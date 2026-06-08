@@ -4,7 +4,7 @@
  * A plugin is a separate repo (or local dir) that contributes assets — skills, agents,
  * MCP configs, persona modes, docs — into DevHub without living in the core repo. The
  * loader merges enabled plugin assets alongside core at sync time, with core winning on
- * name collisions. See TEMPLATE_AND_PLUGIN_PLAN.md for the full design.
+ * name collisions. See docs/architecture/plugins.md for the full design.
  */
 
 /** File-copy asset kinds a plugin can contribute (tier 1). Dashboard modules are tier 2. */
@@ -41,6 +41,18 @@ export interface DashboardContribution {
   paths: string[];
 }
 
+/**
+ * A CLI tool a plugin needs present on this machine. Checked in `preinstall` (see
+ * `scripts/check-plugin-requirements.mjs`) so a plugin can mandate a tool (e.g. the BI
+ * plugin requires `safe-chain`) without the core template forcing it on every forker.
+ */
+export interface PluginRequiredCommand {
+  /** Executable expected on PATH, e.g. "safe-chain". */
+  command: string;
+  /** Human hint shown when it's missing, e.g. "npm install -g @aikidosec/safe-chain". */
+  install?: string;
+}
+
 /** Parsed `devhub-plugin.json` from a plugin repo root. */
 export interface PluginManifest {
   name: string;
@@ -52,6 +64,8 @@ export interface PluginManifest {
   contributes: Partial<Record<ContributeKind, string>>;
   /** Tier-2 dashboard module (pages, API, libs, components, nav). */
   dashboard?: DashboardContribution;
+  /** Machine tooling this plugin needs (verified at install time, not by core). */
+  requires?: { commands?: PluginRequiredCommand[] };
 }
 
 /** A registry entry resolved against the filesystem, with its manifest loaded. */

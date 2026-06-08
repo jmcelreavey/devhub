@@ -42,7 +42,7 @@ export function getDocsDir(): string {
 /**
  * Personal daily tasks; defaults to `REPO_ROOT/tasks` when `TASKS_DIR` is unset.
  * Point it elsewhere (e.g. a separate private repo) to keep personal data out of the
- * shared tree — see the personal-data seam in TEMPLATE_AND_PLUGIN_PLAN.md.
+ * shared tree — see the personal-data boundary in CONTRIBUTING.md.
  */
 export function getTasksDir(): string {
   return resolveContentDir("TASKS_DIR", "tasks");
