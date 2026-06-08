@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Pre-push hook — run dashboard verify (lint + typecheck + tests) before
+# pushing. Set DEVHUB_SKIP_VERIFY=1 to bypass for emergency pushes.
+set -e
+
+if [[ "${DEVHUB_SKIP_VERIFY:-0}" == "1" ]]; then
+    echo "[pre-push] DEVHUB_SKIP_VERIFY=1 — skipping checks."
+    exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+DASHBOARD_DIR="$REPO_ROOT/dashboard"
+
+echo "[pre-push] Scanning for internal-name / secret leaks…"
+if ! bash "$REPO_ROOT/scripts/scan-leaks.sh" tree; then
+    echo "[pre-push] Leak scan failed. Fix the hits above or set DEVHUB_SKIP_VERIFY=1 to override."
+    exit 1
+fi
+
+if [[ ! -d "$DASHBOARD_DIR/node_modules" ]]; then
+    echo "[pre-push] node_modules missing — skipping verify."
+    echo "[pre-push] Run 'npm install' at the repo root (or 'cd dashboard && npm install') to enable pre-push checks."
+    exit 0
+fi
+
+echo "[pre-push] Running dashboard verify…"
+cd "$DASHBOARD_DIR"
+if ! npm run --silent verify; then
+    echo ""
+    echo "[pre-push] Verify failed. Fix the errors above or set DEVHUB_SKIP_VERIFY=1 to override."
+    exit 1
+fi
+
+echo "[pre-push] All checks passed."

@@ -1,0 +1,46 @@
+name: Dashboard Setup
+description: Shared DevHub dashboard bootstrap for CI (Node, safe-chain, npm ci).
+
+inputs:
+  node-version-file:
+    description: Path to .nvmrc for Node version.
+    required: false
+    default: .nvmrc
+
+runs:
+  using: composite
+  steps:
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version-file: ${{ inputs.node-version-file }}
+        cache: npm
+        cache-dependency-path: dashboard/package-lock.json
+
+    - name: Cache dashboard node_modules
+      id: node-cache
+      uses: actions/cache@v4
+      with:
+        path: dashboard/node_modules
+        key: dashboard-node-modules-${{ runner.os }}-${{ hashFiles('dashboard/package-lock.json') }}
+
+    - name: Setup safe-chain
+      shell: bash
+      run: |
+        npm i -g @aikidosec/safe-chain@1.1.10
+        safe-chain setup-ci
+
+    - name: Install dashboard dependencies
+      shell: bash
+      if: steps.node-cache.outputs.cache-hit != 'true'
+      run: npm ci --prefix dashboard
+
+    - name: Configure DevHub content paths
+      shell: bash
+      run: |
+        # next build prerenders /notes and /docs; bundled server code cannot infer repo root from __dirname.
+        {
+          echo "REPO_ROOT=${{ github.workspace }}"
+          echo "NOTES_DIR=${{ github.workspace }}/notes"
+          echo "DOCS_DIR=${{ github.workspace }}/docs"
+        } >> "$GITHUB_ENV"

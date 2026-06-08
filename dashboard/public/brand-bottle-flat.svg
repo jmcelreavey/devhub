@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="DevHub bottle mark">
+  <defs>
+    <linearGradient id="flatBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0c1d14" />
+      <stop offset="100%" stop-color="#07120d" />
+    </linearGradient>
+    <linearGradient id="flatBottle" x1="40%" y1="0%" x2="60%" y2="100%">
+      <stop offset="0%" stop-color="#9ef7cb" stop-opacity="0.75" />
+      <stop offset="55%" stop-color="#2a8e61" stop-opacity="0.82" />
+      <stop offset="100%" stop-color="#15593e" stop-opacity="0.92" />
+    </linearGradient>
+    <linearGradient id="flatLiquid" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#1d8a5e" />
+      <stop offset="60%" stop-color="#0f5a3d" />
+      <stop offset="100%" stop-color="#0a3a28" />
+    </linearGradient>
+    <clipPath id="flatBottleClip">
+      <path
+        d="M27 16
+           L37 16
+           C37 20 40 22 44 25
+           C48 28 49.5 32 49.5 37
+           L49.5 47
+           C49.5 53 47 57 42 60
+           C39.5 61.6 36 62.6 32 62.6
+           C28 62.6 24.5 61.6 22 60
+           C17 57 14.5 53 14.5 47
+           L14.5 37
+           C14.5 32 16 28 20 25
+           C24 22 27 20 27 16 Z"
+      />
+    </clipPath>
+  </defs>
+  <rect x="0" y="0" width="64" height="64" rx="15" fill="url(#flatBg)" />
+  <rect x="23" y="9" width="18" height="5" rx="2.3" fill="#76d8ac" opacity="0.95" />
+  <rect x="24" y="13" width="16" height="4" rx="2" fill="#0f2f22" opacity="0.95" />
+  <rect x="26" y="16" width="12" height="5" rx="2.5" fill="#0a241a" opacity="0.95" />
+
+  <path
+    d="M27 16
+       L37 16
+       C37 20 40 22 44 25
+       C48 28 49.5 32 49.5 37
+       L49.5 47
+       C49.5 53 47 57 42 60
+       C39.5 61.6 36 62.6 32 62.6
+       C28 62.6 24.5 61.6 22 60
+       C17 57 14.5 53 14.5 47
+       L14.5 37
+       C14.5 32 16 28 20 25
+       C24 22 27 20 27 16 Z"
+    fill="url(#flatBottle)"
+    stroke="#e6fff4"
+    stroke-opacity="0.55"
+    stroke-width="1.2"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+  />
+
+  <g clip-path="url(#flatBottleClip)">
+    <path
+      d="M12 36
+         C18 34 25 34 32 36
+         C39 38 46 38 52 35
+         L52 66
+         L12 66 Z"
+      fill="url(#flatLiquid)"
+      opacity="0.96"
+    />
+    <path
+      d="M16 36
+         C21 34.8 26 34.8 32 36.2
+         C38 37.6 43 37.6 48 35.6"
+      fill="none"
+      stroke="#eafff5"
+      stroke-opacity="0.70"
+      stroke-width="1.1"
+      stroke-linecap="round"
+    />
+    <path
+      d="M24 25
+         C23.6 34 23.8 44 24.8 54"
+      fill="none"
+      stroke="#f2fff8"
+      stroke-opacity="0.18"
+      stroke-width="6"
+      stroke-linecap="round"
+    />
+  </g>
+</svg>

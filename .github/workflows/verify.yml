@@ -1,0 +1,38 @@
+name: Verify
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Lint, typecheck, test, and build
+    runs-on: ubuntu-latest
+    env:
+      # verify runs tsc before build; skip Next's duplicate TS pass (see next.config.ts).
+      DEVHUB_SKIP_NEXT_TYPECHECK: "true"
+      NODE_OPTIONS: --max-old-space-size=4096
+      REPO_ROOT: ${{ github.workspace }}
+      NOTES_DIR: ${{ github.workspace }}/notes
+      DOCS_DIR: ${{ github.workspace }}/docs
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Scan for internal-name / secret leaks
+        run: bash scripts/scan-leaks.sh tree
+
+      - name: Setup dashboard
+        uses: ./.github/actions/dashboard-setup
+
+      - name: Run verify
+        run: npm run verify --prefix dashboard

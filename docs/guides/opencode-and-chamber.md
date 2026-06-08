@@ -1,0 +1,134 @@
+# OpenCode and OpenChamber
+
+DevHub runs three cooperating local services during `npm run dev` and `npm run start`:
+
+| Service     | Default port | Dashboard route | Role                                      |
+| ----------- | ------------ | --------------- | ----------------------------------------- |
+| Dashboard   | `1337`       | `/`             | Main Next.js app                          |
+| OpenChamber | `1336`       | `/chamber`      | Thinking/workspace UI (iframe)            |
+| OpenCode    | `1338`       | `/opencode`     | Coding assistant web UI (iframe)          |
+
+OpenCode is a **shared peer service**. OpenChamber connects to the same `opencode serve` instance instead of starting its own embedded server.
+
+## Startup Flow
+
+```text
+npm run dev
+  -> start-peer-services.ts  -> opencode serve on OPENCODE_PORT (default 1338)
+                             -> openchamber serve on OPENCHAMBER_PORT (default 1336)
+                                with OPENCODE_SKIP_START=true
+  -> dashboard (Next.js on PORT, default 1337)
+```
+
+Scripts live in `dashboard/scripts/start-peer-services.ts` (chained startup), with `start-opencode.ts` and `start-chamber.ts` available for standalone use. All call `loadEnvWithOnePasswordFallback` before binding ports so provider keys can be resolved from 1Password when local env vars are empty.
+
+### Peer Version Updates
+
+On every DevHub start (`npm run dev` / `npm run start`), `start-peer-services.ts` best-effort refreshes peer binaries **before** binding ports:
+
+| Peer        | Mechanism | Pin behavior |
+| ----------- | --------- | ------------ |
+| OpenCode    | Runs `opencode upgrade` (no-op when already current) | Updates the user-installed binary; takes effect on the next clean start |
+| OpenChamber | `npm install @openchamber/web@latest --no-save --no-package-lock` into `dashboard/node_modules` | Does **not** change `package.json` or the lockfile; `npm ci` resets to the repo pin and the next start re-applies the update |
+
+Both checks are **non-fatal** — offline, registry errors, or install failures keep the existing copy and DevHub continues.
+
+| Variable                      | Set to | Effect |
+| ----------------------------- | ------ | ------ |
+| `DEVHUB_SKIP_OPENCODE_UPDATE` | `1`    | Skip `opencode upgrade` on start |
+| `DEVHUB_SKIP_CHAMBER_UPDATE`  | `1`    | Skip the OpenChamber npm refresh on start |
+
+See [Environment Variables](../reference/environment-variables.md) for the full list.
+
+### Port Reuse
+
+If a port is already listening, the startup script assumes the service is already running and keeps the npm/concurrently process alive without starting a duplicate listener.
+
+This lets you attach DevHub to an existing OpenCode session. For OpenChamber, startup also reuses an existing listener on `OPENCHAMBER_PORT`, but shutdown still runs `openchamber stop`. In practice, if DevHub attaches to an already-running OpenChamber on that port, exiting DevHub may stop that existing OpenChamber instance as well.
+
+### OpenChamber → OpenCode Wiring
+
+`cleanOpenChamberEnv()` (in `dashboard/lib/openchamber-command.ts`) sets:
+
+- `OPENCODE_PORT` to the shared DevHub port
+- `OPENCODE_SKIP_START=true` so OpenChamber does not spawn a second `opencode serve`
+- `OPENCODE_BINARY` when `~/.opencode/bin/opencode` exists (unless `DEVHUB_OPENCODE_BINARY` overrides)
+
+OpenChamber waits up to 30 seconds for OpenCode to listen before starting its own daemon.
+
+## Configuration
+
+### Environment Variables
+
+| Variable                      | Default   | Purpose                                                |
+| ----------------------------- | --------- | ------------------------------------------------------ |
+| `OPENCODE_PORT`               | `1338`    | `opencode serve --port`                                |
+| `OPENCODE_BIND_HOST`          | `0.0.0.0` | `opencode serve --hostname`                            |
+| `NEXT_PUBLIC_OPENCODE_PORT`   | `1338`    | Port in the browser iframe URL                         |
+| `DEVHUB_OPENCODE_BINARY`      | —         | Override path to the `opencode` binary                 |
+| `OPENCHAMBER_PORT`            | `1336`    | OpenChamber daemon port                                |
+| `OPENCHAMBER_HOST`            | `0.0.0.0` | OpenChamber bind host (sync with `DEVHUB_BIND_HOST`)   |
+| `NEXT_PUBLIC_OPENCHAMBER_PORT`| `1336`    | Port in the Chamber iframe URL                         |
+| `OPENCHAMBER_BIN`             | —         | Override path to the `openchamber` CLI               |
+
+Legacy `OPENCODE_HOST` is still read as a bind host when it is not a full URL; prefer `OPENCODE_BIND_HOST` for new setups.
+
+See [Environment Variables](../reference/environment-variables.md) for 1Password-related keys.
+
+### Shared OpenCode Config
+
+Source of truth: `opencode/shared/opencode.json` in the repo.
+
+Sync copies only these curated keys into `~/.config/opencode/opencode.json`:
+
+- `model`
+- `small_model`
+- `provider`
+- `theme`
+
+Everything else in the local file (MCP block, `$schema`, agents, model catalogue entries OpenCode manages) is left untouched.
+
+Provider API keys in the shared file must use OpenCode placeholders: `{env:VAR_NAME}`. Never commit raw secrets. On sync, DevHub resolves placeholders from `process.env` (including values loaded by the 1Password fallback) and writes concrete values only into the local config.
+
+**Dashboard:** Agents → OpenCode → edit shared config → **Sync OpenCode**.
+
+**API:** `GET` / `PUT` `/api/opencode` reads and updates the shared file; `PUT` rejects JSON that contains raw secrets at secret-like keys.
+
+## 1Password Secret Fallback
+
+Before dev services start, `dashboard/scripts/op-secrets.ts` can populate missing secret env vars from a 1Password item (default title: `devhub`).
+
+| Variable            | Purpose                                              |
+| ------------------- | ---------------------------------------------------- |
+| `DEVHUB_OP_ITEM`    | 1Password item title (default: `devhub`)             |
+| `DEVHUB_OP_VAULT`   | Pin vault when multiple items share the same name    |
+| `DEVHUB_OP_REFRESH` | Set to `1` to bypass `.env.op-synced` and re-fetch   |
+
+After a successful fetch, a marker file `dashboard/.env.op-synced` avoids repeated `op` calls on every restart. Path-only keys (`NOTES_DIR`, bind hosts, etc.) are never fetched from 1Password.
+
+Managed secret names come from the dashboard env allowlist plus any `{env:VAR}` referenced in the shared OpenCode config, so new providers do not require code changes.
+
+## Status and Restarts
+
+The **Status** page probes OpenChamber and OpenCode ports via `/api/status/services`. Restart actions use `/api/status/services/restart` and respect the same port env vars.
+
+**Actions** can launch native apps when installed:
+
+- `/api/actions/launch-chamber` — OpenChamber Desktop pointing at the existing DevHub server (port `1336` / shared OpenCode on `1338`)
+- `/api/actions/launch-opencode` — macOS OpenCode Desktop app (when present under `/Applications`)
+
+## Troubleshooting
+
+| Symptom | Things to check |
+| ------- | ---------------- |
+| Chamber iframe blank | OpenCode listening on `OPENCODE_PORT`; Status page service indicators |
+| OpenCode won't start | `which opencode` or set `DEVHUB_OPENCODE_BINARY`; port `1338` not held by another process |
+| Provider auth errors | `/setup` or 1Password item fields; run sync after env vars are set; `DEVHUB_OP_REFRESH=1` once to refresh |
+| LAN device can't reach Chamber/OpenCode | Match `OPENCHAMBER_HOST` / `OPENCODE_BIND_HOST` with `DEVHUB_BIND_HOST`; forward ports `1336` and `1338` on WSL (see root README) |
+| Two OpenCode instances | Should not happen when `OPENCODE_SKIP_START=true`; if you run `opencode serve` manually, let DevHub reuse that port |
+
+## Related Docs
+
+- [Sync Engine](../architecture/sync-engine.md) — sync vs collect for shared assets
+- [Electron App](../getting-started/electron-app.md) — desktop launcher for all three ports
+- [Theming](theming.md) — OpenChamber theme install during postinstall

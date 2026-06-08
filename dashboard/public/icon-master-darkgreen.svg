@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="DevHub dark green bottle icon">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a1a12" />
+      <stop offset="100%" stop-color="#05100b" />
+    </linearGradient>
+    <linearGradient id="glass" x1="35%" y1="0%" x2="65%" y2="100%">
+      <stop offset="0%" stop-color="#7ce5b4" stop-opacity="0.60" />
+      <stop offset="55%" stop-color="#2a8e61" stop-opacity="0.78" />
+      <stop offset="100%" stop-color="#15593e" stop-opacity="0.92" />
+    </linearGradient>
+    <linearGradient id="liquid" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#1d8a5e" />
+      <stop offset="55%" stop-color="#0f5a3d" />
+      <stop offset="100%" stop-color="#0a3a28" />
+    </linearGradient>
+    <linearGradient id="cap" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#9ef7cb" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#2a8e61" stop-opacity="0.95" />
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="14" />
+    </filter>
+    <clipPath id="bottleClip">
+      <path
+        d="M462 252
+           L562 252
+           C562 292 594 314 636 350
+           C676 384 692 430 692 496
+           L692 634
+           C692 742 646 832 578 882
+           C554 900 534 908 512 908
+           C490 908 470 900 446 882
+           C378 832 332 742 332 634
+           L332 496
+           C332 430 348 384 388 350
+           C430 314 462 292 462 252 Z"
+      />
+    </clipPath>
+  </defs>
+
+  <rect width="1024" height="1024" rx="220" fill="url(#bg)" />
+
+  <ellipse cx="512" cy="878" rx="176" ry="40" fill="#0c3a28" opacity="0.55" filter="url(#softShadow)" />
+
+  <g stroke-linejoin="round" stroke-linecap="round">
+    <rect x="446" y="140" width="132" height="38" rx="13" fill="url(#cap)" stroke="#c8ffe2" stroke-opacity="0.45" stroke-width="3" />
+    <rect x="456" y="170" width="112" height="40" rx="16" fill="#0f2f22" stroke="#c8ffe2" stroke-opacity="0.30" stroke-width="3" />
+    <rect x="468" y="204" width="88" height="56" rx="26" fill="#0a241a" stroke="#c8ffe2" stroke-opacity="0.22" stroke-width="3" />
+
+    <path
+      d="M462 252
+         L562 252
+         C562 292 594 314 636 350
+         C676 384 692 430 692 496
+         L692 634
+         C692 742 646 832 578 882
+         C554 900 534 908 512 908
+         C490 908 470 900 446 882
+         C378 832 332 742 332 634
+         L332 496
+         C332 430 348 384 388 350
+         C430 314 462 292 462 252 Z"
+      fill="url(#glass)"
+      stroke="#d7ffea"
+      stroke-opacity="0.62"
+      stroke-width="6"
+    />
+
+    <g clip-path="url(#bottleClip)">
+      <path
+        d="M316 564
+           C382 542 454 540 512 554
+           C570 568 642 568 708 548
+           L708 960
+           L316 960 Z"
+        fill="url(#liquid)"
+        opacity="0.96"
+      />
+      <path
+        d="M342 564
+           C402 546 462 546 512 558
+           C562 570 622 570 682 552"
+        fill="none"
+        stroke="#e6fff4"
+        stroke-opacity="0.70"
+        stroke-width="4"
+      />
+
+      <g fill="#e6fff4" opacity="0.22">
+        <circle cx="486" cy="790" r="7" />
+        <circle cx="546" cy="730" r="6" />
+        <circle cx="512" cy="670" r="6" />
+      </g>
+    </g>
+
+    <path
+      d="M420 330
+         C416 480 420 640 434 786
+         C438 832 446 866 458 890"
+      fill="none"
+      stroke="#f2fff8"
+      stroke-opacity="0.22"
+      stroke-width="30"
+      stroke-linecap="round"
+    />
+  </g>
+</svg>

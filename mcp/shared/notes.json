@@ -1,0 +1,10 @@
+{
+  "command": "REPO_ROOT/mcp-servers/notes-server/node_modules/.bin/tsx",
+  "args": ["REPO_ROOT/mcp-servers/notes-server/src/mcp.ts"],
+  "env": {
+    "NOTES_DIR": "REPO_ROOT/notes",
+    "TASKS_DIR": "REPO_ROOT/tasks",
+    "DOCS_DIR": "REPO_ROOT/docs"
+  },
+  "description": "DevHub MCP — notes, docs, tasks, and diagrams. CRUD for BlockNote JSON notes, Markdown docs, daily tasks, and tldraw diagrams."
+}

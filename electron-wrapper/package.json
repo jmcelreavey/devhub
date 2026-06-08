@@ -1,0 +1,88 @@
+{
+  "name": "devhub-launcher",
+  "version": "1.3.2",
+  "description": "Local DevHub desktop launcher.",
+  "main": "dist/main.js",
+  "scripts": {
+    "start": "npm run build && electron .",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc -p tsconfig.json",
+    "dist": "npm run build && electron-builder"
+  },
+  "author": "John McElreavey <j.mcelreavey@gmail.com>",
+  "homepage": "https://github.com/jmcelreavey/devhub",
+  "license": "ISC",
+  "type": "commonjs",
+  "build": {
+    "appId": "com.devhub.launcher",
+    "productName": "DevHub",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "jmcelreavey",
+        "repo": "devhub"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "../dashboard/public/icon-512.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "dmg": {
+      "title": "${productName} ${version}"
+    },
+    "linux": {
+      "icon": "../dashboard/public/icon-512.png",
+      "category": "Development",
+      "target": [
+        "deb",
+        "AppImage"
+      ]
+    },
+    "extraResources": [
+      {
+        "from": "..",
+        "to": "devhub",
+        "filter": [
+          "package.json",
+          "dashboard/",
+          "!dashboard/.env*",
+          "!dashboard/.next/**",
+          "!dashboard/output/**",
+          "!dashboard/node_modules/**",
+          "!dashboard/bin/**",
+          "!dashboard/*.log",
+          ".gitignore"
+        ]
+      }
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.3",
+    "electron": "^42.3.2",
+    "electron-builder": "^26.8.1",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.3"
+  }
+}

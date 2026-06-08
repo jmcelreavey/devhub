@@ -1,0 +1,24 @@
+{
+  "name": "devhub",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "description": "Run npm install and npm run dev from the repo root; delegates to dashboard/.",
+  "scripts": {
+    "install": "npm install --prefix ./dashboard && rm -f package-lock.json",
+    "electron": "npm run start --prefix ./electron-wrapper",
+    "electron:build": "npm run build --prefix ./electron-wrapper",
+    "dev": "npm run dev --prefix ./dashboard",
+    "start": "npm run start --prefix ./dashboard",
+    "build": "npm run build --prefix ./dashboard",
+    "verify": "npm run verify --prefix ./dashboard",
+    "lint": "npm run lint --prefix ./dashboard",
+    "typecheck": "npm run typecheck --prefix ./dashboard",
+    "test": "npm run test --prefix ./dashboard",
+    "doctor": "npm run doctor --prefix ./dashboard",
+    "setup": "npm run setup --prefix ./dashboard",
+    "clean": "npm run clean --prefix ./dashboard",
+    "restart": "npm run restart --prefix ./dashboard"
+  }
+}

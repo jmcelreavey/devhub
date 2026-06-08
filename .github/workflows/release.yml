@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            label: mac
+          - os: ubuntu-latest
+            label: linux
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: electron-wrapper/package-lock.json
+
+      - name: Inject version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cd electron-wrapper
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+      - name: Setup safe-chain
+        run: |
+          npm i -g @aikidosec/safe-chain@1.1.10
+          safe-chain setup-ci
+
+      - name: Install dependencies
+        run: npm ci --prefix electron-wrapper
+
+      - name: Build & package
+        run: npm run dist --prefix electron-wrapper
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.label }}
+          path: |
+            electron-wrapper/release/*.dmg
+            electron-wrapper/release/*.deb
+            electron-wrapper/release/*.AppImage
+          if-no-files-found: error
+
+  release:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: dist/*

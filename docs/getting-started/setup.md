@@ -1,0 +1,69 @@
+# Setup
+
+The setup page is the safest place to configure DevHub after installation.
+
+Open:
+
+```text
+http://localhost:1337/setup
+```
+
+## What Setup Controls
+
+| Area            | Purpose                                                            |
+| --------------- | ------------------------------------------------------------------ |
+| Core paths      | Where DevHub stores notes and finds the repo                       |
+| Network access  | Whether the dashboard is local-only or reachable on your LAN       |
+| Google Calendar | Optional calendar widget and calendar page                         |
+| Jira Cloud      | Optional ticket views and standup support                          |
+| Datadog         | Optional alert summaries and deep links                            |
+| GitHub          | Pull request and repo-related features, usually via the GitHub CLI |
+| BI operations   | Optional internal infrastructure helpers                           |
+| Notes AI        | Optional z.ai-powered BlockNote AI — **env vars only** (see below) |
+
+## Core Settings
+
+Most core settings are created automatically during install.
+
+| Setting         | Meaning                                                   |
+| --------------- | --------------------------------------------------------- |
+| Notes directory | Where BlockNote notes, diagrams, and learnings are stored |
+| Repo root       | The DevHub checkout used by scripts and sync actions      |
+| Dashboard port  | The local port used by the web app                        |
+| Bind host       | Whether DevHub listens only on localhost or on your LAN   |
+
+## Localhost Vs LAN Access
+
+By default, DevHub can be configured for access from other devices on a trusted local network.
+
+Use localhost-only mode when:
+
+- You only use DevHub from the current machine.
+- You are on an untrusted network.
+- You want the safest default.
+
+Use LAN mode when:
+
+- You want to open DevHub from a phone or tablet on the same Wi-Fi.
+- You trust the network.
+- You understand that DevHub has no built-in authentication.
+
+## Optional Integrations
+
+Integrations are optional. DevHub should still run without them.
+
+If an integration is not configured, the related pages or widgets either hide themselves or show a setup prompt.
+
+## Secrets
+
+Secrets should live in local environment configuration or a secret manager. Do not commit real tokens to the repo.
+
+The shared configuration files should use environment variable placeholders instead of raw secrets.
+
+### Notes AI (not on this page)
+
+In-editor AI uses `Z_AI_API_KEY` in `dashboard/.env.local`. Copy the example lines from `dashboard/.env.example`, restart after changes, and see [Environment Variables](../reference/environment-variables.md#notes-in-editor-ai-optional).
+
+## After Changing Setup
+
+Some settings are picked up immediately. Changes that affect the server process, such as bind host or core paths, may require restarting DevHub.

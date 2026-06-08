@@ -1,0 +1,5 @@
+{
+  "command": "npx",
+  "args": ["playwriter@latest"],
+  "description": "Playwriter MCP — controls explicitly enabled tabs in the user's existing Chrome session through the Playwriter Chrome extension and local relay. Requires installing the extension and clicking its icon on each tab to connect."
+}
