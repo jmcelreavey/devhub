@@ -35,8 +35,8 @@ For mirrors that track the public core via an `upstream` remote (see `CONTRIBUTI
 
 | Command | Purpose |
 | ------- | ------- |
-| `bash scripts/devhub-update.sh [--dry-run] [--no-sync]` | Pull core updates from `upstream`, rebase, then validate + sync. Guards: on main/master, clean tracked tree, upstream remote present. |
-| `bash scripts/devhub-backport.sh <source-ref> [--execute] [--title "…"]` | Build a clean PR branch off `upstream` with feature files only (personal data excluded), scan for leaks. Previews by default; `--execute` pushes and opens the PR. |
+| `bash scripts/devhub-update.sh [--since <ref>] [--dry-run] [--no-sync] [--mark-synced]` | Pull core updates from `upstream` by porting hunks (`git apply --3way`, since public history is unrelated), then validate + sync. Tracks the last pull in `refs/devhub/upstream-sync`; first run needs `--since`. `--mark-synced` records sync without applying (use after a backport). Guards: on main/master, clean tracked tree, upstream remote present. |
+| `bash scripts/devhub-backport.sh <source-ref> [--base <ref>] [--execute] [--title "…"]` | Build a clean PR branch off `upstream` and port the feature's hunks onto it (`git apply --3way`, preserving public-side templatisation), personal data excluded, leak-scanned. `--base` defaults to `<source-ref>^`. Previews by default; `--execute` pushes the branch to `upstream` and opens the PR. |
 
 These call the CLI action runner, which is also usable directly:
 
