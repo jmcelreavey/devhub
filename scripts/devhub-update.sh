@@ -45,6 +45,18 @@ done
 log()  { echo "[devhub-update] $*"; }
 fail() { echo "[devhub-update] ERROR: $*" >&2; exit 1; }
 
+# Undo a failed `git apply --index --3way` without touching personal paths. The dirty-tree
+# guard deliberately allows live edits under EXCLUDES; a blanket `git checkout -- .` would
+# wipe them on apply failure.
+revert_failed_apply() {
+  local f
+  while IFS= read -r -d '' f; do
+    [[ -n "$f" ]] || continue
+    git reset --quiet HEAD -- "$f" 2>/dev/null || true
+    git checkout --quiet HEAD -- "$f" 2>/dev/null || true
+  done < <(git diff --name-only -z "${SINCE}..${UPSTREAM_REF}" -- . "${EXCLUDES[@]}")
+}
+
 # Personal-data paths: excluded from the pull (never expected from upstream) AND ignored by
 # the dirty-tree guard, so the app's live-dirty tasks/notes don't block a pull from the UI.
 EXCLUDES=(':!notes' ':!tasks' ':!collections' ':!dashboard/.env.local'
@@ -112,8 +124,7 @@ fi
 log "Applying ${SINCE}..${UPSTREAM_REF} onto ${BRANCH}..."
 if ! printf '%s\n' "$PATCH" | git apply --index --3way 2>/tmp/devhub-update-apply.err; then
   cat /tmp/devhub-update-apply.err >&2 || true
-  git reset --quiet HEAD . 2>/dev/null || true
-  git checkout --quiet -- . 2>/dev/null || true
+  revert_failed_apply
   fail "Could not cleanly apply upstream changes (conflicts vs your mirror customisation).
 Resolve manually: \`git diff ${SINCE}..${UPSTREAM_REF} -- . | git apply --3way\`, fix conflicts, commit."
 fi
