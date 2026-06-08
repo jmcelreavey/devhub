@@ -32,7 +32,15 @@ These docs are written for day-to-day users and future contributors. They explai
 | [Jira](integrations/jira.md)                           | Jira Cloud setup and ticket views                 |
 | [Datadog](integrations/datadog.md)                     | Alert links and event summaries                   |
 | [GitHub](integrations/github.md)                       | Pull request tracking and standup support         |
-| [BI Infrastructure](integrations/bi-infrastructure.md) | Internal operations helpers and service discovery |
+
+## Forking & Extending
+
+| Page                                                 | Use It For                                                       |
+| ---------------------------------------------------- | --------------------------------------------------------------- |
+| [Fork Workflow](guides/fork-workflow.md)             | Pulling core updates and contributing features back upstream    |
+| [Plugins](architecture/plugins.md)                   | Adding private/company features without touching the public core |
+| [Creating a Plugin](guides/creating-plugins.md)      | Step-by-step plugin authoring                                   |
+| [Contributing](../CONTRIBUTING.md)                   | Repo topology, mirror setup, personal-data boundary, standards  |
 
 ## Guides
 

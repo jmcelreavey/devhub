@@ -24,7 +24,13 @@
 - [Jira](integrations/jira.md)
 - [Datadog](integrations/datadog.md)
 - [GitHub](integrations/github.md)
-- [BI Infrastructure](integrations/bi-infrastructure.md)
+
+## Forking & Extending
+
+- [Fork Workflow](guides/fork-workflow.md)
+- [Plugins](architecture/plugins.md)
+- [Creating a Plugin](guides/creating-plugins.md)
+- [Contributing](../CONTRIBUTING.md)
 
 ## Guides
 

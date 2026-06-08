@@ -45,12 +45,18 @@ done
 log()  { echo "[devhub-update] $*"; }
 fail() { echo "[devhub-update] ERROR: $*" >&2; exit 1; }
 
+# Personal-data paths: excluded from the pull (never expected from upstream) AND ignored by
+# the dirty-tree guard, so the app's live-dirty tasks/notes don't block a pull from the UI.
+EXCLUDES=(':!notes' ':!tasks' ':!collections' ':!dashboard/.env.local'
+          ':!persona/identity.txt' ':!TEMPLATE_AND_PLUGIN_PLAN.md' ':!scripts/make-public-seed.sh')
+
 # --- guards ---
 BRANCH="$(git branch --show-current)"
 [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]] \
   || fail "Not on main/master (current: $BRANCH). Switch first."
-[[ -z "$(git status --porcelain --untracked-files=no)" ]] \
-  || fail "Tracked changes present. Commit or stash, then re-run."
+# Only non-personal tracked changes block a pull (they could collide with the 3-way apply).
+[[ -z "$(git status --porcelain --untracked-files=no -- . "${EXCLUDES[@]}")" ]] \
+  || fail "Non-personal tracked changes present. Commit or stash them, then re-run."
 git remote get-url upstream >/dev/null 2>&1 || fail \
 "No 'upstream' remote. Add the public core:
   git remote add upstream https://github.com/<owner>/devhub.git"
@@ -77,10 +83,6 @@ fi
 last in sync with, e.g. the initial public commit: \`git log upstream/${UPSTREAM_BRANCH} --oneline\`).
 After that, the marker (${SYNC_REF}) is tracked automatically."
 git rev-parse --verify --quiet "$SINCE" >/dev/null || fail "Unknown --since ref: $SINCE"
-
-# --- personal-data exclusions (never expected from upstream, dropped defensively) ---
-EXCLUDES=(':!notes' ':!tasks' ':!collections' ':!dashboard/.env.local'
-          ':!persona/identity.txt' ':!TEMPLATE_AND_PLUGIN_PLAN.md' ':!scripts/make-public-seed.sh')
 
 # --- show incoming core changes ---
 COUNT="$(git rev-list --count "${SINCE}..${UPSTREAM_REF}" 2>/dev/null || echo 0)"
