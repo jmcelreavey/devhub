@@ -4,9 +4,26 @@ Shared skills, persona, and MCP configs for Claude Code, Codex CLI, OpenCode, an
 
 ## Quick Start
 
-### Safe-Chain (required)
+### Prerequisites: Node 22
 
-DevHub uses [Aikido Safe-Chain](https://github.com/AikidoSec/safe-chain) to block malicious npm packages. Install once per machine:
+DevHub pins **Node 22 (npm 10)** — see `.nvmrc`. npm 11 rewrites `package-lock.json` in a
+shape CI's npm 10 rejects, so `npm install` refuses to run on the wrong major. If you use
+[nvm](https://github.com/nvm-sh/nvm):
+
+```bash
+nvm install   # reads .nvmrc
+nvm use       # switch this shell to Node 22
+```
+
+`npm run dev`, `build`, `test`, and `lint` work on any Node ≥ 20 — only `npm install` /
+`npm ci` are gated, since they're the commands that rewrite the lockfile.
+
+### Safe-Chain (recommended)
+
+DevHub recommends [Aikido Safe-Chain](https://github.com/AikidoSec/safe-chain) to block
+malicious npm packages. It's optional for the core template, but **some plugins require it**
+(the BI plugin does — see [plugin requirements](docs/architecture/plugins.md#requirements)).
+Install once per machine:
 
 ```bash
 npm install -g @aikidosec/safe-chain@1.1.10

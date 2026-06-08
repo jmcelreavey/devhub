@@ -10,8 +10,13 @@
 #   --execute      Actually commit, push to origin, and open the PR. Default: preview only.
 #   --title "..."  PR title (default: derived from source-ref).
 #
-# Safety: branches off upstream so personal commits never ride along; drops personal-data
-# paths; aborts on internal-name/secret hits. See CONTRIBUTING.md and TEMPLATE_AND_PLUGIN_PLAN.md (M4).
+# The public core has an UNRELATED history (it was seeded from a clean tree so private
+# history never leaks), so this ports the feature's *hunks* onto upstream via `git apply`
+# rather than rebasing/cherry-picking. That also preserves any public-side templatisation
+# (e.g. example-org) instead of clobbering whole files with the mirror's version.
+#
+# Safety: builds off upstream so personal commits never ride along; drops personal-data
+# paths; aborts on internal-name/secret hits. See CONTRIBUTING.md.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -21,21 +26,28 @@ log()  { echo "[devhub-backport] $*"; }
 fail() { echo "[devhub-backport] ERROR: $*" >&2; exit 1; }
 
 SOURCE_REF=""
+BASE_REF=""
 EXECUTE=0
 TITLE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --execute) EXECUTE=1; shift ;;
     --title) TITLE="${2:-}"; shift 2 ;;
+    --base) BASE_REF="${2:-}"; shift 2 ;;
     -*) fail "Unknown flag: $1" ;;
     *) SOURCE_REF="$1"; shift ;;
   esac
 done
-[[ -n "$SOURCE_REF" ]] || fail "Provide a source ref. Usage: devhub-backport.sh <source-ref> [--execute]"
+[[ -n "$SOURCE_REF" ]] || fail "Provide a source ref. Usage: devhub-backport.sh <source-ref> [--base <ref>] [--execute]"
+# Base = the mirror commit already represented in public core. Defaults to the source's
+# parent (correct when backporting the tip commit after a fresh pull). For a multi-commit
+# feature, pass --base <branch-point>.
+[[ -n "$BASE_REF" ]] || BASE_REF="${SOURCE_REF}^"
 
 # --- guards ---
 [[ -z "$(git status --porcelain --untracked-files=no)" ]] || fail "Tracked changes present. Commit or stash, then re-run."
 git rev-parse --verify --quiet "$SOURCE_REF" >/dev/null || fail "Unknown ref: $SOURCE_REF"
+git rev-parse --verify --quiet "$BASE_REF" >/dev/null || fail "Unknown base ref: $BASE_REF"
 git remote get-url upstream >/dev/null 2>&1 || fail "No 'upstream' remote. Add the public core first."
 if [[ "$EXECUTE" == "1" ]]; then command -v gh >/dev/null || fail "--execute needs the GitHub CLI (gh)."; fi
 
@@ -50,22 +62,21 @@ UPSTREAM_REF="upstream/${UPSTREAM_BRANCH}"
 UPSTREAM_URL="$(git remote get-url upstream)"
 UPSTREAM_SLUG="$(echo "$UPSTREAM_URL" | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##')"
 
-# --- personal-data exclusions ---
+# --- personal-data exclusions (these never go to the public core) ---
 EXCLUDES=(':!notes' ':!tasks' ':!collections' ':!dashboard/.env.local'
-          ':!persona/identity.txt' ':!TEMPLATE_AND_PLUGIN_PLAN.md')
+          ':!persona/identity.txt' ':!TEMPLATE_AND_PLUGIN_PLAN.md' ':!scripts/make-public-seed.sh')
 
 # Personal paths that were touched but will be dropped (informational).
-DROPPED="$(git diff --name-only "${UPSTREAM_REF}...${SOURCE_REF}" -- notes tasks collections \
-            dashboard/.env.local persona/identity.txt TEMPLATE_AND_PLUGIN_PLAN.md 2>/dev/null || true)"
+DROPPED="$(git diff --name-only "${BASE_REF}..${SOURCE_REF}" -- notes tasks collections \
+            dashboard/.env.local persona/identity.txt TEMPLATE_AND_PLUGIN_PLAN.md \
+            scripts/make-public-seed.sh 2>/dev/null || true)"
 [[ -n "$DROPPED" ]] && { log "Dropping personal/strategy paths from the PR:"; echo "$DROPPED" | sed 's/^/  - /'; }
 
-# Feature files to port (status + path), personal paths excluded.
-# (read loop instead of mapfile for bash 3.2 / macOS compatibility)
-CHANGES=()
-while IFS= read -r line; do
-  [[ -n "$line" ]] && CHANGES+=("$line")
-done < <(git diff --name-status "${UPSTREAM_REF}...${SOURCE_REF}" -- . "${EXCLUDES[@]}")
-[[ ${#CHANGES[@]} -gt 0 ]] || fail "No feature files to backport after exclusions."
+# The feature's patch (hunks only), personal paths excluded.
+PATCH="$(git diff "${BASE_REF}..${SOURCE_REF}" -- . "${EXCLUDES[@]}")"
+[[ -n "$PATCH" ]] || fail "No feature changes to backport after exclusions (check --base)."
+
+log "Porting ${BASE_REF}..${SOURCE_REF} onto ${UPSTREAM_REF}"
 
 # --- build the backport branch off upstream ---
 SAFE_NAME="$(echo "$SOURCE_REF" | tr '/ ' '--' | tr -cd 'A-Za-z0-9._-')"
@@ -75,14 +86,13 @@ git branch -f "$BACKPORT_BRANCH" "$UPSTREAM_REF" >/dev/null
 git checkout --quiet "$BACKPORT_BRANCH"
 trap 'restore' EXIT
 
-for line in "${CHANGES[@]}"; do
-  status="${line%%$'\t'*}"; file="${line#*$'\t'}"
-  if [[ "$status" == D* ]]; then
-    git rm --quiet --ignore-unmatch -- "$file" || true
-  else
-    git checkout --quiet "$SOURCE_REF" -- "$file"
-  fi
-done
+# Apply hunks onto upstream (3-way so public-side templatisation survives). On conflict,
+# git apply aborts non-zero and stages nothing.
+if ! printf '%s\n' "$PATCH" | git apply --index --3way 2>/tmp/devhub-backport-apply.err; then
+  cat /tmp/devhub-backport-apply.err >&2 || true
+  git reset --hard --quiet "$UPSTREAM_REF"
+  fail "Could not cleanly apply the feature onto upstream. Resolve divergence and retry (maybe --base is wrong, or core changed the same lines)."
+fi
 
 # --- leak scan on ADDED lines only (removing internal content must not trip it) ---
 log "Scanning added lines for internal names / secrets..."
@@ -104,9 +114,10 @@ if [[ "$EXECUTE" != "1" ]]; then
   exit 0
 fi
 
-# --- execute: push, PR ---
-log "Pushing ${BACKPORT_BRANCH} to origin..."
-git push --quiet -u origin "$BACKPORT_BRANCH"
+# --- execute: push to the PUBLIC core + open PR there ---
+# origin is the private mirror (unrelated history), so the PR head must live in upstream.
+log "Pushing ${BACKPORT_BRANCH} to upstream (${UPSTREAM_SLUG})..."
+git push --quiet -u upstream "$BACKPORT_BRANCH"
 log "Opening PR against ${UPSTREAM_SLUG} (${UPSTREAM_BRANCH})..."
 gh pr create --repo "$UPSTREAM_SLUG" --base "$UPSTREAM_BRANCH" --head "$BACKPORT_BRANCH" \
   --title "$TITLE" --body "Backported from \`${SOURCE_REF}\` via devhub-backport. Personal data excluded."

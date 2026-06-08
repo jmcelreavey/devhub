@@ -3,7 +3,7 @@
 Plugins let a separate repo (or local directory) contribute assets — skills, agents, MCP
 configs — into DevHub without living in the core repo. This keeps company-specific or
 private content (e.g. `devhub-bi`) out of the shareable core while still syncing it to
-your tools. See `TEMPLATE_AND_PLUGIN_PLAN.md` for the broader template/fork strategy.
+your tools. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md) for the broader template/fork strategy.
 
 The plugin loader is a generalisation of the original `ai-tools` skill merge: instead of
 one hard-coded upstream, any number of registered plugins merge alongside core, with
@@ -69,6 +69,30 @@ Each plugin repo has a `devhub-plugin.json` at its root:
 - `devhubApi` — contract version DevHub understands (currently `1`).
 - `contributes` — map of asset kind → directory relative to the plugin root.
   Supported keys: `skills`, `agents`, `mcp`, `personaModes`, `docs`.
+- `requires` — optional machine tooling this plugin needs (see [Requirements](#requirements)).
+
+## Requirements
+
+A plugin can mandate CLI tools that must be on `PATH` — without the core template forcing
+them on every forker. Declare them in the manifest:
+
+```json
+"requires": {
+  "commands": [
+    { "command": "safe-chain", "install": "npm install -g @aikidosec/safe-chain@1.1.10" }
+  ]
+}
+```
+
+`dashboard/scripts/check-plugin-requirements.mjs` runs in **`preinstall`**: it reads the
+machine-local registry, and for each *enabled* plugin verifies every required `command`
+resolves on `PATH`. If one is missing it prints the `install` hint and fails the install.
+
+This is how the **BI plugin requires `safe-chain`** while the public template does not — a
+fresh fork with no plugins registered hits no requirements at all; the gate only bites once
+you register a plugin that opts in. The check is dependency-free (it runs before
+`node_modules` exists) and tolerant — a missing/broken registry or manifest is skipped,
+never fatal.
 
 Layout inside a plugin mirrors core:
 

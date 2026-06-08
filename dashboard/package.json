@@ -7,7 +7,7 @@
     "npm": "^10"
   },
   "scripts": {
-    "preinstall": "node scripts/check-npm.mjs && { command -v safe-chain >/dev/null 2>&1 || (echo 'Error: safe-chain not installed. Run: npm install -g @aikidosec/safe-chain@1.1.10 && safe-chain setup (then restart your terminal). See README.md.' >&2 && exit 1); }",
+    "preinstall": "node scripts/check-npm.mjs && node scripts/check-plugin-requirements.mjs",
     "dev": "concurrently --kill-others-on-fail false --names 'next,peers' --prefix-colors 'blue,cyan' --restart-tries 0 'tsx scripts/run-next-with-env.ts dev' 'tsx scripts/start-peer-services.ts'",
     "dev:next": "tsx scripts/run-next-with-env.ts dev",
     "predev": "tsx scripts/run-action.ts sync_plugins && tsx scripts/health-check.ts && tsx scripts/ensure-peers-current.ts",

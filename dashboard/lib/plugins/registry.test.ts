@@ -58,6 +58,28 @@ describe("readManifest", () => {
   it("reports a missing manifest without throwing", () => {
     expect(readManifest(pluginRoot).ok).toBe(false);
   });
+  it("accepts a requires.commands block", () => {
+    makePlugin(pluginRoot, {
+      name: "bi",
+      version: "0.1.0",
+      devhubApi: "1",
+      contributes: {},
+      requires: { commands: [{ command: "safe-chain", install: "npm i -g x" }] },
+    });
+    const res = readManifest(pluginRoot);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.manifest.requires?.commands?.[0]?.command).toBe("safe-chain");
+  });
+  it("rejects a requires.commands entry without a command", () => {
+    makePlugin(pluginRoot, {
+      name: "bi",
+      version: "0.1.0",
+      devhubApi: "1",
+      contributes: {},
+      requires: { commands: [{ install: "npm i -g x" }] },
+    });
+    expect(readManifest(pluginRoot).ok).toBe(false);
+  });
 });
 
 describe("listEnabledPlugins", () => {

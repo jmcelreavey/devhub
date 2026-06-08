@@ -4,7 +4,8 @@ DevHub is distributed as a **personal private mirror** of a shared public core. 
 your own copy with your own notes, tasks, persona, and (optionally) private plugins, while
 pulling core improvements and contributing generic features back.
 
-See [`TEMPLATE_AND_PLUGIN_PLAN.md`](TEMPLATE_AND_PLUGIN_PLAN.md) for the full architecture.
+See [`docs/architecture/plugins.md`](docs/architecture/plugins.md) for the plugin design and
+[`docs/guides/creating-plugins.md`](docs/guides/creating-plugins.md) for building one.
 
 ## Repo topology
 

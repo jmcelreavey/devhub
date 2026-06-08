@@ -25,6 +25,21 @@ const dashboardSchema = z
   })
   .strict();
 
+const requiresSchema = z
+  .object({
+    commands: z
+      .array(
+        z
+          .object({
+            command: z.string().min(1),
+            install: z.string().min(1).optional(),
+          })
+          .strict(),
+      )
+      .optional(),
+  })
+  .strict();
+
 const manifestSchema = z
   .object({
     name: z.string().regex(PLUGIN_NAME_SLUG, "name must be a lowercase slug"),
@@ -33,6 +48,7 @@ const manifestSchema = z
     navGate: z.string().min(1).optional(),
     contributes: contributesSchema,
     dashboard: dashboardSchema.optional(),
+    requires: requiresSchema.optional(),
   })
   .strict();
 

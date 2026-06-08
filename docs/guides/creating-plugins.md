@@ -121,6 +121,23 @@ Rules to know:
   (generic plugin-contributed nav is a future enhancement) — add one there, or gate your
   page behind an existing nav gate.
 
+## 5b. (Optional) Require machine tooling
+
+If your plugin needs a CLI tool present (e.g. a security guard, a cloud CLI), declare it so
+DevHub's `preinstall` enforces it — but only on machines that have *registered* your plugin,
+never on a bare fork of the template:
+
+```json
+"requires": {
+  "commands": [
+    { "command": "safe-chain", "install": "npm install -g @aikidosec/safe-chain@1.1.10" }
+  ]
+}
+```
+
+If the `command` isn't on `PATH`, `npm install` fails with your `install` hint. See
+[plugins.md › Requirements](../architecture/plugins.md#requirements).
+
 ## 6. Publish
 
 ```bash
