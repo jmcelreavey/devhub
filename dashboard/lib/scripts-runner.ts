@@ -26,6 +26,7 @@ import {
   updateAndSync,
 } from "./sync-orchestrator";
 import { validateRepo } from "./validate";
+import { pullCore } from "./pull-core";
 
 type Emit = (line: string) => void;
 
@@ -173,6 +174,34 @@ const ACTIONS: Record<string, ActionDef> = {
     ],
     cmd: "dashboard: pushUnpushedCommits()",
     run: (emit, repoRoot) => pushUnpushedCommits({ emit, repoRoot }),
+  },
+  pull_core_preview: {
+    label: "Pull Core Updates (Preview)",
+    description: "Show new commits from the public core (upstream), without applying anything.",
+    timeoutMs: 60_000,
+    mutates: false,
+    effects: [
+      "Fetches the public core (upstream remote)",
+      "Lists incoming commits and a diff stat since your last pull",
+      "Applies nothing, commits nothing — read-only",
+    ],
+    cmd: "scripts/devhub-update.sh --dry-run",
+    run: (emit, repoRoot) => pullCore({ emit, repoRoot, dryRun: true }),
+  },
+  pull_core: {
+    label: "Pull Core Updates",
+    description: "Apply new public-core changes onto your mirror, then validate + sync.",
+    timeoutMs: 300_000,
+    mutates: true,
+    effects: [
+      "Fetches the public core (upstream remote)",
+      "Ports new upstream changes onto your mirror via git apply --3way (no rebase)",
+      "Commits the applied changes and advances the sync marker",
+      "Runs validate + asset sync afterward",
+      "Requires main/master and a tree with no non-personal uncommitted changes",
+    ],
+    cmd: "scripts/devhub-update.sh",
+    run: (emit, repoRoot) => pullCore({ emit, repoRoot }),
   },
   validate: {
     label: "Validate",

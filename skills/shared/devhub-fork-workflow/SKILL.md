@@ -79,6 +79,10 @@ that the app rewrites live-dirty must be stashed before running, restored after.
 
 ## Pulling core updates (update)
 
+> From the dashboard, the **Actions** page exposes **Pull Core Updates (Preview)** (read-only)
+> and **Pull Core Updates** (apply) — they wrap the same script. Use the CLI below when
+> driving headless or scripting.
+
 ```bash
 # First run only: tell it the upstream commit your mirror last matched.
 bash scripts/devhub-update.sh --since <upstream-ref>
