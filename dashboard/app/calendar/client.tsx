@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useState } from "react";
 import { Calendar, ChevronDown, ChevronUp, MapPin, RefreshCw, Settings2, Video } from "lucide-react";
 import { useLive } from "@/lib/use-fetch";
@@ -195,16 +196,28 @@ export default function CalendarPage() {
 
       {isLoading && !data && <SkeletonRows count={3} height={80} />}
 
-      {!isLoading && !error && sortedDays.length === 0 && (
+      {!isLoading && !error && sortedDays.length === 0 && !calData?.configured && (
         <EmptyState
           icon={<Calendar size={28} />}
           title="No calendar connected."
           subtitle={
             <>
-              Set <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code>, and{" "}
-              <code>GOOGLE_REFRESH_TOKEN</code> in <code>.env.local</code> to enable calendar integration.
+              Connect Google Calendar in Setup to see events here and pick which calendars to show.
             </>
           }
+          action={
+            <Link href="/setup" className="btn btn-primary" style={{ fontSize: "12px" }}>
+              Open Setup
+            </Link>
+          }
+        />
+      )}
+
+      {!isLoading && !error && sortedDays.length === 0 && calData?.configured && (
+        <EmptyState
+          icon={<Calendar size={28} />}
+          title="Nothing scheduled this week."
+          subtitle="Events from your selected calendars will appear here."
         />
       )}
 

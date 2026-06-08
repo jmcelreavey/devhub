@@ -63,8 +63,9 @@ export async function getPeerServiceGateStatus(
     isPeerServiceActive("openchamber"),
     isPeerServiceActive("opencode"),
   ]);
-  return {
-    chamber: isOpenChamberConfigured(dashboardDir) || chamberActive,
-    opencode: isOpenCodeConfigured() || opencodeActive,
-  };
+  const opencode = isOpenCodeConfigured() || opencodeActive;
+  // Chamber depends on OpenCode — hide it when only the npm package is present.
+  const chamber =
+    chamberActive || (isOpenChamberConfigured(dashboardDir) && opencode);
+  return { chamber, opencode };
 }
