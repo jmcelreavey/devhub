@@ -36,12 +36,26 @@ git remote add upstream https://github.com/<owner>/devhub.git
 
 ## Pulling core updates
 
+The public core has an **unrelated history** (it's seeded from a clean tree so private
+history never leaks), so you can't rebase/merge onto it. `devhub-update.sh` instead ports
+the *content diff* of new upstream commits onto your mirror via `git apply --3way`, and
+tracks the last-pulled commit in the git ref `refs/devhub/upstream-sync`.
+
 ```bash
-scripts/devhub-update.sh      # fetch upstream, rebase, re-sync assets, validate
+# First run only: tell it where your mirror last matched public (e.g. the initial commit).
+scripts/devhub-update.sh --since <upstream-ref>
+
+# After that, the marker is automatic:
+scripts/devhub-update.sh            # apply new upstream changes, re-sync, validate
+scripts/devhub-update.sh --dry-run  # preview incoming changes only
 ```
 
-(Until that script lands: `git fetch upstream && git rebase upstream/main`, then re-run
-sync from the dashboard **Actions** page.)
+After you **backport** a feature (below), your mirror already contains everything public
+has, so don't re-pull it — just advance the marker:
+
+```bash
+scripts/devhub-update.sh --mark-synced
+```
 
 ## Contributing a feature back
 
