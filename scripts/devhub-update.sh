@@ -95,6 +95,7 @@ log "Incoming core commits ($COUNT) ${SINCE}..${UPSTREAM_REF}:"
 git log --oneline "${SINCE}..${UPSTREAM_REF}" | sed 's/^/  /'
 
 PATCH="$(git diff "${SINCE}..${UPSTREAM_REF}" -- . "${EXCLUDES[@]}")"
+mapfile -t PATCH_FILES < <(git diff --name-only "${SINCE}..${UPSTREAM_REF}" -- . "${EXCLUDES[@]}")
 if [[ -z "$PATCH" ]]; then
   log "No file changes after exclusions; marking synced."
   git update-ref "$SYNC_REF" "$UPSTREAM_SHA"
@@ -112,8 +113,13 @@ fi
 log "Applying ${SINCE}..${UPSTREAM_REF} onto ${BRANCH}..."
 if ! printf '%s\n' "$PATCH" | git apply --index --3way 2>/tmp/devhub-update-apply.err; then
   cat /tmp/devhub-update-apply.err >&2 || true
-  git reset --quiet HEAD . 2>/dev/null || true
-  git checkout --quiet -- . 2>/dev/null || true
+  # Revert only files from the upstream patch — personal paths (tasks/notes/…) may stay
+  # dirty on purpose and must not be wiped by a failed apply.
+  for f in "${PATCH_FILES[@]}"; do
+    [[ -n "$f" ]] || continue
+    git reset --quiet HEAD -- "$f" 2>/dev/null || true
+    git checkout --quiet HEAD -- "$f" 2>/dev/null || true
+  done
   fail "Could not cleanly apply upstream changes (conflicts vs your mirror customisation).
 Resolve manually: \`git diff ${SINCE}..${UPSTREAM_REF} -- . | git apply --3way\`, fix conflicts, commit."
 fi
