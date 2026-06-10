@@ -124,7 +124,11 @@ if ! printf '%s\n' "$PATCH" | git apply --index --3way 2>/tmp/devhub-update-appl
 Resolve manually: \`git diff ${SINCE}..${UPSTREAM_REF} -- . | git apply --3way\`, fix conflicts, commit."
 fi
 
-git commit --quiet -m "chore: pull core updates from ${UPSTREAM_REF} ($(git rev-parse --short "$SINCE")..$(git rev-parse --short "$UPSTREAM_SHA"))"
+# Commit only upstream patch files — personal paths may be staged from a failed scoped
+# sync and must not ride along in the core-update commit (PR #6 allows unstaged dirty
+# personal data during pull; staged personal data must stay out of this commit).
+git commit --quiet -m "chore: pull core updates from ${UPSTREAM_REF} ($(git rev-parse --short "$SINCE")..$(git rev-parse --short "$UPSTREAM_SHA"))" \
+  --only -- "${PATCH_FILES[@]}"
 git update-ref "$SYNC_REF" "$UPSTREAM_SHA"
 log "Applied and committed. Sync marker → $(git rev-parse --short "$UPSTREAM_SHA")."
 
