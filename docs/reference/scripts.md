@@ -41,7 +41,7 @@ the [Fork Workflow](../guides/fork-workflow.md) guide):
 
 | Command | Purpose |
 | ------- | ------- |
-| `bash scripts/devhub-update.sh [--since <ref>] [--dry-run] [--no-sync] [--mark-synced]` | Pull core updates from `upstream` by porting hunks (`git apply --3way`, since public history is unrelated), then validate + sync. Tracks the last pull in `refs/devhub/upstream-sync`; first run needs `--since`. `--mark-synced` records sync without applying (use after a backport). Guards: on main/master, upstream remote present, and no *non-personal* uncommitted changes (live-dirty `notes/`/`tasks/`/`collections/` are ignored). |
+| `bash scripts/devhub-update.sh [--since <ref>] [--dry-run] [--no-sync] [--mark-synced]` | Pull core updates from `upstream` by porting hunks (`git apply --3way`, since public history is unrelated), then validate + sync. Tracks the last pull in `refs/devhub/upstream-sync`; first run needs `--since`. `--mark-synced` records sync without applying (use after a backport). Guards: on main/master, upstream remote present, and no *non-personal* uncommitted changes (live-dirty `notes/`/`tasks/`/`collections/` are ignored). On apply failure, reverts only patch files — personal paths keep their dirty state. |
 | `bash scripts/devhub-backport.sh <source-ref> [--base <ref>] [--execute] [--title "…"]` | Build a clean PR branch off `upstream` and port the feature's hunks onto it (`git apply --3way`, preserving public-side templatisation), personal data excluded, leak-scanned. `--base` defaults to `<source-ref>^`. Previews by default; `--execute` pushes the branch to `upstream` and opens the PR. |
 
 These call the CLI action runner, which is also usable directly:

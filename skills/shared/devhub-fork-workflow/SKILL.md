@@ -33,11 +33,11 @@ PR — always preview, eyeball the diff, and let CI run.
 ```bash
 git remote get-url upstream            # must exist; if not, add the public core
 git branch --show-current              # update.sh requires main/master
-git status --porcelain --untracked-files=no   # must be clean (stash personal tasks/* first)
+git status --porcelain --untracked-files=no -- . ':!notes' ':!tasks' ':!collections'  # non-personal must be clean
 ```
 
-The scripts refuse to run on a dirty tracked tree. Personal files (e.g. `tasks/<date>.json`)
-that the app rewrites live-dirty must be stashed before running, restored after.
+The update script blocks only on **non-personal** tracked changes. Live-dirty `tasks/`,
+`notes/`, and `collections/` are ignored — you do not need to stash them before pulling.
 
 ## Pushing a feature upstream (backport)
 
@@ -93,7 +93,9 @@ bash scripts/devhub-update.sh             # apply, commit, validate, re-sync ass
 
 It tracks the last pull in the git ref `refs/devhub/upstream-sync`, so after the first
 `--since` it's automatic. It ports only commits the mirror lacks. If a hunk conflicts with
-your mirror customisation it aborts cleanly — resolve manually and commit.
+your mirror customisation it aborts before committing, rolls back only upstream patch
+files (personal paths keep their dirty state), and prints manual-resolve steps — see
+`docs/guides/fork-workflow.md`.
 
 > Caveat: don't run a full pull for changes that **originated in your mirror** and went up
 > via backport — they're already present, and re-applying is messy. Use `--mark-synced`
@@ -102,7 +104,7 @@ your mirror customisation it aborts cleanly — resolve manually and commit.
 ## Rules
 
 - Preview (no `--execute`) before every backport; read the diff stat.
-- Stash live-dirty personal files before running; restore after.
+- Commit or stash non-personal changes before pulling; personal `tasks/`/`notes/`/`collections/` dirt is fine.
 - The leak scan is the safety net, not a substitute for judgement — keep company names and
   private logic in plugins, not in backported core.
 - One concern per PR; let CI go green before merging.

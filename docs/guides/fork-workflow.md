@@ -33,7 +33,8 @@ On the **Actions** page:
 
 Your live-dirty personal files (`tasks/`, `notes/`, `collections/`) don't block a pull —
 the guard only stops on *non-personal* uncommitted changes that could collide with the
-apply. Commit or stash those first.
+apply. Commit or stash those first. You do **not** need to stash personal data just
+because the app rewrote a task file while you were working.
 
 ### From the CLI
 
@@ -44,6 +45,26 @@ scripts/devhub-update.sh             # apply + validate + sync
 
 First run only, before the marker exists, pass the upstream commit your mirror last matched:
 `scripts/devhub-update.sh --since <upstream-ref>`.
+
+### When apply fails (conflicts)
+
+`devhub-update.sh` ports hunks with `git apply --3way`. If a hunk conflicts with your
+mirror customisation, the script aborts **before** committing and rolls back only the
+files from the upstream patch — not your personal paths. Unsaved edits in `tasks/`,
+`notes/`, or `collections/` stay as-is.
+
+Fix the conflict manually, then commit:
+
+```bash
+git diff <since-ref>..upstream/<branch> -- . | git apply --3way
+# resolve conflict markers, then:
+git add -A && git commit -m "chore: pull core updates (manual resolve)"
+git update-ref refs/devhub/upstream-sync "$(git rev-parse upstream/<branch>)"
+cd dashboard && npx tsx scripts/run-action.ts validate && npx tsx scripts/run-action.ts sync
+```
+
+Replace `<since-ref>` with the upstream commit shown in the error (or
+`refs/devhub/upstream-sync` before the failed run).
 
 ## Pushing a feature upstream (backport)
 

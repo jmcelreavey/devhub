@@ -10,6 +10,24 @@ DevHub runs three cooperating local services during `npm run dev` and `npm run s
 
 OpenCode is a **shared peer service**. OpenChamber connects to the same `opencode serve` instance instead of starting its own embedded server.
 
+## Nav Visibility
+
+Chamber and OpenCode sidebar links are **gated** via `/api/setup/status` — same pattern as
+Calendar, Jira, and other optional integrations.
+
+| Nav item  | Shown when |
+| --------- | ---------- |
+| OpenCode  | The `opencode` binary is on `PATH` (or `DEVHUB_OPENCODE_BINARY` points at one), **or** something is already listening on `OPENCODE_PORT` |
+| Chamber   | OpenCode is available (above) **and** OpenChamber is installed (`openchamber` on `PATH`, `OPENCHAMBER_BIN`, or the `@openchamber/web` npm package), **or** something is already listening on `OPENCHAMBER_PORT` |
+
+Chamber depends on OpenCode — if only the OpenChamber npm package is present but `opencode`
+is not installed, Chamber stays hidden. Install OpenCode (see root README) or start an
+existing `opencode serve` on the configured port; the nav updates on the next
+`/api/setup/status` poll.
+
+Peer startup failures during `npm run dev` are non-fatal — the dashboard still runs; nav
+items appear once the binaries exist or the ports are live.
+
 ## Startup Flow
 
 ```text
@@ -121,6 +139,7 @@ The **Status** page probes OpenChamber and OpenCode ports via `/api/status/servi
 
 | Symptom | Things to check |
 | ------- | ---------------- |
+| Chamber / OpenCode missing from nav | OpenCode binary installed or port already listening; Chamber also needs OpenChamber installed (see Nav Visibility above) |
 | Chamber iframe blank | OpenCode listening on `OPENCODE_PORT`; Status page service indicators |
 | OpenCode won't start | `which opencode` or set `DEVHUB_OPENCODE_BINARY`; port `1338` not held by another process |
 | Provider auth errors | `/setup` or 1Password item fields; run sync after env vars are set; `DEVHUB_OP_REFRESH=1` once to refresh |

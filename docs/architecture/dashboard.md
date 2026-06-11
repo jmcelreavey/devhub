@@ -29,6 +29,13 @@ Page route
 
 The browser talks to the dashboard API. The API reads local files, shell tools, or third-party services depending on the feature.
 
+## Nav Gating
+
+Sidebar and command-palette entries carry an optional `gate` field (`dashboard/lib/nav.ts`).
+The client polls `/api/setup/status` and hides items the user cannot use yet — Calendar
+until Google OAuth is configured, Chamber until OpenCode and OpenChamber are available,
+and so on. This keeps the nav honest: no dead links to integrations that were never set up.
+
 ## API Pattern
 
 Dashboard API routes are local endpoints used by the UI. They are not intended as a public external API.

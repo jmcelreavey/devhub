@@ -43,8 +43,9 @@ tracks the last-pulled commit in the git ref `refs/devhub/upstream-sync`.
 
 **From the dashboard:** the **Actions** page has **Pull Core Updates (Preview)** (read-only —
 shows incoming commits) and **Pull Core Updates** (applies + validates + re-syncs). Your
-live-dirty personal files don't block it. This is the easiest path; the CLI below is the
-same thing.
+live-dirty personal files don't block it. If apply fails on a conflict, only upstream patch
+files are rolled back — unsaved `tasks/` / `notes/` / `collections/` edits are preserved.
+This is the easiest path; the CLI below is the same thing.
 
 ```bash
 # First run only: tell it where your mirror last matched public (e.g. the initial commit).
