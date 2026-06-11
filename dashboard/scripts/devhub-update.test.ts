@@ -92,4 +92,58 @@ describe("devhub-update.sh", () => {
     expect(fs.readFileSync(path.join(mirrorDir, "tasks", "day.json"), "utf-8")).toBe(dirtyTasks);
     expect(fs.readFileSync(path.join(mirrorDir, "core.txt"), "utf-8")).toBe("mirror-change\n");
   });
+
+  it("does not commit staged personal tasks on successful pull", () => {
+    const localTmp = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-update-success-"));
+    const localUpstream = path.join(localTmp, "upstream.git");
+    const localMirror = path.join(localTmp, "mirror");
+
+    git(REPO_ROOT, "init", "--bare", localUpstream);
+    fs.mkdirSync(localMirror, { recursive: true });
+    git(localMirror, "init", "-b", "main");
+    git(localMirror, "config", "user.email", "test@example.com");
+    git(localMirror, "config", "user.name", "Test");
+
+    fs.mkdirSync(path.join(localMirror, "tasks"), { recursive: true });
+    fs.writeFileSync(path.join(localMirror, "core.txt"), "base\n", "utf-8");
+    fs.writeFileSync(path.join(localMirror, "tasks", "day.json"), "[]\n", "utf-8");
+    git(localMirror, "add", ".");
+    git(localMirror, "commit", "-m", "seed");
+    const seed = git(localMirror, "rev-parse", "HEAD");
+
+    fs.writeFileSync(path.join(localMirror, "upstream-only.txt"), "new core file\n", "utf-8");
+    git(localMirror, "add", "upstream-only.txt");
+    git(localMirror, "commit", "-m", "upstream adds file");
+    git(localMirror, "push", "--quiet", localUpstream, "main");
+    git(localUpstream, "symbolic-ref", "HEAD", "refs/heads/main");
+
+    git(localMirror, "reset", "--hard", seed);
+    fs.writeFileSync(path.join(localMirror, "core.txt"), "mirror-change\n", "utf-8");
+    git(localMirror, "add", "core.txt");
+    git(localMirror, "commit", "-m", "mirror customization");
+    git(localMirror, "update-ref", "refs/devhub/upstream-sync", seed);
+    git(localMirror, "remote", "add", "upstream", localUpstream);
+    git(localMirror, "fetch", "--quiet", "upstream");
+    git(localMirror, "remote", "set-head", "upstream", "main");
+
+    const stagedTasks = '[{"id":"1","text":"staged personal task"}]\n';
+    fs.writeFileSync(path.join(localMirror, "tasks", "day.json"), stagedTasks, "utf-8");
+    git(localMirror, "add", "tasks/day.json");
+
+    const { status, output } = runUpdate(localMirror, ["--no-sync"]);
+    expect(status).toBe(0);
+    expect(output).toMatch(/Applied and committed/);
+
+    const commitFiles = git(localMirror, "show", "--name-only", "--pretty=format:", "HEAD")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    expect(commitFiles).toEqual(["upstream-only.txt"]);
+    expect(commitFiles).not.toContain("tasks/day.json");
+
+    expect(git(localMirror, "diff", "--cached", "--name-only")).toBe("tasks/day.json");
+    expect(fs.readFileSync(path.join(localMirror, "tasks", "day.json"), "utf-8")).toBe(stagedTasks);
+
+    fs.rmSync(localTmp, { recursive: true, force: true });
+  });
 });
