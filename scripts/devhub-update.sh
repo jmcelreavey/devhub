@@ -49,6 +49,9 @@ fail() { echo "[devhub-update] ERROR: $*" >&2; exit 1; }
 # the dirty-tree guard, so the app's live-dirty tasks/notes don't block a pull from the UI.
 EXCLUDES=(':!notes' ':!tasks' ':!collections' ':!dashboard/.env.local'
           ':!persona/identity.txt' ':!TEMPLATE_AND_PLUGIN_PLAN.md' ':!scripts/make-public-seed.sh')
+# Paths that may stay dirty during a pull — never commit them as part of a core update.
+PERSONAL_PATHS=(notes tasks collections dashboard/.env.local persona/identity.txt
+                TEMPLATE_AND_PLUGIN_PLAN.md scripts/make-public-seed.sh)
 
 # --- guards ---
 BRANCH="$(git branch --show-current)"
@@ -57,6 +60,12 @@ BRANCH="$(git branch --show-current)"
 # Only non-personal tracked changes block a pull (they could collide with the 3-way apply).
 [[ -z "$(git status --porcelain --untracked-files=no -- . "${EXCLUDES[@]}")" ]] \
   || fail "Non-personal tracked changes present. Commit or stash them, then re-run."
+# Staged personal data must not ride along in the core-update commit (PR #6 allows unstaged
+# dirty tasks/notes, but index entries would be picked up by a blanket git commit).
+STAGED_PERSONAL="$(git diff --cached --name-only -- "${PERSONAL_PATHS[@]}" 2>/dev/null || true)"
+[[ -z "$STAGED_PERSONAL" ]] \
+  || fail "Staged changes in personal-data paths ($(echo "$STAGED_PERSONAL" | tr '\n' ' ' | sed 's/ $//')).
+Unstage or commit them separately, then re-run."
 git remote get-url upstream >/dev/null 2>&1 || fail \
 "No 'upstream' remote. Add the public core:
   git remote add upstream https://github.com/<owner>/devhub.git"
@@ -124,7 +133,9 @@ if ! printf '%s\n' "$PATCH" | git apply --index --3way 2>/tmp/devhub-update-appl
 Resolve manually: \`git diff ${SINCE}..${UPSTREAM_REF} -- . | git apply --3way\`, fix conflicts, commit."
 fi
 
-git commit --quiet -m "chore: pull core updates from ${UPSTREAM_REF} ($(git rev-parse --short "$SINCE")..$(git rev-parse --short "$UPSTREAM_SHA"))"
+# Commit only upstream patch files — never sweep staged personal paths into this commit.
+git commit --quiet -m "chore: pull core updates from ${UPSTREAM_REF} ($(git rev-parse --short "$SINCE")..$(git rev-parse --short "$UPSTREAM_SHA"))" \
+  -- "${PATCH_FILES[@]}"
 git update-ref "$SYNC_REF" "$UPSTREAM_SHA"
 log "Applied and committed. Sync marker → $(git rev-parse --short "$UPSTREAM_SHA")."
 
