@@ -5,6 +5,7 @@ import { Menu } from "lucide-react";
 import { NavLink } from "./NavLink";
 import {
   NAV_ITEMS,
+  LEGACY_NAV_ITEMS,
   NAV_GROUPS,
   filterNavBySetup,
   type NavGroup,
@@ -22,7 +23,7 @@ export function MobileNav() {
   const { data: setup } = useLive<SetupGateStatus>("/api/setup/status", {
     refreshInterval: 0,
   });
-  const { counts, unseen } = useNavBadges();
+  const { counts, unseen, calendarRemaining } = useNavBadges();
 
   useEffect(() => {
     if (!open) return;
@@ -41,8 +42,10 @@ export function MobileNav() {
   }, []);
 
   const grouped = useMemo(() => {
+    // Mobile has no ⌘K palette or desktop section tabs, so the drawer is
+    // the only road to legacy pages — include them after the core items.
     const visible = filterNavBySetup(
-      NAV_ITEMS.filter((i) => !i.desktopOnly),
+      [...NAV_ITEMS, ...LEGACY_NAV_ITEMS].filter((i) => !i.desktopOnly),
       setup ?? null,
     );
     const map: Record<NavGroup, NavItem[]> = {
@@ -71,7 +74,7 @@ export function MobileNav() {
       {open && (
         <>
           <div
-            className="fixed inset-0 z-40"
+            className="modal-backdrop fixed inset-0 z-40"
             style={{ background: "rgba(0,0,0,0.6)" }}
             onClick={() => setOpen(false)}
             aria-hidden
@@ -81,7 +84,7 @@ export function MobileNav() {
             role="dialog"
             aria-modal="true"
             aria-label="Main navigation"
-            className="fixed inset-y-0 left-0 z-50 w-64 flex flex-col py-4"
+            className="mobile-drawer-enter fixed inset-y-0 left-0 z-50 w-64 flex flex-col py-4"
             style={{ background: "var(--bg-sidebar, #0a0d12)", borderRight: "1px solid var(--border)" }}
           >
             <div
@@ -94,24 +97,13 @@ export function MobileNav() {
               {NAV_GROUPS.map((g) =>
                 grouped[g.id].length === 0 ? null : (
                   <div key={g.id} className="pt-3 pb-1">
-                    <div
-                      style={{
-                        fontSize: 12,
-                        fontWeight: 600,
-                        letterSpacing: "0.12em",
-                        color: "var(--text-subtle)",
-                        padding: "4px 10px 6px",
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      {g.label}
-                    </div>
+                    <div className="nav-group-label">{g.label}</div>
                     {grouped[g.id].map((item) => (
                       <NavLink
                         key={item.href}
                         item={item}
                         onClick={() => setOpen(false)}
-                        count={countForItem(item.icon, counts)}
+                        count={countForItem(item.icon, counts, { calendarRemaining })}
                         unseen={unseenForItem(item.icon, unseen)}
                       />
                     ))}

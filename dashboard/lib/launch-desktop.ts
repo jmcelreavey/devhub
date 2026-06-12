@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -6,7 +6,7 @@ import https from "node:https";
 import http from "node:http";
 
 export type LaunchResult =
-  | { ok: true; path?: string; openUrl?: string; serverUrl?: string }
+  | { ok: true; path?: string; openUrl?: string; serverUrl?: string; focusedExisting?: boolean }
   | { error: string; detail?: string; hint?: string; releasesUrl?: string; status: number };
 
 export interface LaunchConfig {
@@ -50,6 +50,25 @@ export function findInstalledApp(macName: string, linuxBin: string): string | nu
     if (p && fs.existsSync(p)) return p;
   }
   return null;
+}
+
+/**
+ * True when the desktop app already has a running instance (macOS). Every
+ * launch used to spawn a brand-new process — each one its own Electron tree
+ * eating RAM, and a fresh instance can bind a different port / miss the
+ * injected server URL. If it's already up, we just bring it to front.
+ */
+function isAppRunning(macAppName: string): boolean {
+  if (process.platform !== "darwin") return false;
+  const res = spawnSync("pgrep", ["-f", `${macAppName}.app/Contents/MacOS`], {
+    stdio: ["ignore", "ignore", "ignore"],
+    timeout: 3_000,
+  });
+  return res.status === 0;
+}
+
+function focusExistingApp(macAppName: string): void {
+  spawn("open", ["-a", macAppName], { detached: true, stdio: "ignore" }).unref();
 }
 
 function getLinuxArch(): "x86_64" | "aarch64" {
@@ -178,6 +197,12 @@ export async function launchDesktopApp(config: LaunchConfig): Promise<LaunchResu
   const bin = binary ?? installed;
 
   try {
+    if (process.platform === "darwin" && isAppRunning(config.macAppName)) {
+      // Already running — focus it instead of stacking another instance.
+      focusExistingApp(config.macAppName);
+      const serverUrl = config.envInject?.valueFn();
+      return { ok: true as const, path: installed, focusedExisting: true, ...(serverUrl ? { serverUrl } : {}) };
+    }
     if (process.platform === "darwin") {
       if (binary && !config.envInject) {
         spawn("open", [installed], { detached: true, stdio: "ignore" }).unref();

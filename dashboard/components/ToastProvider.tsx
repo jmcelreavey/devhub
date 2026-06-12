@@ -31,18 +31,37 @@ const DEFAULT_DURATION: Record<ToastVariant, number> = {
   error: 7000,
 };
 
+/** Matches the toast-slide-out duration in globals.css. */
+const EXIT_MS = 200;
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [leaving, setLeaving] = useState<Set<number>>(new Set());
   const idRef = useRef(0);
   const timersRef = useRef(new Map<number, ReturnType<typeof setTimeout>>());
 
+  // Two-phase dismiss: mark the toast as leaving so it slides out, then
+  // remove it once the exit animation has played.
   const dismiss = useCallback((id: number) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
     const timer = timersRef.current.get(id);
     if (timer) {
       clearTimeout(timer);
       timersRef.current.delete(id);
     }
+    setLeaving((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    window.setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+      setLeaving((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }, EXIT_MS);
   }, []);
 
   const push = useCallback(
@@ -73,19 +92,30 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="toast-stack" role="region" aria-live="polite" aria-label="Notifications">
         {toasts.map((t) => (
-          <ToastItem key={t.id} toast={t} onDismiss={() => dismiss(t.id)} />
+          <ToastItem key={t.id} toast={t} leaving={leaving.has(t.id)} onDismiss={() => dismiss(t.id)} />
         ))}
       </div>
     </ToastContext.Provider>
   );
 }
 
-function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }) {
+function ToastItem({
+  toast,
+  leaving,
+  onDismiss,
+}: {
+  toast: Toast;
+  leaving?: boolean;
+  onDismiss: () => void;
+}) {
   const Icon =
     toast.variant === "success" ? CheckCircle2 : toast.variant === "error" ? AlertCircle : Info;
 
   return (
-    <div className={`toast toast-${toast.variant}`} role={toast.variant === "error" ? "alert" : "status"}>
+    <div
+      className={`toast toast-${toast.variant}${leaving ? " toast-leaving" : ""}`}
+      role={toast.variant === "error" ? "alert" : "status"}
+    >
       <Icon size={16} className="toast-icon" aria-hidden />
       <span className="toast-message">{toast.message}</span>
       {toast.action && (

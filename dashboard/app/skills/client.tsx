@@ -56,6 +56,7 @@ import {
 import type { SyncPreviewResult } from "@/lib/sync-preview-types";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { useToast } from "@/lib/use-toast";
+import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
 
 type Tab = "skills" | "agents" | "persona" | "mcp" | "opencode";
 
@@ -121,6 +122,7 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
   const [localSkillCandidates, setLocalSkillCandidates] = useState<LocalSkillImportCandidate[]>([]);
   const [localAgentCandidates, setLocalAgentCandidates] = useState<LocalSkillImportCandidate[]>([]);
   const [loadingLocal, setLoadingLocal] = useState(true);
+  const boot = useBootGate(!loading && !loadingAgents && !loadingLocal);
   const [agentSourceFilter, setAgentSourceFilter] = useState<AgentSourceFilter>("all");
   const [importingName, setImportingName] = useState<string | null>(null);
   const [highlightNames, setHighlightNames] = useState<string[]>([]);
@@ -536,6 +538,7 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
 
   return (
     <div className="page-wrapper">
+      <BootScreen state={boot} />
       <div className="page-header">
         <div className="page-title">Agents</div>
         {(tab === "skills" || tab === "agents") && (

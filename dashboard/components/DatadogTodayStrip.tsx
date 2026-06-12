@@ -86,7 +86,14 @@ export function DatadogTodayStrip({
 
   const counts =
     recent && recent.ok ? (
-      <span className="font-mono text-[11px] tabular-nums min-w-0 truncate" style={{ color: subtle }}>
+      <span className="font-mono text-[11px] tabular-nums min-w-0 truncate flex items-center gap-1.5" style={{ color: subtle }}>
+        {recent.oncall.length > 0 && (
+          <span
+            aria-hidden
+            className="danger-pulse inline-block h-2 w-2 shrink-0 rounded-full"
+            style={{ background: "var(--danger)" }}
+          />
+        )}
         <span style={{ color: "var(--danger)" }}>{recent.oncall.length} on-call</span>
         {" · "}
         {recent.teamSlack.length} team-slack

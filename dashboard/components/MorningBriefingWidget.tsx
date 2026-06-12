@@ -69,7 +69,13 @@ export function MorningBriefingWidget() {
           <div className="skeleton" style={{ height: 12, width: "85%" }} />
         </div>
       ) : data?.ok ? (
-        <p className="text-sm leading-relaxed" style={{ color: "var(--text)" }}>
+        // Keyed on generation time so a fresh briefing settles in with a
+        // rise — shimmer → text, no spinner (motion = information).
+        <p
+          key={data.generatedAt ?? "briefing"}
+          className="briefing-settle text-sm leading-relaxed"
+          style={{ color: "var(--text)" }}
+        >
           {data.text}
         </p>
       ) : (

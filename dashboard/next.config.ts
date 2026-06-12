@@ -1,4 +1,6 @@
 import type { NextConfig } from "next";
+import crypto from "node:crypto";
+import fs from "node:fs";
 import path from "node:path";
 
 /** Repo root — used for production file tracing only (not Turbopack dev root). */
@@ -47,7 +49,33 @@ const nextConfig: NextConfig = {
    *  to repoRoot — Turbopack would watch notes/, docs/, tasks/, etc. and can fork workers until RAM is gone. */
   turbopack: {},
   // Don't watch notes/ — large dir unrelated to app code (webpack / `next dev --webpack`)
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, dev }) => {
+    /**
+     * Dev disk cache, version-keyed to app/globals.css content. The
+     * persistent cache repeatedly pinned stale PostCSS/Tailwind output for
+     * globals.css — edits compiled to no-ops until .next/dev/cache was
+     * deleted by hand. Keying `cache.version` to a hash of the file means
+     * any globals.css change made between server runs starts a fresh cache
+     * (correct CSS), while unrelated restarts keep the warm cache (fast
+     * cold starts). Within a session, HMR handles CSS edits as normal.
+     */
+    if (dev) {
+      let cssHash = "none";
+      try {
+        cssHash = crypto
+          .createHash("sha1")
+          .update(fs.readFileSync(path.join(__dirname, "app", "globals.css")))
+          .digest("hex")
+          .slice(0, 12);
+      } catch {
+        /* missing file — fall through with a constant */
+      }
+      config.cache = {
+        ...(typeof config.cache === "object" ? config.cache : {}),
+        type: "filesystem",
+        version: `devhub-css-${cssHash}`,
+      };
+    }
     // Dev webpack compiles instrumentation.ts into a server bundle; without this,
     // `node:child_process` (via scheduler → scripts-runner) triggers UnhandledSchemeError.
     if (isServer) {

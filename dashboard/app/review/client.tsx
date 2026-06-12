@@ -7,6 +7,7 @@ import { useLive } from "@/lib/use-fetch";
 import { localCalendarDateISO } from "@/lib/local-calendar-date";
 import { jiraBrowseUrl } from "@/lib/utils";
 import type { WeeklyReview } from "@/lib/tasks-weekly";
+import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
 
 function shiftISODate(iso: string, deltaDays: number): string {
   const d = new Date(`${iso}T00:00:00`);
@@ -33,6 +34,7 @@ export default function ReviewPage() {
   const today = localCalendarDateISO();
   const [end, setEnd] = useState(today);
   const { data, error, isLoading } = useLive<WeeklyReview>(`/api/tasks/weekly?end=${end}`);
+  const boot = useBootGate(data !== undefined || !!error);
 
   const maxCreated = useMemo(
     () => Math.max(1, ...(data?.days ?? []).map((d) => d.created)),
@@ -43,6 +45,7 @@ export default function ReviewPage() {
 
   return (
     <div className="page-wrapper">
+      <BootScreen state={boot} />
       <div className="page-header">
         <div>
           <div className="page-title">Weekly review</div>
@@ -83,7 +86,7 @@ export default function ReviewPage() {
       </div>
 
       {error && <FetchError message="Couldn't load weekly review." />}
-      {isLoading && !data && <SkeletonRows count={3} height={60} />}
+      {isLoading && !data && <SkeletonRows count={5} height={40} variant="list" />}
 
       {data && (
         <>

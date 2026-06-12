@@ -14,6 +14,7 @@ export default defineConfig({
     include: [
       "lib/**/*.test.ts",
       "app/**/*.test.ts",
+      "components/**/*.test.tsx",
       "scripts/**/*.test.ts",
       "../shared/notes-search/**/*.test.ts",
       "../shared/notes-assets/**/*.test.ts",

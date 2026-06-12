@@ -16,7 +16,7 @@ The launcher can:
 - run or rerun `npm install --prefix ./dashboard`
 - start either `npm run dev` or `npm run start`
 - reuse an existing dashboard if port `1337` is already serving
-- restart DevHub by stopping local listeners on `1337`/`1336`/`1338` first (macOS/Linux)
+- restart DevHub by stopping local listeners on `1337`/`1336`/`1338`/`1339` first (macOS/Linux)
 - open the dashboard in an Electron window at `http://localhost:1337`
 - check for packaged app updates from GitHub Releases (`Tools` → `Check for Updates`)
 

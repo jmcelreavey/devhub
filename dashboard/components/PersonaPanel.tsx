@@ -7,6 +7,7 @@ import { revalidateScriptsHistory } from "@/lib/scripts-history-swr";
 import { waitForScriptRun } from "@/lib/wait-for-script-run";
 import { formatRelativePastAge } from "@/lib/utils";
 import { SyncButton } from "@/components/SyncButton";
+import { SkeletonRows } from "@/components/SkeletonRows";
 
 interface PersonaSourceMeta {
   layer: string;
@@ -308,7 +309,11 @@ export function PersonaPanel() {
   }, [pullTool, pullSource, toast, loadList, closePull]);
 
   if (loading) {
-    return <p className="text-sm" style={{ color: "var(--text-subtle)" }}>Loading…</p>;
+    return (
+      <div role="status" aria-label="Loading persona layers">
+        <SkeletonRows count={3} height={48} />
+      </div>
+    );
   }
 
   const sources = targets.filter((t) => t.kind === "source");

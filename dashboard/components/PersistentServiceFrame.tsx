@@ -52,6 +52,17 @@ export function PersistentServiceFrame({
 
   if (!mounted && isActive) setMounted(true);
 
+  // RAM guard: the iframe stays mounted across routes to preserve session
+  // state, but an embedded app (terminal buffers, editors) accumulates
+  // memory forever. If the user hasn't visited this route in a while,
+  // unload the iframe — it remounts fresh on the next visit.
+  useEffect(() => {
+    if (isActive || !mounted) return;
+    const IDLE_UNLOAD_MS = 20 * 60 * 1000; // 20 minutes away → release it
+    const t = setTimeout(() => setMounted(false), IDLE_UNLOAD_MS);
+    return () => clearTimeout(t);
+  }, [isActive, mounted]);
+
   if (!mounted) return null;
 
   return (

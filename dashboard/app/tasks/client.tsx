@@ -7,6 +7,7 @@ import { FetchError, SkeletonRows } from "@/components";
 import { paletteCommandScore } from "@/lib/command-palette-score";
 import { useToast } from "@/lib/use-toast";
 import { useLive } from "@/lib/use-fetch";
+import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
 
 const PAGE_SIZE = 50;
 const FILTERS = ["all", "open", "done", "abandoned", "moved"] as const;
@@ -166,6 +167,7 @@ export default function TasksPage() {
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [page, setPage] = useState(1);
   const { data, error, isLoading, mutate } = useLive<TaskDay[]>("/api/tasks/history?includeTasks=1");
+  const boot = useBootGate(data !== undefined || !!error);
   const toast = useToast();
 
   const allRecords = useMemo(() => {
@@ -270,6 +272,7 @@ export default function TasksPage() {
 
   return (
     <div className="page-wrapper">
+      <BootScreen state={boot} />
       <div className="page-header">
         <div>
           <div className="page-title">Tasks</div>
@@ -343,7 +346,7 @@ export default function TasksPage() {
         </div>
       </div>
 
-      {isLoading && !data && <SkeletonRows count={3} height={60} />}
+      {isLoading && !data && <SkeletonRows count={5} height={40} variant="list" />}
 
       {!isLoading && !error && records.length === 0 && (
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>

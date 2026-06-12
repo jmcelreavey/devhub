@@ -47,13 +47,13 @@ export function ModalShell({
 
   return (
     <div
-      className={`fixed inset-0 z-[250] flex px-4 ${align === "top" ? "items-start justify-center pt-[12vh]" : "items-center justify-center"}`}
+      className={`modal-backdrop fixed inset-0 z-[250] flex px-4 ${align === "top" ? "items-start justify-center pt-[12vh]" : "items-center justify-center"}`}
       style={{ background: "rgba(0,0,0,0.45)" }}
       onClick={onClose}
       role="presentation"
     >
       <div
-        className={`w-full ${maxWidth} rounded-xl shadow-2xl overflow-hidden`}
+        className={`modal-panel w-full ${maxWidth} rounded-xl shadow-2xl overflow-hidden`}
         style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"

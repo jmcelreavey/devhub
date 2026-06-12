@@ -8,6 +8,7 @@ import type { CalendarEvent, GoogleCalendarInfo } from "@/lib/google-calendar";
 import { CreateMeetingNoteButton } from "@/components/CreateMeetingNoteButton";
 import { formatTime, todayISO } from "@/lib/utils";
 import { EmptyState, FetchError, PageHeader, SkeletonRows } from "@/components";
+import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
 
 function isToday(dateStr: string): boolean {
   return dateStr === todayISO();
@@ -87,6 +88,7 @@ function CalendarPicker({
 
 export default function CalendarPage() {
   const { data, error, isLoading, mutate, isValidating } = useLive<WeekResponse>("/api/calendar/week");
+  const boot = useBootGate(data !== undefined || !!error);
   const {
     data: calData,
     error: calError,
@@ -127,6 +129,7 @@ export default function CalendarPage() {
 
   return (
     <div className="page-wrapper">
+      <BootScreen state={boot} />
       <PageHeader
         title="Calendar"
         subtitle={

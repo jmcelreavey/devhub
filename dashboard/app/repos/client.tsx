@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { GitBranch, ExternalLink, MonitorPlay, AlertCircle, ArrowUpFromLine, Monitor, RefreshCw, Download, Trash2 } from "lucide-react";
+import { AlertCircle, ArrowUpFromLine, Container, Download, ExternalLink, GitBranch, Monitor, MonitorPlay, RefreshCw, TerminalSquare, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useLive } from "@/lib/use-fetch";
 import { useToast } from "@/lib/use-toast";
 import { FetchError } from "@/components/FetchError";
 import { HoverTip } from "@/components/HoverTip";
+import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
 
 interface RepoInfo {
   name: string;
@@ -15,6 +16,7 @@ interface RepoInfo {
   dirtyCount: number;
   remote: string | null;
   unpushedCount?: number;
+  hasCompose?: boolean;
 }
 
 interface ReposApiPayload {
@@ -67,6 +69,7 @@ export default function ReposPage() {
     mutate: mutateLocal,
     isValidating: isLocalValidating,
   } = useLive<ReposApiPayload>("/api/repos");
+  const boot = useBootGate(data !== undefined || !!localError);
   const repos = data?.repos ?? [];
   const [query, setQuery] = useState("");
   const [debouncedGithubQuery, setDebouncedGithubQuery] = useState("");
@@ -85,6 +88,10 @@ export default function ReposPage() {
   const [opening, setOpening] = useState<string | null>(null);
   const [cloning, setCloning] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [composing, setComposing] = useState<string | null>(null);
+  const { data: apps } = useLive<{ gitkraken: boolean; docker: boolean }>("/api/repos/apps", {
+    refreshInterval: 0,
+  });
   const [isDesktop] = useState(() => {
     if (typeof window === "undefined") return true;
     return window.matchMedia("(hover: hover) and (pointer: fine)").matches;
@@ -113,6 +120,37 @@ export default function ReposPage() {
       toast.error(`Couldn't open ${name} in Cursor.`);
     } finally {
       setOpening(null);
+    }
+  }
+
+  function openInTerminal(repo: { name: string; path: string }) {
+    window.dispatchEvent(
+      new CustomEvent("devhub:terminal-open", { detail: { cwd: repo.path, label: repo.name } }),
+    );
+  }
+
+  async function openInGitKraken(name: string) {
+    try {
+      const res = await fetch(`/api/repos/${encodeURIComponent(name)}/open-gitkraken`, { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
+    } catch (e) {
+      console.error("open in gitkraken:", e);
+      toast.error(`Couldn't open ${name} in GitKraken.`);
+    }
+  }
+
+  async function composeUp(name: string) {
+    setComposing(name);
+    try {
+      const res = await fetch(`/api/repos/${encodeURIComponent(name)}/compose-up`, { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? "compose failed");
+      toast.success(`${name}: docker compose up -d finished.`);
+    } catch (e) {
+      console.error("compose up:", e);
+      toast.error(`${name}: compose failed — ${e instanceof Error ? e.message : "unknown error"}`);
+    } finally {
+      setComposing(null);
     }
   }
 
@@ -154,6 +192,7 @@ export default function ReposPage() {
 
   return (
     <div className="page-wrapper">
+      <BootScreen state={boot} />
       <div className="page-header">
         <div className="page-title">Repos</div>
         <div className="flex items-center gap-2">
@@ -347,6 +386,41 @@ export default function ReposPage() {
                     >
                       <ExternalLink size={12} /> GitHub
                     </a>
+                  )}
+                  {isDesktop && (
+                    <button
+                      onClick={() => openInTerminal(repo)}
+                      className="btn btn-ghost"
+                      style={{ fontSize: "12px", padding: "3px 8px" }}
+                      data-tooltip="Open a terminal here"
+                      data-tooltip-pos="top"
+                    >
+                      <TerminalSquare size={12} /> Terminal
+                    </button>
+                  )}
+                  {isDesktop && apps?.gitkraken && (
+                    <button
+                      onClick={() => openInGitKraken(repo.name)}
+                      className="btn btn-ghost"
+                      style={{ fontSize: "12px", padding: "3px 8px" }}
+                      data-tooltip="Open in GitKraken"
+                      data-tooltip-pos="top"
+                    >
+                      <GitBranch size={12} /> Kraken
+                    </button>
+                  )}
+                  {isDesktop && apps?.docker && repo.hasCompose && (
+                    <button
+                      onClick={() => composeUp(repo.name)}
+                      disabled={composing !== null}
+                      className="btn btn-ghost"
+                      style={{ fontSize: "12px", padding: "3px 8px" }}
+                      data-tooltip="docker compose up -d"
+                      data-tooltip-pos="top"
+                    >
+                      <Container size={12} />
+                      {composing === repo.name ? "Starting…" : "Compose"}
+                    </button>
                   )}
                   {isDesktop && (
                     <button

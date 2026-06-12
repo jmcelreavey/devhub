@@ -41,8 +41,9 @@ export function CollapsibleSidebar() {
   });
 
   const mounted = useClientMounted();
-  const { counts, unseen } = useNavBadges();
+  const { counts, unseen, calendarRemaining } = useNavBadges();
   const navCounts = mounted ? counts : undefined;
+  const navCalendarRemaining = mounted ? calendarRemaining : 0;
 
   useEffect(() => {
     const onToggle = () => setCollapsed((prev) => !prev);
@@ -102,6 +103,7 @@ export function CollapsibleSidebar() {
             collapsed={collapsed}
             counts={navCounts}
             unseen={unseen}
+            calendarRemaining={navCalendarRemaining}
           />
         ))}
       </nav>
@@ -136,32 +138,25 @@ function NavSection({
   collapsed,
   counts,
   unseen,
+  calendarRemaining,
 }: {
   label: string;
   items: NavItem[];
   collapsed: boolean;
   counts: NavBadges["counts"];
   unseen: NavBadges["unseen"];
+  calendarRemaining: number;
 }) {
   if (items.length === 0) return null;
   return (
     <div className={collapsed ? "py-1" : "px-2 pt-3 pb-1"}>
       {!collapsed && (
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: "0.12em",
-            color: "var(--text-muted)",
-            padding: "4px 10px 6px",
-            textTransform: "uppercase",
-          }}
-        >
+        <div className="nav-group-label">
           {label}
         </div>
       )}
       {items.map((item) => {
-        const count = countForItem(item.icon, counts);
+        const count = countForItem(item.icon, counts, { calendarRemaining });
         const hasUnseen = unseenForItem(item.icon, unseen);
         const link = (
           <NavLink item={item} collapsed={collapsed} count={count} unseen={hasUnseen} />

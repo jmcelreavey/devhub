@@ -53,6 +53,7 @@ export function KeyboardShortcuts() {
           j: "/tickets",
           d: "/datadog",
           t: "/tasks",
+          w: "/work",
           p: "/prs",
         };
         const target = goto[e.key];

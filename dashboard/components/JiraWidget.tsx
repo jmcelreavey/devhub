@@ -159,7 +159,7 @@ export function JiraWidget({ collapsed = false, collapsedSummary, onToggle }: Ji
               )}
             </div>
           ) : (
-            <div className="jira-widget-ticket-scroll" role="list" aria-label="Your Jira tickets, newest activity first">
+            <div className="jira-widget-ticket-scroll stagger-children" role="list" aria-label="Your Jira tickets, newest activity first">
               {sortedTickets.map((t, i) => (
                 <div
                   key={t.key}

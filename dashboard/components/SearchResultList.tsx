@@ -31,7 +31,7 @@ export interface SearchResultListProps {
 
 export function SearchResultList({ files, query, semantic = false }: SearchResultListProps) {
   return (
-    <div className="flex flex-col gap-3">
+    <div className="stagger-children flex flex-col gap-3">
       {files.map((file) => {
         const cat = searchCategoryFromPath(file.path);
         const Icon = cat.icon;

@@ -130,6 +130,26 @@ All from the repo root:
 - For any UI change, be critical of the experience as well as correctness: check visual hierarchy, spacing, copy, empty/loading/error states, affordances, and awkward user flows.
 - Use screenshots or recordings to review the rendered result, and call out visible UX issues even when the feature technically works.
 
+### Loading & motion vocabulary
+
+- **Shimmer for content arriving, spin only for an action the user just triggered.** Data panels and route loads use skeletons (`SkeletonRows`, `PageSkeleton` via `loading.tsx`) shaped like the content they become; `animate-spin` is reserved for refresh/submit buttons the user clicked.
+- Motion is information — healthy systems hold still. 150–350ms, easing `cubic-bezier(.22,1,.36,1)`, transform/opacity only, no infinite loops on healthy state. Respect `prefers-reduced-motion` and the `body[data-motion="off"]` kill-switch (⌘K → "Toggle animations"). See `docs/motion-and-delight-plan.md`.
+
+### Plugin Architecture — CRITICAL FOR EDITING
+
+DevHub uses a **tier-2 plugin system**. Private modules (company ops pages, internal scripts, etc.) live in **separate plugin repos**, not in this repo. On `npm run dev`, the `predev` → `sync_plugins` step **materializes** plugin files into the core dashboard tree via `fs.cpSync`.
+
+**This means:**
+- Plugin-materialized files (e.g. `dashboard/lib/<plugin>-ops.ts`, `dashboard/app/api/<plugin>/**`) are **copies** — they get overwritten on every server restart.
+- **Always edit the plugin source**, never the materialized copy. The materializer will silently destroy your changes.
+- Plugin registry: `~/.config/devhub/plugins.json` — lists plugin name + path.
+- Plugin `devhub-bi` source: `~/Developer/devhub-bi/dashboard/` — edit files there.
+- New files that don't exist in the plugin should be created in the plugin repo, not in core.
+- Core-owned files (git-tracked in this repo) are safe — the materializer refuses to clobber them.
+- After editing plugin source, restart the dev server (or the materializer will re-copy on next `predev`).
+
+**Quick check:** Before editing any `dashboard/` file, run `git ls-files -- <path>`. If it returns empty, the file is plugin-owned — edit the plugin repo instead.
+
 ### Gotchas
 
 - **Safe-Chain is required** for `npm install` (dashboard `preinstall` and `scripts/install.sh`). Install globally: `npm install -g @aikidosec/safe-chain@1.1.10`, run `safe-chain setup`, restart the terminal. See README.md.

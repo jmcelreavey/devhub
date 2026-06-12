@@ -235,11 +235,7 @@ export function JobsManager() {
           </form>
         )}
 
-        {isLoading && !data ? (
-          <div className="px-4 py-3 text-xs" style={{ color: "var(--text-subtle)" }}>
-            Loading jobs…
-          </div>
-        ) : jobs.length === 0 ? (
+        {isLoading && !data ? null : jobs.length === 0 ? (
           <div className="px-4 py-6 text-center text-xs" style={{ color: "var(--text-subtle)" }}>
             No scheduled jobs yet. Add one to run scripts automatically while
             DevHub is open.

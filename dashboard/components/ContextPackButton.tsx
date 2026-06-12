@@ -33,10 +33,11 @@ export function ContextPackButton() {
       style={{ fontSize: 12, padding: "4px 10px" }}
       onClick={() => void copyPack()}
       disabled={loading}
+      aria-busy={loading}
       title="Copy tasks, learnings, daily note, and standup for AI sessions"
     >
       {copied ? <Check size={12} /> : <Package size={12} />}
-      {loading ? "Building…" : "Context pack"}
+      {loading ? "Building" : "Context pack"}
     </button>
   );
 }

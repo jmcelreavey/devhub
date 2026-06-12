@@ -79,6 +79,7 @@ function ConfirmDialogView({
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
+      className="modal-backdrop"
       style={{
         position: "fixed",
         inset: 0,
@@ -94,7 +95,7 @@ function ConfirmDialogView({
       }}
     >
       <div
-        className="card"
+        className="card modal-panel"
         style={{
           width: "100%",
           maxWidth: 420,

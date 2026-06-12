@@ -1,11 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { NAV_ITEMS, filterNavBySetup } from "./nav";
+import { ALL_NAV_DESTINATIONS, LEGACY_NAV_ITEMS, NAV_ITEMS, filterNavBySetup } from "./nav";
 
 const hrefs = (items: ReturnType<typeof filterNavBySetup>) => items.map((i) => i.href);
 
+describe("NAV_ITEMS (12-destination IA)", () => {
+  it("has exactly 12 sidebar destinations", () => {
+    expect(NAV_ITEMS).toHaveLength(12);
+  });
+
+  it("keeps merged pages out of the sidebar but in the destination list", () => {
+    const sidebar = hrefs(NAV_ITEMS);
+    for (const legacy of ["/tasks", "/tickets", "/search", "/docs", "/learnings", "/diagrams", "/setup"]) {
+      expect(sidebar).not.toContain(legacy);
+      expect(hrefs(ALL_NAV_DESTINATIONS)).toContain(legacy);
+    }
+  });
+
+  it("exposes Work, Library and System as the merged destinations", () => {
+    const sidebar = hrefs(NAV_ITEMS);
+    expect(sidebar).toContain("/work");
+    expect(sidebar).toContain("/notes"); // Library
+    expect(sidebar).toContain("/status"); // System
+  });
+});
+
 describe("filterNavBySetup", () => {
   it("hides all gated items when setup status is unknown", () => {
-    const visible = hrefs(filterNavBySetup(NAV_ITEMS, null));
+    const visible = hrefs(filterNavBySetup(ALL_NAV_DESTINATIONS, null));
     expect(visible).not.toContain("/ops");
     expect(visible).not.toContain("/datadog");
     expect(visible).toContain("/"); // ungated items still show
@@ -13,24 +34,24 @@ describe("filterNavBySetup", () => {
   });
 
   it("hides Ops when BI is not configured", () => {
-    const visible = hrefs(filterNavBySetup(NAV_ITEMS, { bi: false }));
+    const visible = hrefs(filterNavBySetup(LEGACY_NAV_ITEMS, { bi: false }));
     expect(visible).not.toContain("/ops");
   });
 
   it("shows Ops only when BI is configured", () => {
-    expect(hrefs(filterNavBySetup(NAV_ITEMS, { bi: true }))).toContain("/ops");
-    expect(hrefs(filterNavBySetup(NAV_ITEMS, {}))).not.toContain("/ops");
+    expect(hrefs(filterNavBySetup(LEGACY_NAV_ITEMS, { bi: true }))).toContain("/ops");
+    expect(hrefs(filterNavBySetup(LEGACY_NAV_ITEMS, {}))).not.toContain("/ops");
   });
 
   it("gates other integrations independently of Ops", () => {
-    const visible = hrefs(filterNavBySetup(NAV_ITEMS, { datadog: true, bi: false }));
+    const visible = hrefs(filterNavBySetup(LEGACY_NAV_ITEMS, { datadog: true, bi: false }));
     expect(visible).toContain("/datadog");
     expect(visible).not.toContain("/ops");
   });
 
   it("hides Datadog when API credentials are not configured", () => {
-    expect(hrefs(filterNavBySetup(NAV_ITEMS, { datadog: false }))).not.toContain("/datadog");
-    expect(hrefs(filterNavBySetup(NAV_ITEMS, {}))).not.toContain("/datadog");
+    expect(hrefs(filterNavBySetup(LEGACY_NAV_ITEMS, { datadog: false }))).not.toContain("/datadog");
+    expect(hrefs(filterNavBySetup(LEGACY_NAV_ITEMS, {}))).not.toContain("/datadog");
   });
 
   it("hides Chamber and OpenCode when peer services are unavailable", () => {

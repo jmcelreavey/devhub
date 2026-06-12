@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { getRepoRoot } from "@/lib/notes-dir";
 import { buildAiToolsMeta, listSkillsForApi } from "@/lib/skill-catalog";
 import type { SkillsListResponse } from "@/lib/skills-api-types";
+import { BootScreen } from "@/components/TodayBootScreen";
 import Client from "./client";
 
 export default function SkillsPage() {
@@ -11,7 +12,7 @@ export default function SkillsPage() {
     aiTools: buildAiToolsMeta(repoRoot),
   };
   return (
-    <Suspense fallback={<div className="text-sm" style={{ color: "var(--text-muted)" }}>Loading…</div>}>
+    <Suspense fallback={<BootScreen state="loading" />}>
       <Client initialCatalog={initialCatalog} />
     </Suspense>
   );

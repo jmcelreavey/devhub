@@ -5,6 +5,7 @@ import "./globals.css";
 import { CollapsibleSidebar } from "@/components/CollapsibleSidebar";
 import { MobileTopBar } from "@/components/MobileTopBar";
 import { NotesOverlayProvider } from "@/components/NotesOverlayProvider";
+import { TerminalDock } from "@/components/TerminalDock";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
@@ -17,6 +18,7 @@ import { NavProgress } from "@/components/NavProgress";
 import { PersistentChamber } from "@/components/PersistentChamber";
 import { PersistentOpenCode } from "@/components/PersistentOpenCode";
 import { MobileBottomShelf } from "@/components/MobileBottomShelf";
+import { UiPrefsBootstrap } from "@/components/UiPrefsBootstrap";
 
 export const metadata: Metadata = {
   title: {
@@ -86,6 +88,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <NavProgress />
             <DashboardShell />
             <KeyboardShortcuts />
+            <UiPrefsBootstrap />
             <TabTitle />
 
             {/* Desktop sidebar (collapsible) */}
@@ -108,6 +111,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
 
             <MobileBottomShelf />
             <NotesOverlayProvider />
+            <TerminalDock />
             <PWAInstallPrompt />
           </ConfirmProvider>
         </ToastProvider>

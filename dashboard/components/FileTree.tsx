@@ -542,15 +542,9 @@ export function FileTree({
   const visible = search ? filterTree(tree, search) : tree;
 
   if (!loaded) {
-    return (
-      <nav className="min-w-0 overflow-x-hidden overflow-y-auto py-2" aria-busy="true">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="px-3 py-1.5">
-            <div className="skeleton h-4" style={{ width: `${70 - i * 6}%` }} />
-          </div>
-        ))}
-      </nav>
-    );
+    // No shimmer: an empty rail until the tree arrives reads calmer than
+    // placeholder bars (site-wide no-skeleton policy).
+    return <nav className="min-w-0 overflow-x-hidden overflow-y-auto py-2" aria-busy="true" />;
   }
 
   return (

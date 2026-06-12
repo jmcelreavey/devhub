@@ -1,5 +1,5 @@
-import { TodayPage } from "@/components/TodayPage";
+import { TodayViewSwitch } from "@/components/TodayViewSwitch";
 
 export default function Home() {
-  return <TodayPage />;
+  return <TodayViewSwitch />;
 }

@@ -20,9 +20,17 @@ export const NAV_GROUPS: { id: NavGroup; label: string }[] = [
 ];
 
 /**
- * Single source of truth for the side nav. ⌘K remains the quick palette;
- * /search is the full vault search page. Learnings has its own page while
- * still living under notes/learnings/ in the vault.
+ * Single source of truth for the side nav — 11 destinations (2026-06 IA,
+ * see docs/codebase-review-2026-06-09.md). Merged concepts:
+ *
+ * - Work        = Tasks + Tickets (tabs on /work)
+ * - Library     = Notes / Docs / Learnings / Diagrams (tabs over /notes…)
+ * - System      = Status / Ops / Datadog / Actions / Setup (tabs over /status…)
+ * - Search page → ⌘K palette
+ *
+ * Nothing is deleted: the merged pages keep working at their old URLs and
+ * stay reachable via the palette (`LEGACY_NAV_ITEMS`); they just no longer
+ * earn a permanent sidebar slot.
  *
  * The `gate` field controls visibility based on /api/setup/status — pages
  * the user can't actually use yet stay hidden until their integration is
@@ -31,28 +39,68 @@ export const NAV_GROUPS: { id: NavGroup; label: string }[] = [
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Today", icon: "today", group: "workspace" },
   { href: "/calendar", label: "Calendar", icon: "calendar", group: "workspace", gate: "calendar" },
-  { href: "/tickets", label: "Tickets", icon: "tickets", group: "workspace", gate: "jira" },
-  { href: "/tasks", label: "Tasks", icon: "tasks", group: "workspace" },
-  { href: "/review", label: "Review", icon: "review", group: "workspace", desktopOnly: true },
+  { href: "/work", label: "Work", icon: "tasks", group: "workspace" },
   { href: "/prs", label: "PRs", icon: "prs", group: "workspace", gate: "github" },
+  { href: "/review", label: "Review", icon: "review", group: "workspace", desktopOnly: true },
 
-  { href: "/notes", label: "Notes", icon: "notes", group: "library" },
+  { href: "/notes", label: "Library", icon: "notes", group: "library" },
+  { href: "/skills", label: "Agents", icon: "skills", group: "library" },
+  { href: "/repos", label: "Repos", icon: "repos", group: "library", desktopOnly: true },
+
+  { href: "/status", label: "System", icon: "status", group: "system" },
+  { href: "/terminal", label: "Terminal", icon: "terminal", group: "system", desktopOnly: true },
+  { href: "/chamber", label: "Chamber", icon: "chamber", group: "system", gate: "chamber" },
+  { href: "/opencode", label: "OpenCode", icon: "opencode", group: "system", gate: "opencode" },
+];
+
+/**
+ * Destinations that lost their sidebar slot in the 11-item IA but keep
+ * working at their URLs. Used for breadcrumbs and the ⌘K palette so every
+ * page stays one search away.
+ */
+export const LEGACY_NAV_ITEMS: NavItem[] = [
+  { href: "/tasks", label: "Tasks", icon: "tasks", group: "workspace" },
+  { href: "/tickets", label: "Tickets", icon: "tickets", group: "workspace", gate: "jira" },
   { href: "/search", label: "Search", icon: "search", group: "library" },
   { href: "/learnings", label: "Learnings", icon: "learnings", group: "library" },
   { href: "/diagrams", label: "Diagrams", icon: "diagrams", group: "library" },
-  { href: "/skills", label: "Agents", icon: "skills", group: "library" },
-  { href: "/repos", label: "Repos", icon: "repos", group: "library", desktopOnly: true },
   { href: "/docs", label: "Docs", icon: "docs", group: "library" },
+  { href: "/bookmarks", label: "Bookmarks", icon: "bookmarks", group: "library" },
   { href: "/shared", label: "Live links", icon: "shared", group: "library", gate: "github" },
-
-  { href: "/status", label: "Status", icon: "status", group: "system" },
   { href: "/ops", label: "Ops", icon: "ops", group: "system", gate: "bi" },
   { href: "/datadog", label: "Datadog", icon: "datadog", group: "system", gate: "datadog" },
   { href: "/actions", label: "Actions", icon: "actions", group: "system", desktopOnly: true },
-  { href: "/chamber", label: "Chamber", icon: "chamber", group: "system", gate: "chamber" },
-  { href: "/opencode", label: "OpenCode", icon: "opencode", group: "system", gate: "opencode" },
   { href: "/setup", label: "Setup", icon: "setup", group: "system" },
 ];
+
+/** Every routable destination — sidebar items first, then legacy pages. */
+export const ALL_NAV_DESTINATIONS: NavItem[] = [...NAV_ITEMS, ...LEGACY_NAV_ITEMS];
+
+/** Tabs rendered in the top bar when inside a merged destination. */
+export interface SectionTab {
+  href: string;
+  label: string;
+  gate?: NavGate;
+  desktopOnly?: boolean;
+}
+
+export const SECTION_TABS: Record<string, SectionTab[]> = {
+  library: [
+    { href: "/notes", label: "Notes" },
+    { href: "/docs", label: "Docs" },
+    { href: "/learnings", label: "Learnings" },
+    { href: "/diagrams", label: "Diagrams" },
+    { href: "/bookmarks", label: "Bookmarks" },
+    { href: "/shared", label: "Live links", gate: "github" },
+  ],
+  system: [
+    { href: "/status", label: "Status" },
+    { href: "/ops", label: "Ops", gate: "bi" },
+    { href: "/datadog", label: "Datadog", gate: "datadog" },
+    { href: "/actions", label: "Actions", desktopOnly: true },
+    { href: "/setup", label: "Setup" },
+  ],
+};
 
 export interface SetupGateStatus {
   github?: boolean;
@@ -64,17 +112,12 @@ export interface SetupGateStatus {
   opencode?: boolean;
 }
 
+export function gateAllows(gate: NavGate | undefined, setup: SetupGateStatus | null): boolean {
+  if (!gate || gate === "always") return true;
+  if (!setup) return false;
+  return setup[gate] === true;
+}
+
 export function filterNavBySetup(items: NavItem[], setup: SetupGateStatus | null): NavItem[] {
-  if (!setup) return items.filter((i) => !i.gate);
-  return items.filter((i) => {
-    if (!i.gate || i.gate === "always") return true;
-    if (i.gate === "calendar") return setup.calendar === true;
-    if (i.gate === "github") return setup.github === true;
-    if (i.gate === "jira") return setup.jira === true;
-    if (i.gate === "datadog") return setup.datadog === true;
-    if (i.gate === "bi") return setup.bi === true;
-    if (i.gate === "chamber") return setup.chamber === true;
-    if (i.gate === "opencode") return setup.opencode === true;
-    return true;
-  });
+  return items.filter((i) => gateAllows(i.gate, setup));
 }

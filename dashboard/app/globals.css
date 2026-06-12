@@ -7,12 +7,23 @@
    - HTML defaults + hydration script apply Graphite Neon before first paint
    ─────────────────────────────────────────────────────────── */
 :root {
-  --radius: 8px;
-  --radius-sm: 5px;
-  --radius-lg: 12px;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-lg: 14px;
 
   --sidebar-w: 220px;
   --notestree-w: 200px;
+
+  /* Typography tokens — single source of truth for font stacks */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica,
+    Arial, sans-serif;
+  --font-mono:
+    "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas,
+    monospace;
+
+  /* Content measure — wide enough for tables, narrow enough to read */
+  --page-max: 1240px;
 
   /* Semantic aliases that track the active theme */
   --text-xs: 12px;
@@ -302,17 +313,21 @@ body {
   height: 100%;
   margin: 0;
 }
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
 
 body {
   background: var(--bg);
   color: var(--text);
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica,
-    Arial, sans-serif;
+  font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 /* Scrollbar */
@@ -555,7 +570,7 @@ body {
 }
 
 .markdown-body code {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
   background: var(--bg-elevated);
   border: 1px solid var(--border-muted);
@@ -635,7 +650,7 @@ body {
 
 /* ─── Textarea / editor ─── */
 .editor-textarea {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.6;
   background: var(--bg-surface);
@@ -653,11 +668,13 @@ body {
 }
 
 /* ─── Page layout ─── */
+/* Constrained measure: full-bleed reading width on a 27" monitor is
+   hostile. Content centers beyond --page-max; tables still get 1240px. */
 .page-wrapper {
   width: 100%;
-  max-width: 100%;
+  max-width: var(--page-max);
   min-width: 0;
-  margin: 0;
+  margin: 0 auto;
   padding: 24px;
 }
 
@@ -676,16 +693,17 @@ body {
 }
 
 .page-title {
-  font-size: 16px;
+  font-size: 19px;
   font-weight: 600;
+  letter-spacing: -0.015em;
   color: var(--text);
-  line-height: 1.3;
+  line-height: 1.25;
 }
 
 .page-subtitle {
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--text-subtle);
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 /* ─── Loading skeleton ─── */
@@ -781,15 +799,15 @@ a:focus-visible {
   font-size: 13px;
   line-height: 1.4;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  animation: toast-slide-in 180ms ease-out;
+  animation: toast-slide-in 320ms var(--ease-spring) both;
 }
 @keyframes toast-slide-in {
   from {
-    transform: translateX(20px);
+    transform: translateX(32px) scale(0.95);
     opacity: 0;
   }
   to {
-    transform: translateX(0);
+    transform: translateX(0) scale(1);
     opacity: 1;
   }
 }
@@ -841,16 +859,17 @@ a:focus-visible {
 }
 
 /* ─── Refined Hub layout ─── */
+/* Dashboard gets more room than reading pages, but still centers on
+   ultrawide displays instead of smearing across them. */
 .hub {
   width: 100%;
-  max-width: 100%;
+  max-width: 1480px;
   min-width: 0;
-  margin: 0;
+  margin: 0 auto;
   padding: 28px;
   display: flex;
   flex-direction: column;
   gap: 20px;
-  animation: hub-enter 320ms ease-out both;
 }
 
 @keyframes hub-enter {
@@ -861,12 +880,6 @@ a:focus-visible {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hub {
-    animation: none;
   }
 }
 
@@ -886,12 +899,26 @@ a:focus-visible {
 }
 
 .hub-hero-date {
-  font-size: 26px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  /* Fluid: 24px on small viewports up to 30px on wide ones */
+  font-size: clamp(24px, 1.2vw + 18px, 30px);
+  font-weight: 650;
+  letter-spacing: -0.025em;
   color: var(--text);
   line-height: 1.15;
   margin: 0;
+}
+
+/* Time-of-day greeting above the date. Fixed height so the mounted-gated
+   content appearing doesn't shift the hero. */
+.hub-hero-greeting {
+  height: 18px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
 }
 
 .hub-hero-sub {
@@ -904,7 +931,7 @@ a:focus-visible {
 }
 
 .hub-hero-sub .font-mono {
-  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, Menlo, monospace;
+  font-family: var(--font-mono);
 }
 
 .hub-hero-link {
@@ -924,7 +951,7 @@ a:focus-visible {
   flex-direction: column;
   align-items: flex-end;
   gap: 2px;
-  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, Menlo, monospace;
+  font-family: var(--font-mono);
 }
 
 .hub-clock {
@@ -973,7 +1000,7 @@ a:focus-visible {
     color-mix(in oklab, var(--bg-surface) 78%, var(--bg) 22%)
   );
   border: 1px solid var(--border-muted);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.02),
     0 8px 24px -16px rgba(0, 0, 0, 0.5);
@@ -1005,6 +1032,7 @@ a:focus-visible {
 
 .hub-card-count {
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
   color: var(--text-subtle);
   background: var(--bg);
   border: 1px solid var(--border-muted);
@@ -1112,7 +1140,7 @@ a:focus-visible {
   color: var(--text);
 }
 .today-collapse-toggle-chevron {
-  transition: transform 0.15s ease;
+  transition: transform 320ms var(--ease-spring);
 }
 .today-collapse-toggle-chevron[data-collapsed="true"] {
   transform: rotate(-90deg);
@@ -1215,7 +1243,7 @@ a:focus-visible {
   gap: 8px;
   align-items: center;
   justify-content: flex-end;
-  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, Menlo, monospace;
+  font-family: var(--font-mono);
 }
 
 /* Focus timer pill */
@@ -1237,7 +1265,7 @@ a:focus-visible {
     background 140ms ease,
     color 140ms ease,
     border-color 140ms ease;
-  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, Menlo, monospace;
+  font-family: var(--font-mono);
 }
 .focus-pill:hover {
   background: var(--bg-overlay);
@@ -1280,7 +1308,7 @@ a:focus-visible {
   background: var(--bg-overlay);
 }
 .focus-preset-mins {
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   color: var(--text-subtle);
   font-size: 11px;
 }
@@ -1335,7 +1363,7 @@ a:focus-visible {
 }
 .standup-config-date,
 .standup-config-time {
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   padding: 3px 6px;
   border: 1px solid var(--border-muted);
@@ -1448,7 +1476,7 @@ a:focus-visible {
   flex: 1 1 auto;
   overflow: auto;
   padding: 14px 18px;
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.55;
   color: var(--text);
@@ -1581,7 +1609,7 @@ a:focus-visible {
   position: relative;
 }
 .hub-timeline-time {
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-subtle);
   text-align: right;
@@ -1618,7 +1646,7 @@ a.hub-timeline-title:hover {
 }
 .hub-timeline-now {
   font-size: 10px;
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   color: var(--accent);
   background: var(--accent-dim);
   padding: 2px 6px;
@@ -1808,6 +1836,67 @@ a.hub-timeline-title:hover {
   gap: 4px;
 }
 
+/* ── Top-bar search box: looks like an input, opens the ⌘K palette ── */
+.hub-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  margin-right: 10px;
+  width: 180px;
+  padding: 4px 8px 4px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--border-muted);
+  background: var(--bg-elevated);
+  color: var(--text-subtle);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    width 280ms var(--ease-spring-soft),
+    border-color 140ms ease,
+    background 140ms ease,
+    color 140ms ease;
+}
+.hub-search:hover,
+.hub-search:focus-visible {
+  width: 230px;
+  border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
+  background: var(--bg-overlay);
+  color: var(--text-muted);
+}
+.hub-search-label {
+  flex: 1;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.hub-search-kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border-muted);
+  background: var(--bg);
+  color: var(--text-subtle);
+}
+@media (max-width: 980px) {
+  .hub-search {
+    width: 34px;
+    padding: 4px 0;
+    justify-content: center;
+    gap: 0;
+  }
+  .hub-search:hover,
+  .hub-search:focus-visible {
+    width: 34px;
+  }
+  .hub-search-label,
+  .hub-search-kbd {
+    display: none;
+  }
+}
+
 .hub-icon-btn {
   width: 28px;
   height: 28px;
@@ -1933,6 +2022,39 @@ a.hub-timeline-title:hover {
   filter: drop-shadow(0 3px 12px rgba(0, 0, 0, 0.5));
 }
 
+/* Sidebar group labels — quiet wayfinding, not content */
+.nav-group-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--text-subtle);
+  padding: 4px 10px 6px;
+  text-transform: uppercase;
+}
+/* Hairline rule after the label text fills remaining width */
+.nav-group-label::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--border-muted), transparent);
+}
+
+/* Active-item accent rail grows in */
+@keyframes nav-rail-in {
+  from {
+    transform: scaleY(0);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .nav-rail {
+    transform-origin: center;
+    animation: nav-rail-in 280ms var(--ease-spring);
+  }
+}
+
 /* Sidebar nav item polish */
 .nav-item {
   position: relative;
@@ -1993,11 +2115,15 @@ a.hub-timeline-title:hover {
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.15s;
+  scale: 0.9;
+  transition:
+    opacity 0.12s ease,
+    scale 0.2s var(--ease-spring);
   z-index: 100;
 }
 [data-tooltip]:hover::after {
   opacity: 1;
+  scale: 1;
 }
 [data-tooltip-pos="bottom"]::after {
   left: 50%;
@@ -2185,4 +2311,1263 @@ nextjs-portal {
 /* tldraw list previews: contain the exported SVG so non-square diagrams aren't stretched */
 .diagram-thumb-image img {
   object-fit: contain;
+}
+
+/* ───────────────────────────────────────────────────────────
+   2026-06 UX pass (DevHub UX Explorations handoff)
+   Motion principle: motion is information — healthy systems hold
+   still. 150–350ms, one easing curve, no infinite loops on healthy
+   state. See docs/codebase-review-2026-06-09.md.
+   ─────────────────────────────────────────────────────────── */
+
+/* ── Global motion kill-switch (⌘K → "Toggle animations") ── */
+body[data-motion="off"] *,
+body[data-motion="off"] *::before,
+body[data-motion="off"] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* ── Density: compact mode (⌘K → "Toggle density") ── */
+body[data-density="compact"] .hub {
+  padding: 16px;
+  gap: 12px;
+}
+body[data-density="compact"] .hub-card-head {
+  padding: 9px 12px 6px;
+}
+body[data-density="compact"] .hub-card-body {
+  padding: 2px 12px 10px;
+}
+body[data-density="compact"] .page-wrapper {
+  padding: 14px;
+}
+body[data-density="compact"] .card {
+  font-size: 12.5px;
+}
+
+/* ── Hero progress bar (design A) ── */
+.hub-hero-progress {
+  display: inline-block;
+  width: 120px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--bg-overlay, var(--bg-elevated));
+  overflow: hidden;
+  vertical-align: middle;
+}
+.hub-hero-progress > i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--success), var(--accent));
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── Top-bar section tabs (merged Library / System destinations) ── */
+.hub-section-tabs {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: 10px;
+  padding: 2px;
+  background: var(--bg);
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+}
+@media (min-width: 768px) {
+  .hub-section-tabs {
+    display: inline-flex;
+  }
+}
+.hub-section-tab {
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+.hub-section-tab:hover {
+  color: var(--text);
+}
+.hub-section-tab[data-active] {
+  background: var(--bg-elevated);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 20%, transparent);
+}
+
+/* ── Count tick: number rolls up when it changes ── */
+@keyframes count-tick-in {
+  from {
+    opacity: 0;
+    transform: translateY(70%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.count-tick {
+  display: inline-block;
+  animation: count-tick-in 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .count-tick {
+    animation: none;
+  }
+}
+
+/* ── Ambient urgency: severity = motion budget ──
+   Join breathes only within 10 min of a meeting; P1 dots pulse gently;
+   healthy rows hold perfectly still. */
+@keyframes urgency-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 45%, transparent);
+  }
+  60% {
+    box-shadow: 0 0 0 7px color-mix(in oklab, var(--accent) 0%, transparent);
+  }
+}
+.urgency-pulse {
+  animation: urgency-pulse 2s ease-out infinite;
+}
+@keyframes danger-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--danger) 45%, transparent);
+  }
+  60% {
+    box-shadow: 0 0 0 6px color-mix(in oklab, var(--danger) 0%, transparent);
+  }
+}
+.danger-pulse {
+  animation: danger-pulse 2.4s ease-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .urgency-pulse,
+  .danger-pulse {
+    animation: none;
+  }
+}
+
+/* ── Page entrance: cards rise 10px and fade, 40ms apart, one pass.
+   Base state is visible; the animation dips from hidden with no fill
+   so content can never render blank (reduced-motion gated). ── */
+.today-grid-slot > * {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .today-grid-slot > * {
+    /* `backwards` holds the hidden from-state only during the stagger
+       delay; if the animation never runs, the base state is visible. */
+    animation: hub-enter 350ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+  .today-grid-slot:nth-of-type(2) > * {
+    animation-delay: 40ms;
+  }
+  .today-grid-slot:nth-of-type(3) > * {
+    animation-delay: 80ms;
+  }
+  .today-grid-slot:nth-of-type(4) > * {
+    animation-delay: 120ms;
+  }
+  .today-grid-slot:nth-of-type(5) > * {
+    animation-delay: 160ms;
+  }
+  .today-grid-slot:nth-of-type(6) > * {
+    animation-delay: 200ms;
+  }
+  .today-grid-slot:nth-of-type(7) > * {
+    animation-delay: 240ms;
+  }
+}
+
+/* ── Busy buttons: set aria-busy="true" on any async .btn ──
+   Label dims and a trailing ellipsis pulses; the loop is allowed because
+   it's direct feedback for an action the user just triggered. */
+.btn[aria-busy="true"] {
+  opacity: 0.75;
+  pointer-events: none;
+}
+@keyframes busy-ellipsis {
+  0% {
+    content: "";
+  }
+  25% {
+    content: "·";
+  }
+  50% {
+    content: "··";
+  }
+  75% {
+    content: "···";
+  }
+}
+.btn[aria-busy="true"]::after {
+  content: "···";
+  display: inline-block;
+  width: 1.1em;
+  text-align: left;
+  margin-left: 1px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .btn[aria-busy="true"]::after {
+    animation: busy-ellipsis 1.2s steps(1) infinite;
+  }
+}
+
+/* ── Briefing settle: generated lines rise in after the shimmer ── */
+.briefing-settle {
+  animation: hub-enter 350ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation-fill-mode: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .briefing-settle {
+    animation: none;
+  }
+}
+
+/* ── Route entrance (app/template.tsx) — one pass per navigation ──
+   height: 100% keeps full-height pages (notes, chamber) working; long
+   pages still scroll because `main` counts overflowing descendants. */
+.route-enter {
+  height: 100%;
+}
+@keyframes route-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.998);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .route-enter {
+    animation: route-rise 260ms cubic-bezier(0.22, 1, 0.36, 1);
+    animation-fill-mode: none;
+  }
+}
+
+/* ── Tab crossfade: key the panel on the active tab ── */
+.fade-rise {
+  animation: hub-enter 150ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation-fill-mode: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fade-rise {
+    animation: none;
+  }
+}
+
+/* ── Done-row exit: hold while the check lands, then collapse out ── */
+@keyframes task-exit {
+  0%,
+  55% {
+    opacity: 1;
+    max-height: 96px;
+  }
+  100% {
+    opacity: 0;
+    max-height: 0;
+  }
+}
+.task-exit {
+  overflow: hidden;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .task-exit {
+    animation: task-exit 440ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+}
+
+/* ── Sidebar: active item slides in, one pass ── */
+@keyframes nav-pill-in {
+  from {
+    opacity: 0.4;
+    transform: translateX(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .nav-item[data-active] {
+    animation: nav-pill-in 300ms var(--ease-spring);
+  }
+}
+
+/* ── ⌘K palette entrance ── */
+@keyframes palette-backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes palette-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .palette-overlay {
+    animation: palette-backdrop-in 120ms ease-out;
+  }
+  .palette-panel {
+    animation: palette-panel-in 260ms var(--ease-spring);
+  }
+}
+
+/* ── Press feedback on buttons: spring lift on hover, squash on press ── */
+.btn {
+  transition:
+    background 0.12s,
+    color 0.12s,
+    border-color 0.12s,
+    translate 200ms var(--ease-spring),
+    scale 200ms var(--ease-spring),
+    box-shadow 200ms ease;
+}
+@media (hover: hover) {
+  .btn:not(:disabled):hover {
+    translate: 0 -1px;
+  }
+  .btn-primary:not(:disabled):hover {
+    box-shadow: 0 5px 18px -6px color-mix(in oklab, var(--accent) 65%, transparent);
+  }
+}
+.btn:not(:disabled):active {
+  translate: 0 0;
+  scale: 0.96;
+}
+
+/* ── Card hover lift (pointer devices only) ── */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .hub-card,
+  .today-grid-slot > .card {
+    transition:
+      border-color 150ms,
+      box-shadow 200ms,
+      translate 260ms var(--ease-spring-soft);
+  }
+  .hub-card:hover,
+  .today-grid-slot > .card:hover {
+    border-color: color-mix(in oklab, var(--accent) 26%, var(--border));
+    translate: 0 -2px;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.03),
+      0 18px 36px -18px rgba(0, 0, 0, 0.6);
+  }
+  /* Grid slots clip overflow — a lifted card would lose its top edge. */
+  .today-grid-slot .hub-card:hover,
+  .today-grid-slot > .card:hover {
+    translate: none;
+  }
+}
+
+/* ── Task check draw-in: the check stroke draws, the circle pops ── */
+@keyframes check-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .task-check-pulse path {
+    stroke-dasharray: 70;
+    stroke-dashoffset: 70;
+    animation: check-draw 280ms ease-out forwards;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────
+   2026-06 Delight pass — springy motion layer
+   Builds on the restrained system above. Same rules apply:
+   one pass per event, reduced-motion + data-motion="off" gates
+   respected — but the curves got bouncier, interactive things
+   respond to touch, and finishing a thing feels like winning.
+   ─────────────────────────────────────────────────────────── */
+
+:root {
+  /* Overshoot spring — micro-interactions, pops, celebrations */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Gentle spring — larger surfaces (cards, panels) */
+  --ease-spring-soft: cubic-bezier(0.3, 1.3, 0.45, 1);
+  /* Fast settle, no overshoot — entrances, exits */
+  --ease-swift: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── Icon buttons: spring scale on hover, squash on press ── */
+.hub-icon-btn {
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease,
+    scale 220ms var(--ease-spring);
+}
+@media (hover: hover) {
+  .hub-icon-btn:hover {
+    scale: 1.1;
+  }
+}
+.hub-icon-btn:active {
+  scale: 0.88;
+}
+.toast-dismiss,
+.toast-action {
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    scale 200ms var(--ease-spring);
+}
+.toast-dismiss:active,
+.toast-action:active {
+  scale: 0.9;
+}
+
+/* ── Inputs: soft glow blooms in on focus ── */
+.input,
+.editor-textarea {
+  transition:
+    border-color 0.15s,
+    box-shadow 0.25s var(--ease-swift);
+}
+.input:focus,
+.editor-textarea:focus {
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+/* ── Sidebar nav: rows nudge right, icons perk up ── */
+.nav-item {
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease,
+    translate 220ms var(--ease-spring);
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .nav-item:hover {
+    translate: 2px 0;
+  }
+  .nav-item svg {
+    transition:
+      scale 240ms var(--ease-spring),
+      rotate 240ms var(--ease-spring);
+  }
+  .nav-item:hover svg {
+    scale: 1.15;
+    rotate: -4deg;
+  }
+}
+
+/* ── Brand dot: happy wiggle on hover ── */
+@keyframes brand-wiggle {
+  0% {
+    rotate: 0deg;
+    scale: 1;
+  }
+  30% {
+    rotate: -7deg;
+    scale: 1.06;
+  }
+  60% {
+    rotate: 5deg;
+  }
+  100% {
+    rotate: 0deg;
+    scale: 1;
+  }
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .brand-dot:hover {
+    animation: brand-wiggle 480ms var(--ease-spring);
+  }
+}
+
+/* ── Tabs: active pill pops in ── */
+@keyframes tab-pop {
+  from {
+    scale: 0.92;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hub-tab[data-active="true"],
+  .hub-tab[aria-selected="true"],
+  .hub-tab.active,
+  .hub-section-tab[data-active] {
+    animation: tab-pop 260ms var(--ease-spring);
+  }
+}
+
+/* ── Modal: backdrop blurs in, panel springs up ── */
+@keyframes modal-backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes modal-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.95);
+  }
+}
+.modal-backdrop {
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .modal-backdrop {
+    animation: modal-backdrop-in 150ms ease-out;
+  }
+  .modal-panel {
+    animation: modal-pop-in 300ms var(--ease-spring);
+  }
+  .standup-preview-backdrop {
+    animation: modal-backdrop-in 150ms ease-out;
+  }
+  .standup-preview-card,
+  .standup-config-dialog {
+    animation: modal-pop-in 300ms var(--ease-spring);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* ── Side panel: slides in from its edge ── */
+@keyframes side-panel-in {
+  from {
+    transform: translateX(64px);
+    opacity: 0;
+  }
+}
+@keyframes sheet-up-in {
+  from {
+    transform: translateY(56px);
+    opacity: 0;
+  }
+}
+@keyframes drawer-left-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .side-panel-enter {
+    animation: side-panel-in 300ms var(--ease-swift);
+  }
+  .side-panel-enter-mobile {
+    animation: sheet-up-in 320ms var(--ease-swift);
+  }
+  .mobile-drawer-enter {
+    animation: drawer-left-in 280ms var(--ease-swift);
+  }
+}
+
+/* ── Staggered list entrance: rows cascade in 30ms apart, one pass ──
+   Apply .stagger-children to any list container. Timeline rows get it
+   for free. `backwards` only hides rows during their delay; if the
+   animation never runs the base state is fully visible. ── */
+@media (prefers-reduced-motion: no-preference) {
+  /* :not(.skeleton) — shimmer loops own `animation` on .skeleton; the
+     stagger entrance must not stomp it. Wrap shimmers to stagger them. */
+  .stagger-children > :not(.skeleton),
+  .hub-timeline > * {
+    animation: hub-enter 280ms var(--ease-swift) backwards;
+  }
+  .stagger-children > :nth-child(1),
+  .hub-timeline > :nth-child(1) {
+    animation-delay: 0ms;
+  }
+  .stagger-children > :nth-child(2),
+  .hub-timeline > :nth-child(2) {
+    animation-delay: 30ms;
+  }
+  .stagger-children > :nth-child(3),
+  .hub-timeline > :nth-child(3) {
+    animation-delay: 60ms;
+  }
+  .stagger-children > :nth-child(4),
+  .hub-timeline > :nth-child(4) {
+    animation-delay: 90ms;
+  }
+  .stagger-children > :nth-child(5),
+  .hub-timeline > :nth-child(5) {
+    animation-delay: 120ms;
+  }
+  .stagger-children > :nth-child(6),
+  .hub-timeline > :nth-child(6) {
+    animation-delay: 150ms;
+  }
+  .stagger-children > :nth-child(7),
+  .hub-timeline > :nth-child(7) {
+    animation-delay: 180ms;
+  }
+  .stagger-children > :nth-child(8),
+  .hub-timeline > :nth-child(8) {
+    animation-delay: 210ms;
+  }
+  .stagger-children > :nth-child(n + 9),
+  .hub-timeline > :nth-child(n + 9) {
+    animation-delay: 240ms;
+  }
+}
+
+/* ── Reward: confetti burst + ring when a task lands ──
+   Add .check-burst to the element wrapping the just-completed check.
+   Components gate this behind "user just toggled it" state so loading
+   an already-done list stays calm. ── */
+.check-burst {
+  position: relative;
+  display: inline-flex;
+}
+@keyframes burst-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--success) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 14px transparent;
+  }
+}
+@keyframes burst-confetti {
+  0% {
+    opacity: 1;
+    box-shadow:
+      0 0 0 0 var(--success),
+      0 0 0 0 var(--accent),
+      0 0 0 0 var(--warning),
+      0 0 0 0 var(--success),
+      0 0 0 0 var(--accent),
+      0 0 0 0 var(--warning),
+      0 0 0 0 var(--success),
+      0 0 0 0 var(--accent);
+  }
+  100% {
+    opacity: 0;
+    box-shadow:
+      -15px -11px 0 1px var(--success),
+      13px -15px 0 0 var(--accent),
+      18px 2px 0 1px var(--warning),
+      10px 14px 0 0 var(--success),
+      -7px 17px 0 1px var(--accent),
+      -18px 5px 0 0 var(--warning),
+      -2px -18px 0 1px var(--success),
+      16px -5px 0 0 var(--accent);
+  }
+}
+@keyframes check-pop {
+  0% {
+    scale: 0.7;
+  }
+  55% {
+    scale: 1.25;
+  }
+  100% {
+    scale: 1;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .check-burst {
+    animation: check-pop 400ms var(--ease-spring);
+  }
+  .check-burst::before {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+    pointer-events: none;
+    animation: burst-ring 500ms var(--ease-swift) both;
+  }
+  .check-burst::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 3px;
+    height: 3px;
+    margin: -1.5px 0 0 -1.5px;
+    border-radius: 50%;
+    pointer-events: none;
+    animation: burst-confetti 600ms ease-out both;
+  }
+}
+
+/* ── Reward: focus session complete gets a celebration ── */
+@keyframes celebrate-pop {
+  0% {
+    scale: 0.4;
+    rotate: -10deg;
+    opacity: 0;
+  }
+  60% {
+    scale: 1.12;
+    rotate: 3deg;
+    opacity: 1;
+  }
+  100% {
+    scale: 1;
+    rotate: 0deg;
+    opacity: 1;
+  }
+}
+.focus-complete-icon {
+  position: relative;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .focus-complete-card {
+    animation: modal-pop-in 340ms var(--ease-spring);
+  }
+  .focus-complete-icon {
+    animation: celebrate-pop 550ms var(--ease-spring) 120ms backwards;
+  }
+  .focus-complete-icon::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    pointer-events: none;
+    animation: burst-ring 900ms var(--ease-swift) 250ms both;
+  }
+}
+
+/* ── Empty states: icon pops in with a little personality ── */
+@media (prefers-reduced-motion: no-preference) {
+  .empty-pop {
+    animation: celebrate-pop 480ms var(--ease-spring) 80ms backwards;
+  }
+}
+
+/* ── Focus pill: ticking timer gets a gentle live glow ── */
+.focus-pill.running {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 20%, transparent);
+}
+
+/* ── Toast exit: slides back out the way it came (200ms, see EXIT_MS) ── */
+@keyframes toast-slide-out {
+  to {
+    transform: translateX(32px) scale(0.95);
+    opacity: 0;
+  }
+}
+.toast-leaving {
+  animation: toast-slide-out 200ms var(--ease-swift) forwards;
+  pointer-events: none;
+}
+
+/* ── Drag feedback: picked-up rows tilt like a lifted card ── */
+@media (prefers-reduced-motion: no-preference) {
+  .row-dragging {
+    rotate: 1.2deg;
+    scale: 1.01;
+    box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.5);
+    transition:
+      rotate 160ms var(--ease-spring),
+      scale 160ms var(--ease-spring),
+      box-shadow 160ms ease;
+  }
+}
+
+/* ── Text selection follows the accent ── */
+::selection {
+  background: color-mix(in oklab, var(--accent) 30%, transparent);
+}
+
+/* ── plus-pop: referenced by .focus-popover and .accent-picker-pop since
+   the original UX pass, but the keyframes were never defined — popovers
+   silently skipped their entrance. Now they actually pop. ── */
+@keyframes plus-pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .focus-popover,
+  .accent-picker-pop {
+    animation: none;
+  }
+}
+
+/* ── All tasks done: the hero progress bar takes a victory lap ── */
+@keyframes progress-victory {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--success) 45%, transparent);
+  }
+  40% {
+    box-shadow: 0 0 0 5px color-mix(in oklab, var(--success) 0%, transparent);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hub-hero-progress[data-complete] {
+    animation: progress-victory 900ms ease-out 2;
+  }
+  .hub-hero-progress[data-complete] > i {
+    background: linear-gradient(
+      90deg,
+      var(--success),
+      var(--accent),
+      var(--success)
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.8s ease-in-out 2;
+  }
+}
+
+/* ── pop-soft: entrance for positioned popovers that already use inline
+   `transform` for placement — animates standalone scale/opacity only. ── */
+@keyframes pop-soft {
+  from {
+    opacity: 0;
+    scale: 0.96;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pop-soft {
+    animation: pop-soft 160ms var(--ease-spring) both;
+  }
+}
+
+/* ── Boot screen: one loading moment instead of six skeleton pops ── */
+.boot-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9600;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: var(--bg);
+}
+.boot-screen-leaving {
+  opacity: 0;
+  scale: 1.015;
+  transition:
+    opacity 300ms var(--ease-swift),
+    scale 300ms var(--ease-swift);
+  pointer-events: none;
+}
+.boot-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 88px;
+  height: 88px;
+}
+.boot-logo {
+  border-radius: 14px;
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.4));
+}
+.boot-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  /* Conic arc that orbits the mark */
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 290deg,
+    var(--accent) 350deg,
+    transparent 360deg
+  );
+  -webkit-mask: radial-gradient(closest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  mask: radial-gradient(closest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+}
+.boot-title {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.boot-line {
+  height: 18px;
+  font-size: 12px;
+  color: var(--text-subtle);
+  overflow: hidden;
+}
+.boot-bar {
+  width: 160px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+.boot-bar > i {
+  display: block;
+  height: 100%;
+  width: 40%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .boot-screen {
+    animation: modal-backdrop-in 200ms ease-out;
+  }
+  .boot-ring {
+    animation: boot-orbit 1.1s linear infinite;
+  }
+  .boot-logo {
+    animation: boot-bob 2.2s ease-in-out infinite;
+  }
+  .boot-line-text {
+    display: inline-block;
+    animation: hub-enter 260ms var(--ease-swift);
+  }
+  .boot-bar > i {
+    animation: boot-scan 1.2s ease-in-out infinite;
+  }
+}
+@keyframes boot-orbit {
+  to {
+    rotate: 360deg;
+  }
+}
+@keyframes boot-bob {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -4px;
+  }
+}
+@keyframes boot-scan {
+  0% {
+    translate: -160px 0;
+  }
+  100% {
+    translate: 160px 0;
+  }
+}
+
+/* ── Confetti rain: the all-tasks-done moment (one pass, ~1.8s) ── */
+.confetti-rain {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 9990;
+}
+.confetti-rain > i {
+  position: absolute;
+  top: -14px;
+  width: 7px;
+  height: 11px;
+  opacity: 0;
+}
+@keyframes confetti-fall {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--drift, 0px), 105vh) rotate(540deg);
+    opacity: 0.7;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .confetti-rain > i {
+    animation: confetti-fall var(--dur, 1.4s) ease-in var(--delay, 0s) both;
+  }
+}
+
+/* ── PoC terminal ── */
+.terminal-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-surface);
+}
+.terminal-bar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border-muted);
+  background: var(--bg-elevated);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.terminal-bar-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.terminal-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-subtle);
+  flex-shrink: 0;
+}
+.terminal-dot[data-status="open"] {
+  background: var(--success);
+  box-shadow: 0 0 0 0 color-mix(in oklab, var(--success) 50%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .terminal-dot[data-status="open"] {
+    animation: now-pulse 2s ease-in-out infinite;
+  }
+  .terminal-dot[data-status="connecting"] {
+    animation: now-pulse 1s ease-in-out infinite;
+  }
+}
+.terminal-dot[data-status="closed"] {
+  background: var(--danger);
+}
+.terminal-bar-note {
+  color: var(--warning);
+  font-size: 10.5px;
+}
+.terminal-bar-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.terminal-mode-select {
+  background: var(--bg);
+  border: 1px solid var(--border-muted);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 2px 6px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 140ms ease;
+}
+.terminal-mode-select:hover,
+.terminal-mode-select:focus-visible {
+  border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
+}
+.terminal-host {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 10px;
+}
+.terminal-host .xterm,
+.terminal-host .xterm-viewport {
+  height: 100% !important;
+}
+
+/* ── Terminal dock: global bottom drawer, persistent sessions ── */
+.terminal-dock {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  height: 42vh;
+  min-height: 220px;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.35);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .terminal-dock {
+    animation: sheet-up-in 260ms var(--ease-swift);
+  }
+}
+.terminal-dock-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border-muted);
+  background: var(--bg-elevated);
+}
+.terminal-dock-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+}
+.terminal-dock-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 9px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+.terminal-dock-tab:hover {
+  background: var(--bg-overlay);
+  color: var(--text);
+}
+.terminal-dock-tab[data-active] {
+  background: var(--bg-surface);
+  border-color: var(--border-muted);
+  color: var(--text);
+}
+.terminal-dock-tab-label {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.terminal-dock-tab-close {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+.terminal-dock-tab-close:hover {
+  background: var(--bg-overlay);
+  color: var(--text);
+}
+.terminal-dock-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.terminal-dock-cwd {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-subtle);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.terminal-dock-body {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 10px;
+}
+
+/* ── Hero Now/Next signal pills ── */
+.hub-hero-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.hero-signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 340px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border-muted);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    color 140ms ease,
+    translate 220ms var(--ease-spring);
+}
+@media (hover: hover) {
+  .hero-signal:hover {
+    border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
+    background: var(--bg-overlay);
+    color: var(--text);
+    translate: 0 -1px;
+  }
+}
+.hero-signal-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-subtle);
+}
+.hero-signal-dot[data-kind="now"] {
+  background: var(--success);
+}
+.hero-signal-kind {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.hero-signal-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.hero-signal-meta {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-subtle);
+}
+
+/* ── Today main-card overflow menu ── */
+.today-actions-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 180px;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
+}
+.today-actions-menu .btn {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+/* ── Task toggle: empty circle perks up on hover, hinting it's clickable ── */
+.task-toggle svg {
+  transition:
+    scale 200ms var(--ease-spring),
+    color 140ms ease;
+}
+@media (hover: hover) {
+  .task-toggle:hover svg {
+    scale: 1.2;
+    color: var(--accent) !important;
+  }
+}
+.task-toggle:active svg {
+  scale: 0.85;
 }

@@ -5,12 +5,15 @@ import { BlockNoteEditor } from "@/components/BlockNoteEditor";
 import { Bookmark, Save, Check } from "lucide-react";
 import type { DevHubPartialBlock } from "@/lib/blocknote-schema";
 import { FetchError, EmptyState } from "@/components";
+import { SkeletonRows } from "@/components/SkeletonRows";
+import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
 
 export default function BookmarksPage() {
   const [blocks, setBlocks] = useState<DevHubPartialBlock[] | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const boot = useBootGate(blocks !== null || notFound || !!error);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -50,6 +53,7 @@ export default function BookmarksPage() {
 
   return (
     <div className="page-wrapper">
+      <BootScreen state={boot} />
       <div className="page-header">
         <div className="page-title">Bookmarks</div>
         <div
@@ -82,6 +86,12 @@ export default function BookmarksPage() {
             </>
           }
         />
+      )}
+
+      {!blocks && !notFound && !error && (
+        <div role="status" aria-label="Loading bookmarks">
+          <SkeletonRows count={5} height={16} />
+        </div>
       )}
 
       {blocks && (

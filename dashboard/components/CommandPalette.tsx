@@ -14,7 +14,8 @@ import {
   PenTool,
   BookOpen,
 } from "lucide-react";
-import { NAV_ITEMS, filterNavBySetup, type SetupGateStatus } from "@/lib/nav";
+import { ALL_NAV_DESTINATIONS, filterNavBySetup, type SetupGateStatus } from "@/lib/nav";
+import { toggleDensity, toggleMotion } from "@/lib/ui-prefs";
 import { useLive } from "@/lib/use-fetch";
 import { paletteCommandScore } from "@/lib/command-palette-score";
 import { useToast } from "@/lib/use-toast";
@@ -188,7 +189,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   );
 
   const commands = useMemo<Command[]>(() => {
-    const navCmds: Command[] = filterNavBySetup(NAV_ITEMS, setup ?? null).map((item) => ({
+    const navCmds: Command[] = filterNavBySetup(ALL_NAV_DESTINATIONS, setup ?? null).map((item) => ({
       id: `nav:${item.href}`,
       kind: "nav",
       label: `Go to ${item.label}`,
@@ -280,6 +281,26 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           } else {
             toast.error(r.message);
           }
+        },
+      },
+      {
+        id: "action:density",
+        kind: "action",
+        label: "Toggle density (comfortable / compact)",
+        hint: "UI",
+        perform: () => {
+          const next = toggleDensity();
+          toast.success(`Density: ${next}.`);
+        },
+      },
+      {
+        id: "action:motion",
+        kind: "action",
+        label: "Toggle animations",
+        hint: "UI",
+        perform: () => {
+          const on = toggleMotion();
+          toast.success(on ? "Animations on." : "Animations off.");
         },
       },
       {
@@ -375,6 +396,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       role="dialog"
       aria-modal="true"
       aria-label="Command palette"
+      className="palette-overlay"
       style={{
         position: "fixed",
         inset: 0,
@@ -388,7 +410,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       onClick={onClose}
     >
       <div
-        className="card"
+        className="card palette-panel"
         style={{
           width: 560,
           maxWidth: "calc(100vw - 32px)",
