@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { GripVertical, Link, Link2, Unlink, X } from "lucide-react";
 import { HoverTip } from "@/components/HoverTip";
 
@@ -64,6 +64,8 @@ export function ChecklistRow({
   onDelete,
 }: ChecklistRowProps) {
   const labelColor = brokenLink ? "var(--text-subtle)" : checked ? "var(--text-subtle)" : "var(--text)";
+  // Confetti only when the user just checked it — not when done rows render.
+  const [justChecked, setJustChecked] = useState(false);
 
   return (
     <div
@@ -86,13 +88,19 @@ export function ChecklistRow({
         aria-checked={checked}
         aria-label={label}
         disabled={disabled}
-        className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border text-[11px] transition-colors"
+        className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border text-[11px] transition-colors ${justChecked ? "check-burst" : ""}`}
         style={{
           borderColor: checked ? "var(--accent)" : "var(--border)",
           background: checked ? "var(--accent)" : "transparent",
           color: checked ? "#fff" : "var(--text-subtle)",
         }}
-        onClick={onToggle}
+        onClick={() => {
+          if (!checked) {
+            setJustChecked(true);
+            window.setTimeout(() => setJustChecked(false), 700);
+          }
+          onToggle();
+        }}
       >
         {checked ? "✓" : ""}
       </button>

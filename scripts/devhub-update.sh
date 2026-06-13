@@ -95,7 +95,11 @@ log "Incoming core commits ($COUNT) ${SINCE}..${UPSTREAM_REF}:"
 git log --oneline "${SINCE}..${UPSTREAM_REF}" | sed 's/^/  /'
 
 PATCH="$(git diff "${SINCE}..${UPSTREAM_REF}" -- . "${EXCLUDES[@]}")"
-mapfile -t PATCH_FILES < <(git diff --name-only "${SINCE}..${UPSTREAM_REF}" -- . "${EXCLUDES[@]}")
+# Portable array read — macOS ships bash 3.2, which has no `mapfile`.
+PATCH_FILES=()
+while IFS= read -r line; do
+  [[ -n "$line" ]] && PATCH_FILES+=("$line")
+done < <(git diff --name-only "${SINCE}..${UPSTREAM_REF}" -- . "${EXCLUDES[@]}")
 if [[ -z "$PATCH" ]]; then
   log "No file changes after exclusions; marking synced."
   git update-ref "$SYNC_REF" "$UPSTREAM_SHA"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { SkeletonRows } from "@/components/SkeletonRows";
 import {
   Link2,
   ChevronDown,
@@ -417,9 +418,9 @@ export function McpPanel() {
       )}
 
       {loading && (
-        <p className="text-sm" style={{ color: "var(--text-subtle)" }}>
-          Loading...
-        </p>
+        <div role="status" aria-label="Loading MCP servers">
+          <SkeletonRows count={3} height={44} />
+        </div>
       )}
 
       <div className="space-y-2">

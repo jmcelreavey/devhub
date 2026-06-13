@@ -88,6 +88,7 @@ export function CommitMessageModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
+      className="modal-backdrop"
       style={{
         position: "fixed",
         inset: 0,
@@ -103,7 +104,7 @@ export function CommitMessageModal({
       }}
     >
       <div
-        className="card"
+        className="card modal-panel"
         style={{
           width: "100%",
           maxWidth: 440,

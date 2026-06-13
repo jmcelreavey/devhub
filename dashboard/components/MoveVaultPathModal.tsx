@@ -106,13 +106,13 @@ export function MoveVaultPathModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center"
+      className="modal-backdrop fixed inset-0 z-[60] flex items-center justify-center"
       onClick={onClose}
       style={{ background: "rgba(0,0,0,0.4)" }}
       role="presentation"
     >
       <div
-        className="rounded-lg p-5 w-full max-w-md shadow-xl"
+        className="modal-panel rounded-lg p-5 w-full max-w-md shadow-xl"
         style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"

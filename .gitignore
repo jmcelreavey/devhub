@@ -74,3 +74,6 @@ notes/diagrams/test.json
 
 # Morning briefing AI cache (generated, machine-local)
 notes/.cache/
+
+# DevHub local app state (machine-local)
+.devhub/

@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo, useSyncExternalStore } from "react";
+
+const emptySubscribe = () => () => {};
 import dynamic from "next/dynamic";
 import { TaskList } from "@/components/TaskList";
 
@@ -25,6 +27,12 @@ import {
   ListTodo,
   FileText,
   Clock,
+  Plus,
+  Sunrise,
+  Sun,
+  Sunset,
+  Moon,
+  MoreHorizontal,
 } from "lucide-react";
 import Link from "next/link";
 import { useTabSaveStatus } from "@/components/TabTitle";
@@ -45,6 +53,7 @@ import {
   usePersistedSectionCollapsed,
 } from "@/lib/today-workspace-storage";
 import { WelcomeCard, useWelcomeCardVisible } from "@/components/WelcomeCard";
+import { TodayBootScreen, useTodayBoot } from "@/components/TodayBootScreen";
 import { HubTimeline } from "@/components/HubTimeline";
 import { TodayDashboardGrid } from "@/components/TodayDashboardGrid";
 import { MorningBriefingWidget } from "@/components/MorningBriefingWidget";
@@ -111,12 +120,51 @@ function isNoteEffectivelyEmpty(blocks: DevHubPartialBlock[]): boolean {
 type Tab = "tasks" | "notes" | "timeline";
 
 interface TaskCount {
-  tasks?: { done?: boolean; abandonedAt?: string; movedAt?: string }[];
+  tasks?: { done?: boolean; abandonedAt?: string; movedAt?: string; text?: string }[];
 }
 
 interface CalendarProbe {
-  events?: { id: string }[];
+  events?: {
+    id: string;
+    title?: string;
+    start?: string;
+    end?: string;
+    isAllDay?: boolean;
+  }[];
   error?: string;
+}
+
+type HeroEvent = NonNullable<CalendarProbe["events"]>[number];
+
+/**
+ * Hero signal: the meeting happening right now, or the next one coming up.
+ * Cheap enough to run per render — the clock already re-renders every second.
+ */
+function nowNextEvent(
+  events: HeroEvent[] | undefined,
+): { kind: "now" | "next"; event: HeroEvent; whenLabel: string } | null {
+  const now = Date.now();
+  const timed = (events ?? []).filter((e) => !e.isAllDay && e.start && e.end && e.title);
+  const current = timed.find(
+    (e) => Date.parse(e.start as string) <= now && now < Date.parse(e.end as string),
+  );
+  if (current) {
+    const ends = new Date(current.end as string).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    return { kind: "now", event: current, whenLabel: `ends ${ends}` };
+  }
+  const upcoming = timed
+    .filter((e) => Date.parse(e.start as string) > now)
+    .sort((a, b) => Date.parse(a.start as string) - Date.parse(b.start as string))[0];
+  if (!upcoming) return null;
+  const mins = Math.ceil((Date.parse(upcoming.start as string) - now) / 60000);
+  const whenLabel =
+    mins <= 120
+      ? `in ${mins}m`
+      : `at ${new Date(upcoming.start as string).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+  return { kind: "next", event: upcoming, whenLabel };
 }
 
 interface JiraProbe {
@@ -132,15 +180,54 @@ function formatClock(d: Date): string {
   });
 }
 
+/** Time-of-day greeting. Mounted-gated by the caller (server time ≠ client time). */
+function greetingForHour(hour: number): { label: string; Icon: typeof Sun } {
+  if (hour >= 5 && hour < 12) return { label: "Good morning", Icon: Sunrise };
+  if (hour >= 12 && hour < 17) return { label: "Good afternoon", Icon: Sun };
+  if (hour >= 17 && hour < 22) return { label: "Good evening", Icon: Sunset };
+  return { label: "Up late", Icon: Moon };
+}
+
 export function TodayPage() {
   const [tab, setTab] = useState<Tab>("tasks");
   const [todayDate, setTodayDate] = useState(() => todayISO());
   const [blocks, setBlocks] = useState<DevHubPartialBlock[] | null>(null);
   const [noteEditorKey, setNoteEditorKey] = useState(0);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [clock, setClock] = useState<string>(() => formatClock(new Date()));
+  // 30s cadence: date rollover + the "in Xm" signal labels. The visible
+  // seconds clock lives in <LiveClock /> so the rest of the page doesn't
+  // re-render every second.
+  const [, setNowTick] = useState(0);
+  // Greeting renders only after mount — server time and client time can
+  // disagree across a time-of-day boundary, which would mismatch hydration.
+  // useSyncExternalStore: false during SSR/hydration, true on the client.
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const blocksRef = useRef<DevHubPartialBlock[] | null>(null);
+  // Overflow menu for secondary card actions. The panel stays mounted and
+  // toggles via CSS `display` — StandupCopyButton portals its modal to
+  // <body>, so closing the menu must not unmount it mid-flow.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
   const prevTodayDateRef = useRef(todayDate);
   const tabSave = useTabSaveStatus();
   const toast = useToast();
@@ -148,34 +235,14 @@ export function TodayPage() {
   const todayPath = dailyNotePath(todayDate);
   const dayLabel = useMemo(() => formatDayLabel(todayDate), [todayDate]);
 
-  // Realtime clock — tick every second so minute rollover is immediate.
-  // Pauses while the tab is hidden to avoid waking the CPU unnecessarily.
+  // 30-second housekeeping tick — date rollover + signal label freshness.
   useEffect(() => {
-    let id: ReturnType<typeof setInterval> | null = null;
-    const tick = () => {
-      const now = new Date();
-      setClock(formatClock(now));
+    const id = setInterval(() => {
+      setNowTick((t) => t + 1);
       const iso = todayISO();
       setTodayDate((prev) => (prev === iso ? prev : iso));
-    };
-    const start = () => {
-      if (id) return;
-      tick();
-      id = setInterval(tick, 1000);
-    };
-    const stop = () => {
-      if (id) {
-        clearInterval(id);
-        id = null;
-      }
-    };
-    const onVisibility = () => (document.hidden ? stop() : start());
-    start();
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      stop();
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
+    }, 30_000);
+    return () => clearInterval(id);
   }, []);
 
   // Lightweight task counts for the hero/card-head badges. Shares SWR cache
@@ -189,10 +256,29 @@ export function TodayPage() {
     };
   }, [taskData]);
 
+  // One-pass confetti when the final task of the day lands. The prev-count
+  // ref means it only fires on the transition — never on page load with an
+  // already-complete list.
+  const [celebrate, setCelebrate] = useState(false);
+  const prevDoneRef = useRef<number | null>(null);
+  useEffect(() => {
+    const prev = prevDoneRef.current;
+    prevDoneRef.current = tasksDone;
+    if (prev === null) return;
+    if (tasksTotal > 0 && tasksDone === tasksTotal && prev < tasksTotal) {
+      setCelebrate(true);
+      const t = setTimeout(() => setCelebrate(false), 1800);
+      return () => clearTimeout(t);
+    }
+  }, [tasksDone, tasksTotal]);
+
   // Decide whether the right column has anything worth showing. Shares SWR
   // cache with CalendarWidget / JiraWidget so this is essentially free.
   const { data: cal } = useLive<CalendarProbe>("/api/calendar");
   const { data: jira } = useLive<JiraProbe>("/api/jira/tickets");
+  // Probe the PRs cache too — the boot screen holds until the primary
+  // widgets have data, so the dashboard reveals as one settled unit.
+  const { data: prsProbe } = useLive<Record<string, unknown>>("/api/github/prs");
   useMarkTicketsSeen();
   useMarkPrsSeen();
   const hasCalendar = !cal?.error;
@@ -200,6 +286,9 @@ export function TodayPage() {
   const datadogTodayVisible = useDatadogTodayPanelVisible();
   const welcomeVisible = useWelcomeCardVisible(tasksTotal);
   const gridReady = welcomeVisible !== null && cal !== undefined && jira !== undefined;
+  const bootReady =
+    gridReady && taskData !== undefined && prsProbe !== undefined;
+  const boot = useTodayBoot(bootReady);
   const [welcomeCollapsed, setWelcomeCollapsed] = usePersistedSectionCollapsed(TODAY_SECTION_WELCOME_COLLAPSED, {
     defaultCollapsed: true,
   });
@@ -371,23 +460,43 @@ export function TodayPage() {
 
   return (
     <div className="hub">
+      <TodayBootScreen state={boot} />
+      {celebrate && <ConfettiRain />}
       {/* Hero */}
       <div className="hub-hero">
         <div>
+          <div className="hub-hero-greeting" aria-hidden>
+            {mounted &&
+              (() => {
+                const { label, Icon } = greetingForHour(new Date().getHours());
+                return (
+                  <span className="fade-rise inline-flex items-center gap-1.5">
+                    <Icon size={12} aria-hidden />
+                    {label}
+                  </span>
+                );
+              })()}
+          </div>
           <h1 className="hub-hero-date">{dayLabel}</h1>
           <div className="hub-hero-sub">
-            <span
-              className="font-mono"
-              style={{ fontSize: 13 }}
-              aria-label={`Current time ${clock}`}
-              suppressHydrationWarning
-            >
-              {clock}
-            </span>
+            <LiveClock />
             {tasksTotal > 0 && (
               <>
                 <span aria-hidden>·</span>
-                <span>{tasksDone}/{tasksTotal} tasks done</span>
+                <span>
+                  <span key={tasksDone} className="count-tick">{tasksDone}</span>/{tasksTotal} tasks done
+                </span>
+                <span
+                  className="hub-hero-progress"
+                  data-complete={tasksDone === tasksTotal || undefined}
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={tasksTotal}
+                  aria-valuenow={tasksDone}
+                  aria-label="Tasks done today"
+                >
+                  <i style={{ width: `${Math.round((tasksDone / tasksTotal) * 100)}%` }} />
+                </span>
               </>
             )}
             <span aria-hidden>·</span>
@@ -395,8 +504,60 @@ export function TodayPage() {
               <ArrowLeft size={11} aria-hidden /> Yesterday
             </Link>
           </div>
+          {/* Now/Next strip — current/upcoming meeting + the top open task.
+              Data is client-fetched, so this never renders during SSR. */}
+          {(() => {
+            const signal = nowNextEvent(cal?.events);
+            const topTask = (taskData?.tasks ?? []).find(
+              (t) => !t.done && !t.abandonedAt && !t.movedAt && t.text,
+            );
+            if (!signal && !topTask) return null;
+            return (
+              <div className="hub-hero-signals">
+                {signal && (
+                  <Link href="/calendar" className="hero-signal" aria-label={`${signal.kind === "now" ? "Happening now" : "Up next"}: ${signal.event.title}, ${signal.whenLabel}`}>
+                    <span
+                      className={`hero-signal-dot${signal.kind === "now" ? " live-dot" : ""}`}
+                      data-kind={signal.kind}
+                      aria-hidden
+                    />
+                    <span className="hero-signal-kind">{signal.kind === "now" ? "Now" : "Next"}</span>
+                    <span className="hero-signal-text">{signal.event.title}</span>
+                    <span className="hero-signal-meta">{signal.whenLabel}</span>
+                  </Link>
+                )}
+                {topTask && (
+                  <button
+                    type="button"
+                    className="hero-signal"
+                    onClick={() => {
+                      setTab("tasks");
+                      setMainCollapsed(false);
+                    }}
+                    aria-label={`Top task: ${topTask.text}`}
+                  >
+                    <ListTodo size={11} aria-hidden style={{ color: "var(--accent)" }} />
+                    <span className="hero-signal-kind">Task</span>
+                    <span className="hero-signal-text">{topTask.text}</span>
+                  </button>
+                )}
+              </div>
+            );
+          })()}
         </div>
-        <LayoutPresetsButton />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ fontSize: 12 }}
+            onClick={() => window.dispatchEvent(new CustomEvent("devhub:capture-open"))}
+            data-tooltip="Quick capture (⌘⇧C)"
+            data-tooltip-pos="bottom-end"
+          >
+            <Plus size={13} aria-hidden /> Capture
+          </button>
+          <LayoutPresetsButton />
+        </div>
       </div>
 
       <MorningBriefingWidget />
@@ -445,25 +606,46 @@ export function TodayPage() {
                 </div>
                 <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
                   {mainCollapsed ? <span className="today-collapsed-summary">{mainCollapsedSummary}</span> : null}
-                  <StandupCopyButton variant="compact" />
-                  <ContextPackButton />
                   <SaveStatusPill status={status} />
-                  {tab === "notes" && !mainCollapsed && (
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      style={{ fontSize: 12, padding: "3px 8px" }}
-                      onClick={handleClear}
-                      title="Clear today's note"
-                    >
-                      <Trash2 size={12} aria-hidden /> Clear
-                    </button>
-                  )}
                   {tab === "tasks" && tasksTotal > 0 && (
                     <span className="hub-card-count">
-                      {tasksDone}/{tasksTotal} done
+                      <span key={tasksDone} className="count-tick">{tasksDone}</span>/{tasksTotal} done
                     </span>
                   )}
+                  {/* Overflow menu — standup, context pack, clear note */}
+                  <div className="relative today-grid-drag-cancel" ref={menuRef}>
+                    <button
+                      type="button"
+                      className="today-collapse-toggle"
+                      aria-haspopup="menu"
+                      aria-expanded={menuOpen}
+                      aria-label="More actions"
+                      onClick={() => setMenuOpen((o) => !o)}
+                    >
+                      <MoreHorizontal size={13} aria-hidden />
+                    </button>
+                    <div
+                      role="menu"
+                      aria-label="Card actions"
+                      className="today-actions-menu pop-soft"
+                      style={{ display: menuOpen ? undefined : "none" }}
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      <StandupCopyButton variant="compact" />
+                      <ContextPackButton />
+                      {tab === "notes" && !mainCollapsed && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          style={{ fontSize: 12, padding: "4px 10px", justifyContent: "flex-start" }}
+                          onClick={handleClear}
+                          title="Clear today's note"
+                        >
+                          <Trash2 size={12} aria-hidden /> Clear note
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   <TodayCollapseButton
                     collapsed={mainCollapsed}
                     label="Tasks, notes and timeline"
@@ -473,7 +655,7 @@ export function TodayPage() {
               </header>
 
               {!mainCollapsed ? (
-                <div className="hub-card-body">
+                <div key={tab} className="hub-card-body fade-rise">
                   {tab === "tasks" && <TaskList />}
                   {tab === "timeline" && <HubTimeline />}
                   {tab === "notes" &&
@@ -531,6 +713,89 @@ export function TodayPage() {
           ),
         }}
       />
+    </div>
+  );
+}
+
+/**
+ * Self-ticking seconds clock. Isolated so its 1s interval re-renders only
+ * this span — previously the whole Today page re-rendered every second.
+ * Pauses while the tab is hidden.
+ */
+function LiveClock() {
+  const [clock, setClock] = useState<string>(() => formatClock(new Date()));
+  useEffect(() => {
+    let id: ReturnType<typeof setInterval> | null = null;
+    const tick = () => setClock(formatClock(new Date()));
+    const start = () => {
+      if (id) return;
+      tick();
+      id = setInterval(tick, 1000);
+    };
+    const stop = () => {
+      if (id) {
+        clearInterval(id);
+        id = null;
+      }
+    };
+    const onVisibility = () => (document.hidden ? stop() : start());
+    start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+  return (
+    <span
+      className="font-mono"
+      style={{ fontSize: 13 }}
+      aria-label={`Current time ${clock}`}
+      suppressHydrationWarning
+    >
+      {clock}
+    </span>
+  );
+}
+
+const CONFETTI_COLORS = [
+  "var(--accent)",
+  "var(--success)",
+  "var(--warning)",
+  "var(--info)",
+  "var(--violet)",
+];
+
+/**
+ * One-pass confetti rain for the all-tasks-done moment. Deterministic
+ * pseudo-random spread (no Math.random — repeat celebrations look alike,
+ * and there's nothing to disagree with the server about). Client-only by
+ * construction: only rendered from a post-mount state transition.
+ */
+function ConfettiRain() {
+  const pieces = Array.from({ length: 28 }, (_, i) => ({
+    left: `${(i * 37 + 13) % 100}%`,
+    delay: `${((i * 53) % 40) / 100}s`,
+    duration: `${1 + ((i * 29) % 60) / 100}s`,
+    drift: `${(((i * 17) % 90) - 45)}px`,
+    color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+    round: i % 3 === 0,
+  }));
+  return (
+    <div className="confetti-rain" aria-hidden>
+      {pieces.map((p, i) => (
+        <i
+          key={i}
+          style={{
+            left: p.left,
+            background: p.color,
+            borderRadius: p.round ? "50%" : 2,
+            ["--delay" as string]: p.delay,
+            ["--dur" as string]: p.duration,
+            ["--drift" as string]: p.drift,
+          }}
+        />
+      ))}
     </div>
   );
 }

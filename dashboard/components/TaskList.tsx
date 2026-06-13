@@ -5,6 +5,7 @@ import { Plus, X, ExternalLink, Circle, CheckCircle2, Pencil, Ban, RotateCcw, Li
 import { useToast } from "@/lib/use-toast";
 import { useLive } from "@/lib/use-fetch";
 import { statusTone } from "@/components/JiraWidget";
+import { JiraKeyChip } from "@/components/JiraKeyChip";
 import { SeverityPill } from "@/components/ui/Severity";
 import { SortableList } from "@/components/ui/SortableList";
 import { useGridSize } from "@/lib/use-grid-size";
@@ -114,6 +115,21 @@ function detectBareUrl(text: string): string | null {
 
 const EMPTY_TASKS: Task[] = [];
 
+/** One quiet line for a cleared queue — date-seeded so it holds all day. */
+const CLEARED_LINES = [
+  "Done for today. Touch grass.",
+  "Queue clear. Go build something.",
+  "Nothing owed. Savour it.",
+  "All clear — the rest of the day is yours.",
+] as const;
+
+function clearedLineForToday(): string {
+  const seed = todayISO()
+    .split("")
+    .reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  return CLEARED_LINES[seed % CLEARED_LINES.length];
+}
+
 export function matchesTaskSearch(task: Task, query: string): boolean {
   if (!query) return true;
   return (
@@ -125,13 +141,16 @@ export function matchesTaskSearch(task: Task, query: string): boolean {
 export interface TaskListProps {
   inputId?: string;
   searchQuery?: string;
+  /** Hide specific open tasks (e.g. the one already shown in the NOW card). */
+  excludeIds?: readonly string[];
 }
 
-export function TaskList({ inputId = "task-add-text", searchQuery }: TaskListProps) {
+export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }: TaskListProps) {
   const { data, error, isLoading, mutate } = useLive<{ tasks?: Task[] }>("/api/tasks");
   const gridSize = useGridSize("main");
   const tasks = data?.tasks ?? EMPTY_TASKS;
   const [newText, setNewText] = useState("");
+  const [exitingIds, setExitingIds] = useState<Set<string>>(() => new Set());
   const [detectedUrl, setDetectedUrl] = useState<string | null>(null);
   const [linkName, setLinkName] = useState("");
   const [jiraStatuses, setJiraStatuses] = useState<Record<string, JiraStatus>>({});
@@ -577,9 +596,34 @@ export function TaskList({ inputId = "task-add-text", searchQuery }: TaskListPro
 
   const q = searchQuery?.toLowerCase() ?? "";
 
-  const pending = tasks.filter((t) => isTaskOpen(t) && matchesTaskSearch(t, q));
+  const pending = tasks.filter(
+    (t) => isTaskOpen(t) && matchesTaskSearch(t, q) && !excludeIds?.includes(t.id),
+  );
   const completed = tasks.filter((t) => t.done && matchesTaskSearch(t, q));
   const abandoned = tasks.filter((t) => !!t.abandonedAt && matchesTaskSearch(t, q));
+
+  // Completion reads as departure, not teleport: the row holds briefly so
+  // the check animation lands, then height-collapses out before the data
+  // update moves it into Done.
+  const completeWithExit = useCallback(
+    (id: string) => {
+      setExitingIds((prev) => {
+        if (prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
+      window.setTimeout(() => {
+        setExitingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        void toggleTask(id);
+      }, 440);
+    },
+    [toggleTask],
+  );
 
   const renderPendingTasks = () => (
     <SortableList
@@ -587,20 +631,27 @@ export function TaskList({ inputId = "task-add-text", searchQuery }: TaskListPro
       getId={(task) => task.id}
       disabled={!!q}
       onReorder={reorderTasks}
-      renderItem={(task, { dragHandleProps, isDragging, isDropTarget }) => (
-        <TaskItem
-          task={task}
-          jiraStatus={task.jiraKey ? jiraStatuses[task.jiraKey] : undefined}
-          dragHandleProps={q ? undefined : dragHandleProps}
-          isDragging={isDragging}
-          isDropTarget={isDropTarget}
-          onToggle={() => toggleTask(task.id)}
-          onDelete={() => deleteTask(task.id)}
-          onEdit={(text) => updateTaskText(task.id, text)}
-          onAbandon={(reason) => abandonTask(task.id, reason)}
-          onTimer={() => toggleTimer(task.id)}
-        />
-      )}
+      renderItem={(task, { dragHandleProps, isDragging, isDropTarget }) => {
+        const exiting = exitingIds.has(task.id);
+        return (
+          <div className={exiting ? "task-exit" : undefined}>
+            <TaskItem
+              task={exiting ? { ...task, done: true } : task}
+              jiraStatus={task.jiraKey ? jiraStatuses[task.jiraKey] : undefined}
+              dragHandleProps={q || exiting ? undefined : dragHandleProps}
+              isDragging={isDragging}
+              isDropTarget={isDropTarget}
+              onToggle={() => {
+                if (!exiting) completeWithExit(task.id);
+              }}
+              onDelete={() => deleteTask(task.id)}
+              onEdit={(text) => updateTaskText(task.id, text)}
+              onAbandon={(reason) => abandonTask(task.id, reason)}
+              onTimer={() => toggleTimer(task.id)}
+            />
+          </div>
+        );
+      }}
     />
   );
 
@@ -726,6 +777,16 @@ export function TaskList({ inputId = "task-add-text", searchQuery }: TaskListPro
 
       {renderPendingTasks()}
 
+      {pending.length === 0 && exitingIds.size === 0 && completed.length > 0 && !q && (
+        <div
+          className="fade-rise flex items-center gap-2 py-2 text-sm"
+          style={{ color: "var(--text-muted)" }}
+        >
+          <CheckCircle2 size={15} style={{ color: "var(--success)" }} aria-hidden />
+          {clearedLineForToday()}
+        </div>
+      )}
+
       {completed.length > 0 && (
         <>
           {(pending.length > 0 || !showCompleted) && (
@@ -740,17 +801,28 @@ export function TaskList({ inputId = "task-add-text", searchQuery }: TaskListPro
               Done ({completed.length})
             </button>
           )}
-          {showCompleted && completed.map((task) => (
-            <TaskItem
-              key={task.id}
-              task={task}
-              jiraStatus={task.jiraKey ? jiraStatuses[task.jiraKey] : undefined}
-              onToggle={() => toggleTask(task.id)}
-              onDelete={() => deleteTask(task.id)}
-              onEdit={(text) => updateTaskText(task.id, text)}
-              onAbandon={(reason) => abandonTask(task.id, reason)}
-            />
-          ))}
+          {/* Always mounted; grid-rows 0fr→1fr makes expand/collapse glide. */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateRows: showCompleted ? "1fr" : "0fr",
+              transition: "grid-template-rows 200ms cubic-bezier(0.22, 1, 0.36, 1)",
+            }}
+          >
+            <div style={{ overflow: "hidden", minHeight: 0 }}>
+              {completed.map((task) => (
+                <TaskItem
+                  key={task.id}
+                  task={task}
+                  jiraStatus={task.jiraKey ? jiraStatuses[task.jiraKey] : undefined}
+                  onToggle={() => toggleTask(task.id)}
+                  onDelete={() => deleteTask(task.id)}
+                  onEdit={(text) => updateTaskText(task.id, text)}
+                  onAbandon={(reason) => abandonTask(task.id, reason)}
+                />
+              ))}
+            </div>
+          </div>
         </>
       )}
 
@@ -825,11 +897,13 @@ export function TaskItem({
   const [editText, setEditText] = useState(task.text);
   const [showAbandon, setShowAbandon] = useState(false);
   const [abandonReason, setAbandonReason] = useState("");
+  // True only in the moment the user just checked the box, so the confetti
+  // burst fires on completion — not when an already-done list renders.
+  const [justCompleted, setJustCompleted] = useState(false);
   const editRef = useRef<HTMLInputElement>(null);
   const isAbandoned = !!task.abandonedAt;
   const isMoved = !!task.movedAt;
   const isInactive = isAbandoned || isMoved || readOnly;
-  const isInFlight = isTaskOpen(task) && !!jiraStatus && statusTone(jiraStatus.name) === "info";
 
   useEffect(() => {
     if (editing) editRef.current?.focus();
@@ -869,9 +943,9 @@ export function TaskItem({
   const dueDateLabel = task.due ? new Date(task.due).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : null;
 
   return (
-    <div style={isInFlight ? { borderLeft: "3px solid var(--accent)", paddingLeft: 4, borderRadius: 2 } : undefined}>
+    <div>
       <div
-        className="flex items-start gap-2.5 group rounded px-2 py-1.5 transition-colors"
+        className={`flex items-start gap-2.5 group rounded px-2 py-1.5 transition-colors${isDragging ? " row-dragging" : ""}`}
         style={{
           opacity: isDragging ? 0.45 : undefined,
           background: isDropTarget ? "var(--bg-elevated)" : undefined,
@@ -930,9 +1004,14 @@ export function TaskItem({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
+              if (!task.done) {
+                setJustCompleted(true);
+                window.setTimeout(() => setJustCompleted(false), 700);
+              }
               onToggle();
             }}
             aria-label={task.done ? "Mark task incomplete" : "Mark task complete"}
+            className="task-toggle"
             style={{
               background: "none",
               border: "none",
@@ -945,13 +1024,15 @@ export function TaskItem({
             }}
           >
             {task.done ? (
-              <CheckCircle2
-                key="done"
-                size={16}
-                style={{ color: "var(--success)" }}
-                className="task-check-pulse"
-                aria-hidden
-              />
+              <span className={justCompleted ? "check-burst" : "inline-flex"}>
+                <CheckCircle2
+                  key="done"
+                  size={16}
+                  style={{ color: "var(--success)" }}
+                  className="task-check-pulse"
+                  aria-hidden
+                />
+              </span>
             ) : (
               <Circle size={16} style={{ color: "var(--text-subtle)" }} aria-hidden />
             )}
@@ -959,19 +1040,7 @@ export function TaskItem({
         )}
 
         <div className="flex-1 min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          {task.jiraKey && !isAbandoned && (
-            <span
-              className="shrink-0 font-mono text-xs px-1.5 py-0.5 rounded"
-              style={{
-                background: "var(--accent-dim)",
-                color: "var(--accent)",
-                textDecoration: task.done ? "line-through" : "none",
-                opacity: task.done ? 0.5 : 1,
-              }}
-            >
-              {task.jiraKey}
-            </span>
-          )}
+          {task.jiraKey && !isAbandoned && <JiraKeyChip jiraKey={task.jiraKey} done={task.done} />}
 
           {editing ? (
             <input
@@ -1251,7 +1320,7 @@ function SegmentedProgressBar({ open, done, abandoned }: { open: number; done: n
         style={{ color: "var(--text-subtle)" }}
         title={`${open} open · ${done} done · ${abandoned} abandoned`}
       >
-        {done}/{activeTotal} done{abandoned > 0 ? ` · ${abandoned} abandoned` : ""}
+        <span key={done} className="count-tick">{done}</span>/{activeTotal} done{abandoned > 0 ? ` · ${abandoned} abandoned` : ""}
       </span>
     </div>
   );

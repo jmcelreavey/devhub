@@ -139,7 +139,7 @@ export function IconGridPopover<T extends string = string>({
               id={listId}
               role="listbox"
               aria-label="Choose icon"
-              className="fixed flex flex-col overflow-hidden rounded-lg border shadow-lg"
+              className="pop-soft fixed flex flex-col overflow-hidden rounded-lg border shadow-lg"
               style={{
                 zIndex: POPOVER_Z_PANEL,
                 left: coords.left,

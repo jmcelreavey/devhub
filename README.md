@@ -122,6 +122,7 @@ Features:
 - **Notes** — BlockNote editor, file tree, search overlay, folder-scoped **master checklists** (shared task blocks across notes), optional **in-editor AI** via z.ai (`/ai`, selection toolbar — see env vars below)
 - **Chamber** — OpenChamber iframe integration (uses the shared OpenCode server on `1338`)
 - **OpenCode** — OpenCode web UI iframe on port `1338`
+- **Terminal** — in-app PoC terminal backed by a local PTY peer on port `1339`
 - **Datadog** — `/datadog` hub + Today strip (deep links to monitors by `@oncall-dad` / `@slack-dad-team-alerts` and today’s event stream) when `DATADOG_API_KEY` is set in `/setup`
 - **Status** — Git/repo health, services, MCP server processes, restarts; same **GitHub PRs** strip as Today
 - **Skills** — Expandable skill cards with SKILL.md content
@@ -149,6 +150,7 @@ A starter `dashboard/.env.example` is checked in — copy to `dashboard/.env.loc
 | `OPENCHAMBER_HOST` | `0.0.0.0` | OpenChamber bind address (keep in sync with `DEVHUB_BIND_HOST`) |
 | `NEXT_PUBLIC_OPENCHAMBER_PORT` | `1336` | Port embedded in the Chamber iframe URL in the browser |
 | `OPENCODE_PORT` | `1338` | `opencode serve` listen port (shared by Chamber and the `/opencode` page) |
+| `TERMINAL_PORT` | `1339` | In-app terminal PTY WebSocket peer |
 | `OPENCODE_BIND_HOST` | `0.0.0.0` | `opencode serve --hostname` (legacy: `OPENCODE_HOST` when not a URL) |
 | `NEXT_PUBLIC_OPENCODE_PORT` | `1338` | Port embedded in the OpenCode iframe URL in the browser |
 

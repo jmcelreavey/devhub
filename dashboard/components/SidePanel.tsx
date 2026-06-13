@@ -127,6 +127,7 @@ export function SidePanel({
       role="dialog"
       aria-modal="true"
       aria-label={ariaLabel}
+      className={isMobile ? "side-panel-enter-mobile" : "side-panel-enter"}
       style={containerStyle}
     >
       {!isMobile && (

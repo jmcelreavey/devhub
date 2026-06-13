@@ -2,18 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { resolveOpenCodePort } from "./opencode-command";
-
-const NPM_PREFIX_POLLUTED_KEYS = [
-  "npm_config_prefix",
-  "npm_config_global_prefix",
-  "npm_config_local_prefix",
-];
+import { scrubNpmEnv } from "./process-env";
 
 export function cleanOpenChamberEnv(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
-  for (const key of NPM_PREFIX_POLLUTED_KEYS) {
-    delete env[key];
-  }
+  const env = scrubNpmEnv();
   const userOpencode = path.join(process.env.HOME ?? "", ".opencode", "bin", "opencode");
   if (!process.env.DEVHUB_OPENCODE_BINARY && fs.existsSync(userOpencode)) {
     env.OPENCODE_BINARY = userOpencode;

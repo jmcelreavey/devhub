@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, Menu, shell, type MenuItemConstructorOptions } from "electron";
+import { app, BrowserWindow, dialog, Menu, screen, shell, type MenuItemConstructorOptions } from "electron";
 import { autoUpdater } from "electron-updater";
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
@@ -59,17 +59,37 @@ console.log(`[devhub] resolved npm: ${npmBin}`);
 const DASHBOARD_PORT = 1337;
 const CHAMBER_PORT = 1336;
 const OPENCODE_PORT = 1338;
+const TERMINAL_PORT = 1339;
 const DASHBOARD_URL = `http://localhost:${DASHBOARD_PORT}`;
 const PROCESS_EXIT_WAIT_MS = 1_500;
 const PORT_POLL_INTERVAL_MS = 500;
 const PORT_POLL_MAX_ATTEMPTS = 20;
 const LOG_BUFFER_MAX_LINES = 1_000;
 
-const NPM_PREFIX_POLLUTED_KEYS = [
-  "npm_config_prefix",
-  "npm_config_global_prefix",
-  "npm_config_local_prefix",
+const NPM_LIFECYCLE_KEYS = [
+  "INIT_CWD",
+  "npm_command",
+  "npm_execpath",
+  "npm_lifecycle_event",
+  "npm_lifecycle_script",
+  "npm_node_execpath",
+  "npm_package_json",
+  "npm_package_name",
+  "npm_package_version",
 ];
+
+function cleanNpmEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const clean = { ...env };
+  for (const key of Object.keys(clean)) {
+    if (key.startsWith("npm_config_") || key.startsWith("npm_package_")) {
+      delete clean[key];
+    }
+  }
+  for (const key of NPM_LIFECYCLE_KEYS) {
+    delete clean[key];
+  }
+  return clean;
+}
 
 let appWindow: BrowserWindow | null = null;
 let activeProcess: ChildProcessWithoutNullStreams | null = null;
@@ -85,10 +105,7 @@ let manualUpdateCheck = false;
 let resolvedProjectRoot: string | null = null;
 
 function openChamberEnv(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
-  for (const key of NPM_PREFIX_POLLUTED_KEYS) {
-    delete env[key];
-  }
+  const env = cleanNpmEnv();
   const userOpencode = path.join(process.env.HOME ?? "", ".opencode", "bin", "opencode");
   if (!process.env.DEVHUB_OPENCODE_BINARY && fs.existsSync(userOpencode)) {
     env.OPENCODE_BINARY = userOpencode;
@@ -134,11 +151,7 @@ function resolveOpenCodeBinary(): string {
 }
 
 function openCodeEnv(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
-  for (const key of NPM_PREFIX_POLLUTED_KEYS) {
-    delete env[key];
-  }
-  return env;
+  return cleanNpmEnv();
 }
 
 function projectRoot(): string {
@@ -218,18 +231,62 @@ async function waitForDashboard(timeoutMs = 60_000): Promise<boolean> {
   return false;
 }
 
+/** Restore saved bounds only when they still land on a connected display. */
+function restorableBounds(): { x: number; y: number; width: number; height: number } | null {
+  const saved = loadSettings().windowBounds;
+  if (!saved || saved.width < 400 || saved.height < 300) return null;
+  const display = screen.getDisplayMatching(saved);
+  const wa = display.workArea;
+  const intersects =
+    saved.x < wa.x + wa.width &&
+    saved.x + saved.width > wa.x &&
+    saved.y < wa.y + wa.height &&
+    saved.y + saved.height > wa.y;
+  return intersects ? saved : null;
+}
+
+let saveBoundsTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Debounced persist of window bounds + maximized state. */
+function persistWindowState(window: BrowserWindow): void {
+  if (saveBoundsTimer) clearTimeout(saveBoundsTimer);
+  saveBoundsTimer = setTimeout(() => {
+    if (window.isDestroyed()) return;
+    const settings = loadSettings();
+    settings.windowMaximized = window.isMaximized();
+    if (!window.isMaximized() && !window.isFullScreen()) {
+      settings.windowBounds = window.getBounds();
+    }
+    saveSettings(settings);
+  }, 400);
+}
+
 function createLauncherWindow(): BrowserWindow {
   if (appWindow) {
     appWindow.focus();
     return appWindow;
   }
 
+  const savedBounds = restorableBounds();
   appWindow = new BrowserWindow({
-    width: 900,
-    height: 560,
+    width: savedBounds?.width ?? 1280,
+    height: savedBounds?.height ?? 820,
+    x: savedBounds?.x,
+    y: savedBounds?.y,
     title: "DevHub Launcher",
     icon: appIconPath(),
+    // Matches the dashboard's darkest background — no white flash while
+    // the web app loads.
+    backgroundColor: "#0d1012",
+    show: false,
   });
+  if (loadSettings().windowMaximized) appWindow.maximize();
+  appWindow.once("ready-to-show", () => appWindow?.show());
+
+  appWindow.on("resize", () => appWindow && persistWindowState(appWindow));
+  appWindow.on("move", () => appWindow && persistWindowState(appWindow));
+  appWindow.on("maximize", () => appWindow && persistWindowState(appWindow));
+  appWindow.on("unmaximize", () => appWindow && persistWindowState(appWindow));
 
   appWindow.on("close", (event) => {
     if (cleanupComplete) return;
@@ -334,7 +391,7 @@ function spawnNpm(args: readonly string[]): ChildProcessWithoutNullStreams {
   appendLog(`$ ${npmBin} ${args.join(" ")}\n`);
   const child = spawn(npmBin, [...args], {
     cwd: projectRoot(),
-    env: process.env,
+    env: cleanNpmEnv(),
     shell: true,
   });
 
@@ -348,7 +405,7 @@ function spawnDashboardNpm(args: readonly string[]): ChildProcessWithoutNullStre
   appendLog(`dashboard $ ${npmBin} ${args.join(" ")}\n`);
   const child = spawn(npmBin, [...args], {
     cwd: path.join(projectRoot(), "dashboard"),
-    env: process.env,
+    env: cleanNpmEnv(),
     shell: true,
   });
 
@@ -405,7 +462,7 @@ async function reinstallDependenciesAndRestart(): Promise<void> {
   showLogView();
   appendLog(`Reinstalling dependencies, then restarting npm run ${scriptToRestart}...\n`);
   await stopActiveProcessForRestart();
-  await killPortListeners([DASHBOARD_PORT, CHAMBER_PORT, OPENCODE_PORT]);
+  await killPortListeners([DASHBOARD_PORT, CHAMBER_PORT, OPENCODE_PORT, TERMINAL_PORT]);
   await ensureDependencies(true);
   await startScript(scriptToRestart);
 }
@@ -842,7 +899,7 @@ function spawnDetached(args: readonly string[]): void {
   appendLog(`Spawning detached: ${npmBin} ${args.join(" ")}\n`);
   const child = spawn(npmBin, [...args], {
     cwd: projectRoot(),
-    env: process.env,
+    env: cleanNpmEnv(),
     shell: true,
     detached: true,
     stdio: "ignore",
@@ -1002,7 +1059,7 @@ async function startScript(script: LaunchScript, restart = false): Promise<void>
   if (restart) {
     showLogView();
     await stopActiveProcessForRestart();
-    await killPortListeners([DASHBOARD_PORT, CHAMBER_PORT, OPENCODE_PORT]);
+    await killPortListeners([DASHBOARD_PORT, CHAMBER_PORT, OPENCODE_PORT, TERMINAL_PORT]);
   }
 
   if (await canConnect(DASHBOARD_PORT)) {

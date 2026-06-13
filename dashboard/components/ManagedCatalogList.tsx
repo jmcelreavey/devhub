@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { SkeletonRows } from "@/components/SkeletonRows";
 import {
   Bot,
   ChevronDown,
@@ -446,7 +447,9 @@ export function ManagedCatalogList(props: ManagedCatalogListProps) {
                     </div>
                   </div>
                   {loadingContent === key ? (
-                    <p className="text-xs" style={{ color: "var(--text-subtle)" }}>Loading...</p>
+                    <div role="status" aria-label="Loading content">
+                      <SkeletonRows count={3} height={10} />
+                    </div>
                   ) : isEditing ? (
                     <textarea
                       value={editContent}

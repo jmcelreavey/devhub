@@ -9,6 +9,7 @@ import {
   readTodayGridLayoutsFromStorage,
   type TodayGridBreakpoint,
 } from "@/lib/today-grid-layout";
+import { useTodayView, type TodayView } from "@/lib/today-view";
 
 interface LayoutPreset {
   id: string;
@@ -47,6 +48,7 @@ function applyPreset(layouts: ResponsiveLayouts<TodayGridBreakpoint>) {
 
 export function LayoutPresetsButton() {
   const [open, setOpen] = useState(false);
+  const [view, setView] = useTodayView();
   const [customPresets, setCustomPresets] = useState<LayoutPreset[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -122,6 +124,43 @@ export function LayoutPresetsButton() {
             border: "1px solid var(--border-muted)",
           }}
         >
+          {/* View mode — Calm Focus (design B) vs dashboard grid (A+B) */}
+          <div style={{ padding: "4px 0", borderBottom: "1px solid var(--border-muted)" }}>
+            <div
+              className="px-3 pb-1 pt-1.5 text-[10.5px] font-bold uppercase"
+              style={{ color: "var(--text-subtle)", letterSpacing: ".08em" }}
+            >
+              View
+            </div>
+            {(
+              [
+                ["focus", "Focus", "One thing now — the rest whispers"],
+                ["dashboard", "Dashboard", "Draggable grid with all the cards"],
+              ] as [TodayView, string, string][]
+            ).map(([id, name, desc]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  setView(id);
+                  setOpen(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--bg-muted)]"
+                aria-pressed={view === id}
+              >
+                <span
+                  className="text-[13px]"
+                  style={{ color: view === id ? "var(--accent)" : "var(--text)" }}
+                >
+                  {name}
+                </span>
+                <span className="text-[11px] truncate" style={{ color: "var(--text-subtle)" }}>
+                  {desc}
+                </span>
+              </button>
+            ))}
+          </div>
+
           {/* Custom presets */}
           {customPresets.length > 0 && (
             <div style={{ padding: "4px 0" }}>

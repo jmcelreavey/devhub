@@ -52,6 +52,7 @@ const ICONS: Record<string, LucideIcon> = {
   review: BarChart3,
   prs: GitPullRequest,
   checklists: ListChecks,
+  terminal: Terminal,
 };
 
 const UNSEEN_COLOR = "var(--info)";
@@ -123,10 +124,11 @@ export function NavLink({ item, onClick, collapsed, count = 0, unseen = false }:
         boxShadow: active ? "inset 0 0 0 1px color-mix(in oklab, var(--accent) 22%, transparent)" : "none",
       }}
     >
-      {/* 2px left-rail accent for active items */}
+      {/* 2px left-rail accent for active items — grows in via .nav-rail */}
       {active && (
         <span
           aria-hidden
+          className="nav-rail"
           style={{
             position: "absolute",
             left: 0,

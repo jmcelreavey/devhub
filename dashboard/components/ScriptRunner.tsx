@@ -199,14 +199,7 @@ export function ScriptRunner({ onDone }: { onDone?: () => void } = {}) {
         </label>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {noScripts ? (
-          <div
-            className="rounded-lg border px-4 py-3 text-xs"
-            style={{ borderColor: "var(--border)", color: "var(--text-subtle)" }}
-          >
-            Loading actions…
-          </div>
-        ) : scripts.map((s) => {
+        {noScripts ? null : scripts.map((s) => {
           const isPreviewing = previewing === s.id;
           const isRunning = running === s.id;
           return (

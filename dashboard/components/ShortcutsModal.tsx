@@ -53,6 +53,7 @@ export function ShortcutsModal({ open, onClose }: { open: boolean; onClose: () =
       role="dialog"
       aria-modal="true"
       aria-labelledby="shortcuts-modal-title"
+      className="modal-backdrop"
       style={{
         position: "fixed",
         inset: 0,
@@ -65,7 +66,7 @@ export function ShortcutsModal({ open, onClose }: { open: boolean; onClose: () =
       onClick={onClose}
     >
       <div
-        className="card"
+        className="card modal-panel"
         style={{ width: "380px", maxWidth: "calc(100vw - 32px)", maxHeight: "80vh", overflow: "auto" }}
         onClick={(e) => e.stopPropagation()}
       >

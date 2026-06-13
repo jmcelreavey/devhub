@@ -8,6 +8,7 @@ import { useMarkPrsSeen } from "@/lib/use-sidebar-counts";
 import { buildSlackMessage, copyWithToast } from "@/lib/pr-slack";
 import { useToast } from "@/lib/use-toast";
 import { FetchError, EmptyState, SkeletonRows } from "@/components";
+import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
 
 type PrTab = "authored" | "reviews" | "recent";
 
@@ -112,6 +113,7 @@ function RecentlyReviewedCard({ row }: { row: RecentlyReviewedPr }) {
 export default function PrsPage() {
   const [prTab, setPrTab] = useState<PrTab>("authored");
   const { data, error, isLoading, mutate, isValidating } = useLive<GithubPrsApiPayload>("/api/github/prs");
+  const boot = useBootGate(data !== undefined || !!error);
 
   const authored = data?.authored ?? EMPTY_PR_ROWS;
   const reviews = data?.reviews ?? EMPTY_PR_ROWS;
@@ -122,6 +124,7 @@ export default function PrsPage() {
   if (!data?.configured && !isLoading && !error) {
     return (
       <div className="page-wrapper">
+        <BootScreen state={boot} />
         <div className="page-header">
           <div className="page-title">Pull Requests</div>
         </div>
@@ -136,6 +139,7 @@ export default function PrsPage() {
 
   return (
     <div className="page-wrapper">
+      <BootScreen state={boot} />
       <div className="page-header">
         <div className="page-title">Pull Requests</div>
         <div className="flex items-center gap-2">
@@ -179,7 +183,7 @@ export default function PrsPage() {
         ))}
       </div>
 
-      {isLoading && !data && <SkeletonRows count={3} height={60} />}
+      {isLoading && !data && <SkeletonRows count={5} height={40} variant="list" />}
 
       <div className="space-y-2">
         {prTab === "recent"
@@ -199,6 +203,11 @@ export default function PrsPage() {
               : prTab === "reviews"
                 ? "No PRs awaiting your review."
                 : "No recently reviewed PRs in the last 7 days."
+          }
+          quips={
+            prTab === "reviews"
+              ? ["Inbox zero, review edition.", "Nobody needs you. In a good way.", "Clear. Go write some code of your own."]
+              : undefined
           }
         />
       )}

@@ -1,18 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-
-const NPM_PREFIX_POLLUTED_KEYS = [
-  "npm_config_prefix",
-  "npm_config_global_prefix",
-  "npm_config_local_prefix",
-];
+import { scrubNpmEnv } from "./process-env";
 
 export function getOpenCodeEnv(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
-  for (const key of NPM_PREFIX_POLLUTED_KEYS) {
-    delete env[key];
-  }
-  return env;
+  return scrubNpmEnv();
 }
 
 export function resolveOpenCodeBinary(): string {

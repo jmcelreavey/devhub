@@ -18,6 +18,7 @@ import {
   DIAGRAMS_DIR,
 } from "@/lib/diagram-utils";
 import { broadcastNoteAutosaveInvalidation } from "@/lib/note-autosave-invalidation";
+import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
 
 interface DiagramItem {
   path: string;
@@ -26,7 +27,7 @@ interface DiagramItem {
 
 const TldrawThumbnail = dynamic(
   () => import("@/components/TldrawThumbnail").then((mod) => mod.TldrawThumbnail),
-  { ssr: false, loading: () => <div className="skeleton w-full aspect-square" /> },
+  { ssr: false, loading: () => <div className="w-full aspect-square rounded-[var(--radius-sm)]" style={{ background: "var(--bg-elevated)" }} /> },
 );
 
 function DiagramThumbnail({ data }: { data: unknown }) {
@@ -50,6 +51,7 @@ function DiagramThumbnail({ data }: { data: unknown }) {
 export default function DiagramsIndex() {
   const [diagrams, setDiagrams] = useState<DiagramItem[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const boot = useBootGate(loaded);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
@@ -161,6 +163,7 @@ export default function DiagramsIndex() {
 
   return (
     <div className="page-wrapper">
+      <BootScreen state={boot} />
       <div className="page-header">
         <div className="page-title">Diagrams</div>
         <button
@@ -197,8 +200,8 @@ export default function DiagramsIndex() {
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="card p-3 flex flex-col gap-2">
-              <div className="skeleton w-full aspect-square" />
-              <div className="skeleton h-3 w-2/3" />
+              <div className="w-full aspect-square rounded-[var(--radius-sm)]" style={{ background: "var(--bg-elevated)" }} />
+              <div className="h-3 w-2/3 rounded" style={{ background: "var(--bg-elevated)" }} />
             </div>
           ))}
         </div>
@@ -275,7 +278,7 @@ function DiagramCardThumbnail({ storagePath, loader }: { storagePath: string; lo
   }, [storagePath, loader]);
 
   if (data == null) {
-    return <div className="skeleton w-full aspect-square" />;
+    return <div className="w-full aspect-square rounded-[var(--radius-sm)]" style={{ background: "var(--bg-elevated)" }} />;
   }
 
   return <DiagramThumbnail data={data} />;

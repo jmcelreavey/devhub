@@ -7,6 +7,7 @@ import type { JiraTicket } from "@/lib/jira-client";
 import { useMarkTicketsSeen } from "@/lib/use-sidebar-counts";
 import { priorityIcon, statusColor } from "@/components/JiraWidget";
 import { FetchError, EmptyState, SkeletonRows } from "@/components";
+import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
 
 interface JiraResponse {
   tickets?: JiraTicket[];
@@ -77,6 +78,7 @@ function TicketCard({ ticket }: { ticket: JiraTicket }) {
 
 export default function TicketsPage() {
   const { data, error, isLoading, mutate, isValidating } = useLive<JiraResponse>("/api/jira/tickets");
+  const boot = useBootGate(data !== undefined || !!error);
   const [filter, setFilter] = useState<string>("All");
 
   const tickets = useMemo(() => {
@@ -92,6 +94,7 @@ export default function TicketsPage() {
   if (!isLoading && !error && !configured) {
     return (
       <div className="page-wrapper">
+      <BootScreen state={boot} />
         <div className="page-header">
           <div className="page-title">Tickets</div>
         </div>
@@ -111,6 +114,7 @@ export default function TicketsPage() {
 
   return (
     <div className="page-wrapper">
+      <BootScreen state={boot} />
       <div className="page-header">
         <div className="page-title">Tickets</div>
         <div className="flex items-center gap-2">
@@ -152,7 +156,7 @@ export default function TicketsPage() {
         ))}
       </div>
 
-      {isLoading && !data && <SkeletonRows count={3} height={60} />}
+      {isLoading && !data && <SkeletonRows count={5} height={40} variant="list" />}
 
       <div className="space-y-2">
         {filtered.map((t) => (
@@ -163,6 +167,11 @@ export default function TicketsPage() {
       {!isLoading && !error && filtered.length === 0 && configured && (
         <EmptyState
           title={filter === "All" ? "No tickets assigned to you." : `No ${filter.toLowerCase()} tickets.`}
+          quips={
+            filter === "All"
+              ? ["Suspiciously quiet.", "Enjoy it while it lasts.", "The board owes you nothing today."]
+              : undefined
+          }
         />
       )}
     </div>

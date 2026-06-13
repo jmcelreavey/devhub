@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { Search } from "lucide-react";
 import { BRAND_BOTTLE_IMAGE_SRC } from "@/lib/brand-mark";
 import { MobileNav } from "@/components/MobileNav";
 import { NotesBrowseButton } from "@/components/NotesBrowseButton";
@@ -45,6 +46,14 @@ export function MobileTopBar() {
       </div>
       <div className="ml-auto flex items-center gap-1">
         <ContentSyncIndicator />
+        <button
+          type="button"
+          className="hub-icon-btn"
+          onClick={() => window.dispatchEvent(new CustomEvent("devhub:palette-toggle"))}
+          aria-label="Search"
+        >
+          <Search size={15} aria-hidden />
+        </button>
         <NotesBrowseButton />
         <TasksBrowseButton />
         <DiagramsBrowseButton />

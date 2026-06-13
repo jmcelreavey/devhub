@@ -38,6 +38,12 @@ function isFuture(iso: string): boolean {
   return new Date(iso).getTime() > Date.now();
 }
 
+/** Within 10 minutes of starting — the only time the Join button breathes. */
+function isImminent(iso: string): boolean {
+  const ms = new Date(iso).getTime() - Date.now();
+  return ms > 0 && ms <= 10 * 60_000;
+}
+
 export function CalendarWidget({ collapsed = false, collapsedSummary, onToggle }: CalendarWidgetProps) {
   const { data, error, isLoading } = useLive<CalendarResponse>("/api/calendar");
 
@@ -125,9 +131,23 @@ export function CalendarWidget({ collapsed = false, collapsedSummary, onToggle }
           <Clock size={13} style={{ color: "var(--text-subtle)" }} aria-hidden />
           <span style={{ color: "var(--text-muted)" }}>Next:</span>
           <span style={{ color: "var(--text)" }}>{next.title}</span>
-          <span className="text-xs" style={{ color: "var(--accent)" }}>
+          <span
+            className="text-xs"
+            style={{ color: isImminent(next.start) ? "var(--warning)" : "var(--accent)" }}
+          >
             in {timeUntil(next.start)}
           </span>
+          {next.conferenceUrl && isImminent(next.start) && (
+            <a
+              href={next.conferenceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="urgency-pulse ml-auto inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
+              style={{ background: "var(--accent)", color: "var(--accent-fg, #121710)" }}
+            >
+              <Video size={11} aria-hidden /> Join
+            </a>
+          )}
         </div>
       )}
 

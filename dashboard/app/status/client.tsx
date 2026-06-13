@@ -16,6 +16,7 @@ import { CopyButton } from "@/components/CopyButton";
 import { HoverTip } from "@/components/HoverTip";
 import { useLive } from "@/lib/use-fetch";
 import type { SetupGateStatus } from "@/lib/nav";
+import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
 
 interface ServiceInfo {
   name: string;
@@ -264,6 +265,7 @@ export default function StatusPage() {
   const [mcpRuntime, setMcpRuntime] = useState<McpRuntimeEntry[]>([]);
   const [git, setGit] = useState<GitStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const boot = useBootGate(!loading);
   const [refreshed, setRefreshed] = useState(0);
   const [restarting, setRestarting] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -505,6 +507,7 @@ export default function StatusPage() {
 
   return (
     <div className="page-wrapper">
+      <BootScreen state={boot} />
       <CommitMessageModal
         open={syncDirtyModal !== null}
         onClose={() => setSyncDirtyModal(null)}

@@ -357,7 +357,7 @@ export function StandupCopyButton({ variant = "strip" }: StandupCopyButtonProps)
             aria-busy={busy}
           >
             <FileText size={13} aria-hidden />
-            {busy ? "Building..." : "Save standup note"}
+            {busy ? "Building" : "Save standup note"}
           </button>
           {previewBtn}
           {settingsBtn}
@@ -385,7 +385,7 @@ export function StandupCopyButton({ variant = "strip" }: StandupCopyButtonProps)
               aria-busy={busy}
             >
               <FileText size={14} aria-hidden />
-              {busy ? "Building…" : "Save standup note"}
+              {busy ? "Building" : "Save standup note"}
             </button>
             {previewBtn}
             {settingsBtn}
@@ -416,7 +416,7 @@ export function StandupCopyButton({ variant = "strip" }: StandupCopyButtonProps)
             aria-busy={busy}
           >
             <FileText size={13} aria-hidden />
-            {busy ? "Building…" : "Save standup note"}
+            {busy ? "Building" : "Save standup note"}
           </button>
           {previewBtn}
           {settingsBtn}

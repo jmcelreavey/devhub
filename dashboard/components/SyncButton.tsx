@@ -78,11 +78,12 @@ export function SyncButton({
     <button
       onClick={trigger}
       disabled={running}
+      aria-busy={running}
       className="btn btn-primary text-xs"
       style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px 10px" }}
     >
-      <GitBranch size={11} className={running ? "animate-spin" : ""} aria-hidden />
-      {running ? "Syncing…" : label}
+      <GitBranch size={11} aria-hidden />
+      {running ? "Syncing" : label}
     </button>
   );
 }

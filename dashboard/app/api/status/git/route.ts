@@ -3,6 +3,10 @@ import { detectGitConflicts } from "@/lib/git-conflicts";
 import { getRepoRoot } from "@/lib/notes-dir";
 import { runGitRepo, runGitRepoAsync } from "@/lib/git-repo-local";
 
+/** Throttle the network fetch — local counting stays per-request. */
+const FETCH_TTL_MS = 4 * 60 * 1000;
+let lastUpstreamFetchAt = 0;
+
 export async function GET() {
   const root = getRepoRoot();
   try {
@@ -28,10 +32,19 @@ export async function GET() {
       else if (fp.startsWith("docs/")) docsCount++;
     }
 
+    // ahead/behind needs a network `git fetch`, but this endpoint is polled
+    // every 30s by the top-bar indicator — fetching every call burned
+    // 700–950ms per request and hammered the remote. Fetch at most every
+    // FETCH_TTL; in between, recount against the last-fetched upstream ref
+    // (local-only, fast) so ahead counts stay live as the user commits.
     let ahead = 0;
     let behind = 0;
     try {
-      await runGitRepoAsync(root, ["fetch", "--quiet", "--no-tags"], { timeout: 10_000 });
+      const now = Date.now();
+      if (now - lastUpstreamFetchAt > FETCH_TTL_MS) {
+        lastUpstreamFetchAt = now;
+        await runGitRepoAsync(root, ["fetch", "--quiet", "--no-tags"], { timeout: 10_000 });
+      }
       const countOut = runGitRepo(root, ["rev-list", "--left-right", "--count", "@{upstream}...HEAD"]);
       if (countOut.status === 0) {
         const parts = countOut.stdout.trim().split(/\s+/);

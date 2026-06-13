@@ -24,6 +24,14 @@ export interface RepoInfo {
   remote: string | null;
   dirtyCount: number;
   unpushedCount: number;
+  /** docker-compose.yml / compose.yaml present in the repo root. */
+  hasCompose: boolean;
+}
+
+const COMPOSE_FILES = ["docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"];
+
+function detectCompose(repoPath: string): boolean {
+  return COMPOSE_FILES.some((f) => fs.existsSync(path.join(repoPath, f)));
 }
 
 export interface GithubRepoInfo {
@@ -130,6 +138,7 @@ export async function listRepos(): Promise<RepoInfo[]> {
           path: repoPath,
           branch: readHead(repoPath),
           remote: readRemote(repoPath),
+          hasCompose: detectCompose(repoPath),
           dirtyCount,
           unpushedCount,
         });

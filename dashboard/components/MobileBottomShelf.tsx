@@ -12,7 +12,7 @@ const SHELF_COLLAPSED_H = 24; // WCAG 2.5.8 AA minimum touch target
 const TABS = [
   { href: "/",      label: "Today",  Icon: CalendarDays },
   { href: "/notes", label: "Notes",  Icon: FileText },
-  { href: "/tasks", label: "Tasks",  Icon: ListTodo },
+  { href: "/work",  label: "Work",   Icon: ListTodo },
 ];
 
 function openPalette() {

@@ -8,9 +8,11 @@ import { SimpleMarkdown } from "@/components/SimpleMarkdown";
 import { formatShortDate } from "@/lib/format-date";
 import type { LearningDetail, LearningEntry } from "@/lib/learnings-types";
 import { useLive } from "@/lib/use-fetch";
+import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
 
 export default function LearningsPage() {
   const { data, isLoading, error, mutate } = useLive<{ entries: LearningEntry[] }>("/api/learnings");
+  const boot = useBootGate(data !== undefined || !!error);
   const entries = data?.entries ?? [];
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -34,6 +36,7 @@ export default function LearningsPage() {
 
   return (
     <div className="page-wrapper">
+      <BootScreen state={boot} />
       <PageHeader
         title="Learnings"
         subtitle={

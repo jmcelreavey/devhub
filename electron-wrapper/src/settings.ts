@@ -2,10 +2,20 @@ import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
 
+export interface WindowBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface LauncherSettings {
   killDashboardOnClose: boolean;
   killChamberOnClose: boolean;
   killOpenCodeOnClose: boolean;
+  /** Last window bounds — restored on next launch. */
+  windowBounds?: WindowBounds;
+  windowMaximized?: boolean;
 }
 
 const DEFAULTS: LauncherSettings = {
@@ -26,6 +36,8 @@ export function loadSettings(): LauncherSettings {
       killDashboardOnClose: parsed.killDashboardOnClose ?? DEFAULTS.killDashboardOnClose,
       killChamberOnClose: parsed.killChamberOnClose ?? DEFAULTS.killChamberOnClose,
       killOpenCodeOnClose: parsed.killOpenCodeOnClose ?? DEFAULTS.killOpenCodeOnClose,
+      windowBounds: parsed.windowBounds,
+      windowMaximized: parsed.windowMaximized,
     };
   } catch {
     return { ...DEFAULTS };

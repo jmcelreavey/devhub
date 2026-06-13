@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Edit3, Save, X } from "lucide-react";
 import { useToast } from "@/lib/use-toast";
 import { SyncButton } from "@/components/SyncButton";
+import { SkeletonRows } from "@/components/SkeletonRows";
 
 interface OpencodeConfigResponse {
   exists: boolean;
@@ -116,9 +117,9 @@ export function OpencodeConfigPanel() {
       </div>
 
       {loading && (
-        <p className="text-sm" style={{ color: "var(--text-subtle)" }}>
-          Loading...
-        </p>
+        <div role="status" aria-label="Loading OpenCode config">
+          <SkeletonRows count={2} height={56} />
+        </div>
       )}
 
       {!loading && data && (
