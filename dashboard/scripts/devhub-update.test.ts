@@ -92,4 +92,15 @@ describe("devhub-update.sh", () => {
     expect(fs.readFileSync(path.join(mirrorDir, "tasks", "day.json"), "utf-8")).toBe(dirtyTasks);
     expect(fs.readFileSync(path.join(mirrorDir, "core.txt"), "utf-8")).toBe("mirror-change\n");
   });
+
+  it("rejects staged personal tasks before pull (would leak into core commit)", () => {
+    const stagedTasks = '[{"id":"1","text":"staged secret"}]\n';
+    fs.writeFileSync(path.join(mirrorDir, "tasks", "day.json"), stagedTasks, "utf-8");
+    git(mirrorDir, "add", "tasks/day.json");
+
+    const { status, output } = runUpdate(mirrorDir);
+    expect(status).not.toBe(0);
+    expect(output).toMatch(/Staged changes in personal-data paths/);
+    expect(git(mirrorDir, "diff", "--cached", "--name-only")).toBe("tasks/day.json");
+  });
 });
