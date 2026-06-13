@@ -11,17 +11,27 @@ function git(cwd: string, ...args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf-8" }).trim();
 }
 
-function installUpdateScript(mirrorDir: string): string {
+function installUpdateScript(mirrorDir: string, opts?: { stubPostSync?: boolean }): string {
   const scriptsDir = path.join(mirrorDir, "scripts");
   fs.mkdirSync(scriptsDir, { recursive: true });
   const scriptPath = path.join(scriptsDir, "devhub-update.sh");
-  fs.copyFileSync(CANONICAL_UPDATE_SCRIPT, scriptPath);
+  let contents = fs.readFileSync(CANONICAL_UPDATE_SCRIPT, "utf-8");
+  if (opts?.stubPostSync) {
+    contents = contents
+      .replaceAll("npx tsx scripts/run-action.ts validate", "echo STUB_VALIDATE")
+      .replaceAll("npx tsx scripts/run-action.ts sync", "echo STUB_SYNC");
+  }
+  fs.writeFileSync(scriptPath, contents, "utf-8");
   fs.chmodSync(scriptPath, 0o755);
   return scriptPath;
 }
 
-function runUpdate(mirrorDir: string, extraArgs: string[] = []): { status: number; output: string } {
-  const scriptPath = installUpdateScript(mirrorDir);
+function runUpdate(
+  mirrorDir: string,
+  extraArgs: string[] = [],
+  opts?: { stubPostSync?: boolean },
+): { status: number; output: string } {
+  const scriptPath = installUpdateScript(mirrorDir, opts);
   try {
     const output = execFileSync("bash", [scriptPath, ...extraArgs], {
       cwd: mirrorDir,
@@ -85,11 +95,23 @@ describe("devhub-update.sh", () => {
     const dirtyTasks = '[{"id":"1","text":"unsaved task edit"}]\n';
     fs.writeFileSync(path.join(mirrorDir, "tasks", "day.json"), dirtyTasks, "utf-8");
 
-    const { status, output } = runUpdate(mirrorDir);
+    const { status, output } = runUpdate(mirrorDir, [], { stubPostSync: true });
     expect(status).not.toBe(0);
     expect(output).toMatch(/Could not cleanly apply upstream changes/);
 
     expect(fs.readFileSync(path.join(mirrorDir, "tasks", "day.json"), "utf-8")).toBe(dirtyTasks);
     expect(fs.readFileSync(path.join(mirrorDir, "core.txt"), "utf-8")).toBe("mirror-change\n");
+  });
+
+  it("runs validate+sync when already up to date (retry after post-commit failure)", () => {
+    const upstreamHead = git(mirrorDir, "rev-parse", "upstream/main");
+    git(mirrorDir, "update-ref", "refs/devhub/upstream-sync", upstreamHead);
+    fs.mkdirSync(path.join(mirrorDir, "dashboard", "scripts"), { recursive: true });
+
+    const { status, output } = runUpdate(mirrorDir, [], { stubPostSync: true });
+    expect(status).toBe(0);
+    expect(output).toMatch(/Already up to date/);
+    expect(output).toContain("STUB_VALIDATE");
+    expect(output).toContain("STUB_SYNC");
   });
 });

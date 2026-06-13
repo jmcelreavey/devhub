@@ -45,6 +45,18 @@ done
 log()  { echo "[devhub-update] $*"; }
 fail() { echo "[devhub-update] ERROR: $*" >&2; exit 1; }
 
+# Validate + sync local tool copies after a successful pull (or when retrying after a
+# previous run committed but failed here — sync marker already advanced).
+run_post_pull_steps() {
+  if [[ "$DO_SYNC" != "1" ]]; then
+    return 0
+  fi
+  log "Validating..."
+  ( cd "$REPO_ROOT/dashboard" && npx tsx scripts/run-action.ts validate ) || fail "Validation failed."
+  log "Syncing assets to local tools..."
+  ( cd "$REPO_ROOT/dashboard" && npx tsx scripts/run-action.ts sync ) || fail "Sync failed."
+}
+
 # Personal-data paths: excluded from the pull (never expected from upstream) AND ignored by
 # the dirty-tree guard, so the app's live-dirty tasks/notes don't block a pull from the UI.
 EXCLUDES=(':!notes' ':!tasks' ':!collections' ':!dashboard/.env.local'
@@ -89,6 +101,8 @@ COUNT="$(git rev-list --count "${SINCE}..${UPSTREAM_REF}" 2>/dev/null || echo 0)
 if [[ "$COUNT" == "0" ]]; then
   log "Already up to date with ${UPSTREAM_REF}."
   git update-ref "$SYNC_REF" "$UPSTREAM_SHA"
+  run_post_pull_steps
+  log "Done. You are now up to date with ${UPSTREAM_REF}."
   exit 0
 fi
 log "Incoming core commits ($COUNT) ${SINCE}..${UPSTREAM_REF}:"
@@ -99,6 +113,8 @@ mapfile -t PATCH_FILES < <(git diff --name-only "${SINCE}..${UPSTREAM_REF}" -- .
 if [[ -z "$PATCH" ]]; then
   log "No file changes after exclusions; marking synced."
   git update-ref "$SYNC_REF" "$UPSTREAM_SHA"
+  run_post_pull_steps
+  log "Done. You are now up to date with ${UPSTREAM_REF}."
   exit 0
 fi
 
@@ -128,12 +144,6 @@ git commit --quiet -m "chore: pull core updates from ${UPSTREAM_REF} ($(git rev-
 git update-ref "$SYNC_REF" "$UPSTREAM_SHA"
 log "Applied and committed. Sync marker → $(git rev-parse --short "$UPSTREAM_SHA")."
 
-# --- validate + sync ---
-if [[ "$DO_SYNC" == "1" ]]; then
-  log "Validating..."
-  ( cd "$REPO_ROOT/dashboard" && npx tsx scripts/run-action.ts validate ) || fail "Validation failed."
-  log "Syncing assets to local tools..."
-  ( cd "$REPO_ROOT/dashboard" && npx tsx scripts/run-action.ts sync ) || fail "Sync failed."
-fi
+run_post_pull_steps
 
 log "Done. You are now up to date with ${UPSTREAM_REF}."
