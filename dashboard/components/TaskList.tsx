@@ -457,7 +457,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
         const res = await fetch("/api/tasks", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, text: original.text }),
+          body: JSON.stringify({ id, status: "active" }),
         });
         if (!res.ok) throw new Error(await res.text());
         const updated = (await res.json()) as Task;

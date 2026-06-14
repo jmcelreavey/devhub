@@ -431,6 +431,8 @@ export function TodayPage() {
 
   const handleChange = useCallback(
     (newBlocks: DevHubPartialBlock[]) => {
+      // Track latest editor state for midnight rollover flush (debounce may not have fired).
+      blocksRef.current = newBlocks;
       if (saveTimer.current) clearTimeout(saveTimer.current);
       setStatus("saving");
       saveTimer.current = setTimeout(() => save(newBlocks), 1200);

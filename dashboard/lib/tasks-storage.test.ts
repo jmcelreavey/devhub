@@ -119,6 +119,25 @@ describe("tasks-storage", () => {
     expect(abandoned.abandonReason).toBeUndefined();
   });
 
+  it("reactivateTask clears abandoned fields", async () => {
+    const m = await freshTaskModule();
+    const t = await m.addTask("x");
+    await m.abandonTask(t.id, "not needed");
+    const reactivated = await m.reactivateTask(t.id);
+    expect(reactivated?.abandonedAt).toBeUndefined();
+    expect(reactivated?.abandonReason).toBeUndefined();
+    expect(reactivated?.done).toBe(false);
+  });
+
+  it("updateTask with text only does not reactivate an abandoned task", async () => {
+    const m = await freshTaskModule();
+    const t = await m.addTask("x");
+    const abandoned = await m.abandonTask(t.id, "not needed");
+    const updated = await m.updateTask(t.id, { text: abandoned.text });
+    expect(updated?.abandonedAt).toBeDefined();
+    expect(updated?.abandonReason).toBe("not needed");
+  });
+
   it("toggleTask clears abandoned fields when completing", async () => {
     const m = await freshTaskModule();
     const t = await m.addTask("x");
