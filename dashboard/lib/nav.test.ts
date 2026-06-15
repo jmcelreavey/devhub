@@ -3,9 +3,9 @@ import { ALL_NAV_DESTINATIONS, LEGACY_NAV_ITEMS, NAV_ITEMS, filterNavBySetup } f
 
 const hrefs = (items: ReturnType<typeof filterNavBySetup>) => items.map((i) => i.href);
 
-describe("NAV_ITEMS (12-destination IA)", () => {
-  it("has exactly 12 sidebar destinations", () => {
-    expect(NAV_ITEMS).toHaveLength(12);
+describe("NAV_ITEMS (11-destination IA)", () => {
+  it("has exactly 11 sidebar destinations", () => {
+    expect(NAV_ITEMS).toHaveLength(11);
   });
 
   it("keeps merged pages out of the sidebar but in the destination list", () => {

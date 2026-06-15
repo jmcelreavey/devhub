@@ -2119,7 +2119,7 @@ a.hub-timeline-title:hover {
   transition:
     opacity 0.12s ease,
     scale 0.2s var(--ease-spring);
-  z-index: 100;
+  z-index: 1000;
 }
 [data-tooltip]:hover::after {
   opacity: 1;
@@ -3150,12 +3150,19 @@ body[data-density="compact"] .card {
   background: var(--bg);
 }
 .boot-screen-leaving {
-  opacity: 0;
-  scale: 1.015;
-  transition:
-    opacity 300ms var(--ease-swift),
-    scale 300ms var(--ease-swift);
+  animation: boot-exit 340ms var(--ease-swift) forwards;
   pointer-events: none;
+}
+@keyframes boot-exit {
+  0%,
+  18% {
+    opacity: 1;
+    scale: 1;
+  }
+  100% {
+    opacity: 0;
+    scale: 1.015;
+  }
 }
 .boot-mark {
   position: relative;
@@ -3554,6 +3561,68 @@ body[data-density="compact"] .card {
 .today-actions-menu .btn {
   width: 100%;
   justify-content: flex-start;
+}
+
+/* ── Generic launcher dropdowns ── */
+.launch-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.launch-menu {
+  position: fixed;
+  z-index: 80;
+  display: flex;
+  min-width: 230px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid color-mix(in oklab, var(--border) 70%, var(--text) 30%);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text);
+  box-shadow:
+    0 18px 42px rgba(0, 0, 0, 0.58),
+    0 0 0 1px color-mix(in oklab, var(--bg-overlay) 55%, transparent);
+}
+.launch-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--bg-elevated) 82%, var(--bg-surface) 18%);
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
+}
+.launch-menu-item:hover,
+.launch-menu-item:focus-visible {
+  background: var(--bg-overlay);
+  color: var(--text);
+  outline: none;
+}
+.launch-menu-icon {
+  display: inline-flex;
+  margin-top: 1px;
+  color: var(--accent);
+}
+.launch-menu-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+.launch-menu-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.launch-menu-description {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-subtle);
 }
 
 /* ── Task toggle: empty circle perks up on hover, hinting it's clickable ── */

@@ -52,7 +52,6 @@ const ICONS: Record<string, LucideIcon> = {
   review: BarChart3,
   prs: GitPullRequest,
   checklists: ListChecks,
-  terminal: Terminal,
 };
 
 const UNSEEN_COLOR = "var(--info)";

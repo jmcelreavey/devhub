@@ -129,6 +129,8 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
   const catalogListRef = useRef<HTMLDivElement | null>(null);
   const mounted = useClientMounted();
   const toast = useToast();
+  const toastRef = useRef(toast);
+  useEffect(() => { toastRef.current = toast; }, [toast]);
   const confirm = useConfirm();
 
   const reloadSkills = useCallback(async () => {
@@ -137,9 +139,9 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
       setSkills(data.skills);
       setAiToolsMeta(data.aiTools);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not load skills.");
+      toastRef.current.error(e instanceof Error ? e.message : "Could not load skills.");
     }
-  }, [toast]);
+  }, []);
 
   const reloadAgents = useCallback(async () => {
     setLoadingAgents(true);
@@ -149,12 +151,12 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
       const list = (await r.json()) as AgentListItem[];
       setAgents(list);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not load agents.");
+      toastRef.current.error(e instanceof Error ? e.message : "Could not load agents.");
       setAgents([]);
     } finally {
       setLoadingAgents(false);
     }
-  }, [toast]);
+  }, []);
 
   const reloadLocalCandidates = useCallback(async () => {
     await Promise.resolve();
@@ -164,13 +166,13 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
       setLocalSkillCandidates(skills);
       setLocalAgentCandidates(agents);
     } catch {
-      toast.error("Could not scan local tool directories.");
+      toastRef.current.error("Could not scan local tool directories.");
       setLocalSkillCandidates([]);
       setLocalAgentCandidates([]);
     } finally {
       setLoadingLocal(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- load agents catalog on mount
@@ -190,10 +192,10 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
         setAiToolsMeta(data.aiTools);
       })
       .catch((e) => {
-        toast.error(e instanceof Error ? e.message : "Could not load skills.");
+        toastRef.current.error(e instanceof Error ? e.message : "Could not load skills.");
       })
       .finally(() => setLoading(false));
-  }, [initialCatalog, toast]);
+  }, [initialCatalog]);
 
   useEffect(() => {
     const applySkills = () => {

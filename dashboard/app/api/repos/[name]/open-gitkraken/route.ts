@@ -6,7 +6,9 @@ import { getReposScanDir } from "@/lib/repos";
 
 type Params = { params: Promise<{ name: string }> };
 
-/** Open a local repo in GitKraken (macOS `open -a`; falls back to the CLI). */
+/** Open a local repo in GitKraken via the gitkraken:// URL scheme (macOS)
+ *  or the `-p` CLI flag (Linux). The URL scheme routes through the OS handler
+ *  so it works whether GitKraken is already running or not. */
 export async function POST(_req: Request, { params }: Params) {
   const { name } = await params;
   const scanDir = getReposScanDir();
@@ -16,7 +18,8 @@ export async function POST(_req: Request, { params }: Params) {
   }
   try {
     if (process.platform === "darwin") {
-      spawn("open", ["-a", "GitKraken", repoPath], { detached: true, stdio: "ignore" }).unref();
+      const uri = `gitkraken://repo${encodeURI(repoPath)}`;
+      spawn("open", [uri], { detached: true, stdio: "ignore" }).unref();
     } else {
       spawn("gitkraken", ["-p", repoPath], { detached: true, stdio: "ignore" }).unref();
     }

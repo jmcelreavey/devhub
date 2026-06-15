@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 interface ConfirmOptions {
   title: string;
@@ -39,8 +39,10 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     [pending],
   );
 
+  const value = useMemo(() => ({ request }), [request]);
+
   return (
-    <ConfirmContext.Provider value={{ request }}>
+    <ConfirmContext.Provider value={value}>
       {children}
       {pending && <ConfirmDialogView pending={pending} onClose={close} />}
     </ConfirmContext.Provider>

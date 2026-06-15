@@ -4,7 +4,7 @@
  *
  * Each browser connection spawns a shell rooted at the developer directory
  * (~/Developer) and relays bytes both ways. The xterm.js client
- * (components/TerminalView.tsx) connects over ws://localhost:1339.
+ * (components/TerminalDock.tsx) connects over ws://localhost:1339.
  *
  * Shell modes (client picks via `?shell=` on the WS URL):
  * - `login` — $SHELL -l, full rc files. The real environment.

@@ -1,43 +1,39 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowUpFromLine, Container, Download, ExternalLink, GitBranch, Monitor, MonitorPlay, RefreshCw, TerminalSquare, Trash2 } from "lucide-react";
-import Link from "next/link";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  AlertCircle,
+  ArrowUpFromLine,
+  BookOpen,
+  Check,
+  ClipboardCopy,
+  Container,
+  FileDown,
+  FileText,
+  GraduationCap,
+  RefreshCw,
+  Sparkles,
+  TerminalSquare,
+  X,
+} from "lucide-react";
 import { useLive } from "@/lib/use-fetch";
 import { useToast } from "@/lib/use-toast";
 import { FetchError } from "@/components/FetchError";
-import { HoverTip } from "@/components/HoverTip";
+import { SidePanel } from "@/components/SidePanel";
+import { SimpleMarkdown } from "@/components/SimpleMarkdown";
 import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
-
-interface RepoInfo {
-  name: string;
-  path: string;
-  branch: string | null;
-  dirtyCount: number;
-  remote: string | null;
-  unpushedCount?: number;
-  hasCompose?: boolean;
-}
-
-interface ReposApiPayload {
-  repos: RepoInfo[];
-  scanDirDisplay: string;
-}
-
-interface GithubRepoInfo {
-  name: string;
-  fullName: string;
-  owner: string;
-  url: string;
-  description: string | null;
-  isPrivate: boolean;
-  defaultBranch: string | null;
-  localRepoName: string | null;
-}
-
-interface GithubReposApiPayload {
-  repos: GithubRepoInfo[];
-}
+import { useLaunchClaudeDesktop } from "@/lib/launch-claude";
+import { openTerminal, opencodeCliCommand } from "@/lib/terminal-launch";
+import {
+  EmptyReposCard,
+  GithubRepoCard,
+  LocalRepoCard,
+  OpenChamberCard,
+  SearchCard,
+  SectionHeader,
+  StatCard,
+} from "./cards";
+import type { GithubReposApiPayload, RepoInfo, RepoLearnApiPayload, ReposApiPayload } from "./types";
 
 function parseFetchErrorMessage(error: unknown): string {
   if (!(error instanceof Error)) return "Couldn’t load GitHub repos.";
@@ -89,6 +85,7 @@ export default function ReposPage() {
   const [cloning, setCloning] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [composing, setComposing] = useState<string | null>(null);
+  const [learningRepo, setLearningRepo] = useState<RepoInfo | null>(null);
   const { data: apps } = useLive<{ gitkraken: boolean; docker: boolean }>("/api/repos/apps", {
     refreshInterval: 0,
   });
@@ -97,11 +94,15 @@ export default function ReposPage() {
     return window.matchMedia("(hover: hover) and (pointer: fine)").matches;
   });
   const toast = useToast();
+  const launchClaudeDesktop = useLaunchClaudeDesktop();
   const githubRepos = githubData?.repos ?? [];
   const normalizedLocalQuery = query.trim().toLowerCase();
   const filteredLocalRepos = normalizedLocalQuery
     ? repos.filter((repo) => repo.name.toLowerCase().includes(normalizedLocalQuery))
     : repos;
+  const changedRepos = repos.filter((repo) => repo.dirtyCount > 0).length;
+  const unpushedRepos = repos.filter((repo) => (repo.unpushedCount ?? 0) > 0).length;
+  const composeRepos = repos.filter((repo) => repo.hasCompose).length;
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -124,9 +125,11 @@ export default function ReposPage() {
   }
 
   function openInTerminal(repo: { name: string; path: string }) {
-    window.dispatchEvent(
-      new CustomEvent("devhub:terminal-open", { detail: { cwd: repo.path, label: repo.name } }),
-    );
+    openTerminal({ cwd: repo.path, label: repo.name });
+  }
+
+  function openLearn(repo: RepoInfo) {
+    setLearningRepo(repo);
   }
 
   async function openInGitKraken(name: string) {
@@ -190,13 +193,25 @@ export default function ReposPage() {
     }
   }
 
+  const panelAwarePageStyle =
+    learningRepo && isDesktop
+      ? {
+          maxWidth: "calc(100vw - 600px)",
+          marginLeft: 0,
+          marginRight: 0,
+        }
+      : undefined;
+
   return (
-    <div className="page-wrapper">
+    <div className="page-wrapper" style={panelAwarePageStyle}>
       <BootScreen state={boot} />
       <div className="page-header">
-        <div className="page-title">Repos</div>
-        <div className="flex items-center gap-2">
-          <span className="badge badge-muted">{repos.length}</span>
+        <div>
+          <div className="page-title">Repos</div>
+          <div className="page-subtitle">Clone, open, run, and get up to speed without spelunking through every folder by hand.</div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="badge badge-accent">{repos.length} local</span>
           <button
             type="button"
             className="btn btn-ghost"
@@ -225,7 +240,10 @@ export default function ReposPage() {
         </div>
       )}
 
-      <div className="mb-2">
+      <div className="grid gap-2 md:grid-cols-4 mb-3">
+        <StatCard label="Changed" value={changedRepos} tone={changedRepos ? "warning" : "muted"} icon={<AlertCircle size={13} />} />
+        <StatCard label="Unpushed" value={unpushedRepos} tone={unpushedRepos ? "accent" : "muted"} icon={<ArrowUpFromLine size={13} />} />
+        <StatCard label="Compose-ready" value={composeRepos} tone={composeRepos ? "success" : "muted"} icon={<Container size={13} />} />
         <OpenChamberCard />
       </div>
 
@@ -237,239 +255,92 @@ export default function ReposPage() {
         </div>
       )}
 
-      <div className="space-y-2">
-        <label htmlFor="repos-filter" className="sr-only">Search repos</label>
-        <input
-          id="repos-filter"
-          className="input mb-2"
-          placeholder="Search GitHub and filter local repos..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+      <SearchCard query={query} onQueryChange={setQuery} />
 
-        <div className="pt-2">
-          <div className="text-xs uppercase tracking-wide mb-2" style={{ color: "var(--text-subtle)" }}>
-            GitHub {githubSearchQuery ? `(${isGithubValidating && !githubData ? "…" : githubRepos.length})` : "(search to load)"}
-          </div>
-        </div>
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <section className="space-y-2">
+          <SectionHeader
+            label="Local"
+            count={`${filteredLocalRepos.length}/${repos.length}`}
+            description="Repos already cloned next to this DevHub checkout."
+          />
 
-        {githubError && (
-          <FetchError message={parseFetchErrorMessage(githubError)} onRetry={() => mutateGithub()} />
-        )}
-        {githubSearchQuery && isGithubValidating && !githubData && (
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            Searching GitHub repos...
-          </p>
-        )}
+          {filteredLocalRepos.map((repo) => (
+            <LocalRepoCard
+              key={repo.name}
+              repo={repo}
+              githubUrl={githubUrl(repo.remote)}
+              apps={apps}
+              isDesktop={isDesktop}
+              opening={opening}
+              removing={removing}
+              composing={composing}
+              onLearn={openLearn}
+              onTerminal={openInTerminal}
+              onGitKraken={openInGitKraken}
+              onCompose={composeUp}
+              onCursor={openInCursor}
+              onClaudeDesktop={launchClaudeDesktop}
+              onRemove={removeRepo}
+            />
+          ))}
 
-        {githubSearchQuery && githubRepos.map((repo) => (
-          <div key={repo.fullName} className="card" style={{ padding: "12px 16px" }}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="font-medium text-sm mb-0.5 break-words leading-snug" style={{ color: "var(--text)" }}>
-                  {repo.fullName}
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {repo.defaultBranch && (
-                    <span className="flex items-center gap-1 text-xs" style={{ color: "var(--text-subtle)" }}>
-                      <GitBranch size={11} /> {repo.defaultBranch}
-                    </span>
-                  )}
-                  {repo.isPrivate && <span className="badge badge-muted" style={{ fontSize: "10px" }}>private</span>}
-                  {repo.localRepoName && (
-                    <span className="badge badge-success" style={{ fontSize: "10px" }}>
-                      Local: {repo.localRepoName}
-                    </span>
-                  )}
-                </div>
-                {repo.description && (
-                  <div className="text-xs mt-1 break-words leading-snug" style={{ color: "var(--text-subtle)" }}>
-                    {repo.description}
-                  </div>
-                )}
-              </div>
+          {!isLoading && !localError && filteredLocalRepos.length === 0 && (
+            <EmptyReposCard>
+              {normalizedLocalQuery
+                ? `No local repos matching "${query}".`
+                : scanDirDisplay
+                ? `No repos found in ${scanDirDisplay}${scanDirDisplay.endsWith("/") ? "" : "/"}.`
+                : "No repos found."}
+            </EmptyReposCard>
+          )}
+        </section>
 
-              <div className="flex items-center gap-1.5 shrink-0">
-                <a
-                  href={repo.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn-ghost"
-                  style={{ fontSize: "12px", padding: "3px 8px" }}
-                >
-                  <ExternalLink size={12} /> GitHub
-                </a>
-                {repo.localRepoName ? (
-                  isDesktop && (
-                    <button
-                      onClick={() => openInCursor(repo.localRepoName!)}
-                      disabled={opening !== null}
-                      className="btn btn-ghost"
-                      style={{ fontSize: "12px", padding: "3px 8px" }}
-                    >
-                      <MonitorPlay size={12} />
-                      {opening === repo.localRepoName ? "Opening…" : "Cursor"}
-                    </button>
-                  )
-                ) : (
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    style={{ fontSize: "12px", padding: "3px 8px" }}
-                    disabled={cloning !== null}
-                    onClick={() => cloneRepo(repo.fullName)}
-                  >
-                    <Download size={12} />
-                    {cloning === repo.fullName ? "Cloning…" : "Clone"}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
-        {!githubSearchQuery && (
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            Type in the GitHub box to search repos.
-          </p>
-        )}
-        {githubSearchQuery && !isGithubValidating && !githubError && githubRepos.length === 0 && (
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            No GitHub repos matching &quot;{githubSearchQuery}&quot;.
-          </p>
-        )}
+        <aside className="space-y-2">
+          <SectionHeader
+            label="GitHub"
+            count={githubSearchQuery ? (isGithubValidating && !githubData ? "..." : githubRepos.length) : "search"}
+            description="Search accessible repos, then clone or open them."
+          />
 
-        <div className="pt-1">
-          <div className="text-xs uppercase tracking-wide mb-2" style={{ color: "var(--text-subtle)" }}>
-            Local ({filteredLocalRepos.length}/{repos.length})
-          </div>
-        </div>
+          {githubError && (
+            <FetchError message={parseFetchErrorMessage(githubError)} onRetry={() => mutateGithub()} />
+          )}
+          {githubSearchQuery && isGithubValidating && !githubData && (
+            <EmptyReposCard>
+              Searching GitHub repos...
+            </EmptyReposCard>
+          )}
 
-        {filteredLocalRepos.map((repo) => {
-          const ghUrl = githubUrl(repo.remote);
-          return (
-            <div key={repo.name} className="card" style={{ padding: "12px 16px" }}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="font-medium text-sm mb-0.5 break-words leading-snug" style={{ color: "var(--text)" }}>
-                    {repo.name}
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {repo.branch && (
-                      <span className="flex items-center gap-1 text-xs" style={{ color: "var(--text-subtle)" }}>
-                        <GitBranch size={11} /> {repo.branch}
-                      </span>
-                    )}
-                    {repo.dirtyCount > 0 && (
-                      <span className="badge badge-warning" style={{ fontSize: "10px" }}>
-                        <AlertCircle size={10} /> {repo.dirtyCount} changed
-                      </span>
-                    )}
-                    {(repo.unpushedCount ?? 0) > 0 && (
-                      <span
-                        className="repo-unpushed-badge"
-                        title="Local commits not on any remote"
-                      >
-                        <ArrowUpFromLine size={10} aria-hidden /> {repo.unpushedCount} unpushed
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {ghUrl && (
-                    <a
-                      href={ghUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-ghost"
-                      style={{ fontSize: "12px", padding: "3px 8px" }}
-                    >
-                      <ExternalLink size={12} /> GitHub
-                    </a>
-                  )}
-                  {isDesktop && (
-                    <button
-                      onClick={() => openInTerminal(repo)}
-                      className="btn btn-ghost"
-                      style={{ fontSize: "12px", padding: "3px 8px" }}
-                      data-tooltip="Open a terminal here"
-                      data-tooltip-pos="top"
-                    >
-                      <TerminalSquare size={12} /> Terminal
-                    </button>
-                  )}
-                  {isDesktop && apps?.gitkraken && (
-                    <button
-                      onClick={() => openInGitKraken(repo.name)}
-                      className="btn btn-ghost"
-                      style={{ fontSize: "12px", padding: "3px 8px" }}
-                      data-tooltip="Open in GitKraken"
-                      data-tooltip-pos="top"
-                    >
-                      <GitBranch size={12} /> Kraken
-                    </button>
-                  )}
-                  {isDesktop && apps?.docker && repo.hasCompose && (
-                    <button
-                      onClick={() => composeUp(repo.name)}
-                      disabled={composing !== null}
-                      className="btn btn-ghost"
-                      style={{ fontSize: "12px", padding: "3px 8px" }}
-                      data-tooltip="docker compose up -d"
-                      data-tooltip-pos="top"
-                    >
-                      <Container size={12} />
-                      {composing === repo.name ? "Starting…" : "Compose"}
-                    </button>
-                  )}
-                  {isDesktop && (
-                    <button
-                      onClick={() => openInCursor(repo.name)}
-                      disabled={opening !== null || removing !== null}
-                      className="btn btn-ghost"
-                      style={{ fontSize: "12px", padding: "3px 8px" }}
-                    >
-                      <MonitorPlay size={12} />
-                      {opening === repo.name ? "Opening…" : "Cursor"}
-                    </button>
-                  )}
-                  <HoverTip
-                    label={
-                      removing === repo.name
-                        ? "Removing…"
-                        : removing !== null || opening !== null
-                          ? "Another repo operation is in progress."
-                          : "Delete local clone only"
-                    }
-                  >
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      style={{ fontSize: "12px", padding: "3px 8px", color: "var(--danger)" }}
-                      disabled={removing !== null || opening !== null}
-                      onClick={() => removeRepo(repo.name)}
-                    >
-                      <Trash2 size={12} />
-                      {removing === repo.name ? "Removing…" : "Remove"}
-                    </button>
-                  </HoverTip>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-
+          {githubSearchQuery && githubRepos.map((repo) => (
+            <GithubRepoCard
+              key={repo.fullName}
+              repo={repo}
+              isDesktop={isDesktop}
+              opening={opening}
+              cloning={cloning}
+              onCursor={openInCursor}
+              onClone={cloneRepo}
+            />
+          ))}
+          {!githubSearchQuery && (
+            <EmptyReposCard>
+              Type in the search box to query GitHub. Local repos filter instantly.
+            </EmptyReposCard>
+          )}
+          {githubSearchQuery && !isGithubValidating && !githubError && githubRepos.length === 0 && (
+            <EmptyReposCard>
+              No GitHub repos matching &quot;{githubSearchQuery}&quot;.
+            </EmptyReposCard>
+          )}
+        </aside>
       </div>
 
-      {!isLoading && !localError && filteredLocalRepos.length === 0 && (
-        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-          {normalizedLocalQuery
-            ? `No local repos matching "${query}".`
-            : scanDirDisplay
-            ? `No repos found in ${scanDirDisplay}${scanDirDisplay.endsWith("/") ? "" : "/"}.`
-            : "No repos found."}
-        </p>
-      )}
+      <LearnPanel
+        key={learningRepo?.name ?? "closed"}
+        repo={learningRepo}
+        onClose={() => setLearningRepo(null)}
+      />
     </div>
   );
 }
@@ -479,49 +350,199 @@ function queryParam(value: string): string {
   return trimmed ? `?q=${encodeURIComponent(trimmed)}` : "";
 }
 
-function OpenChamberCard() {
-  const [running, setRunning] = useState<boolean | null>(null);
+function LearnPanel({
+  repo,
+  onClose,
+}: {
+  repo: RepoInfo | null;
+  onClose: () => void;
+}) {
+  const toast = useToast();
+  const [copied, setCopied] = useState<string | null>(null);
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  const key = repo ? `/api/repos/${encodeURIComponent(repo.name)}/learn` : null;
+  const { data, error, isLoading, mutate } = useLive<RepoLearnApiPayload>(key, { refreshInterval: 0, revalidateOnFocus: false });
+  const profile = data?.profile;
 
-  useEffect(() => {
-    fetch("/api/status/services")
-      .then((r) => r.json())
-      .then((data) => setRunning(data?.openchamber?.active ?? false))
-      .catch(() => setRunning(false));
-  }, []);
+  async function copyText(id: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(id);
+      window.setTimeout(() => setCopied(null), 1500);
+      toast.success("Copied.");
+    } catch {
+      toast.error("Could not copy to clipboard.");
+    }
+  }
+
+  function downloadPack() {
+    if (!profile) return;
+    const blob = new Blob([profile.notebookPackMarkdown], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${profile.repoName}-notebooklm-pack.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function openCodeCommand(): string {
+    return opencodeCliCommand();
+  }
+
+  function handoffToOpenCode() {
+    if (!profile || !repo) return;
+    void copyText("opencode", profile.openCodePrompt);
+    openTerminal({
+      cwd: repo.path,
+      label: `OpenCode · ${repo.name}`,
+      command: openCodeCommand(),
+    });
+  }
 
   return (
-    <div
-      className="card"
-      style={{
-        padding: "12px 16px",
-        borderLeft: `3px solid ${running ? "var(--accent)" : "var(--border)"}`,
-      }}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="font-medium text-sm mb-0.5 flex items-center gap-2" style={{ color: "var(--text)" }}>
-            <Monitor size={14} style={{ color: "var(--accent)" }} />
-            OpenChamber
+    <SidePanel open={!!repo} onClose={onClose} storageKey="repos-learn-panel-width" defaultWidth={560} minWidth={420} ariaLabel="Repo learning panel">
+      <div className="p-4 border-b flex items-start justify-between gap-3" style={{ borderColor: "var(--border)" }}>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-wide" style={{ color: "var(--text-subtle)" }}>
+            <GraduationCap size={13} aria-hidden /> Learn repo
           </div>
-          <span
-            className="text-xs flex items-center gap-1"
-            style={{ color: running ? "var(--success)" : "var(--text-subtle)" }}
-          >
-            <span
-              className="inline-block w-1.5 h-1.5 rounded-full"
-              style={{ background: running ? "var(--success)" : "var(--text-subtle)" }}
-            />
-            {running ? "Running on :1336" : "Not running"}
-          </span>
+          <div className="mt-1 text-lg font-semibold truncate" style={{ color: "var(--text)" }}>{repo?.name}</div>
+          <div className="text-xs truncate font-mono" style={{ color: "var(--text-subtle)" }}>
+            Local path: {repo?.path}
+          </div>
         </div>
-        <Link
-          href="/chamber"
-          className="btn btn-ghost"
-          style={{ fontSize: "12px", padding: "3px 8px" }}
-        >
-          Open
-        </Link>
+        <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Close learning panel" style={{ fontSize: 12, padding: "4px 9px" }}>
+          <X size={14} />
+          Close
+        </button>
       </div>
-    </div>
+
+      <div className="p-4 overflow-auto space-y-4">
+        {isLoading && (
+          <div className="space-y-2">
+            {[1, 2, 3].map((i) => <div key={i} className="skeleton" style={{ height: 72, borderRadius: "var(--radius)" }} />)}
+          </div>
+        )}
+        {error && (
+          <FetchError message={parseFetchErrorMessage(error)} onRetry={() => mutate()} />
+        )}
+        {profile && (
+          <>
+            <div className="card card-body">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
+                    <Sparkles size={14} aria-hidden /> Generated brief
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>{profile.headline}</p>
+                </div>
+                <button type="button" className="btn btn-ghost" style={{ fontSize: 12, padding: "3px 8px" }} onClick={() => mutate()}>
+                  <RefreshCw size={12} /> Refresh
+                </button>
+              </div>
+              <div className="mt-3 rounded p-3" style={{ background: "var(--bg-elevated)" }}>
+                <SimpleMarkdown text={profile.briefMarkdown} compact />
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <PanelAction
+                  icon={<ClipboardCopy size={12} />}
+                  copied={copied === "brief"}
+                  label="Copy brief"
+                  onClick={() => copyText("brief", profile.briefMarkdown)}
+                />
+                <PanelAction
+                  icon={<TerminalSquare size={12} />}
+                  copied={copied === "opencode"}
+                  label="OpenCode handoff"
+                  onClick={handoffToOpenCode}
+                />
+              </div>
+            </div>
+
+            <div className="card card-body">
+              <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
+                <BookOpen size={14} aria-hidden /> Quiz me
+              </div>
+              <div className="mt-3 space-y-2">
+                {profile.quiz.map((question, index) => (
+                  <div key={question.id} className="rounded border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
+                    <div className="text-xs font-medium" style={{ color: "var(--text)" }}>
+                      {index + 1}. {question.question}
+                    </div>
+                    {revealed[question.id] && (
+                      <div className="mt-2 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+                        {question.answer}
+                        {question.source && <div className="mt-1 font-mono">Source: {question.source}</div>}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-ghost mt-2"
+                      style={{ fontSize: 12, padding: "3px 8px" }}
+                      onClick={() => setRevealed((prev) => ({ ...prev, [question.id]: !prev[question.id] }))}
+                    >
+                      {revealed[question.id] ? "Hide answer" : "Reveal answer"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="card card-body">
+              <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
+                <FileText size={14} aria-hidden /> NotebookLM source pack
+              </div>
+              <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+                Copy or download a Markdown pack for NotebookLM. Official automation needs NotebookLM Enterprise; this keeps the consumer workflow honest.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <PanelAction
+                  icon={<ClipboardCopy size={12} />}
+                  copied={copied === "pack"}
+                  label="Copy pack"
+                  onClick={() => copyText("pack", profile.notebookPackMarkdown)}
+                />
+                <PanelAction
+                  icon={<FileDown size={12} />}
+                  copied={false}
+                  label="Download .md"
+                  onClick={downloadPack}
+                />
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </SidePanel>
   );
 }
+
+function PanelAction({
+  icon,
+  label,
+  copied,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  copied: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="btn btn-ghost"
+      style={{
+        fontSize: 12,
+        padding: "4px 9px",
+        color: copied ? "var(--success)" : undefined,
+      }}
+      onClick={onClick}
+    >
+      {copied ? <Check size={12} style={{ color: "var(--success)" }} /> : icon}
+      {copied ? "Copied" : label}
+    </button>
+  );
+}
+

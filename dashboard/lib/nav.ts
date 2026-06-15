@@ -48,7 +48,6 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/repos", label: "Repos", icon: "repos", group: "library", desktopOnly: true },
 
   { href: "/status", label: "System", icon: "status", group: "system" },
-  { href: "/terminal", label: "Terminal", icon: "terminal", group: "system", desktopOnly: true },
   { href: "/chamber", label: "Chamber", icon: "chamber", group: "system", gate: "chamber" },
   { href: "/opencode", label: "OpenCode", icon: "opencode", group: "system", gate: "opencode" },
 ];

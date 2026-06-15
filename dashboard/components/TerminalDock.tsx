@@ -22,6 +22,8 @@ function cssVar(name: string, fallback: string): string {
 interface SessionProps {
   /** Start directory; server falls back to the developer dir. */
   cwd?: string;
+  /** Optional command to run once after the shell opens. */
+  command?: string;
   /** Sessions stay mounted when inactive; refit + focus when activated. */
   active: boolean;
   onStatus?: (status: Status) => void;
@@ -32,7 +34,7 @@ interface SessionProps {
  * the lifetime of the component — hiding the dock or switching tabs only
  * hides the DOM, so long-running commands keep running.
  */
-export function TerminalSession({ cwd, active, onStatus }: SessionProps) {
+export function TerminalSession({ cwd, command, active, onStatus }: SessionProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<{ fit: () => void } | null>(null);
   const termRef = useRef<{ focus: () => void } | null>(null);
@@ -93,6 +95,13 @@ export function TerminalSession({ cwd, active, onStatus }: SessionProps) {
         onStatusRef.current?.("open");
         fit.fit();
         sendResize();
+        if (command?.trim()) {
+          socket.send("stty -echo\r");
+          window.setTimeout(() => {
+            if (socket.readyState !== WebSocket.OPEN) return;
+            socket.send(`clear\r${command.trim()}; stty echo\r`);
+          }, 50);
+        }
         term.focus();
       };
       socket.onmessage = (event) => {
@@ -149,6 +158,7 @@ export function TerminalSession({ cwd, active, onStatus }: SessionProps) {
 interface DockTab {
   id: number;
   cwd?: string;
+  command?: string;
   label: string;
   status: Status;
   /** Bump to tear the session down and rebuild (restart button). */
@@ -158,6 +168,7 @@ interface DockTab {
 interface OpenDetail {
   cwd?: string;
   label?: string;
+  command?: string;
 }
 
 /**
@@ -177,7 +188,7 @@ export function TerminalDock() {
     const label = detail?.label ?? (detail?.cwd ? detail.cwd.split("/").pop() ?? "zsh" : "zsh");
     setTabs((prev) => [
       ...prev,
-      { id, cwd: detail?.cwd, label, status: "connecting", generation: 0 },
+      { id, cwd: detail?.cwd, command: detail?.command, label, status: "connecting", generation: 0 },
     ]);
     setActiveId(id);
     setOpen(true);
@@ -316,6 +327,7 @@ export function TerminalDock() {
           >
             <TerminalSession
               cwd={tab.cwd}
+              command={tab.command}
               active={open && tab.id === active?.id}
               onStatus={(s) => setStatus(tab.id, s)}
             />

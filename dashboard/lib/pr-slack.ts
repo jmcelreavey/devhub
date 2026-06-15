@@ -5,7 +5,7 @@ import { JIRA_KEY_RE } from "./utils";
 
 export type SlackMessageKind = "awaiting" | "reviewed" | "reviewed-approved";
 
-const DEFAULT_JIRA_DOMAIN = "";
+const DEFAULT_JIRA_DOMAIN = "example-org.atlassian.net";
 
 function getJiraDomain(): string {
   return process.env.NEXT_PUBLIC_JIRA_DOMAIN?.trim() || DEFAULT_JIRA_DOMAIN;

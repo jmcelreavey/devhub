@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CheckCircle2, AlertCircle, Info, X } from "lucide-react";
 
 export type ToastVariant = "success" | "error" | "info";
@@ -87,8 +87,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const value = useMemo(() => ({ push, dismiss }), [push, dismiss]);
+
   return (
-    <ToastContext.Provider value={{ push, dismiss }}>
+    <ToastContext.Provider value={value}>
       {children}
       <div className="toast-stack" role="region" aria-live="polite" aria-label="Notifications">
         {toasts.map((t) => (

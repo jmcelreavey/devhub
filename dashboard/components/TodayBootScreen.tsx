@@ -8,7 +8,8 @@ export type BootState = "loading" | "leaving" | "done";
 
 const MIN_SHOW_MS = 350;
 const MAX_WAIT_MS = 3500;
-const EXIT_MS = 320;
+/** CSS boot-exit animation is 340ms; the extra 20ms is a safety buffer. */
+const EXIT_MS = 360;
 
 /**
  * Coordinates a page boot screen: one loading moment instead of scattered
@@ -33,8 +34,22 @@ export function useBootGate(dataReady: boolean): BootState {
     const delay = dataReady
       ? Math.max(0, MIN_SHOW_MS - elapsed)
       : Math.max(0, MAX_WAIT_MS - elapsed);
-    const t = setTimeout(() => setState("leaving"), delay);
-    return () => clearTimeout(t);
+    let raf1 = 0;
+    let raf2 = 0;
+    const t = setTimeout(() => {
+      // Double rAF: guarantees the browser has painted the real content
+      // at least once behind the still-opaque overlay before we start
+      // fading. Without this the overlay can begin its opacity transition
+      // before React commits, briefly revealing the skeleton underneath.
+      raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => setState("leaving"));
+      });
+    }, delay);
+    return () => {
+      clearTimeout(t);
+      if (raf1) cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+    };
   }, [dataReady, state]);
 
   useEffect(() => {

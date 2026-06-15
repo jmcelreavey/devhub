@@ -61,7 +61,7 @@ Copy the commented block from `dashboard/.env.example` into `.env.local`, set `Z
 
 ## Skills (ai-tools merge)
 
-Used when syncing skills from the optional `ai-tools` checkout. See [Sync Engine](../architecture/sync-engine.md) and [Skills](../guides/skills.md).
+Used when syncing skills from the optional [ai-tools](https://github.com/example-org/ai-tools) checkout. See [Sync Engine](../architecture/sync-engine.md) and [Skills](../guides/skills.md).
 
 | Variable                   | Default                | Purpose                                                 |
 | -------------------------- | ---------------------- | ------------------------------------------------------- |
