@@ -30,6 +30,7 @@ import {
 
 export interface TodayDashboardSlots {
   welcome: React.ReactNode;
+  briefing: React.ReactNode;
   main: React.ReactNode;
   calendar: React.ReactNode;
   jira: React.ReactNode;
@@ -40,6 +41,7 @@ export interface TodayDashboardSlots {
 export interface TodayDashboardGridProps {
   ready?: boolean;
   showWelcome: boolean;
+  showBriefing: boolean;
   hasCalendar: boolean;
   hasJira: boolean;
   showDatadog: boolean;
@@ -47,9 +49,10 @@ export interface TodayDashboardGridProps {
   slots: TodayDashboardSlots;
 }
 
-function buildVisibleSet(props: Pick<TodayDashboardGridProps, "showWelcome" | "hasCalendar" | "hasJira" | "showDatadog">): Set<TodayGridSlotId> {
+function buildVisibleSet(props: Pick<TodayDashboardGridProps, "showWelcome" | "showBriefing" | "hasCalendar" | "hasJira" | "showDatadog">): Set<TodayGridSlotId> {
   const s = new Set<TodayGridSlotId>(["main", "github"]);
   if (props.showWelcome) s.add("welcome");
+  if (props.showBriefing) s.add("briefing");
   if (props.hasCalendar) s.add("calendar");
   if (props.hasJira) s.add("jira");
   if (props.showDatadog) s.add("datadog");
@@ -241,6 +244,11 @@ function TodayDashboardGridBody({
           {slots.welcome}
         </div>
       ) : null}
+      {visible.has("briefing") ? (
+        <div key="briefing" ref={setSlotRef("briefing")} className="today-grid-slot" data-today-grid-slot="briefing">
+          {slots.briefing}
+        </div>
+      ) : null}
       <div key="main" ref={setSlotRef("main")} className="today-grid-slot" data-today-grid-slot="main">
         {slots.main}
       </div>
@@ -270,6 +278,7 @@ function TodayDashboardGridBody({
 export function TodayDashboardGrid({
   ready,
   showWelcome,
+  showBriefing,
   hasCalendar,
   hasJira,
   showDatadog,
@@ -277,8 +286,8 @@ export function TodayDashboardGrid({
   slots,
 }: TodayDashboardGridProps) {
   const visible = useMemo(
-    () => buildVisibleSet({ showWelcome, hasCalendar, hasJira, showDatadog }),
-    [showWelcome, hasCalendar, hasJira, showDatadog],
+    () => buildVisibleSet({ showWelcome, showBriefing, hasCalendar, hasJira, showDatadog }),
+    [showWelcome, showBriefing, hasCalendar, hasJira, showDatadog],
   );
 
   const visibleKey = useMemo(() => [...visible].sort().join(","), [visible]);

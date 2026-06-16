@@ -17,7 +17,8 @@ vi.mock("./load-env-local-into-process", () => ({
   loadEnvLocalIntoProcessIfUnset: mockLoadEnv,
 }));
 vi.mock("../lib/sync-opencode-config", () => ({
-  getManagedSecretEnvNames: () => ["JIRA_API_TOKEN", "GOOGLE_CLIENT_SECRET"],
+  // NOTES_DIR is a local-only key — managed, but excluded from sync by default.
+  getManagedSecretEnvNames: () => ["JIRA_API_TOKEN", "GOOGLE_CLIENT_SECRET", "NOTES_DIR"],
 }));
 
 // Import after mocks are registered.
@@ -56,14 +57,14 @@ beforeEach(() => {
   mockPatch.mockImplementation((mutator: (overrides: Map<string, string>) => void) => {
     mutator(new Map());
   });
-  for (const k of [...SECRET_KEYS, "DEVHUB_OP_ITEM", "DEVHUB_OP_VAULT", "DEVHUB_OP_REFRESH", "DEVHUB_OP_CACHE"]) {
+  for (const k of [...SECRET_KEYS, "NOTES_DIR", "DEVHUB_OP_ITEM", "DEVHUB_OP_VAULT", "DEVHUB_OP_REFRESH", "DEVHUB_OP_CACHE", "DEVHUB_OP_SYNC_LOCAL"]) {
     delete process.env[k];
   }
 });
 
 afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
-  for (const k of SECRET_KEYS) delete process.env[k];
+  for (const k of [...SECRET_KEYS, "NOTES_DIR", "DEVHUB_OP_SYNC_LOCAL"]) delete process.env[k];
 });
 
 describe("loadEnvWithOnePasswordFallback", () => {
@@ -222,6 +223,42 @@ describe("loadEnvWithOnePasswordFallback", () => {
 
     expect(process.env.JIRA_API_TOKEN).toBe("tok");
     expect(process.env.GOOGLE_CLIENT_SECRET).toBeUndefined();
+  });
+
+  it("ignores local-only keys (e.g. NOTES_DIR) by default", async () => {
+    const itemWithLocal = JSON.stringify({
+      fields: [
+        { label: "JIRA_API_TOKEN", value: "tok-jira" },
+        { label: "GOOGLE_CLIENT_SECRET", value: "gcs-secret" },
+        { label: "NOTES_DIR", value: "/synced/notes" },
+      ],
+    });
+    opOk("1.x.x");
+    opOk("alice");
+    opOk(itemWithLocal);
+
+    await loadEnvWithOnePasswordFallback(tmpDir);
+
+    expect(process.env.JIRA_API_TOKEN).toBe("tok-jira");
+    expect(process.env.NOTES_DIR).toBeUndefined();
+  });
+
+  it("pulls local-only keys when DEVHUB_OP_SYNC_LOCAL=1", async () => {
+    process.env.DEVHUB_OP_SYNC_LOCAL = "1";
+    const itemWithLocal = JSON.stringify({
+      fields: [
+        { label: "JIRA_API_TOKEN", value: "tok-jira" },
+        { label: "GOOGLE_CLIENT_SECRET", value: "gcs-secret" },
+        { label: "NOTES_DIR", value: "/synced/notes" },
+      ],
+    });
+    opOk("1.x.x");
+    opOk("alice");
+    opOk(itemWithLocal);
+
+    await loadEnvWithOnePasswordFallback(tmpDir);
+
+    expect(process.env.NOTES_DIR).toBe("/synced/notes");
   });
 });
 

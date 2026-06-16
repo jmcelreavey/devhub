@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, Menu, screen, shell, type MenuItemConstructorOptions } from "electron";
+import { app, BrowserWindow, dialog, Menu, screen, session, shell, type MenuItemConstructorOptions } from "electron";
 import { autoUpdater } from "electron-updater";
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
@@ -792,6 +792,8 @@ async function openDevHub(): Promise<void> {
   window.setTitle("DevHub");
   window.setSize(1280, 900);
   window.focus();
+  await session.defaultSession.clearCache();
+  await session.defaultSession.clearStorageData({ storages: ["cachestorage", "serviceworkers"] });
   await window.loadURL(DASHBOARD_URL);
 }
 

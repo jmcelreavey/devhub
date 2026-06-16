@@ -1,6 +1,6 @@
 {
   "type": "remote",
   "url": "https://mcp.figma.com/mcp",
-  "enabled": true,
+  "enabled": false,
   "description": "Figma MCP — remote SSE/Streamable HTTP server for AI access to Figma design files, frames, components, and related design context."
 }

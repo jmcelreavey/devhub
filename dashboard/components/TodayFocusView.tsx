@@ -1,7 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Sparkles, Clock, Timer, ExternalLink, GitPullRequest, EyeOff, Eye } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
+import {
+  Sparkles,
+  Clock,
+  Timer,
+  ExternalLink,
+  GitPullRequest,
+  EyeOff,
+  Eye,
+  Plus,
+  ArrowLeft,
+  ListTodo,
+  Sunrise,
+  Sun,
+  Sunset,
+  Moon,
+} from "lucide-react";
 import { useLive } from "@/lib/use-fetch";
 import { TaskList } from "@/components/TaskList";
 import { JiraKeyChip } from "@/components/JiraKeyChip";
@@ -10,7 +26,7 @@ import { statusTone } from "@/components/JiraWidget";
 import { LayoutPresetsButton } from "@/components/LayoutPresets";
 import { TodayBootScreen, useTodayBoot } from "@/components/TodayBootScreen";
 import { readFocusSession, writeFocusSession } from "@/lib/focus-session-storage";
-import { todayISO, formatTime } from "@/lib/utils";
+import { todayISO, yesterdayISO, dailyNotePath, formatDayLabel, formatTime } from "@/lib/utils";
 import type { GithubPrRow, GithubPrsApiPayload } from "@/lib/github-prs";
 import type { CalendarEvent } from "@/lib/google-calendar";
 
@@ -38,7 +54,7 @@ interface CalendarResponse {
 }
 
 interface TasksResponse {
-  tasks?: { done: boolean; abandonedAt?: string; movedAt?: string }[];
+  tasks?: { done: boolean; abandonedAt?: string; movedAt?: string; text?: string }[];
 }
 
 interface TaskHistoryDay {
@@ -68,20 +84,91 @@ function completionStreak(days: readonly TaskHistoryDay[], doneToday: number, to
   return streak;
 }
 
-function greetingForHour(h: number): string {
-  if (h < 5) return "Late one.";
-  if (h < 7) return "Early start.";
-  if (h < 12) return "Morning.";
-  if (h < 18) return "Afternoon.";
-  if (h < 22) return "Evening.";
-  return "Late one.";
+function greetingForHour(hour: number): { label: string; Icon: typeof Sun } {
+  if (hour >= 5 && hour < 12) return { label: "Good morning", Icon: Sunrise };
+  if (hour >= 12 && hour < 17) return { label: "Good afternoon", Icon: Sun };
+  if (hour >= 17 && hour < 22) return { label: "Good evening", Icon: Sunset };
+  return { label: "Up late", Icon: Moon };
 }
 
-function focusSubline(d: Date): string {
-  const day = d.toLocaleDateString([], { weekday: "long" }).toUpperCase();
-  const date = d.toLocaleDateString([], { month: "long", day: "numeric" }).toUpperCase();
-  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
-  return `${day} · ${date} · ${time}`;
+const emptySubscribe = () => () => {};
+
+function formatClock(d: Date): string {
+  return d.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function LiveClock() {
+  const [clock, setClock] = useState<string>(() => formatClock(new Date()));
+  useEffect(() => {
+    let id: ReturnType<typeof setInterval> | null = null;
+    const tick = () => setClock(formatClock(new Date()));
+    const start = () => {
+      if (id) return;
+      tick();
+      id = setInterval(tick, 1000);
+    };
+    const stop = () => {
+      if (id) {
+        clearInterval(id);
+        id = null;
+      }
+    };
+    const onVisibility = () => (document.hidden ? stop() : start());
+    start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+  return (
+    <span
+      className="font-mono"
+      style={{ fontSize: 13 }}
+      aria-label={`Current time ${clock}`}
+      suppressHydrationWarning
+    >
+      {clock}
+    </span>
+  );
+}
+
+interface HeroEvent {
+  title: string;
+  start?: string;
+  end?: string;
+  isAllDay?: boolean;
+}
+
+function nowNextEvent(
+  events: HeroEvent[] | undefined,
+): { kind: "now" | "next"; event: HeroEvent; whenLabel: string } | null {
+  const now = Date.now();
+  const timed = (events ?? []).filter((e) => !e.isAllDay && e.start && e.end && e.title);
+  const current = timed.find(
+    (e) => Date.parse(e.start as string) <= now && now < Date.parse(e.end as string),
+  );
+  if (current) {
+    const ends = new Date(current.end as string).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    return { kind: "now", event: current, whenLabel: `ends ${ends}` };
+  }
+  const upcoming = timed
+    .filter((e) => Date.parse(e.start as string) > now)
+    .sort((a, b) => Date.parse(a.start as string) - Date.parse(b.start as string))[0];
+  if (!upcoming) return null;
+  const mins = Math.ceil((Date.parse(upcoming.start as string) - now) / 60000);
+  const whenLabel =
+    mins <= 120
+      ? `in ${mins}m`
+      : `at ${new Date(upcoming.start as string).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+  return { kind: "next", event: upcoming, whenLabel };
 }
 
 function isUpcoming(e: CalendarEvent): boolean {
@@ -146,9 +233,10 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
  * one never slips past), and the task list. Tasks live only in THEN.
  */
 export function TodayFocusView() {
-  const [now, setNow] = useState(() => new Date());
+  const [, setNow] = useState(() => new Date());
   const [skips, setSkips] = useState<Record<string, string>>(() => readSkips());
   const [showSkipped, setShowSkipped] = useState(false);
+  const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
 
   // Minute-resolution clock; pauses while the tab is hidden.
   useEffect(() => {
@@ -224,8 +312,11 @@ export function TodayFocusView() {
   const nextMeeting = (cal?.events ?? []).find(isUpcoming);
 
   const doneToday = (taskData?.tasks ?? []).filter((t) => t.done).length;
+  const tasksTotal = (taskData?.tasks ?? []).length;
   const ticketsInProgress = tickets.filter((t) => t.status.toLowerCase().includes("progress")).length;
   const streak = completionStreak(Array.isArray(history) ? history : [], doneToday, today);
+  const yesterdayLink = `/notes/${dailyNotePath(yesterdayISO())}`;
+  const dayLabel = formatDayLabel(today);
 
   const briefingLine =
     briefing?.ok && briefing.text
@@ -235,20 +326,95 @@ export function TodayFocusView() {
         : undefined; // undefined = still loading
 
   return (
-    <div className="hub">
+    <div className="hub today-home">
       <TodayBootScreen state={boot} />
       <div className="w-full" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-        {/* Header */}
-        <div className="flex items-start gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="hub-hero-sub font-mono" style={{ fontSize: 12 }} suppressHydrationWarning>
-              {focusSubline(now)}
+        {/* Header — matches dashboard hero */}
+        <div className="hub-hero">
+          <div>
+            <div className="hub-hero-greeting" aria-hidden>
+              {mounted &&
+                (() => {
+                  const { label, Icon } = greetingForHour(new Date().getHours());
+                  return (
+                    <span className="fade-rise inline-flex items-center gap-1.5">
+                      <Icon size={12} aria-hidden />
+                      {label}
+                    </span>
+                  );
+                })()}
             </div>
-            <h1 className="hub-hero-date" style={{ fontSize: 28, margin: "6px 0 0" }} suppressHydrationWarning>
-              {greetingForHour(now.getHours())}
-            </h1>
+            <h1 className="hub-hero-date">{dayLabel}</h1>
+            <div className="hub-hero-sub">
+              <LiveClock />
+              {tasksTotal > 0 && (
+                <>
+                  <span aria-hidden>·</span>
+                  <span>
+                    <span key={doneToday} className="count-tick">{doneToday}</span>/{tasksTotal} tasks done
+                  </span>
+                  <span
+                    className="hub-hero-progress"
+                    data-complete={doneToday === tasksTotal || undefined}
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={tasksTotal}
+                    aria-valuenow={doneToday}
+                    aria-label="Tasks done today"
+                  >
+                    <i style={{ width: `${tasksTotal > 0 ? Math.round((doneToday / tasksTotal) * 100) : 0}%` }} />
+                  </span>
+                </>
+              )}
+              <span aria-hidden>·</span>
+              <Link href={yesterdayLink} className="hub-hero-link">
+                <ArrowLeft size={11} aria-hidden /> Yesterday
+              </Link>
+            </div>
+            {(() => {
+              const signal = nowNextEvent(cal?.events);
+              const topTask = (taskData?.tasks ?? []).find(
+                (t) => !t.done && !t.abandonedAt && !t.movedAt && t.text,
+              );
+              if (!signal && !topTask) return null;
+              return (
+                <div className="hub-hero-signals">
+                  {signal && (
+                    <Link href="/calendar" className="hero-signal" aria-label={`${signal.kind === "now" ? "Happening now" : "Up next"}: ${signal.event.title}, ${signal.whenLabel}`}>
+                      <span
+                        className={`hero-signal-dot${signal.kind === "now" ? " live-dot" : ""}`}
+                        data-kind={signal.kind}
+                        aria-hidden
+                      />
+                      <span className="hero-signal-kind">{signal.kind === "now" ? "Now" : "Next"}</span>
+                      <span className="hero-signal-text">{signal.event.title}</span>
+                      <span className="hero-signal-meta">{signal.whenLabel}</span>
+                    </Link>
+                  )}
+                  {topTask && (
+                    <span className="hero-signal" aria-label={`Top task: ${topTask.text}`}>
+                      <ListTodo size={11} aria-hidden style={{ color: "var(--accent)" }} />
+                      <span className="hero-signal-kind">Task</span>
+                      <span className="hero-signal-text">{topTask.text}</span>
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
           </div>
-          <LayoutPresetsButton />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ fontSize: 12 }}
+              onClick={() => window.dispatchEvent(new CustomEvent("devhub:capture-open"))}
+              data-tooltip="Quick capture (⌘⇧C)"
+              data-tooltip-pos="bottom-end"
+            >
+              <Plus size={13} aria-hidden /> Capture
+            </button>
+            <LayoutPresetsButton />
+          </div>
         </div>
 
         {/* Briefing — calm accent strip, same language as the dashboard's widget */}
@@ -330,7 +496,7 @@ export function TodayFocusView() {
                     >
                       {r.title}
                     </a>
-                    <span className="shrink-0 font-mono text-[11px]" style={{ color: "var(--text-subtle)" }}>
+                    <span className="min-w-0 shrink truncate font-mono text-[11px]" style={{ color: "var(--text-subtle)" }}>
                       {id}
                     </span>
                     <a

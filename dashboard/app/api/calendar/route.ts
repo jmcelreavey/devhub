@@ -4,7 +4,7 @@ import {
   getTodayCalendarCache,
   setTodayCalendarCache,
 } from "@/lib/calendar-cache";
-import { getTodayEvents } from "@/lib/google-calendar";
+import { getTodayEvents, isGoogleCalendarAuthError } from "@/lib/google-calendar";
 
 export async function GET() {
   const cache = getTodayCalendarCache();
@@ -17,6 +17,11 @@ export async function GET() {
     setTodayCalendarCache(events);
     return NextResponse.json({ events, cached: false });
   } catch (e) {
+    // A missing/expired refresh token is a setup problem, not a server fault —
+    // return empty events with a reconnect hint so the dashboard stays usable.
+    if (isGoogleCalendarAuthError(e)) {
+      return NextResponse.json({ events: [], cached: false, needsReauth: true });
+    }
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Calendar fetch failed" },
       { status: 500 }

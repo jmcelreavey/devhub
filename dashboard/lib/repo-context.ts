@@ -24,10 +24,15 @@ const TEXT_EXTS = new Set([".md", ".mdx", ".txt", ".json", ".toml", ".yaml", ".y
 const MAX_FILES_SCANNED = 2_000;
 const MAX_SOURCE_CHARS = 120_000;
 
-export interface RepoLearningProfile {
+export interface RepoSnippet {
+  relativePath: string;
+  text: string;
+}
+
+export interface RepoContext {
   repoName: string;
   repoPath: string;
-  generatedAt: string;
+  scannedAt: string;
   headline: string;
   primaryStack: string[];
   packageManager: string | null;
@@ -39,17 +44,8 @@ export interface RepoLearningProfile {
   runCommands: string[];
   recentCommits: string[];
   languageBreakdown: { extension: string; count: number }[];
-  briefMarkdown: string;
-  notebookPackMarkdown: string;
+  snippets: RepoSnippet[];
   openCodePrompt: string;
-  quiz: RepoQuizQuestion[];
-}
-
-export interface RepoQuizQuestion {
-  id: string;
-  question: string;
-  answer: string;
-  source: string | null;
 }
 
 interface ScannedFile {
@@ -57,12 +53,16 @@ interface ScannedFile {
   extension: string;
 }
 
-interface ReadSnippet {
-  relativePath: string;
-  text: string;
+export async function getGitHead(repoPath: string): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync("git", ["-C", repoPath, "rev-parse", "HEAD"], { timeout: 5_000 });
+    return stdout.trim();
+  } catch {
+    return "";
+  }
 }
 
-export async function buildRepoLearningProfile(repoPath: string): Promise<RepoLearningProfile> {
+export async function scanRepoContext(repoPath: string): Promise<RepoContext> {
   const repoName = path.basename(repoPath);
   const files = scanRepoFiles(repoPath);
   const snippets = readUsefulSnippets(repoPath, files);
@@ -78,37 +78,11 @@ export async function buildRepoLearningProfile(repoPath: string): Promise<RepoLe
   const runCommands = detectRunCommands(scripts, packageManager, files);
   const recentCommits = await getRecentCommits(repoPath);
   const headline = buildHeadline(primaryStack, keyDirectories, docs, manifests);
-  const openCodePrompt = buildOpenCodePrompt(repoName);
-  const quiz = buildQuiz({
-    repoName,
-    primaryStack,
-    packageManager,
-    scripts,
-    keyDirectories,
-    docs,
-    manifests,
-    testCommands,
-    runCommands,
-    recentCommits,
-  });
-  const briefMarkdown = buildBriefMarkdown({
+
+  return {
     repoName,
     repoPath,
-    headline,
-    primaryStack,
-    packageManager,
-    scripts,
-    keyDirectories,
-    docs,
-    manifests,
-    testCommands,
-    runCommands,
-    recentCommits,
-    languageBreakdown,
-  });
-  const notebookPackMarkdown = buildNotebookPackMarkdown({
-    repoName,
-    repoPath,
+    scannedAt: new Date().toISOString(),
     headline,
     primaryStack,
     packageManager,
@@ -121,28 +95,67 @@ export async function buildRepoLearningProfile(repoPath: string): Promise<RepoLe
     recentCommits,
     languageBreakdown,
     snippets,
-    openCodePrompt,
-  });
+    openCodePrompt: buildOpenCodePrompt(repoName),
+  };
+}
 
+/** Deterministic excerpt files appended to the NotebookLM pack ZIP. */
+export function buildSnippetPackFiles(snippets: RepoSnippet[]): { path: string; content: string }[] {
+  return snippets.map((snippet) => {
+    const safeName = snippet.relativePath.replace(/[/\\]/g, "-");
+    return {
+      path: `05-source-excerpts/${safeName}.md`,
+      content: `# ${snippet.relativePath}\n\n${snippet.text}`,
+    };
+  });
+}
+
+export function buildNotebookImportReadme(repoName: string): string {
+  return [
+    `# NotebookLM import: ${repoName}`,
+    "",
+    "This ZIP contains multiple Markdown sources for a NotebookLM notebook.",
+    "",
+    "## How to import",
+    "",
+    "1. **NotebookLM Tools extension** (recommended): use its ZIP import to upload all `.md` files as separate sources.",
+    "2. **Manual**: unzip and upload individual files in the NotebookLM Add source dialog.",
+    "",
+    "Note: Google NotebookLM does not accept ZIP files natively.",
+    "Free plan: up to 50 sources per notebook. Split or pick files if you hit the limit.",
+    "",
+    "Secrets, build output, and dependencies are intentionally excluded.",
+  ].join("\n");
+}
+
+export function buildOpenCodePrompt(repoName: string): string {
+  return [
+    `You are helping me get up to speed on the ${repoName} codebase.`,
+    "Read the repo first, then produce:",
+    "1. a concise architecture map with the important files/directories;",
+    "2. exact run/test/build commands and setup gotchas;",
+    "3. a prioritized reading path for a new contributor;",
+    "4. five quiz questions, one at a time, with answers grounded in file references.",
+    "Do not modify files.",
+  ].join("\n");
+}
+
+/** Compact JSON for model prompts — omits full snippet bodies (those are passed separately). */
+export function compactContextForModel(context: RepoContext): Record<string, unknown> {
   return {
-    repoName,
-    repoPath,
-    generatedAt: new Date().toISOString(),
-    headline,
-    primaryStack,
-    packageManager,
-    scripts,
-    keyDirectories,
-    docs,
-    manifests,
-    testCommands,
-    runCommands,
-    recentCommits,
-    languageBreakdown,
-    briefMarkdown,
-    notebookPackMarkdown,
-    openCodePrompt,
-    quiz,
+    repoName: context.repoName,
+    repoPath: context.repoPath,
+    headline: context.headline,
+    primaryStack: context.primaryStack,
+    packageManager: context.packageManager,
+    scripts: context.scripts,
+    keyDirectories: context.keyDirectories,
+    docs: context.docs,
+    manifests: context.manifests,
+    testCommands: context.testCommands,
+    runCommands: context.runCommands,
+    recentCommits: context.recentCommits,
+    languageBreakdown: context.languageBreakdown,
   };
 }
 
@@ -177,7 +190,7 @@ function scanRepoFiles(repoPath: string): ScannedFile[] {
   return out.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 }
 
-function readUsefulSnippets(repoPath: string, files: ScannedFile[]): ReadSnippet[] {
+function readUsefulSnippets(repoPath: string, files: ScannedFile[]): RepoSnippet[] {
   const preferred = files.filter((file) => {
     const base = path.basename(file.relativePath).toLowerCase();
     return (
@@ -192,7 +205,7 @@ function readUsefulSnippets(repoPath: string, files: ScannedFile[]): ReadSnippet
     );
   });
 
-  const snippets: ReadSnippet[] = [];
+  const snippets: RepoSnippet[] = [];
   let remaining = MAX_SOURCE_CHARS;
   for (const file of preferred) {
     if (remaining <= 0) break;
@@ -205,13 +218,17 @@ function readUsefulSnippets(repoPath: string, files: ScannedFile[]): ReadSnippet
       snippets.push({ relativePath: file.relativePath, text: text.trim() });
       remaining -= text.length;
     } catch {
-      // Best-effort source pack. Broken files do not make the whole feature useless.
+      // Best-effort source pack.
     }
   }
   return snippets;
 }
 
-function readPackageJson(repoPath: string): { scripts?: Record<string, string>; dependencies?: Record<string, string>; devDependencies?: Record<string, string> } | null {
+function readPackageJson(repoPath: string): {
+  scripts?: Record<string, string>;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+} | null {
   try {
     return JSON.parse(fs.readFileSync(path.join(repoPath, "package.json"), "utf8"));
   } catch {
@@ -279,7 +296,9 @@ function detectPrimaryStack(
   if (names.has("go.mod")) stack.add("Go");
   if (names.has("Cargo.toml")) stack.add("Rust");
   if (names.has("Dockerfile") || names.has("compose.yaml") || names.has("docker-compose.yml")) stack.add("Docker");
-  if (files.some((file) => file.relativePath.startsWith("app/api/") || file.relativePath.includes("/app/api/"))) stack.add("API routes");
+  if (files.some((file) => file.relativePath.startsWith("app/api/") || file.relativePath.includes("/app/api/"))) {
+    stack.add("API routes");
+  }
   return [...stack].slice(0, 8);
 }
 
@@ -316,8 +335,12 @@ function detectTestCommands(
     if (scripts[name]) commands.push(`${runner} run ${name}`);
   }
   if (files.some((file) => file.relativePath.endsWith("_test.go"))) commands.push("go test ./...");
-  if (files.some((file) => file.relativePath.endsWith("_test.py") || file.relativePath.startsWith("tests/"))) commands.push("pytest");
-  if (files.some((file) => file.relativePath.endsWith(".rs")) && files.some((file) => file.relativePath === "Cargo.toml")) commands.push("cargo test");
+  if (files.some((file) => file.relativePath.endsWith("_test.py") || file.relativePath.startsWith("tests/"))) {
+    commands.push("pytest");
+  }
+  if (files.some((file) => file.relativePath.endsWith(".rs")) && files.some((file) => file.relativePath === "Cargo.toml")) {
+    commands.push("cargo test");
+  }
   return unique(commands).slice(0, 8);
 }
 
@@ -351,139 +374,6 @@ function buildHeadline(primaryStack: string[], keyDirectories: string[], docs: s
   const dirs = keyDirectories.length ? `Key dirs: ${keyDirectories.slice(0, 3).join(", ")}.` : "No dominant directories detected.";
   const docSignal = docs.length ? `${docs.length} docs/source files found.` : `${manifests.length} manifests found.`;
   return `${stack}. ${dirs} ${docSignal}`;
-}
-
-function buildBriefMarkdown(input: Omit<RepoLearningProfile, "generatedAt" | "briefMarkdown" | "notebookPackMarkdown" | "openCodePrompt" | "quiz">): string {
-  const lines = [
-    `# ${input.repoName} repo brief`,
-    "",
-    input.headline,
-    "",
-    "## Stack",
-    bulletList(input.primaryStack.length ? input.primaryStack : ["No clear stack detected from manifests."]),
-    "",
-    "## Run",
-    bulletList(input.runCommands.length ? input.runCommands : ["No common run command detected. Check README or manifests."]),
-    "",
-    "## Verify",
-    bulletList(input.testCommands.length ? input.testCommands : ["No common test command detected. Check CI or README."]),
-    "",
-    "## First files to read",
-    bulletList(unique([...input.docs.slice(0, 6), ...input.manifests.slice(0, 6)]).slice(0, 10)),
-    "",
-    "## Key directories",
-    bulletList(input.keyDirectories.length ? input.keyDirectories : ["No nested directories detected."]),
-    "",
-    "## Recent commits",
-    bulletList(input.recentCommits.length ? input.recentCommits : ["No recent commit data available."]),
-  ];
-  return lines.join("\n");
-}
-
-function buildNotebookPackMarkdown(input: Omit<RepoLearningProfile, "generatedAt" | "briefMarkdown" | "notebookPackMarkdown" | "quiz"> & { snippets: ReadSnippet[] }): string {
-  const sections = [
-    `# NotebookLM pack: ${input.repoName}`,
-    "",
-    "Paste or upload this file into NotebookLM as a source. It intentionally skips secrets, build output, dependencies, and oversized files.",
-    "",
-    input.headline,
-    "",
-    "## Repo facts",
-    `- Path: \`${input.repoPath}\``,
-    `- Stack: ${input.primaryStack.join(", ") || "Unknown"}`,
-    `- Package manager: ${input.packageManager ?? "Unknown"}`,
-    `- Key directories: ${input.keyDirectories.join(", ") || "None detected"}`,
-    "",
-    "## Commands",
-    "### Run",
-    bulletList(input.runCommands.length ? input.runCommands : ["No common run command detected."]),
-    "",
-    "### Verify",
-    bulletList(input.testCommands.length ? input.testCommands : ["No common test command detected."]),
-    "",
-    "## Manifests and docs",
-    bulletList(unique([...input.docs, ...input.manifests]).slice(0, 40)),
-    "",
-    "## Language/file signal",
-    bulletList(input.languageBreakdown.map((row) => `${row.extension}: ${row.count}`)),
-    "",
-    "## OpenCode handoff prompt",
-    input.openCodePrompt,
-    "",
-    "## Source excerpts",
-  ];
-
-  for (const snippet of input.snippets) {
-    sections.push("", `### ${snippet.relativePath}`, "", "```", snippet.text.slice(0, 12_000), "```");
-  }
-
-  return sections.join("\n");
-}
-
-function buildOpenCodePrompt(repoName: string): string {
-  return [
-    `You are helping me get up to speed on the ${repoName} codebase.`,
-    "Read the repo first, then produce:",
-    "1. a concise architecture map with the important files/directories;",
-    "2. exact run/test/build commands and setup gotchas;",
-    "3. a prioritized reading path for a new contributor;",
-    "4. five quiz questions, one at a time, with answers grounded in file references.",
-    "Do not modify files.",
-  ].join("\n");
-}
-
-function buildQuiz(input: {
-  repoName: string;
-  primaryStack: string[];
-  packageManager: string | null;
-  scripts: Record<string, string>;
-  keyDirectories: string[];
-  docs: string[];
-  manifests: string[];
-  testCommands: string[];
-  runCommands: string[];
-  recentCommits: string[];
-}): RepoQuizQuestion[] {
-  return [
-    {
-      id: "stack",
-      question: `What stack signals does ${input.repoName} expose from its manifests?`,
-      answer: input.primaryStack.length ? input.primaryStack.join(", ") : "No obvious stack was detected from the scanned manifests.",
-      source: firstManifest(input.manifests),
-    },
-    {
-      id: "run",
-      question: "Which command would you try first to run it locally?",
-      answer: input.runCommands[0] ?? "No common run command was detected; start with README/docs or inspect package/Makefile scripts.",
-      source: firstManifest(input.manifests),
-    },
-    {
-      id: "verify",
-      question: "How would you verify a change before opening a PR?",
-      answer: input.testCommands.length ? input.testCommands.join("; ") : "No common verification command was detected from repo scripts or test files.",
-      source: firstManifest(input.manifests),
-    },
-    {
-      id: "reading-path",
-      question: "Which files or directories should a new contributor read first?",
-      answer: unique([...input.docs.slice(0, 4), ...input.keyDirectories.slice(0, 4)]).join(", ") || "No strong reading path was detected.",
-      source: input.docs[0] ?? null,
-    },
-    {
-      id: "change-signal",
-      question: "What recent commit theme should you scan before changing this repo?",
-      answer: input.recentCommits[0] ?? "No recent commit data was available.",
-      source: null,
-    },
-  ];
-}
-
-function firstManifest(manifests: string[]): string | null {
-  return manifests.find((file) => file === "package.json") ?? manifests[0] ?? null;
-}
-
-function bulletList(items: string[]): string {
-  return items.map((item) => `- ${item}`).join("\n");
 }
 
 function unique(items: string[]): string[] {

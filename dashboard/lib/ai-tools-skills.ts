@@ -1,5 +1,5 @@
 /**
- * Read-only integration with the example-org/ai-tools checkout.
+ * Read-only integration with the businessinsider/ai-tools checkout.
  * Skills stay canonical in that repo; DevHub syncs from a local clone path.
  */
 import fs from "node:fs";
@@ -116,7 +116,7 @@ export async function refreshAiToolsRepo(opts: {
   }
 
   if (!fs.existsSync(root)) {
-    const msg = `ai-tools not found at ${root} — set AI_TOOLS_ROOT or clone example-org/ai-tools`;
+    const msg = `ai-tools not found at ${root} — set AI_TOOLS_ROOT or clone businessinsider/ai-tools`;
     emit(`WARNING: ${msg}`);
     return { ok: false, warning: msg };
   }

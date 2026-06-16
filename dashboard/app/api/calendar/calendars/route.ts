@@ -3,6 +3,7 @@ import { isSameOrigin } from "@/lib/api-utils";
 import { invalidateCalendarCaches } from "@/lib/calendar-cache";
 import { writeCalendarSelection } from "@/lib/calendar-selection";
 import {
+  isGoogleCalendarAuthError,
   isGoogleCalendarConfigured,
   listCalendars,
   resolveActiveCalendarIds,
@@ -20,6 +21,11 @@ export async function GET() {
     const selectedIds = resolveActiveCalendarIds(calendars);
     return NextResponse.json({ configured: true, calendars, selectedIds });
   } catch (e) {
+    // Token present but rejected (revoked/expired) → surface as "reconnect"
+    // rather than a 500, so the calendar picker can prompt a re-auth.
+    if (isGoogleCalendarAuthError(e)) {
+      return NextResponse.json({ configured: false, calendars: [], selectedIds: [], needsReauth: true });
+    }
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Failed to list calendars" },
       { status: 500 },

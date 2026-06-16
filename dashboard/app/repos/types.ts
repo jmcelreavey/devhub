@@ -28,10 +28,15 @@ export interface GithubReposApiPayload {
   repos: GithubRepoInfo[];
 }
 
-export interface RepoLearningProfile {
+export interface RepoSnippet {
+  relativePath: string;
+  text: string;
+}
+
+export interface RepoContextPayload {
   repoName: string;
   repoPath: string;
-  generatedAt: string;
+  scannedAt: string;
   headline: string;
   primaryStack: string[];
   packageManager: string | null;
@@ -43,19 +48,28 @@ export interface RepoLearningProfile {
   runCommands: string[];
   recentCommits: string[];
   languageBreakdown: { extension: string; count: number }[];
-  briefMarkdown: string;
-  notebookPackMarkdown: string;
   openCodePrompt: string;
-  quiz: RepoQuizQuestion[];
 }
 
-export interface RepoQuizQuestion {
-  id: string;
-  question: string;
-  answer: string;
-  source: string | null;
+export interface RepoLearnPackFileMeta {
+  path: string;
+  sizeBytes: number;
+}
+
+export interface RepoLearnArtifactsPayload {
+  briefMarkdown: string;
+  packFiles: RepoLearnPackFileMeta[];
+  overviewMarkdown: string | null;
+  generatedAt: string;
+  cached: boolean;
 }
 
 export interface RepoLearnApiPayload {
-  profile: RepoLearningProfile;
+  ok: boolean;
+  context: RepoContextPayload;
+  gitHead: string;
+  aiConfigured: boolean;
+  artifacts: RepoLearnArtifactsPayload | null;
+  code?: "not_configured" | "error";
+  message?: string;
 }

@@ -6,6 +6,19 @@ import { scrubNpmEnv } from "./process-env";
 
 export function cleanOpenChamberEnv(): NodeJS.ProcessEnv {
   const env = scrubNpmEnv();
+
+  // Strip env vars injected by the OpenChamber desktop app — they point the
+  // CLI daemon at the app bundle's static files and runtime config, which
+  // can crash or mislead the headless daemon DevHub spawns.
+  const DESKTOP_LEAK_KEYS = [
+    "OPENCHAMBER_DIST_DIR",
+    "OPENCHAMBER_RUNTIME",
+    "OPENCHAMBER_DESKTOP_NOTIFY",
+    "OPENCHAMBER_SKIP_API_COMPRESSION",
+    "__CFBundleIdentifier",
+  ];
+  for (const key of DESKTOP_LEAK_KEYS) delete env[key];
+
   const userOpencode = path.join(process.env.HOME ?? "", ".opencode", "bin", "opencode");
   if (!process.env.DEVHUB_OPENCODE_BINARY && fs.existsSync(userOpencode)) {
     env.OPENCODE_BINARY = userOpencode;

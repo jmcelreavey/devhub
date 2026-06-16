@@ -25,7 +25,7 @@ export function formatDayLabel(dateIso: string): string {
 
 export const JIRA_KEY_RE = /\b([A-Z][A-Z0-9]+-\d+)\b/;
 
-const DEFAULT_JIRA_DOMAIN = "example-org.atlassian.net";
+const DEFAULT_JIRA_DOMAIN = "businessinsider.atlassian.net";
 
 /**
  * Direct, external Jira browse URL for a ticket key. Built client-side so links

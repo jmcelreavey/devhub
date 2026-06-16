@@ -39,6 +39,30 @@ function defaultOAuthRedirectUri(): string {
   return `http://localhost:${process.env.PORT ?? "1337"}/api/calendar/auth/callback`;
 }
 
+/**
+ * True when an error from the Google API is an authentication/authorization
+ * failure — a missing, revoked, or expired refresh token, or bad client
+ * credentials. These are config problems the user fixes by reconnecting in
+ * /setup, not server faults, so callers surface them as "needs reauth" rather
+ * than a 500.
+ */
+export function isGoogleCalendarAuthError(err: unknown): boolean {
+  const status = (err as { code?: number; status?: number; response?: { status?: number } } | null);
+  const httpStatus = status?.code ?? status?.status ?? status?.response?.status;
+  if (httpStatus === 401 || httpStatus === 403) return true;
+
+  const message = (err instanceof Error ? err.message : String(err ?? "")).toLowerCase();
+  return (
+    message.includes("invalid_grant") ||
+    message.includes("invalid_client") ||
+    message.includes("invalid_request") ||
+    message.includes("unauthorized") ||
+    message.includes("no refresh token") ||
+    message.includes("no access, refresh token") ||
+    message.includes("token has been expired or revoked")
+  );
+}
+
 /** Resolve Google OAuth + Calendar env: `.env.local` wins over stale `process.env`. */
 export function getResolvedGoogleCalendarEnv(): {
   clientId?: string;

@@ -6,7 +6,7 @@ The sync engine keeps AI tool configuration consistent across machines and tools
 
 | Asset           | Source In Repo         | Destination                     |
 | --------------- | ---------------------- | ------------------------------- |
-| Skills          | `skills/shared/` plus optional [ai-tools](https://github.com/example-org/ai-tools) checkout | Local tool skill directories    |
+| Skills          | `skills/shared/` plus optional [ai-tools](https://github.com/businessinsider/ai-tools) checkout | Local tool skill directories    |
 | Agents          | Shared agent files     | Local tool agent directories    |
 | Persona         | Persona files          | Tool-specific instruction files |
 | MCP configs     | `mcp/shared/*.json`    | `~/.claude.json`, `~/.codex/mcp.json`, `~/.cursor/mcp.json`, OpenCode `mcp` block |

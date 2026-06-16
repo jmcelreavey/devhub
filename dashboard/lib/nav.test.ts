@@ -3,9 +3,9 @@ import { ALL_NAV_DESTINATIONS, LEGACY_NAV_ITEMS, NAV_ITEMS, filterNavBySetup } f
 
 const hrefs = (items: ReturnType<typeof filterNavBySetup>) => items.map((i) => i.href);
 
-describe("NAV_ITEMS (11-destination IA)", () => {
-  it("has exactly 11 sidebar destinations", () => {
-    expect(NAV_ITEMS).toHaveLength(11);
+describe("NAV_ITEMS (12-destination IA)", () => {
+  it("has exactly 12 sidebar destinations", () => {
+    expect(NAV_ITEMS).toHaveLength(12);
   });
 
   it("keeps merged pages out of the sidebar but in the destination list", () => {
@@ -63,5 +63,14 @@ describe("filterNavBySetup", () => {
   it("shows Chamber and OpenCode only when gated on", () => {
     expect(hrefs(filterNavBySetup(NAV_ITEMS, { chamber: true }))).toContain("/chamber");
     expect(hrefs(filterNavBySetup(NAV_ITEMS, { opencode: true }))).toContain("/opencode");
+  });
+
+  it("hides Claude unless it is installed", () => {
+    expect(hrefs(filterNavBySetup(NAV_ITEMS, { claude: false }))).not.toContain("/claude");
+    expect(hrefs(filterNavBySetup(NAV_ITEMS, {}))).not.toContain("/claude");
+  });
+
+  it("shows Claude only when installed", () => {
+    expect(hrefs(filterNavBySetup(NAV_ITEMS, { claude: true }))).toContain("/claude");
   });
 });

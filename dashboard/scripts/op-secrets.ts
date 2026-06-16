@@ -9,7 +9,12 @@ import { loadEnvLocalIntoProcessIfUnset } from "./load-env-local-into-process";
 
 const execFile = promisify(_execFile);
 
-// Keys that are local paths/preferences, not secrets to store in 1Password.
+// Local paths/preferences rather than secrets. Excluded from 1Password sync by
+// default so a stored value (especially an absolute path from another machine)
+// can't clobber a fresh machine. Set DEVHUB_OP_SYNC_LOCAL=1 to opt in and pull
+// these from the "devhub" item too — handy when every machine shares the same
+// layout. Either way they're only fetched when still unset locally, so an
+// existing machine's value is never overwritten.
 const LOCAL_ONLY_KEYS = new Set<string>([
   "NOTES_DIR",
   "DOCS_DIR",
@@ -25,6 +30,11 @@ const LOCAL_ONLY_KEYS = new Set<string>([
   "Z_AI_BASE_URL",
   "Z_AI_MODEL",
 ]);
+
+/** When set, the LOCAL_ONLY_KEYS above also sync from 1Password (when unset). */
+function syncLocalKeysEnabled(): boolean {
+  return process.env.DEVHUB_OP_SYNC_LOCAL === "1";
+}
 
 function markerPath(envDir: string): string {
   return path.join(envDir, ".env.op-synced");
@@ -47,8 +57,9 @@ function repoRootFor(envDir: string): string {
 }
 
 function missableSecretKeys(repoRoot: string): string[] {
+  const includeLocal = syncLocalKeysEnabled();
   return getManagedSecretEnvNames(repoRoot).filter((k) => {
-    if (LOCAL_ONLY_KEYS.has(k)) return false;
+    if (!includeLocal && LOCAL_ONLY_KEYS.has(k)) return false;
     return !(process.env[k] ?? "").trim();
   });
 }
@@ -125,6 +136,8 @@ interface OpItem {
  *   DEVHUB_OP_VAULT  — vault to search (default: all vaults)
  *   DEVHUB_OP_REFRESH — set to "1" to bypass the sync marker and re-fetch
  *   DEVHUB_OP_CACHE  — set to "0" to avoid writing fetched secrets to .env.local
+ *   DEVHUB_OP_SYNC_LOCAL — set to "1" to also pull local-only keys (paths,
+ *                    ports, prefs) from 1Password when unset; off by default
  */
 export async function loadEnvWithOnePasswordFallback(envDir: string): Promise<void> {
   loadEnvLocalIntoProcessIfUnset(envDir);
@@ -219,6 +232,17 @@ export async function loadEnvWithOnePasswordFallback(envDir: string): Promise<vo
   if (fetched.length > 0) {
     const cacheStatus = process.env.DEVHUB_OP_CACHE === "0" ? "without caching to .env.local" : "and cached to .env.local";
     process.stdout.write(`  · 1Password: loaded ${fetched.length} secret(s) from "${opItem}" ${cacheStatus}\n`);
+  }
+
+  // Anything still unset means the "devhub" item has no field for it. Call this
+  // out explicitly — otherwise the marker below silences the next startup and
+  // the gap looks like a DevHub bug rather than a missing 1Password field.
+  const stillMissing = missing.filter((key) => !(process.env[key] ?? "").trim());
+  if (stillMissing.length > 0) {
+    process.stdout.write(
+      `  · 1Password: "${opItem}" has no field for ${stillMissing.length} key(s): ${stillMissing.join(", ")}.\n` +
+        `    Add a field for each (label = env var name) to auto-fill them, then re-run with DEVHUB_OP_REFRESH=1.\n`,
+    );
   }
 
   writeMarker(envDir);

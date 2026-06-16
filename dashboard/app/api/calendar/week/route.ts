@@ -4,7 +4,7 @@ import {
   getWeekCalendarCache,
   setWeekCalendarCache,
 } from "@/lib/calendar-cache";
-import { getWeekEvents } from "@/lib/google-calendar";
+import { getWeekEvents, isGoogleCalendarAuthError } from "@/lib/google-calendar";
 
 export async function GET() {
   const cache = getWeekCalendarCache();
@@ -17,6 +17,10 @@ export async function GET() {
     setWeekCalendarCache(data);
     return NextResponse.json({ days: data, cached: false });
   } catch (e) {
+    // Missing/expired refresh token → reconnect hint, not a 500.
+    if (isGoogleCalendarAuthError(e)) {
+      return NextResponse.json({ days: {}, cached: false, needsReauth: true });
+    }
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Calendar fetch failed" },
       { status: 500 }

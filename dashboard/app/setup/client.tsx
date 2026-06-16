@@ -329,7 +329,19 @@ export default function SetupPage() {
       setError("");
       try {
         if (kind === "datadog") {
-          const r = await fetch("/api/setup/check/datadog");
+          // Test exactly what's in the form. Masked/blank secrets are omitted so
+          // the server falls back to the saved env — this lets the check pass
+          // before the step is saved, instead of demanding a save first.
+          const apiKey = datadogForm.apiKey.trim();
+          const applicationKey = datadogForm.applicationKey.trim();
+          const r = await fetch("/api/setup/check/datadog", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...(apiKey && apiKey !== SECRET_FIELD_MASK ? { apiKey } : {}),
+              ...(applicationKey && applicationKey !== SECRET_FIELD_MASK ? { applicationKey } : {}),
+            }),
+          });
           const result = (await r.json()) as { ok: boolean; code?: string; message?: string };
           if (!result.ok) {
             setError(result.message ?? "Datadog connection failed.");
@@ -366,7 +378,7 @@ export default function SetupPage() {
         setCheckConnectionBusy(null);
       }
     },
-    [loadSetupStatus],
+    [loadSetupStatus, datadogForm],
   );
 
   const startGoogleCalendarOAuth = useCallback(async () => {

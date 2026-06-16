@@ -76,6 +76,7 @@ export async function GET() {
     bi,
     chamber: peerServices.chamber,
     opencode: peerServices.opencode,
+    claude: peerServices.claude,
     allowLanNetwork,
     envPath: ".env.local",
     coreVars: {

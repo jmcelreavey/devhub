@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Sparkles, RefreshCw } from "lucide-react";
 import { useLive } from "@/lib/use-fetch";
 import { formatTime } from "@/lib/utils";
+import { TodayCollapseButton } from "@/components/TodayCollapseButton";
 
 interface BriefingResponse {
   ok: boolean;
@@ -14,7 +15,12 @@ interface BriefingResponse {
   message?: string;
 }
 
-export function MorningBriefingWidget() {
+interface MorningBriefingWidgetProps {
+  collapsed?: boolean;
+  onToggle?: () => void;
+}
+
+export function MorningBriefingWidget({ collapsed = false, onToggle }: MorningBriefingWidgetProps) {
   const { data, isLoading, mutate } = useLive<BriefingResponse>("/api/dashboard/morning-briefing", {
     refreshInterval: 0,
   });
@@ -39,13 +45,17 @@ export function MorningBriefingWidget() {
   const loading = (isLoading && !data) || refreshing;
 
   return (
-    <div className="card" style={{ borderLeft: "3px solid var(--accent)", padding: "10px 14px" }}>
+    <div
+      className="card today-grid-drag-handle"
+      data-collapsed={collapsed ? "true" : undefined}
+      style={{ borderLeft: "3px solid var(--accent)", padding: "10px 14px" }}
+    >
       <div className="flex items-center gap-2 mb-1.5">
         <Sparkles size={13} style={{ color: "var(--accent)" }} aria-hidden />
         <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
           MORNING BRIEFING
         </span>
-        {data?.ok && data.generatedAt && (
+        {data?.ok && data.generatedAt && !collapsed && (
           <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
             {formatTime(data.generatedAt)}
             {data.cached ? "" : " · fresh"}
@@ -55,33 +65,40 @@ export function MorningBriefingWidget() {
           type="button"
           onClick={() => void refresh()}
           disabled={loading}
-          className="hub-icon-btn ml-auto"
+          className="hub-icon-btn ml-auto today-grid-drag-cancel"
           title="Regenerate briefing"
           aria-label="Regenerate briefing"
         >
           <RefreshCw size={12} aria-hidden className={refreshing ? "animate-spin" : undefined} />
         </button>
+        {onToggle && (
+          <TodayCollapseButton collapsed={collapsed} label="Morning briefing" onToggle={onToggle} />
+        )}
       </div>
 
-      {loading ? (
-        <div className="space-y-1.5">
-          <div className="skeleton" style={{ height: 12, width: "100%" }} />
-          <div className="skeleton" style={{ height: 12, width: "85%" }} />
-        </div>
-      ) : data?.ok ? (
-        // Keyed on generation time so a fresh briefing settles in with a
-        // rise — shimmer → text, no spinner (motion = information).
-        <p
-          key={data.generatedAt ?? "briefing"}
-          className="briefing-settle text-sm leading-relaxed"
-          style={{ color: "var(--text)" }}
-        >
-          {data.text}
-        </p>
-      ) : (
-        <p className="text-sm" style={{ color: "var(--text-subtle)" }}>
-          {data?.message ?? "Briefing unavailable."}
-        </p>
+      {!collapsed && (
+        <>
+          {loading ? (
+            <div className="space-y-1.5">
+              <div className="skeleton" style={{ height: 12, width: "100%" }} />
+              <div className="skeleton" style={{ height: 12, width: "85%" }} />
+            </div>
+          ) : data?.ok ? (
+            // Keyed on generation time so a fresh briefing settles in with a
+            // rise — shimmer → text, no spinner (motion = information).
+            <p
+              key={data.generatedAt ?? "briefing"}
+              className="briefing-settle text-sm leading-relaxed"
+              style={{ color: "var(--text)" }}
+            >
+              {data.text}
+            </p>
+          ) : (
+            <p className="text-sm" style={{ color: "var(--text-subtle)" }}>
+              {data?.message ?? "Briefing unavailable."}
+            </p>
+          )}
+        </>
       )}
     </div>
   );

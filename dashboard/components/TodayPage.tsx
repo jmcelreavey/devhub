@@ -50,6 +50,7 @@ import {
   TODAY_SECTION_JIRA_COLLAPSED,
   TODAY_SECTION_MAIN_COLLAPSED,
   TODAY_SECTION_WELCOME_COLLAPSED,
+  TODAY_SECTION_BRIEFING_COLLAPSED,
   usePersistedSectionCollapsed,
 } from "@/lib/today-workspace-storage";
 import { WelcomeCard, useWelcomeCardVisible } from "@/components/WelcomeCard";
@@ -279,6 +280,11 @@ export function TodayPage() {
   // Probe the PRs cache too — the boot screen holds until the primary
   // widgets have data, so the dashboard reveals as one settled unit.
   const { data: prsProbe } = useLive<Record<string, unknown>>("/api/github/prs");
+  // Probe the morning briefing so the grid slot only appears when AI is configured.
+  const { data: briefingProbe } = useLive<{ ok?: boolean; code?: string }>("/api/dashboard/morning-briefing", {
+    refreshInterval: 0,
+  });
+  const showBriefing = briefingProbe !== undefined && !(briefingProbe.ok === false && briefingProbe.code === "not_configured");
   useMarkTicketsSeen();
   useMarkPrsSeen();
   const hasCalendar = !cal?.error;
@@ -297,10 +303,12 @@ export function TodayPage() {
   const [jiraCollapsed, setJiraCollapsed] = usePersistedSectionCollapsed(TODAY_SECTION_JIRA_COLLAPSED);
   const [githubCollapsed, setGithubCollapsed] = usePersistedSectionCollapsed(TODAY_SECTION_GITHUB_PRS_COLLAPSED);
   const [datadogCollapsed, setDatadogCollapsed] = usePersistedSectionCollapsed(TODAY_SECTION_DATADOG_COLLAPSED);
+  const [briefingCollapsed, setBriefingCollapsed] = usePersistedSectionCollapsed(TODAY_SECTION_BRIEFING_COLLAPSED);
 
   const collapsedSlots = useMemo(() => {
     const slots = new Set<TodayGridSlotId>();
     if (welcomeCollapsed) slots.add("welcome");
+    if (briefingCollapsed) slots.add("briefing");
     if (mainCollapsed) slots.add("main");
     if (calendarCollapsed) slots.add("calendar");
     if (jiraCollapsed) slots.add("jira");
@@ -309,6 +317,7 @@ export function TodayPage() {
     return slots;
   }, [
     welcomeCollapsed,
+    briefingCollapsed,
     mainCollapsed,
     calendarCollapsed,
     jiraCollapsed,
@@ -459,7 +468,7 @@ export function TodayPage() {
   const yesterdayLink = `/notes/${dailyNotePath(yesterdayISO())}`;
 
   return (
-    <div className="hub">
+    <div className="hub today-home">
       <TodayBootScreen state={boot} />
       {celebrate && <ConfettiRain />}
       {/* Hero */}
@@ -560,11 +569,10 @@ export function TodayPage() {
         </div>
       </div>
 
-      <MorningBriefingWidget />
-
       <TodayDashboardGrid
         ready={gridReady}
         showWelcome={welcomeVisible === true}
+        showBriefing={showBriefing}
         hasCalendar={hasCalendar}
         hasJira={hasJira}
         showDatadog={datadogTodayVisible}
@@ -575,6 +583,12 @@ export function TodayPage() {
               visible={welcomeVisible}
               collapsed={welcomeCollapsed}
               onToggle={() => setWelcomeCollapsed((c) => !c)}
+            />
+          ),
+          briefing: (
+            <MorningBriefingWidget
+              collapsed={briefingCollapsed}
+              onToggle={() => setBriefingCollapsed((c) => !c)}
             />
           ),
           main: (

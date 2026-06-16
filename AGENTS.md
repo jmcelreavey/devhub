@@ -101,6 +101,12 @@ Teaching, code review, debugging, scaffolding, and other modes live under `perso
 
 ## Cursor Cloud specific instructions
 
+### Repo nature — personal mirror, NOT the public template
+
+- This checkout is the **private mirror**. It holds **everything**: your personal data — notes, diagrams, daily tasks, checklist collections, `persona/identity.txt` — committed alongside the code. This is where day-to-day work lives, and committing personal data here is expected.
+- The separate **public / template core** repo is the code-only one: generic, reusable features. It ships personal-data paths empty (`.gitkeep`/`EXAMPLE`), and personal data must **not** be pushed there. See `CONTRIBUTING.md` → "Personal-data boundary" for the exact path list.
+- Running the app locally writes personal data into tracked paths (e.g. creating a task writes `tasks/YYYY-MM-DD.json`) — that's fine to commit here. The only place to keep personal data out is when **back-porting a generic feature to the public template**.
+
 ### Services
 
 | Service | Command | Port | Notes |
@@ -137,10 +143,10 @@ All from the repo root:
 
 ### Plugin Architecture — CRITICAL FOR EDITING
 
-DevHub uses a **tier-2 plugin system**. Private modules (company ops pages, internal scripts, etc.) live in **separate plugin repos**, not in this repo. On `npm run dev`, the `predev` → `sync_plugins` step **materializes** plugin files into the core dashboard tree via `fs.cpSync`.
+DevHub uses a **tier-2 plugin system**. Private modules (BI ops, CAPI scripts, etc.) live in **separate plugin repos**, not in this repo. On `npm run dev`, the `predev` → `sync_plugins` step **materializes** plugin files into the core dashboard tree via `fs.cpSync`.
 
 **This means:**
-- Plugin-materialized files (e.g. `dashboard/lib/<plugin>-ops.ts`, `dashboard/app/api/<plugin>/**`) are **copies** — they get overwritten on every server restart.
+- Files like `dashboard/lib/bi-ops.ts`, `dashboard/components/CapiScriptsCard.tsx`, `dashboard/app/api/bi/**` are **copies** — they get overwritten on every server restart.
 - **Always edit the plugin source**, never the materialized copy. The materializer will silently destroy your changes.
 - Plugin registry: `~/.config/devhub/plugins.json` — lists plugin name + path.
 - Plugin `devhub-bi` source: `~/Developer/devhub-bi/dashboard/` — edit files there.

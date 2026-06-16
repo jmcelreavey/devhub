@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { DEV_SERVICES } from "./dev-services";
 import { resolveOpenChamberCommand } from "./openchamber-command";
 import { resolveOpenCodeBinary, resolveOpenCodeBindHost } from "./opencode-command";
+import { findInstalledApp } from "./launch-desktop";
 
 function commandOnPath(cmd: string): boolean {
   const which = process.platform === "win32" ? "where" : "which";
@@ -27,6 +28,16 @@ export function isOpenCodeConfigured(): boolean {
   const bin = resolveOpenCodeBinary();
   if (bin !== "opencode") return fs.existsSync(bin);
   return commandOnPath("opencode");
+}
+
+/**
+ * True when Claude is available locally — either the `claude` CLI is on PATH
+ * or the native Claude desktop app is installed. Gates the Claude sidebar item
+ * so it only appears for people who actually have it.
+ */
+export function isClaudeConfigured(): boolean {
+  if (commandOnPath("claude")) return true;
+  return findInstalledApp("Claude", "claude") !== null;
 }
 
 export function checkServicePort(port: number, host: string): Promise<boolean> {
@@ -58,7 +69,7 @@ export async function isPeerServiceActive(serviceId: "openchamber" | "opencode")
 /** True when the companion binary exists or the dev peer is already listening. */
 export async function getPeerServiceGateStatus(
   dashboardDir = process.cwd(),
-): Promise<{ chamber: boolean; opencode: boolean }> {
+): Promise<{ chamber: boolean; opencode: boolean; claude: boolean }> {
   const [chamberActive, opencodeActive] = await Promise.all([
     isPeerServiceActive("openchamber"),
     isPeerServiceActive("opencode"),
@@ -67,5 +78,6 @@ export async function getPeerServiceGateStatus(
   // Chamber depends on OpenCode — hide it when only the npm package is present.
   const chamber =
     chamberActive || (isOpenChamberConfigured(dashboardDir) && opencode);
-  return { chamber, opencode };
+  const claude = isClaudeConfigured();
+  return { chamber, opencode, claude };
 }

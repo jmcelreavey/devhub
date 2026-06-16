@@ -1,29 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import {
-  AlertCircle,
-  ArrowUpFromLine,
-  BookOpen,
-  Check,
-  ClipboardCopy,
-  Container,
-  FileDown,
-  FileText,
-  GraduationCap,
-  RefreshCw,
-  Sparkles,
-  TerminalSquare,
-  X,
-} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertCircle, ArrowUpFromLine, Container, RefreshCw } from "lucide-react";
 import { useLive } from "@/lib/use-fetch";
 import { useToast } from "@/lib/use-toast";
 import { FetchError } from "@/components/FetchError";
-import { SidePanel } from "@/components/SidePanel";
-import { SimpleMarkdown } from "@/components/SimpleMarkdown";
 import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
 import { useLaunchClaudeDesktop } from "@/lib/launch-claude";
-import { openTerminal, opencodeCliCommand } from "@/lib/terminal-launch";
+import { openTerminal } from "@/lib/terminal-launch";
 import {
   EmptyReposCard,
   GithubRepoCard,
@@ -33,9 +17,10 @@ import {
   SectionHeader,
   StatCard,
 } from "./cards";
-import type { GithubReposApiPayload, RepoInfo, RepoLearnApiPayload, ReposApiPayload } from "./types";
+import { LearnPanel } from "./LearnPanel";
+import type { GithubReposApiPayload, RepoInfo, ReposApiPayload } from "./types";
 
-function parseFetchErrorMessage(error: unknown): string {
+function parseGithubFetchErrorMessage(error: unknown): string {
   if (!(error instanceof Error)) return "Couldn’t load GitHub repos.";
   const raw = error.message;
   const marker = ": ";
@@ -240,7 +225,7 @@ export default function ReposPage() {
         </div>
       )}
 
-      <div className="grid gap-2 md:grid-cols-4 mb-3">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-4 mb-3">
         <StatCard label="Changed" value={changedRepos} tone={changedRepos ? "warning" : "muted"} icon={<AlertCircle size={13} />} />
         <StatCard label="Unpushed" value={unpushedRepos} tone={unpushedRepos ? "accent" : "muted"} icon={<ArrowUpFromLine size={13} />} />
         <StatCard label="Compose-ready" value={composeRepos} tone={composeRepos ? "success" : "muted"} icon={<Container size={13} />} />
@@ -257,7 +242,7 @@ export default function ReposPage() {
 
       <SearchCard query={query} onQueryChange={setQuery} />
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_420px]">
         <section className="space-y-2">
           <SectionHeader
             label="Local"
@@ -304,7 +289,7 @@ export default function ReposPage() {
           />
 
           {githubError && (
-            <FetchError message={parseFetchErrorMessage(githubError)} onRetry={() => mutateGithub()} />
+            <FetchError message={parseGithubFetchErrorMessage(githubError)} onRetry={() => mutateGithub()} />
           )}
           {githubSearchQuery && isGithubValidating && !githubData && (
             <EmptyReposCard>
@@ -348,201 +333,5 @@ export default function ReposPage() {
 function queryParam(value: string): string {
   const trimmed = value.trim();
   return trimmed ? `?q=${encodeURIComponent(trimmed)}` : "";
-}
-
-function LearnPanel({
-  repo,
-  onClose,
-}: {
-  repo: RepoInfo | null;
-  onClose: () => void;
-}) {
-  const toast = useToast();
-  const [copied, setCopied] = useState<string | null>(null);
-  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
-  const key = repo ? `/api/repos/${encodeURIComponent(repo.name)}/learn` : null;
-  const { data, error, isLoading, mutate } = useLive<RepoLearnApiPayload>(key, { refreshInterval: 0, revalidateOnFocus: false });
-  const profile = data?.profile;
-
-  async function copyText(id: string, text: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(id);
-      window.setTimeout(() => setCopied(null), 1500);
-      toast.success("Copied.");
-    } catch {
-      toast.error("Could not copy to clipboard.");
-    }
-  }
-
-  function downloadPack() {
-    if (!profile) return;
-    const blob = new Blob([profile.notebookPackMarkdown], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${profile.repoName}-notebooklm-pack.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function openCodeCommand(): string {
-    return opencodeCliCommand();
-  }
-
-  function handoffToOpenCode() {
-    if (!profile || !repo) return;
-    void copyText("opencode", profile.openCodePrompt);
-    openTerminal({
-      cwd: repo.path,
-      label: `OpenCode · ${repo.name}`,
-      command: openCodeCommand(),
-    });
-  }
-
-  return (
-    <SidePanel open={!!repo} onClose={onClose} storageKey="repos-learn-panel-width" defaultWidth={560} minWidth={420} ariaLabel="Repo learning panel">
-      <div className="p-4 border-b flex items-start justify-between gap-3" style={{ borderColor: "var(--border)" }}>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-xs uppercase tracking-wide" style={{ color: "var(--text-subtle)" }}>
-            <GraduationCap size={13} aria-hidden /> Learn repo
-          </div>
-          <div className="mt-1 text-lg font-semibold truncate" style={{ color: "var(--text)" }}>{repo?.name}</div>
-          <div className="text-xs truncate font-mono" style={{ color: "var(--text-subtle)" }}>
-            Local path: {repo?.path}
-          </div>
-        </div>
-        <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Close learning panel" style={{ fontSize: 12, padding: "4px 9px" }}>
-          <X size={14} />
-          Close
-        </button>
-      </div>
-
-      <div className="p-4 overflow-auto space-y-4">
-        {isLoading && (
-          <div className="space-y-2">
-            {[1, 2, 3].map((i) => <div key={i} className="skeleton" style={{ height: 72, borderRadius: "var(--radius)" }} />)}
-          </div>
-        )}
-        {error && (
-          <FetchError message={parseFetchErrorMessage(error)} onRetry={() => mutate()} />
-        )}
-        {profile && (
-          <>
-            <div className="card card-body">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
-                    <Sparkles size={14} aria-hidden /> Generated brief
-                  </div>
-                  <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>{profile.headline}</p>
-                </div>
-                <button type="button" className="btn btn-ghost" style={{ fontSize: 12, padding: "3px 8px" }} onClick={() => mutate()}>
-                  <RefreshCw size={12} /> Refresh
-                </button>
-              </div>
-              <div className="mt-3 rounded p-3" style={{ background: "var(--bg-elevated)" }}>
-                <SimpleMarkdown text={profile.briefMarkdown} compact />
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <PanelAction
-                  icon={<ClipboardCopy size={12} />}
-                  copied={copied === "brief"}
-                  label="Copy brief"
-                  onClick={() => copyText("brief", profile.briefMarkdown)}
-                />
-                <PanelAction
-                  icon={<TerminalSquare size={12} />}
-                  copied={copied === "opencode"}
-                  label="OpenCode handoff"
-                  onClick={handoffToOpenCode}
-                />
-              </div>
-            </div>
-
-            <div className="card card-body">
-              <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
-                <BookOpen size={14} aria-hidden /> Quiz me
-              </div>
-              <div className="mt-3 space-y-2">
-                {profile.quiz.map((question, index) => (
-                  <div key={question.id} className="rounded border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
-                    <div className="text-xs font-medium" style={{ color: "var(--text)" }}>
-                      {index + 1}. {question.question}
-                    </div>
-                    {revealed[question.id] && (
-                      <div className="mt-2 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-                        {question.answer}
-                        {question.source && <div className="mt-1 font-mono">Source: {question.source}</div>}
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      className="btn btn-ghost mt-2"
-                      style={{ fontSize: 12, padding: "3px 8px" }}
-                      onClick={() => setRevealed((prev) => ({ ...prev, [question.id]: !prev[question.id] }))}
-                    >
-                      {revealed[question.id] ? "Hide answer" : "Reveal answer"}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="card card-body">
-              <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
-                <FileText size={14} aria-hidden /> NotebookLM source pack
-              </div>
-              <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-                Copy or download a Markdown pack for NotebookLM. Official automation needs NotebookLM Enterprise; this keeps the consumer workflow honest.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <PanelAction
-                  icon={<ClipboardCopy size={12} />}
-                  copied={copied === "pack"}
-                  label="Copy pack"
-                  onClick={() => copyText("pack", profile.notebookPackMarkdown)}
-                />
-                <PanelAction
-                  icon={<FileDown size={12} />}
-                  copied={false}
-                  label="Download .md"
-                  onClick={downloadPack}
-                />
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-    </SidePanel>
-  );
-}
-
-function PanelAction({
-  icon,
-  label,
-  copied,
-  onClick,
-}: {
-  icon: ReactNode;
-  label: string;
-  copied: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className="btn btn-ghost"
-      style={{
-        fontSize: 12,
-        padding: "4px 9px",
-        color: copied ? "var(--success)" : undefined,
-      }}
-      onClick={onClick}
-    >
-      {copied ? <Check size={12} style={{ color: "var(--success)" }} /> : icon}
-      {copied ? "Copied" : label}
-    </button>
-  );
 }
 

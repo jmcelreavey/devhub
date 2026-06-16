@@ -24,6 +24,7 @@ import {
   ListChecks,
   BarChart3,
   Globe,
+  Bot,
   type LucideIcon,
 } from "lucide-react";
 import type { NavItem } from "@/lib/nav";
@@ -40,6 +41,7 @@ const ICONS: Record<string, LucideIcon> = {
   learnings: BookOpen,
   chamber: Monitor,
   opencode: Terminal,
+  claude: Bot,
   status: Activity,
   skills: Zap,
   repos: FolderGit2,

@@ -157,18 +157,38 @@ export async function startChamberPeer(log: PeerLog): Promise<ChamberPeerHandle>
     return { reusedExisting: true };
   }
 
-  if (await canBindPort(port, host)) {
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (await canConnect(port, probe)) {
+      log(`OpenChamber became reachable on port ${port}`);
+      return { reusedExisting: true };
+    }
+
+    if (!(await canBindPort(port, host))) {
+      log(`port ${port} busy but not accepting connections — retrying (${attempt}/${maxAttempts})`);
+      await sleep(1000);
+      continue;
+    }
+
     await runOpenChamber(["serve", "--port", String(port), "--host", host, "--quiet"], log);
-    log(`OpenChamber daemon is running on port ${port}`);
-    return { reusedExisting: false };
+
+    // Verify the daemon actually came up — the CLI forks and exits 0 even
+    // if the forked daemon crashes immediately.
+    if (await waitForPortListening(port, 5_000, probe)) {
+      log(`OpenChamber daemon is running on port ${port}`);
+      return { reusedExisting: false };
+    }
+
+    log(`OpenChamber serve returned but port ${port} is not listening — retrying (${attempt}/${maxAttempts})`);
+    await sleep(1000);
   }
 
   if (await canConnect(port, probe)) {
-    log(`OpenChamber already listening on port ${port}`);
+    log(`OpenChamber is reachable on port ${port} after retries`);
     return { reusedExisting: true };
   }
 
-  throw new Error(`OpenChamber port ${port} is busy but not accepting connections`);
+  throw new Error(`OpenChamber did not start on port ${port}`);
 }
 
 export function attachOpenCodeShutdown(child: ChildProcess | null, log: PeerLog): () => void {

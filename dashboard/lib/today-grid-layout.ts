@@ -1,6 +1,6 @@
 import { cloneLayout, verticalCompactor, type LayoutItem, type ResponsiveLayouts } from "react-grid-layout";
 
-export const TODAY_GRID_STORAGE_KEY = "devhub-today-grid-layouts-v8";
+export const TODAY_GRID_STORAGE_KEY = "devhub-today-grid-layouts-v9";
 
 export const TODAY_GRID_BREAKPOINTS = { lg: 1200, md: 996, sm: 768, xs: 0 } as const;
 
@@ -14,6 +14,7 @@ export type TodayGridBreakpoint = keyof typeof TODAY_GRID_BREAKPOINTS;
 
 export type TodayGridSlotId =
   | "welcome"
+  | "briefing"
   | "main"
   | "calendar"
   | "jira"
@@ -23,6 +24,7 @@ export type TodayGridSlotId =
 /** Stable order when merging persisted layout with defaults. */
 export const TODAY_GRID_SLOT_ORDER: TodayGridSlotId[] = [
   "welcome",
+  "briefing",
   "main",
   "calendar",
   "jira",
@@ -75,6 +77,7 @@ export function applyHeightPatchAndCompact(
 
 const LG: LayoutItem[] = [
   { i: "welcome", x: 0, y: 0, w: 12, h: 2, minW: 12, maxW: 12, minH: 2 },
+  { i: "briefing", x: 0, y: 2, w: 12, h: 3, minW: 4, minH: 2 },
   { i: "datadog", x: 0, y: 0, w: 7, h: 4, minH: 2 },
   { i: "main", x: 0, y: 2, w: 8, h: 18, minW: 5, minH: 6 },
   { i: "calendar", x: 8, y: 2, w: 4, h: 4, minW: 3, minH: 2 },
@@ -84,6 +87,7 @@ const LG: LayoutItem[] = [
 
 const MD: LayoutItem[] = [
   { i: "welcome", x: 0, y: 0, w: 12, h: 2, minW: 12, maxW: 12, minH: 2 },
+  { i: "briefing", x: 0, y: 2, w: 12, h: 3, minW: 4, minH: 2 },
   { i: "main", x: 0, y: 2, w: 8, h: 16, minW: 5, minH: 6 },
   { i: "calendar", x: 8, y: 2, w: 4, h: 4, minW: 3, minH: 2 },
   { i: "jira", x: 8, y: 6, w: 4, h: 8, minW: 3, minH: 2 },
@@ -93,6 +97,7 @@ const MD: LayoutItem[] = [
 
 const SM: LayoutItem[] = [
   { i: "welcome", x: 0, y: 0, w: 12, h: 2, minW: 12, maxW: 12, minH: 2 },
+  { i: "briefing", x: 0, y: 2, w: 12, h: 3, minW: 12, minH: 2 },
   { i: "main", x: 0, y: 2, w: 12, h: 16, minW: 12, minH: 6 },
   { i: "calendar", x: 0, y: 18, w: 12, h: 4, minW: 12, minH: 2 },
   { i: "github", x: 0, y: 22, w: 12, h: 6, minW: 12, minH: 2 },

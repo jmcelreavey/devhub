@@ -10,6 +10,7 @@ export const TODAY_SECTION_WELCOME_COLLAPSED = "devhub-today-welcome-collapsed";
 export const TODAY_SECTION_MAIN_COLLAPSED = "devhub-today-main-collapsed";
 export const TODAY_SECTION_CALENDAR_COLLAPSED = "devhub-today-calendar-collapsed";
 export const TODAY_SECTION_JIRA_COLLAPSED = "devhub-today-jira-collapsed";
+export const TODAY_SECTION_BRIEFING_COLLAPSED = "devhub-today-briefing-collapsed";
 
 function readCollapsed(key: string, defaultCollapsed = false): boolean {
   if (typeof window === "undefined") return defaultCollapsed;

@@ -17,6 +17,7 @@ import { HubTopBar } from "@/components/HubTopBar";
 import { NavProgress } from "@/components/NavProgress";
 import { PersistentChamber } from "@/components/PersistentChamber";
 import { PersistentOpenCode } from "@/components/PersistentOpenCode";
+import { PersistentClaude } from "@/components/PersistentClaude";
 import { MobileBottomShelf } from "@/components/MobileBottomShelf";
 import { UiPrefsBootstrap } from "@/components/UiPrefsBootstrap";
 
@@ -106,6 +107,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                   {children}
                   <PersistentChamber />
                   <PersistentOpenCode />
+                  <PersistentClaude />
               </main>
             </div>
 

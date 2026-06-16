@@ -643,7 +643,7 @@ function BlockNoteEditorReady({
             </button>
           </div>
 
-          <div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_auto]">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(220px,1fr)_auto]">
             <input
               ref={findInputRef}
               className="input h-8 text-xs"
@@ -695,7 +695,7 @@ function BlockNoteEditorReady({
           </div>
 
           {utilityMode === "replace" ? (
-            <div className="mt-2 grid gap-2 md:grid-cols-[minmax(220px,1fr)_auto]">
+            <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-[minmax(220px,1fr)_auto]">
               <input
                 ref={replaceInputRef}
                 className="input h-8 text-xs"

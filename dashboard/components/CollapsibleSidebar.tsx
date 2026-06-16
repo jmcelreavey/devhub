@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useSyncExternalStore, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { createPersistedBoolStore } from "@/lib/use-persisted-bool";
-import { useLaunchChamberDesktop } from "@/lib/launch-chamber";
-import { useLaunchOpenCodeDesktop } from "@/lib/launch-opencode";
 import { NavLink } from "./NavLink";
+import { NavLaunchMenu } from "./NavLaunchMenu";
 import {
   NAV_ITEMS,
   NAV_GROUPS,
@@ -14,7 +13,7 @@ import {
   type SetupGateStatus,
 } from "@/lib/nav";
 import { IconPicker } from "./IconPicker";
-import { ChevronLeft, ChevronRight, Play } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useLive } from "@/lib/use-fetch";
 import { useNavBadges, countForItem, unseenForItem, type NavBadges } from "@/lib/use-nav-badges";
 import { useClientMounted } from "@/lib/use-client-mounted";
@@ -161,63 +160,19 @@ function NavSection({
         const link = (
           <NavLink item={item} collapsed={collapsed} count={count} unseen={hasUnseen} />
         );
-        if (!collapsed && (item.icon === "chamber" || item.icon === "opencode")) {
+        if (
+          !collapsed &&
+          (item.icon === "chamber" || item.icon === "opencode" || item.icon === "claude")
+        ) {
           return (
             <div key={item.href} style={{ position: "relative" }}>
               {link}
-              <NavLaunchButton icon={item.icon} label={item.label} />
+              <NavLaunchMenu icon={item.icon} label={item.label} />
             </div>
           );
         }
         return <div key={item.href}>{link}</div>;
       })}
     </div>
-  );
-}
-
-function NavLaunchButton({ icon, label }: { icon: string; label: string }) {
-  const launchChamber = useLaunchChamberDesktop();
-  const launchOpenCode = useLaunchOpenCodeDesktop();
-  const launch = icon === "opencode" ? launchOpenCode : launchChamber;
-
-  const handleClick = (e: ReactMouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    void launch();
-  };
-  return (
-    <button
-      onClick={handleClick}
-      title={`Launch ${label} Desktop`}
-      aria-label={`Launch ${label} Desktop`}
-      style={{
-        position: "absolute",
-        right: 6,
-        top: "50%",
-        transform: "translateY(-50%)",
-        width: 20,
-        height: 20,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        borderRadius: 4,
-        border: "none",
-        background: "transparent",
-        color: "var(--text-subtle)",
-        cursor: "pointer",
-        padding: 0,
-        zIndex: 1,
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = "var(--accent-dim)";
-        e.currentTarget.style.color = "var(--text)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = "transparent";
-        e.currentTarget.style.color = "var(--text-subtle)";
-      }}
-    >
-      <Play size={11} strokeWidth={2} fill="currentColor" />
-    </button>
   );
 }

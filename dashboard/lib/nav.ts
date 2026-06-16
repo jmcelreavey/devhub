@@ -1,6 +1,6 @@
 export type NavGroup = "workspace" | "library" | "system";
 
-export type NavGate = "always" | "calendar" | "github" | "jira" | "datadog" | "bi" | "chamber" | "opencode";
+export type NavGate = "always" | "calendar" | "github" | "jira" | "datadog" | "bi" | "chamber" | "opencode" | "claude";
 
 export interface NavItem {
   href: string;
@@ -20,7 +20,7 @@ export const NAV_GROUPS: { id: NavGroup; label: string }[] = [
 ];
 
 /**
- * Single source of truth for the side nav — 11 destinations (2026-06 IA,
+ * Single source of truth for the side nav — 12 destinations (2026-06 IA,
  * see docs/codebase-review-2026-06-09.md). Merged concepts:
  *
  * - Work        = Tasks + Tickets (tabs on /work)
@@ -50,6 +50,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/status", label: "System", icon: "status", group: "system" },
   { href: "/chamber", label: "Chamber", icon: "chamber", group: "system", gate: "chamber" },
   { href: "/opencode", label: "OpenCode", icon: "opencode", group: "system", gate: "opencode" },
+  { href: "/claude", label: "Claude", icon: "claude", group: "system", gate: "claude", desktopOnly: true },
 ];
 
 /**
@@ -109,6 +110,7 @@ export interface SetupGateStatus {
   bi?: boolean;
   chamber?: boolean;
   opencode?: boolean;
+  claude?: boolean;
 }
 
 export function gateAllows(gate: NavGate | undefined, setup: SetupGateStatus | null): boolean {

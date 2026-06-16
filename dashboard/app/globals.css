@@ -19,8 +19,7 @@
     -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica,
     Arial, sans-serif;
   --font-mono:
-    "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas,
-    monospace;
+    "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
   /* Content measure — wide enough for tables, narrow enough to read */
   --page-max: 1240px;
@@ -863,13 +862,18 @@ a:focus-visible {
    ultrawide displays instead of smearing across them. */
 .hub {
   width: 100%;
-  max-width: 1480px;
+  max-width: 100%;
   min-width: 0;
-  margin: 0 auto;
+  margin: 0;
   padding: 28px;
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+.hub.today-home {
+  max-width: none;
+  margin-inline: 0;
 }
 
 @keyframes hub-enter {
@@ -2116,14 +2120,27 @@ a.hub-timeline-title:hover {
   pointer-events: none;
   opacity: 0;
   scale: 0.9;
+  /* display:none keeps the hidden tooltip out of layout so its off-screen
+     position (left: 100% + 8px) cannot inflate an ancestor's scroll width
+     and create a phantom horizontal scroll. allow-discrete + @starting-style
+     preserve the fade/scale in and out. */
+  display: none;
   transition:
     opacity 0.12s ease,
-    scale 0.2s var(--ease-spring);
+    scale 0.2s var(--ease-spring),
+    display 0.12s allow-discrete;
   z-index: 1000;
 }
 [data-tooltip]:hover::after {
+  display: block;
   opacity: 1;
   scale: 1;
+}
+@starting-style {
+  [data-tooltip]:hover::after {
+    opacity: 0;
+    scale: 0.9;
+  }
 }
 [data-tooltip-pos="bottom"]::after {
   left: 50%;
@@ -2271,13 +2288,23 @@ nextjs-portal {
   /* Reserve space for the fixed bottom navigation shelf so the last
      card/content row is not clipped behind it. */
   main {
-    padding-bottom: calc(var(--shelf-h, 56px) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(
+      var(--shelf-h, 56px) + env(safe-area-inset-bottom, 0px)
+    );
   }
 
   /* Card headers pack tabs + actions on one row; let them wrap so the
      "Save standup note" cluster stops overlapping the tab list. */
   .hub-card-head,
   .card-header {
+    flex-wrap: wrap;
+  }
+
+  /* Page headers (title + action cluster) overflow on phones when the
+     action side is busy (e.g. Status: IP badge + QR + Commit & sync +
+     Sync + refresh). Let the cluster drop to its own line instead of
+     forcing a horizontal scroll. */
+  .page-header {
     flex-wrap: wrap;
   }
 
@@ -2396,7 +2423,8 @@ body[data-density="compact"] .card {
 .hub-section-tab[data-active] {
   background: var(--bg-elevated);
   color: var(--text);
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 20%, transparent);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in oklab, var(--accent) 20%, transparent);
 }
 
 /* ── Count tick: number rolls up when it changes ── */
@@ -2636,7 +2664,8 @@ body[data-density="compact"] .card {
     translate: 0 -1px;
   }
   .btn-primary:not(:disabled):hover {
-    box-shadow: 0 5px 18px -6px color-mix(in oklab, var(--accent) 65%, transparent);
+    box-shadow: 0 5px 18px -6px
+      color-mix(in oklab, var(--accent) 65%, transparent);
   }
 }
 .btn:not(:disabled):active {
@@ -3139,7 +3168,7 @@ body[data-density="compact"] .card {
 
 /* ── Boot screen: one loading moment instead of six skeleton pops ── */
 .boot-screen {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 9600;
   display: flex;
@@ -3187,8 +3216,16 @@ body[data-density="compact"] .card {
     var(--accent) 350deg,
     transparent 360deg
   );
-  -webkit-mask: radial-gradient(closest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
-  mask: radial-gradient(closest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  -webkit-mask: radial-gradient(
+    closest-side,
+    transparent calc(100% - 3px),
+    #000 calc(100% - 2px)
+  );
+  mask: radial-gradient(
+    closest-side,
+    transparent calc(100% - 3px),
+    #000 calc(100% - 2px)
+  );
 }
 .boot-title {
   font-size: 17px;
@@ -3592,7 +3629,11 @@ body[data-density="compact"] .card {
   padding: 7px 8px;
   border: 0;
   border-radius: 6px;
-  background: color-mix(in oklab, var(--bg-elevated) 82%, var(--bg-surface) 18%);
+  background: color-mix(
+    in oklab,
+    var(--bg-elevated) 82%,
+    var(--bg-surface) 18%
+  );
   color: var(--text-muted);
   cursor: pointer;
   text-align: left;

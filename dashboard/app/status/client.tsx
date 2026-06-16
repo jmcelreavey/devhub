@@ -132,12 +132,12 @@ function ServiceCard({ info, onRestart, restarting }: {
   restarting: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between py-2">
-      <div className="flex items-center gap-2.5">
+    <div className="flex items-center justify-between gap-2 py-2">
+      <div className="flex min-w-0 items-center gap-2.5">
         <StatusDot ok={info.active} />
-        <span className="text-sm font-medium" style={{ color: "var(--text)" }}>{info.name}</span>
+        <span className="truncate text-sm font-medium" style={{ color: "var(--text)" }}>{info.name}</span>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         {info.uptime && (
           <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
             since {info.uptime}
