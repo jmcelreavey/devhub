@@ -65,7 +65,6 @@ export const LEGACY_NAV_ITEMS: NavItem[] = [
   { href: "/learnings", label: "Learnings", icon: "learnings", group: "library" },
   { href: "/diagrams", label: "Diagrams", icon: "diagrams", group: "library" },
   { href: "/docs", label: "Docs", icon: "docs", group: "library" },
-  { href: "/bookmarks", label: "Bookmarks", icon: "bookmarks", group: "library" },
   { href: "/shared", label: "Live links", icon: "shared", group: "library", gate: "github" },
   { href: "/ops", label: "Ops", icon: "ops", group: "system", gate: "bi" },
   { href: "/datadog", label: "Datadog", icon: "datadog", group: "system", gate: "datadog" },
@@ -90,7 +89,6 @@ export const SECTION_TABS: Record<string, SectionTab[]> = {
     { href: "/docs", label: "Docs" },
     { href: "/learnings", label: "Learnings" },
     { href: "/diagrams", label: "Diagrams" },
-    { href: "/bookmarks", label: "Bookmarks" },
     { href: "/shared", label: "Live links", gate: "github" },
   ],
   system: [
