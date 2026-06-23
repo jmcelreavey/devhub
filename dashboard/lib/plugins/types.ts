@@ -42,6 +42,55 @@ export interface DashboardContribution {
 }
 
 /**
+ * Tier-3 branding contribution. A plugin can whitelabel DevHub when it's enabled:
+ * contribute a theme palette + presets, seed the default theme/mode, swap fonts, the
+ * sidebar/boot logo, the OpenChamber theme, and the Electron app icon.
+ *
+ * Core never hard-codes any of this — the branding materialiser (`lib/plugins/branding.ts`)
+ * reads these fields from whichever enabled plugin declares them and writes machine-local
+ * generated files that `globals.css`, `theme-presets.ts`, the logo components and the
+ * Electron launcher consume. All defaults are *seeds*: the user can still flip the theme,
+ * mode, or logo afterwards.
+ */
+export interface BrandingContribution {
+  /**
+   * Plugin-root-relative CSS file holding the palette blocks
+   * (`:root[data-theme=...][data-theme-preset=<id>]`) and any `@font-face` declarations.
+   * Font `url(...)` references should point at `/fonts-plugin/<file>` (see `fonts`).
+   */
+  themeCss?: string;
+  /**
+   * Plugin-root-relative JSON: an array of `{ id, label, description, darkSwatch,
+   * lightSwatch }` preset descriptors merged into the theme-preset picker.
+   */
+  presets?: string;
+  /** Preset id seeded as the default when this plugin is enabled (must exist in `presets`). */
+  defaultPreset?: string;
+  /** Default colour mode seeded on first run: `"dark" | "light" | "system"`. */
+  defaultMode?: "dark" | "light" | "system";
+  /** Plugin-root-relative dir of font files copied into `dashboard/public/fonts-plugin/`. */
+  fonts?: string;
+  /** Default sidebar/boot brand mark (user can still change it in the IconPicker). */
+  logo?: {
+    /** Plugin-root-relative SVG/PNG, copied into `dashboard/public/` as the brand image. */
+    src: string;
+    /** Accessible label shown next to the mark, e.g. "ACME". */
+    label?: string;
+  };
+  /** OpenChamber whitelabel (applied only when OpenChamber is installed). */
+  openchamber?: {
+    /** Plugin-root-relative dir of OpenChamber theme JSON files. */
+    themes?: string;
+    /** Theme id seeded as OpenChamber's default dark theme. */
+    defaultDarkId?: string;
+    /** Theme id seeded as OpenChamber's default light theme. */
+    defaultLightId?: string;
+  };
+  /** Plugin-root-relative PNG (>=512px) used as the Electron app icon. */
+  electronIcon?: string;
+}
+
+/**
  * A CLI tool a plugin needs present on this machine. Checked in `preinstall` (see
  * `scripts/check-plugin-requirements.mjs`) so a plugin can mandate a tool (e.g. the BI
  * plugin requires `safe-chain`) without the core template forcing it on every forker.
@@ -64,6 +113,8 @@ export interface PluginManifest {
   contributes: Partial<Record<ContributeKind, string>>;
   /** Tier-2 dashboard module (pages, API, libs, components, nav). */
   dashboard?: DashboardContribution;
+  /** Tier-3 whitelabel: theme, fonts, logo, OpenChamber theme, Electron icon. */
+  branding?: BrandingContribution;
   /** Machine tooling this plugin needs (verified at install time, not by core). */
   requires?: { commands?: PluginRequiredCommand[] };
 }

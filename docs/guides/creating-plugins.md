@@ -138,6 +138,48 @@ never on a bare fork of the template:
 If the `command` isn't on `PATH`, `npm install` fails with your `install` hint. See
 [plugins.md › Requirements](../architecture/plugins.md#requirements).
 
+## 5c. (Optional) Whitelabel DevHub (tier-3 branding)
+
+Ship a theme, font, logo, OpenChamber theme and Electron icon that switch on when your
+plugin is enabled. Lay the assets out under `branding/` in your plugin root:
+
+```
+my-plugin/
+  branding/
+    theme.css          # :root[data-theme="dark|light"][data-theme-preset="<id>"] { … }
+    presets.json       # [{ "id": "<id>", "label", "description", "darkSwatch", "lightSwatch" }]
+    fonts/             # *.woff2/*.woff — reference as url("/fonts-plugin/<file>") in theme.css
+    logo.svg           # square brand mark (sidebar chip / boot screen)
+    oc/                # OpenChamber theme JSONs (metadata.id + metadata.variant)
+    icon.png           # >=512px Electron app icon
+```
+
+Then declare a `branding` block in `devhub-plugin.json`:
+
+```json
+"branding": {
+  "themeCss": "branding/theme.css",
+  "presets": "branding/presets.json",
+  "defaultPreset": "<id>",
+  "defaultMode": "system",
+  "fonts": "branding/fonts",
+  "logo": { "src": "branding/logo.svg", "label": "ACME" },
+  "openchamber": { "themes": "branding/oc", "defaultDarkId": "<id>-dark", "defaultLightId": "<id>-light" },
+  "electronIcon": "branding/icon.png"
+}
+```
+
+Every field is optional — contribute only a palette, or only a logo, if that's all you
+need. Your `theme.css` must define the palette variables for **both** `data-theme="dark"`
+and `data-theme="light"` under your `data-theme-preset` id (copy the variable list from any
+core block in `dashboard/app/globals.css`). Run `sync_plugins` (or just `npm run dev`) and
+the new preset, default, logo and OpenChamber theme appear. Everything is a *seed*: the
+theme picker, the dark/light/system toggle and the IconPicker still override it, and the
+user's saved choice is never clobbered. Disable the plugin and DevHub reverts to stock.
+
+See [plugins.md › Tier 3 — branding](../architecture/plugins.md#tier-3--branding-whitelabel)
+for how the generated files are wired in.
+
 ## 6. Publish
 
 ```bash

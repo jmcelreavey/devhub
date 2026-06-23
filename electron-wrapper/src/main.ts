@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, Menu, screen, session, shell, type MenuItemConstructorOptions } from "electron";
+import { app, BrowserWindow, dialog, Menu, nativeImage, screen, session, shell, type MenuItemConstructorOptions } from "electron";
 import { autoUpdater } from "electron-updater";
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
@@ -8,18 +8,48 @@ import type { LaunchScript } from "./shared";
 import { EXTRA_PATH_SEGMENTS, appendPath, nvmNodeBinDirs, prependPath } from "./path-fallbacks";
 import { loadSettings, saveSettings } from "./settings";
 
+/**
+ * Resolve npm — honoring the project's `.nvmrc` via nvm — and put that node's
+ * bin dir first on PATH for everything we spawn (dev + production).
+ *
+ * Why: nvm initializes in the user's shell rc (interactive), so a plain login
+ * shell or a GUI launch doesn't see it and falls back to a system/Homebrew node.
+ * That means the wrong node version AND a PATH missing the nvm bin dir — which
+ * is where globally-installed CLIs like `openchamber` live. We source `nvm.sh`
+ * explicitly (works non-interactively) and run `nvm use` from the dashboard dir
+ * so it reads `.nvmrc`, then prepend the resolved node's bin. After this,
+ * `node`, `npm`, and nvm-global tools all resolve from the pinned version.
+ */
 function resolveNpm(): string {
-  const shellBin = process.env.SHELL || "/bin/sh";
+  const shellBin = process.env.SHELL || "/bin/zsh";
+  let dashboardDir = "";
   try {
-    const resolved = require("node:child_process")
-      .execSync(`${shellBin} -l -c 'which npm'`, { encoding: "utf8", timeout: 5000 })
+    dashboardDir = path.join(projectRoot(), "dashboard");
+  } catch { /* project root not resolvable yet — fall back to nvm default */ }
+
+  // Single-quoted for the outer /bin/sh that execSync uses; no single quotes
+  // inside. `nvm use` (no arg) reads .nvmrc from cwd, set below.
+  const script =
+    'export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"; ' +
+    '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; ' +
+    "nvm use >/dev/null 2>&1; command -v npm";
+  try {
+    const out = require("node:child_process")
+      .execSync(`${shellBin} -lc '${script}'`, {
+        encoding: "utf8",
+        timeout: 8000,
+        ...(dashboardDir && fs.existsSync(dashboardDir) ? { cwd: dashboardDir } : {}),
+      })
       .trim();
-    if (resolved) {
+    const resolved = out.split(/\r?\n/).map((s: string) => s.trim()).filter(Boolean).pop();
+    if (resolved && fs.existsSync(resolved)) {
       prependPath(path.dirname(resolved));
       return resolved;
     }
   } catch { /* fall through */ }
-  for (const dir of EXTRA_PATH_SEGMENTS) {
+
+  // No nvm — search nvm bin dirs (honoring .nvmrc major) then common locations.
+  for (const dir of [...nvmNodeBinDirsForProject(dashboardDir), ...EXTRA_PATH_SEGMENTS]) {
     const candidate = path.join(dir, "npm");
     if (fs.existsSync(candidate)) {
       prependPath(dir);
@@ -27,6 +57,24 @@ function resolveNpm(): string {
     }
   }
   return "npm";
+}
+
+/** nvm node bin dirs, preferring the major pinned in `.nvmrc` when present. */
+function nvmNodeBinDirsForProject(dashboardDir: string): string[] {
+  const dirs = nvmNodeBinDirs();
+  let want = "";
+  for (const f of [path.join(dashboardDir, "..", ".nvmrc"), path.join(dashboardDir, ".nvmrc")]) {
+    try {
+      const v = fs.readFileSync(f, "utf8").trim().replace(/^v/, "");
+      if (v) { want = v.split(".")[0]; break; }
+    } catch { /* no .nvmrc here */ }
+  }
+  if (!want) return dirs;
+  const matches = dirs.filter((d) => {
+    const m = d.match(/\/v(\d+)\./);
+    return m && m[1] === want;
+  });
+  return [...matches, ...dirs];
 }
 
 /**
@@ -120,24 +168,37 @@ function openChamberEnv(): NodeJS.ProcessEnv {
 }
 
 function resolveOpenChamberCommand(): { cmd: string; argsPrefix: string[] } | null {
+  // OpenChamber is developer-managed: DevHub no longer vendors @openchamber/web.
+  // A GUI launch inherits a minimal PATH, so look beyond it — common bin dirs,
+  // nvm node bins, and finally the user's login shell. Returns null when nothing
+  // is found so the caller skips Chamber entirely.
   const configured = process.env.OPENCHAMBER_BIN?.trim();
-  if (configured) return { cmd: configured, argsPrefix: [] };
+  if (configured && fs.existsSync(configured)) return { cmd: configured, argsPrefix: [] };
 
-  // Prefer the repo's pinned copy over any global install (see openchamber-command.ts).
-  const local = path.join(projectRoot(), "dashboard", "node_modules", "@openchamber", "web", "bin", "cli.js");
-  if (fs.existsSync(local)) return { cmd: process.execPath, argsPrefix: [local] };
+  const which = process.platform === "win32" ? "where" : "which";
+  const onPath = spawnSync(which, ["openchamber"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  if (onPath.status === 0) {
+    const first = onPath.stdout.split(/\r?\n/).map((s) => s.trim()).find(Boolean);
+    if (first && fs.existsSync(first)) return { cmd: first, argsPrefix: [] };
+  }
 
-  const cleanEnv = openChamberEnv();
-  const npmPrefix = spawnSync(npmBin, ["prefix", "-g"], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-    env: cleanEnv,
-  });
-  const globalPrefix = npmPrefix.status === 0 ? npmPrefix.stdout.trim() : "";
-  const globalBin = globalPrefix
-    ? path.join(globalPrefix, process.platform === "win32" ? "openchamber.cmd" : "bin/openchamber")
-    : "";
-  if (globalBin && fs.existsSync(globalBin)) return { cmd: globalBin, argsPrefix: [] };
+  for (const dir of [...nvmNodeBinDirs(), ...EXTRA_PATH_SEGMENTS]) {
+    const candidate = path.join(dir, "openchamber");
+    if (fs.existsSync(candidate)) return { cmd: candidate, argsPrefix: [] };
+  }
+
+  const shellBin = process.env.SHELL || "/bin/sh";
+  try {
+    const resolved = spawnSync(shellBin, ["-lic", "command -v openchamber"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 5000,
+    });
+    if (resolved.status === 0) {
+      const last = resolved.stdout.split(/\r?\n/).map((s) => s.trim()).filter(Boolean).pop();
+      if (last && fs.existsSync(last)) return { cmd: last, argsPrefix: [] };
+    }
+  } catch { /* fall through */ }
 
   return null;
 }
@@ -201,10 +262,47 @@ function dashboardNodeModules(): string {
   return path.join(projectRoot(), "dashboard", "node_modules");
 }
 
-/** App icon, resolvable in both dev and packaged layouts. Undefined if missing. */
+/**
+ * App icon, resolvable in both dev and packaged layouts. Undefined if missing.
+ * A branding plugin can whitelabel it: `plugin-electron-icon.png` (written by the branding
+ * materialiser) wins over the default DevHub icon when present.
+ */
 function appIconPath(): string | undefined {
+  const publicDir = path.join(projectRoot(), "dashboard", "public");
+  const branded = path.join(publicDir, "plugin-electron-icon.png");
+  if (fs.existsSync(branded)) return branded;
+  const icon = path.join(publicDir, "icon-512.png");
+  return fs.existsSync(icon) ? icon : undefined;
+}
+
+/** The stock DevHub icon (never the whitelabel) — used when the user picks "DevHub default". */
+function devhubIconPath(): string | undefined {
   const icon = path.join(projectRoot(), "dashboard", "public", "icon-512.png");
   return fs.existsSync(icon) ? icon : undefined;
+}
+
+/**
+ * Best-effort: reflect the user's in-app logo choice on the *running* dock/window icon.
+ * Reads the dashboard's stored logo key straight from the page (no IPC bridge needed):
+ * when the user explicitly picks the stock DevHub mark ("__devhub__") we show the default
+ * icon, otherwise the active (whitelabel) app icon. The installed Finder icon is baked at
+ * build time and is unaffected. Never throws.
+ */
+async function syncDockIconFromRenderer(win: BrowserWindow): Promise<void> {
+  try {
+    const choice = (await win.webContents.executeJavaScript(
+      "(()=>{try{return localStorage.getItem('devhub-logo-icon')}catch(e){return null}})()",
+      true,
+    )) as string | null;
+    const iconFile = choice === "__devhub__" ? devhubIconPath() : appIconPath();
+    if (!iconFile) return;
+    const img = nativeImage.createFromPath(iconFile);
+    if (img.isEmpty()) return;
+    if (process.platform === "darwin" && app.dock) app.dock.setIcon(img);
+    win.setIcon(img);
+  } catch {
+    // best-effort only — never block the app over a cosmetic icon
+  }
 }
 
 function canConnect(port: number, host = "127.0.0.1"): Promise<boolean> {
@@ -314,6 +412,14 @@ function createLauncherWindow(): BrowserWindow {
     if (isInternalUrl(url)) return { action: "allow" };
     void shell.openExternal(url);
     return { action: "deny" };
+  });
+
+  // Reflect the user's in-app logo choice (DevHub default vs whitelabel) on the dock icon.
+  appWindow.webContents.on("did-finish-load", () => {
+    if (appWindow) void syncDockIconFromRenderer(appWindow);
+  });
+  appWindow.on("focus", () => {
+    if (appWindow) void syncDockIconFromRenderer(appWindow);
   });
 
   appWindow.webContents.on("will-navigate", (event, url) => {

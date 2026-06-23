@@ -41,3 +41,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# plugin branding — machine-local whitelabel assets copied by lib/plugins/branding.ts.
+# (The generated source files app/plugin-branding.generated.css and
+#  lib/plugin-branding.generated.ts are committed empty baselines kept machine-local via
+#  `git update-index --skip-worktree`, so they are intentionally NOT ignored here.)
+/public/fonts-plugin/
+/public/plugin-brand-logo.*
+/public/plugin-electron-icon.png

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { BRAND_BOTTLE_IMAGE_SRC } from "@/lib/brand-mark";
+import { BRAND_BOTTLE_IMAGE_SRC, BRAND_LABEL } from "@/lib/brand-mark";
 
 export type BootState = "loading" | "leaving" | "done";
 
@@ -103,7 +103,7 @@ export function TodayBootScreen({ state }: { state: BootState }) {
           className="boot-logo"
         />
       </div>
-      <div className="boot-title">DevHub</div>
+      {BRAND_LABEL && <div className="boot-title">{BRAND_LABEL}</div>}
       <div className="boot-line" aria-hidden>
         <span key={lineIdx} className="boot-line-text">
           {BOOT_LINES[lineIdx]}

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { Search } from "lucide-react";
-import { BRAND_BOTTLE_IMAGE_SRC } from "@/lib/brand-mark";
+import { BRAND_BOTTLE_IMAGE_SRC, BRAND_LABEL } from "@/lib/brand-mark";
 import { MobileNav } from "@/components/MobileNav";
 import { NotesBrowseButton } from "@/components/NotesBrowseButton";
 import { TasksBrowseButton } from "@/components/TasksBrowseButton";
@@ -40,9 +40,11 @@ export function MobileTopBar() {
             height={34}
           />
         </span>
-        <span className="font-semibold text-sm truncate" style={{ color: "var(--text)" }}>
-          DevHub
-        </span>
+        {BRAND_LABEL && (
+          <span className="font-semibold text-sm truncate" style={{ color: "var(--text)" }}>
+            {BRAND_LABEL}
+          </span>
+        )}
       </div>
       <div className="ml-auto flex items-center gap-1">
         <ContentSyncIndicator />

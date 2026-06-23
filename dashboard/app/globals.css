@@ -299,6 +299,24 @@
   box-sizing: border-box;
 }
 
+/* Smooth cross-fade of palette tokens when the user switches theme/preset/mode.
+   Scoped to a transient `.theme-transition` class set by applyThemeSelection (not on
+   first paint), and disabled for reduced-motion users. */
+@media (prefers-reduced-motion: no-preference) {
+  html.theme-transition,
+  html.theme-transition *,
+  html.theme-transition *::before,
+  html.theme-transition *::after {
+    transition:
+      background-color 280ms ease,
+      border-color 280ms ease,
+      color 280ms ease,
+      fill 280ms ease,
+      stroke 280ms ease,
+      box-shadow 280ms ease !important;
+  }
+}
+
 button {
   cursor: pointer;
 }
@@ -1258,8 +1276,8 @@ a:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 8px;
-  border-radius: 999px;
+  padding: 4px 9px;
+  border-radius: 8px;
   background: var(--bg-elevated);
   border: 1px solid var(--border-muted);
   color: var(--text-muted);
@@ -1582,89 +1600,6 @@ a:focus-visible {
   }
 }
 
-/* Hub timeline */
-.hub-timeline {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  position: relative;
-}
-.hub-timeline::before {
-  content: "";
-  position: absolute;
-  left: 78px;
-  top: 8px;
-  bottom: 8px;
-  width: 1px;
-  background: linear-gradient(
-    180deg,
-    transparent,
-    var(--border) 10%,
-    var(--border) 90%,
-    transparent
-  );
-}
-.hub-timeline-row {
-  display: grid;
-  grid-template-columns: 60px 18px 1fr auto;
-  gap: 12px;
-  align-items: center;
-  padding: 10px 4px;
-  position: relative;
-}
-.hub-timeline-time {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-subtle);
-  text-align: right;
-}
-.hub-timeline-marker {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  z-index: 1;
-}
-.hub-timeline-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.hub-timeline-title {
-  font-size: 13px;
-  color: var(--text);
-  text-decoration: none;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-a.hub-timeline-title:hover {
-  color: var(--accent);
-}
-.hub-timeline-meta {
-  font-size: 11px;
-  color: var(--text-subtle);
-}
-.hub-timeline-now {
-  font-size: 10px;
-  font-family: var(--font-mono);
-  color: var(--accent);
-  background: var(--accent-dim);
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-.hub-timeline-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 28px 16px;
-  text-align: center;
-}
-
 /* Animated progress bar inside the tasks card */
 .hub-progress {
   height: 4px;
@@ -1840,6 +1775,18 @@ a.hub-timeline-title:hover {
   gap: 4px;
 }
 
+/* Grouped action buttons (sync, quick actions). Single source of truth so
+   every top-bar cluster shares one look — see HubTopBar / ContentSyncIndicator. */
+.hub-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-muted);
+}
+
 /* ── Top-bar search box: looks like an input, opens the ⌘K palette ── */
 .hub-search {
   display: inline-flex;
@@ -1849,7 +1796,7 @@ a.hub-timeline-title:hover {
   margin-right: 10px;
   width: 180px;
   padding: 4px 8px 4px 9px;
-  border-radius: 7px;
+  border-radius: 8px;
   border: 1px solid var(--border-muted);
   background: var(--bg-elevated);
   color: var(--text-subtle);
@@ -2559,6 +2506,494 @@ body[data-density="compact"] .card {
   }
 }
 
+/* ── Morning briefing: bespoke digest layout ── */
+.briefing-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 15px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  /* Background is set inline per weather condition; this is the calm fallback. */
+  background: linear-gradient(135deg, var(--accent-dim), transparent 70%);
+  position: relative;
+  overflow: hidden;
+}
+.briefing-hero-emoji {
+  font-size: 34px;
+  line-height: 1;
+  filter: saturate(1.15);
+  flex: none;
+}
+.briefing-hero-temp {
+  font-size: 23px;
+  font-weight: 650;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.briefing-hero-vibe {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+.briefing-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 5px;
+}
+.briefing-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-overlay);
+  padding: 1px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.briefing-tip {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-dim);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+}
+.briefing-tip code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.85em;
+  background: var(--bg-overlay);
+  padding: 0.5px 4px;
+  border-radius: 4px;
+}
+.briefing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+/* Dashboard widget keeps the tighter, single-column rhythm. */
+.card .briefing-grid {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px 18px;
+}
+.briefing-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.briefing-hero-band {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 720px;
+}
+.briefing-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 13px 15px 11px;
+}
+.briefing-card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border-muted, var(--border));
+}
+.briefing-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text);
+  text-transform: uppercase;
+}
+.briefing-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.briefing-list .briefing-item {
+  font-size: 14px;
+  line-height: 1.4;
+  padding: 0;
+}
+.briefing-tagchip {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  color: var(--accent);
+  background: var(--accent-dim);
+  padding: 0 6px;
+  border-radius: 999px;
+  line-height: 16px;
+  vertical-align: 1px;
+}
+.briefing-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-muted, var(--border));
+}
+.briefing-panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+.briefing-count {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-subtle);
+  background: var(--bg-overlay);
+  padding: 0 6px;
+  border-radius: 999px;
+  line-height: 16px;
+}
+.briefing-link {
+  color: var(--text);
+  text-decoration: none;
+  transition: color 120ms ease;
+}
+.briefing-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.briefing-meta {
+  color: var(--text-subtle);
+  font-size: 11px;
+}
+.briefing-hero-icon {
+  flex: none;
+  color: var(--text);
+  opacity: 0.85;
+}
+.briefing-wx-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 8px;
+}
+.briefing-wx-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--accent-dim);
+}
+.briefing-wx-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.briefing-wx-icon {
+  color: var(--text);
+  opacity: 0.85;
+  margin: 1px 0;
+}
+.briefing-wx-temp {
+  font-size: 19px;
+  font-weight: 650;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.briefing-wx-lo {
+  color: var(--text-subtle);
+  font-weight: 500;
+}
+.briefing-wx-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.briefing-wx-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.briefing-more-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg-overlay);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+.briefing-more-btn:hover {
+  color: var(--accent);
+}
+.briefing-item {
+  padding: 1px 0;
+}
+.briefing-interest-links {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+.briefing-collapse-btn {
+  margin-left: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  color: var(--text-subtle);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+  background: transparent;
+  border: none;
+}
+.briefing-collapse-btn:hover {
+  background: var(--bg-overlay);
+  color: var(--text);
+}
+.briefing-ai-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  background: var(--accent-dim);
+  padding: 1px 5px;
+  border-radius: 999px;
+  margin-left: 4px;
+}
+.briefing-ai-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-dim);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+}
+.briefing-ai-summary svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+/* ── Briefing edit dialog ── */
+.briefing-edit-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-muted);
+  border-radius: 999px;
+  padding: 2px 4px 2px 8px;
+  color: var(--text);
+}
+.briefing-edit-chip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  color: var(--text-subtle);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  transition: color 120ms ease;
+}
+.briefing-edit-chip button:hover {
+  color: var(--danger, #e53e3e);
+}
+.briefing-edit-chip-input {
+  font-size: 11px !important;
+  padding: 2px 8px !important;
+  width: 140px;
+  height: 24px;
+}
+.briefing-edit-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-muted);
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
+  user-select: none;
+}
+.briefing-edit-toggle[data-checked] {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+.briefing-edit-toggle-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.briefing-edit-toggle-desc {
+  font-size: 10px;
+  color: var(--text-subtle);
+  line-height: 1.2;
+}
+.briefing-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 48px 16px;
+  text-align: center;
+}
+
+/* ── Briefing AI chat customizer ── */
+.briefing-chat-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.briefing-chat-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-muted);
+}
+.briefing-chat-starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.briefing-chat-starter {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  border: 1px solid var(--border-muted);
+  border-radius: 999px;
+  background: var(--bg-overlay);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 5px 9px;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    color 120ms ease,
+    background 120ms ease;
+}
+.briefing-chat-starter:hover {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--accent-dim);
+}
+.briefing-chat-starter:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.briefing-chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-height: 260px;
+  max-height: 42vh;
+  overflow-y: auto;
+  padding: 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-muted);
+  background: var(--bg-surface);
+}
+.briefing-chat-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+.briefing-chat-row.is-user {
+  flex-direction: row-reverse;
+}
+.briefing-chat-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--bg-overlay);
+  color: var(--text-subtle);
+}
+.briefing-chat-row.is-ai .briefing-chat-avatar {
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+.briefing-chat-bubble {
+  max-width: min(78%, 520px);
+  padding: 8px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--border-muted);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.briefing-chat-row.is-user .briefing-chat-bubble {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+.briefing-chat-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+.briefing-chat-input {
+  min-height: 72px;
+  resize: vertical;
+  font-size: 13px !important;
+}
+.briefing-chat-send {
+  height: 34px;
+  font-size: 12px;
+}
+@media (max-width: 640px) {
+  .briefing-chat-input-row {
+    grid-template-columns: 1fr;
+  }
+  .briefing-chat-send {
+    justify-content: center;
+    width: 100%;
+  }
+  .briefing-chat-bubble {
+    max-width: 88%;
+  }
+}
+
 /* ── Route entrance (app/template.tsx) — one pass per navigation ──
    height: 100% keeps full-height pages (notes, chamber) working; long
    pages still scroll because `main` counts overflowing descendants. */
@@ -2899,50 +3334,40 @@ body[data-density="compact"] .card {
 }
 
 /* ── Staggered list entrance: rows cascade in 30ms apart, one pass ──
-   Apply .stagger-children to any list container. Timeline rows get it
-   for free. `backwards` only hides rows during their delay; if the
-   animation never runs the base state is fully visible. ── */
+   Apply .stagger-children to any list container. `backwards` only hides
+   rows during their delay; if the animation never runs the base state is
+   fully visible. ── */
 @media (prefers-reduced-motion: no-preference) {
   /* :not(.skeleton) — shimmer loops own `animation` on .skeleton; the
      stagger entrance must not stomp it. Wrap shimmers to stagger them. */
-  .stagger-children > :not(.skeleton),
-  .hub-timeline > * {
+  .stagger-children > :not(.skeleton) {
     animation: hub-enter 280ms var(--ease-swift) backwards;
   }
-  .stagger-children > :nth-child(1),
-  .hub-timeline > :nth-child(1) {
+  .stagger-children > :nth-child(1) {
     animation-delay: 0ms;
   }
-  .stagger-children > :nth-child(2),
-  .hub-timeline > :nth-child(2) {
+  .stagger-children > :nth-child(2) {
     animation-delay: 30ms;
   }
-  .stagger-children > :nth-child(3),
-  .hub-timeline > :nth-child(3) {
+  .stagger-children > :nth-child(3) {
     animation-delay: 60ms;
   }
-  .stagger-children > :nth-child(4),
-  .hub-timeline > :nth-child(4) {
+  .stagger-children > :nth-child(4) {
     animation-delay: 90ms;
   }
-  .stagger-children > :nth-child(5),
-  .hub-timeline > :nth-child(5) {
+  .stagger-children > :nth-child(5) {
     animation-delay: 120ms;
   }
-  .stagger-children > :nth-child(6),
-  .hub-timeline > :nth-child(6) {
+  .stagger-children > :nth-child(6) {
     animation-delay: 150ms;
   }
-  .stagger-children > :nth-child(7),
-  .hub-timeline > :nth-child(7) {
+  .stagger-children > :nth-child(7) {
     animation-delay: 180ms;
   }
-  .stagger-children > :nth-child(8),
-  .hub-timeline > :nth-child(8) {
+  .stagger-children > :nth-child(8) {
     animation-delay: 210ms;
   }
-  .stagger-children > :nth-child(n + 9),
-  .hub-timeline > :nth-child(n + 9) {
+  .stagger-children > :nth-child(n + 9) {
     animation-delay: 240ms;
   }
 }
@@ -3680,4 +4105,25 @@ body[data-density="compact"] .card {
 }
 .task-toggle:active svg {
   scale: 0.85;
+}
+
+/* ── Tactile press feedback ── a subtle scale-down on press for buttons and nav.
+   Uses the independent `scale` property so it composes with any existing
+   translate/transform (e.g. nav-item's hover slide). The `transition: scale` only
+   lands on bare button/[role=button] elements — class-styled buttons keep their own
+   transitions untouched (more specific), so nothing is clobbered. Opt out for
+   reduced-motion. */
+@media (prefers-reduced-motion: no-preference) {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    transition: scale 90ms var(--ease-swift);
+  }
+  button:not(:disabled):active,
+  [role="button"]:not([aria-disabled="true"]):active,
+  a.nav-item:active,
+  .nav-item:active,
+  .hub-icon-btn:active,
+  .btn:active {
+    scale: 0.96;
+  }
 }

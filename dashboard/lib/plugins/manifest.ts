@@ -25,6 +25,32 @@ const dashboardSchema = z
   })
   .strict();
 
+const brandingSchema = z
+  .object({
+    themeCss: z.string().min(1).optional(),
+    presets: z.string().min(1).optional(),
+    defaultPreset: z.string().min(1).optional(),
+    defaultMode: z.enum(["dark", "light", "system"]).optional(),
+    fonts: z.string().min(1).optional(),
+    logo: z
+      .object({
+        src: z.string().min(1),
+        label: z.string().min(1).optional(),
+      })
+      .strict()
+      .optional(),
+    openchamber: z
+      .object({
+        themes: z.string().min(1).optional(),
+        defaultDarkId: z.string().min(1).optional(),
+        defaultLightId: z.string().min(1).optional(),
+      })
+      .strict()
+      .optional(),
+    electronIcon: z.string().min(1).optional(),
+  })
+  .strict();
+
 const requiresSchema = z
   .object({
     commands: z
@@ -48,6 +74,7 @@ const manifestSchema = z
     navGate: z.string().min(1).optional(),
     contributes: contributesSchema,
     dashboard: dashboardSchema.optional(),
+    branding: brandingSchema.optional(),
     requires: requiresSchema.optional(),
   })
   .strict();

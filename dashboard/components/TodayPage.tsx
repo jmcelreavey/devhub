@@ -26,7 +26,6 @@ import {
   ArrowLeft,
   ListTodo,
   FileText,
-  Clock,
   Plus,
   Sunrise,
   Sun,
@@ -55,7 +54,6 @@ import {
 } from "@/lib/today-workspace-storage";
 import { WelcomeCard, useWelcomeCardVisible } from "@/components/WelcomeCard";
 import { TodayBootScreen, useTodayBoot } from "@/components/TodayBootScreen";
-import { HubTimeline } from "@/components/HubTimeline";
 import { TodayDashboardGrid } from "@/components/TodayDashboardGrid";
 import { MorningBriefingWidget } from "@/components/MorningBriefingWidget";
 import { LayoutPresetsButton } from "@/components/LayoutPresets";
@@ -118,7 +116,7 @@ function isNoteEffectivelyEmpty(blocks: DevHubPartialBlock[]): boolean {
   return blocksPlainText(blocks).trim().length === 0;
 }
 
-type Tab = "tasks" | "notes" | "timeline";
+type Tab = "tasks" | "notes";
 
 interface TaskCount {
   tasks?: { done?: boolean; abandonedAt?: string; movedAt?: string; text?: string }[];
@@ -330,8 +328,7 @@ export function TodayPage() {
       if (tasksTotal > 0) return `${tasksDone}/${tasksTotal} tasks done`;
       return "Tasks";
     }
-    if (tab === "notes") return "Notes";
-    return "Timeline";
+    return "Notes";
   }, [tab, tasksTotal, tasksDone]);
 
   const calendarCollapsedSummary = useMemo(() => {
@@ -595,7 +592,7 @@ export function TodayPage() {
             <section
               className="hub-card"
               data-collapsed={mainCollapsed ? "true" : undefined}
-              aria-label={tab === "tasks" ? "Today's tasks" : tab === "notes" ? "Today's notes" : "Timeline"}
+              aria-label={tab === "tasks" ? "Today's tasks" : "Today's notes"}
             >
               <header className="hub-card-head today-grid-drag-handle">
                 <div className="hub-tabs" role="tablist" aria-label="Today view">
@@ -610,12 +607,6 @@ export function TodayPage() {
                     onClick={() => setTab("notes")}
                     icon={<FileText size={13} aria-hidden />}
                     label="Notes"
-                  />
-                  <TabButton
-                    active={tab === "timeline"}
-                    onClick={() => setTab("timeline")}
-                    icon={<Clock size={13} aria-hidden />}
-                    label="Timeline"
                   />
                 </div>
                 <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
@@ -662,7 +653,7 @@ export function TodayPage() {
                   </div>
                   <TodayCollapseButton
                     collapsed={mainCollapsed}
-                    label="Tasks, notes and timeline"
+                    label="Tasks and notes"
                     onToggle={() => setMainCollapsed((c) => !c)}
                   />
                 </div>
@@ -671,7 +662,6 @@ export function TodayPage() {
               {!mainCollapsed ? (
                 <div key={tab} className="hub-card-body fade-rise">
                   {tab === "tasks" && <TaskList />}
-                  {tab === "timeline" && <HubTimeline />}
                   {tab === "notes" &&
                     (blocks ? (
                       <BlockNoteEditor

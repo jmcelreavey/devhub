@@ -18,6 +18,7 @@ one hard-coded upstream, any number of registered plugins merge alongside core, 
 | ---- | ----------- | ------ |
 | 1 — file-copy assets | `skills/`, `agents/`, `mcp/` | **implemented** |
 | 2 — dashboard module | pages, API routes, libs, components | **implemented** |
+| 3 — branding (whitelabel) | theme, fonts, logo, OpenChamber theme, Electron icon | **implemented** |
 
 Docs and persona-modes are not yet plugin-aware (different delivery mechanisms).
 
@@ -47,6 +48,57 @@ Nav: a plugin's pages still need a sidebar entry. Today the gated entry (e.g. `/
 `gate: "bi"`) lives as a stub in core `lib/nav.ts`; the `bi` gate is computed by a
 dependency-free `lib/bi-presence.ts` detector so core holds no BI feature code. (Generic
 plugin-contributed nav is a possible future enhancement.)
+
+## Tier 3 — branding (whitelabel)
+
+A plugin can **whitelabel** DevHub when it's enabled: contribute a theme palette + presets,
+seed the default theme/mode, swap the UI font, the sidebar/boot logo, the OpenChamber
+theme, and the Electron app icon. Nothing here is plugin-specific in core — any plugin can
+do it by adding a `branding` block to its manifest:
+
+```json
+"branding": {
+  "themeCss": "branding/theme.css",
+  "presets": "branding/presets.json",
+  "defaultPreset": "acme",
+  "defaultMode": "system",
+  "fonts": "branding/fonts",
+  "logo": { "src": "branding/logo.svg", "label": "ACME" },
+  "openchamber": { "themes": "branding/oc", "defaultDarkId": "acme-dark", "defaultLightId": "acme-light" },
+  "electronIcon": "branding/icon.png"
+}
+```
+
+The **branding materialiser** (`dashboard/lib/plugins/branding.ts`, run alongside the
+dashboard materialiser via `sync_plugins` + `postinstall`) reads the **first enabled
+plugin** that declares `branding` and writes machine-local generated files:
+
+| Target | Source | Consumed by |
+| ------ | ------ | ----------- |
+| `app/plugin-branding.generated.css` | `themeCss` (verbatim) + copied fonts | imported by `app/layout.tsx` after `globals.css` |
+| `lib/plugin-branding.generated.ts` | `presets`, `defaultPreset`, `defaultMode`, `logo` | `lib/theme-presets.ts`, `lib/brand-mark.ts` |
+| `public/fonts-plugin/*` | `fonts` dir | `@font-face url("/fonts-plugin/…")` in your `themeCss` |
+| `public/plugin-brand-logo.*` | `logo.src` | sidebar chip, mobile bar, boot screen |
+| `public/plugin-electron-icon.png` | `electronIcon` | the Electron launcher (`electron-wrapper`) |
+| `~/.config/openchamber/{themes,settings.json}` | `openchamber` | OpenChamber itself (only if installed) |
+
+Key properties:
+
+- **Seeds, never forces.** `defaultPreset` / `defaultMode` / `logo` only set the out-of-box
+  default. The theme picker, the dark/light/system toggle, and the IconPicker still let the
+  user override, and their choice (in `localStorage`, or OpenChamber's `settings.json`) is
+  never overwritten.
+- **No core clobbering.** The two generated source files are committed as *empty baselines*
+  (so a fresh clone and CI build work with no plugin), and the materialiser rewrites them
+  locally then `git update-index --skip-worktree` so the whitelabel never shows as repo
+  churn. Copied `public/` assets are git-ignored.
+- **OpenChamber is optional.** Its theme is applied only when an OpenChamber data dir
+  exists on the machine; otherwise that step is skipped.
+- **One brander at a time.** If several enabled plugins declare `branding`, the first wins
+  and a warning is logged. Disabling the brander restores the empty baseline and prunes the
+  copied assets.
+
+See `docs/guides/creating-plugins.md` for a step-by-step branding walkthrough.
 
 ## Manifest
 

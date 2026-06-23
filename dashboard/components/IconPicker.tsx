@@ -11,7 +11,13 @@ import {
   type SVGProps,
 } from "react";
 import Image from "next/image";
-import { BRAND_BOTTLE_IMAGE_SRC } from "@/lib/brand-mark";
+import {
+  BRAND_BOTTLE_IMAGE_SRC,
+  BRAND_LABEL,
+  DEVHUB_BRAND_IMAGE,
+  DEVHUB_BRAND_LABEL,
+  HAS_PLUGIN_BRAND,
+} from "@/lib/brand-mark";
 import { getSeasonalEntry, getCurrentSeasonalEntries } from "@/lib/seasonal";
 import {
   decodePinnedGlyph,
@@ -272,7 +278,17 @@ const SEASONAL_VALUE = "__seasonal__";
  * the Reset button restores this value.
  */
 const BOTTLE_VALUE = "__bottle__";
+/**
+ * Sentinel for the stock DevHub bottle mark. Only meaningful when a branding plugin is
+ * active: BOTTLE_VALUE then renders the whitelabel logo (the out-of-box default), and
+ * DEVHUB_VALUE lets the user explicitly switch back to the original DevHub mark.
+ */
+const DEVHUB_VALUE = "__devhub__";
 const ICON_EVENT = "devhub:icon-change";
+
+function isDevhubStored(stored: string): boolean {
+  return stored === DEVHUB_VALUE;
+}
 
 let clientMounted = false;
 
@@ -384,7 +400,7 @@ export function useIconName(): string {
  * and falls back to the default icon outside of any seasonal window.
  */
 export function resolveIconName(stored: string, now: Date = new Date()): string {
-  if (isBottleStored(stored)) return DEFAULT_ICON;
+  if (isBottleStored(stored) || isDevhubStored(stored)) return DEFAULT_ICON;
   if (isPinnedGlyphStored(stored)) {
     const g = decodePinnedGlyph(stored);
     return g?.icon ?? DEFAULT_ICON;
@@ -413,11 +429,12 @@ export function IconPicker({
   const selected = hydrated ? storedSelected : BOTTLE_VALUE;
   const renderCollapsed = hydrated ? sidebarCollapsed : false;
   const bottleSelected = isBottleStored(selected);
+  const devhubSelected = isDevhubStored(selected);
   const activeSeasonal = selected === SEASONAL_VALUE ? getSeasonalEntry() : null;
   const isFullSeasonalIcon = Boolean(
     seasonalEntryUsesFullColorGlyph(activeSeasonal) || isFullColorGlyphStored(selected),
   );
-  const isFullColorBrandIcon = isFullSeasonalIcon || bottleSelected;
+  const isFullColorBrandIcon = isFullSeasonalIcon || bottleSelected || devhubSelected;
 
   const pick = useCallback(
     (name: string) => {
@@ -516,6 +533,45 @@ export function IconPicker({
               boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
             }}
           >
+            {/* Brand section — only when a plugin whitelabels the logo, so the user can
+                flip between the brand mark and the stock DevHub mark. */}
+            {!search && HAS_PLUGIN_BRAND && (
+              <div style={{ borderBottom: "1px solid var(--border)" }}>
+                <div style={{ padding: "8px 12px 4px" }}>
+                  <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Brand
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: "8px", padding: "4px 12px 10px" }}>
+                  {[
+                    { value: BOTTLE_VALUE, src: BRAND_BOTTLE_IMAGE_SRC, label: BRAND_LABEL || "Brand", active: bottleSelected },
+                    { value: DEVHUB_VALUE, src: DEVHUB_BRAND_IMAGE, label: DEVHUB_BRAND_LABEL, active: devhubSelected },
+                  ].map((b) => (
+                    <button
+                      key={b.value}
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); pick(b.value); }}
+                      title={`Use the ${b.label} logo`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        padding: "6px 10px 6px 6px",
+                        borderRadius: "8px",
+                        border: b.active ? "2px solid var(--accent)" : "2px solid transparent",
+                        background: b.active ? "var(--accent-dim)" : "var(--bg-surface)",
+                        color: "var(--text)",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <Image src={b.src} alt="" aria-hidden unoptimized width={28} height={28} style={{ width: 28, height: 28, borderRadius: 6, display: "block" }} />
+                      <span style={{ fontSize: "12px", fontWeight: 500 }}>{b.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* Seasonal section */}
             {!search && (
               <div style={{ borderBottom: "1px solid var(--border)" }}>
@@ -774,14 +830,17 @@ export function LogoIcon({
 
   const glyphProps = { markPixels: glyphMarkPx, emojiPixels: glyphEmojiPx };
 
-  if (isBottleStored(stored)) {
+  if (isBottleStored(stored) || isDevhubStored(stored)) {
     const bottlePx =
       lucidePx <= BRAND_LUCIDE_COLLAPSED_PX
         ? BRAND_BOTTLE_MARK_COLLAPSED_PX
         : BRAND_BOTTLE_MARK_EXPANDED_PX;
+    // BOTTLE_VALUE = the active brand (whitelabel logo if a plugin set one); DEVHUB_VALUE
+    // = always the stock DevHub mark.
+    const brandSrc = isDevhubStored(stored) ? DEVHUB_BRAND_IMAGE : BRAND_BOTTLE_IMAGE_SRC;
     return (
       <Image
-        src={BRAND_BOTTLE_IMAGE_SRC}
+        src={brandSrc}
         alt=""
         aria-hidden
         unoptimized

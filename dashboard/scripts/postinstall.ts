@@ -11,6 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 import process from "node:process";
+import { materializeBranding } from "../lib/plugins/branding";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(scriptDir, "../..");
@@ -143,5 +144,12 @@ if (fs.existsSync(hooksDir)) {
 // --- 4. OpenChamber theme ---
 installOpenChamberThemes();
 setDefaultOpenChamerTheme();
+
+// --- 5. Plugin branding (whitelabel theme/logo/fonts/OpenChamber, if a plugin opts in) ---
+try {
+  materializeBranding({ repoRoot: REPO_ROOT, emit: log });
+} catch (e) {
+  warn(`Plugin branding skipped: ${e instanceof Error ? e.message : String(e)}`);
+}
 
 log("Done");

@@ -7,7 +7,6 @@ import {
   applyThemeSelection,
   getThemeSelectionFromDom,
   getServerThemeSelectionSnapshot,
-  sanitizeMode,
   subscribeThemeSelection,
 } from "@/lib/theme-presets";
 
@@ -17,7 +16,9 @@ export function AccentPicker() {
     getThemeSelectionFromDom,
     getServerThemeSelectionSnapshot,
   );
-  const activeMode = sanitizeMode(selection.mode);
+  // Display swatches/labels for the currently-applied mode, but preserve the user's mode
+  // *setting* (including "system") when they pick a different palette.
+  const activeMode = selection.resolvedMode;
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -37,8 +38,8 @@ export function AccentPicker() {
     };
   }, [open]);
 
-  function selectPreset(preset: (typeof THEME_PRESETS)[number]["id"]) {
-    applyThemeSelection({ mode: activeMode, preset });
+  function selectPreset(preset: string) {
+    applyThemeSelection({ mode: selection.mode, preset });
     setOpen(false);
   }
 

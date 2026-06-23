@@ -13,6 +13,7 @@ import {
   type SetupGateStatus,
 } from "@/lib/nav";
 import { IconPicker } from "./IconPicker";
+import { BRAND_LABEL } from "@/lib/brand-mark";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useLive } from "@/lib/use-fetch";
 import { useNavBadges, countForItem, unseenForItem, type NavBadges } from "@/lib/use-nav-badges";
@@ -82,12 +83,12 @@ export function CollapsibleSidebar() {
       {/* Brand */}
       <div className="flex items-center px-3 py-4 shrink-0 gap-1">
         <IconPicker sidebarCollapsed={collapsed} />
-        {!collapsed && (
+        {!collapsed && BRAND_LABEL && (
           <span
             className="font-semibold text-sm truncate"
             style={{ color: "var(--text)", letterSpacing: "-0.01em" }}
           >
-            DevHub
+            {BRAND_LABEL}
           </span>
         )}
       </div>

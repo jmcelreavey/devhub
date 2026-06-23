@@ -7,6 +7,7 @@
     "start": "npm run build && electron .",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "npm run clean && tsc -p tsconfig.json",
+    "predist": "node scripts/resolve-brand-icon.mjs",
     "dist": "npm run build && electron-builder"
   },
   "author": "John McElreavey <j.mcelreavey@gmail.com>",
@@ -31,7 +32,7 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
-      "icon": "../dashboard/public/icon-512.png",
+      "icon": "build/icon.png",
       "target": [
         {
           "target": "dmg",
@@ -51,7 +52,7 @@
       "title": "${productName} ${version}"
     },
     "linux": {
-      "icon": "../dashboard/public/icon-512.png",
+      "icon": "build/icon.png",
       "category": "Development",
       "target": [
         "deb",
