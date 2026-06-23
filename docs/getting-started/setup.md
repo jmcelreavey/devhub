@@ -60,9 +60,9 @@ Secrets should live in local environment configuration or a secret manager. Do n
 
 The shared configuration files should use environment variable placeholders instead of raw secrets.
 
-### Notes AI (not on this page)
+### z.ai Features (not on this page)
 
-In-editor AI uses `Z_AI_API_KEY` in `dashboard/.env.local`. Copy the example lines from `dashboard/.env.example`, restart after changes, and see [Environment Variables](../reference/environment-variables.md#notes-in-editor-ai-optional).
+Notes AI and Repo Learning generated artifacts use `Z_AI_API_KEY` in `dashboard/.env.local`. Copy the example lines from `dashboard/.env.example`, restart after changes, and see [Environment Variables](../reference/environment-variables.md#notes-and-repo-learning-ai-optional).
 
 ## After Changing Setup
 

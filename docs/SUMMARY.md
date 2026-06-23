@@ -37,6 +37,7 @@
 - [Skills](guides/skills.md)
 - [Shared Agents](guides/agents.md)
 - [OpenCode and OpenChamber](guides/opencode-and-chamber.md)
+- [Repo Learning](guides/repo-learning.md)
 - [Command Palette](guides/command-palette.md)
 - [Sharing](guides/sharing.md)
 - [Scheduled Jobs](guides/scheduled-jobs.md)
@@ -52,5 +53,4 @@
 - [Platform Requirements](PLATFORM_REQUIREMENTS.md)
 - [Memory Options](MEMORY_OPTIONS.md)
 - [Token Budget](TOKEN_BUDGET.md)
-- [Migration](MIGRATION.md)
 - [Backlog](reference/backlog.md)

@@ -49,6 +49,7 @@ These docs are written for day-to-day users and future contributors. They explai
 | [Skills](guides/skills.md)                   | Creating, syncing, and collecting shared skills |
 | [Shared Agents](guides/agents.md)            | Subagent catalog, sync, and collect from local tools |
 | [OpenCode and OpenChamber](guides/opencode-and-chamber.md) | Local ports, shared OpenCode, config sync, 1Password |
+| [Repo Learning](guides/repo-learning.md)     | Onboarding briefs, tutor, and NotebookLM packs for local repos |
 | [Sharing](guides/sharing.md)                 | Temporary note/doc links via secret GitHub Gists |
 | [Command Palette](guides/command-palette.md) | Keyboard shortcuts and fast navigation          |
 | [Scheduled Jobs](guides/scheduled-jobs.md)   | Running safe maintenance actions on a schedule  |
@@ -66,5 +67,4 @@ These docs are written for day-to-day users and future contributors. They explai
 | [Platform Requirements](PLATFORM_REQUIREMENTS.md)           | Supported platforms and capabilities              |
 | [Memory Options](MEMORY_OPTIONS.md)                         | Why DevHub uses git-backed notes                  |
 | [Token Budget](TOKEN_BUDGET.md)                             | How persona and memory stay lightweight           |
-| [Migration](MIGRATION.md)                                   | Moving from older DevHub versions                 |
 | [Backlog](reference/backlog.md)                             | Condensed quality backlog and future improvements |

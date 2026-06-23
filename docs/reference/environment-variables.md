@@ -47,9 +47,9 @@ Most values live in the dashboard's local environment file and can be edited fro
 | `DATADOG_LINK_TEAM_ALERTS`  | Custom team alerts link               |
 | `DATADOG_LINK_EVENTS_TODAY` | Custom today's events link            |
 
-## Notes In-Editor AI (Optional)
+## Notes and Repo Learning AI (Optional)
 
-BlockNote AI in the notes editor calls `POST /api/notes/ai/chat`, which streams through the [z.ai](https://z.ai) OpenAI-compatible **Coding plan** API. Configure in `dashboard/.env.local` only — not on `/setup`.
+BlockNote AI in the notes editor and Repo Learning generated artifacts use the [z.ai](https://z.ai) OpenAI-compatible **Coding plan** API. Configure these in `dashboard/.env.local` only - not on `/setup`.
 
 | Variable        | Required | Default                               | Purpose                                   |
 | --------------- | -------- | ------------------------------------- | ----------------------------------------- |
@@ -57,7 +57,9 @@ BlockNote AI in the notes editor calls `POST /api/notes/ai/chat`, which streams 
 | `Z_AI_BASE_URL` | No       | `https://api.z.ai/api/coding/paas/v4` | Coding plan API base (no trailing slash)  |
 | `Z_AI_MODEL`    | No       | `glm-5-turbo`                         | Model id sent in chat completion requests |
 
-Copy the commented block from `dashboard/.env.example` into `.env.local`, set `Z_AI_API_KEY`, and restart the dev server. Without a key, the editor still works; AI menu actions return HTTP 503 with a short configuration message.
+Copy the commented block from `dashboard/.env.example` into `.env.local`, set `Z_AI_API_KEY`, and restart the dev server.
+
+Without a key, notes still work and Repo Learning still shows deterministic repo facts. Notes AI menu actions and Repo Learning generated features return HTTP 503 with a short configuration message.
 
 ## Skills (ai-tools merge)
 
@@ -122,7 +124,7 @@ Suggested `devhub` item fields for shared local secrets:
 | `DATADOG_APPLICATION_KEY` | Datadog integration             |
 | `DATADOG_APP_KEY`         | Shell/Datadog alias             |
 | `DD_APPLICATION_KEY`      | Datadog alias                   |
-| `Z_AI_API_KEY`            | Notes in-editor AI              |
+| `Z_AI_API_KEY`            | Notes and Repo Learning AI      |
 | `OPENAI_API_KEY`          | Shell/OpenCode-compatible tools |
 | `NOTION_API_KEY`          | Shell Notion workflows          |
 | `ITERABLE_API_KEY`        | Shell Iterable workflows        |

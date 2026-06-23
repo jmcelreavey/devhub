@@ -81,7 +81,7 @@ The notes **BlockNote** editor can call z.ai through BlockNote’s AI extension:
 - Select text → **AI** (stars) on the formatting toolbar.
 - Type **`/ai`** in the slash menu.
 
-Configuration is env-only — see [Environment Variables](../reference/environment-variables.md#notes-in-editor-ai-optional) (`Z_AI_API_KEY`, `Z_AI_BASE_URL`, `Z_AI_MODEL`). Example placeholders are in `dashboard/.env.example`. Do not commit real API keys.
+Configuration is env-only - see [Environment Variables](../reference/environment-variables.md#notes-and-repo-learning-ai-optional) (`Z_AI_API_KEY`, `Z_AI_BASE_URL`, `Z_AI_MODEL`). Example placeholders are in `dashboard/.env.example`. Do not commit real API keys.
 
 **Notes work fully without these variables.** When `Z_AI_API_KEY` is unset, the editor omits AI toolbar, `/ai`, and related UI. `GET /api/notes/ai/status` reports `{ configured: false }`.
 

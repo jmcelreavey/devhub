@@ -22,7 +22,7 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | Collections | Master checklist CRUD under repo `collections/` (legacy route name); `GET …/linked-label-drift?itemId=` and `POST …/sync-linked-labels` propagate master item labels into linked note blocks |
 | OpenCode  | Read/update shared `opencode.json`; secret env hints |
 | Persona   | View shared and local persona configuration          |
-| Repos     | Repository discovery and actions                     |
+| Repos     | Repository discovery, actions, and Repo Learning artifacts |
 | Scripts   | Run allowlisted maintenance scripts                  |
 | Search    | Full-text search (`?q=` required; default notes, `?vault=docs` for docs) |
 | Setup     | Read and save setup configuration                    |

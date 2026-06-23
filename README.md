@@ -194,7 +194,7 @@ Calendar setup steps:
 | `DATADOG_EVENTS_QUERY_ONCALL` | No                       | Events query for **@oncall-dad** slice (default `source:alert "@oncall-dad"`)                                                                 |
 | `DATADOG_EVENTS_QUERY_TEAM`   | No                       | Events query for **@slack-dad-team-alerts** slice (default `source:alert "@slack-dad-team-alerts"`)                                           |
 
-**Notes in-editor AI (optional):** not on `/setup` — add to `dashboard/.env.local` from `dashboard/.env.example`:
+**Notes and Repo Learning AI (optional):** not on `/setup` - add to `dashboard/.env.local` from `dashboard/.env.example`:
 
 | Var             | Required | Description                                       |
 | --------------- | -------- | ------------------------------------------------- |
@@ -202,7 +202,7 @@ Calendar setup steps:
 | `Z_AI_BASE_URL` | No       | Defaults to `https://api.z.ai/api/coding/paas/v4` |
 | `Z_AI_MODEL`    | No       | Defaults to `glm-5-turbo`                         |
 
-Restart the dev server after setting these. See [docs/reference/environment-variables.md](docs/reference/environment-variables.md#notes-in-editor-ai-optional).
+Restart the dev server after setting these. See [docs/reference/environment-variables.md](docs/reference/environment-variables.md#notes-and-repo-learning-ai-optional).
 
 ### Keyboard Shortcuts
 
@@ -460,24 +460,6 @@ cd dashboard && npx tsx scripts/run-action.ts validate
 
 See [`docs/PLATFORM_REQUIREMENTS.md`](docs/PLATFORM_REQUIREMENTS.md) for the full matrix. Short version: **Node 20+** and **Git** on macOS or WSL; dashboard + sync actions are TypeScript; iOS is read-only for repo files.
 
-## Migration from Older Versions
-
-If you're upgrading from an earlier version of devhub:
-
-```bash
-# Extract v3 zip somewhere temporary
-cd /tmp
-unzip ~/Downloads/devhub-v3.zip -d devhub-v3
-
-# Run migration from your existing repo
-cd ~/devhub
-bash /tmp/devhub-v3/scripts/migrate.sh
-```
-
-The migration script handles: removing old MemPalace scripts and references, updating MCP configs to the notes server, copying in new files (notes system, optimize skill, etc.), updating the persona split, preserving your existing notes, fixing permissions, cleaning stale cron entries, and running validation.
-
-See `docs/MIGRATION.md` for the full step-by-step guide.
-
 ## Workflow Summary
 
 1. **Session start**: AI reads `AGENTS.md` → loads L0 persona → checks `notes/index.md` for relevant context
@@ -491,9 +473,9 @@ See `docs/MIGRATION.md` for the full step-by-step guide.
 | Document                        | Purpose                                                        |
 | ------------------------------- | -------------------------------------------------------------- |
 | `docs/MEMORY_OPTIONS.md`        | Memory architecture: git-based notes + custom notes MCP server |
-| `docs/MIGRATION.md`             | Step-by-step migration guide from older versions               |
 | `docs/PLATFORM_REQUIREMENTS.md` | Platform capability matrix                                     |
 | `docs/TOKEN_BUDGET.md`          | Token budget analysis and optimization tips                    |
+| `docs/guides/repo-learning.md`  | Repos page learning briefs, tutor, and NotebookLM source packs |
 | `docs/guides/creating-plugins.md` | Step-by-step guide to building a plugin                      |
 | `docs/architecture/plugins.md`  | Plugin system: manifest, registry, tier-1/tier-2, precedence   |
 | `CONTRIBUTING.md`               | Private-mirror + upstream + backport fork workflow             |
