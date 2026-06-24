@@ -168,11 +168,11 @@ interface BiSnapshot {
 }
 
 /**
- * Compact BI infra snapshot: AWS profile + identity + current k8s context.
- * Surfaces whether the dashboard process has working AWS credentials and
- * links to /ops for the full sign-in / EKS / mongo / jumpbox controls.
+ * Compact infra snapshot: AWS profile + identity + current Kubernetes context.
+ * Surfaces whether the dashboard process has working AWS credentials and links to
+ * /ops for the full controls (provided by an infra plugin when installed).
  */
-function BiInfraCard() {
+function InfraCard() {
   const [snapshot, setSnapshot] = useState<BiSnapshot | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -205,7 +205,7 @@ function BiInfraCard() {
   return (
     <div className="card min-w-0 flex flex-col">
       <div className="card-header">
-        <span className="flex items-center gap-1.5"><Cloud size={12} />BI Infra</span>
+        <span className="flex items-center gap-1.5"><Cloud size={12} />Infra</span>
         <Link
           href="/ops"
           className="inline-flex items-center gap-1 text-[11px]"
@@ -918,7 +918,7 @@ export default function StatusPage() {
           </div>
         </div>
 
-        <BiInfraCard />
+        <InfraCard />
         </div>
 
       </div>

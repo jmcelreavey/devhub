@@ -122,9 +122,9 @@ const STEPS: Step[] = [
   },
   {
     id: "bi",
-    title: "BI Infra",
+    title: "Infra",
     icon: <Cloud size={18} />,
-    description: "AWS profile + infra tooling for BI engineers (optional)",
+    description: "AWS profile + infra tooling (optional)",
     configured: false,
     optional: true,
   },
@@ -674,7 +674,7 @@ export default function SetupPage() {
             />
           )}
           {step.id === "bi" && (
-            <BiStep
+            <InfraStep
               configured={status.bi}
               awsProfile={status.biVars.awsProfile}
               account={status.biVars.account}
@@ -1025,11 +1025,11 @@ function GitHubStep({
 }
 
 /**
- * BI Infra step. Read-only — the actual sign-in / EKS / mongo / jumpbox
- * controls live on /ops. This step just surfaces whether the dashboard
- * process has a working AWS session and links out for the interactive flow.
+ * Infra step. Read-only — the actual sign-in / cloud / database / shell controls
+ * live on /ops (provided by an infra plugin when installed). This step just surfaces
+ * whether the dashboard process has a working AWS session and links out for the flow.
  */
-function BiStep({
+function InfraStep({
   configured,
   awsProfile,
   account,
@@ -1049,13 +1049,12 @@ function BiStep({
   return (
     <div>
       <h2 style={{ fontSize: "20px", fontWeight: 700, color: "var(--text)", marginBottom: "4px" }}>
-        BI Infrastructure
+        Infrastructure
       </h2>
       <p style={{ color: "var(--text-subtle)", fontSize: "13px", marginBottom: "16px", lineHeight: 1.5 }}>
-        Optional helpers for Business Insider engineers: AWS sign-in via{" "}
-        <code style={{ fontSize: "11px" }}>gimme-aws-creds</code>, Tailscale service lookup,
-        EKS context setup, MongoDB connection strings, CAPI script runner, and jumpbox SSM commands.
-        Skip this step if you don&apos;t work on BI services.
+        Optional infrastructure helpers, surfaced on the Ops page when an infra plugin is
+        installed: AWS sign-in, service lookup, Kubernetes context setup, database connection
+        strings, a script runner, and remote-shell commands. Skip this step if you don&apos;t need them.
       </p>
       <div
         style={{
@@ -1092,17 +1091,17 @@ function BiStep({
       </div>
       <div style={{ marginTop: "16px" }}>
         <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "var(--text)", marginBottom: "4px" }}>
-          CAPI repo path <span style={{ fontWeight: 400, color: "var(--text-subtle)" }}>(optional — enables script discovery)</span>
+          Script repo path <span style={{ fontWeight: 400, color: "var(--text-subtle)" }}>(optional — enables script discovery)</span>
         </label>
         <p style={{ fontSize: "11px", color: "var(--text-subtle)", marginBottom: "8px", lineHeight: 1.5 }}>
-          Absolute path to your local CAPI checkout. Enables the CAPI Scripts panel on the Ops page to discover
+          Absolute path to a local script repo. Enables the Scripts panel on the Ops page to discover
           and run <code>scripts/**/main.ts</code> and <code>mongo/**/*.js</code>.
         </p>
         <input
           type="text"
           value={capiRepoPath}
           onChange={(e) => onCapiRepoPathChange(e.target.value)}
-          placeholder="e.g. ~/dev/capi"
+          placeholder="e.g. ~/dev/scripts"
           style={{
             width: "100%",
             padding: "8px 12px",
