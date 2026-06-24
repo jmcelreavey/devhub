@@ -26,7 +26,7 @@ describe("ai-tools-skills", () => {
       ok: true,
       commit: "abc1234",
       branch: "main",
-      repo: "businessinsider/ai-tools",
+      repo: "example-org/ai-tools",
     });
   });
 

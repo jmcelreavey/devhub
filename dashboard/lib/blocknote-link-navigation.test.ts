@@ -55,12 +55,12 @@ describe("blocknote-link-navigation", () => {
 
     handleBlockNoteLinkClick(
       event,
-      "https://github.com/businessinsider/capi/pull/437",
+      "https://github.com/example-org/repo/pull/437",
       notesContext,
       { push, openExternal },
     );
 
-    expect(openExternal).toHaveBeenCalledWith("https://github.com/businessinsider/capi/pull/437");
+    expect(openExternal).toHaveBeenCalledWith("https://github.com/example-org/repo/pull/437");
     expect(push).not.toHaveBeenCalled();
   });
 

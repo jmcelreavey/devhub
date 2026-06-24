@@ -45,7 +45,7 @@ describe("refreshUpstreamSkills", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedAuth.mockResolvedValue(true);
-    mockedRemote.mockReturnValue("git@github.com:businessinsider/ai-tools.git");
+    mockedRemote.mockReturnValue("git@github.com:example-org/ai-tools.git");
     mockedShortRef.mockReturnValue("abc1234");
     mockedExecGh.mockResolvedValue({ stdout: "main\n", stderr: "" });
     mockedFetch.mockResolvedValue(undefined);
@@ -63,13 +63,13 @@ describe("refreshUpstreamSkills", () => {
 
     expect(result.ok).toBe(true);
     expect(result.branch).toBe("main");
-    expect(result.repo).toBe("businessinsider/ai-tools");
+    expect(result.repo).toBe("example-org/ai-tools");
     expect(mockedFetch).toHaveBeenCalledWith(checkoutRoot, "main");
     expect(mockedExtract).toHaveBeenCalledWith(
       checkoutRoot,
       "origin/main",
       "skills",
-      expect.stringContaining("businessinsider--ai-tools"),
+      expect.stringContaining("example-org--ai-tools"),
     );
 
     const manifest = readUpstreamSkillsManifest();
