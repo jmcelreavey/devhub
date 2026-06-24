@@ -6,11 +6,24 @@ Skills are reusable instructions for AI agents. They capture repeatable workflow
 
 Shared skills live in the DevHub repo under `skills/shared/` and can be synced into local AI tools.
 
-BI company skills live in the **ai-tools** repo (`skills/`). DevHub merges them at sync time from a local clone and exposes them with a `bi-` prefix unless they already have one. They appear on the Skills page with an **ai-tools** badge and are read-only in DevHub (edit them in ai-tools, then **Refresh** or run sync).
+Optional shared/team skills can live in an **ai-tools** checkout under `skills/`. DevHub merges them at sync time from a local clone and exposes them with a `bi-` catalog prefix unless they already have one. They appear on the Skills page with an **ai-tools** badge and are read-only in DevHub (edit them in ai-tools, then **Refresh** or run sync).
 
 Each skill should have a clear name and a `SKILL.md` file that explains when and how to use it.
 
 Configure `AI_TOOLS_ROOT` if your clone is not at `~/Developer/ai-tools`. Set `AI_TOOLS_SYNC=0` to sync DevHub skills only. Set `AI_TOOLS_REFRESH_ON_SYNC=0` if you want sync to skip upstream fetch (airplane mode). Set `AI_TOOLS_BRANCH` to override the default branch (normally resolved via `gh`). Requires `gh auth login` for upstream refresh.
+
+Example:
+
+```bash
+AI_TOOLS_ROOT=~/Developer/ai-tools
+AI_TOOLS_BRANCH=main
+```
+
+Constraints:
+
+- DevHub never edits the ai-tools checkout; those rows are read-only in the UI.
+- DevHub skills win on name collision. If `skills/shared/bi-foo` exists, it replaces ai-tools `foo` or `bi-foo`.
+- Upstream refresh writes a cache under `~/.cache/devhub/ai-tools-upstream/` and leaves the working tree untouched.
 
 Excluded skills (eye icon on the Skills page) are not synced or pruned; old copies remain in tool directories until you remove them manually.
 
@@ -49,7 +62,7 @@ Run skill sync when:
 - You pull new shared skills.
 - You edit a shared skill.
 - A tool does not show a skill you expect.
-- You want the latest ai-tools company skills (or use **Refresh** on the Skills page).
+- You want the latest ai-tools skills (or use **Refresh** on the Skills page).
 
 Use the source filter (**All / DevHub / ai-tools / Local**) and the eye control to exclude catalog skills from sync and prune.
 

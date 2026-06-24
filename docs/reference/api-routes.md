@@ -8,7 +8,7 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | --------- | ---------------------------------------------------- |
 | Actions   | Launch native OpenChamber/OpenCode apps when installed |
 | Agents    | View shared and local agent configuration            |
-| BI (`/api/bi/*`) | Internal ops: AWS profile, EKS, RDS, Mongo, CAPI, IAM |
+| Infra plugin (`/api/bi/*`) | Optional plugin-backed ops: AWS profile, EKS, RDS, Mongo, CAPI, IAM |
 | Calendar  | Google Calendar auth and event reads                 |
 | Datadog   | Alert links and summaries                            |
 | GitHub    | Pull request and repository data                     |
