@@ -6,7 +6,7 @@ The sync engine keeps AI tool configuration consistent across machines and tools
 
 | Asset           | Source In Repo         | Destination                     |
 | --------------- | ---------------------- | ------------------------------- |
-| Skills          | `skills/shared/` plus optional [ai-tools](https://github.com/businessinsider/ai-tools) checkout | Local tool skill directories    |
+| Skills          | `skills/shared/` plus optional `ai-tools` checkout | Local tool skill directories    |
 | Agents          | Shared agent files     | Local tool agent directories    |
 | Persona         | Persona files          | Tool-specific instruction files |
 | MCP configs     | `mcp/shared/*.json`    | `~/.claude.json`, `~/.codex/mcp.json`, `~/.cursor/mcp.json`, OpenCode `mcp` block |
@@ -14,7 +14,11 @@ The sync engine keeps AI tool configuration consistent across machines and tools
 
 Only `model`, `small_model`, `provider`, and `theme` are merged. MCP entries, schema, and agent metadata that OpenCode maintains locally are preserved. Provider credentials use `{env:VAR}` in the repo; sync resolves them from the environment (including 1Password-backed vars) into the local file.
 
-DevHub `skills/shared/` is the source of truth for personal and dotfiles skills. BI company skills stay canonical in **ai-tools**; DevHub reads a local clone (default `~/Developer/ai-tools`) and merges at sync time. DevHub wins when the same skill name exists in both trees.
+DevHub `skills/shared/` is the source of truth for personal and dotfiles skills. Optional upstream/shared team skills can stay canonical in an **ai-tools** checkout; DevHub reads a local clone (default `~/Developer/ai-tools`) and merges it at sync time. DevHub wins when the same skill name exists in both trees.
+
+For compatibility with older shared catalogs, ai-tools skills are exposed with a `bi-`
+catalog prefix unless the source directory already has that prefix. That prefix is a
+catalog naming convention, not a requirement that the upstream repo be company-specific.
 
 **Plugins generalise this.** Skills, agents, and MCP configs can also come from registered **plugins** (separate repos, e.g. the private `devhub-bi`), merged at sync time with the same "core wins on collision" rule and marked read-only. See [`plugins.md`](plugins.md) for the manifest, the machine-local registry (`~/.config/devhub/plugins.json`), and precedence (core → ai-tools → plugins).
 

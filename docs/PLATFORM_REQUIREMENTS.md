@@ -25,7 +25,7 @@ DevHub is designed for local developer machines.
 | ------------- | ----------------------------------------- |
 | GitHub CLI    | PR tracking and GitHub-based standup data |
 | 1Password CLI | Local secret loading workflow             |
-| AWS CLI       | BI infrastructure helpers                 |
+| AWS CLI       | Optional infrastructure plugin helpers    |
 | kubectl       | EKS-related workflows                     |
 | Datadog keys  | Datadog alert/event integration           |
 

@@ -18,7 +18,7 @@ http://localhost:1337/setup
 | Jira Cloud      | Optional ticket views and standup support                          |
 | Datadog         | Optional alert summaries and deep links                            |
 | GitHub          | Pull request and repo-related features, usually via the GitHub CLI |
-| BI operations   | Optional internal infrastructure helpers                           |
+| Infra           | Optional internal infrastructure helpers, when an infra plugin is installed |
 | Notes AI        | Optional z.ai-powered BlockNote AI — **env vars only** (see below) |
 
 ## Core Settings

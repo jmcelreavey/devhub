@@ -49,6 +49,7 @@ These call the CLI action runner, which is also usable directly:
 ```bash
 cd dashboard
 npx tsx scripts/run-action.ts validate                 # repo integrity checks
+npx tsx scripts/run-action.ts sync_plugins             # materialise plugin dashboard + branding files only
 npx tsx scripts/run-action.ts sync                     # skills + agents + MCP + persona → tools
 npx tsx scripts/run-action.ts update_and_sync --push   # full origin update + sync
 ```
@@ -61,6 +62,7 @@ The dashboard owns most operational scripts. They handle tasks such as:
 - Full diagnostics.
 - Post-install setup.
 - Action runner execution.
+- Plugin dashboard/branding materialisation before `dev`, `build`, `start`, and full sync.
 - Chained OpenChamber and OpenCode startup (`start-peer-services.ts`; standalone `start-chamber.ts`, `start-opencode.ts`).
 - 1Password secret fallback (`op-secrets.ts`) before services bind ports.
 - Standup diagnostics.

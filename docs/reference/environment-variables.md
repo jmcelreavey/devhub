@@ -63,7 +63,10 @@ Without a key, notes still work and Repo Learning still shows deterministic repo
 
 ## Skills (ai-tools merge)
 
-Used when syncing skills from the optional [ai-tools](https://github.com/businessinsider/ai-tools) checkout. See [Sync Engine](../architecture/sync-engine.md) and [Skills](../guides/skills.md).
+Used when syncing skills from an optional local `ai-tools` checkout. The checkout is a
+read-only upstream/shared-team source; DevHub's own `skills/shared/` catalog still wins on
+name collisions. See [Sync Engine](../architecture/sync-engine.md) and
+[Skills](../guides/skills.md).
 
 | Variable                   | Default                | Purpose                                                 |
 | -------------------------- | ---------------------- | ------------------------------------------------------- |
