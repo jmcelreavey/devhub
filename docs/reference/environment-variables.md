@@ -13,6 +13,7 @@ Most values live in the dashboard's local environment file and can be edited fro
 | `TASKS_DIR`                    | Optional override for daily tasks (default: `REPO_ROOT/tasks`) — point elsewhere to keep personal data out of the tree |
 | `COLLECTIONS_DIR`             | Optional override for checklist collections (default: `REPO_ROOT/collections`) |
 | `REPO_ROOT`                    | DevHub repository root                                      |
+| `NEXT_PUBLIC_REPO_ROOT`        | Browser-visible DevHub repo root for terminal handoffs that need to pin local paths |
 | `PORT`                         | Dashboard port                                              |
 | `DEVHUB_BIND_HOST`             | Dashboard bind address                                      |
 | `OPENCHAMBER_HOST`             | OpenChamber bind address                                    |

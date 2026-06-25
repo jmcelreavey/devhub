@@ -117,12 +117,34 @@ The **Status** page probes OpenChamber and OpenCode ports via `/api/status/servi
 - `/api/actions/launch-chamber` — OpenChamber Desktop pointing at the existing DevHub server (port `1336` / shared OpenCode on `1338`)
 - `/api/actions/launch-opencode` — macOS OpenCode Desktop app (when present under `/Applications`)
 
+## Terminal Drawer Handoffs
+
+DevHub can also start CLI workflows inside the terminal drawer instead of the
+OpenCode web UI. The drawer dispatches a local terminal tab with an optional
+working directory and command; no server-side API is involved in the handoff.
+
+Current handoffs:
+
+| Source | Command | Notes |
+| ------ | ------- | ----- |
+| Top bar launch menu | `opencode` or `claude` | Opens the tool in the drawer, rooted at the default developer directory. |
+| Repo cards | `opencode` or `claude` | Opens the tool with the repo path as the terminal working directory. |
+| Repo Learning | `opencode` | Copies the generated handoff prompt and opens OpenCode in that repo. |
+| GitHub PR **Review** action | `opencode run "Use the pr-explain-review skill..."` | Streams a one-shot PR explanation/review and asks the skill to save a DevHub note. |
+
+The PR review command is guarded with `command -v opencode`; machines without
+the CLI get a readable message in the terminal tab. When `NEXT_PUBLIC_REPO_ROOT`
+is set, the command also exports `REPO_ROOT` and pins `NOTES_DIR` to
+`<REPO_ROOT>/notes` so saved PR review notes land under `notes/pr-reviews/...`
+rather than whichever repository OpenCode happens to inspect.
+
 ## Troubleshooting
 
 | Symptom | Things to check |
 | ------- | ---------------- |
 | Chamber iframe blank | OpenCode listening on `OPENCODE_PORT`; Status page service indicators |
 | OpenCode won't start | `which opencode` or set `DEVHUB_OPENCODE_BINARY`; port `1338` not held by another process |
+| PR review note never appears | The terminal review completed, `opencode` was on `PATH`, and the notes MCP wrote to the prompted `pr-reviews/...` path |
 | Provider auth errors | `/setup` or 1Password item fields; run sync after env vars are set; `DEVHUB_OP_REFRESH=1` once to refresh |
 | LAN device can't reach Chamber/OpenCode | Match `OPENCHAMBER_HOST` / `OPENCODE_BIND_HOST` with `DEVHUB_BIND_HOST`; forward ports `1336` and `1338` on WSL (see root README) |
 | Two OpenCode instances | Should not happen when `OPENCODE_SKIP_START=true`; if you run `opencode serve` manually, let DevHub reuse that port |
