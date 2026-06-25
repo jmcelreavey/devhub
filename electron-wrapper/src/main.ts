@@ -495,9 +495,16 @@ function setStatus(text: string): void {
 
 function spawnNpm(args: readonly string[]): ChildProcessWithoutNullStreams {
   appendLog(`$ ${npmBin} ${args.join(" ")}\n`);
+  const env = cleanNpmEnv();
+  const bindHost = env.DEVHUB_BIND_HOST?.trim().toLowerCase();
+  if (bindHost === "auto" || bindHost === "lan") {
+    // Electron opens localhost; binding Next to a specific LAN IP makes the app
+    // healthy but unreachable to the wrapper. Keep packaged launches local.
+    env.DEVHUB_BIND_HOST = "127.0.0.1";
+  }
   const child = spawn(npmBin, [...args], {
     cwd: projectRoot(),
-    env: cleanNpmEnv(),
+    env,
     shell: true,
   });
 
