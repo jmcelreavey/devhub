@@ -3,6 +3,7 @@ import { autoUpdater } from "electron-updater";
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
+import { networkInterfaces } from "node:os";
 import path from "node:path";
 import type { LaunchScript } from "./shared";
 import { EXTRA_PATH_SEGMENTS, appendPath, nvmNodeBinDirs, prependPath } from "./path-fallbacks";
@@ -108,7 +109,6 @@ const DASHBOARD_PORT = 1337;
 const CHAMBER_PORT = 1336;
 const OPENCODE_PORT = 1338;
 const TERMINAL_PORT = 1339;
-const DASHBOARD_URL = `http://localhost:${DASHBOARD_PORT}`;
 const PROCESS_EXIT_WAIT_MS = 1_500;
 const PORT_POLL_INTERVAL_MS = 500;
 const PORT_POLL_MAX_ATTEMPTS = 20;
@@ -151,6 +151,56 @@ let updateCheckInProgress = false;
 let manualUpdateCheck = false;
 
 let resolvedProjectRoot: string | null = null;
+
+function dashboardEnvValue(key: string): string | undefined {
+  const fromProcess = process.env[key]?.trim();
+  if (fromProcess) return fromProcess;
+  try {
+    const envLocal = fs.readFileSync(path.join(projectRoot(), "dashboard", ".env.local"), "utf8");
+    const line = envLocal.split(/\r?\n/).find((l) => l.trim().startsWith(`${key}=`));
+    return line?.slice(key.length + 1).trim().replace(/^['"]|['"]$/g, "") || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isCgnat(ip: string): boolean {
+  const parts = ip.split(".").map(Number);
+  return parts.length === 4 && parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127;
+}
+
+function detectLanIp(): string | null {
+  const virtualIface = /^(docker|br-|veth|virbr|ll\d|bridge|tap|zt|wg)/i;
+  const physicalPref = ["en0", "en1", "en2", "eth0", "enp", "wlan", "Wi-Fi"];
+  const candidates: { iface: string; ip: string }[] = [];
+  for (const [name, addrs] of Object.entries(networkInterfaces())) {
+    if (!addrs || virtualIface.test(name)) continue;
+    for (const a of addrs) {
+      if (a.family !== "IPv4" || a.internal || isCgnat(a.address)) continue;
+      candidates.push({ iface: name, ip: a.address });
+    }
+  }
+  candidates.sort((x, y) => {
+    const rank = (iface: string): number => {
+      const i = physicalPref.findIndex((p) => iface.startsWith(p));
+      return i === -1 ? 99 : i;
+    };
+    return rank(x.iface) - rank(y.iface);
+  });
+  return candidates[0]?.ip ?? null;
+}
+
+function dashboardHost(): string {
+  const raw = dashboardEnvValue("DEVHUB_BIND_HOST") || "0.0.0.0";
+  const host = raw.trim().toLowerCase();
+  if (host === "auto" || host === "lan") return detectLanIp() ?? "127.0.0.1";
+  if (host === "0.0.0.0" || host === "::") return "localhost";
+  return raw.trim() || "localhost";
+}
+
+function dashboardUrl(): string {
+  return `http://${dashboardHost()}:${DASHBOARD_PORT}`;
+}
 
 function openChamberEnv(): NodeJS.ProcessEnv {
   const env = cleanNpmEnv();
@@ -323,7 +373,7 @@ function canConnect(port: number, host = "127.0.0.1"): Promise<boolean> {
 async function waitForDashboard(timeoutMs = 60_000): Promise<boolean> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
-    if (await canConnect(DASHBOARD_PORT)) return true;
+    if (await canConnect(DASHBOARD_PORT, dashboardHost())) return true;
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   return false;
@@ -450,7 +500,7 @@ function showLogView(): void {
     #back-btn{background:#238636;color:#fff;border:1px solid #2ea043;border-radius:6px;padding:4px 12px;font:500 12px system-ui;cursor:pointer;white-space:nowrap}
     #back-btn:hover{background:#2ea043}
     pre{box-sizing:border-box;height:calc(100vh - 45px);margin:0;overflow:auto;padding:16px;white-space:pre-wrap}
-  </style></head><body><header><span>DevHub launcher logs <span id="status"></span></span><button id="back-btn" onclick="location.href='${DASHBOARD_URL}'">Back to DevHub</button></header><pre id="log">${logBuffer.map(escapeHtml).join("")}</pre></body></html>`;
+  </style></head><body><header><span>DevHub launcher logs <span id="status"></span></span><button id="back-btn" onclick="location.href='${dashboardUrl()}'">Back to DevHub</button></header><pre id="log">${logBuffer.map(escapeHtml).join("")}</pre></body></html>`;
 
   void window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 }
@@ -495,16 +545,9 @@ function setStatus(text: string): void {
 
 function spawnNpm(args: readonly string[]): ChildProcessWithoutNullStreams {
   appendLog(`$ ${npmBin} ${args.join(" ")}\n`);
-  const env = cleanNpmEnv();
-  const bindHost = env.DEVHUB_BIND_HOST?.trim().toLowerCase();
-  if (bindHost === "auto" || bindHost === "lan") {
-    // Electron opens localhost; binding Next to a specific LAN IP makes the app
-    // healthy but unreachable to the wrapper. Keep packaged launches local.
-    env.DEVHUB_BIND_HOST = "127.0.0.1";
-  }
   const child = spawn(npmBin, [...args], {
     cwd: projectRoot(),
-    env,
+    env: cleanNpmEnv(),
     shell: true,
   });
 
@@ -907,7 +950,7 @@ async function openDevHub(): Promise<void> {
   window.focus();
   await session.defaultSession.clearCache();
   await session.defaultSession.clearStorageData({ storages: ["cachestorage", "serviceworkers"] });
-  await window.loadURL(DASHBOARD_URL);
+  await window.loadURL(dashboardUrl());
 }
 
 async function restartOpenChamber(): Promise<void> {
@@ -1177,8 +1220,8 @@ async function startScript(script: LaunchScript, restart = false): Promise<void>
     await killPortListeners([DASHBOARD_PORT, CHAMBER_PORT, OPENCODE_PORT, TERMINAL_PORT]);
   }
 
-  if (await canConnect(DASHBOARD_PORT)) {
-    appendLog(`DevHub is already available at ${DASHBOARD_URL}; opening existing instance.\n`);
+  if (await canConnect(DASHBOARD_PORT, dashboardHost())) {
+    appendLog(`DevHub is already available at ${dashboardUrl()}; opening existing instance.\n`);
     await openDevHub();
     return;
   }
@@ -1197,9 +1240,9 @@ async function startScript(script: LaunchScript, restart = false): Promise<void>
     activeScript = null;
   });
 
-  setStatus(`Waiting for ${DASHBOARD_URL}...`);
+  setStatus(`Waiting for ${dashboardUrl()}...`);
   if (!(await waitForDashboard())) {
-    throw new Error(`Timed out waiting for ${DASHBOARD_URL}`);
+    throw new Error(`Timed out waiting for ${dashboardUrl()}`);
   }
 
   setStatus("Opening DevHub...");
@@ -1388,7 +1431,7 @@ async function launch(): Promise<void> {
   createLauncherWindow();
   appWindow!.setTitle(`DevHub v${app.getVersion()}`);
   await ensureOnePasswordSignedIn();
-  if (await canConnect(DASHBOARD_PORT)) {
+  if (await canConnect(DASHBOARD_PORT, dashboardHost())) {
     await chooseWhenRunning();
     return;
   }
