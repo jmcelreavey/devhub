@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, type HTMLAttributes, type ReactNode } from "react";
-import { Plus, X, ExternalLink, Circle, CheckCircle2, Pencil, Ban, RotateCcw, Link as LinkIcon, ChevronRight, ChevronDown, ArrowRight, Play, Pause, GripVertical } from "lucide-react";
+import { Plus, X, ExternalLink, Circle, CheckCircle2, Pencil, Ban, RotateCcw, Link as LinkIcon, ChevronRight, ChevronDown, ArrowRight, Play, Pause, GripVertical, Ticket } from "lucide-react";
 import { useToast } from "@/lib/use-toast";
 import { useLive } from "@/lib/use-fetch";
 import { statusTone } from "@/components/JiraWidget";
 import { JiraKeyChip } from "@/components/JiraKeyChip";
+import { AddToJiraModal } from "@/components/AddToJiraModal";
+import { JiraTransitionModal } from "@/components/JiraTransitionModal";
 import { SeverityPill } from "@/components/ui/Severity";
 import { SortableList } from "@/components/ui/SortableList";
 import { useGridSize } from "@/lib/use-grid-size";
@@ -47,6 +49,19 @@ function stripLinkedJiraKeyFromText(text: string, jiraKey: string): string {
     .trim()
     .replace(/^[-–—,:]\s*/, "")
     .trim();
+}
+
+/**
+ * Point a task at a newly created Jira ticket: replace its current key with the
+ * new one (so the chip/status/link all track the new ticket), or prepend the
+ * new key when the task had none.
+ */
+function rewriteTaskKey(text: string, oldKey: string | undefined, newKey: string): string {
+  if (oldKey) {
+    const re = new RegExp(`\\b${escapeRegExp(oldKey)}\\b`, "g");
+    if (re.test(text)) return text.replace(new RegExp(`\\b${escapeRegExp(oldKey)}\\b`, "g"), newKey);
+  }
+  return `${newKey} ${text}`.replace(/\s+/g, " ").trim();
 }
 
 const MD_LINK_RE = /\[([^\]]+)\]\(([^)]+)\)/g;
@@ -154,6 +169,13 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
   const [detectedUrl, setDetectedUrl] = useState<string | null>(null);
   const [linkName, setLinkName] = useState("");
   const [jiraStatuses, setJiraStatuses] = useState<Record<string, JiraStatus>>({});
+  const [jiraModalTask, setJiraModalTask] = useState<Task | null>(null);
+  const [statusChangeTask, setStatusChangeTask] = useState<Task | null>(null);
+  const [transitionPrompt, setTransitionPrompt] = useState<{
+    task: Task;
+    action: "complete" | "abandon";
+    reason?: string;
+  } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const linkNameRef = useRef<HTMLInputElement>(null);
   const loadErrorToastShown = useRef(false);
@@ -625,6 +647,92 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
     [toggleTask],
   );
 
+  // Completing/abandoning a Jira-linked task first offers a state change.
+  const requestComplete = useCallback(
+    (task: Task) => {
+      if (task.jiraKey) setTransitionPrompt({ task, action: "complete" });
+      else completeWithExit(task.id);
+    },
+    [completeWithExit],
+  );
+
+  const requestAbandon = useCallback(
+    (task: Task, reason?: string) => {
+      if (task.jiraKey) setTransitionPrompt({ task, action: "abandon", reason });
+      else abandonTask(task.id, reason);
+    },
+    [abandonTask],
+  );
+
+  // Apply the chosen transition (if any), then finalize the local task change.
+  const resolveTransition = useCallback(
+    async (transitionId: string | null) => {
+      const prompt = transitionPrompt;
+      if (!prompt) return;
+      setTransitionPrompt(null);
+      if (transitionId && prompt.task.jiraKey) {
+        try {
+          const res = await fetch(`/api/jira/ticket/${prompt.task.jiraKey}/transition`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transitionId }),
+          });
+          if (!res.ok) throw new Error(await res.text());
+        } catch (e) {
+          console.error("apply transition:", e);
+          toast.error("Couldn't update the Jira state, but the task was updated.");
+        }
+      }
+      if (prompt.action === "complete") completeWithExit(prompt.task.id);
+      else abandonTask(prompt.task.id, prompt.reason);
+    },
+    [transitionPrompt, completeWithExit, abandonTask, toast],
+  );
+
+  // Re-fetch one ticket's status so the pill reflects Jira after a change.
+  const refreshJiraStatus = useCallback(async (key: string) => {
+    try {
+      const res = await fetch(`/api/jira/ticket/${key}`);
+      if (!res.ok) return;
+      const d = (await res.json()) as { status?: JiraStatus };
+      if (d.status) setJiraStatuses((prev) => ({ ...prev, [key]: d.status! }));
+    } catch (e) {
+      console.error("refresh jira status:", e);
+    }
+  }, []);
+
+  // Apply a status change requested by clicking the status pill.
+  const resolveStatusChange = useCallback(
+    async (transitionId: string | null) => {
+      const task = statusChangeTask;
+      setStatusChangeTask(null);
+      if (!transitionId || !task?.jiraKey) return;
+      const key = task.jiraKey;
+      try {
+        const res = await fetch(`/api/jira/ticket/${key}/transition`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transitionId }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        await refreshJiraStatus(key);
+      } catch (e) {
+        console.error("change jira status:", e);
+        toast.error("Couldn't update the Jira status.");
+      }
+    },
+    [statusChangeTask, refreshJiraStatus, toast],
+  );
+
+  // After a ticket is created, point the task at the new key.
+  const handleJiraCreated = useCallback(
+    (task: Task, newKey: string) => {
+      const newText = rewriteTaskKey(task.text, task.jiraKey, newKey);
+      if (newText !== task.text) void updateTaskText(task.id, newText);
+    },
+    [updateTaskText],
+  );
+
   const renderPendingTasks = () => (
     <SortableList
       items={pending}
@@ -642,11 +750,13 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
               isDragging={isDragging}
               isDropTarget={isDropTarget}
               onToggle={() => {
-                if (!exiting) completeWithExit(task.id);
+                if (!exiting) requestComplete(task);
               }}
               onDelete={() => deleteTask(task.id)}
               onEdit={(text) => updateTaskText(task.id, text)}
-              onAbandon={(reason) => abandonTask(task.id, reason)}
+              onAbandon={(reason) => requestAbandon(task, reason)}
+              onAddToJira={() => setJiraModalTask(task)}
+              onStatusClick={task.jiraKey ? () => setStatusChangeTask(task) : undefined}
               onTimer={() => toggleTimer(task.id)}
             />
           </div>
@@ -862,6 +972,38 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
           No tasks yet. Add one above.
         </p>
       )}
+
+      {jiraModalTask && (
+        <AddToJiraModal
+          open
+          task={jiraModalTask}
+          onClose={() => setJiraModalTask(null)}
+          onCreated={(newKey) => handleJiraCreated(jiraModalTask, newKey)}
+        />
+      )}
+
+      {transitionPrompt && transitionPrompt.task.jiraKey && (
+        <JiraTransitionModal
+          open
+          jiraKey={transitionPrompt.task.jiraKey}
+          title={transitionPrompt.action === "complete" ? "Completed — update Jira?" : "Abandoned — update Jira?"}
+          suggest={transitionPrompt.action === "complete" ? "Done" : "Won't Do"}
+          onCancel={() => setTransitionPrompt(null)}
+          onConfirm={resolveTransition}
+        />
+      )}
+
+      {statusChangeTask && statusChangeTask.jiraKey && (
+        <JiraTransitionModal
+          open
+          jiraKey={statusChangeTask.jiraKey}
+          title="Update Jira status"
+          skipLabel="Cancel"
+          suggest={statusChangeTask.jiraKey ? jiraStatuses[statusChangeTask.jiraKey]?.name : undefined}
+          onCancel={() => setStatusChangeTask(null)}
+          onConfirm={resolveStatusChange}
+        />
+      )}
     </div>
   );
 }
@@ -875,6 +1017,8 @@ export function TaskItem({
   onEdit,
   onAbandon,
   onReactivate,
+  onAddToJira,
+  onStatusClick,
   onTimer,
   dragHandleProps,
   isDragging = false,
@@ -888,6 +1032,8 @@ export function TaskItem({
   onEdit: (text: string) => void;
   onAbandon: (reason?: string) => void;
   onReactivate?: () => void;
+  onAddToJira?: () => void;
+  onStatusClick?: () => void;
   onTimer?: () => void;
   dragHandleProps?: HTMLAttributes<HTMLButtonElement> & { draggable: boolean };
   isDragging?: boolean;
@@ -1068,7 +1214,24 @@ export function TaskItem({
           )}
 
           {jiraStatus && !task.done && !isAbandoned && (
-            <SeverityPill tone={statusTone(jiraStatus.name)}>{jiraStatus.name}</SeverityPill>
+            onStatusClick ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStatusClick();
+                }}
+                aria-label={`Change Jira status (currently ${jiraStatus.name})`}
+                title="Click to change status in Jira"
+                style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
+              >
+                <SeverityPill tone={statusTone(jiraStatus.name)} style={{ cursor: "pointer" }}>
+                  {jiraStatus.name}
+                </SeverityPill>
+              </button>
+            ) : (
+              <SeverityPill tone={statusTone(jiraStatus.name)}>{jiraStatus.name}</SeverityPill>
+            )
           )}
 
           {isAbandoned && task.abandonReason && (
@@ -1094,6 +1257,28 @@ export function TaskItem({
 
         {!editing && !showAbandon && (
           <div className="flex items-start gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+            {!isInactive && !task.done && onAddToJira && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddToJira();
+                }}
+                aria-label={task.jiraKey ? "Create a Jira ticket from this task" : "Add to Jira"}
+                title={task.jiraKey ? "Create a Jira ticket from this task" : "Add to Jira"}
+                style={{
+                  color: "var(--text-subtle)",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: "4px",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                <Ticket size={12} aria-hidden />
+              </button>
+            )}
             {!isAbandoned && task.jiraKey && (
               <a
                 href={jiraBrowseUrl(task.jiraKey)}

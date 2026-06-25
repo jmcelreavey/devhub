@@ -7,6 +7,7 @@ import { buildTutorSystemPrompt } from "@/lib/repo-learn-ai";
 import { REPO_LEARN_TUTOR_START } from "@/lib/repo-learn-constants";
 import { resolveRepoPath } from "@/lib/repo-learn-resolve";
 import { getRepoContextForTutor } from "@/lib/repo-learn-tutor-context";
+import { tutorMessageText } from "@/lib/repo-learn-tutor-utils";
 import { getZAiNotesModel } from "@/lib/z-ai";
 
 type Params = { params: Promise<{ name: string }> };
@@ -37,20 +38,28 @@ export const POST = withErrorHandler(async (req: Request, { params }: Params) =>
   const system = buildTutorSystemPrompt(context);
 
   const modelMessages = await convertToModelMessages(messages);
-  const filtered = modelMessages.filter((m) => {
-    if (m.role !== "user") return true;
-    return tutorMessageText(m.content) !== REPO_LEARN_TUTOR_START;
+  const promptMessages = modelMessages.map((m) => {
+    if (m.role === "user" && tutorMessageText(m.content) === REPO_LEARN_TUTOR_START) {
+      return {
+        ...m,
+        content: [
+          {
+            type: "text" as const,
+            text: "Start the tutoring session. Ask me your first calibration question.",
+          },
+        ],
+      };
+    }
+    return m;
   });
 
   const result = streamText({
     model,
     system,
-    messages: filtered,
+    messages: promptMessages,
     maxOutputTokens: 1024,
     providerOptions: { zai: { thinking: { type: "disabled" } } },
   });
 
   return result.toUIMessageStreamResponse();
 }, "repos.learn.tutor");
-
-import { tutorMessageText } from "@/lib/repo-learn-tutor-utils";

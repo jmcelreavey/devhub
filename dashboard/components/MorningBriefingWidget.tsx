@@ -1,14 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, RefreshCw } from "lucide-react";
+import Link from "next/link";
+import { Sparkles, RefreshCw, ArrowRight } from "lucide-react";
 import { useLive } from "@/lib/use-fetch";
-import { formatTime } from "@/lib/utils";
+import type { DailyBriefing } from "@/lib/morning-briefing";
 import { TodayCollapseButton } from "@/components/TodayCollapseButton";
+import { WeatherStrip } from "@/components/briefing-parts";
 
 interface BriefingResponse {
   ok: boolean;
-  text?: string;
+  briefing?: DailyBriefing;
   generatedAt?: string;
   cached?: boolean;
   code?: string;
@@ -26,13 +28,10 @@ export function MorningBriefingWidget({ collapsed = false, onToggle }: MorningBr
   });
   const [refreshing, setRefreshing] = useState(false);
 
-  // AI not configured → no widget at all.
-  if (data && data.ok === false && data.code === "not_configured") return null;
-
   const refresh = async () => {
     setRefreshing(true);
     try {
-      const res = await fetch("/api/dashboard/morning-briefing?refresh=1");
+      const res = await fetch("/api/dashboard/morning-briefing?refresh=1", { cache: "no-store" });
       const json = (await res.json()) as BriefingResponse;
       await mutate(json, { revalidate: false });
     } catch {
@@ -43,6 +42,7 @@ export function MorningBriefingWidget({ collapsed = false, onToggle }: MorningBr
   };
 
   const loading = (isLoading && !data) || refreshing;
+  const b = data?.ok ? data.briefing : undefined;
 
   return (
     <div
@@ -50,24 +50,18 @@ export function MorningBriefingWidget({ collapsed = false, onToggle }: MorningBr
       data-collapsed={collapsed ? "true" : undefined}
       style={{ borderLeft: "3px solid var(--accent)", padding: "10px 14px" }}
     >
-      <div className="flex items-center gap-2 mb-1.5">
+      <div className="flex items-center gap-2 mb-2">
         <Sparkles size={13} style={{ color: "var(--accent)" }} aria-hidden />
         <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
           MORNING BRIEFING
         </span>
-        {data?.ok && data.generatedAt && !collapsed && (
-          <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
-            {formatTime(data.generatedAt)}
-            {data.cached ? "" : " · fresh"}
-          </span>
-        )}
         <button
           type="button"
           onClick={() => void refresh()}
           disabled={loading}
           className="hub-icon-btn ml-auto today-grid-drag-cancel"
-          title="Regenerate briefing"
-          aria-label="Regenerate briefing"
+          title="Refresh weather"
+          aria-label="Refresh weather"
         >
           <RefreshCw size={12} aria-hidden className={refreshing ? "animate-spin" : undefined} />
         </button>
@@ -79,24 +73,20 @@ export function MorningBriefingWidget({ collapsed = false, onToggle }: MorningBr
       {!collapsed && (
         <>
           {loading ? (
-            <div className="space-y-1.5">
-              <div className="skeleton" style={{ height: 12, width: "100%" }} />
-              <div className="skeleton" style={{ height: 12, width: "85%" }} />
+            <div className="space-y-2">
+              <div className="skeleton" style={{ height: 86, width: "100%", borderRadius: 8 }} />
             </div>
-          ) : data?.ok ? (
-            // Keyed on generation time so a fresh briefing settles in with a
-            // rise — shimmer → text, no spinner (motion = information).
-            <p
-              key={data.generatedAt ?? "briefing"}
-              className="briefing-settle text-sm leading-relaxed"
-              style={{ color: "var(--text)" }}
-            >
-              {data.text}
+          ) : !b ? (
+            <p className="text-sm" style={{ color: "var(--text-subtle)" }}>
+              {data?.message ?? "Briefing unavailable. Try refreshing."}
             </p>
           ) : (
-            <p className="text-sm" style={{ color: "var(--text-subtle)" }}>
-              {data?.message ?? "Briefing unavailable."}
-            </p>
+            <div key={data?.generatedAt ?? "briefing"} className="briefing-settle space-y-2.5">
+              {b.weather && <WeatherStrip weather={b.weather} />}
+              <Link href="/briefing" className="briefing-more-btn today-grid-drag-cancel">
+                View full briefing <ArrowRight size={12} aria-hidden />
+              </Link>
+            </div>
           )}
         </>
       )}

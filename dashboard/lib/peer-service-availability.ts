@@ -1,9 +1,8 @@
 import fs from "node:fs";
 import http from "node:http";
-import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { DEV_SERVICES } from "./dev-services";
-import { resolveOpenChamberCommand } from "./openchamber-command";
+import { findOpenChamberBin } from "./openchamber-command";
 import { resolveOpenCodeBinary, resolveOpenCodeBindHost } from "./opencode-command";
 import { findInstalledApp } from "./launch-desktop";
 
@@ -12,16 +11,14 @@ function commandOnPath(cmd: string): boolean {
   return spawnSync(which, [cmd], { stdio: "ignore" }).status === 0;
 }
 
-export function isOpenChamberConfigured(dashboardDir = process.cwd()): boolean {
-  const configured = process.env.OPENCHAMBER_BIN?.trim();
-  if (configured) return fs.existsSync(configured);
-
-  const local = path.resolve(dashboardDir, "node_modules", "@openchamber", "web", "bin", "cli.js");
-  if (fs.existsSync(local)) return true;
-
-  const { source } = resolveOpenChamberCommand();
-  if (source !== "PATH lookup") return true;
-  return commandOnPath("openchamber");
+/**
+ * True when a system OpenChamber is available. Detection (PATH, the node bin
+ * dir, and a login shell) lives in `findOpenChamberBin` so it's robust to a GUI
+ * launch where the server's PATH omits the install dir. DevHub no longer vendors
+ * OpenChamber, so when none is found the Chamber nav/iframe is simply hidden.
+ */
+export function isOpenChamberConfigured(): boolean {
+  return findOpenChamberBin() !== null;
 }
 
 export function isOpenCodeConfigured(): boolean {
@@ -67,17 +64,19 @@ export async function isPeerServiceActive(serviceId: "openchamber" | "opencode")
 }
 
 /** True when the companion binary exists or the dev peer is already listening. */
-export async function getPeerServiceGateStatus(
-  dashboardDir = process.cwd(),
-): Promise<{ chamber: boolean; opencode: boolean; claude: boolean }> {
+export async function getPeerServiceGateStatus(): Promise<{
+  chamber: boolean;
+  opencode: boolean;
+  claude: boolean;
+}> {
   const [chamberActive, opencodeActive] = await Promise.all([
     isPeerServiceActive("openchamber"),
     isPeerServiceActive("opencode"),
   ]);
   const opencode = isOpenCodeConfigured() || opencodeActive;
-  // Chamber depends on OpenCode — hide it when only the npm package is present.
-  const chamber =
-    chamberActive || (isOpenChamberConfigured(dashboardDir) && opencode);
+  // Chamber depends on OpenCode — hide it unless a system OpenChamber exists
+  // and OpenCode is available too.
+  const chamber = chamberActive || (isOpenChamberConfigured() && opencode);
   const claude = isClaudeConfigured();
   return { chamber, opencode, claude };
 }

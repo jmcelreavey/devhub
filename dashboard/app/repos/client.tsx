@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, ArrowUpFromLine, Container, RefreshCw } from "lucide-react";
 import { useLive } from "@/lib/use-fetch";
 import { useToast } from "@/lib/use-toast";
@@ -70,7 +70,11 @@ export default function ReposPage() {
   const [cloning, setCloning] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [composing, setComposing] = useState<string | null>(null);
-  const [learningRepo, setLearningRepo] = useState<RepoInfo | null>(null);
+  const [learningRepoName, setLearningRepoName] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("learn");
+  });
+  const learningRepoNameRef = useRef<string | null>(learningRepoName);
   const { data: apps } = useLive<{ gitkraken: boolean; docker: boolean }>("/api/repos/apps", {
     refreshInterval: 0,
   });
@@ -85,9 +89,30 @@ export default function ReposPage() {
   const filteredLocalRepos = normalizedLocalQuery
     ? repos.filter((repo) => repo.name.toLowerCase().includes(normalizedLocalQuery))
     : repos;
+  const learningRepo = learningRepoName
+    ? repos.find((repo) => repo.name === learningRepoName) ?? null
+    : null;
   const changedRepos = repos.filter((repo) => repo.dirtyCount > 0).length;
   const unpushedRepos = repos.filter((repo) => (repo.unpushedCount ?? 0) > 0).length;
   const composeRepos = repos.filter((repo) => repo.hasCompose).length;
+
+  useEffect(() => {
+    learningRepoNameRef.current = learningRepoName;
+  }, [learningRepoName]);
+
+  useEffect(() => {
+    return () => {
+      const repoName = learningRepoNameRef.current;
+      if (repoName) {
+        window.dispatchEvent(new CustomEvent("devhub:repo-learn-hidden", { detail: { repoName } }));
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!learningRepo) return;
+    window.dispatchEvent(new CustomEvent("devhub:repo-learn-opened"));
+  }, [learningRepo]);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -114,7 +139,7 @@ export default function ReposPage() {
   }
 
   function openLearn(repo: RepoInfo) {
-    setLearningRepo(repo);
+    setLearningRepoName(repo.name);
   }
 
   async function openInGitKraken(name: string) {
@@ -324,7 +349,10 @@ export default function ReposPage() {
       <LearnPanel
         key={learningRepo?.name ?? "closed"}
         repo={learningRepo}
-        onClose={() => setLearningRepo(null)}
+        onClose={() => {
+          setLearningRepoName(null);
+          learningRepoNameRef.current = null;
+        }}
       />
     </div>
   );
@@ -334,4 +362,3 @@ function queryParam(value: string): string {
   const trimmed = value.trim();
   return trimmed ? `?q=${encodeURIComponent(trimmed)}` : "";
 }
-

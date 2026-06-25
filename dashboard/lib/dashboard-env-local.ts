@@ -6,7 +6,9 @@ export const DASHBOARD_MANAGED_ENV_KEYS = [
   "NOTES_DIR",
   "REPO_ROOT",
   "DEVHUB_BIND_HOST",
+  "DEVHUB_LAN_PROXY_HOST",
   "OPENCHAMBER_HOST",
+  "OPENCHAMBER_UI_PASSWORD",
   "OPENCODE_BIND_HOST",
   "GOOGLE_CLIENT_ID",
   "GOOGLE_CLIENT_SECRET",
@@ -49,6 +51,8 @@ const DATADOG_PROCESS_KEYS = ["DATADOG_API_KEY", "DATADOG_APPLICATION_KEY", "DAT
 
 const BI_PROCESS_KEYS = ["AWS_PROFILE", "OKTA_PASSWORD", "BI_OPS_USER_EMAIL", "CAPI_REPO_PATH"] as const;
 
+const CHAMBER_PROCESS_KEYS = ["OPENCHAMBER_HOST", "OPENCHAMBER_UI_PASSWORD"] as const;
+
 /** Keeps Google Calendar routes working in the same dev process after `.env.local` changes. */
 export function syncGoogleProcessEnvFromOverrides(overrides: Map<string, string>): void {
   for (const key of GOOGLE_PROCESS_KEYS) {
@@ -76,6 +80,19 @@ export function syncDatadogProcessEnvFromOverrides(overrides: Map<string, string
 
 export function syncBiProcessEnvFromOverrides(overrides: Map<string, string>): void {
   for (const key of BI_PROCESS_KEYS) {
+    const v = overrides.get(key)?.trim();
+    if (v) process.env[key] = v;
+    else delete process.env[key];
+  }
+}
+
+/**
+ * Keeps the OpenChamber bind host + UI password live in this process after a
+ * save, so the in-app "Restart" button (which spawns the daemon from
+ * process.env) picks up changes without a full relaunch.
+ */
+export function syncChamberProcessEnvFromOverrides(overrides: Map<string, string>): void {
+  for (const key of CHAMBER_PROCESS_KEYS) {
     const v = overrides.get(key)?.trim();
     if (v) process.env[key] = v;
     else delete process.env[key];

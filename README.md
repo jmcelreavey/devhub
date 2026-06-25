@@ -91,9 +91,9 @@ A Next.js-based personal dev dashboard (default `http://localhost:1337`).
 
 > **Trusted network only.** DevHub ships with no authentication. Use it on a LAN you control (home Wi‑Fi) or lock it to this machine (below). Do not expose it to the public internet without adding auth (out of scope). The Actions page can spawn whitelisted scripts on your machine.
 
-By default the dashboard, OpenChamber, and OpenCode bind to all interfaces, so phones and other devices on your Wi‑Fi can use `http://<this machine’s LAN IP>:1337`. Use **Setup** (`/setup`) — checkbox _Allow access from other devices on my network_ — to toggle localhost-only vs LAN; it updates `DEVHUB_BIND_HOST` / `OPENCHAMBER_HOST` / `OPENCODE_BIND_HOST` in `dashboard/.env.local` (restart dev server after changing).
+DevHub keeps the local services on `127.0.0.1` so the Electron app can always use `http://localhost:1337`. Use **Setup** (`/setup`) — checkbox _Allow access from other devices on my network_ — to add LAN access. LAN mode starts a small proxy on the detected physical LAN IPv4 and forwards ports `1337`, `1336`, `1338`, and `1339` back to localhost. The `auto` detector excludes Tailscale/VPN CGNAT addresses (`100.64.0.0/10`) by default.
 
-**WSL2:** LAN traffic hits **Windows** first. DevHub already binds `0.0.0.0` inside Linux; you still need Windows to accept and route it.
+**WSL2:** LAN traffic hits **Windows** first. DevHub exposes a LAN proxy inside Linux; you still need Windows to accept and route it.
 
 1. **Mirrored networking (recommended, Windows 11 22H2+):** Put this in `%USERPROFILE%\.wslconfig` (create the file if needed), then run `wsl --shutdown` and open your distro again:
 
@@ -146,12 +146,13 @@ A starter `dashboard/.env.example` is checked in — copy to `dashboard/.env.loc
 | `NOTES_DIR` | `~/dev/devhub/notes` | Notes storage path |
 | `REPO_ROOT` | `~/dev/devhub` | Repository root |
 | `PORT` | `1337` | Dashboard port |
-| `DEVHUB_BIND_HOST` | `0.0.0.0` | Next.js listen address; use `127.0.0.1` for localhost only |
-| `OPENCHAMBER_HOST` | `0.0.0.0` | OpenChamber bind address (keep in sync with `DEVHUB_BIND_HOST`) |
+| `DEVHUB_BIND_HOST` | `127.0.0.1` | Next.js listen address; keep localhost for Electron |
+| `DEVHUB_LAN_PROXY_HOST` | unset | Optional LAN proxy bind host. Use `auto` to pick a physical LAN IPv4 and exclude Tailscale CGNAT |
+| `OPENCHAMBER_HOST` | `127.0.0.1` | OpenChamber local bind address; LAN access is proxied when enabled |
 | `NEXT_PUBLIC_OPENCHAMBER_PORT` | `1336` | Port embedded in the Chamber iframe URL in the browser |
 | `OPENCODE_PORT` | `1338` | `opencode serve` listen port (shared by Chamber and the `/opencode` page) |
 | `TERMINAL_PORT` | `1339` | In-app terminal PTY WebSocket peer |
-| `OPENCODE_BIND_HOST` | `0.0.0.0` | `opencode serve --hostname` (legacy: `OPENCODE_HOST` when not a URL) |
+| `OPENCODE_BIND_HOST` | `127.0.0.1` | `opencode serve --hostname` (legacy: `OPENCODE_HOST` when not a URL); LAN access is proxied when enabled |
 | `NEXT_PUBLIC_OPENCODE_PORT` | `1338` | Port embedded in the OpenCode iframe URL in the browser |
 
 **Google Calendar (optional):**
@@ -341,7 +342,11 @@ Register a plugin in a machine-local file (never committed):
 
 ```jsonc
 // ~/.config/devhub/plugins.json
-{ "plugins": [ { "name": "bi", "path": "~/Developer/devhub-bi", "enabled": true } ] }
+{
+  "plugins": [
+    { "name": "bi", "path": "~/Developer/devhub-bi", "enabled": true },
+  ],
+}
 ```
 
 Each plugin repo has a `devhub-plugin.json` manifest declaring what it contributes. To build one, follow [docs/guides/creating-plugins.md](docs/guides/creating-plugins.md); for the design, see [docs/architecture/plugins.md](docs/architecture/plugins.md). This generalises the older single `ai-tools` skill merge.
@@ -470,15 +475,15 @@ See [`docs/PLATFORM_REQUIREMENTS.md`](docs/PLATFORM_REQUIREMENTS.md) for the ful
 
 ## Documentation
 
-| Document                        | Purpose                                                        |
-| ------------------------------- | -------------------------------------------------------------- |
-| `docs/MEMORY_OPTIONS.md`        | Memory architecture: git-based notes + custom notes MCP server |
-| `docs/PLATFORM_REQUIREMENTS.md` | Platform capability matrix                                     |
-| `docs/TOKEN_BUDGET.md`          | Token budget analysis and optimization tips                    |
-| `docs/guides/repo-learning.md`  | Repos page learning briefs, tutor, and NotebookLM source packs |
-| `docs/guides/creating-plugins.md` | Step-by-step guide to building a plugin                      |
-| `docs/architecture/plugins.md`  | Plugin system: manifest, registry, tier-1/tier-2, precedence   |
-| `CONTRIBUTING.md`               | Private-mirror + upstream + backport fork workflow             |
+| Document                          | Purpose                                                        |
+| --------------------------------- | -------------------------------------------------------------- |
+| `docs/MEMORY_OPTIONS.md`          | Memory architecture: git-based notes + custom notes MCP server |
+| `docs/PLATFORM_REQUIREMENTS.md`   | Platform capability matrix                                     |
+| `docs/TOKEN_BUDGET.md`            | Token budget analysis and optimization tips                    |
+| `docs/guides/repo-learning.md`    | Repos page learning briefs, tutor, and NotebookLM source packs |
+| `docs/guides/creating-plugins.md` | Step-by-step guide to building a plugin                        |
+| `docs/architecture/plugins.md`    | Plugin system: manifest, registry, tier-1/tier-2, precedence   |
+| `CONTRIBUTING.md`                 | Private-mirror + upstream + backport fork workflow             |
 
 ## Troubleshooting
 

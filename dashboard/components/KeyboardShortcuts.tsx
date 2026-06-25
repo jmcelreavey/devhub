@@ -47,7 +47,6 @@ export function KeyboardShortcuts() {
           a: "/actions",
           r: "/repos",
           k: "/skills",
-          b: "/bookmarks",
           c: "/chamber",
           l: "/calendar",
           j: "/tickets",

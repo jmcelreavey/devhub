@@ -184,7 +184,7 @@ export function TasksOverlay({ open, onClose }: TasksOverlayProps) {
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto overscroll-contain">
         {activeTab === "active" ? (
           <div className="p-3">
             <TaskList

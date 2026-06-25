@@ -218,6 +218,21 @@ export class VaultStorage {
     return true;
   }
 
+  createDir(relPath: string): { path: string } | null {
+    const normalized = path.normalize(relPath.trim().replace(/\\/g, path.sep));
+    if (!normalized || normalized === ".") return null;
+    if (normalized.split(path.sep).includes("..")) {
+      throw new Error("Path traversal blocked");
+    }
+    const resolved = path.resolve(this.root, normalized);
+    if (resolved === this.root || !resolved.startsWith(this.root + path.sep)) {
+      return null;
+    }
+    if (fs.existsSync(resolved)) return null;
+    fs.mkdirSync(resolved, { recursive: true });
+    return { path: path.relative(this.root, resolved) };
+  }
+
   private walkVaultFiles(dir: string, callback: (fullPath: string, relPath: string) => void): void {
     if (!fs.existsSync(dir)) return;
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

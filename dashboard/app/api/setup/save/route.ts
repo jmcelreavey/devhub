@@ -5,6 +5,7 @@ import os from "node:os";
 import {
   readDashboardEnvLocalFile,
   syncBiProcessEnvFromOverrides,
+  syncChamberProcessEnvFromOverrides,
   syncDatadogProcessEnvFromOverrides,
   syncGoogleProcessEnvFromOverrides,
   syncJiraProcessEnvFromOverrides,
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
     jira?: { domain: string; email: string; apiToken: string };
     datadog?: { apiKey?: string; applicationKey?: string; email?: string; scheduleId?: string } | null;
     core?: { repoRoot?: string; notesDir?: string };
-    network?: { allowLan: boolean };
+    network?: { allowLan: boolean; openchamberUiPassword?: string };
     bi?: { capiRepoPath?: string };
   };
 
@@ -143,15 +144,25 @@ export async function POST(req: NextRequest) {
 
   if (network !== undefined) {
     if (network.allowLan) {
-      overrides.delete("DEVHUB_BIND_HOST");
-      overrides.delete("OPENCHAMBER_HOST");
-      overrides.delete("OPENCODE_BIND_HOST");
-      overrides.delete("OPENCODE_HOST");
-    } else {
       overrides.set("DEVHUB_BIND_HOST", "127.0.0.1");
+      overrides.set("DEVHUB_LAN_PROXY_HOST", "auto");
       overrides.set("OPENCHAMBER_HOST", "127.0.0.1");
       overrides.set("OPENCODE_BIND_HOST", "127.0.0.1");
       overrides.delete("OPENCODE_HOST");
+    } else {
+      overrides.set("DEVHUB_BIND_HOST", "127.0.0.1");
+      overrides.delete("DEVHUB_LAN_PROXY_HOST");
+      overrides.set("OPENCHAMBER_HOST", "127.0.0.1");
+      overrides.set("OPENCODE_BIND_HOST", "127.0.0.1");
+      overrides.delete("OPENCODE_HOST");
+    }
+    // OpenChamber >=1.13 refuses to bind a LAN address without UI auth, so a
+    // password is required to expose it over the network. Stored regardless of
+    // LAN state so toggling back on doesn't lose it.
+    if (network.openchamberUiPassword !== undefined) {
+      const pw = network.openchamberUiPassword.trim();
+      if (pw) overrides.set("OPENCHAMBER_UI_PASSWORD", pw);
+      else overrides.delete("OPENCHAMBER_UI_PASSWORD");
     }
     needsRestartNotice = true;
   }
@@ -169,6 +180,7 @@ export async function POST(req: NextRequest) {
   syncJiraProcessEnvFromOverrides(overrides);
   syncDatadogProcessEnvFromOverrides(overrides);
   syncBiProcessEnvFromOverrides(overrides);
+  syncChamberProcessEnvFromOverrides(overrides);
 
   const saved: string[] = [];
   if (core?.repoRoot && overrides.get("REPO_ROOT")) saved.push(`REPO_ROOT=${overrides.get("REPO_ROOT")}`);
@@ -184,6 +196,9 @@ export async function POST(req: NextRequest) {
   if (datadog?.email?.trim()) saved.push(`BI_OPS_USER_EMAIL=${datadog.email.trim()}`);
   if (datadog?.scheduleId?.trim()) saved.push(`DATADOG_ONCALL_SCHEDULE_ID=${datadog.scheduleId.trim()}`);
   if (bi?.capiRepoPath && overrides.get("CAPI_REPO_PATH")) saved.push(`CAPI_REPO_PATH=${overrides.get("CAPI_REPO_PATH")}`);
+  if (network?.openchamberUiPassword?.trim() && overrides.get("OPENCHAMBER_UI_PASSWORD")) {
+    saved.push(`OPENCHAMBER_UI_PASSWORD=${mask(overrides.get("OPENCHAMBER_UI_PASSWORD")!)}`);
+  }
 
   const message = needsRestartNotice
     ? "Saved. Restart the dev server for core paths or network bind changes. Other values are already active in this session."

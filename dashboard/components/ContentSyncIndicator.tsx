@@ -27,11 +27,6 @@ const EMPTY_GIT_SYNC: GitSyncState = {
   behind: 0,
 };
 
-const CLUSTER_STYLE: React.CSSProperties = {
-  background: "var(--bg-elevated)",
-  border: "1px solid var(--border-muted)",
-};
-
 async function loadGitSyncState(): Promise<GitSyncState> {
   const git = (await fetch("/api/status/git")
     .then((r) => (r.ok ? r.json() : null))
@@ -201,8 +196,7 @@ export function ContentSyncIndicator() {
     <>
       <span
         role="group"
-        className="flex items-center gap-0.5 px-1 rounded"
-        style={CLUSTER_STYLE}
+        className="hub-cluster"
         aria-label="Pending changes"
       >
         {contentChanges > 0 && (

@@ -14,7 +14,12 @@ export async function GET(
   try {
     const ticket = await getTicket(key);
     if (!ticket) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return NextResponse.json({ key, status: ticket.status });
+    return NextResponse.json({
+      key,
+      status: ticket.status,
+      summary: ticket.summary,
+      issuetype: ticket.issuetype,
+    });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }

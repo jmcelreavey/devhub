@@ -4,14 +4,13 @@ import Image from "next/image";
 import { Search } from "lucide-react";
 import { BRAND_BOTTLE_IMAGE_SRC, BRAND_LABEL } from "@/lib/brand-mark";
 import { MobileNav } from "@/components/MobileNav";
-import { NotesBrowseButton } from "@/components/NotesBrowseButton";
-import { TasksBrowseButton } from "@/components/TasksBrowseButton";
-import { DiagramsBrowseButton } from "@/components/DiagramsBrowseButton";
+import { MobileQuickActionsMenu } from "@/components/MobileQuickActionsMenu";
 import { ContentSyncIndicator } from "@/components/ContentSyncIndicator";
 
 /**
- * Mobile-only chrome: hamburger nav + brand + the Notes/Tasks/Diagrams
- * quick-action side panels.
+ * Mobile-only chrome: hamburger nav + brand + search + a single overflow
+ * menu holding the Notes/Tasks/Diagrams panels and the terminal toggle
+ * (kept off the bar itself to avoid crowding a phone-width row).
  *
  * Kept on every route including /chamber — the burger covers navigation
  * and the quick-action panels are the only way to reach Notes/Tasks/
@@ -56,9 +55,7 @@ export function MobileTopBar() {
         >
           <Search size={15} aria-hidden />
         </button>
-        <NotesBrowseButton />
-        <TasksBrowseButton />
-        <DiagramsBrowseButton />
+        <MobileQuickActionsMenu />
       </div>
     </header>
   );

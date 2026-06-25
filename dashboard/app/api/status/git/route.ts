@@ -1,7 +1,45 @@
+import path from "node:path";
 import { NextResponse } from "next/server";
 import { detectGitConflicts } from "@/lib/git-conflicts";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot, getNotesDir, getCollectionsDir, getTasksDir, getDocsDir } from "@/lib/notes-dir";
 import { runGitRepo, runGitRepoAsync } from "@/lib/git-repo-local";
+import { DIAGRAMS_DIR } from "@/lib/diagram-utils";
+
+type ContentBucket = "notes" | "tasks" | "docs";
+
+/** Repo-relative POSIX prefix (trailing slash) for a content dir, or null when it lives outside the repo. */
+function repoRelativePrefix(root: string, dir: string): string | null {
+  const rel = path.relative(root, dir);
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return null;
+  return `${rel.split(path.sep).join("/")}/`;
+}
+
+function safeContentDir(resolve: () => string): string | null {
+  try {
+    return resolve();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Classify dirty files by their CONFIGURED content directory rather than
+ * hardcoded path literals. This keeps tasks/notes/docs counted as syncable
+ * "content" (not generic "dirty files") even when TASKS_DIR/NOTES_DIR are
+ * relocated — a supported setup per the personal-data boundary in CONTRIBUTING.
+ */
+function buildContentBuckets(root: string): { bucket: ContentBucket; prefix: string }[] {
+  const buckets: { bucket: ContentBucket; prefix: string }[] = [];
+  const add = (bucket: ContentBucket, dir: string | null, fallback: string): void => {
+    const prefix = dir ? repoRelativePrefix(root, dir) : `${fallback}/`;
+    if (prefix) buckets.push({ bucket, prefix });
+  };
+  add("notes", safeContentDir(getNotesDir), "notes");
+  add("notes", safeContentDir(getCollectionsDir), "collections");
+  add("tasks", safeContentDir(getTasksDir), "tasks");
+  add("docs", safeContentDir(getDocsDir), "docs");
+  return buckets;
+}
 
 /** Throttle the network fetch — local counting stays per-request. */
 const FETCH_TTL_MS = 4 * 60 * 1000;
@@ -20,17 +58,28 @@ export async function GET() {
 
     const dirtyLines = status.stdout.trim().split("\n").filter(Boolean);
     const dirtyCount = dirtyLines.length;
+    const contentBuckets = buildContentBuckets(root);
+    const diagramsPrefix = `${DIAGRAMS_DIR}/`;
     let notesCount = 0;
     let tasksCount = 0;
     let diagramsCount = 0;
     let docsCount = 0;
     for (const line of dirtyLines) {
       const fp = line.slice(3);
-      if (fp.startsWith("notes/") || fp.startsWith("collections/")) notesCount++;
-      else if (fp.startsWith("tasks/")) tasksCount++;
-      else if (fp.startsWith("diagrams/")) diagramsCount++;
-      else if (fp.startsWith("docs/")) docsCount++;
+      if (fp.startsWith(diagramsPrefix)) {
+        diagramsCount++;
+        continue;
+      }
+      const hit = contentBuckets.find((b) => fp.startsWith(b.prefix));
+      if (!hit) continue;
+      if (hit.bucket === "notes") notesCount++;
+      else if (hit.bucket === "tasks") tasksCount++;
+      else docsCount++;
     }
+    // Dirty files that are NOT syncable content (notes/tasks/diagrams/docs).
+    // The top bar treats content as a one-click sync; only these need the
+    // commit-&-push "dirty files" flow.
+    const otherDirtyCount = dirtyCount - (notesCount + tasksCount + diagramsCount + docsCount);
 
     // ahead/behind needs a network `git fetch`, but this endpoint is polled
     // every 30s by the top-bar indicator — fetching every call burned
@@ -78,11 +127,20 @@ export async function GET() {
         fix: "git checkout main && git pull",
       });
     }
-    if (dirtyCount > 0) {
+    const contentDirtyCount = notesCount + tasksCount + diagramsCount + docsCount;
+    if (otherDirtyCount > 0) {
       hints.push({
         severity: "warn",
-        text: "Working tree is dirty — pull / collect / commit / push are skipped until it is clean.",
+        text: "Working tree has dirty files — pull / collect / commit / push are skipped until it is clean.",
         fix: "Use Commit & sync on this page, the warning (triangle + count) button in the top bar, or Actions → Commit & Push Dirty Files. Then run Update & Sync.",
+      });
+    } else if (contentDirtyCount > 0) {
+      // Content (notes/tasks/diagrams/docs) is not a generic "dirty file" — it
+      // has a dedicated one-tap sync. Surface it as content, not as dirt.
+      hints.push({
+        severity: "warn",
+        text: "Notes, tasks, and diagrams have unsynced changes.",
+        fix: "Click the cloud (content) button in the top bar to sync them, then run Update & Sync.",
       });
     }
     if (ahead > 0 && behind > 0) {
@@ -105,6 +163,8 @@ export async function GET() {
     return NextResponse.json({
       branch: branchName,
       dirtyCount,
+      otherDirtyCount,
+      contentDirtyCount,
       notesCount,
       tasksCount,
       diagramsCount,

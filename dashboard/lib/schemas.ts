@@ -37,6 +37,22 @@ export const TaskReorderSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
+const JIRA_KEY_PATTERN = /^[A-Z][A-Z0-9]+-\d+$/;
+
+export const JiraCreateIssueSchema = z.object({
+  projectKey: z.string().regex(/^[A-Z][A-Z0-9]+$/, "projectKey must be a Jira project key"),
+  summary: z.string().min(1, "summary is required").max(255),
+  description: z.string().max(5000).optional(),
+  parentKey: z.union([z.string().regex(JIRA_KEY_PATTERN), z.null()]).optional(),
+  issuetypeName: z.string().min(1).max(60).optional(),
+  assignToMe: z.boolean().optional(),
+  sprintId: z.union([z.number().int().positive(), z.null()]).optional(),
+});
+
+export const JiraTransitionSchema = z.object({
+  transitionId: z.string().min(1, "transitionId is required"),
+});
+
 export const NotePutSchema = z.object({
   content: z.unknown(),
 });

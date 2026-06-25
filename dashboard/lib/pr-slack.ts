@@ -2,6 +2,7 @@ import type { MouseEvent } from "react";
 import type { GithubPrRow } from "./github-prs";
 import type { useToast } from "./use-toast";
 import { JIRA_KEY_RE } from "./utils";
+import { copyTextToClipboard } from "./clipboard";
 
 export type SlackMessageKind = "awaiting" | "reviewed" | "reviewed-approved";
 
@@ -37,7 +38,7 @@ export function copyWithToast(text: string, label: string, toast: ReturnType<typ
     e.preventDefault();
     e.stopPropagation();
     try {
-      await navigator.clipboard.writeText(text);
+      await copyTextToClipboard(text);
       toast.success(`${label} copied.`);
     } catch {
       toast.error("Copy failed.");

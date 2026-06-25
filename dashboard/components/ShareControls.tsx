@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Share2, Globe, Loader2, Copy, X, RefreshCw, AlertTriangle } from "lucide-react";
 import { useLive } from "@/lib/use-fetch";
 import { useToast } from "@/lib/use-toast";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { HoverTip } from "@/components/HoverTip";
 import { shareKey, type ShareStatus, type VaultId } from "@/lib/share/share-public";
 
@@ -34,7 +35,7 @@ export function ShareControls({ vaultId, path }: Props) {
       const body = (await res.json().catch(() => ({}))) as { share?: { url: string }; error?: string };
       if (!res.ok || !body.share) throw new Error(body.error ?? res.statusText);
       await mutate();
-      await navigator.clipboard?.writeText(body.share.url).catch(() => {});
+      await copyTextToClipboard(body.share.url).catch(() => {});
       toast.success(live ? "Updated — link copied" : "Live — link copied");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not publish.");
@@ -127,8 +128,10 @@ export function ShareControls({ vaultId, path }: Props) {
           <button
             type="button"
             onClick={() => {
-              navigator.clipboard?.writeText(live.url);
-              toast.success("Link copied.");
+              void copyTextToClipboard(live.url).then(
+                () => toast.success("Link copied."),
+                () => toast.error("Could not copy link."),
+              );
             }}
             className="btn btn-ghost text-xs flex items-center justify-center px-1.5"
             aria-label="Copy live link"

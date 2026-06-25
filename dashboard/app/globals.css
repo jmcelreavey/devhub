@@ -1992,7 +1992,6 @@ a:focus-visible {
   height: 1px;
   background: linear-gradient(90deg, var(--border-muted), transparent);
 }
-
 /* Active-item accent rail grows in */
 @keyframes nav-rail-in {
   from {
@@ -3281,6 +3280,15 @@ body[data-density="compact"] .card {
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
 }
+
+/* Lift BlockNote's base UI z-index so any floating element that derives from it
+   (`calc(var(--bn-ui-base-z-index) + n)`) sits above our modals (z-250) rather
+   than the default 0. !important beats BlockNote's own `.bn-root { …: 0 }`
+   regardless of stylesheet order. (Most menus render in-DOM within the modal's
+   stacking context and are already fine; this is a safety net for the rest.) */
+.bn-root {
+  --bn-ui-base-z-index: 300 !important;
+}
 @media (prefers-reduced-motion: no-preference) {
   .modal-backdrop {
     animation: modal-backdrop-in 150ms ease-out;
@@ -4125,5 +4133,48 @@ body[data-density="compact"] .card {
   .hub-icon-btn:active,
   .btn:active {
     scale: 0.96;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────
+   Mobile UX polish
+   ─────────────────────────────────────────────────────────── */
+
+/* Kill the grey flash when tapping custom controls on touch devices. */
+a,
+button,
+[role="button"],
+summary,
+.hub-icon-btn,
+.btn {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Contain rubber-band / scroll-chaining inside the app's own scrollers so a
+   flick at the end of a list doesn't bounce the whole page. */
+main,
+.terminal-dock-body,
+#mobile-nav-drawer nav {
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 767px) {
+  /* iOS Safari auto-zooms when focusing a control whose font-size is < 16px.
+     Pin form controls to 16px on phones so tapping a field never jerks the
+     viewport (task capture, search palette, note editor, setup inputs). */
+  input,
+  textarea,
+  select,
+  .input,
+  .palette-input,
+  .editor-textarea {
+    font-size: 16px;
+  }
+
+  /* A 42vh terminal leaves only a couple of visible rows once the on-screen
+     keyboard is up. Give it almost the full (dynamic) viewport height on
+     phones. dvh tracks the shrinking viewport as browser chrome hides. */
+  .terminal-dock {
+    height: 92dvh;
   }
 }

@@ -23,6 +23,7 @@ import { blocknoteNotesAiEditorOptions } from "@/lib/notes-ai/editor-options";
 import { useNotesAiConfigured } from "@/lib/notes-ai/use-notes-ai-configured";
 import { ChecklistIcon } from "@/lib/checklists/icons";
 import { collectCheckboxBlocks } from "@/lib/note-task-sync";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { NoteEditorProvider } from "@/lib/note-editor-context";
 import {
   getLinkHrefFromEvent,
@@ -486,14 +487,14 @@ function BlockNoteEditorReady({
   }, [caseSensitive, editor, findQuery, matchCount, replaceValue, searchableBlocks]);
 
   const copyMarkdown = useCallback(async () => {
-    await navigator.clipboard.writeText(
+    await copyTextToClipboard(
       editor.blocksToMarkdownLossy(editor.document as DevHubPartialBlock[]),
     );
     setUtilityStatus("Copied Markdown.");
   }, [editor]);
 
   const copyPlainText = useCallback(async () => {
-    await navigator.clipboard.writeText(
+    await copyTextToClipboard(
       searchableBlocks.map((block) => inlineText(block.content)).filter(Boolean).join("\n"),
     );
     setUtilityStatus("Copied plain text.");

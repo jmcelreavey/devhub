@@ -9,6 +9,7 @@ import type { JiraTicket } from "@/lib/jira-client";
 import { TodayCollapseButton } from "@/components/TodayCollapseButton";
 import { SeverityPill, type SeverityTone } from "@/components/ui/Severity";
 import { useGridSize } from "@/lib/use-grid-size";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { QueueRow } from "@/components/ui/QueueRow";
 
 interface JiraResponse {
@@ -73,7 +74,7 @@ export function JiraWidget({ collapsed = false, collapsedSummary, onToggle }: Ji
   const copyKey = useCallback(
     async (key: string) => {
       try {
-        await navigator.clipboard.writeText(key);
+        await copyTextToClipboard(key);
         toast.success(`Copied ${key}`);
       } catch {
         toast.error("Couldn't copy to clipboard.");

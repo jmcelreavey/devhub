@@ -1,17 +1,25 @@
 "use client";
 
-import { forwardRef } from "react";
+import type { Ref } from "react";
 import { GripVertical, GripHorizontal } from "lucide-react";
 
 type ResizeAxis = "e" | "s" | "se" | "w";
 
 interface ResizeHandleProps extends React.HTMLAttributes<HTMLDivElement> {
   axis?: ResizeAxis;
+  /** React 19 takes ref as a plain prop — no forwardRef wrapper needed. */
+  ref?: Ref<HTMLDivElement>;
 }
 
-export const ResizeHandle = forwardRef<HTMLDivElement, ResizeHandleProps>(
-  ({ axis = "e", style, onMouseEnter, onMouseLeave, ...props }, ref) => {
-    const isVertical = axis === "e" || axis === "w";
+export function ResizeHandle({
+  axis = "e",
+  style,
+  onMouseEnter,
+  onMouseLeave,
+  ref,
+  ...props
+}: ResizeHandleProps) {
+  const isVertical = axis === "e" || axis === "w";
     const cursor =
       axis === "se" ? "nwse-resize" : isVertical ? "col-resize" : "row-resize";
 
@@ -52,6 +60,4 @@ export const ResizeHandle = forwardRef<HTMLDivElement, ResizeHandleProps>(
           ))}
       </div>
     );
-  },
-);
-ResizeHandle.displayName = "ResizeHandle";
+}

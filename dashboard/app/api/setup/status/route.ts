@@ -57,15 +57,17 @@ export async function GET() {
   const bi = biPresence.bi;
 
   const bindHost = resolveEnvValue("DEVHUB_BIND_HOST", overrides)?.trim();
+  const lanProxyHost = resolveEnvValue("DEVHUB_LAN_PROXY_HOST", overrides)?.trim();
   const chamberHost = resolveEnvValue("OPENCHAMBER_HOST", overrides)?.trim();
   const opencodeBindHost =
     resolveEnvValue("OPENCODE_BIND_HOST", overrides)?.trim()
     ?? resolveEnvValue("OPENCODE_HOST", overrides)?.trim();
-  /** When unset, dev/start scripts default to 0.0.0.0 (LAN). Any host locked to localhost disables LAN. */
-  const allowLanNetwork =
-    bindHost !== "127.0.0.1" && chamberHost !== "127.0.0.1" && opencodeBindHost !== "127.0.0.1";
+  const allowLanNetwork = !!lanProxyHost || (
+    bindHost !== "127.0.0.1" && chamberHost !== "127.0.0.1" && opencodeBindHost !== "127.0.0.1"
+  );
+  const hasOpenchamberUiPassword = !!resolveEnvValue("OPENCHAMBER_UI_PASSWORD", overrides);
 
-  const peerServices = await getPeerServiceGateStatus(process.cwd());
+  const peerServices = await getPeerServiceGateStatus();
 
   return NextResponse.json({
     core,
@@ -78,6 +80,7 @@ export async function GET() {
     opencode: peerServices.opencode,
     claude: peerServices.claude,
     allowLanNetwork,
+    hasOpenchamberUiPassword,
     envPath: ".env.local",
     coreVars: {
       repoRoot: resolveEnvValue("REPO_ROOT", overrides) ?? "",

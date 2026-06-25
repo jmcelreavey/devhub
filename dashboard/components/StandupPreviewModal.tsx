@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Copy, FileText, X } from "lucide-react";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { useToast } from "@/lib/use-toast";
 import type { StandupResponse } from "@/lib/standup-params";
 
@@ -53,7 +54,7 @@ export function StandupPreviewModal({
 
   async function copyToClipboard() {
     try {
-      await navigator.clipboard.writeText(markdown);
+      await copyTextToClipboard(markdown);
       toast.success("Standup copied.");
     } catch {
       toast.error("Clipboard unavailable — try again from a user tap.");

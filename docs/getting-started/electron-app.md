@@ -10,13 +10,15 @@ It does not replace the dashboard. It runs the same local DevHub app you can ope
 
 ### Local Ports
 
-| Port  | Service     |
-| ----- | ----------- |
-| `1337`| Dashboard   |
-| `1336`| OpenChamber |
-| `1338`| OpenCode    |
+| Port   | Service     |
+| ------ | ----------- |
+| `1337` | Dashboard   |
+| `1336` | OpenChamber |
+| `1338` | OpenCode    |
 
 The launcher can detect whether each port is reachable, start `npm run dev` or `npm run start` when needed, and restart listeners on all three before relaunching.
+
+The Electron app always opens the dashboard through `localhost`. LAN access is handled separately by DevHub's LAN proxy, so enabling network access does not make Electron chase the machine's Wi‑Fi or Tailscale IP.
 
 ## Start The App Locally
 
@@ -55,11 +57,11 @@ Use the browser if you prefer:
 
 Per-service quit behavior is configurable in the app menu (stored in `launcher-settings.json` under Electron user data):
 
-| Setting                 | Default | Effect on quit                          |
-| ----------------------- | ------- | --------------------------------------- |
-| Kill dashboard on close | on      | Stops the Next.js dev/production process|
-| Kill OpenChamber on close | on    | Stops the OpenChamber daemon on `1336`  |
-| Kill OpenCode on close  | on      | Stops `opencode serve` on `1338`        |
+| Setting                   | Default | Effect on quit                           |
+| ------------------------- | ------- | ---------------------------------------- |
+| Kill dashboard on close   | on      | Stops the Next.js dev/production process |
+| Kill OpenChamber on close | on      | Stops the OpenChamber daemon on `1336`   |
+| Kill OpenCode on close    | on      | Stops `opencode serve` on `1338`         |
 
 Turn off individual toggles when you want DevHub to keep supported peer services running after closing the window. Note: OpenChamber is currently still stopped during launcher cleanup even if **Kill OpenChamber on close** is disabled.
 
@@ -76,11 +78,11 @@ From the dashboard **Actions** page (when the native apps are installed):
 
 Packaged installs (`.dmg`, `.deb`, `.AppImage`) use `electron-updater` with GitHub Releases as the update provider.
 
-| Context | Behavior |
-| ------- | -------- |
-| Packaged app | On launch, checks for a newer launcher version; prompts before download and before install |
-| Manual check | **Tools** → **Check for Updates** in the app menu |
-| Local dev (`npm run electron`) | No auto-update; manual check explains that only packaged builds update |
+| Context                        | Behavior                                                                                   |
+| ------------------------------ | ------------------------------------------------------------------------------------------ |
+| Packaged app                   | On launch, checks for a newer launcher version; prompts before download and before install |
+| Manual check                   | **Tools** → **Check for Updates** in the app menu                                          |
+| Local dev (`npm run electron`) | No auto-update; manual check explains that only packaged builds update                     |
 
 Updates apply to the **Electron launcher**, not the dashboard code inside the repo. After installing a launcher update, DevHub still runs whatever dashboard version is in your local checkout (or bundled resources in a full release build).
 

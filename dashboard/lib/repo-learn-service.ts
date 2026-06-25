@@ -7,6 +7,8 @@ import {
   type RepoLearnPackFile,
 } from "@/lib/repo-learn-cache";
 
+const inFlightGenerations = new Map<string, Promise<RepoLearnArtifactsResponse>>();
+
 export interface RepoLearnArtifactsResponse {
   briefMarkdown: string;
   packFiles: RepoLearnPackFile[];
@@ -57,24 +59,12 @@ export async function loadRepoLearn(repoPath: string, refresh: boolean): Promise
   }
 
   try {
-    const generated = await generateRepoLearnArtifacts(context);
-    const generatedAt = new Date().toISOString();
-    await writeRepoLearnCache({
-      repoName: context.repoName,
-      gitHead,
-      generatedAt,
-      briefMarkdown: generated.briefMarkdown,
-      packFiles: generated.packFiles,
-    });
+    const generated = await generateCachedRepoLearnArtifacts(context, gitHead);
     return {
       context,
       gitHead,
       aiConfigured: true,
-      artifacts: {
-        ...generated,
-        generatedAt,
-        cached: false,
-      },
+      artifacts: generated,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -87,4 +77,31 @@ export async function loadRepoLearn(repoPath: string, refresh: boolean): Promise
       message,
     };
   }
+}
+
+function generateCachedRepoLearnArtifacts(context: RepoContext, gitHead: string): Promise<RepoLearnArtifactsResponse> {
+  const key = `${context.repoName}:${gitHead}`;
+  const existing = inFlightGenerations.get(key);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    const generated = await generateRepoLearnArtifacts(context);
+    const generatedAt = new Date().toISOString();
+    await writeRepoLearnCache({
+      repoName: context.repoName,
+      gitHead,
+      generatedAt,
+      briefMarkdown: generated.briefMarkdown,
+      packFiles: generated.packFiles,
+    });
+    return {
+      ...generated,
+      generatedAt,
+      cached: false,
+    };
+  })();
+
+  inFlightGenerations.set(key, promise);
+  void promise.finally(() => inFlightGenerations.delete(key));
+  return promise;
 }

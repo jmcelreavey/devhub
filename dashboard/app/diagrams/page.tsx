@@ -1,29 +1,50 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { PenTool, Plus, Trash2, Pencil } from "lucide-react";
-import { flattenTreeFiles } from "@/lib/tree-utils";
-import { useRouter } from "next/navigation";
+import {
+  ChevronRight,
+  Folder,
+  FolderInput,
+  FolderPlus,
+  PenTool,
+  Plus,
+  Trash2,
+} from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/lib/use-toast";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { EmptyState } from "@/components/EmptyState";
+import { InlineNoteRename } from "@/components/InlineNoteRename";
+import { MoveDiagramModal, type MoveDiagramTarget } from "@/components/MoveDiagramModal";
 import {
+  collectDiagramFolderRelPaths,
   createEmptyDiagram,
+  diagramBreadcrumbs,
+  diagramFolderChildren,
+  diagramFolderHref,
+  diagramFolderStoragePath,
+  extractDiagramsTree,
   hasVisibleDiagramShapes,
-  isDiagramStoragePath,
+  normalizeDiagramFolder,
+  splitDiagramEntries,
+  stripDiagramsPrefix,
   toDiagramRoutePath,
   toNotesApiPath,
-  DIAGRAMS_DIR,
+  type DiagramFile,
+  type DiagramFolder,
+  type DiagramTreeEntry,
 } from "@/lib/diagram-utils";
+import {
+  createDiagramFolder,
+  deleteDiagramFolder,
+  moveDiagramEntry,
+  renameDiagramFolder,
+} from "@/lib/diagram-folder-actions";
+import { renameNoteFile } from "@/lib/notes-path";
 import { broadcastNoteAutosaveInvalidation } from "@/lib/note-autosave-invalidation";
 import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
-
-interface DiagramItem {
-  path: string;
-  name: string;
-}
 
 const TldrawThumbnail = dynamic(
   () => import("@/components/TldrawThumbnail").then((mod) => mod.TldrawThumbnail),
@@ -48,42 +69,71 @@ function DiagramThumbnail({ data }: { data: unknown }) {
   );
 }
 
+type MoveCandidate = { storagePath: string; name: string; isDir: boolean };
+
 export default function DiagramsIndex() {
-  const [diagrams, setDiagrams] = useState<DiagramItem[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const boot = useBootGate(loaded);
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [renamingPath, setRenamingPath] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
+  return (
+    <Suspense fallback={<div className="page-wrapper" />}>
+      <DiagramsIndexInner />
+    </Suspense>
+  );
+}
+
+function DiagramsIndexInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToast();
   const confirm = useConfirm();
-  const createInputRef = useRef<HTMLInputElement>(null);
-  const renameInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    fetch("/api/tree")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((tree) => {
-        const allFiles = flattenTreeFiles(tree);
-        setDiagrams(
-          allFiles
-            .filter((f) => isDiagramStoragePath(f.path))
-            .map((f) => ({ path: f.path, name: f.name.replace(/\.json$/, "") })),
-        );
-      })
-      .catch(() => {})
+  const folder = normalizeDiagramFolder(searchParams.get("folder"));
+
+  const [tree, setTree] = useState<DiagramTreeEntry[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const boot = useBootGate(loaded);
+
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [moving, setMoving] = useState<MoveCandidate | null>(null);
+
+  const createInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+
+  const reload = useCallback(() => {
+    return fetch("/api/tree")
+      .then((r) => (r.ok ? (r.json() as Promise<DiagramTreeEntry[]>) : []))
+      .then((data) => setTree(Array.isArray(data) ? data : []))
+      .catch(() => setTree([]))
       .finally(() => setLoaded(true));
   }, []);
 
   useEffect(() => {
-    if (creating && createInputRef.current) createInputRef.current.focus();
-  }, [creating]);
+    reload();
+  }, [reload]);
 
   useEffect(() => {
-    if (renamingPath && renameInputRef.current) renameInputRef.current.focus();
-  }, [renamingPath]);
+    if (creating) createInputRef.current?.focus();
+  }, [creating]);
+  useEffect(() => {
+    if (creatingFolder) folderInputRef.current?.focus();
+  }, [creatingFolder]);
+
+  const diagramsTree = useMemo(() => extractDiagramsTree(tree), [tree]);
+  const entries = useMemo(
+    () => diagramFolderChildren(diagramsTree, folder),
+    [diagramsTree, folder],
+  );
+  const { folders, files } = useMemo(
+    () => (entries ? splitDiagramEntries(entries) : { folders: [], files: [] }),
+    [entries],
+  );
+  const crumbs = useMemo(() => diagramBreadcrumbs(folder), [folder]);
+  const folderMissing = loaded && folder !== "" && entries === null;
+
+  function goToFolder(relPath: string) {
+    router.push(diagramFolderHref(relPath));
+  }
 
   async function loadDiagramData(storagePath: string): Promise<unknown> {
     const r = await fetch(`/api/notes/${toNotesApiPath(storagePath)}`);
@@ -92,17 +142,16 @@ export default function DiagramsIndex() {
     return json.content;
   }
 
-  async function handleCreate() {
+  async function handleCreateDiagram() {
     const name = newName.trim() || `diagram-${Date.now()}`;
-    const filePath = `${DIAGRAMS_DIR}/${name}`;
+    const filePath = `${diagramFolderStoragePath(folder)}/${name}`;
     try {
       const r = await fetch(`/api/notes/${toNotesApiPath(filePath)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: createEmptyDiagram() }),
       });
-      if (!r.ok) throw new Error("Could not create diagram");
-      toast.success("Diagram created.");
+      if (!r.ok) throw new Error("create failed");
       setCreating(false);
       setNewName("");
       router.push(toDiagramRoutePath(filePath));
@@ -111,86 +160,214 @@ export default function DiagramsIndex() {
     }
   }
 
-  async function handleDelete(path: string, name: string) {
+  async function handleCreateFolder() {
+    const name = newFolderName.trim();
+    if (!name) {
+      setCreatingFolder(false);
+      return;
+    }
+    try {
+      await createDiagramFolder(folder, name);
+      toast.success("Folder created.");
+      setCreatingFolder(false);
+      setNewFolderName("");
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't create folder.");
+    }
+  }
+
+  async function handleDeleteDiagram(file: DiagramFile) {
     const ok = await confirm({
       title: "Delete diagram",
-      message: `Delete "${name}"? This cannot be undone.`,
+      message: `Delete "${file.name}"? This cannot be undone.`,
       confirmLabel: "Delete",
+      variant: "danger",
     });
     if (!ok) return;
-    broadcastNoteAutosaveInvalidation(path);
+    broadcastNoteAutosaveInvalidation(file.path);
     try {
-      const r = await fetch(`/api/notes/${toNotesApiPath(path)}`, { method: "DELETE" });
-      if (!r.ok) throw new Error("Delete failed");
-      setDiagrams((prev) => prev.filter((d) => d.path !== path));
+      const r = await fetch(`/api/notes/${toNotesApiPath(file.path)}`, { method: "DELETE" });
+      if (!r.ok) throw new Error("delete failed");
       toast.success("Diagram deleted.");
+      await reload();
     } catch {
       toast.error("Couldn't delete diagram.");
     }
   }
 
-  async function handleRename(oldPath: string) {
-    const trimmed = renameValue.trim();
-    if (!trimmed || trimmed === oldPath.slice(DIAGRAMS_DIR.length + 1)) {
-      setRenamingPath(null);
-      return;
-    }
-    const newPath = `${DIAGRAMS_DIR}/${trimmed}`;
-    broadcastNoteAutosaveInvalidation(oldPath);
+  async function handleDeleteFolder(f: DiagramFolder) {
+    const ok = await confirm({
+      title: "Delete folder",
+      message: `Delete folder "${f.name}" and every diagram inside it? This cannot be undone.`,
+      confirmLabel: "Delete",
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
-      const r = await fetch(`/api/notes/${toNotesApiPath(oldPath)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ newPath }),
-      });
-      if (!r.ok) throw new Error("Rename failed");
-      setDiagrams((prev) =>
-        prev.map((d) =>
-          d.path === oldPath ? { path: newPath, name: trimmed } : d,
-        ),
-      );
-      setRenamingPath(null);
-      toast.success("Diagram renamed.");
-    } catch {
-      toast.error("Couldn't rename diagram.");
+      await deleteDiagramFolder(f.storagePath);
+      toast.success("Folder deleted.");
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't delete folder.");
     }
   }
 
-  function startRename(item: DiagramItem) {
-    setRenamingPath(item.path);
-    setRenameValue(item.name);
+  const moveTargets: MoveDiagramTarget[] = useMemo(() => {
+    if (!moving) return [];
+    const movingRel = moving.isDir ? stripDiagramsPrefix(moving.storagePath) : "";
+    const all = ["", ...collectDiagramFolderRelPaths(diagramsTree)];
+    return all.map((relPath) => {
+      const isCurrentParent = relPath === folder;
+      const isSelfOrChild =
+        moving.isDir && (relPath === movingRel || relPath.startsWith(`${movingRel}/`));
+      return {
+        relPath,
+        label: relPath === "" ? "Diagrams (top level)" : relPath,
+        disabled: isCurrentParent || isSelfOrChild,
+      };
+    });
+  }, [moving, diagramsTree, folder]);
+
+  async function handleMove(targetRel: string) {
+    if (!moving) return;
+    const candidate = moving;
+    setMoving(null);
+    try {
+      await moveDiagramEntry(candidate.storagePath, targetRel, candidate.isDir);
+      toast.success(`Moved to ${targetRel || "top level"}.`);
+      await reload();
+    } catch (err) {
+      if (err instanceof Error && err.message === "unchanged") return;
+      toast.error(err instanceof Error ? err.message : "Couldn't move item.");
+    }
   }
+
+  const isEmpty = folders.length === 0 && files.length === 0;
+  // Show actions on tap (mobile) and on hover (desktop).
+  const actionBtn =
+    "hub-icon-btn opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity";
 
   return (
     <div className="page-wrapper">
       <BootScreen state={boot} />
-      <div className="page-header">
-        <div className="page-title">Diagrams</div>
-        <button
-          type="button"
-          onClick={() => { setCreating(true); setNewName(""); }}
-          className="btn btn-primary text-xs"
-        >
-          <Plus size={12} aria-hidden />
-          New diagram
-        </button>
+
+      <div className="page-header" style={{ alignItems: "flex-start" }}>
+        <nav className="flex flex-wrap items-center gap-x-1 gap-y-1 min-w-0" aria-label="Breadcrumb">
+          {crumbs.map((c, i) => {
+            const isLast = i === crumbs.length - 1;
+            return (
+              <span key={c.relPath || "__root__"} className="flex items-center gap-1 min-w-0">
+                {i > 0 && (
+                  <ChevronRight size={14} style={{ color: "var(--text-subtle)" }} aria-hidden />
+                )}
+                {isLast ? (
+                  <span className="page-title truncate" style={{ color: "var(--text)" }}>
+                    {c.name}
+                  </span>
+                ) : (
+                  <Link
+                    href={diagramFolderHref(c.relPath)}
+                    className="text-sm truncate hover:underline"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    {c.name}
+                  </Link>
+                )}
+              </span>
+            );
+          })}
+        </nav>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              setCreatingFolder(true);
+              setNewFolderName("");
+            }}
+            className="btn btn-ghost text-xs"
+          >
+            <FolderPlus size={12} aria-hidden />
+            New folder
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCreating(true);
+              setNewName("");
+            }}
+            className="btn btn-primary text-xs"
+          >
+            <Plus size={12} aria-hidden />
+            New diagram
+          </button>
+        </div>
       </div>
+
+      {creatingFolder && (
+        <div className="card p-4 mb-4 flex items-center gap-2">
+          <Folder size={14} style={{ color: "var(--text-subtle)" }} aria-hidden />
+          <input
+            ref={folderInputRef}
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void handleCreateFolder();
+              if (e.key === "Escape") {
+                setCreatingFolder(false);
+                setNewFolderName("");
+              }
+            }}
+            placeholder="folder-name"
+            className="input flex-1 text-sm"
+            autoComplete="off"
+          />
+          <button type="button" onClick={() => void handleCreateFolder()} className="btn btn-primary text-xs">
+            Create
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCreatingFolder(false);
+              setNewFolderName("");
+            }}
+            className="btn btn-ghost text-xs"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
 
       {creating && (
         <div className="card p-4 mb-4 flex items-center gap-2">
+          <PenTool size={14} style={{ color: "var(--text-subtle)" }} aria-hidden />
           <input
             ref={createInputRef}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") void handleCreate(); if (e.key === "Escape") { setCreating(false); setNewName(""); } }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void handleCreateDiagram();
+              if (e.key === "Escape") {
+                setCreating(false);
+                setNewName("");
+              }
+            }}
             placeholder="my-diagram"
             className="input flex-1 text-sm"
             autoComplete="off"
           />
-          <button type="button" onClick={() => void handleCreate()} className="btn btn-primary text-xs">
+          <button type="button" onClick={() => void handleCreateDiagram()} className="btn btn-primary text-xs">
             Create
           </button>
-          <button type="button" onClick={() => { setCreating(false); setNewName(""); }} className="btn btn-ghost text-xs">
+          <button
+            type="button"
+            onClick={() => {
+              setCreating(false);
+              setNewName("");
+            }}
+            className="btn btn-ghost text-xs"
+          >
             Cancel
           </button>
         </div>
@@ -205,64 +382,118 @@ export default function DiagramsIndex() {
             </div>
           ))}
         </div>
-      ) : diagrams.length === 0 && !creating ? (
+      ) : folderMissing ? (
+        <EmptyState
+          icon={<Folder size={32} />}
+          title="Folder not found"
+          subtitle={
+            <Link href="/diagrams" className="btn btn-ghost text-xs mt-2">
+              Back to all diagrams
+            </Link>
+          }
+        />
+      ) : isEmpty && !creating && !creatingFolder ? (
         <EmptyState
           icon={<PenTool size={32} />}
-          title="No diagrams yet"
-          subtitle="Create one to get started."
+          title={folder ? "This folder is empty" : "No diagrams yet"}
+          subtitle="Create a diagram or folder to get started."
         />
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-          {diagrams.map((d) => (
+          {folders.map((f) => (
+            <div key={f.storagePath} className="card p-3 flex flex-col gap-2 group">
+              <button
+                type="button"
+                onClick={() => goToFolder(f.relPath)}
+                className="w-full aspect-square rounded flex items-center justify-center"
+                style={{ background: "var(--bg)" }}
+                title={`Open ${f.name}`}
+                aria-label={`Open folder ${f.name}`}
+              >
+                <Folder size={36} style={{ color: "var(--text-subtle)" }} aria-hidden />
+              </button>
+              <div className="flex items-center gap-1">
+                <InlineNoteRename
+                  noteSlug={f.storagePath}
+                  displayName={f.name}
+                  active={false}
+                  onRenamed={() => void reload()}
+                  renameFile={renameDiagramFolder}
+                  className="text-xs font-medium truncate flex-1"
+                  style={{ color: "var(--text)" }}
+                  inputClassName="min-w-0 flex-1 bg-transparent border-none outline-none text-xs"
+                  title="Double-click to rename"
+                />
+                <button
+                  type="button"
+                  onClick={() => setMoving({ storagePath: f.storagePath, name: f.name, isDir: true })}
+                  className={actionBtn}
+                  title="Move"
+                  aria-label={`Move ${f.name}`}
+                >
+                  <FolderInput size={11} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteFolder(f)}
+                  className={actionBtn}
+                  title="Delete folder"
+                  aria-label={`Delete folder ${f.name}`}
+                >
+                  <Trash2 size={11} aria-hidden />
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {files.map((d) => (
             <div key={d.path} className="card p-3 flex flex-col gap-2 group">
               <Link href={toDiagramRoutePath(d.path)} className="block">
                 <DiagramCardThumbnail storagePath={d.path} loader={loadDiagramData} />
               </Link>
-
-              {renamingPath === d.path ? (
-                <div className="flex items-center gap-1">
-                  <input
-                    ref={renameInputRef}
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") void handleRename(d.path); if (e.key === "Escape") setRenamingPath(null); }}
-                    className="input flex-1 text-xs py-1"
-                  />
-                  <button type="button" onClick={() => void handleRename(d.path)} className="btn btn-primary text-xs px-2 py-1">
-                    <Pencil size={11} aria-hidden />
-                  </button>
-                  <button type="button" onClick={() => setRenamingPath(null)} className="btn btn-ghost text-xs px-2 py-1">
-                    ✕
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1">
-                  <span className="text-xs font-medium truncate flex-1" style={{ color: "var(--text)" }}>
-                    {d.name}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => startRename(d)}
-                    className="hub-icon-btn opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Rename"
-                    aria-label={`Rename ${d.name}`}
-                  >
-                    <Pencil size={11} aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleDelete(d.path, d.name)}
-                    className="hub-icon-btn opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Delete"
-                    aria-label={`Delete ${d.name}`}
-                  >
-                    <Trash2 size={11} aria-hidden />
-                  </button>
-                </div>
-              )}
+              <div className="flex items-center gap-1">
+                <InlineNoteRename
+                  noteSlug={d.path}
+                  displayName={d.name}
+                  active={false}
+                  onRenamed={() => void reload()}
+                  renameFile={renameNoteFile}
+                  className="text-xs font-medium truncate flex-1"
+                  style={{ color: "var(--text)" }}
+                  inputClassName="min-w-0 flex-1 bg-transparent border-none outline-none text-xs"
+                  title="Double-click to rename"
+                />
+                <button
+                  type="button"
+                  onClick={() => setMoving({ storagePath: d.path, name: d.name, isDir: false })}
+                  className={actionBtn}
+                  title="Move"
+                  aria-label={`Move ${d.name}`}
+                >
+                  <FolderInput size={11} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteDiagram(d)}
+                  className={actionBtn}
+                  title="Delete"
+                  aria-label={`Delete ${d.name}`}
+                >
+                  <Trash2 size={11} aria-hidden />
+                </button>
+              </div>
             </div>
           ))}
         </div>
+      )}
+
+      {moving && (
+        <MoveDiagramModal
+          itemName={moving.name}
+          targets={moveTargets}
+          onMove={(rel) => void handleMove(rel)}
+          onClose={() => setMoving(null)}
+        />
       )}
     </div>
   );

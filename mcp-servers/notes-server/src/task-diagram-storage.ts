@@ -193,6 +193,31 @@ export interface DiagramEntry {
   size: number;
 }
 
+export interface AddDiagramNoteOptions {
+  text: string;
+  x?: number;
+  y?: number;
+  color?: string;
+}
+
+export interface AddedDiagramNote {
+  path: string;
+  shapeId: string;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const richTextFromText = (text: string): Record<string, unknown> => ({
+  type: "doc",
+  attrs: { dir: "auto" },
+  content: text.split("\n").map((line) => ({
+    type: "paragraph",
+    attrs: { dir: "auto" },
+    content: line ? [{ type: "text", text: line }] : [],
+  })),
+});
+
 export class DiagramsStorage {
   private notesStorage: NotesStorage;
 
@@ -263,6 +288,53 @@ export class DiagramsStorage {
     return true;
   }
 
+  addNote(diagramPath: string, note: AddDiagramNoteOptions): AddedDiagramNote | null {
+    const fullPath = diagramPath.startsWith("diagrams/")
+      ? diagramPath
+      : `diagrams/${diagramPath}`;
+    const data = this.read(fullPath);
+    if (!data) return null;
+
+    const outerStore = this.ensureRecord(data, "store");
+    const records = this.ensureRecord(outerStore, "store");
+    this.ensurePageRecords(records);
+
+    const shapeId = `shape:${randomUUID().replaceAll("-", "").slice(0, 20)}`;
+    const { x, y } = this.nextNotePosition(records, note.x, note.y);
+    const userId = Object.keys(records).find((key) => key.startsWith("user:"))?.slice("user:".length);
+
+    records[shapeId] = {
+      x,
+      y,
+      rotation: 0,
+      isLocked: false,
+      opacity: 1,
+      meta: {},
+      id: shapeId,
+      type: "note",
+      props: {
+        color: note.color ?? "yellow",
+        richText: richTextFromText(note.text),
+        size: "m",
+        font: "draw",
+        align: "middle",
+        verticalAlign: "middle",
+        labelColor: "black",
+        growY: 0,
+        fontSizeAdjustment: 1,
+        url: "",
+        scale: 1,
+        ...(userId ? { textFirstEditedBy: userId } : {}),
+      },
+      parentId: "page:page",
+      index: this.nextIndex(records),
+      typeName: "shape",
+    };
+
+    this.notesStorage.write(fullPath, data);
+    return { path: fullPath, shapeId };
+  }
+
   delete(diagramPath: string): boolean {
     const fullPath = diagramPath.startsWith("diagrams/")
       ? diagramPath
@@ -276,12 +348,60 @@ export class DiagramsStorage {
     if (!existing) return null;
 
     const cleanName = newName.replace(/\.json$/, "");
-    const newPath = `diagrams/${cleanName}`;
+    // Preserve the diagram's folder — rename in place rather than yanking it to
+    // the diagrams root (keeps the MCP consistent with the dashboard).
+    const slashIndex = fullPath.lastIndexOf("/");
+    const parent = slashIndex === -1 ? "diagrams" : fullPath.slice(0, slashIndex);
+    const newPath = `${parent}/${cleanName}`;
 
     if (fullPath === newPath) return fullPath;
 
     this.notesStorage.write(newPath, existing.content);
     this.notesStorage.delete(fullPath);
     return newPath;
+  }
+
+  private ensureRecord(parent: Record<string, unknown>, key: string): Record<string, unknown> {
+    const value = parent[key];
+    if (isRecord(value)) return value;
+    const created: Record<string, unknown> = {};
+    parent[key] = created;
+    return created;
+  }
+
+  private ensurePageRecords(records: Record<string, unknown>): void {
+    records["page:page"] ??= { meta: {}, id: "page:page", name: "Page 1", index: "a1", typeName: "page" };
+    records["document:document"] ??= {
+      gridSize: 10,
+      name: "",
+      meta: {},
+      id: "document:document",
+      typeName: "document",
+    };
+  }
+
+  private nextNotePosition(records: Record<string, unknown>, x?: number, y?: number): { x: number; y: number } {
+    if (x !== undefined && y !== undefined) return { x, y };
+
+    const shapes = Object.values(records).filter(
+      (record): record is Record<string, unknown> => isRecord(record) && record.typeName === "shape",
+    );
+    const rightEdge = Math.max(
+      80,
+      ...shapes.map((shape) => (typeof shape.x === "number" ? shape.x : 0) + this.shapeWidth(shape)),
+    );
+    return { x: x ?? rightEdge + 40, y: y ?? 120 };
+  }
+
+  private shapeWidth(shape: Record<string, unknown>): number {
+    const props = shape.props;
+    return isRecord(props) && typeof props.w === "number" ? props.w : 220;
+  }
+
+  private nextIndex(records: Record<string, unknown>): string {
+    const shapeCount = Object.values(records).filter(
+      (record) => isRecord(record) && record.typeName === "shape",
+    ).length;
+    return `a${(shapeCount + 1).toString(36)}`;
   }
 }

@@ -1,3 +1,5 @@
+import { copyTextToClipboard } from "./clipboard";
+
 interface ToastLike {
   success: (message: string) => void;
   error: (message: string) => void;
@@ -12,7 +14,7 @@ export async function copyContextPackToClipboard(
     if (!r.ok) throw new Error("Could not build context pack.");
     const data = (await r.json()) as { markdown?: string };
     if (!data.markdown) throw new Error("Empty context pack.");
-    await navigator.clipboard.writeText(data.markdown);
+    await copyTextToClipboard(data.markdown);
     toast.success(options?.successMessage ?? "Context pack copied.");
     return true;
   } catch (e) {

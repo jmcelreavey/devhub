@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Globe, Copy, Trash2, ExternalLink, RefreshCw, AlertTriangle, Loader2 } from "lucide-react";
 import { useLive } from "@/lib/use-fetch";
 import { useToast } from "@/lib/use-toast";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { getVaultClient } from "@/lib/vault/vault-client";
 import { shareExpiresAt, type ShareRecord, type ShareStatus } from "@/lib/share/share-public";
@@ -192,8 +193,10 @@ export default function SharedClient() {
               <button
                 type="button"
                 onClick={() => {
-                  navigator.clipboard?.writeText(share.url);
-                  toast.success("Link copied.");
+                  void copyTextToClipboard(share.url).then(
+                    () => toast.success("Link copied."),
+                    () => toast.error("Could not copy link."),
+                  );
                 }}
                 className="btn btn-ghost text-xs flex items-center justify-center px-1.5 shrink-0"
                 aria-label="Copy link"

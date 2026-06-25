@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { Check, ClipboardCopy } from "lucide-react";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { useToast } from "@/lib/use-toast";
 
 /**
@@ -22,7 +23,7 @@ export function CopyButton({
 
   const copy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(text);
+      await copyTextToClipboard(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {

@@ -14,6 +14,7 @@ import {
 import { NewNotePathModal } from "./NewNotePathModal";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/lib/use-toast";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { isDiagramStoragePath } from "@/lib/diagram-utils";
 import { isMobileViewport } from "@/lib/use-is-mobile";
 import { notesApiPathFromSlug, notesPageHref } from "@/lib/notes-path";
@@ -44,7 +45,7 @@ function CopyRefButton({ path }: { path: string }) {
   const [copied, setCopied] = useState(false);
   const handleClick = (e: { stopPropagation: () => void }) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(path).then(
+    copyTextToClipboard(path).then(
       () => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
@@ -321,7 +322,7 @@ export function NotesOverlay({ open, onClose }: NoteOverlayProps) {
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto overscroll-contain">
         {activeNote ? (
           <div className="p-2">
             <BlockNoteEditor

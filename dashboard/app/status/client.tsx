@@ -9,6 +9,7 @@ import { getNow, subscribeMinute } from "@/lib/minute-tick";
 import { revalidateScriptsHistory } from "@/lib/scripts-history-swr";
 import { waitForScriptRun } from "@/lib/wait-for-script-run";
 import { formatRelativePastAge } from "@/lib/utils";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { ConflictResolverPanel } from "@/components/ConflictResolverPanel";
 import { SyncHealthPanel } from "@/components/SyncHealthPanel";
 import { StatusDot } from "@/components/StatusDot";
@@ -47,6 +48,10 @@ interface GitHint {
 interface GitStatus {
   branch: string;
   dirtyCount: number;
+  /** Dirty files that are NOT syncable content (notes/tasks/diagrams/docs). */
+  otherDirtyCount?: number;
+  /** Dirty syncable content (notes/tasks/diagrams/docs). */
+  contentDirtyCount?: number;
   ahead: number;
   behind: number;
   conflictCount?: number;
@@ -456,7 +461,7 @@ export default function StatusPage() {
     const ip = lanAddresses[0];
     if (!ip) return;
     try {
-      await navigator.clipboard.writeText(buildLanDashboardUrl(ip));
+      await copyTextToClipboard(buildLanDashboardUrl(ip));
       setCopiedLanUrl(true);
       window.setTimeout(() => setCopiedLanUrl(false), 1500);
     } catch {
@@ -492,8 +497,12 @@ export default function StatusPage() {
     const stopped = visible.filter((s) => !s.active).length;
     if (stopped > 0) healthItems.push(`${stopped} service${stopped > 1 ? "s" : ""} stopped`);
   }
+  // Content (notes/tasks/diagrams/docs) has a one-tap sync and is tracked
+  // separately from genuine "dirty files" that need commit & push.
+  const otherDirty = git ? (git.otherDirtyCount ?? git.dirtyCount) : 0;
+  const contentDirty = git ? (git.contentDirtyCount ?? 0) : 0;
   if (git) {
-    if (git.dirtyCount > 0) healthItems.push(`${git.dirtyCount} dirty path${git.dirtyCount > 1 ? "s" : ""}`);
+    if (otherDirty > 0) healthItems.push(`${otherDirty} dirty path${otherDirty > 1 ? "s" : ""}`);
     if (git.behind > 0) healthItems.push(`${git.behind} commit${git.behind > 1 ? "s" : ""} behind`);
     if ((git.conflictCount ?? 0) > 0) {
       healthItems.push(`${git.conflictCount} merge conflict${git.conflictCount !== 1 ? "s" : ""}`);
@@ -673,15 +682,25 @@ export default function StatusPage() {
                     {git.branch}
                   </span>
                 </div>
-                <div className="flex min-h-[1.75rem] items-center justify-between gap-3 border-b border-[var(--border-muted)] pb-2 sm:border-b-0 sm:pb-0">
+                <div
+                  className="flex min-h-[1.75rem] items-center justify-between gap-3 border-b border-[var(--border-muted)] pb-2 sm:border-b-0 sm:pb-0"
+                  title="Dirty files needing commit & push. Notes/tasks/diagrams are tracked separately as syncable content."
+                >
                   <span className="text-[13px] font-medium tracking-tight" style={{ color: "var(--text-muted)" }}>
                     Dirty paths
                   </span>
-                  <span
-                    className="tabular-nums text-sm font-semibold"
-                    style={{ color: git.dirtyCount > 0 ? "var(--warning)" : "var(--success)" }}
-                  >
-                    {git.dirtyCount}
+                  <span className="flex items-center gap-1.5 text-sm">
+                    <span
+                      className="tabular-nums font-semibold"
+                      style={{ color: otherDirty > 0 ? "var(--warning)" : "var(--success)" }}
+                    >
+                      {otherDirty}
+                    </span>
+                    {contentDirty > 0 && (
+                      <span className="tabular-nums text-[11px]" style={{ color: "var(--accent)" }}>
+                        +{contentDirty} content
+                      </span>
+                    )}
                   </span>
                 </div>
                 <div
@@ -737,7 +756,9 @@ export default function StatusPage() {
                   style={{ background: "var(--warning-dim)" }}
                 >
                   <p className="text-xs leading-snug" style={{ color: "var(--text)" }}>
-                    Automated sync is paused until these changes are committed (or discarded).
+                    {otherDirty > 0
+                      ? "Automated sync is paused until these changes are committed (or discarded)."
+                      : "Notes, tasks, and diagrams have unsynced changes — sync them (cloud button in the top bar) before automated sync resumes."}
                   </p>
                 </div>
               )}
@@ -783,7 +804,8 @@ export default function StatusPage() {
                     (h) =>
                       !(
                         git.dirtyCount > 0 &&
-                        h.text.startsWith("Working tree is dirty")
+                        (h.text.startsWith("Working tree has dirty files") ||
+                          h.text.startsWith("Notes, tasks, and diagrams have unsynced"))
                       ),
                   ) ?? [];
                 if (extraHints.length === 0) return null;
@@ -925,4 +947,3 @@ export default function StatusPage() {
     </div>
   );
 }
-

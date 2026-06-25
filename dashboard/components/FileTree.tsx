@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Check, ClipboardCopy, GripVertical, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/lib/use-toast";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { HoverTip } from "@/components/HoverTip";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { InlineNoteRename } from "@/components/InlineNoteRename";
@@ -207,7 +208,7 @@ function TreeNode({
     e.preventDefault();
     e.stopPropagation();
     try {
-      await navigator.clipboard.writeText(slug);
+      await copyTextToClipboard(slug);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {

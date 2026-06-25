@@ -18,6 +18,7 @@ import {
   startOpenCodePeer,
   waitForOpenCodePeer,
 } from "../lib/dev-peer-services";
+import { isOpenChamberConfigured } from "../lib/peer-service-availability";
 
 function log(msg: string): void {
   process.stdout.write(`[peers] ${msg}\n`);
@@ -41,15 +42,22 @@ async function main(): Promise<void> {
 
   attachOpenCodeShutdown(opencode.child, log);
 
-  log("starting OpenChamber on OPENCHAMBER_PORT (default 1336)…");
-  try {
-    await startChamberPeer(log);
-  } catch (err) {
-    log(`warning: ${err instanceof Error ? err.message : String(err)} — continuing without OpenChamber`);
+  // OpenChamber is developer-managed: only start it when a system install is
+  // present. When it's absent the Chamber nav/iframe is hidden, so there's
+  // nothing to serve.
+  if (isOpenChamberConfigured()) {
+    log("starting OpenChamber on OPENCHAMBER_PORT (default 1336)…");
+    try {
+      await startChamberPeer(log);
+      attachChamberShutdown(log);
+    } catch (err) {
+      log(`warning: ${err instanceof Error ? err.message : String(err)} — continuing without OpenChamber`);
+    }
+  } else {
+    log("OpenChamber not installed — skipping (install it to enable the Chamber tab)");
   }
 
-  attachChamberShutdown(log);
-  log("peer services ready (OpenCode → OpenChamber)");
+  log("peer services ready");
   await keepPeerProcessAlive();
 }
 

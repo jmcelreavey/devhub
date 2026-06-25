@@ -30,9 +30,13 @@ Infer project title from the user’s goal when they do not name one.
 
 ## Workflow
 
-If the user is creating a new project note, follow **Create/update a project note**. If they send completion photos or say the project is done, follow **Complete and archive a project**.
+Pick one based on note state and the user's intent:
 
-### Create/update a project note
+- **No note exists yet, or user is starting fresh** → [Create a project note](#create-a-project-note).
+- **Note exists and user is mid-project** (progress photos, "I've done X", "review and update my existing notes") → [Update an in-progress project](#update-an-in-progress-project). **This is the default for any update request — do not bolt a "Progress update" toggle on top of an unchanged Guide.**
+- **Project is finished** (completion photos, "we're done", "archive this") → [Complete and archive a project](#complete-and-archive-a-project).
+
+### Create a project note
 
 #### 0. Discovery questions (before you plan)
 
@@ -260,23 +264,79 @@ Tell the user:
 - Items **added** vs **reused** on the master
 - Link to open in the dashboard: `/notes/<path>`
 
+### Update an in-progress project
+
+Use this whenever the user reports progress, sends mid-project photos, says "review and update my notes", or otherwise changes scope on an existing note. The Guide must reflect the **current** state, not a running log of what changed.
+
+**Core principle:** edit the Guide in place. Do **not** add a "Progress update" toggle as the default; that just buries the real list under a status blurb. Only fall back to a status note when state genuinely cannot be encoded by checking, striking, or rewording items (rare).
+
+#### 1. Read first, classify each Guide item
+
+Read the note with `notes_read`. For every Guide checkbox **and** every supplies/tools entry, decide which bucket it falls into:
+
+| Bucket | Action |
+| ------ | ------ |
+| **Done** | Set `checked: true`. No strike — checked is the "done" signal. |
+| **No longer applicable** (scope shrank, decision changed, user skipped this path) | Set `checked: true` **and** apply `strike: true` to every text run in the item. The strike is the "obsolete" signal so a reader sees what was originally planned. |
+| **Still to do, unchanged** | Leave untouched. |
+| **Still to do, but reworded** | Edit the text in place. Do not duplicate the item. |
+| **New work uncovered by progress** | Insert a new `- [ ]` item at the right point in the sequence. |
+
+Apply the same buckets to the shared checklist entries: items already used get the master `checked: true` via `PATCH promoteItem` (never flip an existing `true` back to `false`); items no longer needed get the entry **removed from this note's `entriesJson`** (do not delete the master item — other projects may still use it).
+
+#### 2. Rewrite supporting toggles to match reality
+
+- **Planning notes / Before you start:** edit numbers and assumptions in place (e.g. "replace 2 posts" → "replace 1 post"). Do not leave a stale figure standing next to a corrected one.
+- **Cost and time:** update the table rows and totals to the new scope. If the user already bought something, drop or strike that line.
+- **Reference images:** keep the originals. Add new progress photos as `assets/progress-<n>.<ext>` inside the same `Reference images` toggle (chronological order), with captions that say what changed ("Post removed, 2026-06-21"). Do not create a parallel `Progress photos` toggle.
+
+#### 3. When (rarely) to add a status block
+
+Only add a short `::toggle Current state` block when **all** of these are true:
+
+- The change cannot be captured by checking/striking/rewording (e.g. user paused the project for an external reason: waiting on a tradesperson, frozen ground, replacement part on order).
+- The reader needs to know *why* before doing the next Guide item.
+- One sentence is not enough.
+
+Keep it to a few bullets. Delete the block on the next update when the blocker is gone.
+
+#### 4. Save new photos
+
+For each progress image:
+
+1. `notes/<folder>/<note-slug>/assets/progress-<n>.<ext>` (continue the numbering across updates — do not restart at 1 each time).
+2. Write bytes with `notes_write_asset`.
+3. Reference inside the existing `Reference images` toggle.
+
+#### 5. Verify and report back
+
+- Re-read the note with `notes_read`.
+- Confirm: no Guide item still says "2 posts" if reality is 1; no shared-checklist entry references a removed item id; new images render.
+- Report a short diff to the user: items **checked off**, items **struck through**, items **added**, items **reworded**, master checklist changes.
+
+#### Strikethrough syntax (BlockNote)
+
+In note JSON, strike is a text style on each run inside a `checkListItem`:
+
+```json
+{ "type": "text", "text": "Brace the leaning panel", "styles": { "bold": true, "strike": true } }
+```
+
+Apply `"strike": true` to **every** text run in an obsolete item — partial strike reads as a typo, not a deliberate retraction. Combine with `checked: true` on the item props.
+
 ### Complete and archive a project
 
-Use this when the user sends finished photos, says the work is complete, or asks to archive a project.
+Use when the user sends finished photos, says the work is complete, or asks to archive.
 
-1. Identify the existing project note path (for example `garden/fence-repair-repaint`).
-2. Save finished photos under the project asset folder:
-   - `notes/<folder>/<note-slug>/assets/complete-<n>.<ext>`
-   - Reference them as `![caption](<folder>/<note-slug>/assets/complete-<n>.<ext>)`.
-3. Read the current note and update it:
-   - Mark every unfinished **Guide** checklist item checked **only if** the user says the project is complete.
-   - Add `## Completed` near the end, before `## If something goes wrong` when that section exists.
-   - Include completion date, 1-3 plain-language outcome bullets, and the finished photos.
-4. Archive the note when the user asks for archive or the project is clearly complete:
-   - Preferred dashboard/API path: `PATCH /api/notes/<oldPath>` with `{ "newPath": "archive/<folder>/<note-slug>" }`.
-   - Fallback filesystem path: move `notes/<oldPath>.json` to `notes/archive/<folder>/<note-slug>.json`.
-   - Asset paths in note markdown may remain pointed at the original asset folder so image links keep working. If you also move the asset directory, rewrite every image path in the note to the new archive location.
-5. Report the new archived path and the completion images added.
+1. Run the **Update an in-progress project** workflow first so the Guide reflects what actually happened. Then:
+2. Save finished photos as `assets/complete-<n>.<ext>` inside `Reference images`.
+3. Mark every remaining unfinished **Guide** item `checked: true` (no strike — they were done, not obsolete).
+4. Add `## Completed` before `## If something goes wrong`: completion date, 1–3 outcome bullets, finished photos.
+5. Archive when the user asks:
+   - Preferred: `PATCH /api/notes/<oldPath>` with `{ "newPath": "archive/<folder>/<note-slug>" }`.
+   - Fallback: move `notes/<oldPath>.json` to `notes/archive/<folder>/<note-slug>.json`.
+   - Image paths can stay pointed at the original asset folder; if you move the asset dir too, rewrite every image path.
+6. Report archived path and completion images added.
 
 ## Image and checklist reference
 
@@ -287,6 +347,8 @@ Use this when the user sends finished photos, says the work is complete, or asks
 | Toggle section | `::toggle Reference images` ... `::end-toggle` |
 | Guide item | `- [ ] Do the next physical action` |
 | Completed guide item | `- [x] Finished action` |
+| Obsolete guide item | `checked: true` + every text run has `styles.strike: true` |
+| Progress photo path | `notes/<folder>/<slug>/assets/progress-<n>.<ext>` (numbering continues across updates) |
 | Archived project path | `archive/<folder>/<note-slug>` |
 | Master file | `collections/<uuid>.json` |
 | Note block | `::shared-checklist <masterId> [...]` |

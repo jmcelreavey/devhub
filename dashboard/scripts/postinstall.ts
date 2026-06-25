@@ -11,6 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 import process from "node:process";
+import { applyOpenChamberTheme } from "../lib/openchamber-theme";
 import { materializeBranding } from "../lib/plugins/branding";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -25,79 +26,6 @@ function log(msg: string): void {
 
 function warn(msg: string): void {
   process.stderr.write(`[postinstall] WARNING: ${msg}\n`);
-}
-
-// --- OpenChamber integration ---
-const OC_THEMES_SRC = path.join(DASHBOARD_DIR, "config/openchamber-themes");
-const OC_THEMES_DEST = path.join(
-  process.env.HOME || process.env.USERPROFILE || "",
-  ".config/openchamber/themes",
-);
-const OC_INDEX_HTML = path.join(
-  DASHBOARD_DIR,
-  "node_modules/@openchamber/web/dist/index.html",
-);
-const OC_THEME_INJECT_MARKER = "<!-- DEVHUB_THEME_DEFAULTS -->";
-
-/** Read theme metadata.id from every .json in the source dir. */
-function discoverThemeIds(): { dark: string | null; light: string | null } {
-  if (!fs.existsSync(OC_THEMES_SRC)) return { dark: null, light: null };
-  const ids: Record<string, string> = {};
-  for (const f of fs.readdirSync(OC_THEMES_SRC)) {
-    if (!f.endsWith(".json")) continue;
-    try {
-      const raw = JSON.parse(
-        fs.readFileSync(path.join(OC_THEMES_SRC, f), "utf8"),
-      );
-      const id = raw?.metadata?.id;
-      const variant = raw?.metadata?.variant;
-      if (id && (variant === "dark" || variant === "light")) {
-        ids[variant] = id;
-      }
-    } catch {
-      // skip malformed json
-    }
-  }
-  return { dark: ids.dark ?? null, light: ids.light ?? null };
-}
-
-/** Copy all theme .json files to the user's OpenChamber themes directory. */
-function installOpenChamberThemes(): void {
-  if (!fs.existsSync(OC_THEMES_SRC) || !OC_THEMES_DEST) return;
-  fs.mkdirSync(OC_THEMES_DEST, { recursive: true });
-  let count = 0;
-  for (const f of fs.readdirSync(OC_THEMES_SRC)) {
-    if (!f.endsWith(".json")) continue;
-    fs.copyFileSync(path.join(OC_THEMES_SRC, f), path.join(OC_THEMES_DEST, f));
-    count++;
-  }
-  if (count > 0) log(`OpenChamber themes installed (${count})`);
-}
-
-/**
- * Patch the OpenChamber index.html so first-time users get our default theme.
- * Only writes once (guarded by marker); respects existing user choices.
- */
-function setDefaultOpenChamerTheme(): void {
-  if (!fs.existsSync(OC_INDEX_HTML)) return;
-  const { dark, light } = discoverThemeIds();
-  if (!dark && !light) return;
-
-  let html = fs.readFileSync(OC_INDEX_HTML, "utf8");
-  if (html.includes(OC_THEME_INJECT_MARKER)) return;
-
-  const sets: string[] = [];
-  if (dark) sets.push(`if(!localStorage.getItem('darkThemeId'))localStorage.setItem('darkThemeId','${dark}')`);
-  if (light) sets.push(`if(!localStorage.getItem('lightThemeId'))localStorage.setItem('lightThemeId','${light}')`);
-  if (dark || light) sets.push(`if(!localStorage.getItem('themeMode'))localStorage.setItem('themeMode','dark')`);
-
-  const script = `<script>\n(function(){try{${sets.join(";")}}catch(e){}})();\n</script>`;
-  html = html.replace(
-    "<head>",
-    `<head>\n    ${OC_THEME_INJECT_MARKER}\n    ${script}`,
-  );
-  fs.writeFileSync(OC_INDEX_HTML, html);
-  log("OpenChamber default theme injected");
 }
 
 // Skip in CI or when explicitly disabled
@@ -141,9 +69,8 @@ if (fs.existsSync(hooksDir)) {
   }
 }
 
-// --- 4. OpenChamber theme ---
-installOpenChamberThemes();
-setDefaultOpenChamerTheme();
+// --- 4. OpenChamber theme (core default) ---
+applyOpenChamberTheme(DASHBOARD_DIR, log);
 
 // --- 5. Plugin branding (whitelabel theme/logo/fonts/OpenChamber, if a plugin opts in) ---
 try {

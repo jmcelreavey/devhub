@@ -52,6 +52,7 @@ describe("augmentedPathEnv", () => {
 
     expect(env.PATH).toContain("/usr/bin");
     expect(env.PATH).toContain("/opt/homebrew/bin");
+    expect(env.PATH).toContain(`${process.env.HOME}/Library/Python/3.9/bin`);
     expect(env.npm_config_prefix).toBeUndefined();
     expect(env.npm_lifecycle_event).toBeUndefined();
   });

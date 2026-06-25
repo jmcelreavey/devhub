@@ -38,7 +38,6 @@ import { useTabSaveStatus } from "@/components/TabTitle";
 import { CalendarWidget } from "@/components/CalendarWidget";
 import { JiraWidget } from "@/components/JiraWidget";
 import { TodayCollapseButton } from "@/components/TodayCollapseButton";
-import { ContextPackButton } from "@/components/ContextPackButton";
 import { StandupCopyButton } from "@/components/StandupCopyButton";
 import { GithubPrsCollapsedSummary, GithubPrsPanel } from "@/components/GithubPrsPanel";
 import { DatadogCollapsedSummary, DatadogTodayStrip, useDatadogTodayPanelVisible } from "@/components/DatadogTodayStrip";
@@ -617,7 +616,7 @@ export function TodayPage() {
                       <span key={tasksDone} className="count-tick">{tasksDone}</span>/{tasksTotal} done
                     </span>
                   )}
-                  {/* Overflow menu — standup, context pack, clear note */}
+                  {/* Overflow menu — standup, clear note */}
                   <div className="relative today-grid-drag-cancel" ref={menuRef}>
                     <button
                       type="button"
@@ -637,7 +636,6 @@ export function TodayPage() {
                       onClick={() => setMenuOpen(false)}
                     >
                       <StandupCopyButton variant="compact" />
-                      <ContextPackButton />
                       {tab === "notes" && !mainCollapsed && (
                         <button
                           type="button"

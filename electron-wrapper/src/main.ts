@@ -193,7 +193,7 @@ function detectLanIp(): string | null {
 function dashboardHost(): string {
   const raw = dashboardEnvValue("DEVHUB_BIND_HOST") || "0.0.0.0";
   const host = raw.trim().toLowerCase();
-  if (host === "auto" || host === "lan") return detectLanIp() ?? "127.0.0.1";
+  if (host === "auto" || host === "lan") return "localhost";
   if (host === "0.0.0.0" || host === "::") return "localhost";
   return raw.trim() || "localhost";
 }

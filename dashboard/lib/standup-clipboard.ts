@@ -3,6 +3,7 @@ import {
   fetchStandup,
   readExcludedRepos,
 } from "@/lib/standup-params";
+import { copyTextToClipboard } from "@/lib/clipboard";
 
 function readTime(key: string): string | undefined {
   if (typeof window === "undefined") return undefined;
@@ -21,7 +22,7 @@ export async function copyStandupMarkdownToClipboard(): Promise<
   if (!result.ok) return result;
 
   try {
-    await navigator.clipboard.writeText(result.data.markdown);
+    await copyTextToClipboard(result.data.markdown);
     return { ok: true };
   } catch {
     return {

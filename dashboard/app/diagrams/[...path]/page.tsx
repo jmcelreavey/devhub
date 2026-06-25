@@ -3,11 +3,21 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, PenTool, Trash2, Download } from "lucide-react";
+import { ArrowLeft, ChevronRight, PenTool, Trash2, Download } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { Editor } from "tldraw";
 import { useToast } from "@/lib/use-toast";
-import { toDiagramStoragePath, toNotesApiPath } from "@/lib/diagram-utils";
+import { InlineNoteRename } from "@/components/InlineNoteRename";
+import {
+  diagramBreadcrumbs,
+  diagramFolderHref,
+  diagramParentFolder,
+  stripDiagramsPrefix,
+  toDiagramRoutePath,
+  toDiagramStoragePath,
+  toNotesApiPath,
+} from "@/lib/diagram-utils";
+import { renameNoteFile } from "@/lib/notes-path";
 import { exportDiagramImage } from "@/lib/tldraw-export";
 import { broadcastNoteAutosaveInvalidation } from "@/lib/note-autosave-invalidation";
 
@@ -106,7 +116,10 @@ export default function DiagramEditorPage() {
     );
   }
 
-  const title = routePath.split("/").pop() ?? "diagram";
+  const slug = stripDiagramsPrefix(filePath);
+  const title = slug.split("/").pop() ?? "diagram";
+  const parentFolder = diagramParentFolder(slug);
+  const crumbs = diagramBreadcrumbs(parentFolder);
 
   return (
     <div className="flex flex-col h-full">
@@ -118,26 +131,41 @@ export default function DiagramEditorPage() {
         }}
       >
         <Link
-          href="/diagrams"
+          href={diagramFolderHref(parentFolder)}
           className="rounded p-1 hover:bg-[var(--bg-elevated)]"
-          title="Back to diagrams"
+          title="Back to folder"
         >
-          <ArrowLeft
-            size={14}
-            style={{ color: "var(--text-muted)" }}
-          />
+          <ArrowLeft size={14} style={{ color: "var(--text-muted)" }} />
         </Link>
-        <PenTool
-          size={14}
-          style={{ color: "var(--text-subtle)" }}
-          aria-hidden
-        />
-        <span
+        <PenTool size={14} style={{ color: "var(--text-subtle)" }} aria-hidden />
+        <nav
+          className="hidden sm:flex items-center gap-1 min-w-0 shrink"
+          aria-label="Breadcrumb"
+        >
+          {crumbs.map((c) => (
+            <span key={c.relPath || "__root__"} className="flex items-center gap-1 min-w-0">
+              <Link
+                href={diagramFolderHref(c.relPath)}
+                className="text-sm truncate hover:underline"
+                style={{ color: "var(--text-muted)" }}
+              >
+                {c.name}
+              </Link>
+              <ChevronRight size={12} style={{ color: "var(--text-subtle)" }} aria-hidden />
+            </span>
+          ))}
+        </nav>
+        <InlineNoteRename
+          noteSlug={filePath}
+          displayName={title}
+          active={false}
+          onRenamed={(newSlug) => router.replace(toDiagramRoutePath(newSlug))}
+          renameFile={renameNoteFile}
           className="text-sm font-medium truncate flex-1"
           style={{ color: "var(--text)" }}
-        >
-          {title}
-        </span>
+          inputClassName="min-w-0 flex-1 bg-transparent border-none outline-none text-sm font-medium"
+          title="Double-click to rename"
+        />
         <button
           type="button"
           onClick={() => void handleExport("svg")}

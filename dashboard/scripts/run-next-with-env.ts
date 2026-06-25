@@ -16,12 +16,13 @@ async function main(): Promise<void> {
   await loadEnvWithOnePasswordFallback(dashboardRoot);
 
   const rawHost = envTrimOrDefault("DEVHUB_BIND_HOST", "0.0.0.0");
-  const bindHost = resolveBindHost(rawHost);
+  const rawHostLower = rawHost.trim().toLowerCase();
+  const bindHost = rawHostLower === "auto" || rawHostLower === "lan" ? "127.0.0.1" : resolveBindHost(rawHost);
   const port = envTrimOrDefault("PORT", "1337");
   // When the magic value resolved, show the actual IP so the user can verify
   // the right interface was picked (matters on machines with Docker/VM NICs).
-  if (rawHost.trim().toLowerCase() === "auto" || rawHost.trim().toLowerCase() === "lan") {
-    process.stderr.write(`[devhub] DEVHUB_BIND_HOST=${rawHost.trim()} → ${bindHost} (port ${port})\n`);
+  if (rawHostLower === "auto" || rawHostLower === "lan") {
+    process.stderr.write(`[devhub] DEVHUB_BIND_HOST=${rawHost.trim()} → localhost + LAN proxy (port ${port})\n`);
   }
 
   const args = process.argv.slice(2);

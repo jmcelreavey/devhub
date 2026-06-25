@@ -10,6 +10,7 @@ import {
   FileDown,
   FileText,
   GraduationCap,
+  Minimize2,
   RefreshCw,
   Sparkles,
   TerminalSquare,
@@ -21,6 +22,7 @@ import { SidePanel } from "@/components/SidePanel";
 import { SimpleMarkdown } from "@/components/SimpleMarkdown";
 import { REPO_LEARN_NOT_CONFIGURED_MSG, repoLearnApiPath } from "@/lib/repo-learn-constants";
 import { openTerminal, opencodeCliCommand } from "@/lib/terminal-launch";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { useLive } from "@/lib/use-fetch";
 import { useToast } from "@/lib/use-toast";
 import type { RepoInfo, RepoLearnApiPayload } from "./types";
@@ -57,9 +59,20 @@ export function LearnPanel({
   const artifacts = data?.artifacts;
   const initialLoading = isLoading && !data;
 
+  function closePanel() {
+    onClose();
+  }
+
+  function hidePanel() {
+    if (repo) {
+      window.dispatchEvent(new CustomEvent("devhub:repo-learn-hidden", { detail: { repoName: repo.name } }));
+    }
+    closePanel();
+  }
+
   async function copyText(id: string, text: string) {
     try {
-      await navigator.clipboard.writeText(text);
+      await copyTextToClipboard(text);
       setCopied(id);
       window.setTimeout(() => setCopied(null), 1500);
       toast.success("Copied.");
@@ -118,7 +131,7 @@ export function LearnPanel({
   const briefLoading = data?.aiConfigured && !artifacts?.briefMarkdown && !aiError && (initialLoading || refreshing);
 
   return (
-    <SidePanel open={!!repo} onClose={onClose} storageKey="repos-learn-panel-width" defaultWidth={560} minWidth={420} ariaLabel="Repo learning panel">
+    <SidePanel open={!!repo} onClose={closePanel} storageKey="repos-learn-panel-width" defaultWidth={560} minWidth={420} ariaLabel="Repo learning panel">
       <div className="p-4 border-b flex items-start justify-between gap-3" style={{ borderColor: "var(--border)" }}>
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-xs uppercase tracking-wide" style={{ color: "var(--text-subtle)" }}>
@@ -129,17 +142,21 @@ export function LearnPanel({
             Local path: {repo?.path}
           </div>
         </div>
-        <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Close learning panel" style={{ fontSize: 12, padding: "4px 9px" }}>
-          <X size={14} />
-          Close
-        </button>
+        <div className="flex shrink-0 gap-1.5">
+          <button type="button" className="btn btn-ghost" onClick={hidePanel} aria-label="Hide learning panel" style={{ fontSize: 12, padding: "4px 9px" }}>
+            <Minimize2 size={14} />
+            Hide
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={closePanel} aria-label="Close learning panel" style={{ fontSize: 12, padding: "4px 9px" }}>
+            <X size={14} />
+            Close
+          </button>
+        </div>
       </div>
 
       <div className="p-4 overflow-auto space-y-4">
         {initialLoading && (
-          <div className="space-y-2">
-            {[1, 2, 3].map((i) => <div key={i} className="skeleton" style={{ height: 72, borderRadius: "var(--radius)" }} />)}
-          </div>
+          <RepoLearnLoading repoName={repo?.name} />
         )}
         {error && (
           <FetchError message={parseFetchErrorMessage(error)} onRetry={() => mutate()} />
@@ -205,10 +222,7 @@ export function LearnPanel({
                   <SimpleMarkdown text={artifacts.briefMarkdown} compact />
                 </div>
               ) : briefLoading ? (
-                <div className="mt-3 space-y-1.5">
-                  <div className="skeleton" style={{ height: 12, width: "100%" }} />
-                  <div className="skeleton" style={{ height: 12, width: "90%" }} />
-                </div>
+                <BriefLoading />
               ) : aiBlocked ? (
                 <p className="mt-2 text-xs" style={{ color: "var(--text-subtle)" }}>Brief requires z.ai.</p>
               ) : null}
@@ -280,6 +294,51 @@ export function LearnPanel({
         )}
       </div>
     </SidePanel>
+  );
+}
+
+function RepoLearnLoading({ repoName }: { repoName?: string }) {
+  return (
+    <div className="card card-body">
+      <div className="flex items-start gap-3">
+        <div className="skeleton shrink-0" style={{ width: 36, height: 36, borderRadius: "999px" }} />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+            Building the repo learning pack{repoName ? ` for ${repoName}` : ""}
+          </div>
+          <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+            This scans the repo, summarizes the shape of the codebase, then asks AI for the brief and NotebookLM source pack. It can take a bit. Hide the panel if you want to keep moving around.
+          </p>
+          <div className="mt-4 space-y-2">
+            <LoadingStep label="Scanning repo files and manifests" width="78%" />
+            <LoadingStep label="Building detected facts" width="62%" />
+            <LoadingStep label="Generating brief and source pack" width="86%" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LoadingStep({ label, width }: { label: string; width: string }) {
+  return (
+    <div>
+      <div className="mb-1 text-[11px]" style={{ color: "var(--text-subtle)" }}>{label}</div>
+      <div className="skeleton" style={{ height: 8, width, borderRadius: 999 }} />
+    </div>
+  );
+}
+
+function BriefLoading() {
+  return (
+    <div className="mt-3 rounded p-3" style={{ background: "var(--bg-elevated)" }}>
+      <div className="mb-2 text-xs font-medium" style={{ color: "var(--text-subtle)" }}>Generating the brief...</div>
+      <div className="space-y-1.5">
+        <div className="skeleton" style={{ height: 10, width: "100%" }} />
+        <div className="skeleton" style={{ height: 10, width: "92%" }} />
+        <div className="skeleton" style={{ height: 10, width: "72%" }} />
+      </div>
+    </div>
   );
 }
 

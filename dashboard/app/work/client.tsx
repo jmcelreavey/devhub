@@ -29,8 +29,8 @@ export default function WorkPage() {
   const boot = useBootGate(setup !== undefined && taskData !== undefined);
 
   const tabs = (
-    <div className="hub-tabs" role="tablist" aria-label="Work">
-      <WorkTabButton active={tab === "tasks"} onClick={() => setTab("tasks")} icon={<ListTodo size={13} aria-hidden />} label={open > 0 ? `Tasks · ${open}` : "Tasks"} />
+    <div className="mb-4 flex gap-1" role="tablist" aria-label="Work" style={{ borderBottom: "1px solid var(--border-muted)" }}>
+      <WorkTabButton active={tab === "tasks"} onClick={() => setTab("tasks")} icon={<ListTodo size={13} aria-hidden />} label="Tasks" count={open} />
       {showJira && (
         <WorkTabButton active={tab === "jira"} onClick={() => setTab("jira")} icon={<Ticket size={13} aria-hidden />} label="Jira" />
       )}
@@ -38,30 +38,25 @@ export default function WorkPage() {
     </div>
   );
 
-  // Jira / History embed full pages that bring their own `.page-wrapper`
-  // padding, so the tab strip floats above them instead of inside `.hub`.
   if (tab !== "tasks") {
     return (
-      <div>
-        <div style={{ padding: "20px 24px 0" }}>{tabs}</div>
+      <>
+        <div className="page-wrapper" style={{ paddingBottom: 0 }}>
+          {tabs}
+        </div>
         <div key={tab} className="fade-rise">
           {tab === "jira" ? <TicketsPage /> : <TaskHistoryPage />}
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="hub">
+    <div className="page-wrapper">
       <BootScreen state={boot} />
-      <section className="hub-card" aria-label="Today's queue">
-        <header className="hub-card-head">
-          {tabs}
-          {open > 0 && <span className="hub-card-count">{open} open</span>}
-        </header>
-        <div key="tasks" className="hub-card-body fade-rise">
-          <TaskList />
-        </div>
+      {tabs}
+      <section className="card card-body fade-rise" aria-label="Today's queue">
+        <TaskList />
       </section>
     </div>
   );
@@ -72,16 +67,32 @@ function WorkTabButton({
   onClick,
   icon,
   label,
+  count,
 }: {
   active: boolean;
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
+  count?: number;
 }) {
   return (
-    <button type="button" role="tab" aria-selected={active} data-active={active} className="hub-tab" onClick={onClick}>
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors"
+      style={{
+        color: active ? "var(--text)" : "var(--text-muted)",
+        borderBottom: active ? "2px solid var(--accent)" : "2px solid transparent",
+        background: "none",
+        cursor: "pointer",
+        marginBottom: "-1px",
+      }}
+    >
       {icon}
       {label}
+      {count ? <span className="badge badge-muted ml-0.5" style={{ fontSize: 12 }}>{count}</span> : null}
     </button>
   );
 }

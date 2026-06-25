@@ -16,7 +16,6 @@ const PAGE_TITLES: Record<string, string> = {
   "/ops": "Ops",
   "/skills": "Skills",
   "/repos": "Repos",
-  "/bookmarks": "Bookmarks",
   "/actions": "Actions",
   "/search": "Search",
   "/setup": "Setup",

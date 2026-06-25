@@ -51,15 +51,17 @@ const nextConfig: NextConfig = {
   // Don't watch notes/ — large dir unrelated to app code (webpack / `next dev --webpack`)
   webpack: (config, { isServer, dev }) => {
     /**
-     * Dev disk cache, version-keyed to app/globals.css content. The
+     * Disk cache, version-keyed to app/globals.css content. Webpack's
      * persistent cache repeatedly pinned stale PostCSS/Tailwind output for
-     * globals.css — edits compiled to no-ops until .next/dev/cache was
-     * deleted by hand. Keying `cache.version` to a hash of the file means
-     * any globals.css change made between server runs starts a fresh cache
-     * (correct CSS), while unrelated restarts keep the warm cache (fast
-     * cold starts). Within a session, HMR handles CSS edits as normal.
+     * globals.css — edits compiled to no-ops until the cache was deleted by
+     * hand. This bit dev AND production builds: a `next build` (e.g. Electron's
+     * "Switch to Production") would reuse the stale CSS, so globals.css edits
+     * and newly-used Tailwind classes never reached the prod bundle even though
+     * dev/HMR showed them. Keying `cache.version` to a hash of the file starts a
+     * fresh cache whenever globals.css changes (correct CSS) while unrelated
+     * builds keep the warm cache (fast). Applies to both modes for this reason.
      */
-    if (dev) {
+    {
       let cssHash = "none";
       try {
         cssHash = crypto
@@ -73,7 +75,7 @@ const nextConfig: NextConfig = {
       config.cache = {
         ...(typeof config.cache === "object" ? config.cache : {}),
         type: "filesystem",
-        version: `devhub-css-${cssHash}`,
+        version: `devhub-css-${cssHash}${dev ? "-dev" : "-prod"}`,
       };
     }
     // Dev webpack compiles instrumentation.ts into a server bundle; without this,

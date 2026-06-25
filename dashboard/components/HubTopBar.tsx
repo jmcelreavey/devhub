@@ -9,21 +9,13 @@ import { SectionTabs } from "./SectionTabs";
 import { AccentPicker } from "./AccentPicker";
 import { ThemeToggle } from "./ThemeToggle";
 import { FocusTimer } from "./FocusTimer";
-import { NotesBrowseButton } from "./NotesBrowseButton";
-import { TasksBrowseButton } from "./TasksBrowseButton";
-import { DiagramsBrowseButton } from "./DiagramsBrowseButton";
+import { QuickActions } from "./QuickActions";
 import { ContentSyncIndicator } from "./ContentSyncIndicator";
-import { TerminalDockButton } from "./TerminalDock";
 import { LaunchMenu, type LaunchMenuItem } from "./LaunchMenu";
 import { useLaunchClaudeDesktop } from "@/lib/launch-claude";
 import { useLaunchChamberDesktop } from "@/lib/launch-chamber";
 import { useLaunchOpenCodeDesktop } from "@/lib/launch-opencode";
 import { claudeCliCommand, openTerminal, opencodeCliCommand } from "@/lib/terminal-launch";
-
-const CLUSTER_STYLE: React.CSSProperties = {
-  background: "var(--bg-elevated)",
-  border: "1px solid var(--border-muted)",
-};
 
 interface Crumb {
   label: string;
@@ -184,11 +176,8 @@ export function HubTopBar() {
         </span>
 
         {/* Quick cluster — notes/tasks/diagrams/theme/accent/chamber */}
-        <span role="group" className="flex items-center gap-0.5 px-1 rounded" style={CLUSTER_STYLE} aria-label="Quick actions">
-          <NotesBrowseButton />
-          <TasksBrowseButton />
-          <DiagramsBrowseButton />
-          <TerminalDockButton />
+        <span role="group" className="hub-cluster" aria-label="Quick actions">
+          <QuickActions />
           <ThemeToggle />
           {toolLaunchItems && (
             <LaunchMenu

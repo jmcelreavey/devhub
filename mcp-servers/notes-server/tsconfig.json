@@ -15,5 +15,6 @@
     "../../shared/notes-search/search.ts",
     "../../shared/notes-search/index.ts",
     "../../shared/notes-assets/index.ts"
-  ]
+  ],
+  "exclude": ["src/**/*.test.ts"]
 }

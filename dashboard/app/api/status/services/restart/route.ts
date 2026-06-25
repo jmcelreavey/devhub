@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { spawn } from "node:child_process";
-import { cleanOpenChamberEnv, resolveOpenChamberCommand } from "@/lib/openchamber-command";
+import { cleanOpenChamberEnv, resolveOpenChamberBind, resolveOpenChamberCommand } from "@/lib/openchamber-command";
 import {
   resolveOpenCodeBinary,
   getOpenCodeEnv,
@@ -10,7 +10,6 @@ import {
 import { DEV_SERVICES } from "@/lib/dev-services";
 
 const CHAMBER_PORT = Number.parseInt(process.env.OPENCHAMBER_PORT ?? "1336", 10);
-const CHAMBER_HOST = process.env.OPENCHAMBER_HOST ?? "0.0.0.0";
 
 function runOpenChamber(args: string[]): Promise<{ code: number | null; output: string }> {
   const { cmd, argsPrefix } = resolveOpenChamberCommand();
@@ -43,20 +42,24 @@ async function killProcessOnPort(port: number): Promise<void> {
 }
 
 async function restartOpenChamber(): Promise<NextResponse> {
+  // Mirror the peer-startup auth guard: OpenChamber >=1.13 exits with code 4
+  // when binding a LAN address without UI auth, which is what made the in-app
+  // Restart button silently fail. Fall back to loopback unless auth is set.
+  const { host, note } = resolveOpenChamberBind();
   await runOpenChamber(["stop", "--port", String(CHAMBER_PORT), "--quiet"]).catch(() => null);
   const started = await runOpenChamber([
     "serve",
     "--port", String(CHAMBER_PORT),
-    "--host", CHAMBER_HOST,
+    "--host", host,
     "--quiet",
   ]);
   if (started.code !== 0) {
     return NextResponse.json(
-      { error: "Failed to restart OpenChamber", output: started.output.trim() },
+      { error: "Failed to restart OpenChamber", output: started.output.trim(), hint: note },
       { status: 500 },
     );
   }
-  return NextResponse.json({ ok: true, restarted: true });
+  return NextResponse.json({ ok: true, restarted: true, host, note });
 }
 
 async function restartOpenCode(): Promise<NextResponse> {

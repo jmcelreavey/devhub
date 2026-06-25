@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import {
   DEFAULT_THEME_MODE_SETTING,
   DEFAULT_THEME_PRESET_ID,
@@ -10,7 +10,7 @@ import "./globals.css";
 // when none is enabled). Imported after globals so a plugin can override core tokens.
 import "./plugin-branding.generated.css";
 import { CollapsibleSidebar } from "@/components/CollapsibleSidebar";
-import { MobileTopBar } from "@/components/MobileTopBar";
+import { MobileShell } from "@/components/MobileShell";
 import { NotesOverlayProvider } from "@/components/NotesOverlayProvider";
 import { TerminalDock } from "@/components/TerminalDock";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
@@ -26,8 +26,9 @@ import { NavProgress } from "@/components/NavProgress";
 import { PersistentChamber } from "@/components/PersistentChamber";
 import { PersistentOpenCode } from "@/components/PersistentOpenCode";
 import { PersistentClaude } from "@/components/PersistentClaude";
-import { MobileBottomShelf } from "@/components/MobileBottomShelf";
+import { PersistentRepoLearnDock } from "@/components/PersistentRepoLearnDock";
 import { UiPrefsBootstrap } from "@/components/UiPrefsBootstrap";
+import { KonamiPong } from "@/components/KonamiPong";
 
 export const metadata: Metadata = {
   title: {
@@ -59,6 +60,22 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * Next 16's metadata system owns the <meta name="viewport"> and theme-color
+ * tags — a hand-written <meta> in <head> is overridden by the framework
+ * default. `viewportFit: "cover"` is required for env(safe-area-inset-*) to
+ * resolve to non-zero values on notched iPhones / installed PWAs.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#111416" },
+    { media: "(prefers-color-scheme: light)", color: "#f7f8f9" },
+  ],
+};
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html
@@ -79,10 +96,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         */}
         <script dangerouslySetInnerHTML={{ __html: getThemeBootstrapInlineScript() }} />
         <link rel="manifest" href="/manifest.webmanifest" />
-        <meta name="theme-color" content="#111416" media="(prefers-color-scheme: dark)" />
-        <meta name="theme-color" content="#f7f8f9" media="(prefers-color-scheme: light)" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body
         className="h-full flex overflow-hidden"
@@ -103,8 +117,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
 
             {/* Main area */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-              {/* Mobile top bar — burger nav + Notes/Tasks/Diagrams panels */}
-              <MobileTopBar />
+              {/* Mobile chrome — top bar (burger drawer + search + overflow)
+                  and the fixed bottom shelf, owned by one component. */}
+              <MobileShell />
 
               {/* Desktop topbar — breadcrumbs + actions */}
               <HubTopBar />
@@ -117,10 +132,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               </main>
             </div>
 
-            <MobileBottomShelf />
+            <PersistentRepoLearnDock />
             <NotesOverlayProvider />
             <TerminalDock />
             <PWAInstallPrompt />
+            <KonamiPong />
           </ConfirmProvider>
         </ToastProvider>
       </body>

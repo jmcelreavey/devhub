@@ -1,7 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import process from "node:process";
-import { envTrimOrDefault } from "../scripts/load-env-local-into-process";
-import { cleanOpenChamberEnv, resolveOpenChamberCommand } from "./openchamber-command";
+import { cleanOpenChamberEnv, resolveOpenChamberBind, resolveOpenChamberCommand } from "./openchamber-command";
 import {
   getOpenCodeEnv,
   resolveOpenCodeBinary,
@@ -149,8 +148,8 @@ export async function stopChamberPeer(log: PeerLog, port = Number.parseInt(proce
 
 export async function startChamberPeer(log: PeerLog): Promise<ChamberPeerHandle> {
   const port = Number.parseInt(process.env.OPENCHAMBER_PORT ?? "1336", 10);
-  const host = envTrimOrDefault("OPENCHAMBER_HOST", "0.0.0.0");
-  const probe = host === "0.0.0.0" ? "127.0.0.1" : host;
+  const { host, probe, note } = resolveOpenChamberBind();
+  if (note) log(note);
 
   if (await canConnect(port, probe)) {
     log(`OpenChamber already listening on port ${port}`);

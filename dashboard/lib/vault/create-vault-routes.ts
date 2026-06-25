@@ -63,6 +63,24 @@ export function createVaultRoutes(vaultId: VaultId) {
   const POST = withErrorHandler(async (req: NextRequest, { params }: Params) => {
     const { path: segments } = await params;
     const filePath = joinPath(segments);
+
+    if (new URL(req.url).searchParams.get("dir") === "1") {
+      if (!filePath) {
+        return NextResponse.json({ error: "Folder path required" }, { status: 400 });
+      }
+      const created = getVaultStorage(vaultId).createDir(filePath);
+      if (!created) {
+        return NextResponse.json(
+          { error: "Could not create folder — it may already exist" },
+          { status: 409 },
+        );
+      }
+      for (const p of vault.revalidatePaths) {
+        revalidatePath(p);
+      }
+      return NextResponse.json(created, { status: 201 });
+    }
+
     const body = await req.json().catch(() => ({}));
     const parsed = putSchema.safeParse(body);
     if (!parsed.success || parsed.data.content === undefined) {

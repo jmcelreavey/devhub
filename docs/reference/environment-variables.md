@@ -6,17 +6,18 @@ Most values live in the dashboard's local environment file and can be edited fro
 
 ## Core Variables
 
-| Variable                       | Purpose                                                     |
-| ------------------------------ | ----------------------------------------------------------- |
-| `NOTES_DIR`                    | Directory for notes, learnings, and diagrams                |
-| `DOCS_DIR`                     | Optional override for repo docs (default: `REPO_ROOT/docs`) |
+| Variable                       | Purpose                                                                                                                |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `NOTES_DIR`                    | Directory for notes, learnings, and diagrams                                                                           |
+| `DOCS_DIR`                     | Optional override for repo docs (default: `REPO_ROOT/docs`)                                                            |
 | `TASKS_DIR`                    | Optional override for daily tasks (default: `REPO_ROOT/tasks`) — point elsewhere to keep personal data out of the tree |
-| `COLLECTIONS_DIR`             | Optional override for checklist collections (default: `REPO_ROOT/collections`) |
-| `REPO_ROOT`                    | DevHub repository root                                      |
-| `PORT`                         | Dashboard port                                              |
-| `DEVHUB_BIND_HOST`             | Dashboard bind address                                      |
-| `OPENCHAMBER_HOST`             | OpenChamber bind address                                    |
-| `NEXT_PUBLIC_OPENCHAMBER_PORT` | Browser-visible OpenChamber port                            |
+| `COLLECTIONS_DIR`              | Optional override for checklist collections (default: `REPO_ROOT/collections`)                                         |
+| `REPO_ROOT`                    | DevHub repository root                                                                                                 |
+| `PORT`                         | Dashboard port                                                                                                         |
+| `DEVHUB_BIND_HOST`             | Dashboard bind address. Keep `127.0.0.1` so Electron can use localhost                                                 |
+| `DEVHUB_LAN_PROXY_HOST`        | Optional LAN proxy host. Use `auto` to detect a physical LAN IPv4 and exclude Tailscale CGNAT (`100.64.0.0/10`)        |
+| `OPENCHAMBER_HOST`             | OpenChamber local bind address. LAN access is proxied when enabled                                                     |
+| `NEXT_PUBLIC_OPENCHAMBER_PORT` | Browser-visible OpenChamber port                                                                                       |
 
 ## Google Calendar
 
@@ -87,18 +88,20 @@ at sync time. See [Plugins](../architecture/plugins.md).
 
 See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md) for how the three local ports work together.
 
-| Variable                       | Default   | Purpose                                 |
-| ------------------------------ | --------- | --------------------------------------- |
-| `OPENCHAMBER_PORT`             | `1336`    | OpenChamber daemon port                 |
-| `OPENCHAMBER_HOST`             | `0.0.0.0` | OpenChamber bind host                   |
-| `NEXT_PUBLIC_OPENCHAMBER_PORT` | `1336`    | Chamber iframe URL port in the browser  |
-| `OPENCODE_PORT`                | `1338`    | Shared `opencode serve` port            |
-| `OPENCODE_BIND_HOST`           | `0.0.0.0` | `opencode serve --hostname`             |
-| `NEXT_PUBLIC_OPENCODE_PORT`    | `1338`    | OpenCode iframe URL port in the browser |
-| `DEVHUB_OPENCODE_BINARY`       | —         | Override path to the `opencode` binary  |
-| `OPENCHAMBER_BIN`              | —         | Override path to the `openchamber` CLI  |
-| `DEVHUB_SKIP_OPENCODE_UPDATE`  | —         | Set to `1` to skip `opencode upgrade` on peer startup |
-| `DEVHUB_SKIP_CHAMBER_UPDATE`   | —         | Set to `1` to skip the OpenChamber npm refresh on peer startup |
+| Variable                                | Default                 | Purpose                                                                                                                                                             |
+| --------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPENCHAMBER_PORT`                      | `1336`                  | OpenChamber daemon port                                                                                                                                             |
+| `OPENCHAMBER_HOST`                      | `0.0.0.0`               | OpenChamber bind host                                                                                                                                               |
+| `OPENCHAMBER_UI_PASSWORD`               | —                       | UI password required to bind a LAN host on OpenChamber ≥1.13. Configure from `/setup`. Without it (or the override below) DevHub falls back to binding `127.0.0.1`. |
+| `OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN` | `false`                 | Set `true` to expose OpenChamber over the LAN without a UI password (not recommended)                                                                               |
+| `NEXT_PUBLIC_OPENCHAMBER_PORT`          | `1336`                  | Chamber iframe URL port in the browser                                                                                                                              |
+| `OPENCODE_PORT`                         | `1338`                  | Shared `opencode serve` port                                                                                                                                        |
+| `OPENCODE_BIND_HOST`                    | `0.0.0.0`               | `opencode serve --hostname`                                                                                                                                         |
+| `NEXT_PUBLIC_OPENCODE_PORT`             | `1338`                  | OpenCode iframe URL port in the browser                                                                                                                             |
+| `DEVHUB_OPENCODE_BINARY`                | —                       | Override path to the `opencode` binary                                                                                                                              |
+| `OPENCHAMBER_BIN`                       | —                       | Override path to the `openchamber` CLI. Otherwise DevHub uses `openchamber` on `PATH`; if neither exists the Chamber tab is hidden.                                 |
+| `OPENCHAMBER_DATA_DIR`                  | `~/.config/openchamber` | OpenChamber's data dir. DevHub seeds its default theme into `<dir>/settings.json` and copies themes into `<dir>/themes`.                                            |
+| `DEVHUB_SKIP_OPENCODE_UPDATE`           | —                       | Set to `1` to skip `opencode upgrade` on peer startup                                                                                                               |
 
 Legacy `OPENCODE_HOST` is treated as a bind host when it is not a URL; prefer `OPENCODE_BIND_HOST`.
 

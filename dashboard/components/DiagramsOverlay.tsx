@@ -196,7 +196,7 @@ export function DiagramsOverlay({ open, onClose }: DiagramsOverlayProps) {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto overscroll-contain">
         {!loaded && !q ? (
           <div className="p-3 flex flex-col gap-2" aria-busy="true">
             {Array.from({ length: 5 }).map((_, i) => (

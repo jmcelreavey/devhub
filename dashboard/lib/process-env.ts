@@ -6,12 +6,16 @@
  * /usr/local/bin     — Intel Homebrew, standard Linux
  * /opt/local/bin     — MacPorts
  * ~/.local/bin       — Linux user installs (pip --user, cargo, etc.)
+ * ~/Library/Python   — macOS pip --user console scripts
  */
 export const EXTRA_PATH_SEGMENTS = [
   "/opt/homebrew/bin",
   "/usr/local/bin",
   "/opt/local/bin",
   `${process.env.HOME ?? ""}/.local/bin`,
+  ...["3.9", "3.10", "3.11", "3.12", "3.13"].map((version) =>
+    `${process.env.HOME ?? ""}/Library/Python/${version}/bin`,
+  ),
 ].filter(Boolean);
 
 const NPM_LIFECYCLE_KEYS = [

@@ -38,6 +38,7 @@ export const NAV_GROUPS: { id: NavGroup; label: string }[] = [
  */
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Today", icon: "today", group: "workspace" },
+  { href: "/briefing", label: "Briefing", icon: "briefing", group: "workspace" },
   { href: "/calendar", label: "Calendar", icon: "calendar", group: "workspace", gate: "calendar" },
   { href: "/work", label: "Work", icon: "tasks", group: "workspace" },
   { href: "/prs", label: "PRs", icon: "prs", group: "workspace", gate: "github" },

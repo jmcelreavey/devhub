@@ -6,8 +6,8 @@ type Log = (msg: string) => void;
 /**
  * Best-effort upgrade of the OpenCode binary to the newest release.
  *
- * Mirrors ensureOpenChamberCurrent (see openchamber-update.ts): runs on every DevHub
- * start so a restart tracks upstream. OpenCode ships a self-detecting `opencode upgrade`
+ * Runs on every DevHub start so a restart tracks upstream. OpenCode ships a
+ * self-detecting `opencode upgrade`
  * that no-ops when already current, so we just delegate to it. Never fatal — on any
  * failure (offline, release server down, upgrade error) we keep the existing binary and
  * continue. An already-running server can't be hot-swapped; the new binary takes effect

@@ -34,6 +34,8 @@ interface SetupStatus {
   bi: boolean;
   /** When false, dashboard binds to localhost only. */
   allowLanNetwork: boolean;
+  /** Whether OPENCHAMBER_UI_PASSWORD is already configured (value never echoed). */
+  hasOpenchamberUiPassword?: boolean;
   coreVars: { repoRoot: string; notesDir: string };
   coreDefaults: { repoRoot: string; notesDir: string };
   githubVars: { authenticated: boolean };
@@ -159,6 +161,7 @@ export default function SetupPage() {
   const [saveResult, setSaveResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [error, setError] = useState("");
   const [allowLan, setAllowLan] = useState(true);
+  const [chamberUiPassword, setChamberUiPassword] = useState("");
   const [calendarConnectBusy, setCalendarConnectBusy] = useState(false);
   const [calendarBanner, setCalendarBanner] = useState("");
   const [biChecking, setBiChecking] = useState(false);
@@ -554,13 +557,16 @@ export default function SetupPage() {
           />
         </div>
 
-        {/* Step indicators */}
+        {/* Step indicators — scroll horizontally on narrow screens rather than
+            squishing; the active step always shows its label (see below) so
+            mobile users can tell where they are. */}
         <div
           style={{
             display: "flex",
             alignItems: "center",
             gap: "4px",
             marginBottom: "32px",
+            overflowX: "auto",
           }}
         >
           {steps.map((s, i) => {
@@ -588,11 +594,16 @@ export default function SetupPage() {
                 cursor: "pointer",
                 fontSize: "12px",
                 fontWeight: i === currentStep ? 600 : 400,
+                whiteSpace: "nowrap",
+                flexShrink: 0,
                 transition: "all 0.15s ease",
               }}
             >
               {complete ? <CheckCircle2 size={14} /> : i === currentStep ? s.icon : <Circle size={14} style={{ opacity: 0.5 }} />}
-              <span className="hidden sm:inline">{s.title}</span>
+              {/* Desktop shows every label; mobile shows only the active step's
+                  label (icon-only otherwise) so the row stays compact but the
+                  current step is always identifiable. */}
+              <span className={i === currentStep ? "inline" : "hidden sm:inline"}>{s.title}</span>
               {s.optional && !complete && (
                 <span className="hidden sm:inline text-[9px] font-normal" style={{ color: "var(--text-subtle)", opacity: 0.8 }}>opt</span>
               )}
@@ -612,7 +623,13 @@ export default function SetupPage() {
           }}
         >
           {step.id === "welcome" && (
-            <WelcomeStep allowLan={allowLan} onAllowLanChange={setAllowLan} />
+            <WelcomeStep
+              allowLan={allowLan}
+              onAllowLanChange={setAllowLan}
+              chamberUiPassword={chamberUiPassword}
+              onChamberUiPasswordChange={setChamberUiPassword}
+              hasExistingPassword={status?.hasOpenchamberUiPassword === true}
+            />
           )}
           {step.id === "paths" && (
             <PathsStep
@@ -774,7 +791,14 @@ export default function SetupPage() {
                       const r = await fetch("/api/setup/save", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ network: { allowLan } }),
+                        body: JSON.stringify({
+                          network: {
+                            allowLan,
+                            // Only send when the user entered/generated one; empty
+                            // preserves any existing password.
+                            openchamberUiPassword: chamberUiPassword.trim() || undefined,
+                          },
+                        }),
                       });
                       const result = await r.json();
                       if (!r.ok) throw new Error(result.error || "Save failed");
@@ -848,9 +872,15 @@ function isStepComplete(step: Step, status: SetupStatus): boolean {
 function WelcomeStep({
   allowLan,
   onAllowLanChange,
+  chamberUiPassword,
+  onChamberUiPasswordChange,
+  hasExistingPassword,
 }: {
   allowLan: boolean;
   onAllowLanChange: (v: boolean) => void;
+  chamberUiPassword: string;
+  onChamberUiPasswordChange: (v: string) => void;
+  hasExistingPassword: boolean;
 }) {
   return (
     <div>
@@ -884,14 +914,77 @@ function WelcomeStep({
             Allow access from other devices on my network
           </div>
           <div style={{ fontSize: "12px", color: "var(--text-subtle)", lineHeight: 1.5, marginTop: "4px" }}>
-            When enabled, DevHub and OpenChamber bind to all interfaces (default). Uncheck to restrict to this
-            machine only (<code style={{ fontSize: "11px" }}>127.0.0.1</code>). Writes{" "}
-            <code style={{ fontSize: "11px" }}>DEVHUB_BIND_HOST</code> and{" "}
-            <code style={{ fontSize: "11px" }}>OPENCHAMBER_HOST</code> in <code style={{ fontSize: "11px" }}>.env.local</code>
-            — restart the dev server after changing.
+            When enabled, DevHub keeps localhost working and exposes selected ports on your non-Tailscale LAN IP.
+            Uncheck to restrict to this machine only (<code style={{ fontSize: "11px" }}>127.0.0.1</code>). Writes{" "}
+            <code style={{ fontSize: "11px" }}>DEVHUB_BIND_HOST</code>,{" "}
+            <code style={{ fontSize: "11px" }}>DEVHUB_LAN_PROXY_HOST</code>, and peer host settings in{" "}
+            <code style={{ fontSize: "11px" }}>.env.local</code> — restart the dev server after changing.
           </div>
         </div>
       </label>
+      {allowLan && (
+        <div
+          style={{
+            padding: "12px 14px",
+            borderRadius: "8px",
+            border: "1px solid var(--border)",
+            background: "var(--bg-elevated)",
+            marginBottom: "20px",
+          }}
+        >
+          <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text)" }}>
+            OpenChamber UI password
+          </div>
+          <div style={{ fontSize: "12px", color: "var(--text-subtle)", lineHeight: 1.5, marginTop: "4px", marginBottom: "10px" }}>
+            Required before exposing OpenChamber through the LAN proxy. Saved as <code style={{ fontSize: "11px" }}>OPENCHAMBER_UI_PASSWORD</code>.
+            {hasExistingPassword && " A password is already configured; leave blank to keep it."}
+          </div>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <input
+              type="text"
+              value={chamberUiPassword}
+              onChange={(e) => onChamberUiPasswordChange(e.target.value)}
+              placeholder={hasExistingPassword ? "•••••••• (unchanged)" : "Enter or generate a password"}
+              autoComplete="off"
+              spellCheck={false}
+              style={{
+                flex: 1,
+                padding: "8px 10px",
+                borderRadius: "6px",
+                border: "1px solid var(--border)",
+                background: "var(--bg)",
+                color: "var(--text)",
+                fontSize: "13px",
+                fontFamily: "var(--font-mono, monospace)",
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const bytes = new Uint8Array(18);
+                crypto.getRandomValues(bytes);
+                const pw = btoa(String.fromCharCode(...bytes))
+                  .replace(/[+/=]/g, "")
+                  .slice(0, 24);
+                onChamberUiPasswordChange(pw);
+              }}
+              style={{
+                padding: "8px 14px",
+                borderRadius: "6px",
+                border: "1px solid var(--border)",
+                background: "var(--bg)",
+                color: "var(--text)",
+                cursor: "pointer",
+                fontSize: "13px",
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Generate
+            </button>
+          </div>
+        </div>
+      )}
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         <FeatureCard
           title="Core paths"

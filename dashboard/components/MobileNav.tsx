@@ -5,7 +5,6 @@ import { Menu } from "lucide-react";
 import { NavLink } from "./NavLink";
 import {
   NAV_ITEMS,
-  LEGACY_NAV_ITEMS,
   NAV_GROUPS,
   filterNavBySetup,
   type NavGroup,
@@ -17,6 +16,19 @@ import { useNavBadges, countForItem, unseenForItem } from "@/lib/use-nav-badges"
 import { ThemeToggle } from "./ThemeToggle";
 import { AccentPicker } from "./AccentPicker";
 import { FocusTimer } from "./FocusTimer";
+
+type GroupedNav = Record<NavGroup, NavItem[]>;
+
+/** Filter by setup gates, drop desktop-only pages, and bucket by section. */
+function groupNav(items: NavItem[], setup: SetupGateStatus | null): GroupedNav {
+  const visible = filterNavBySetup(
+    items.filter((i) => !i.desktopOnly),
+    setup,
+  );
+  const map: GroupedNav = { workspace: [], library: [], system: [] };
+  for (const item of visible) map[item.group].push(item);
+  return map;
+}
 
 export function MobileNav() {
   const [open, setOpen] = useState(false);
@@ -41,21 +53,12 @@ export function MobileNav() {
     return () => window.removeEventListener("devhub:mobile-nav-open", onOpen);
   }, []);
 
-  const grouped = useMemo(() => {
-    // Mobile has no ⌘K palette or desktop section tabs, so the drawer is
-    // the only road to legacy pages — include them after the core items.
-    const visible = filterNavBySetup(
-      [...NAV_ITEMS, ...LEGACY_NAV_ITEMS].filter((i) => !i.desktopOnly),
-      setup ?? null,
-    );
-    const map: Record<NavGroup, NavItem[]> = {
-      workspace: [],
-      library: [],
-      system: [],
-    };
-    for (const item of visible) map[item.group].push(item);
-    return map;
-  }, [setup]);
+  // Mirror the desktop sidebar exactly: the curated NAV_ITEMS, grouped by
+  // section. Legacy destinations stay reachable at their URLs / via search.
+  const coreGrouped = useMemo(
+    () => groupNav(NAV_ITEMS, setup ?? null),
+    [setup],
+  );
 
   return (
     <>
@@ -74,7 +77,7 @@ export function MobileNav() {
       {open && (
         <>
           <div
-            className="modal-backdrop fixed inset-0 z-40"
+            className="modal-backdrop fixed inset-0 z-[9650]"
             style={{ background: "rgba(0,0,0,0.6)" }}
             onClick={() => setOpen(false)}
             aria-hidden
@@ -84,7 +87,7 @@ export function MobileNav() {
             role="dialog"
             aria-modal="true"
             aria-label="Main navigation"
-            className="mobile-drawer-enter fixed inset-y-0 left-0 z-50 w-64 flex flex-col py-4"
+            className="mobile-drawer-enter fixed inset-y-0 left-0 z-[9660] w-64 flex flex-col py-4"
             style={{ background: "var(--bg-sidebar, #0a0d12)", borderRight: "1px solid var(--border)" }}
           >
             <div
@@ -95,10 +98,10 @@ export function MobileNav() {
             </div>
             <nav className="flex-1 overflow-y-auto px-2">
               {NAV_GROUPS.map((g) =>
-                grouped[g.id].length === 0 ? null : (
+                coreGrouped[g.id].length === 0 ? null : (
                   <div key={g.id} className="pt-3 pb-1">
                     <div className="nav-group-label">{g.label}</div>
-                    {grouped[g.id].map((item) => (
+                    {coreGrouped[g.id].map((item) => (
                       <NavLink
                         key={item.href}
                         item={item}

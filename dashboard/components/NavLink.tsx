@@ -8,7 +8,6 @@ import {
   Activity,
   Zap,
   FolderGit2,
-  Bookmark,
   Play,
   Monitor,
   Ticket,
@@ -25,12 +24,14 @@ import {
   BarChart3,
   Globe,
   Bot,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import type { NavItem } from "@/lib/nav";
 
 const ICONS: Record<string, LucideIcon> = {
   today: CalendarDays,
+  briefing: Sparkles,
   calendar: CalendarDays,
   tickets: Ticket,
   notes: FileText,
@@ -45,7 +46,6 @@ const ICONS: Record<string, LucideIcon> = {
   status: Activity,
   skills: Zap,
   repos: FolderGit2,
-  bookmarks: Bookmark,
   actions: Play,
   setup: Settings2,
   datadog: LineChart,

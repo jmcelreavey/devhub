@@ -31,7 +31,7 @@ export function RepoLearnTutor({ repoName, aiConfigured }: RepoLearnTutorProps) 
   const toast = useToast();
   const [savingId, setSavingId] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  const startedRef = useRef(false);
+  const [started, setStarted] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const api = repoLearnApiPath(repoName, "/tutor");
@@ -43,11 +43,11 @@ export function RepoLearnTutor({ repoName, aiConfigured }: RepoLearnTutorProps) 
   const isStreaming = status === "streaming" || status === "submitted";
   const lastMessageId = messages[messages.length - 1]?.id;
 
-  useEffect(() => {
-    if (!aiConfigured || startedRef.current) return;
-    startedRef.current = true;
+  const startTutor = useCallback(() => {
+    if (started) return;
+    setStarted(true);
     void sendMessage({ text: REPO_LEARN_TUTOR_START });
-  }, [aiConfigured, sendMessage]);
+  }, [started, sendMessage]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -96,6 +96,17 @@ export function RepoLearnTutor({ repoName, aiConfigured }: RepoLearnTutorProps) 
 
   return (
     <div className="flex flex-col gap-3">
+      {!started ? (
+        <button
+          type="button"
+          className="btn btn-primary"
+          style={{ fontSize: 12, padding: "6px 12px" }}
+          onClick={startTutor}
+        >
+          <BookOpen size={13} aria-hidden /> Start tutor
+        </button>
+      ) : (
+        <>
       <div
         ref={scrollRef}
         className="max-h-72 overflow-y-auto space-y-2 rounded border p-2"
@@ -182,6 +193,8 @@ export function RepoLearnTutor({ repoName, aiConfigured }: RepoLearnTutorProps) 
           {isStreaming ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
         </button>
       </div>
+        </>
+      )}
     </div>
   );
 }
