@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { CircleCheck, ExternalLink, GitPullRequest, MessageSquare, RefreshCw } from "lucide-react";
+import type { ReactNode } from "react";
+import { GitPullRequest, RefreshCw } from "lucide-react";
 import { useLive } from "@/lib/use-fetch";
 import type { GithubPrsApiPayload, GithubPrRow, RecentlyReviewedPr } from "@/lib/github-prs";
 import { useMarkPrsSeen } from "@/lib/use-sidebar-counts";
-import { buildSlackMessage, copyWithToast } from "@/lib/pr-slack";
-import { useToast } from "@/lib/use-toast";
+import { PrRowActions } from "@/components/PrRowActions";
 import { FetchError, EmptyState, SkeletonRows } from "@/components";
 import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
 
@@ -15,9 +15,7 @@ type PrTab = "authored" | "reviews" | "recent";
 const EMPTY_PR_ROWS: GithubPrRow[] = [];
 const EMPTY_RECENTLY_REVIEWED: RecentlyReviewedPr[] = [];
 
-function PrCard({ row, mode }: { row: GithubPrRow; mode: "authored" | "reviews" }) {
-  const toast = useToast();
-
+function PrTitleCard({ row, children }: { row: GithubPrRow; children: ReactNode }) {
   return (
     <div className="card flex items-center gap-3" style={{ padding: "10px 14px" }}>
       <GitPullRequest size={16} style={{ color: "var(--accent)", flexShrink: 0 }} aria-hidden />
@@ -33,80 +31,24 @@ function PrCard({ row, mode }: { row: GithubPrRow; mode: "authored" | "reviews" 
           {row.repo}#{row.number}
         </span>
       </a>
-      {mode === "authored" && (
-        <button
-          type="button"
-          onClick={copyWithToast(buildSlackMessage(row, "awaiting"), "Slack message", toast)}
-          title="Copy Slack review message"
-          className="shrink-0 rounded p-1 transition-colors hover:bg-[var(--bg-muted)]"
-          style={{ color: "var(--text-subtle)" }}
-          aria-label="Copy Slack review message"
-        >
-          <MessageSquare size={13} aria-hidden />
-          <span>Copy</span>
-        </button>
-      )}
-      <a
-        href={row.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{ color: "var(--text-subtle)", flexShrink: 0 }}
-        aria-label="Open on GitHub"
-      >
-        <ExternalLink size={14} aria-hidden />
-      </a>
+      {children}
     </div>
   );
 }
 
-function RecentlyReviewedCard({ row }: { row: RecentlyReviewedPr }) {
-  const toast = useToast();
-
+function PrCard({ row, mode }: { row: GithubPrRow; mode: "authored" | "reviews" }) {
   return (
-    <div className="card flex items-center gap-3" style={{ padding: "10px 14px" }}>
-      <GitPullRequest size={16} style={{ color: "var(--accent)", flexShrink: 0 }} aria-hidden />
-      <a
-        href={row.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex min-w-0 flex-1 flex-col gap-0.5 no-underline"
-        style={{ color: "var(--text)" }}
-      >
-        <span className="text-sm font-medium leading-snug break-words">{row.title}</span>
-        <span className="font-mono text-[11px]" style={{ color: "var(--text-muted)" }}>
-          {row.repo}#{row.number}
-        </span>
-      </a>
-      <button
-        type="button"
-        onClick={copyWithToast(buildSlackMessage(row, "reviewed-approved"), "Slack message", toast)}
-        title="reviewed — approved"
-        className="shrink-0 rounded p-1 transition-colors hover:bg-[var(--bg-muted)]"
-        style={{ color: "var(--success)" }}
-        aria-label="Copy reviewed approved message"
-      >
-        <CircleCheck size={13} aria-hidden />
-      </button>
-      <button
-        type="button"
-        onClick={copyWithToast(buildSlackMessage(row, "reviewed"), "Slack message", toast)}
-        title="reviewed"
-        className="shrink-0 rounded p-1 transition-colors hover:bg-[var(--bg-muted)]"
-        style={{ color: "var(--text-subtle)" }}
-        aria-label="Copy reviewed message"
-      >
-        <MessageSquare size={13} aria-hidden />
-      </button>
-      <a
-        href={row.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{ color: "var(--text-subtle)", flexShrink: 0 }}
-        aria-label="Open on GitHub"
-      >
-        <ExternalLink size={14} aria-hidden />
-      </a>
-    </div>
+    <PrTitleCard row={row}>
+      <PrRowActions row={row} kind={mode} size="md" />
+    </PrTitleCard>
+  );
+}
+
+function RecentlyReviewedCard({ row }: { row: RecentlyReviewedPr }) {
+  return (
+    <PrTitleCard row={row}>
+      <PrRowActions row={row} kind="reviewed" size="md" />
+    </PrTitleCard>
   );
 }
 

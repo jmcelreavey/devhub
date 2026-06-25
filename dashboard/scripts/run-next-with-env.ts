@@ -7,7 +7,7 @@ import { spawn } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { envTrimOrDefault } from "./load-env-local-into-process";
+import { envTrimOrDefault, resolveBindHost } from "./load-env-local-into-process";
 import { loadEnvWithOnePasswordFallback } from "./op-secrets";
 
 const dashboardRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -15,8 +15,14 @@ const dashboardRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 async function main(): Promise<void> {
   await loadEnvWithOnePasswordFallback(dashboardRoot);
 
-  const bindHost = envTrimOrDefault("DEVHUB_BIND_HOST", "0.0.0.0");
+  const rawHost = envTrimOrDefault("DEVHUB_BIND_HOST", "0.0.0.0");
+  const bindHost = resolveBindHost(rawHost);
   const port = envTrimOrDefault("PORT", "1337");
+  // When the magic value resolved, show the actual IP so the user can verify
+  // the right interface was picked (matters on machines with Docker/VM NICs).
+  if (rawHost.trim().toLowerCase() === "auto" || rawHost.trim().toLowerCase() === "lan") {
+    process.stderr.write(`[devhub] DEVHUB_BIND_HOST=${rawHost.trim()} → ${bindHost} (port ${port})\n`);
+  }
 
   const args = process.argv.slice(2);
   if (args.length === 0) {

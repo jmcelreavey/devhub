@@ -2,22 +2,20 @@
 
 import type { AriaRole, ReactNode } from "react";
 import Link from "next/link";
-import { GitPullRequest, MessageSquare, CircleCheck } from "lucide-react";
+import { GitPullRequest } from "lucide-react";
 import { useLive } from "@/lib/use-fetch";
 import type { GithubPrsApiPayload, GithubPrRow, RecentlyReviewedPr } from "@/lib/github-prs";
 import { HUB_STRIP_ICON_PX, hubStripSetupLinkClassName, hubStripSetupLinkStyle } from "@/lib/hub-strip";
 import { HubSignalStrip, HubStripHeading, hubStripInlineCodeClassName } from "@/components/HubSignalStrip";
 import { TodayCollapseButton } from "@/components/TodayCollapseButton";
-import { buildSlackMessage, copyWithToast } from "@/lib/pr-slack";
-import { useToast } from "@/lib/use-toast";
+import { PrRowActions, type PrRowKind } from "@/components/PrRowActions";
 import { ConditionalList } from "@/components/ui/EmptyStateRow";
 import { useGridSize } from "@/lib/use-grid-size";
 
 const EMPTY_PR_ROWS: GithubPrRow[] = [];
 const EMPTY_RECENTLY_REVIEWED: RecentlyReviewedPr[] = [];
 
-function PrRowLink({ row, mode }: { row: GithubPrRow; mode?: "authored" | "reviewed" }) {
-  const toast = useToast();
+function PrRowLink({ row, kind }: { row: GithubPrRow; kind?: PrRowKind }) {
   return (
     <li className="min-w-0">
       <div className="flex items-center gap-1 rounded px-2 py-1.5 transition-colors hover:bg-[var(--bg-muted)]">
@@ -33,49 +31,13 @@ function PrRowLink({ row, mode }: { row: GithubPrRow; mode?: "authored" | "revie
             {row.repo}#{row.number}
           </span>
         </a>
-        {mode === "authored" && (
-          <button
-            type="button"
-            onClick={copyWithToast(buildSlackMessage(row, "awaiting"), "Slack message", toast)}
-            aria-label="Copy Slack review message"
-            title="Copy Slack review message"
-            className="shrink-0 flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium transition-colors hover:bg-[var(--bg-muted)]"
-            style={{ color: "var(--text-subtle)" }}
-          >
-            <MessageSquare size={11} aria-hidden />
-            <span>Copy</span>
-          </button>
-        )}
-        {mode === "reviewed" && (
-          <>
-            <button
-              type="button"
-              onClick={copyWithToast(buildSlackMessage(row, "reviewed-approved"), "Slack message", toast)}
-              aria-label="Copy reviewed (approved) message"
-              title="Copy reviewed — approved"
-              className="shrink-0 rounded p-1 transition-colors hover:bg-[var(--bg-muted)]"
-              style={{ color: "var(--success, #22c55e)" }}
-            >
-              <CircleCheck size={12} aria-hidden />
-            </button>
-            <button
-              type="button"
-              onClick={copyWithToast(buildSlackMessage(row, "reviewed"), "Slack message", toast)}
-              aria-label="Copy reviewed message"
-              title="Copy reviewed"
-              className="shrink-0 rounded p-1 transition-colors hover:bg-[var(--bg-muted)]"
-              style={{ color: "var(--text-subtle)" }}
-            >
-              <MessageSquare size={12} aria-hidden />
-            </button>
-          </>
-        )}
+        {kind && <PrRowActions row={row} kind={kind} size="sm" />}
       </div>
     </li>
   );
 }
 
-function SubList({ title, rows, mode }: { title: string; rows: GithubPrRow[]; mode?: "authored" | "reviewed" }) {
+function SubList({ title, rows, kind }: { title: string; rows: GithubPrRow[]; kind?: PrRowKind }) {
   return (
     <ConditionalList
       items={rows}
@@ -86,7 +48,7 @@ function SubList({ title, rows, mode }: { title: string; rows: GithubPrRow[]; mo
           </h3>
           <ul className="m-0 list-none space-y-0.5 p-0">
             {items.map((r) => (
-              <PrRowLink key={`${r.repo}-${r.number}`} row={r} mode={mode} />
+              <PrRowLink key={`${r.repo}-${r.number}`} row={r} kind={kind} />
             ))}
           </ul>
         </div>
@@ -371,9 +333,9 @@ export function GithubPrsPanel({
     ? compact2x1
     : (
     <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-3">
-      <SubList title="Mine (open)" rows={authored} mode="authored" />
-      <SubList title="Review requested" rows={reviews} />
-      <SubList title="Recently reviewed" rows={recentlyReviewed} mode="reviewed" />
+      <SubList title="Mine (open)" rows={authored} kind="authored" />
+      <SubList title="Review requested" rows={reviews} kind="reviews" />
+      <SubList title="Recently reviewed" rows={recentlyReviewed} kind="reviewed" />
     </div>
   );
 
