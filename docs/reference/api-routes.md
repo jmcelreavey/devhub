@@ -11,12 +11,12 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | Infra plugin (`/api/bi/*`) | Optional plugin-backed ops: AWS profile, EKS, RDS, Mongo, CAPI, IAM |
 | Calendar  | Google Calendar auth and event reads                 |
 | Datadog   | Alert links and summaries                            |
-| GitHub    | Pull request and repository data                     |
+| GitHub    | Pull request/review queues, recently reviewed PRs, and repository data |
 | Jira      | Ticket data and redirects                            |
 | Jobs      | Scheduled job management                             |
 | Learnings | Browse reusable learning notes                       |
 | MCP       | View MCP server configuration                        |
-| Notes     | Notes CRUD, tree access, note image assets (`GET /api/notes-assets/...`), optional in-editor AI (`GET /api/notes/ai/status`, `POST /api/notes/ai/chat`) |
+| Notes     | Notes CRUD, tree access, PR review notes under `pr-reviews/...`, note image assets (`GET /api/notes-assets/...`), optional in-editor AI (`GET /api/notes/ai/status`, `POST /api/notes/ai/chat`) |
 | Docs      | Repo `docs/` markdown CRUD (`/api/docs/...`), file tree (`GET /api/docs/tree`), same ordering API as notes (`PATCH /api/note-order?vault=docs`) |
 | Share     | Publish notes/docs as secret GitHub Gists (`GET`/`POST`/`DELETE` `/api/share`; `DELETE ?all=1` clears all) |
 | Collections | Master checklist CRUD under repo `collections/` (legacy route name); `GET …/linked-label-drift?itemId=` and `POST …/sync-linked-labels` propagate master item labels into linked note blocks |
@@ -37,6 +37,13 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 - Mutating routes are intended for same-origin dashboard use.
 - Long-running actions expose progress through server-sent events.
 - Optional integrations should fail clearly when unconfigured.
+
+## Notable User-Facing Routes
+
+| Route | Used By | Notes |
+| ----- | ------- | ----- |
+| `GET /api/github/prs` | Today GitHub PR panel, `/prs` | Requires an authenticated local `gh` session. Returns authored PRs, review-requested PRs, and recently reviewed PRs; archived repositories are filtered from active queues. |
+| `GET /api/notes/pr-reviews/<slug>` | PR **Notes** links | The GitHub PR **Review** action polls this route after starting OpenCode. A `404` just means the review note has not been written yet. |
 
 ## Contributor Guidance
 
