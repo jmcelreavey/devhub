@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { pluginMcpServers, readCatalogMcpServer } from "./sync-mcp";
+import { pluginMcpServers, readCatalogMcpServer, substitutePlaceholder } from "./sync-mcp";
 import { pluginRegistryPath } from "./plugins/registry";
 
 let home: string;
@@ -65,5 +65,35 @@ describe("readCatalogMcpServer precedence", () => {
     const resolved = readCatalogMcpServer(repoRoot, home, "dup");
     expect(resolved?.source).toBe("repo");
     expect(resolved?.server.command).toBe("CORE");
+  });
+
+  it("exposes the plugin root so PLUGIN_ROOT can be resolved", () => {
+    writeJson(path.join(pluginRoot, "mcp", "bi-tools.json"), {
+      command: "PLUGIN_ROOT/mcp-servers/x/node_modules/.bin/tsx",
+    });
+    registerPlugin();
+    const map = pluginMcpServers(home);
+    expect(map.get("bi-tools")?.pluginPath).toBe(pluginRoot);
+    const resolved = readCatalogMcpServer(repoRoot, home, "bi-tools");
+    expect(resolved?.pluginPath).toBe(pluginRoot);
+  });
+});
+
+describe("substitutePlaceholder", () => {
+  it("replaces a token across strings, arrays, and nested objects", () => {
+    const out = substitutePlaceholder(
+      { command: "ROOT/.bin/tsx", args: ["ROOT/src/mcp.ts"], env: { P: "ROOT/x" } },
+      "ROOT",
+      "/abs/plugin",
+    );
+    expect(out).toEqual({
+      command: "/abs/plugin/.bin/tsx",
+      args: ["/abs/plugin/src/mcp.ts"],
+      env: { P: "/abs/plugin/x" },
+    });
+  });
+
+  it("leaves non-matching values untouched", () => {
+    expect(substitutePlaceholder({ a: 1, b: true, c: null }, "ROOT", "/x")).toEqual({ a: 1, b: true, c: null });
   });
 });

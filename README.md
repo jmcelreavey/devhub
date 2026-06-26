@@ -79,7 +79,7 @@ open http://localhost:1337   # macOS — on Linux/WSL: xdg-open http://localhost
 
 You can still run `npm install` / `npm run dev` inside `dashboard/` if you prefer.
 
-Optional **bootstrap** from the repo root: `bash scripts/install.sh` installs dashboard deps, then runs a **TypeScript** bootstrap (`dashboard/scripts/bootstrap-install.ts`) — skill + persona sync, MCP configs, notes-server deps, production build, validation. Day-to-day sync is from the **Actions** and **Skills** pages in the app.
+Optional **bootstrap** from the repo root: `bash scripts/install.sh` installs dashboard deps, then runs a **TypeScript** bootstrap (`dashboard/scripts/bootstrap-install.ts`) — skill + persona sync, MCP configs, DevHub MCP server deps (plus any plugin MCP server deps), production build, validation. Day-to-day sync is from the **Actions** and **Skills** pages in the app.
 
 After install, start a session in any supported AI tool. It will automatically read `AGENTS.md` at the repo root and load your persona.
 
@@ -357,21 +357,22 @@ If you run DevHub as a private mirror of a shared core, `scripts/devhub-update.s
 
 ## MCP Servers
 
-MCP (Model Context Protocol) servers extend tool capabilities. This repo configures a notes MCP server for all supported tools.
+MCP (Model Context Protocol) servers extend tool capabilities. This repo configures the **DevHub MCP server** for all supported tools, and plugins can contribute their own (the `bi` plugin ships a **DevHub BI MCP server**).
 
-### Notes MCP Server
+### DevHub MCP Server
 
-A lightweight Node.js server provides both a web UI and MCP integration for your notes. No Docker, no database — just plain markdown files.
+A stdio MCP server (`mcp-servers/devhub-server`, wired from `mcp/shared/devhub.json`) exposes two tiers of tools:
+
+- **Filesystem-backed** (work without the dashboard): notes, docs, tasks, diagrams, appraisal.
+- **Dashboard-backed** (proxy `http://localhost:1337`): status, scripts/sync, briefing, calendar, work/PRs, repos, search. These need the dashboard running.
 
 ```bash
-# Start the web UI (port 1337)
-NOTES_DIR=~/devhub/notes node mcp-servers/notes-server/src/server.js
-
-# MCP configs are installed by install.sh (bootstrap) or from Actions when you re-run setup flows
-# It provides: notes_list, notes_read, notes_write, notes_append, notes_search, notes_delete
+# Run the server directly (normally launched by your AI tool via the synced MCP config)
+NOTES_DIR=~/devhub/notes DOCS_DIR=~/devhub/docs \
+  mcp-servers/devhub-server/node_modules/.bin/tsx mcp-servers/devhub-server/src/mcp.ts
 ```
 
-MCP configs are installed to your tool directories by `install.sh` with the correct paths. The MCP server uses `REPO_ROOT/mcp-servers/notes-server/src/mcp.js` and points at `REPO_ROOT/notes`.
+MCP configs are installed to your tool directories by `install.sh` / Actions with the correct paths. The config substitutes `REPO_ROOT` (and `PLUGIN_ROOT` for plugin servers) at sync time. See the `devhub-mcp` skill for tool usage.
 
 ### Web UI
 

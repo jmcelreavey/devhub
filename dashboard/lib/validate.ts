@@ -171,16 +171,16 @@ export async function validateRepo(opts: ValidateOptions): Promise<number> {
           continue;
         }
         valid++;
-        if (f.name === "notes.json") hasNotes = true;
+        if (f.name === "devhub.json") hasNotes = true;
       } catch {
         warn(`mcp/shared/${f.name}: invalid JSON`);
       }
     }
     ok(`${valid}/${files.length} MCP server file(s) valid`);
-    if (!hasNotes) warn("mcp/shared/notes.json missing — run Sync MCP to install it");
+    if (!hasNotes) warn("mcp/shared/devhub.json missing — run Sync MCP to install it");
   }
-  if (exists("mcp-servers/notes-server/src/mcp.ts")) ok("Notes MCP server source exists");
-  else err("mcp-servers/notes-server/src/mcp.ts missing");
+  if (exists("mcp-servers/devhub-server/src/mcp.ts")) ok("DevHub MCP server source exists");
+  else err("mcp-servers/devhub-server/src/mcp.ts missing");
   if (exists("dashboard/package.json")) ok("Dashboard package.json exists");
   else err("dashboard/package.json missing");
 

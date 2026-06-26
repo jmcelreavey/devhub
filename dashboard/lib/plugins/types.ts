@@ -136,4 +136,6 @@ export interface PluginAssetDir {
   origin: AssetOrigin;
   /** Absolute path to the directory holding that kind's files inside the plugin. */
   dir: string;
+  /** Absolute path to the plugin root (for `PLUGIN_ROOT` placeholder substitution). */
+  pluginPath: string;
 }

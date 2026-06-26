@@ -21,7 +21,7 @@ Create or update a **project note** under `notes/<folder>/` from photos plus a p
 
 ## Prerequisites
 
-- DevHub **notes MCP** configured (`mcp/shared/notes.json`). Load [devhub-notes-mcp](../devhub-notes-mcp/SKILL.md) for tool usage; do not duplicate full schemas here.
+- DevHub **MCP** configured (`mcp/shared/devhub.json`). Load [devhub-mcp](../devhub-mcp/SKILL.md) for tool usage; do not duplicate full schemas here.
 - For checklist updates when the dashboard is running: `PATCH /api/collections/<id>` (preferred). Otherwise edit `collections/<id>.json` carefully.
 
 ## Inputs

@@ -128,7 +128,7 @@ export function pluginAssetDirs(
       continue;
     }
     if (!fs.existsSync(dir)) continue;
-    out.push({ plugin: plugin.name, origin: pluginOrigin(plugin.name), dir });
+    out.push({ plugin: plugin.name, origin: pluginOrigin(plugin.name), dir, pluginPath: plugin.path });
   }
   return out;
 }

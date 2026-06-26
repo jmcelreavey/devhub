@@ -1,0 +1,11 @@
+{
+  "command": "REPO_ROOT/mcp-servers/devhub-server/node_modules/.bin/tsx",
+  "args": ["REPO_ROOT/mcp-servers/devhub-server/src/mcp.ts"],
+  "env": {
+    "NOTES_DIR": "REPO_ROOT/notes",
+    "TASKS_DIR": "REPO_ROOT/tasks",
+    "DOCS_DIR": "REPO_ROOT/docs",
+    "DEVHUB_BASE_URL": "http://localhost:1337"
+  },
+  "description": "DevHub MCP — notes, docs, tasks, diagrams, appraisal (direct filesystem) plus dashboard-backed tools: scripts, status, briefing, calendar, work/PRs, repos, search (proxied to the local DevHub dashboard)."
+}

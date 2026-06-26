@@ -19,7 +19,7 @@ export default defineConfig({
       "../shared/notes-search/**/*.test.ts",
       "../shared/notes-assets/**/*.test.ts",
       "lib/markdown-convert/**/*.test.ts",
-      "../mcp-servers/notes-server/src/**/*.test.ts",
+      "../mcp-servers/devhub-server/src/**/*.test.ts",
     ],
     globals: false,
   },

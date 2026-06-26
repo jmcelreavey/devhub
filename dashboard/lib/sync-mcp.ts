@@ -219,6 +219,18 @@ export function substituteRepoRoot(value: Json, repoRoot: string): Json {
   return value;
 }
 
+/** Replace a placeholder token (e.g. PLUGIN_ROOT) with a path. Recurses into arrays/objects. */
+export function substitutePlaceholder(value: Json, token: string, replacement: string): Json {
+  if (typeof value === "string") return value.replaceAll(token, replacement);
+  if (Array.isArray(value)) return value.map((v) => substitutePlaceholder(v, token, replacement));
+  if (value && typeof value === "object") {
+    const out: { [key: string]: Json } = {};
+    for (const [k, v] of Object.entries(value)) out[k] = substitutePlaceholder(v as Json, token, replacement);
+    return out;
+  }
+  return value;
+}
+
 /** Reverse of substituteRepoRoot — turn absolute paths under repoRoot back into REPO_ROOT/... . */
 export function reverseSubstituteRepoRoot(value: Json, repoRoot: string): Json {
   const normalized = repoRoot.endsWith(path.sep) ? repoRoot.slice(0, -1) : repoRoot;
@@ -280,14 +292,14 @@ export function readSharedMcpServer(repoRoot: string, name: string): SharedMcpSe
 export function pluginMcpServers(
   home: string,
   warn?: (line: string) => void,
-): Map<string, { file: string; origin: AssetOrigin }> {
-  const map = new Map<string, { file: string; origin: AssetOrigin }>();
-  for (const { dir, origin } of pluginAssetDirs("mcp", home, warn)) {
+): Map<string, { file: string; origin: AssetOrigin; pluginPath: string }> {
+  const map = new Map<string, { file: string; origin: AssetOrigin; pluginPath: string }>();
+  for (const { dir, origin, pluginPath } of pluginAssetDirs("mcp", home, warn)) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
       const name = entry.name.replace(/\.json$/, "");
       if (!isValidServerName(name) || map.has(name)) continue;
-      map.set(name, { file: path.join(dir, entry.name), origin });
+      map.set(name, { file: path.join(dir, entry.name), origin, pluginPath });
     }
   }
   return map;
@@ -353,14 +365,14 @@ export function readCatalogMcpServer(
   repoRoot: string,
   home: string,
   name: string,
-  pluginServers?: Map<string, { file: string; origin: AssetOrigin }>,
-): { server: SharedMcpServer; source: McpCatalogSource } | null {
+  pluginServers?: Map<string, { file: string; origin: AssetOrigin; pluginPath: string }>,
+): { server: SharedMcpServer; source: McpCatalogSource; pluginPath?: string } | null {
   const shared = readSharedMcpServer(repoRoot, name);
   if (shared) return { server: shared, source: "repo" };
   const fromPlugin = (pluginServers ?? pluginMcpServers(home)).get(name);
   if (fromPlugin) {
     const server = parseSharedMcpServerFile(fromPlugin.file);
-    if (server) return { server, source: "plugin" };
+    if (server) return { server, source: "plugin", pluginPath: fromPlugin.pluginPath };
   }
   const personal = readPersonalMcpServer(home, name);
   if (personal) return { server: personal, source: "personal" };
@@ -426,7 +438,7 @@ export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<numbe
         continue;
       }
       const { server, source } = resolved;
-      const substituted = substituteRepoRoot(
+      let substitutedJson = substituteRepoRoot(
         {
           ...(server.command ? { command: server.command } : {}),
           ...(server.args ? { args: server.args } : {}),
@@ -438,7 +450,13 @@ export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<numbe
           ...(server.headers ? { headers: server.headers } : {}),
         } as Json,
         repoRoot,
-      ) as SharedMcpServer;
+      );
+      // Plugin-contributed servers live in the plugin repo, not under REPO_ROOT — resolve
+      // their PLUGIN_ROOT placeholder to the plugin's own root.
+      if (source === "plugin" && resolved.pluginPath) {
+        substitutedJson = substitutePlaceholder(substitutedJson, "PLUGIN_ROOT", resolved.pluginPath);
+      }
+      const substituted = substitutedJson as SharedMcpServer;
 
       const entry = tool.toTool({
         command: substituted.command,

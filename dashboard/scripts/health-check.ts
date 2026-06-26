@@ -6,6 +6,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { loadEnvWithOnePasswordFallback } from "./op-secrets";
 import { augmentedPathEnv } from "../lib/process-env";
+import { pluginMcpServerDirs } from "../lib/plugin-mcp-deps";
 
 const exec = promisify(execFile);
 
@@ -180,17 +181,30 @@ async function main() {
     });
   }
 
-  // Notes MCP server dependencies — stdio server needs its own node_modules.
+  // DevHub MCP server dependencies — stdio server needs its own node_modules.
   {
-    const notesServer = path.join(path.resolve(repoRoot || process.cwd(), ".."), "mcp-servers", "notes-server");
-    if (fs.existsSync(notesServer) && !fs.existsSync(path.join(notesServer, "node_modules"))) {
-      console.log("  · Installing notes server dependencies...");
+    const devhubServer = path.join(path.resolve(repoRoot || process.cwd(), ".."), "mcp-servers", "devhub-server");
+    if (fs.existsSync(devhubServer) && !fs.existsSync(path.join(devhubServer, "node_modules"))) {
+      console.log("  · Installing DevHub MCP server dependencies...");
       try {
-        await exec("npm", ["install", "--silent"], { cwd: notesServer });
+        await exec("npm", ["install", "--silent"], { cwd: devhubServer });
       } catch {
         issues.push({
           level: "warn",
-          msg: "Notes server npm install failed — MCP tools may not work. Run: cd mcp-servers/notes-server && npm install",
+          msg: "DevHub MCP server npm install failed — MCP tools may not work. Run: cd mcp-servers/devhub-server && npm install",
+        });
+      }
+    }
+    // Plugin-contributed MCP servers (e.g. the BI plugin's devhub-bi-server).
+    for (const { plugin, dir, hasNodeModules } of pluginMcpServerDirs()) {
+      if (hasNodeModules) continue;
+      console.log(`  · Installing ${plugin} MCP server dependencies...`);
+      try {
+        await exec("npm", ["install", "--silent"], { cwd: dir });
+      } catch {
+        issues.push({
+          level: "warn",
+          msg: `${plugin} MCP server npm install failed — MCP tools may not work. Run: cd ${dir} && npm install`,
         });
       }
     }

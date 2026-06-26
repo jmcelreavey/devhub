@@ -11,6 +11,7 @@ import process from "node:process";
 import { syncSkills } from "../lib/sync-skills";
 import { syncPersona } from "../lib/sync-persona";
 import { syncMcpServers } from "../lib/sync-mcp";
+import { pluginMcpServerDirs } from "../lib/plugin-mcp-deps";
 import { validateRepo } from "../lib/validate";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -89,10 +90,17 @@ async function main(): Promise<void> {
   const mcp = await syncMcpServers({ emit, repoRoot: REPO_ROOT, prune: true });
   if (mcp !== 0) warn("MCP sync had issues");
 
-  const notesServer = path.join(REPO_ROOT, "mcp-servers", "notes-server");
-  if (fs.existsSync(notesServer)) {
-    log("Installing notes server dependencies...");
-    run("npm install --silent", { cwd: notesServer, label: "Notes server npm install" });
+  const devhubServer = path.join(REPO_ROOT, "mcp-servers", "devhub-server");
+  if (fs.existsSync(devhubServer)) {
+    log("Installing DevHub MCP server dependencies...");
+    run("npm install --silent", { cwd: devhubServer, label: "DevHub MCP server npm install" });
+  }
+
+  // Plugin-contributed MCP servers (e.g. the BI plugin's devhub-bi-server) need their
+  // own deps too.
+  for (const { plugin, dir } of pluginMcpServerDirs()) {
+    log(`Installing ${plugin} MCP server dependencies (${path.basename(dir)})...`);
+    run("npm install --silent", { cwd: dir, label: `${plugin} MCP server npm install` });
   }
 
   log("Building dashboard...");

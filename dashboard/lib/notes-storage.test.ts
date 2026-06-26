@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { isWorkspaceNoteRel } from "../../shared/notes-search/scope.ts";
-import { NotesStorage } from "../../mcp-servers/notes-server/src/storage";
+import { NotesStorage } from "../../mcp-servers/devhub-server/src/storage";
 
 function makeTmp(prefix = "notes-storage"): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `devhub-${prefix}-`));
