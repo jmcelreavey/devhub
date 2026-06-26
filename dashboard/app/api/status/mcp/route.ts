@@ -51,6 +51,18 @@ function dedupeMatchingPids(rows: PsRow[]): number[] {
   return rows.filter((r) => !matchPids.has(r.ppid)).map((r) => r.pid);
 }
 
+/**
+ * Whether a server's launch command resolves. A path (absolute/relative) must
+ * exist on disk; a bare command name (npx, node, docker, uvx, bunx, …) only has
+ * to be resolvable on PATH — those aren't "missing binaries".
+ */
+function commandResolves(command: string): boolean {
+  if (command.includes("/") || command.includes("\\")) return fs.existsSync(command);
+  const finder = process.platform === "win32" ? "where" : "which";
+  const which = spawnSync(finder, [command], { encoding: "utf-8", timeout: 2_000 });
+  return which.status === 0 && which.stdout.trim().length > 0;
+}
+
 /** Best identifying string for a server: first arg (script path) if any, else command. */
 function chooseFingerprint(command: string, args: string[] | undefined): string {
   if (args && args.length > 0) {
@@ -103,7 +115,7 @@ export async function GET() {
       name,
       command,
       fingerprint,
-      binaryExists: fs.existsSync(command),
+      binaryExists: commandResolves(command),
       runningCount: pids.length,
       pids,
     });
