@@ -2,7 +2,7 @@ import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { withErrorHandler, parseBody, isSameOrigin } from "@/lib/api-utils";
-import { getZAiNotesModel } from "@/lib/z-ai";
+import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai-provider";
 import { isNotesAiConfigured } from "@/lib/notes-ai/config";
 import {
   normalisePrefsUpdate,
@@ -24,7 +24,6 @@ interface ChatRequest {
   history?: ChatMessage[];
 }
 
-const ZAI_OPTIONS = { providerOptions: { zai: { thinking: { type: "disabled" as const } } } } as const;
 const AI_TIMEOUT_MS = 8000;
 
 function extractJson(text: string): unknown {
@@ -104,7 +103,7 @@ function fallbackPatch(message: string): { reply: string; patch: Partial<Briefin
 }
 
 async function aiPatch(current: BriefingPrefs, message: string, history: ChatMessage[]) {
-  const model = getZAiNotesModel();
+  const model = getNotesAiModel();
   if (!model || !isNotesAiConfigured()) return fallbackPatch(message);
 
   try {
@@ -112,7 +111,7 @@ async function aiPatch(current: BriefingPrefs, message: string, history: ChatMes
       generateText({
         model,
         maxOutputTokens: 1200,
-        ...ZAI_OPTIONS,
+        ...getNotesAiCallOptions(),
         prompt: [
           "You are configuring a personal AI morning briefing dashboard through a chat UI.",
           "Be warm, concise, and hand-hold the user. Ask one useful follow-up question at a time.",

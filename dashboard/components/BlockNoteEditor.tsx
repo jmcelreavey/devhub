@@ -277,7 +277,7 @@ interface BlockNoteEditorProps {
   linkedChecklistContext?: LinkedChecklistContext;
   editable?: boolean;
   /**
-   * In-editor AI (z.ai). Omit to auto-enable only when `Z_AI_API_KEY` is set.
+   * In-editor AI. Omit to auto-enable only when `AI_API_KEY` is set.
    * Pass `false` to force off.
    */
   enableAi?: boolean;

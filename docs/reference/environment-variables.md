@@ -50,15 +50,19 @@ Most values live in the dashboard's local environment file and can be edited fro
 
 ## Notes and Repo Learning AI (Optional)
 
-BlockNote AI in the notes editor and Repo Learning generated artifacts use the [z.ai](https://z.ai) OpenAI-compatible **Coding plan** API. Configure these in `dashboard/.env.local` only - not on `/setup`.
+BlockNote AI in the notes editor and Repo Learning generated artifacts work with any **OpenAI-compatible** chat-completions endpoint — [z.ai](https://z.ai) (the default), OpenAI, OpenRouter, Together, Groq, a local Ollama/LM Studio server, etc. Point `AI_BASE_URL` / `AI_MODEL` at your provider and set `AI_API_KEY`. Configure these in `dashboard/.env.local` only - not on `/setup`.
 
-| Variable        | Required | Default                               | Purpose                                   |
-| --------------- | -------- | ------------------------------------- | ----------------------------------------- |
-| `Z_AI_API_KEY`  | Yes      | —                                     | Bearer token from z.ai                    |
-| `Z_AI_BASE_URL` | No       | `https://api.z.ai/api/coding/paas/v4` | Coding plan API base (no trailing slash)  |
-| `Z_AI_MODEL`    | No       | `glm-5-turbo`                         | Model id sent in chat completion requests |
+| Variable      | Required | Default                               | Purpose                                                 |
+| ------------- | -------- | ------------------------------------- | ------------------------------------------------------- |
+| `AI_API_KEY`  | Yes      | —                                     | Bearer token for your provider                          |
+| `AI_BASE_URL` | No       | `https://api.z.ai/api/coding/paas/v4` | OpenAI-compatible API base (no trailing slash)          |
+| `AI_MODEL`    | No       | `glm-5-turbo`                         | Model id sent in chat completion requests               |
 
-Copy the commented block from `dashboard/.env.example` into `.env.local`, set `Z_AI_API_KEY`, and restart the dev server.
+The GLM-specific `thinking` request option is only sent when `AI_BASE_URL`/`AI_MODEL` point at a z.ai GLM model, so other providers (OpenAI, etc.) aren't sent fields they'd reject.
+
+For OpenAI, set `AI_BASE_URL=https://api.openai.com/v1` and `AI_MODEL=gpt-4o-mini` (or similar).
+
+Copy the commented block from `dashboard/.env.example` into `.env.local`, set `AI_API_KEY`, and restart the dev server.
 
 Without a key, notes still work and Repo Learning still shows deterministic repo facts. Notes AI menu actions and Repo Learning generated features return HTTP 503 with a short configuration message.
 
@@ -130,7 +134,7 @@ Suggested `devhub` item fields for shared local secrets:
 | `DATADOG_APPLICATION_KEY` | Datadog integration             |
 | `DATADOG_APP_KEY`         | Shell/Datadog alias             |
 | `DD_APPLICATION_KEY`      | Datadog alias                   |
-| `Z_AI_API_KEY`            | Notes and Repo Learning AI      |
+| `AI_API_KEY`              | Notes and Repo Learning AI      |
 | `OPENAI_API_KEY`          | Shell/OpenCode-compatible tools |
 | `NOTION_API_KEY`          | Shell Notion workflows          |
 | `ITERABLE_API_KEY`        | Shell Iterable workflows        |

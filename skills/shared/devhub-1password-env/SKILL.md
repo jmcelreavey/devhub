@@ -11,7 +11,7 @@ metadata:
 
 Use this skill to move local DevHub and shell secrets into a 1Password item and wire DevHub to fetch them safely with the `op` CLI.
 
-DevHub's default item title is `devhub`. Field labels should match env var names exactly, such as `JIRA_API_TOKEN`, `DATADOG_API_KEY`, or `Z_AI_API_KEY`.
+DevHub's default item title is `devhub`. Field labels should match env var names exactly, such as `JIRA_API_TOKEN`, `DATADOG_API_KEY`, or `AI_API_KEY`.
 
 ## When To Use
 

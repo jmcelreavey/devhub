@@ -120,7 +120,7 @@ Teaching, code review, debugging, scaffolding, and other modes live under `perso
 - `npm run dev` from the repo root starts the dashboard (and attempts companions). The `predev` health check auto-creates `dashboard/.env.local` if missing.
 - Core env vars (`NOTES_DIR`, `REPO_ROOT`, `PORT`) are auto-configured by `postinstall`.
 - Optional integrations (Google Calendar, Jira, Datadog) are configured via the `/setup` page; they are not required for the app to function.
-- Optional **notes in-editor AI** uses `Z_AI_API_KEY` in `dashboard/.env.local` (see `dashboard/.env.example`); not configured via `/setup`.
+- Optional **notes in-editor AI** uses `AI_API_KEY` (any OpenAI-compatible provider; `AI_BASE_URL`/`AI_MODEL` default to z.ai) in `dashboard/.env.local` (see `dashboard/.env.example`); not configured via `/setup`.
 - OpenChamber and OpenCode will fail to start if their binaries aren't installed — this is harmless; the dashboard still works.
 
 ### Lint / Typecheck / Test

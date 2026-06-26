@@ -1,7 +1,7 @@
 import { convertToModelMessages, streamText } from "ai";
 import { injectDocumentStateMessages, toolDefinitionsToToolSet } from "@blocknote/xl-ai/server";
 import { BLOCKNOTE_HTML_SYSTEM_PROMPT } from "@/lib/notes-ai/blocknote-html-system-prompt";
-import { getZAiNotesModel } from "@/lib/z-ai";
+import { getNotesAiModel } from "@/lib/ai-provider";
 
 export interface NotesAiChatBody {
   messages: Parameters<typeof injectDocumentStateMessages>[0];
@@ -9,7 +9,7 @@ export interface NotesAiChatBody {
 }
 
 export async function streamNotesAiChat(body: NotesAiChatBody) {
-  const model = getZAiNotesModel();
+  const model = getNotesAiModel();
   if (!model) return null;
 
   return streamText({

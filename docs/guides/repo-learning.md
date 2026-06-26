@@ -10,11 +10,11 @@ Use it when you want a quick architecture brief, a handoff prompt for OpenCode, 
 | ----------- | -------------- |
 | The repo is a direct child of the repos scan directory | DevHub only resolves repo names under the directory returned by `REPO_ROOT`'s parent. |
 | The repo has a `.git` directory | Non-git folders are not listed or resolved for learning. |
-| `Z_AI_API_KEY` is set in `dashboard/.env.local` | Generated briefs, NotebookLM packs, and the tutor use z.ai. |
+| `AI_API_KEY` is set in `dashboard/.env.local` | Generated briefs, NotebookLM packs, and the tutor use your configured OpenAI-compatible provider (z.ai by default). |
 
 The scan directory is the parent of the DevHub checkout. For example, if DevHub lives at `~/Developer/devhub`, Repo Learning can use sibling clones like `~/Developer/my-service`.
 
-Without `Z_AI_API_KEY`, the panel still shows deterministic detected facts. AI-generated artifacts are disabled and the API reports `not_configured`.
+Without `AI_API_KEY`, the panel still shows deterministic detected facts. AI-generated artifacts are disabled and the API reports `not_configured`.
 
 ## Typical Use
 
@@ -100,8 +100,8 @@ The saved note contains the tutor explanation, with the internal marker stripped
 | Symptom | Check |
 | ------- | ----- |
 | Repo is missing from the Repos page | The clone must be a direct child of the repos scan directory and contain `.git`. |
-| Learn panel says AI is not configured | Set `Z_AI_API_KEY` in `dashboard/.env.local` and restart DevHub. |
-| Brief, tutor, or ZIP are unavailable | z.ai may be unconfigured, unreachable, or returned a generation error. Deterministic facts should still load. |
+| Learn panel says AI is not configured | Set `AI_API_KEY` in `dashboard/.env.local` and restart DevHub. |
+| Brief, tutor, or ZIP are unavailable | The AI provider may be unconfigured, unreachable, or returned a generation error. Deterministic facts should still load. |
 | Output looks stale | Confirm the repo `HEAD` changed, or click **Refresh** to bypass the cache. |
 | NotebookLM cannot import the ZIP | NotebookLM itself does not support ZIP upload; unzip manually or use the NotebookLM Tools extension. |
 | Generated content omits parts of a large repo | The scanner and prompts are intentionally capped. Add or improve README/docs files so the preferred snippets contain the important context. |

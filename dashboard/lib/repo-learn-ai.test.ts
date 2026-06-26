@@ -7,8 +7,9 @@ import {
 } from "./repo-learn-ai";
 import type { RepoContext } from "./repo-context";
 
-vi.mock("@/lib/z-ai", () => ({
-  getZAiNotesModel: vi.fn(),
+vi.mock("@/lib/ai-provider", () => ({
+  getNotesAiModel: vi.fn(),
+  getNotesAiCallOptions: vi.fn(() => ({})),
 }));
 
 const sampleContext: RepoContext = {

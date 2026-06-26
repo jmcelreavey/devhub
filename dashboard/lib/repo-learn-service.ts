@@ -37,7 +37,7 @@ export async function loadRepoLearn(repoPath: string, refresh: boolean): Promise
       aiConfigured: false,
       artifacts: null,
       code: "not_configured",
-      message: "Z_AI_API_KEY is not set.",
+      message: "AI_API_KEY is not set.",
     };
   }
 

@@ -23,9 +23,9 @@ export const DASHBOARD_MANAGED_ENV_KEYS = [
   "DATADOG_APP_KEY",
   "DD_APPLICATION_KEY",
   "DATADOG_ONCALL_SCHEDULE_ID",
-  "Z_AI_API_KEY",
-  "Z_AI_BASE_URL",
-  "Z_AI_MODEL",
+  "AI_API_KEY",
+  "AI_BASE_URL",
+  "AI_MODEL",
   // Ops integration keys (used by the optional ops plugin: AWS/SSO + repo path)
   "AWS_PROFILE",
   "OKTA_PASSWORD",

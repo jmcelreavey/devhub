@@ -8,7 +8,7 @@ import { REPO_LEARN_TUTOR_START } from "@/lib/repo-learn-constants";
 import { resolveRepoPath } from "@/lib/repo-learn-resolve";
 import { getRepoContextForTutor } from "@/lib/repo-learn-tutor-context";
 import { tutorMessageText } from "@/lib/repo-learn-tutor-utils";
-import { getZAiNotesModel } from "@/lib/z-ai";
+import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai-provider";
 
 type Params = { params: Promise<{ name: string }> };
 
@@ -29,7 +29,7 @@ export const POST = withErrorHandler(async (req: Request, { params }: Params) =>
   const body = (await req.json()) as { messages?: UIMessage[] };
   const messages = body.messages ?? [];
 
-  const model = getZAiNotesModel();
+  const model = getNotesAiModel();
   if (!model) {
     return NextResponse.json({ error: NOTES_AI_NOT_CONFIGURED }, { status: 503 });
   }
@@ -58,7 +58,7 @@ export const POST = withErrorHandler(async (req: Request, { params }: Params) =>
     system,
     messages: promptMessages,
     maxOutputTokens: 1024,
-    providerOptions: { zai: { thinking: { type: "disabled" } } },
+    ...getNotesAiCallOptions(),
   });
 
   return result.toUIMessageStreamResponse();

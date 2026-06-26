@@ -7,7 +7,7 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 | Area         | Purpose                                                                      |
 | ------------ | ---------------------------------------------------------------------------- |
 | Today        | Daily workspace with tasks, notes, calendar, tickets, PRs, and standup tools |
-| Notes        | BlockNote editing, file tree, folder-scoped master checklists, optional z.ai in-editor AI |
+| Notes        | BlockNote editing, file tree, folder-scoped master checklists, optional OpenAI-compatible in-editor AI |
 | Docs         | In-app editing of repo `docs/` markdown (BlockNote with markdown round-trip), file tree, content sync |
 | Tasks        | Daily task management, drag reorder for open items, and history              |
 | Skills       | Shared skill viewing, creation, sync, and collection                         |

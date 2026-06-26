@@ -27,8 +27,8 @@ const LOCAL_ONLY_KEYS = new Set<string>([
   "AWS_PROFILE",
   "BI_OPS_USER_EMAIL",
   "CAPI_REPO_PATH",
-  "Z_AI_BASE_URL",
-  "Z_AI_MODEL",
+  "AI_BASE_URL",
+  "AI_MODEL",
 ]);
 
 /** When set, the LOCAL_ONLY_KEYS above also sync from 1Password (when unset). */

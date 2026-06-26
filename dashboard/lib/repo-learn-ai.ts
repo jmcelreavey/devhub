@@ -1,5 +1,5 @@
 import { generateText } from "ai";
-import { getZAiNotesModel } from "@/lib/z-ai";
+import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai-provider";
 import {
   buildNotebookImportReadme,
   buildSnippetPackFiles,
@@ -105,25 +105,25 @@ export function buildTutorSystemPrompt(context: RepoContext): string {
 }
 
 export async function generateRepoLearnArtifacts(context: RepoContext): Promise<RepoLearnArtifacts> {
-  const model = getZAiNotesModel();
+  const model = getNotesAiModel();
   if (!model) {
-    throw new Error("Z_AI_API_KEY is not set.");
+    throw new Error("AI_API_KEY is not set.");
   }
 
-  const zaiOptions = { providerOptions: { zai: { thinking: { type: "disabled" as const } } } };
+  const callOptions = getNotesAiCallOptions();
 
   const [briefResult, packResult] = await Promise.all([
     generateText({
       model,
       prompt: buildBriefPrompt(context),
       maxOutputTokens: 2048,
-      ...zaiOptions,
+      ...callOptions,
     }),
     generateText({
       model,
       prompt: buildPackPrompt(context),
       maxOutputTokens: 4096,
-      ...zaiOptions,
+      ...callOptions,
     }),
   ]);
 

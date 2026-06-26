@@ -86,7 +86,7 @@ export function RepoLearnTutor({ repoName, aiConfigured }: RepoLearnTutorProps) 
   if (!aiConfigured) {
     return (
       <p className="text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-        Configure z.ai to use the Socratic tutor.{" "}
+        Configure an AI provider to use the Socratic tutor.{" "}
         <Link href="/setup" className="underline underline-offset-2" style={{ color: "var(--accent)" }}>
           Open Setup
         </Link>

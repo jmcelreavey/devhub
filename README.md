@@ -48,7 +48,7 @@ brew install --cask 1password-cli
 op signin
 ```
 
-Create or sync an item named `devhub` with fields named exactly like the env vars DevHub needs, for example `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `JIRA_DOMAIN`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `DATADOG_API_KEY`, `DATADOG_APPLICATION_KEY`, and `Z_AI_API_KEY`.
+Create or sync an item named `devhub` with fields named exactly like the env vars DevHub needs, for example `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `JIRA_DOMAIN`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `DATADOG_API_KEY`, `DATADOG_APPLICATION_KEY`, and `AI_API_KEY`.
 
 To keep 1Password as the source of truth instead of caching secrets into `dashboard/.env.local`, set this in your shell before starting DevHub:
 
@@ -197,11 +197,13 @@ Calendar setup steps:
 
 **Notes and Repo Learning AI (optional):** not on `/setup` - add to `dashboard/.env.local` from `dashboard/.env.example`:
 
-| Var             | Required | Description                                       |
-| --------------- | -------- | ------------------------------------------------- |
-| `Z_AI_API_KEY`  | Yes      | z.ai API key (Coding plan)                        |
-| `Z_AI_BASE_URL` | No       | Defaults to `https://api.z.ai/api/coding/paas/v4` |
-| `Z_AI_MODEL`    | No       | Defaults to `glm-5-turbo`                         |
+Works with any OpenAI-compatible provider (z.ai by default, or OpenAI, OpenRouter, a local Ollama/LM Studio server, etc.):
+
+| Var           | Required | Description                                                       |
+| ------------- | -------- | ---------------------------------------------------------------- |
+| `AI_API_KEY`  | Yes      | API key for your provider                                        |
+| `AI_BASE_URL` | No       | OpenAI-compatible base; defaults to `https://api.z.ai/api/coding/paas/v4` |
+| `AI_MODEL`    | No       | Defaults to `glm-5-turbo` (e.g. `gpt-4o-mini` for OpenAI)        |
 
 Restart the dev server after setting these. See [docs/reference/environment-variables.md](docs/reference/environment-variables.md#notes-and-repo-learning-ai-optional).
 

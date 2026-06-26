@@ -23,7 +23,7 @@ export async function GET(_req: Request, { params }: Params) {
     const loaded = await loadRepoLearn(repoPath, false);
     if (!loaded.artifacts?.packFiles.length) {
       return NextResponse.json(
-        { error: loaded.message ?? "NotebookLM pack not available. Configure Z_AI_API_KEY and refresh." },
+        { error: loaded.message ?? "NotebookLM pack not available. Configure AI_API_KEY and refresh." },
         { status: loaded.code === "not_configured" ? 503 : 404 },
       );
     }

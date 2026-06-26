@@ -7,11 +7,9 @@
 // page load.
 
 import { generateText } from "ai";
-import { getZAiNotesModel } from "@/lib/z-ai";
+import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai-provider";
 import { isNotesAiConfigured } from "@/lib/notes-ai/config";
 import { pickDevTip, type DailyBriefing, type DevTip, type InterestSnippet } from "./morning-briefing";
-
-const ZAI_OPTIONS = { providerOptions: { zai: { thinking: { type: "disabled" as const } } } } as const;
 
 function extractJson(text: string): unknown {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -38,7 +36,7 @@ export async function generateAiDevTip(techStack: string[], date: Date): Promise
   if (!isNotesAiConfigured() || techStack.length === 0) {
     return pickDevTip(date);
   }
-  const model = getZAiNotesModel();
+  const model = getNotesAiModel();
   if (!model) return pickDevTip(date);
 
   try {
@@ -54,7 +52,7 @@ export async function generateAiDevTip(techStack: string[], date: Date): Promise
         'Respond as JSON only: {"tag": "<primary-tech>","text": "<the tip>"}',
       ].join("\n"),
       maxOutputTokens: 300,
-      ...ZAI_OPTIONS,
+      ...getNotesAiCallOptions(),
     });
     if (!result.text || result.finishReason === "length") return pickDevTip(date);
 
@@ -100,7 +98,7 @@ export async function generateAiSummary(
   profile: { techStack: string[]; interests: string[] },
 ): Promise<string | null> {
   if (!isNotesAiConfigured()) return null;
-  const model = getZAiNotesModel();
+  const model = getNotesAiModel();
   if (!model) return null;
 
   try {
@@ -127,7 +125,7 @@ export async function generateAiSummary(
         "Respond with the sentence only — no quotes, no JSON.",
       ].join("\n"),
       maxOutputTokens: 200,
-      ...ZAI_OPTIONS,
+      ...getNotesAiCallOptions(),
     });
     if (!result.text || result.finishReason === "length") return null;
 
@@ -142,7 +140,7 @@ export async function generateAiSummary(
 
 export async function generateInterestSnippets(interests: string[]): Promise<InterestSnippet[]> {
   if (!isNotesAiConfigured() || interests.length === 0) return [];
-  const model = getZAiNotesModel();
+  const model = getNotesAiModel();
   if (!model) return [];
 
   try {
@@ -162,7 +160,7 @@ export async function generateInterestSnippets(interests: string[]): Promise<Int
         'Respond as JSON array: [{"interest":"<name>","text":"<insight>"}]',
       ].join("\n"),
       maxOutputTokens: 800,
-      ...ZAI_OPTIONS,
+      ...getNotesAiCallOptions(),
     });
     if (!result.text || result.finishReason === "length") return [];
 

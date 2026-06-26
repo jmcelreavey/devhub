@@ -224,7 +224,7 @@ export function LearnPanel({
               ) : briefLoading ? (
                 <BriefLoading />
               ) : aiBlocked ? (
-                <p className="mt-2 text-xs" style={{ color: "var(--text-subtle)" }}>Brief requires z.ai.</p>
+                <p className="mt-2 text-xs" style={{ color: "var(--text-subtle)" }}>Brief requires an AI provider.</p>
               ) : null}
               {artifacts?.briefMarkdown && (
                 <div className="mt-3 flex flex-wrap gap-2">

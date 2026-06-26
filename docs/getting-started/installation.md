@@ -44,7 +44,7 @@ brew install --cask 1password-cli
 op signin
 ```
 
-Create or sync a 1Password item titled `devhub`. Add fields named exactly after the env vars, such as `JIRA_API_TOKEN`, `DATADOG_API_KEY`, `DATADOG_APPLICATION_KEY`, and `Z_AI_API_KEY`.
+Create or sync a 1Password item titled `devhub`. Add fields named exactly after the env vars, such as `JIRA_API_TOKEN`, `DATADOG_API_KEY`, `DATADOG_APPLICATION_KEY`, and `AI_API_KEY`.
 
 Set this if you want secrets loaded into the process without writing them back to `dashboard/.env.local`:
 
