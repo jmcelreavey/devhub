@@ -499,7 +499,9 @@ export default function StatusPage() {
   }
   // Content (notes/tasks/diagrams/docs) has a one-tap sync and is tracked
   // separately from genuine "dirty files" that need commit & push.
-  const otherDirty = git ? (git.otherDirtyCount ?? git.dirtyCount) : 0;
+  // Never fall back to the TOTAL dirty count: content (notes/tasks/diagrams/docs)
+  // has its own one-tap sync and must not be mislabeled as a generic "dirty path".
+  const otherDirty = git ? (git.otherDirtyCount ?? 0) : 0;
   const contentDirty = git ? (git.contentDirtyCount ?? 0) : 0;
   if (git) {
     if (otherDirty > 0) healthItems.push(`${otherDirty} dirty path${otherDirty > 1 ? "s" : ""}`);
