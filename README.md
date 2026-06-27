@@ -366,7 +366,7 @@ MCP (Model Context Protocol) servers extend tool capabilities. This repo configu
 A stdio MCP server (`mcp-servers/devhub-server`, wired from `mcp/shared/devhub.json`) exposes two tiers of tools:
 
 - **Filesystem-backed** (work without the dashboard): notes, docs, tasks, diagrams, appraisal.
-- **Dashboard-backed** (proxy `http://localhost:1337`): status, scripts/sync, briefing, calendar, work/PRs, repos, search. These need the dashboard running.
+- **Dashboard-backed** (proxy `http://localhost:1337`): status, scripts/sync, briefing, calendar, work/PRs, repos, search, Datadog. These need the dashboard running.
 
 ```bash
 # Run the server directly (normally launched by your AI tool via the synced MCP config)
@@ -378,7 +378,7 @@ MCP configs are installed to your tool directories by `install.sh` / Actions wit
 
 ### Web UI
 
-When the notes server is running, open `http://localhost:1337` to:
+When the dashboard is running, open `http://localhost:1337` to:
 
 - Browse and search all notes
 - Create and edit notes with a markdown editor

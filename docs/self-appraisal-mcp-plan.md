@@ -1,8 +1,8 @@
 # Self-Appraisal Notes — Design Doc & Tool Specs
 
-Status: implemented (initial scaffold landed — see `mcp-servers/notes-server/src/appraisal.ts` + `appraisal_*` tools in `mcp.ts`, tests in `appraisal.test.ts`)
+Status: implemented (initial scaffold landed — see `mcp-servers/devhub-server/src/appraisal.ts`, `mcp-servers/devhub-server/src/tools/appraisal.ts`, and the `appraisal_*` tools registered from `mcp.ts`)
 Owner: JM
-Scope: extend the existing `notes-server` MCP with appraisal-specific tools. No new server, no new storage engine.
+Scope: extend the existing DevHub MCP server with appraisal-specific tools. No new storage engine.
 
 ## Problem
 
@@ -31,7 +31,7 @@ prose or duplicate entries over twelve months.
 
 ## Non-goals
 
-- No new MCP server or storage backend — reuse `notes-server` + the vault.
+- No new storage backend — reuse the DevHub MCP server + the vault.
 - No web UI work beyond the notes already rendering in the dashboard.
 - No automatic "scrape my activity" inference. Capture is intentional.
 - No automated ingestion of others' feedback (manager/peer/360) — appraiser
@@ -42,8 +42,9 @@ prose or duplicate entries over twelve months.
 ## Where it lives
 
 Everything hangs off the existing server at
-`mcp-servers/notes-server/src/mcp.ts`, alongside `notes_*`, `docs_*`, `tasks_*`,
-and `diagrams_*`. New tools use the `appraisal_*` prefix to match the
+`mcp-servers/devhub-server/src/mcp.ts`, alongside `notes_*`, `docs_*`, `tasks_*`,
+and `diagrams_*`. The tool handlers live in
+`mcp-servers/devhub-server/src/tools/appraisal.ts`. New tools use the `appraisal_*` prefix to match the
 `<domain>_<verb>` convention already in place.
 
 Storage uses the existing `NotesStorage` (BlockNote JSON via `jsonVaultCodec`),
@@ -372,12 +373,12 @@ people), a goals panel, and theme/tag filters.
 - Schema: missing `references` rejected; bad `theme`/`status` rejected.
 - Year routing: a `date` in 2025 writes the 2025 file, today writes 2026.
 
-Mirror the existing notes-server test style (the markdown-convert and vault
+Mirror the existing DevHub MCP server test style (the markdown-convert and vault
 helpers already have coverage to follow).
 
 ## Implementation steps
 
-1. Add the tools to `mcp-servers/notes-server/src/mcp.ts`: `appraisal_record`,
+1. Add the tools to `mcp-servers/devhub-server/src/mcp.ts`: `appraisal_record`,
    `appraisal_read`, `appraisal_list`, `appraisal_people`, `appraisal_set_goal`,
    `appraisal_list_goals`, `appraisal_summarize` (and optional
    `appraisal_delete`).
