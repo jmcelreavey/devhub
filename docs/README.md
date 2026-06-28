@@ -19,7 +19,7 @@ These docs are written for day-to-day users and future contributors. They explai
 | [Overview](architecture/overview.md)                 | Understanding the main parts of DevHub                                       |
 | [Dashboard](architecture/dashboard.md)               | How the web dashboard is organized                                           |
 | [Sync Engine](architecture/sync-engine.md)           | How skills, persona, agents, and MCP configs move between the repo and tools |
-| [MCP Server](architecture/mcp-server.md)             | How notes, tasks, and diagrams are exposed to AI tools                       |
+| [MCP Server](architecture/mcp-server.md)             | How DevHub exposes filesystem and dashboard-backed tools to AI assistants    |
 | [Notes System](architecture/notes-system.md)         | Note areas, master checklists, optional in-editor AI                         |
 | [Persona System](architecture/persona-system.md)     | How shared AI behavior is layered                                            |
 | [Electron Wrapper](architecture/electron-wrapper.md) | How the desktop app launches and manages DevHub                              |
