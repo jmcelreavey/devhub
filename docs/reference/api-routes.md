@@ -44,6 +44,7 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | ----- | ------- | ----- |
 | `GET /api/github/prs` | Today GitHub PR panel, `/prs` | Requires an authenticated local `gh` session. Returns authored PRs, review-requested PRs, and recently reviewed PRs; archived repositories are filtered from active queues. |
 | `GET /api/notes/pr-reviews/<slug>` | PR **Notes** links | The GitHub PR **Review** action polls this route after starting OpenCode. A `404` just means the review note has not been written yet. |
+| `GET /api/repos/<name>/learn`, `GET /api/repos/<name>/learn/status`, `GET /api/repos/<name>/learn/pack.zip`, `POST /api/repos/<name>/learn/tutor` | Repo Learning panel | Resolves sibling git checkouts only. Deterministic facts work without AI; generated briefs, NotebookLM packs, and tutor responses require `AI_API_KEY`. |
 
 ## Contributor Guidance
 

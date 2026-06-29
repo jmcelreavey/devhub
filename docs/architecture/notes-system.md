@@ -76,7 +76,7 @@ Collection JSON writes are serialized with a repo mutex so rapid checklist edits
 
 ## In-Editor AI (Optional)
 
-The notes **BlockNote** editor can call z.ai through BlockNote’s AI extension:
+The notes **BlockNote** editor can call an OpenAI-compatible provider through BlockNote's AI extension:
 
 - Select text → **AI** (stars) on the formatting toolbar.
 - Type **`/ai`** in the slash menu.
@@ -85,7 +85,7 @@ Configuration is env-only - see [Environment Variables](../reference/environment
 
 **Notes work fully without these variables.** When `AI_API_KEY` is unset, the editor omits AI toolbar, `/ai`, and related UI. `GET /api/notes/ai/status` reports `{ configured: false }`.
 
-Backend route: `POST /api/notes/ai/chat` (Vercel AI SDK + BlockNote server helpers → z.ai Coding plan endpoint).
+Backend route: `POST /api/notes/ai/chat` (Vercel AI SDK + BlockNote server helpers -> configured OpenAI-compatible chat endpoint).
 
 ## Content vaults
 
