@@ -12,7 +12,7 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 | Tasks        | Daily task management, drag reorder for open items, and history              |
 | Skills       | Shared skill viewing, creation, sync, and collection                         |
 | Actions      | Safe script runner for maintenance tasks                                     |
-| Status       | Health checks for repo, services, MCP, and network access                    |
+| Status       | Health checks for repo, services, MCP, sync health, merge conflicts, and network access |
 | Setup        | Environment and integration configuration                                    |
 | Integrations | Calendar, Jira, Datadog, GitHub, and internal ops views                      |
 
@@ -65,6 +65,17 @@ Daily tasks live in repo-root `tasks/YYYY-MM-DD.json` (one file per calendar day
 | API        | `PATCH /api/tasks` with `{ ids: string[], date?: string }` — must include every open task id exactly once |
 
 Completed and abandoned tasks stay in the file for history and standup; they are not included in reorder requests.
+
+## Repo Status And Content Sync
+
+The dashboard keeps Git sync state visible without making every page own Git logic:
+
+- `ContentSyncIndicator` is mounted in the desktop and mobile top bars. It polls `GET /api/status/git` every 30 seconds and hides itself when the repo is clean and up to date.
+- The cloud button is for scoped content only: `notes/`, `collections/`, `tasks/`, and `docs/`. It runs the `sync_notes_tasks_push` action through `POST /api/scripts`.
+- The warning triangle is for blockers and broader Git work: non-content dirty files run `commit_dirty_push`, upstream-only changes run `update_and_sync`, and merge conflicts send the user to `/status`.
+- The Status page is the runbook surface. It shows repo branch, dirty content vs other dirty paths, ahead/behind counts, latest failed sync logs, conflict resolution, skill sync health, service status, MCP runtime status, and LAN access.
+
+Merge conflict recovery lives on Status through `ConflictResolverPanel`. It reads `GET /api/git/conflicts`, lets the user edit the conflicted file, and saves with `POST /api/git/conflicts`; the backend writes the resolved content and stages the file only after conflict markers are removed. The full content-sync runbook is in [Notes System -> Content sync workflow](notes-system.md#content-sync-workflow).
 
 ## Safety Boundaries
 

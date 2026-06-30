@@ -100,6 +100,30 @@ Docs use the same BlockNote editor with markdown load/save via `shared/markdown-
 
 Open **Docs** in the sidebar (`/docs`) for the file tree, search, and BlockNote editing. Command palette content search includes docs when you use `/api/search` (notes by default; `?vault=docs` for docs-only API calls). Prefer editing architecture and guides here or in git — the automation that maintains this tree expects markdown on disk.
 
+### Content sync workflow
+
+Content sync is the low-friction path for personal content that changes while using the dashboard. It is intentionally scoped: `dashboard/lib/content-sync-paths.ts` defines `notes/`, `collections/`, `tasks/`, and `docs/` as the paths staged by the `sync_notes_tasks_push` action.
+
+| Surface | Behavior |
+| ------- | -------- |
+| Top bar cloud button | Appears when `/api/status/git` reports dirty content. It starts `POST /api/scripts` with `script: "sync_notes_tasks_push"`, which stages only the scoped content paths, creates an auto-generated `chore(content): ...` commit, and pushes the current branch. |
+| Top bar warning triangle | Handles everything that is not a scoped content sync: non-content dirty files, upstream commits waiting to be pulled, or merge conflicts. Dirty non-content files open the commit-message modal and run `commit_dirty_push`; upstream-only changes run `update_and_sync`; conflicts redirect to `/status`. |
+| Status page | Shows repo branch, ahead/behind counts, dirty content vs other dirty files, recent sync failures, merge conflicts, and sync-health checks. Use it when the top bar blocks sync or a scripted action fails. |
+| Actions page | Exposes the same allowlisted script IDs for manual runs and log inspection. `dry_run_scoped_sync` previews the scoped content commit without staging anything. |
+
+`/api/status/git` classifies content using the configured directories (`NOTES_DIR`, `TASKS_DIR`, `DOCS_DIR`, and `collections/`), so relocated notes or tasks still show as content when they live inside the repo. Root `diagrams/` files are also shown as content-adjacent in dirty counts, but the scoped content script stages only `notes/`, `collections/`, `tasks/`, and `docs/`; if a diagram remains after a content sync, use the general commit flow or commit it manually.
+
+#### Conflict recovery
+
+Merge conflicts block content sync. Detection uses both Git unmerged status and `<<<<<<<` markers under the scoped content paths. Open **Status -> Merge conflicts** to:
+
+1. Pick the conflicted file.
+2. Edit out all conflict markers.
+3. Save; the dashboard writes the file and runs `git add -- <path>`.
+4. Repeat until the panel reports no conflicts, then run content sync or Update & Sync again.
+
+The conflict API rejects saves that still contain conflict markers, so the file is not staged until it is actually resolved.
+
 ### File tree ordering
 
 Custom sibling order for notes and docs is stored in `.devhub-order.json` at each vault root (per parent folder). Reorder from the sidebar via drag handles (arrow keys work when the handle is focused). The dashboard calls `PATCH /api/note-order` with the ordered sibling paths (add `?vault=docs` for the docs vault). Writes use atomic updates so concurrent reorders do not corrupt the file.

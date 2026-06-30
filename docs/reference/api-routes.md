@@ -11,6 +11,7 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | Infra plugin (`/api/bi/*`) | Optional plugin-backed ops: AWS profile, EKS, RDS, Mongo, CAPI, IAM |
 | Calendar  | Google Calendar auth and event reads                 |
 | Datadog   | Alert links and summaries                            |
+| Git       | Local repo status and merge-conflict detection/resolution |
 | GitHub    | Pull request/review queues, recently reviewed PRs, and repository data |
 | Jira      | Ticket data and redirects                            |
 | Jobs      | Scheduled job management                             |
@@ -23,10 +24,10 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | OpenCode  | Read/update shared `opencode.json`; secret env hints |
 | Persona   | View shared and local persona configuration          |
 | Repos     | Repository discovery, actions, and Repo Learning artifacts |
-| Scripts   | Run allowlisted maintenance scripts                  |
+| Scripts   | Run allowlisted maintenance and sync actions; stream/history endpoints expose run output |
 | Search    | Full-text search (`?q=` required; default notes, `?vault=docs` for docs) |
 | Setup     | Read and save setup configuration                    |
-| Status    | Health checks for Git, services, MCP, and LAN access |
+| Status    | Health checks for Git, services, MCP, sync health, and LAN access |
 | Sync preview | Preview repo → local sync without applying        |
 | Tasks     | Task CRUD, open-task reorder (`PATCH` with `{ ids }`), rollover, timers, and history |
 | Tree      | Notes file tree listing                              |
@@ -44,6 +45,23 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | ----- | ------- | ----- |
 | `GET /api/github/prs` | Today GitHub PR panel, `/prs` | Requires an authenticated local `gh` session. Returns authored PRs, review-requested PRs, and recently reviewed PRs; archived repositories are filtered from active queues. |
 | `GET /api/notes/pr-reviews/<slug>` | PR **Notes** links | The GitHub PR **Review** action polls this route after starting OpenCode. A `404` just means the review note has not been written yet. |
+| `GET /api/status/git` | Top-bar sync indicator, Status page | Returns branch, dirty counts, content-vs-other dirty counts, ahead/behind counts, conflict count, last commit, and user-facing hints. It fetches upstream at most every four minutes; intermediate polls compare against the last fetched upstream ref. |
+| `GET /api/git/conflicts` | Status merge-conflict panel | Lists files with Git unmerged status or conflict markers under scoped content paths and includes readable file content for editing. |
+| `POST /api/git/conflicts` | Status merge-conflict panel | Body: `{ path, content }`. Rejects invalid paths or content that still contains `<<<<<<<` markers; on success writes the content, runs `git add -- <path>`, and returns the remaining conflict count. |
+| `GET /api/sync-health` | Status skill-sync panel | Checks shared skill sync health across configured tool directories and includes preview diffs for unhealthy skill/agent sync state. |
+| `GET /api/scripts` | Actions page | Returns the allowlisted script catalog. Content-sync-related IDs include `sync_notes_tasks_push`, `dry_run_scoped_sync`, `commit_dirty_push`, and `update_and_sync`. |
+| `POST /api/scripts` | Top-bar sync indicator, Status page, Actions page | Starts an allowlisted action and returns `202 { runId }`. Same-origin only. `commit_dirty_push` accepts a trimmed `commitMessage`; filter options are accepted only by the script families that use them. |
+
+## Content Sync Actions
+
+These action IDs are local operational interfaces, not public APIs:
+
+| Script ID | Purpose | Main constraints |
+| --------- | ------- | ---------------- |
+| `sync_notes_tasks_push` | Stage, commit, and push scoped content paths: `notes/`, `collections/`, `tasks/`, and `docs/`. | Requires `main` or `master`; uses an auto-generated `chore(content): ...` commit message. |
+| `dry_run_scoped_sync` | Preview which scoped content files would be committed. | Read-only; requires `main` or `master` because it mirrors the scoped sync guardrails. |
+| `commit_dirty_push` | Stage all tracked and untracked changes, commit with the provided message, and push. | Requires `main` or `master`; intended for dirty files outside scoped content. |
+| `update_and_sync` | Pull/rebase from origin, sync shared assets/configuration, optionally create a sync commit, and push. | Git operations require a clean tree; the dashboard blocks or redirects when dirty files or conflicts are present. |
 
 ## Contributor Guidance
 
