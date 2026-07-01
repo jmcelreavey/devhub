@@ -36,7 +36,7 @@ Expected: install is blocked with a Safe-Chain error (the package is a known tes
 
 ## 1Password Secret Bootstrap
 
-On a new machine, set up 1Password before the first dashboard run if you want Jira, Google Calendar, Datadog, z.ai, and OpenCode provider credentials to appear automatically.
+On a new machine, set up 1Password before the first dashboard run if you want Jira, Google Calendar, Datadog, AI provider (`AI_API_KEY`), and OpenCode provider credentials to appear automatically.
 
 ```bash
 # macOS example; use the official 1Password CLI install for other platforms.

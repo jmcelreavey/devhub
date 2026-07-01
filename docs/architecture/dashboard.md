@@ -98,6 +98,10 @@ Preferences live in `notes/.config/briefing-prefs.json` and sync with the repo l
 
 AI enrichment (dev tip, AI summary, interests) is additive: when `AI_API_KEY` is unset or a provider call fails, the briefing still loads with deterministic content. See [Environment Variables](../reference/environment-variables.md#notes-repo-learning-and-briefing-ai-optional).
 
+### Shared AI provider
+
+Notes in-editor AI, Repo Learning generation, briefing enrichment, and the **Tune briefing** chat all route through `dashboard/lib/ai-provider.ts`. That module reads `AI_API_KEY`, `AI_BASE_URL`, and `AI_MODEL` once and returns an OpenAI-compatible Vercel AI SDK model. GLM-specific `thinking` options are only sent when the configured base URL/model look like z.ai GLM — other providers get an empty options object so unknown fields are not rejected.
+
 ## Repo Status And Content Sync
 
 The dashboard keeps Git sync state visible without making every page own Git logic:
