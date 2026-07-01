@@ -10,7 +10,7 @@ It brings together a dashboard, shared agent configuration, persistent notes, ta
 | ------------- | --------------------------------------------------------------------- |
 | Dashboard     | The local web app used day to day                                     |
 | Notes storage | File-backed notes, tasks, learnings, and diagrams                     |
-| MCP server    | Lets AI tools read and write DevHub notes and tasks                   |
+| MCP server    | Lets AI tools use DevHub filesystem data and dashboard-backed workflows |
 | Sync engine   | Copies shared skills, persona, agents, and MCP configs to local tools |
 | Electron app  | Optional desktop launcher for the dashboard                           |
 | Integrations  | Calendar, Jira, Datadog, GitHub, and internal ops helpers             |

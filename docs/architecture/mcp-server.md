@@ -46,6 +46,10 @@ running.
 | Repos | `repos_list`, `repos_open`, `repos_clone`, `repo_learn` |
 | Datadog | `datadog_oncall`, `datadog_recent_alerts`, `datadog_investigate` |
 
+BI-specific MCP tools are contributed by the private BI plugin as a separate server; they are not part of the core DevHub server.
+
+Dashboard-backed tools that mutate runtime or external state require `confirm: true` (for example `services_restart`, mutating `scripts_run` entries, and `jira_ticket_transition`). Long-running actions return a `runId`; poll the matching status tool, such as `scripts_run_status`, until the run exits. MCP cannot stream the dashboard's live run log.
+
 ## Storage Model
 
 The MCP server uses local files, not a database.
@@ -97,6 +101,27 @@ npm run dev
 Run `npm run dev` for dashboard-backed tools. Run the sync action after changing MCP
 catalog entries so client configs pick up the new command, args, and environment.
 
+## Common Workflows
+
+### Read or update docs from an agent
+
+1. Use `docs_search` or `docs_list` to find the page.
+2. Use `docs_read` to load the current Markdown.
+3. Use `docs_write` only after merging your intended change into the full current content.
+
+`docs_write` is a full-file replacement, not a patch API.
+
+### Run a dashboard action
+
+1. Start the dashboard with `npm run dev`.
+2. Call `scripts_list` and inspect whether the target action mutates state.
+3. Call `scripts_run` with the script id. Add `confirm: true` only after checking the listed effects.
+4. Poll `scripts_run_status` with the returned `runId`.
+
+### Check local health from an agent
+
+Use `status_services`, `status_git`, and `status_mcp` when the dashboard is running. These are dashboard-backed because they inspect live process and repo state.
+
 ## Plugin MCP Servers
 
 Plugins can contribute simple MCP config files under `mcp/` and full stdio MCP
@@ -124,9 +149,11 @@ plugin MCP packages. See [Plugin System](plugins.md) and
 | ------- | ----- |
 | Dashboard-backed tool cannot connect | Confirm `npm run dev` is running and `DEVHUB_BASE_URL` matches the dashboard port. |
 | Filesystem tool reads the wrong content | Check `NOTES_DIR`, `TASKS_DIR`, and `DOCS_DIR` in the synced MCP config. |
+| Work tools return auth/setup errors | GitHub PR tools need `gh auth login`; Jira and Datadog tools need their integrations configured in `/setup` or env vars. |
 | MCP client shows an old tool list | Re-run MCP sync, then restart the AI tool so it reloads server metadata. |
 | `tsx` is missing for `devhub` | Run `cd mcp-servers/devhub-server && npm install`. |
 | Plugin MCP server fails to start | Run `npm install` inside the plugin's `mcp-servers/<name>/` package and re-run MCP sync. |
+| A plugin MCP tool is missing | Check plugin registration in `~/.config/devhub/plugins.json`, then run the sync action so plugin MCP configs are materialized. |
 | Status page says a command is missing | Bare commands such as `npx`, `tsx`, and `uvx` must resolve on `PATH`; absolute or relative command paths must exist on disk. |
 
 ## Safety Model
@@ -134,6 +161,4 @@ plugin MCP packages. See [Plugin System](plugins.md) and
 The server is scoped to configured local directories plus documented dashboard
 routes. It is not a general filesystem API.
 
-Keep secrets out of notes/docs unless you intentionally store them there. Dashboard
-integrations may use local secrets from `.env.local` or configured credential
-stores, but MCP responses should still be treated as local developer data.
+Keep secrets out of notes and docs unless you intentionally want them committed in this private mirror. Public/template backports must still respect the personal-data boundary in `CONTRIBUTING.md`. Dashboard integrations may use local secrets from `.env.local` or configured credential stores, but MCP responses should still be treated as local developer data.

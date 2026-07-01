@@ -11,7 +11,8 @@ The goal is simple: keep useful context in plain local files that can be searche
 | Daily notes | Day-by-day work notes and standups                 |
 | Learnings   | Reusable knowledge distilled from work             |
 | Sessions    | Longer records of significant AI-assisted sessions |
-| Diagrams    | tldraw files for visual notes                  |
+| Diagrams    | tldraw files for visual notes                      |
+| Appraisal   | Structured review evidence and goals               |
 
 ## Two-Tier Memory
 
@@ -49,6 +50,25 @@ Good learning notes are:
 - Written for a future reader.
 - Free of unnecessary session noise.
 
+## Appraisal notes
+
+Appraisal notes are intentional review records captured through the DevHub MCP server's `appraisal_*` tools. They are stored as regular BlockNote JSON under the notes tree so the dashboard can render them like other notes:
+
+```text
+notes/
+  appraisal/
+    self/<year>.json
+    people/<person-slug>/<year>.json
+```
+
+Use them for evidence-backed moments, goals, and year-end summaries:
+
+- `appraisal_record` captures a dated moment with a theme, summary, and at least one reference.
+- `appraisal_set_goal` records or revises a review goal for the year.
+- `appraisal_read`, `appraisal_list_goals`, and `appraisal_summarize` retrieve structured review material.
+
+Appraisal entries are deliberately separate from `notes_search`'s default workspace slice. Use the dedicated `appraisal_*` tools, or explicit note paths, when you want to read or modify them.
+
 ## Why Files Instead Of A Database
 
 Files are a good fit because they are:
@@ -76,7 +96,7 @@ Collection JSON writes are serialized with a repo mutex so rapid checklist edits
 
 ## In-Editor AI (Optional)
 
-The notes **BlockNote** editor can call z.ai through BlockNote’s AI extension:
+The notes **BlockNote** editor can call an OpenAI-compatible provider through BlockNote's AI extension:
 
 - Select text → **AI** (stars) on the formatting toolbar.
 - Type **`/ai`** in the slash menu.
@@ -85,7 +105,7 @@ Configuration is env-only - see [Environment Variables](../reference/environment
 
 **Notes work fully without these variables.** When `AI_API_KEY` is unset, the editor omits AI toolbar, `/ai`, and related UI. `GET /api/notes/ai/status` reports `{ configured: false }`.
 
-Backend route: `POST /api/notes/ai/chat` (Vercel AI SDK + BlockNote server helpers → z.ai Coding plan endpoint).
+Backend route: `POST /api/notes/ai/chat` (Vercel AI SDK + BlockNote server helpers -> configured OpenAI-compatible chat endpoint).
 
 ## Content vaults
 
