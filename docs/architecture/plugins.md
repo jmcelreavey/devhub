@@ -16,11 +16,35 @@ one hard-coded upstream, any number of registered plugins merge alongside core, 
 
 | Tier | Contributes | Status |
 | ---- | ----------- | ------ |
-| 1 — file-copy assets | `skills/`, `agents/`, `mcp/` | **implemented** |
+| 1 — file-copy assets | `skills/`, `agents/`, `mcp/`, optional MCP packages | **implemented** |
 | 2 — dashboard module | pages, API routes, libs, components | **implemented** |
 | 3 — branding (whitelabel) | theme, fonts, logo, OpenChamber theme, Electron icon | **implemented** |
 
 Docs and persona-modes are not yet plugin-aware (different delivery mechanisms).
+
+## Tier 1 — file-copy assets and MCP packages
+
+Tier-1 assets mirror core directories and merge into the same catalogs:
+
+```
+devhub-bi/
+  devhub-plugin.json
+  agents/<name>.md
+  skills/<name>/SKILL.md
+  mcp/<name>.json
+  mcp-servers/<name>/package.json   # optional stdio server package
+```
+
+`mcp/<name>.json` is the canonical MCP catalog entry. It can point at a command that
+already exists on the machine, or it can point at a server package shipped by the
+plugin under `mcp-servers/<name>/`. Plugin MCP configs may use `PLUGIN_ROOT` in
+`command`, `args`, or `env`; `sync-mcp` replaces it with the plugin's registered
+path. Use `REPO_ROOT` only for paths inside the DevHub core checkout.
+
+During bootstrap and the dashboard health check, DevHub scans enabled plugins for
+`mcp-servers/*/package.json` and runs `npm install` where `node_modules` is missing.
+That keeps plugin stdio servers self-contained instead of pretending one
+top-level `node_modules` can somehow satisfy every package on earth. It cannot.
 
 ## Tier 2 — dashboard modules
 
@@ -154,6 +178,7 @@ devhub-bi/
   agents/<name>.md            # flat .md files (like agents/shared)
   skills/<name>/SKILL.md      # one dir per skill
   mcp/<name>.json             # one canonical server JSON per file
+  mcp-servers/<name>/          # optional stdio server package
 ```
 
 ## Registry (machine-local, never committed)
