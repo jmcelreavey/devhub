@@ -205,7 +205,7 @@ Works with any OpenAI-compatible provider (z.ai by default, or OpenAI, OpenRoute
 | `AI_BASE_URL` | No       | OpenAI-compatible base; defaults to `https://api.z.ai/api/coding/paas/v4` |
 | `AI_MODEL`    | No       | Defaults to `glm-5-turbo` (e.g. `gpt-4o-mini` for OpenAI)        |
 
-Restart the dev server after setting these. See [docs/reference/environment-variables.md](docs/reference/environment-variables.md#notes-and-repo-learning-ai-optional).
+Restart the dev server after setting these. See [docs/reference/environment-variables.md](docs/reference/environment-variables.md#notes-repo-learning-and-briefing-ai-optional).
 
 ### Keyboard Shortcuts
 

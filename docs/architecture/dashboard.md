@@ -6,7 +6,8 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 
 | Area         | Purpose                                                                      |
 | ------------ | ---------------------------------------------------------------------------- |
-| Today        | Daily workspace with tasks, notes, calendar, tickets, PRs, and standup tools |
+| Today        | Daily workspace with tasks, notes, calendar, tickets, PRs, standup tools, and a morning briefing widget |
+| Briefing     | Full-page personal start-of-day digest (weather, news, events, dev tip, and more) |
 | Notes        | BlockNote editing, file tree, folder-scoped master checklists, optional OpenAI-compatible in-editor AI |
 | Docs         | In-app editing of repo `docs/` markdown (BlockNote with markdown round-trip), file tree, content sync |
 | Tasks        | Daily task management, drag reorder for open items, and history              |
@@ -66,6 +67,37 @@ Daily tasks live in repo-root `tasks/YYYY-MM-DD.json` (one file per calendar day
 
 Completed and abandoned tasks stay in the file for history and standup; they are not included in reorder requests.
 
+## Morning Briefing
+
+The morning briefing is a personal start-of-day digest, not a work standup. It appears as a widget on **Today** and as a full page at `/briefing`.
+
+| Surface | Route | Behavior |
+| ------- | ----- | -------- |
+| Today widget | `GET /api/dashboard/morning-briefing` | Compact card in the Today grid. |
+| Briefing page | `/briefing` | Full layout with collapsible sections and refresh. |
+| MCP | `briefing_get` | Returns the same rendered text through the dashboard-backed MCP tool. |
+
+The API fetches only sections the user has enabled in briefing preferences. Results are cached once per calendar day under `notes/.cache/briefing/`; add `?refresh=1` to bypass the cache.
+
+### Sections and preferences
+
+Preferences live in `notes/.config/briefing-prefs.json` and sync with the repo like other notes config. The **Tune briefing** chat on `/briefing` (`POST /api/briefing/prefs/chat`) updates prefs conversationally when `AI_API_KEY` is set. Manual edits use `GET`/`PUT /api/briefing/prefs`.
+
+| Section | Default | Source |
+| ------- | ------- | ------ |
+| Weather | on | Open-Meteo forecast for the configured location |
+| Dev Tip | on | AI tip from your tech stack, or a deterministic fallback |
+| News | on | RSS feeds from prefs |
+| Events | on | Local event search around configured areas |
+| Trending Repos | on | GitHub trending by language |
+| Hacker News | on | HN top stories |
+| Gaming | off | Gaming RSS feeds |
+| On This Day | on | Historical events |
+| Family Days Out | off | Nearby attractions when `hasKids` is enabled |
+| Interests | off | AI snippets for configured hobbies |
+
+AI enrichment (dev tip, AI summary, interests) is additive: when `AI_API_KEY` is unset or a provider call fails, the briefing still loads with deterministic content. See [Environment Variables](../reference/environment-variables.md#notes-repo-learning-and-briefing-ai-optional).
+
 ## Repo Status And Content Sync
 
 The dashboard keeps Git sync state visible without making every page own Git logic:
@@ -74,6 +106,7 @@ The dashboard keeps Git sync state visible without making every page own Git log
 - The cloud button is for scoped content only: `notes/`, `collections/`, `tasks/`, and `docs/`. It runs the `sync_notes_tasks_push` action through `POST /api/scripts`.
 - The warning triangle is for blockers and broader Git work: non-content dirty files run `commit_dirty_push`, upstream-only changes run `update_and_sync`, and merge conflicts send the user to `/status`.
 - The Status page is the runbook surface. It shows repo branch, dirty content vs other dirty paths, ahead/behind counts, latest failed sync logs, conflict resolution, skill sync health, service status, MCP runtime status, and LAN access.
+- The MCP panel (`GET /api/status/mcp`) lists each server under `mcp/shared/`, whether its launch command resolves, and how many matching processes are running. Bare command names such as `npx`, `tsx`, or `uvx` count as present when they resolve on `PATH`; only absolute or relative command paths must exist on disk. Idle servers are normal — MCP clients start stdio servers on demand.
 
 Merge conflict recovery lives on Status through `ConflictResolverPanel`. It reads `GET /api/git/conflicts`, lets the user edit the conflicted file, and saves with `POST /api/git/conflicts`; the backend writes the resolved content and stages the file only after conflict markers are removed. The full content-sync runbook is in [Notes System -> Content sync workflow](notes-system.md#content-sync-workflow).
 

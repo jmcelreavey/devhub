@@ -49,9 +49,9 @@ Most values live in the dashboard's local environment file and can be edited fro
 | `DATADOG_LINK_TEAM_ALERTS`  | Custom team alerts link               |
 | `DATADOG_LINK_EVENTS_TODAY` | Custom today's events link            |
 
-## Notes and Repo Learning AI (Optional)
+## Notes, Repo Learning, and Briefing AI (Optional)
 
-BlockNote AI in the notes editor and Repo Learning generated artifacts work with any **OpenAI-compatible** chat-completions endpoint — [z.ai](https://z.ai) (the default), OpenAI, OpenRouter, Together, Groq, a local Ollama/LM Studio server, etc. Point `AI_BASE_URL` / `AI_MODEL` at your provider and set `AI_API_KEY`. Configure these in `dashboard/.env.local` only - not on `/setup`.
+BlockNote AI in the notes editor, Repo Learning generated artifacts, and morning-briefing enrichment (dev tip, AI summary, interests, and the **Tune briefing** chat) work with any **OpenAI-compatible** chat-completions endpoint — [z.ai](https://z.ai) (the default), OpenAI, OpenRouter, Together, Groq, a local Ollama/LM Studio server, etc. Point `AI_BASE_URL` / `AI_MODEL` at your provider and set `AI_API_KEY`. Configure these in `dashboard/.env.local` only - not on `/setup`.
 
 | Variable      | Required | Default                               | Purpose                                                 |
 | ------------- | -------- | ------------------------------------- | ------------------------------------------------------- |
@@ -65,7 +65,7 @@ For OpenAI, set `AI_BASE_URL=https://api.openai.com/v1` and `AI_MODEL=gpt-4o-min
 
 Copy the commented block from `dashboard/.env.example` into `.env.local`, set `AI_API_KEY`, and restart the dev server.
 
-Without a key, notes still work and Repo Learning still shows deterministic repo facts. Notes AI menu actions and Repo Learning generated features return HTTP 503 with a short configuration message.
+Without a key, notes still work, Repo Learning still shows deterministic repo facts, and the morning briefing still loads with RSS/weather/event content. Notes AI menu actions, Repo Learning generated features, and briefing chat return HTTP 503 with a short configuration message. Briefing AI sections fall back to deterministic content instead of failing the whole page.
 
 ## Skills (ai-tools merge)
 
@@ -135,7 +135,7 @@ Suggested `devhub` item fields for shared local secrets:
 | `DATADOG_APPLICATION_KEY` | Datadog integration             |
 | `DATADOG_APP_KEY`         | Shell/Datadog alias             |
 | `DD_APPLICATION_KEY`      | Datadog alias                   |
-| `AI_API_KEY`              | Notes and Repo Learning AI      |
+| `AI_API_KEY`              | Notes, Repo Learning, and briefing AI |
 | `OPENAI_API_KEY`          | Shell/OpenCode-compatible tools |
 | `NOTION_API_KEY`          | Shell Notion workflows          |
 | `ITERABLE_API_KEY`        | Shell Iterable workflows        |

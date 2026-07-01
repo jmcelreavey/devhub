@@ -66,7 +66,7 @@ The shared configuration files should use environment variable placeholders inst
 
 ### AI Features (not on this page)
 
-Notes AI and Repo Learning generated artifacts use `AI_API_KEY` in `dashboard/.env.local` (any OpenAI-compatible provider — z.ai by default, or OpenAI, OpenRouter, etc. via `AI_BASE_URL`/`AI_MODEL`). Copy the example lines from `dashboard/.env.example`, restart after changes, and see [Environment Variables](../reference/environment-variables.md#notes-and-repo-learning-ai-optional).
+Notes AI, Repo Learning generated artifacts, and morning-briefing AI use `AI_API_KEY` in `dashboard/.env.local` (any OpenAI-compatible provider — z.ai by default, or OpenAI, OpenRouter, etc. via `AI_BASE_URL`/`AI_MODEL`). Copy the example lines from `dashboard/.env.example`, restart after changes, and see [Environment Variables](../reference/environment-variables.md#notes-repo-learning-and-briefing-ai-optional).
 
 ## After Changing Setup
 

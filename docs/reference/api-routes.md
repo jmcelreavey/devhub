@@ -9,6 +9,7 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | Actions   | Launch native OpenChamber/OpenCode apps when installed |
 | Agents    | View shared and local agent configuration            |
 | Infra plugin (`/api/bi/*`) | Optional plugin-backed ops: AWS profile, EKS, RDS, Mongo, CAPI, IAM |
+| Briefing  | Morning briefing data and user preferences           |
 | Calendar  | Google Calendar auth and event reads                 |
 | Datadog   | Alert links and summaries                            |
 | Git       | Local repo status and merge-conflict detection/resolution |
@@ -45,10 +46,16 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | ----- | ------- | ----- |
 | `GET /api/github/prs` | Today GitHub PR panel, `/prs` | Requires an authenticated local `gh` session. Returns authored PRs, review-requested PRs, and recently reviewed PRs; archived repositories are filtered from active queues. |
 | `GET /api/notes/pr-reviews/<slug>` | PR **Notes** links | The GitHub PR **Review** action polls this route after starting OpenCode. A `404` just means the review note has not been written yet. |
+| `GET /api/dashboard/morning-briefing` | Today briefing widget, `/briefing`, MCP `briefing_get` | Returns structured briefing data plus a rendered `text` summary. Cached per calendar day under `notes/.cache/briefing/`; `?refresh=1` bypasses the cache. AI sections fall back gracefully when `AI_API_KEY` is unset. |
+| `GET /api/briefing/prefs`, `PUT /api/briefing/prefs` | Briefing settings UI | Reads or updates `notes/.config/briefing-prefs.json`. `PUT` is same-origin only and accepts partial updates (location, feeds, section toggles, tech stack, interests). |
+| `POST /api/briefing/prefs/chat` | Briefing **Tune briefing** dialog | Streams a conversational prefs update. Requires `AI_API_KEY`; returns `503` when unconfigured. Saves merged prefs to disk after each assistant turn. |
 | `GET /api/repos/<name>/learn`, `GET /api/repos/<name>/learn/status`, `GET /api/repos/<name>/learn/pack.zip`, `POST /api/repos/<name>/learn/tutor` | Repo Learning panel | Resolves sibling git checkouts only. Deterministic facts work without AI; generated briefs, NotebookLM packs, and tutor responses require `AI_API_KEY`. |
 | `GET /api/status/git` | Top-bar sync indicator, Status page | Returns branch, dirty counts, content-vs-other dirty counts, ahead/behind counts, conflict count, last commit, and user-facing hints. It fetches upstream at most every four minutes; intermediate polls compare against the last fetched upstream ref. |
 | `GET /api/git/conflicts` | Status merge-conflict panel | Lists files with Git unmerged status or conflict markers under scoped content paths and includes readable file content for editing. |
 | `POST /api/git/conflicts` | Status merge-conflict panel | Body: `{ path, content }`. Rejects invalid paths or content that still contains `<<<<<<<` markers; on success writes the content, runs `git add -- <path>`, and returns the remaining conflict count. |
+| `GET /api/status/mcp` | Status MCP panel | Scans running processes for each server in `mcp/shared/`. Returns `command`, `fingerprint`, `binaryExists`, `runningCount`, and `pids`. Bare launch commands (`npx`, `tsx`, `uvx`, …) are considered present when resolvable on `PATH`; path-based commands must exist on disk. |
+| `GET /api/status/services`, `POST /api/status/services/restart` | Status services panel | Probes dashboard, OpenChamber, and OpenCode ports. Restart is same-origin only. |
+| `GET /api/status/lan` | Status LAN panel | Returns LAN URLs for accessing the dashboard and companions from other devices on the network. |
 | `GET /api/sync-health` | Status skill-sync panel | Checks shared skill sync health across configured tool directories and includes preview diffs for unhealthy skill/agent sync state. |
 | `GET /api/scripts` | Actions page | Returns the allowlisted script catalog. Content-sync-related IDs include `sync_notes_tasks_push`, `dry_run_scoped_sync`, `commit_dirty_push`, and `update_and_sync`. |
 | `POST /api/scripts` | Top-bar sync indicator, Status page, Actions page | Starts an allowlisted action and returns `202 { runId }`. Same-origin only. `commit_dirty_push` accepts a trimmed `commitMessage`; filter options are accepted only by the script families that use them. |
