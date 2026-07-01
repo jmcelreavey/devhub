@@ -19,7 +19,7 @@ http://localhost:1337/setup
 | Datadog         | Optional alert summaries and deep links                                     |
 | GitHub          | Pull request and repo-related features, usually via the GitHub CLI          |
 | Infra           | Optional internal infrastructure helpers, when an infra plugin is installed |
-| Notes AI        | Optional z.ai-powered BlockNote AI — **env vars only** (see below)          |
+| Notes AI        | Optional OpenAI-compatible BlockNote AI — **env vars only** (see below)     |
 
 ## Core Settings
 

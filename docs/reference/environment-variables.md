@@ -15,6 +15,7 @@ Most values live in the dashboard's local environment file and can be edited fro
 | `REPO_ROOT`                    | DevHub repository root                                                                                                 |
 | `PORT`                         | Dashboard port                                                                                                         |
 | `DEVHUB_BIND_HOST`             | Dashboard bind address. Keep `127.0.0.1` so Electron can use localhost                                                 |
+| `DEVHUB_BASE_URL`              | Dashboard URL used by dashboard-backed MCP tools. Defaults to `http://localhost:1337`                                  |
 | `DEVHUB_LAN_PROXY_HOST`        | Optional LAN proxy host. Use `auto` to detect a physical LAN IPv4 and exclude Tailscale CGNAT (`100.64.0.0/10`)        |
 | `OPENCHAMBER_HOST`             | OpenChamber local bind address. LAN access is proxied when enabled                                                     |
 | `NEXT_PUBLIC_OPENCHAMBER_PORT` | Browser-visible OpenChamber port                                                                                       |

@@ -119,7 +119,7 @@ Features:
 - **Today page** — Tasks with Jira key detection + due dates, notes editor, calendar widget, ticket widget, daily activity digest; **Copy standup** (markdown for Slack: git **subjects** in `REPO_ROOT` over the same local window, **Jira** issues still assigned to you with any update in that window, **GitHub PRs you authored** that merged in that window via `gh pr list`, **GitHub PRs you reviewed** (merged, not your own) via `gh api search/issues`, tasks with **due date = today**); **GitHub PRs** (open + review queue via `gh pr status` across devhub and sibling clones with a `github.com` remote when the GitHub CLI is logged in)
 - **Calendar** — Week view with Google Calendar integration (optional)
 - **Tickets** — Jira Cloud tickets with status filters (optional)
-- **Notes** — BlockNote editor, file tree, search overlay, folder-scoped **master checklists** (shared task blocks across notes), optional **in-editor AI** via z.ai (`/ai`, selection toolbar — see env vars below)
+- **Notes** — BlockNote editor, file tree, search overlay, folder-scoped **master checklists** (shared task blocks across notes), optional **in-editor AI** via an OpenAI-compatible provider (`/ai`, selection toolbar — see env vars below)
 - **Chamber** — OpenChamber iframe integration (uses the shared OpenCode server on `1338`)
 - **OpenCode** — OpenCode web UI iframe on port `1338`
 - **Terminal** — in-app PoC terminal backed by a local PTY peer on port `1339`
@@ -366,7 +366,7 @@ MCP (Model Context Protocol) servers extend tool capabilities. This repo configu
 A stdio MCP server (`mcp-servers/devhub-server`, wired from `mcp/shared/devhub.json`) exposes two tiers of tools:
 
 - **Filesystem-backed** (work without the dashboard): notes, docs, tasks, diagrams, appraisal.
-- **Dashboard-backed** (proxy `http://localhost:1337`): status, scripts/sync, briefing, calendar, work/PRs, repos, search. These need the dashboard running.
+- **Dashboard-backed** (proxy `http://localhost:1337`): status, scripts/sync, briefing, calendar, work/PRs, repos, search, Datadog. These need the dashboard running.
 
 ```bash
 # Run the server directly (normally launched by your AI tool via the synced MCP config)
@@ -378,7 +378,7 @@ MCP configs are installed to your tool directories by `install.sh` / Actions wit
 
 ### Web UI
 
-When the notes server is running, open `http://localhost:1337` to:
+When the dashboard is running, open `http://localhost:1337` to:
 
 - Browse and search all notes
 - Create and edit notes with a markdown editor
