@@ -110,7 +110,7 @@ Microsoft documents [Hyper-V firewall rules](https://learn.microsoft.com/en-us/w
 powershell.exe -ExecutionPolicy Bypass -File "\\wsl$\YOUR_DISTRO_NAME\home\YOU\dev\devhub\scripts\wsl\forward-devhub.ps1"
 ```
 
-That sets `netsh` portproxy for ports **1337**, **1336**, and **1338** plus a firewall rule. Re-run after reboot if your phone can’t connect anymore.
+That sets `netsh` portproxy for ports **1337**, **1336**, and **1338** plus a firewall rule. The in-app terminal peer (`1339`) is not included — use mirrored networking for full LAN access, or add `1339` to the portproxy manually if you need the terminal over Wi‑Fi. Re-run after reboot if your phone can’t connect anymore.
 
 `npm run dev` prints a WSL reminder when relevant.
 
@@ -178,7 +178,7 @@ Calendar setup steps:
 | `JIRA_DOMAIN` | Yes | Your Jira Cloud domain (e.g., `yourcompany.atlassian.net`) |
 | `JIRA_EMAIL` | Yes | Your Jira email |
 | `JIRA_API_TOKEN` | Yes | [Atlassian API Token](https://id.atlassian.com/manage-profile/security/api-tokens) |
-| `NEXT_PUBLIC_JIRA_DOMAIN` | No | Same domain as `JIRA_DOMAIN`; used client-side for JIRA links in PR copy messages. Defaults to `businessinsider.atlassian.net`. |
+| `NEXT_PUBLIC_JIRA_DOMAIN` | No | Same domain as `JIRA_DOMAIN`; used client-side for JIRA links in PR copy messages. Defaults to `your-domain.atlassian.net` when unset — configure via `/setup` or env. |
 
 **Datadog (optional):** `DATADOG_API_KEY` is saved from `/setup` (used by skills and to unlock the Datadog nav entry). Datadog’s **Events** REST API expects **both** an API key and an [application key](https://docs.datadoghq.com/account_management/api-app-keys/) — the API key alone is not enough for read/search endpoints we use for counts. Deep links default to US1 (`datadoghq.com`); override as needed:
 

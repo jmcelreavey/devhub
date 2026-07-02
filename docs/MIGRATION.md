@@ -37,6 +37,20 @@ Depending on your previous version, migration may affect:
 - Git hooks.
 - Optional integration settings.
 
+## Upgrading from Z_AI_* (June 2026)
+
+Notes in-editor AI, Repo Learning generation, morning-briefing enrichment, and the **Tune briefing** chat now read **`AI_API_KEY`**, **`AI_BASE_URL`**, and **`AI_MODEL`** in `dashboard/.env.local`. The old `Z_AI_*` names were removed.
+
+| Old name         | New name      |
+| ---------------- | ------------- |
+| `Z_AI_API_KEY`   | `AI_API_KEY`  |
+| `Z_AI_BASE_URL`  | `AI_BASE_URL` |
+| `Z_AI_MODEL`     | `AI_MODEL`    |
+
+If you still have `Z_AI_*` in `.env.local` or a 1Password `devhub` item, rename the fields and restart the dev server. Without `AI_API_KEY`, notes AI, repo-learn generation, and briefing chat return HTTP 503; the briefing page itself still loads with deterministic sections.
+
+When unset, `AI_BASE_URL` and `AI_MODEL` still default to z.ai (`https://api.z.ai/api/coding/paas/v4`, `glm-5-turbo`). See [Environment Variables](reference/environment-variables.md#notes-repo-learning-and-briefing-ai-optional).
+
 ## Notes Migration
 
 DevHub expects notes to live in a structured notes directory with areas for daily notes, learnings, sessions, and diagrams.

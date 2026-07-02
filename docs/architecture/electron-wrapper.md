@@ -11,8 +11,8 @@ It starts and manages the local dashboard rather than replacing it.
 | Locate DevHub    | Finds the repo or bundled app resources              |
 | Start services   | Runs the dashboard in development or production mode |
 | Open a window    | Loads the local dashboard URL in a native window     |
-| Manage processes | Restarts or stops dashboard, OpenChamber, OpenCode   |
-| Port health      | Probes `1337` / `1336` / `1338` before start/restart |
+| Manage processes | Restarts or stops dashboard, OpenChamber, OpenCode; restart also clears terminal peer on `1339` |
+| Port health      | Probes `1337` / `1336` / `1338` / `1339` before start/restart |
 | Show logs        | Provides a simple log viewer for launched processes  |
 | Auto-update      | Packaged builds check GitHub Releases via `electron-updater` |
 

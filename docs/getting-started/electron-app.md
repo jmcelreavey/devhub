@@ -15,8 +15,9 @@ It does not replace the dashboard. It runs the same local DevHub app you can ope
 | `1337` | Dashboard   |
 | `1336` | OpenChamber |
 | `1338` | OpenCode    |
+| `1339` | Terminal (in-app PTY peer) |
 
-The launcher can detect whether each port is reachable, start `npm run dev` or `npm run start` when needed, and restart listeners on all three before relaunching.
+The launcher can detect whether each port is reachable, start `npm run dev` or `npm run start` when needed, and restart listeners on all four before relaunching.
 
 The Electron app always opens the dashboard through `localhost`. LAN access is handled separately by DevHub's LAN proxy, so enabling network access does not make Electron chase the machine's Wi‑Fi or Tailscale IP.
 
@@ -63,7 +64,7 @@ Per-service quit behavior is configurable in the app menu (stored in `launcher-s
 | Kill OpenChamber on close | on      | Stops the OpenChamber daemon on `1336`   |
 | Kill OpenCode on close    | on      | Stops `opencode serve` on `1338`         |
 
-Turn off individual toggles when you want DevHub to keep supported peer services running after closing the window. Note: OpenChamber is currently still stopped during launcher cleanup even if **Kill OpenChamber on close** is disabled.
+Turn off individual toggles when you want DevHub to keep supported peer services running after closing the window. Note: OpenChamber is currently still stopped during launcher cleanup even if **Kill OpenChamber on close** is disabled. Restart and full port cleanup always include the terminal peer on `1339` even though it has no separate quit toggle.
 
 Port cleanup uses graceful shutdown with a short wait, then `SIGKILL` fallback when a listener does not exit in time.
 
