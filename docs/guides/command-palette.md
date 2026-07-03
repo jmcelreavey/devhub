@@ -17,7 +17,9 @@ Cmd+K
 - Tickets.
 - Common actions.
 - Standup shortcuts.
-- **Content** — full-text matches inside notes when your query is at least two characters (debounced; uses `/api/search`).
+- **Content** — full-text matches inside notes when your query is at least two characters (debounced; uses `GET /api/search` substring mode).
+
+For TF-IDF "related notes" search across the full notes vault, use the **Search** page at `/search` (`?mode=semantic` on the API). The palette always uses exact substring matching so results stay predictable for quick navigation.
 
 ## Actions
 

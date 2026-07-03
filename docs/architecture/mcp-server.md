@@ -122,6 +122,18 @@ catalog entries so client configs pick up the new command, args, and environment
 
 Use `status_services`, `status_git`, and `status_mcp` when the dashboard is running. These are dashboard-backed because they inspect live process and repo state.
 
+### Capture appraisal notes from an agent
+
+Appraisal data lives under `notes/appraisal/` as BlockNote JSON. Filesystem-backed tools work without the dashboard.
+
+1. `appraisal_record` — append a moment, win, or feedback entry for a year (self or a person slug).
+2. `appraisal_set_goal` / `appraisal_list_goals` — define and review goals for the review period.
+3. `appraisal_read` / `appraisal_list` / `appraisal_people` — browse existing entries.
+4. `appraisal_summarize` — generate a year-end summary from captured notes and goals.
+5. `appraisal_delete` — remove an entry when correcting mistakes.
+
+Storage layout: `notes/appraisal/self/<year>.json` for self-reviews; `notes/appraisal/people/<slug>/<year>.json` for others. See [Notes System — Appraisal](notes-system.md) for vault details.
+
 ## Plugin MCP Servers
 
 Plugins can contribute simple MCP config files under `mcp/` and full stdio MCP

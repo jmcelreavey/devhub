@@ -10,7 +10,7 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 | Briefing     | Full-page personal start-of-day digest (weather, news, events, dev tip, and more) |
 | Notes        | BlockNote editing, file tree, folder-scoped master checklists, optional OpenAI-compatible in-editor AI |
 | Docs         | In-app editing of repo `docs/` markdown (BlockNote with markdown round-trip), file tree, content sync |
-| Tasks        | Daily task management, drag reorder for open items, and history              |
+| Tasks        | Daily task management, drag reorder for open items, weekly review, and history |
 | Skills       | Shared skill viewing, creation, sync, and collection                         |
 | Actions      | Safe script runner for maintenance tasks                                     |
 | Status       | Health checks for repo, services, MCP, sync health, merge conflicts, and network access |
@@ -66,6 +66,20 @@ Daily tasks live in repo-root `tasks/YYYY-MM-DD.json` (one file per calendar day
 | API        | `PATCH /api/tasks` with `{ ids: string[], date?: string }` — must include every open task id exactly once |
 
 Completed and abandoned tasks stay in the file for history and standup; they are not included in reorder requests.
+
+## Weekly Review
+
+The **Review** page (`/review`, desktop nav) is a retrospective view over the last seven calendar days ending on a chosen date.
+
+| Surface | Route | Behavior |
+| ------- | ----- | -------- |
+| Review page | `/review` | Per-day created/completed/abandoned/moved bars, window totals, and a **slipped** list |
+| API | `GET /api/tasks/weekly?end=YYYY-MM-DD` | Same data as JSON; `end` defaults to today |
+| MCP | `tasks_weekly` | Dashboard-backed proxy of the weekly route |
+
+**Slipped tasks** are detected when the same task text (normalized) appears as rolled over (`moved`) on three or more distinct days within the window (`SLIP_THRESHOLD = 3`). Rollover mints a new task id each day, so slip detection compares text across days rather than ids.
+
+Pair with [Standup](../guides/standup.md) for daily forward-looking summaries; Review is the backward-looking complement.
 
 ## Morning Briefing
 

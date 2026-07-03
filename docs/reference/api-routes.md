@@ -26,11 +26,13 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | Persona   | View shared and local persona configuration          |
 | Repos     | Repository discovery, actions, and Repo Learning artifacts |
 | Scripts   | Run allowlisted maintenance and sync actions; stream/history endpoints expose run output |
-| Search    | Full-text search (`?q=` required; default notes, `?vault=docs` for docs) |
+| Search    | Full-text and semantic search (`?q=` required; default notes, `?vault=docs` for docs) |
 | Setup     | Read and save setup configuration                    |
+| Skills    | Shared skill catalog CRUD, local import scan, and ai-tools refresh |
+| Sidebar   | Nav badge counts and activity signatures           |
 | Status    | Health checks for Git, services, MCP, sync health, and LAN access |
 | Sync preview | Preview repo → local sync without applying        |
-| Tasks     | Task CRUD, open-task reorder (`PATCH` with `{ ids }`), rollover, timers, and history |
+| Tasks     | Task CRUD, open-task reorder (`PATCH` with `{ ids }`), rollover, timers, weekly review, and history |
 | Tree      | Notes file tree listing                              |
 
 ## Common Behavior
@@ -60,6 +62,15 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | `GET /api/sync-health` | Status skill-sync panel | Checks shared skill sync health across configured tool directories and includes preview diffs for unhealthy skill/agent sync state. |
 | `GET /api/scripts` | Actions page | Returns the allowlisted script catalog. Content-sync-related IDs include `sync_notes_tasks_push`, `dry_run_scoped_sync`, `commit_dirty_push`, and `update_and_sync`. |
 | `POST /api/scripts` | Top-bar sync indicator, Status page, Actions page | Starts an allowlisted action and returns `202 { runId }`. Same-origin only. `commit_dirty_push` accepts a trimmed `commitMessage`; filter options are accepted only by the script families that use them. |
+| `GET /api/search` | Command palette content search, `/search` page | `?q=` required. Default vault is notes; `?vault=docs` searches repo docs. Optional `?prefix=` limits to paths under a folder (rejects `..` and leading `/`). Default mode is substring line match; `?mode=semantic` uses TF-IDF over notes vault only (BlockNote + tldraw text) and returns `{ score, preview }` per file. |
+| `GET /api/tasks/weekly` | Weekly Review page (`/review`), MCP `tasks_weekly` | `?end=YYYY-MM-DD` optional (defaults to today). Returns a 7-day window ending on `end`: per-day `created`/`completed`/`abandoned`/`moved` counts, window `totals`, and `slipped` tasks (same text rolled over on ≥3 distinct days). |
+| `GET /api/sidebar/counts` | Sidebar nav badges | Polls every 60s. Returns open task count, Jira ticket count, GitHub PR count (authored + review-requested), stale live-link count (`shared`), and `signatures` for ticket/PR activity badges. Cached server-side for 60s. |
+| `GET /api/skills` | Skills page | Returns `{ skills, aiTools }` from the shared catalog under `skills/shared/` plus ai-tools metadata. |
+| `POST /api/skills` | Skills **New skill** | Body: `{ name, description? }`. Creates `skills/shared/<name>/SKILL.md`. Name must match `[a-z0-9_-]+`. |
+| `GET/PUT/PATCH/DELETE /api/skills/<name>` | Skills editor | `GET` returns content and `readOnly`/`source` metadata. `PUT` replaces `SKILL.md`. `PATCH` renames the folder (`{ newName }`). `DELETE` removes the folder. Upstream ai-tools skills are read-only (`403`). |
+| `GET /api/skills/local` | Skills import UI | Scans `~/.claude/skills`, `~/.codex/skills`, and similar tool dirs for import candidates. |
+| `GET/DELETE /api/skills/local/<name>` | Local skill preview/remove | `GET` reads installed copy; `DELETE` removes local installations. |
+| `POST /api/skills/refresh-ai-tools` | Skills ai-tools sync | Pulls upstream ai-tools skills when `AI_TOOLS_SYNC` is enabled. Returns `{ ok, disabled?, lines, … }`; responds with `disabled: true` when `AI_TOOLS_SYNC=0`. |
 
 ## Content Sync Actions
 

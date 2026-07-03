@@ -28,6 +28,8 @@ Empty notes cannot be published.
 | Column / state | Meaning |
 | -------------- | ------- |
 | Stale badge    | Source file changed since the last gist push (or the file was deleted) |
+
+The sidebar **Live links** entry shows a count badge when any share is stale. The UI polls `GET /api/sidebar/counts` every 60 seconds; the `shared` field is `countStaleShares()` — drift between the gist snapshot and the current note/doc on disk.
 | Expiry label   | Auto-cleanup countdown (see below) |
 | Update         | Re-push current content to the gist |
 | Remove         | Delete the gist and drop the registry entry |

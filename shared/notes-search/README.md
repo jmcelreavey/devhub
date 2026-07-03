@@ -14,8 +14,9 @@ Presentation stays in each consumer (API JSON + scoring vs MCP markdown).
 ## API
 
 - `searchNotes(root, query, options)` — walk, extract, line match, limit (default 50)
+- `semanticSearchNotes(root, query, options)` — TF-IDF ranking over tokenized BlockNote/tldraw text (notes vault only; used by `GET /api/search?mode=semantic`)
 - `extractPlainTextFromBlockNote(blocks)` — search-oriented plain text (not markdown export)
 - `extractPlainTextFromTldraw(data)` — diagram shape labels/text
-- `isWorkspaceNoteRel(relPath)` — MCP path filter
+- `isWorkspaceNoteRel(relPath)` — MCP path filter (root scratch + `daily/` only; excludes `appraisal/`, learnings, and other subtrees from MCP `notes_search`)
 
 Do not point dashboard search at `isWorkspaceNoteRel` without an explicit product change — that would hide learnings/diagrams from Command Palette and global search.

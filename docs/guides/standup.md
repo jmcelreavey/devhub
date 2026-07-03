@@ -20,6 +20,8 @@ Depending on your setup, standup can include:
 4. Copy the generated Markdown.
 5. Edit before posting if needed.
 
+For a backward-looking view of the same task data, use **Review** (`/review`) — a seven-day window with per-day stats and slipped (repeatedly rolled-over) tasks. See [Dashboard — Weekly Review](../architecture/dashboard.md#weekly-review).
+
 ## Good Standup Hygiene
 
 - Treat generated text as a draft.
