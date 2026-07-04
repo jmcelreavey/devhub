@@ -27,6 +27,27 @@ If a dashboard-backed tool returns `Could not reach the DevHub dashboard`, start
 dashboard with `npm run dev` or set `DEVHUB_BASE_URL` to the port where it is
 running.
 
+## Package Layout
+
+`mcp-servers/devhub-server/src/mcp.ts` is a thin registrar (v4.0.0). It wires tool
+groups and does not hold business logic.
+
+| Path | Role |
+| ---- | ---- |
+| `src/mcp.ts` | Entry point — creates `McpServer`, calls each `register*Tools` |
+| `src/context.ts` | `createContext()` — reads `NOTES_DIR`, `TASKS_DIR`, `DOCS_DIR`, `DEVHUB_BASE_URL` |
+| `src/tools/*.ts` | One registrar per tool group (`notes.ts`, `status.ts`, …) |
+| `src/storage.ts`, `src/task-diagram-storage.ts` | Filesystem-backed vault access |
+| `src/dashboard-client.ts` | HTTP proxy for dashboard-backed tools |
+| `src/convert.ts` | BlockNote ↔ Markdown conversion for notes |
+
+Filesystem tools import from `shared/vault/` via relative paths. Dashboard tools call
+matching routes on `DEVHUB_BASE_URL` through `DashboardClient`.
+
+To add a tool group: create `src/tools/<group>.ts` with a `register*Tools(server, ctx)`
+function, import it in `mcp.ts`, and add a dashboard API route when the tool is
+dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
+
 ## Tool Inventory
 
 | Group | Tools |

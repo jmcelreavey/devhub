@@ -9,7 +9,7 @@ The sync engine keeps AI tool configuration consistent across machines and tools
 | Skills          | `skills/shared/` plus optional `ai-tools` checkout | Local tool skill directories    |
 | Agents          | Shared agent files     | Local tool agent directories    |
 | Persona         | Persona files          | Tool-specific instruction files |
-| MCP configs     | `mcp/shared/*.json`    | `~/.claude.json`, `~/.codex/mcp.json`, `~/.cursor/mcp.json`, OpenCode `mcp` block |
+| MCP configs     | Core `mcp/shared/*.json`, enabled plugin `mcp/*.json`, and machine-local `~/.config/devhub/mcp-personal/` | `~/.claude.json`, `~/.codex/mcp.json`, `~/.cursor/mcp.json`, OpenCode `mcp` block |
 | OpenCode config | `opencode/shared/opencode.json` | `~/.config/opencode/opencode.json` (curated keys only) |
 
 Only `model`, `small_model`, `provider`, and `theme` are merged. MCP entries, schema, and agent metadata that OpenCode maintains locally are preserved. Provider credentials use `{env:VAR}` in the repo; sync resolves them from the environment (including 1Password-backed vars) into the local file.
@@ -40,6 +40,20 @@ On **Sync skills**, DevHub may fetch the ai-tools default branch into `~/.cache/
 **Cursor MCP path:** DevHub syncs to `~/.cursor/mcp.json` (where Cursor stores user MCP servers such as agentmemory). A legacy `~/.config/cursor/mcp.json` is merged on read and cleared after sync.
 
 **Personal MCP catalog:** Machine-local definitions under `~/.config/devhub/mcp-personal/` sync to every tool like `mcp/shared/` but are never committed — use for agentmemory, remote HTTP entries, or other per-machine setup.
+
+### MCP catalog resolution
+
+Forward sync resolves each server name through three catalogs (`readCatalogMcpServer` in
+`dashboard/lib/sync-mcp.ts`):
+
+1. **Core** — `mcp/shared/<name>.json` in the DevHub repo
+2. **Plugins** — `<plugin>/mcp/<name>.json` for enabled plugins in `~/.config/devhub/plugins.json`
+3. **Personal** — `~/.config/devhub/mcp-personal/<name>.json`
+
+Core wins on name collision. Plugin configs are **not** copied into `mcp/shared/`; they
+stay in the plugin checkout and are merged at sync time. `PLUGIN_ROOT` in a plugin
+config is replaced with that plugin's registered path. Among plugins, the first
+registered plugin wins when two define the same server name.
 
 ## Sync Vs Collect
 

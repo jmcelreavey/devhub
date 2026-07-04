@@ -21,6 +21,24 @@ The launcher can detect whether each port is reachable, start `npm run dev` or `
 
 The Electron app always opens the dashboard through `localhost`. LAN access is handled separately by DevHub's LAN proxy, so enabling network access does not make Electron chase the machine's Wi‑Fi or Tailscale IP.
 
+### Dashboard URL Resolution
+
+Electron resolves the window URL from `DEVHUB_BIND_HOST` in `process.env` or
+`dashboard/.env.local` (`electron-wrapper/src/main.ts`):
+
+| `DEVHUB_BIND_HOST` value | Electron opens |
+| ------------------------ | -------------- |
+| `0.0.0.0`, `::` (default) | `http://localhost:<PORT>` |
+| `auto`, `lan` | `http://localhost:<PORT>` |
+| `127.0.0.1` or other explicit host | `http://<host>:<PORT>` |
+
+The dashboard may bind `0.0.0.0` for LAN proxy access while Electron still loads
+`localhost`. Phones and other devices use the LAN URLs from `/setup` or Status — not
+the Electron window URL.
+
+If Electron shows a blank window but the browser works, confirm the dashboard is
+listening on the resolved port and that `PORT` in `.env.local` matches.
+
 ## Start The App Locally
 
 From the repo root:

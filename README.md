@@ -146,7 +146,7 @@ A starter `dashboard/.env.example` is checked in — copy to `dashboard/.env.loc
 | `NOTES_DIR` | `~/dev/devhub/notes` | Notes storage path |
 | `REPO_ROOT` | `~/dev/devhub` | Repository root |
 | `PORT` | `1337` | Dashboard port |
-| `DEVHUB_BIND_HOST` | `127.0.0.1` | Next.js listen address; keep localhost for Electron |
+| `DEVHUB_BIND_HOST` | `0.0.0.0` | Next.js listen address; Electron maps `0.0.0.0`/`auto`/`lan` to `localhost` for its window |
 | `DEVHUB_LAN_PROXY_HOST` | unset | Optional LAN proxy bind host. Use `auto` to pick a physical LAN IPv4 and exclude Tailscale CGNAT |
 | `OPENCHAMBER_HOST` | `127.0.0.1` | OpenChamber local bind address; LAN access is proxied when enabled |
 | `NEXT_PUBLIC_OPENCHAMBER_PORT` | `1336` | Port embedded in the Chamber iframe URL in the browser |
