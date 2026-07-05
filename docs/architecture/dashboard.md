@@ -124,7 +124,26 @@ The dashboard keeps Git sync state visible without making every page own Git log
 - The cloud button is for scoped content only: `notes/`, `collections/`, `tasks/`, and `docs/`. It runs the `sync_notes_tasks_push` action through `POST /api/scripts`.
 - The warning triangle is for blockers and broader Git work: non-content dirty files run `commit_dirty_push`, upstream-only changes run `update_and_sync`, and merge conflicts send the user to `/status`.
 - The Status page is the runbook surface. It shows repo branch, dirty content vs other dirty paths, ahead/behind counts, latest failed sync logs, conflict resolution, skill sync health, service status, MCP runtime status, and LAN access.
-- The MCP panel (`GET /api/status/mcp`) lists each server under `mcp/shared/` only — not plugin or personal catalog entries. It reports whether each server's launch command resolves and how many matching processes are running. Bare command names such as `npx`, `tsx`, or `uvx` count as present when they resolve on `PATH`; only absolute or relative command paths must exist on disk. Idle servers are normal — MCP clients start stdio servers on demand. Plugin and personal MCP servers sync to Cursor/Claude/etc. but do not appear here; troubleshoot those via the AI client's MCP logs and `npm install` inside the plugin's `mcp-servers/<name>/` package.
+- The MCP panel (`GET /api/status/mcp`) lists each server under `mcp/shared/` only — not plugin or personal catalog entries. It reports whether each server's launch command resolves and how many matching processes are running. Bare command names such as `npx`, `tsx`, or `uvx` count as present when they resolve on `PATH`; only absolute or relative command paths must exist on disk. Idle servers are normal — MCP clients start stdio servers on demand. Plugin and personal MCP servers sync to Cursor/Claude/etc. but do not appear here; troubleshoot those via the AI client's MCP logs and `npm install` inside the plugin's `mcp-servers/<name>/` package. **Catalog editing** (`/api/mcp*`) is separate from runtime status — use **Agents → MCP** to add or edit repo/personal entries.
+
+### Status page runbook
+
+The Status page (`/status`) aggregates Git, sync, services, and infra into one operational view:
+
+| Section | What it shows | Primary actions |
+| ------- | ------------- | --------------- |
+| Health summary | Aggregates stopped peer services, non-content dirty paths, behind count, merge conflicts, missing MCP binaries, and last failed sync | Banner turns amber when any item is present |
+| Repo | Branch, content vs other dirty counts, ahead/behind, last commit | **Sync** runs `update_and_sync` on a clean tree; **Commit & sync…** chains `commit_dirty_push` then `update_and_sync` when dirty |
+| Merge conflicts | Files with conflict markers under scoped content paths | Inline edit via `ConflictResolverPanel` |
+| Skill sync | `GET /api/sync-health` plus preview diffs when unhealthy | Links to Agents library; see [Skills guide](../guides/skills.md#sync-preview-before-sync) |
+| Services | OpenChamber and OpenCode port probes | Restart via `POST /api/status/services/restart`; cards hidden when setup disables a peer |
+| MCP | Runtime scan of `mcp/shared/` only | Idle = normal; missing binary = warning |
+| Infra | AWS profile/identity and kubectl context via `GET /api/bi` (plugin-backed) | Polls every 5 minutes; links to `/ops` |
+| LAN access | Wi‑Fi IPv4 badge + QR | Client builds `http://<ip>:<port>…` for phone access on the same network |
+
+Failed sync runs surface from `GET /api/scripts/history` with log detail from `GET /api/scripts/runs/<runId>`. The **Copy Chamber prompt** button builds a fix-it prompt from the last 120 log lines for verify/pre-push failures.
+
+The page reloads on manual refresh and polls Git/services/MCP/LAN every 30 seconds in the background.
 
 Merge conflict recovery lives on Status through `ConflictResolverPanel`. It reads `GET /api/git/conflicts`, lets the user edit the conflicted file, and saves with `POST /api/git/conflicts`; the backend writes the resolved content and stages the file only after conflict markers are removed. The full content-sync runbook is in [Notes System -> Content sync workflow](notes-system.md#content-sync-workflow).
 

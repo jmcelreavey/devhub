@@ -117,6 +117,7 @@ The **Status** page probes OpenChamber and OpenCode ports via `/api/status/servi
 
 - `/api/actions/launch-chamber` — OpenChamber Desktop pointing at the existing DevHub server (port `1336` / shared OpenCode on `1338`)
 - `/api/actions/launch-opencode` — macOS OpenCode Desktop app (when present under `/Applications`)
+- `/api/actions/launch-claude` — Claude Desktop when installed; otherwise opens `https://claude.ai/new` in the browser. Available from the top-bar launch menu and command palette.
 
 ## Troubleshooting
 

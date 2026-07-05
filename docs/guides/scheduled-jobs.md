@@ -32,3 +32,18 @@ They are not a system cron replacement. If DevHub is closed, jobs do not run.
 ## Managing Jobs
 
 Use the Actions page to view and manage scheduled jobs. Prefer the UI unless you are debugging.
+
+## API (dashboard running)
+
+While the dashboard process is alive, jobs are exposed as local JSON routes (same-origin on mutating calls):
+
+| Route | Method | Purpose |
+| ----- | ------ | ------- |
+| `/api/jobs` | `GET` | List jobs plus the allowlisted `scripts` catalog for the picker |
+| `/api/jobs` | `POST` | Create a job — body: `{ name, script, cron, enabled? }` |
+| `/api/jobs/<id>` | `GET` | Read one job |
+| `/api/jobs/<id>` | `PATCH` | Update `name`, `cron`, `enabled`, or `script` |
+| `/api/jobs/<id>` | `DELETE` | Remove the job |
+| `/api/jobs/<id>` | `POST` | Trigger immediately — returns `202` with run info |
+
+`script` must be an allowlisted action ID (same catalog as `GET /api/scripts`). See [API Routes](../reference/api-routes.md) for script run polling (`/api/scripts/runs/<runId>`, `/api/scripts/stream/<runId>`).

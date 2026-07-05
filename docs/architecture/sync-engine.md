@@ -79,6 +79,18 @@ The full update flow usually does four things:
 
 This keeps machines aligned without requiring every tool to be configured by hand.
 
+## Preview Without Applying
+
+`GET /api/sync-preview?kind=skill|agent` builds a read-only diff of what forward sync would write, prune, or leave unchanged per tool directory. The Agents library and Status skill-sync panel use this before you commit to a sync.
+
+| Query param | Effect |
+| ----------- | ------ |
+| `kind=skill` or `kind=agent` | Required — which catalog to preview |
+| `prune=true` | Include entries that would be removed locally |
+| `exclude=a,b` | Skip catalog slugs (same semantics as the eye icon) |
+
+This is **not** the same as `dry_run_scoped_sync` (Actions), which previews staged **content** paths (`notes/`, `tasks/`, `docs/`, `collections/`) for git commit — not skill/agent/MCP tool directories.
+
 ## Safety Rules
 
 - Avoid syncing real secrets into shared config.

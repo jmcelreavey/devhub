@@ -66,6 +66,37 @@ Run skill sync when:
 
 Use the source filter (**All / DevHub / ai-tools / Local**) and the eye control to exclude catalog skills from sync and prune.
 
+### Sync preview before sync
+
+Before syncing skills or agents, the dashboard can show what would change without applying it:
+
+- **Agents → Skills / Agents tabs** — preview runs when you open sync controls (`GET /api/sync-preview?kind=skill` or `?kind=agent`).
+- **Status → Skill sync** — when `GET /api/sync-health` reports `healthy: false`, embedded previews explain missing or drifted entries.
+
+Preview response fields:
+
+| Field | Meaning |
+| ----- | ------- |
+| `targets[].writes` | Files that would be created or updated (`reason`: `missing` or `changed`) |
+| `targets[].prunes` | Local entries that would be removed when prune is enabled |
+| `targets[].unchanged` | Count of entries already in sync |
+| `excluded` | Slugs skipped via the eye icon or `exclude=` query param |
+
+Preview is read-only. It does not replace `dry_run_scoped_sync` (that action previews **content** git paths only). See [Sync Engine](../architecture/sync-engine.md#preview-without-applying).
+
+## MCP tab
+
+Sidebar **Agents** → tab **MCP** manages the MCP catalog:
+
+| Scope | Storage | Synced to tools |
+| ----- | ------- | --------------- |
+| Repo | `mcp/shared/<name>.json` | Yes — committed with DevHub |
+| Personal | `~/.config/devhub/mcp-personal/<name>.json` | Yes — machine-local, never committed |
+
+Use **New server** to create an entry, or **Import** (`GET /api/mcp/local`) to copy from an existing tool config. The eye icon excludes a server from forward sync and prune (same semantics as skills). **Sync MCP** on Actions runs the MCP sync action.
+
+**Catalog vs runtime:** `/api/mcp*` edits JSON configs. `/api/status/mcp` (Status page) only inspects running processes for `mcp/shared/` entries. Plugin and personal servers sync to AI tools but do not appear on Status.
+
 ## Collecting Skills (add to catalog)
 
 On the **Agents → Skills** tab, the catalog list includes **local-only** rows (skills that exist under `~/.codex/skills`, `~/.claude/skills`, etc. but not yet in `skills/shared/`).
