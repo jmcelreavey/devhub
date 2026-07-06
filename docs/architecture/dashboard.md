@@ -15,6 +15,7 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 | Actions      | Safe script runner for maintenance tasks                                     |
 | Status       | Health checks for repo, services, MCP, sync health, merge conflicts, and network access |
 | Setup        | Environment and integration configuration                                    |
+| Repos        | Sibling git checkout discovery, GitHub clone/search, Cursor/GitKraken launch, compose-up, and Repo Learning |
 | Integrations | Calendar, Jira, Datadog, GitHub, and internal ops views                      |
 
 ## Page Pattern

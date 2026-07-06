@@ -30,6 +30,22 @@ When GitHub is configured, DevHub can publish notes and docs as **secret gists**
 
 See [Sharing](../guides/sharing.md) for the full workflow, security model, and troubleshooting.
 
+## Repos Page
+
+`/repos` is the local workspace for sibling git checkouts. DevHub scans `dirname(REPO_ROOT)` — typically `~/Developer` when DevHub lives at `~/Developer/devhub` — for direct-child folders containing `.git`.
+
+| Section | API | Behavior |
+| ------- | --- | -------- |
+| Local repos | `GET /api/repos` | Branch, remote, dirty/unpushed counts, and whether a compose file exists (`docker-compose.yml`, `compose.yaml`, etc.). |
+| GitHub search | `GET /api/repos/github?q=` | Requires `gh auth login`. Shows clone targets; already-cloned repos link to the local card. |
+| Clone | `POST /api/repos/clone` | Body `{ fullName: "owner/repo" }`. Clones into the scan directory using the repo name as the folder. |
+| Remove | `DELETE /api/repos/<name>` | Deletes the local folder. Cannot remove the current DevHub checkout. |
+| Open | `POST /api/repos/<name>/open` | Cursor CLI when available. |
+| GitKraken | `POST /api/repos/<name>/open-gitkraken` | When `GET /api/repos/apps` reports `gitkraken: true`. |
+| Compose | `POST /api/repos/<name>/compose-up` | `docker compose up -d` when the repo has a compose file and Docker is available. |
+
+Repo Learning (`?learn=<name>` or the **Learn** action) only resolves repos from this scan directory. See [Repo Learning](../guides/repo-learning.md).
+
 ## Pull Request Views
 
 The PR views are meant to answer:
