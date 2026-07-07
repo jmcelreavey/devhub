@@ -13,6 +13,7 @@ Most values live in the dashboard's local environment file and can be edited fro
 | `TASKS_DIR`                    | Optional override for daily tasks (default: `REPO_ROOT/tasks`) — point elsewhere to keep personal data out of the tree |
 | `COLLECTIONS_DIR`              | Optional override for checklist collections (default: `REPO_ROOT/collections`)                                         |
 | `REPO_ROOT`                    | DevHub repository root                                                                                                 |
+| `NEXT_PUBLIC_REPO_ROOT`        | Browser-visible mirror of `REPO_ROOT` for client-side terminal commands (PR review notes). Set to the same path as `REPO_ROOT` in `dashboard/.env.local`; not auto-populated by postinstall. Without it, OpenCode PR reviews launched from `/prs` may write notes outside DevHub's `notes/` tree. |
 | `PORT`                         | Dashboard port                                                                                                         |
 | `DEVHUB_BIND_HOST`             | Dashboard bind address (`0.0.0.0` default). Electron maps `0.0.0.0`, `::`, `auto`, and `lan` to `localhost` for its window URL; LAN clients use the proxy URLs from `/setup` |
 | `DEVHUB_BASE_URL`              | Dashboard URL used by dashboard-backed MCP tools. Defaults to `http://localhost:1337`                                  |
@@ -91,7 +92,7 @@ at sync time. See [Plugins](../architecture/plugins.md).
 
 ## OpenCode And OpenChamber
 
-See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md) for how the three local ports work together.
+See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md) for how the local peer ports work together.
 
 | Variable                                | Default                 | Purpose                                                                                                                                                             |
 | --------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -103,8 +104,11 @@ See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md) for how the th
 | `OPENCODE_PORT`                         | `1338`                  | Shared `opencode serve` port                                                                                                                                        |
 | `OPENCODE_BIND_HOST`                    | `0.0.0.0`               | `opencode serve --hostname`                                                                                                                                         |
 | `NEXT_PUBLIC_OPENCODE_PORT`             | `1338`                  | OpenCode iframe URL port in the browser                                                                                                                             |
-| `TERMINAL_PORT`                         | `1339`                  | In-app terminal PTY WebSocket peer (`dashboard/scripts/terminal-pty-server.ts`)                                                                                     |
+| `TERMINAL_PORT`                         | `1339`                  | In-app terminal PTY WebSocket peer (`dashboard/scripts/terminal-pty-server.ts`); localhost-only                                                                                     |
 | `NEXT_PUBLIC_TERMINAL_PORT`             | `1339`                  | Browser-visible terminal port for the docked terminal iframe                                                                                                        |
+| `DEVHUB_DEVELOPER_DIR`                  | `~/Developer`           | Default shell cwd for the in-app terminal when a session does not pass `cwd`                                                                                        |
+| `DEVHUB_TERMINAL_ARGS`                  | `-l` (login shell)      | Override shell args when interactive rc files deadlock in the embedded PTY (e.g. `-f` for zsh)                                                                      |
+| `DEVHUB_TERMINAL_SHELL`                 | `$SHELL`                | Override the shell binary for the terminal peer                                                                                                                     |
 | `DEVHUB_OPENCODE_BINARY`                | —                       | Override path to the `opencode` binary                                                                                                                              |
 | `OPENCHAMBER_BIN`                       | —                       | Override path to the `openchamber` CLI. Otherwise DevHub uses `openchamber` on `PATH`; if neither exists the Chamber tab is hidden.                                 |
 | `OPENCHAMBER_DATA_DIR`                  | `~/.config/openchamber` | OpenChamber's data dir. DevHub seeds its default theme into `<dir>/settings.json` and copies themes into `<dir>/themes`.                                            |
