@@ -79,8 +79,8 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | `GET /api/scripts/history` | Status failed-sync panel, Actions | Returns the last 50 script runs from `~/.local/state/devhub/runs.jsonl`, newest first (`{ runId, script, startedAt, finishedAt?, exitCode? }[]`). Status surfaces the latest failed `commit_dirty_push` or `update_and_sync` run. |
 | `GET /api/scripts/runs/<runId>` | Status failed-sync panel, Actions | Returns `{ runId, script, startedAt, finishedAt?, exitCode?, lines[] }` for a completed or in-progress run. Older history entries may return `404` if output was not captured. |
 | `GET /api/scripts/stream/<runId>` | Actions live output | Server-sent events: `data: "<line>"` per log line; `event: done` with exit code when finished. Replays buffered lines then streams live output. |
-| `GET /api/scripts` | Actions page | Returns the allowlisted script catalog. Content-sync-related IDs include `sync_notes_tasks_push`, `dry_run_scoped_sync`, `commit_dirty_push`, and `update_and_sync`. |
-| `POST /api/scripts` | Top-bar sync indicator, Status page, Actions page | Starts an allowlisted action and returns `202 { runId }`. Same-origin only. `commit_dirty_push` accepts a trimmed `commitMessage`; filter options are accepted only by the script families that use them. |
+| `GET /api/scripts` | Actions page | Returns `{ scripts, catalog }` — full allowlisted action catalog with labels, descriptions, `mutates`, and `effects[]`. |
+| `POST /api/scripts` | Top-bar sync indicator, Status page, Actions page | Starts an allowlisted action and returns `202 { runId }`. Same-origin only. Optional body fields depend on the script — see [Scripts](../reference/scripts.md#in-process-action-catalog). |
 | `GET /api/search` | Command palette content search, `/search` page | `?q=` required. Default vault is notes; `?vault=docs` searches repo docs. Optional `?prefix=` limits to paths under a folder (rejects `..` and leading `/`). Default mode is substring line match; `?mode=semantic` uses TF-IDF over notes vault only (BlockNote + tldraw text) and returns `{ score, preview }` per file. |
 | `GET /api/tasks/weekly` | Weekly Review page (`/review`), MCP `tasks_weekly` | `?end=YYYY-MM-DD` optional (defaults to today). Returns a 7-day window ending on `end`: per-day `created`/`completed`/`abandoned`/`moved` counts, window `totals`, and `slipped` tasks (same text rolled over on ≥3 distinct days). |
 | `GET /api/sidebar/counts` | Sidebar nav badges | Polls every 60s. Returns open task count, Jira ticket count, GitHub PR count (authored + review-requested), stale live-link count (`shared`), and `signatures` for ticket/PR activity badges. Cached server-side for 60s. |
@@ -90,17 +90,36 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | `GET /api/skills/local` | Skills import UI | Scans `~/.claude/skills`, `~/.codex/skills`, and similar tool dirs for import candidates. |
 | `GET/DELETE /api/skills/local/<name>` | Local skill preview/remove | `GET` reads installed copy; `DELETE` removes local installations. |
 | `POST /api/skills/refresh-ai-tools` | Skills ai-tools sync | Pulls upstream ai-tools skills when `AI_TOOLS_SYNC` is enabled. Returns `{ ok, disabled?, lines, … }`; responds with `disabled: true` when `AI_TOOLS_SYNC=0`. |
+| `GET /api/setup/status` | Setup wizard, nav gates, Status service cards | Returns integration readiness booleans (`core`, `github`, `calendar`, `jira`, `datadog`, `bi`, `chamber`, `opencode`, `claude`), `allowLanNetwork`, `hasOpenchamberUiPassword`, and per-integration `*Vars` previews (saved key presence, not secrets). `datadogVars` includes work email and schedule ID for the setup form. `bi` is dependency-free presence detection (`AWS_PROFILE`, `BI_OPS_USER_EMAIL`, `CAPI_REPO_PATH`). |
+| `POST /api/setup/save` | Setup wizard | Persists integration and core settings to `dashboard/.env.local`. Same-origin only. |
+| `POST /api/setup/validate-path` | Setup path fields | Body: `{ path, kind: "repoRoot" \| "notesDir" }`. Returns `{ ok, resolved, message, isGitRepo?, hasNotesIndex? }`. |
+| `POST /api/setup/check/datadog` | Setup Datadog **Test keys** | Validates API + application key pair against the Events API. Unsaved form values take precedence over saved env. |
+| `GET /api/datadog/links` | Datadog page, Today strip | Returns `{ configured, ddSite?, oncall, teamAlerts, eventsToday }` deep links. `configured: false` when no API key. |
+| `GET /api/datadog/oncall` | Datadog page, Today strip, briefing | On-call roster + whether `BI_OPS_USER_EMAIL` is on call. Fail-closed codes: `not_configured`, `needs_application_key`, `needs_email`, `upstream`. |
+| `GET /api/datadog/recent-alerts` | Datadog page | Five most recent on-call and team Slack alert events. Requires application key. |
+| `POST /api/datadog/investigate` | Datadog **Investigate** button | Body: `{ scope?, title?, status?, tags?, timestampMs? }`. Spawns an OpenCode session with a structured prompt. `502` when OpenCode is unreachable. |
+| `GET /api/jira/ticket/<key>/transitions` | Task complete/abandon Jira prompt | Returns `{ key, transitions[] }` — available workflow transitions for the ticket. |
+| `POST /api/jira/ticket/<key>/transition` | Task complete/abandon Jira prompt | Body: `{ transitionId }`. Applies the workflow transition. Same-origin on POST. |
+| `PATCH /api/tasks` (timer) | Task list focus timer | Body: `{ id, timer: "start" \| "stop", date? }`. Starts or stops the focus timer on one task. Only one timer runs per day — starting a new timer stops any other running timer that day. Returns the updated task with `timerStartedAt` / `timeSpentMs`. |
+| `GET /api/tasks/history` | Task history views | Default: `{ date, total, completed, abandoned, moved, modified }[]` per day file, newest first. `?date=YYYY-MM-DD`: `{ date, tasks }` for one day. `?includeTasks=1`: same summaries plus full `tasks[]` per day. |
 
 ## Content Sync Actions
 
-These action IDs are local operational interfaces, not public APIs:
+These action IDs are local operational interfaces, not public APIs. The full catalog (20+ actions) is returned by `GET /api/scripts` as `{ scripts, catalog }`. See [Scripts](../reference/scripts.md#in-process-action-catalog) for the complete list and optional `POST` body fields.
 
 | Script ID | Purpose | Main constraints |
 | --------- | ------- | ---------------- |
 | `sync_notes_tasks_push` | Stage, commit, and push scoped content paths: `notes/`, `collections/`, `tasks/`, and `docs/`. | Requires `main` or `master`; uses an auto-generated `chore(content): ...` commit message. |
 | `dry_run_scoped_sync` | Preview which scoped content files would be committed. | Read-only; requires `main` or `master` because it mirrors the scoped sync guardrails. |
-| `commit_dirty_push` | Stage all tracked and untracked changes, commit with the provided message, and push. | Requires `main` or `master`; intended for dirty files outside scoped content. |
+| `commit_dirty_push` | Stage all tracked and untracked changes, commit with the provided message, and push. | Requires `main` or `master`; accepts `commitMessage` (max 180 chars). |
 | `update_and_sync` | Pull/rebase from origin, sync shared assets/configuration, optionally create a sync commit, and push. | Git operations require a clean tree; the dashboard blocks or redirects when dirty files or conflicts are present. |
+| `pull_core_preview` | Fetch upstream public-core commits and show diff stat — read-only. | Wraps `devhub-update.sh --dry-run`. |
+| `pull_core` | Port upstream public-core changes onto the mirror, then validate + sync. | Requires `main`/`master` and no non-personal uncommitted changes. |
+| `sync_skills`, `sync_agents`, `sync_mcp_servers`, `sync_native_persona`, `sync_opencode_config` | Push repo catalog → local tool dirs/configs. | Optional `prune: true` removes local entries missing from repo. Filter with `skills`/`agents`/`servers` or `exclude*` arrays. |
+| `collect_local_*`, `collect_opencode_config`, `collect_local_persona` | Reverse-sync local tool state into the repo. | `collect_local_persona` requires `personaTool`; `collect_local_mcp_servers` accepts `importMcpTarget: "repo" \| "personal"`. |
+| `validate`, `verify_sync` | Repo integrity and skill readability checks. | Read-only. |
+| `push_unpushed_commits` | Push ahead commits without staging new changes. | `main`/`master` only. |
+| `sync_notes_push` | Legacy notes-only scoped sync. | Prefer `sync_notes_tasks_push` for the full content set. |
 
 ## Contributor Guidance
 

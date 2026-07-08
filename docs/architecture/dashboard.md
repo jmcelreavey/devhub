@@ -68,6 +68,21 @@ Daily tasks live in repo-root `tasks/YYYY-MM-DD.json` (one file per calendar day
 
 Completed and abandoned tasks stay in the file for history and standup; they are not included in reorder requests.
 
+### Focus timer
+
+Each task can track focused work time via `timerStartedAt` (ISO start) and `timeSpentMs` (accumulated). Only **one** timer runs per calendar day — starting a timer on a new task stops any other running timer that day and folds elapsed time into `timeSpentMs`.
+
+| Action | API |
+| ------ | --- |
+| Start timer | `PATCH /api/tasks` with `{ id, timer: "start", date? }` |
+| Stop timer | `PATCH /api/tasks` with `{ id, timer: "stop", date? }` |
+
+Completing, abandoning, or deleting a task settles any running timer into `timeSpentMs`.
+
+### History
+
+`GET /api/tasks/history` returns per-day summaries (`total`, `completed`, `abandoned`, `moved`, `modified`). Add `?date=YYYY-MM-DD` for one day's tasks, or `?includeTasks=1` for summaries plus full task arrays.
+
 ## Weekly Review
 
 The **Review** page (`/review`, desktop nav) is a retrospective view over the last seven calendar days ending on a chosen date.

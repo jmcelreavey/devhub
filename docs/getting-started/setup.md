@@ -71,3 +71,18 @@ Notes AI, Repo Learning generated artifacts, and morning-briefing AI use `AI_API
 ## After Changing Setup
 
 Some settings are picked up immediately. Changes that affect local listeners, such as LAN proxy host or core paths, may require restarting DevHub.
+
+## Setup API
+
+The `/setup` wizard reads and writes configuration through local API routes (same-origin on mutating calls):
+
+| Route | Purpose |
+| ----- | ------- |
+| `GET /api/setup/status` | Drives nav item visibility, integration toggles, and peer-service gates. Returns booleans for each integration plus `*Vars` previews (key presence, not secret values). |
+| `POST /api/setup/save` | Persists core paths, network/LAN settings, and integration credentials to `dashboard/.env.local`. |
+| `POST /api/setup/validate-path` | Validates `repoRoot` or `notesDir` paths before save. |
+| `POST /api/setup/check/datadog` | Tests Datadog API + application keys against the Events API. |
+
+The Status page service cards (`chamber`, `opencode`) also read `chamber` / `opencode` from `GET /api/setup/status` — they render only when the corresponding peer is enabled.
+
+See [API Routes](../reference/api-routes.md) for response field details.

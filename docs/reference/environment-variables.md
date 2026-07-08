@@ -40,15 +40,19 @@ Most values live in the dashboard's local environment file and can be edited fro
 
 ## Datadog
 
-| Variable                    | Purpose                               |
-| --------------------------- | ------------------------------------- |
-| `DATADOG_API_KEY`           | Enables Datadog integration features  |
-| `DATADOG_APPLICATION_KEY`   | Enables event search and counts       |
-| `DD_SITE`                   | Datadog site, such as `datadoghq.com` |
-| `DATADOG_APP_ORIGIN`        | Full Datadog origin override          |
-| `DATADOG_LINK_ONCALL`       | Custom on-call monitor link           |
-| `DATADOG_LINK_TEAM_ALERTS`  | Custom team alerts link               |
-| `DATADOG_LINK_EVENTS_TODAY` | Custom today's events link            |
+| Variable                       | Purpose                                                                 |
+| ------------------------------ | ----------------------------------------------------------------------- |
+| `DATADOG_API_KEY`              | Enables Datadog integration features                                    |
+| `DATADOG_APPLICATION_KEY`      | Enables Events search, On-Call API, and recent-alerts panels            |
+| `DD_SITE`                      | Datadog site, such as `datadoghq.com`                                   |
+| `DATADOG_APP_ORIGIN`           | Full Datadog origin override                                            |
+| `DATADOG_LINK_ONCALL`          | Custom on-call monitor link                                             |
+| `DATADOG_LINK_TEAM_ALERTS`     | Custom team alerts link                                                 |
+| `DATADOG_LINK_EVENTS_TODAY`    | Custom today's events link                                              |
+| `BI_OPS_USER_EMAIL`            | Work email matched against the Datadog on-call roster; also gates BI ops nav when set with other BI vars |
+| `DATADOG_ONCALL_SCHEDULE_ID`   | Optional comma-separated on-call schedule IDs; when unset, DevHub auto-discovers schedules (up to 100) |
+
+See [Datadog integration](../integrations/datadog.md) for on-call behavior and API routes.
 
 ## Notes, Repo Learning, and Briefing AI (Optional)
 
@@ -103,6 +107,7 @@ See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md) for how the lo
 | `NEXT_PUBLIC_OPENCHAMBER_PORT`          | `1336`                  | Chamber iframe URL port in the browser                                                                                                                              |
 | `OPENCODE_PORT`                         | `1338`                  | Shared `opencode serve` port                                                                                                                                        |
 | `OPENCODE_BIND_HOST`                    | `0.0.0.0`               | `opencode serve --hostname`                                                                                                                                         |
+| `OPENCODE_SERVER_PASSWORD`            | —                       | When set, DevHub sends Basic auth (`opencode:<password>`) to the local OpenCode API — used by Datadog **Investigate**, PR review handoffs, and other dashboard→OpenCode calls |
 | `NEXT_PUBLIC_OPENCODE_PORT`             | `1338`                  | OpenCode iframe URL port in the browser                                                                                                                             |
 | `TERMINAL_PORT`                         | `1339`                  | In-app terminal PTY WebSocket peer (`dashboard/scripts/terminal-pty-server.ts`); localhost-only                                                                                     |
 | `NEXT_PUBLIC_TERMINAL_PORT`             | `1339`                  | Browser-visible terminal port for the docked terminal iframe                                                                                                        |
