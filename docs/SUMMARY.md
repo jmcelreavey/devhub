@@ -42,6 +42,7 @@
 - [Sharing](guides/sharing.md)
 - [Scheduled Jobs](guides/scheduled-jobs.md)
 - [Standup](guides/standup.md)
+- [Appraisal](guides/appraisal.md)
 - [PWA](guides/pwa.md)
 - [Theming](guides/theming.md)
 

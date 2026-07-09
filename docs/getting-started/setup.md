@@ -82,7 +82,36 @@ The `/setup` wizard reads and writes configuration through local API routes (sam
 | `POST /api/setup/save` | Persists core paths, network/LAN settings, and integration credentials to `dashboard/.env.local`. |
 | `POST /api/setup/validate-path` | Validates `repoRoot` or `notesDir` paths before save. |
 | `POST /api/setup/check/datadog` | Tests Datadog API + application keys against the Events API. |
+| `POST /api/setup/install-app` | Builds and installs the Electron launcher; streams logs; `409` when a build is already running. |
 
 The Status page service cards (`chamber`, `opencode`) also read `chamber` / `opencode` from `GET /api/setup/status` — they render only when the corresponding peer is enabled.
 
 See [API Routes](../reference/api-routes.md) for response field details.
+
+## DevHub Desktop App (Build & Install)
+
+The **DevHub Desktop App** card on Setup builds and installs the local Electron launcher from your checkout — no sign-in, no sudo.
+
+| Step | What happens |
+| ---- | ------------ |
+| Click **Build & Install** | `POST /api/setup/install-app` streams plain-text build logs |
+| First run | Installs `electron-wrapper` dependencies if `node_modules` is missing |
+| Build | Runs `npm run dist --prefix electron-wrapper` (can take several minutes) |
+| Install | macOS → `/Applications/DevHub.app`; Linux → `~/Applications/DevHub.AppImage` plus a `.desktop` launcher and hicolor icon |
+
+The response stream uses control markers on their own lines:
+
+- `[devhub:installed] <path>` — success; path is where the artifact was placed
+- `[devhub:error] <message>` — failure (build, missing artifact, or install error)
+
+`409` means another build is already in progress (only one `electron-builder` run at a time).
+
+This path builds from **your local repo**. It is separate from [GitHub Releases auto-updates](electron-app.md#auto-updates), which update a previously packaged launcher binary. After Build & Install, the launcher still runs whatever dashboard code is in your checkout.
+
+**Troubleshooting**
+
+| Symptom | Likely cause |
+| ------- | ------------ |
+| Build succeeds but “no installable artifact” | Wrong platform output under `electron-wrapper/release/` (expect `mac-arm64/DevHub.app` or `*.AppImage`) |
+| Generic icon in WSLg Start Menu | Icon is registered by name (`Icon=devhub`); re-login or wait for the desktop DB to refresh |
+| Launcher can't find `npm` / `safe-chain` | GUI `PATH` differs from your shell — see [Electron App — Troubleshooting](electron-app.md#troubleshooting) |

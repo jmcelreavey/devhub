@@ -57,6 +57,8 @@ npm run electron:build
 
 For distributable packages, run the Electron wrapper's packaging command from its own directory.
 
+You can also build and install from the dashboard: **Setup → DevHub Desktop App → Build & Install**. That runs the same `electron-wrapper` dist step and places the artifact on this machine (see [Setup — DevHub Desktop App](setup.md#devhub-desktop-app-build--install)).
+
 ## When To Use It
 
 Use the desktop app if you want:
@@ -112,3 +114,32 @@ Download is opt-in per prompt; `autoInstallOnAppQuit` applies the downloaded upd
 Tagged releases (`v*`) build macOS `.dmg` and Linux `.deb` / `.AppImage` artifacts via `.github/workflows/release.yml` in `electron-wrapper/`.
 
 Publish both the macOS `dmg` and `zip` plus the `electron-builder` update metadata so packaged clients can find new versions. Bump `version` in `electron-wrapper/package.json` before tagging.
+
+## Troubleshooting
+
+### GUI PATH vs terminal PATH
+
+A packaged or dock-launched Electron app inherits a **minimal `PATH`** — not the same environment as an interactive shell where `npm run dev` works. Symptoms:
+
+- Launcher can't start DevHub (`npm` not found).
+- Dashboard `preinstall` fails because `safe-chain` is missing.
+- OpenChamber or other nvm-global CLIs are unreachable.
+
+The launcher mitigates this in `electron-wrapper/src/main.ts`:
+
+| Mitigation | Behavior |
+| ---------- | -------- |
+| nvm resolution | Sources `nvm.sh`, runs `nvm use` from the dashboard directory (reads `.nvmrc`, pinned to Node 22), prepends that node's `bin` to `PATH` |
+| Safe-Chain search | Scans nvm bin dirs plus Homebrew/MacPorts/`~/.local/bin` and appends wherever `safe-chain` is found |
+| Binary lookup | Peer-service commands are resolved beyond the inherited `PATH` using the same fallback dirs |
+
+**Fixes that usually work**
+
+1. Install Safe-Chain globally in the **same Node version** nvm selects for DevHub: `npm install -g @aikidosec/safe-chain@1.1.10` after `nvm use`.
+2. Keep `openchamber` and other launcher-spawned tools on that node's global bin path.
+3. Prefer **Build & Install** from Setup or `npm run electron` from a terminal when debugging — terminals inherit your shell rc; the GUI does not.
+4. Check launcher logs for `[devhub] found safe-chain in …` or the warning when it is still missing.
+
+### Blank window
+
+If Electron shows a blank window but the browser works, confirm the dashboard is listening on the resolved port and that `PORT` in `.env.local` matches. See [Dashboard URL Resolution](#dashboard-url-resolution) above.

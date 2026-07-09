@@ -214,6 +214,8 @@ Press `?` when DevHub (not the Chamber iframe) has focus to see all shortcuts:
 | Shortcut      | Action                  |
 | ------------- | ----------------------- |
 | `g + h`       | Go to Today             |
+| `g + w`       | Go to Work (tasks, Jira, history) |
+| `g + p`       | Go to PRs               |
 | `g + n`       | Go to Notes             |
 | `g + s`       | Go to Status            |
 | `g + a`       | Go to Actions           |

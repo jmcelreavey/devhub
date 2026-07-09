@@ -94,6 +94,7 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | `POST /api/setup/save` | Setup wizard | Persists integration and core settings to `dashboard/.env.local`. Same-origin only. |
 | `POST /api/setup/validate-path` | Setup path fields | Body: `{ path, kind: "repoRoot" \| "notesDir" }`. Returns `{ ok, resolved, message, isGitRepo?, hasNotesIndex? }`. |
 | `POST /api/setup/check/datadog` | Setup Datadog **Test keys** | Validates API + application key pair against the Events API. Unsaved form values take precedence over saved env. |
+| `POST /api/setup/install-app` | Setup **Build & Install** | Same-origin only. Streams `text/plain` build log from `electron-wrapper` (`npm install` if needed, then `npm run dist`). Ends with `[devhub:installed] <path>` or `[devhub:error] …`. `409` when a build is already in progress. |
 | `GET /api/datadog/links` | Datadog page, Today strip | Returns `{ configured, ddSite?, oncall, teamAlerts, eventsToday }` deep links. `configured: false` when no API key. |
 | `GET /api/datadog/oncall` | Datadog page, Today strip, briefing | On-call roster + whether `BI_OPS_USER_EMAIL` is on call. Fail-closed codes: `not_configured`, `needs_application_key`, `needs_email`, `upstream`. |
 | `GET /api/datadog/recent-alerts` | Datadog page | Five most recent on-call and team Slack alert events. Requires application key. |

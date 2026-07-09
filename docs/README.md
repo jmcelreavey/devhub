@@ -54,6 +54,7 @@ These docs are written for day-to-day users and future contributors. They explai
 | [Command Palette](guides/command-palette.md) | Keyboard shortcuts and fast navigation          |
 | [Scheduled Jobs](guides/scheduled-jobs.md)   | Running safe maintenance actions on a schedule  |
 | [Standup](guides/standup.md)                 | Generating daily standup notes                  |
+| [Appraisal](guides/appraisal.md)           | MCP-backed performance review evidence capture  |
 | [PWA](guides/pwa.md)                         | Installing DevHub as a browser app              |
 | [Theming](guides/theming.md)                 | Choosing and customizing the look of DevHub     |
 

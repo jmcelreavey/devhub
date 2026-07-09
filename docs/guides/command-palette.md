@@ -51,6 +51,8 @@ Common shortcuts include:
 | Shortcut      | Action             |
 | ------------- | ------------------ |
 | `g h`         | Go to Today        |
+| `g w`         | Go to Work         |
+| `g p`         | Go to PRs          |
 | `g n`         | Go to Notes        |
 | `g s`         | Go to Status       |
 | `g a`         | Go to Actions      |
@@ -58,8 +60,11 @@ Common shortcuts include:
 | `g k`         | Go to Skills       |
 | `g c`         | Go to Chamber      |
 | `g l`         | Go to Calendar     |
-| `g j`         | Go to Tickets      |
+| `g j`         | Go to Tickets (legacy; Work → Jira tab is the sidebar path) |
+| `g t`         | Go to Tasks history (legacy; Work → History tab) |
 | `g d`         | Go to Datadog      |
+| `g /`         | Go to Search page  |
+| `g f`         | Go to Diagrams     |
 | `Cmd+Shift+O` | Toggle notes panel |
 | `Cmd+Shift+T` | Toggle tasks panel |
 

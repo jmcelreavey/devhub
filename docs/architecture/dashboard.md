@@ -18,6 +18,44 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 | Repos        | Sibling git checkout discovery, GitHub clone/search, Cursor/GitKraken launch, compose-up, and Repo Learning |
 | Integrations | Calendar, Jira, Datadog, GitHub, and internal ops views                      |
 
+## Navigation (2026-06 IA)
+
+The sidebar is driven by `dashboard/lib/nav.ts` — twelve primary destinations grouped into **Workspace**, **Library**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag.
+
+| Sidebar | Route | Notes |
+| ------- | ----- | ----- |
+| Today | `/` | Daily hub |
+| Briefing | `/briefing` | Full morning digest |
+| Calendar | `/calendar` | Gated on `calendar` |
+| Work | `/work` | Tasks + Jira + History tabs (see below) |
+| PRs | `/prs` | Gated on `github` |
+| Review | `/review` | Weekly retrospective; desktop nav only |
+| Library | `/notes` | Top-bar tabs: Notes, Docs, Learnings, Diagrams, Live links |
+| Agents | `/skills` | Skills, persona, MCP catalog |
+| Repos | `/repos` | Desktop nav only |
+| System | `/status` | Top-bar tabs: Status, Ops, Datadog, Actions, Setup |
+| Chamber | `/chamber` | Gated on `chamber` |
+| OpenCode | `/opencode` | Gated on `opencode` |
+| Claude | `/claude` | Gated on `claude`; desktop nav only |
+
+### Merged destinations
+
+**Work** (`/work`) groups “things I owe” in one shell:
+
+| Tab | Content | API |
+| --- | ------- | --- |
+| Tasks | Today's open queue | `/api/tasks` |
+| Jira | Ticket list (same as `/tickets`) | Jira routes; tab hidden until Jira is configured |
+| History | Per-day task summaries | `GET /api/tasks/history?includeTasks=1` |
+
+**Library** and **System** use `SectionTabs` in the top bar when you land on any sibling route (for example `/docs` or `/setup`). Gated tabs (Ops, Datadog, Live links) appear only when setup enables them.
+
+### Legacy routes
+
+Older URLs still work and remain reachable via **⌘K** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/tasks`, `/tickets`, `/search`, `/learnings`, `/diagrams`, `/docs`, `/shared`, `/ops`, `/datadog`, `/actions`, `/setup`. They no longer have permanent sidebar slots.
+
+On mobile, the bottom shelf uses **Work** (`/work`) instead of separate Tasks/Tickets entries.
+
 ## Page Pattern
 
 Most pages follow a simple pattern:
