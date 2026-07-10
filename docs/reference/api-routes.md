@@ -38,7 +38,8 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 ## Common Behavior
 
 - Routes return JSON unless they stream logs or redirect.
-- Mutating routes are intended for same-origin dashboard use.
+- Most mutating routes use a **loose** same-origin check: browser requests without an `Origin` header are allowed; when `Origin` is present it must match the request host.
+- A small set of **sensitive** routes use `requireDashboardAuth` instead: when `DEVHUB_API_SECRET` is set, callers must send `X-DevHub-Secret`; when unset, a **strict** same-origin check applies (missing `Origin` is rejected). The MCP `DashboardClient` sends `Origin` plus the secret when configured.
 - Long-running actions expose progress through server-sent events.
 - Optional integrations should fail clearly when unconfigured.
 
@@ -57,7 +58,9 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | `POST /api/repos/clone` | Repos page **Clone** | Body: `{ fullName: "owner/repo" }`. Clones into the scan directory as a direct child folder. `409` when the folder already exists. |
 | `DELETE /api/repos/<name>` | Repos page **Remove** | Deletes a local clone from the scan directory. Refuses to delete the current DevHub checkout (`400`). |
 | `GET /api/repos/apps` | Repos page action buttons | Cached per process: `{ gitkraken, docker }` — whether GitKraken (macOS app or CLI) and `docker` are available. |
-| `POST /api/repos/<name>/open` | Repos **Open in Cursor** | Spawns the Cursor CLI on the repo path. `503` when `cursor` is not on `PATH`. |
+| `POST /api/repos/<name>/open` | Repos **Open in Cursor**, repo-aware links | Spawns the Cursor CLI on the repo path. Optional JSON body `{ path?, line? }` opens a file (and line) inside the clone — used by `repo://` / `repo:` links in tasks and markdown. `503` when `cursor` is not on `PATH`. |
+| `GET /api/opencode/recap` | MCP `sessions_recap`, `devhub-recap` skill | `requireDashboardAuth`. Query: `sessionId?`, `children=true`, `directory?`. Returns redacted OpenCode session activity (commands, MCP calls, file changes, failures). `409` when multiple root sessions are busy without `sessionId`; `503` when OpenCode is unreachable. |
+| `GET /api/terminal/log?session=<uuid>` | Terminal dock **Copy all output** | Returns `text/plain` session output from the PTY peer's on-disk tee. `400` for invalid ids; `404` when the log file does not exist yet. |
 | `POST /api/repos/<name>/open-gitkraken` | Repos **Open in GitKraken** | macOS uses the `gitkraken://` URL scheme; Linux spawns `gitkraken -p`. |
 | `POST /api/repos/<name>/compose-up` | Repos **Compose up** | Runs `docker compose up -d` in the repo root (120s timeout). Shown only when `hasCompose` is true. |
 | `GET /api/repos/<name>/learn`, `GET /api/repos/<name>/learn/status`, `GET /api/repos/<name>/learn/pack.zip`, `POST /api/repos/<name>/learn/tutor` | Repo Learning panel | Resolves sibling git checkouts only. Deterministic facts work without AI; generated briefs, NotebookLM packs, and tutor responses require `AI_API_KEY`. |

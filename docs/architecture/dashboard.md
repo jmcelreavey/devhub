@@ -56,6 +56,17 @@ Older URLs still work and remain reachable via **⌘K** (`LEGACY_NAV_ITEMS` in `
 
 On mobile, the bottom shelf uses **Work** (`/work`) instead of separate Tasks/Tickets entries.
 
+### Repo-aware links
+
+Tasks, Repo Learning tutor output, and lightweight markdown renderers recognize **`repo://`** and **`repo:`** links to sibling clones under the Repos scan directory:
+
+```text
+repo://my-service/src/auth.ts#L42
+repo:my-service/docs/README.md
+```
+
+Clicking calls `POST /api/repos/<name>/open` with optional `{ path, line }` and opens the target in Cursor (`cursor -g path:line` when a line is present). Invalid repo names or `..` path segments are rejected. Links only work for repos DevHub already tracks — use the Repos page to clone first.
+
 ## Page Pattern
 
 Most pages follow a simple pattern:

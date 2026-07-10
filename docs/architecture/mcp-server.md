@@ -64,12 +64,17 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 | Assets | `assets_list` |
 | Search | `search` |
 | Scripts | `scripts_list`, `scripts_run`, `scripts_run_status`, `scripts_history` |
-| Repos | `repos_list`, `repos_open`, `repos_clone`, `repo_learn` |
+| Repos | `repos_list`, `repos_open`, `repos_clone`, `repo_learn`, `repos_git_status`, `repos_git_commit`, `repos_git_push` |
+| Sessions | `sessions_recap` |
 | Datadog | `datadog_oncall`, `datadog_recent_alerts`, `datadog_investigate` |
 
 BI-specific MCP tools are contributed by the private BI plugin as a separate server; they are not part of the core DevHub server.
 
-Dashboard-backed tools that mutate runtime or external state require `confirm: true` (for example `services_restart`, mutating `scripts_run` entries, and `jira_ticket_transition`). Long-running actions return a `runId`; poll the matching status tool, such as `scripts_run_status`, until the run exits. MCP cannot stream the dashboard's live run log.
+Dashboard-backed tools that mutate runtime or external state require `confirm: true` (for example `services_restart`, mutating `scripts_run` entries, `repos_git_commit`, `repos_git_push`, and `jira_ticket_transition`). Long-running actions return a `runId`; poll the matching status tool, such as `scripts_run_status`, until the run exits. MCP cannot stream the dashboard's live run log.
+
+`repos_git_status`, `repos_git_commit`, and `repos_git_push` run `git` locally in the resolved repo path (by `name` from `repos_list` or an explicit `path`). They do not go through dashboard HTTP beyond path resolution.
+
+Sensitive dashboard routes (currently `GET /api/opencode/recap`) use `requireDashboardAuth`. Set `DEVHUB_API_SECRET` in `dashboard/.env.local` and in the synced MCP env when LAN exposure or non-browser callers need access; `DashboardClient` sends `Origin` and `X-DevHub-Secret` automatically.
 
 ## Storage Model
 
@@ -143,6 +148,17 @@ catalog entries so client configs pick up the new command, args, and environment
 
 Use `status_services`, `status_git`, and `status_mcp` when the dashboard is running. These are dashboard-backed because they inspect live process and repo state.
 
+### Recap an OpenCode session
+
+Use `sessions_recap` (or the `devhub-recap` skill) when you need **what happened** in an OpenCode run — commands, MCP calls, file changes, failures — without prompts or reasoning.
+
+1. Start the dashboard and ensure OpenCode is listening on `OPENCODE_PORT`.
+2. Call `sessions_recap` with `directory` set to the workspace path. Omit `sessionId` to pick the current busy root, then the latest root in that directory.
+3. Pass `includeChildren: true` only when subagent/child sessions matter.
+4. On `409`, multiple root sessions are busy — pass an explicit `sessionId`.
+
+The dashboard route redacts secrets (tokens, env values, URL credentials) before returning JSON.
+
 ### Capture appraisal notes from an agent
 
 Appraisal data lives under `notes/appraisal/` as BlockNote JSON. Filesystem-backed tools work without the dashboard.
@@ -183,6 +199,8 @@ plugin MCP packages. See [Plugin System](plugins.md) and
 | Dashboard-backed tool cannot connect | Confirm `npm run dev` is running and `DEVHUB_BASE_URL` matches the dashboard port. |
 | Filesystem tool reads the wrong content | Check `NOTES_DIR`, `TASKS_DIR`, and `DOCS_DIR` in the synced MCP config. |
 | Work tools return auth/setup errors | GitHub PR tools need `gh auth login`; Jira and Datadog tools need their integrations configured in `/setup` or env vars. |
+| `sessions_recap` returns `401` / `403` | Set `DEVHUB_API_SECRET` in dashboard and MCP env (or call from a same-origin browser tab). Restart the dashboard after changing the secret. |
+| `repos_git_*` can't find the repo | Pass `path` for clones outside the DevHub scan directory, or use `repos_list` names only for siblings under `dirname(REPO_ROOT)`. |
 | MCP client shows an old tool list | Re-run MCP sync, then restart the AI tool so it reloads server metadata. |
 | `tsx` is missing for `devhub` | Run `cd mcp-servers/devhub-server && npm install`. |
 | Plugin MCP server fails to start | Run `npm install` inside the plugin's `mcp-servers/<name>/` package and re-run MCP sync. |

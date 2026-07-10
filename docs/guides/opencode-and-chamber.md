@@ -73,9 +73,23 @@ The docked terminal is opened from the bottom drawer (or programmatically via `d
 
 The PTY server binds **localhost only** and has no authentication — acceptable because DevHub is a local-only tool. Do not expose port `1339` off-host.
 
+Each session's output is **tee'd to disk** (`DEVHUB_TERMINAL_LOG_DIR`, default `<tmpdir>/devhub-terminal-logs/<session-uuid>.log`) so **Copy all output** in the terminal drawer can return the full log via `GET /api/terminal/log?session=<uuid>`. Browser xterm scrollback is RAM-capped; the on-disk log is the source of truth for long PR reviews or builds.
+
 If an interactive shell framework (powerlevel10k, ftazsh, etc.) deadlocks inside the embedded PTY, the server auto-respawns in safe mode after 4 seconds of silence. Override manually with `DEVHUB_TERMINAL_ARGS=-f` or `DEVHUB_TERMINAL_SHELL=/bin/bash` in `dashboard/.env.local`.
 
 For PR review notes to land under `notes/pr-reviews/...`, set `NEXT_PUBLIC_REPO_ROOT` to the same path as `REPO_ROOT` (not auto-written by postinstall). See [GitHub integration](../integrations/github.md#review-note-constraints).
+
+## OpenCode Session Recap
+
+Agents can summarize **what an OpenCode session did** (commands, MCP calls, file edits, failures) without replaying chat:
+
+| Surface | Entry point |
+| ------- | ----------- |
+| MCP | `sessions_recap` on the `devhub` server |
+| Skill | `devhub-recap` — call the tool and return the JSON unchanged |
+| HTTP | `GET /api/opencode/recap` (requires `requireDashboardAuth`; see [API Routes](../reference/api-routes.md)) |
+
+OpenCode must be running on `OPENCODE_PORT`. The recap builder reads the OpenCode HTTP API, redacts secrets, and omits prompts/reasoning. Use `directory` to scope sessions to a workspace; pass `sessionId` when multiple root sessions are busy (`409`).
 
 ## Configuration
 
