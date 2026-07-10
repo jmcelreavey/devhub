@@ -8,8 +8,9 @@
  * stays the single source of truth: it owns the run registry, the loaded
  * secrets, and (for BI) the active AWS profile.
  *
- * Node's fetch sends no `Origin` header, so the dashboard's `isSameOrigin`
- * guard passes for these server-to-server calls without any auth change.
+ * The client now sends an `Origin` header and, when `DEVHUB_API_SECRET` is
+ * set, an `X-DevHub-Secret` header so sensitive dashboard routes can enforce
+ * authentication instead of relying on a loose same-origin check.
  */
 
 export interface DashboardRequestOptions {
@@ -58,6 +59,13 @@ export class DashboardClient {
     return url.toString();
   }
 
+  private authHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { Origin: this.baseUrl };
+    const secret = process.env.DEVHUB_API_SECRET?.trim();
+    if (secret) headers["X-DevHub-Secret"] = secret;
+    return headers;
+  }
+
   /** Perform a request and return the parsed JSON (or text) body. Throws on non-2xx / unreachable. */
   async request<T = unknown>(path: string, opts: DashboardRequestOptions = {}): Promise<T> {
     const { method = "GET", body, query, timeoutMs = 30_000 } = opts;
@@ -69,7 +77,10 @@ export class DashboardClient {
       res = await fetch(url, {
         method,
         signal: controller.signal,
-        headers: body !== undefined ? { "content-type": "application/json" } : undefined,
+        headers: {
+          ...this.authHeaders(),
+          ...(body !== undefined ? { "content-type": "application/json" } : {}),
+        },
         body: body !== undefined ? JSON.stringify(body) : undefined,
       });
     } catch (err) {
