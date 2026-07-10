@@ -5,6 +5,7 @@ import {
   stripExtension,
 } from "../../shared/vault/relative-path.ts";
 import { VAULT_PATHS, type VaultId } from "../../shared/vault/vault-routes.ts";
+import { isRepoLinkHref, openRepoLinkHref } from "@/lib/repo-link";
 
 export interface LinkNavigationContext {
   vaultId: VaultId;
@@ -96,6 +97,11 @@ export function handleBlockNoteLinkClick(
   handlers: BlockNoteLinkClickHandlers,
 ): void {
   event.preventDefault();
+
+  if (isRepoLinkHref(href)) {
+    void openRepoLinkHref(href).catch((e) => console.error(e));
+    return;
+  }
 
   if (isExternalHref(href)) {
     handlers.openExternal(href);

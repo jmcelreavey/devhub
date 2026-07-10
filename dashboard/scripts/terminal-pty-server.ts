@@ -24,13 +24,41 @@ import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { randomUUID } from "node:crypto";
 import { WebSocketServer, type WebSocket, type RawData } from "ws";
 import type { IncomingMessage } from "node:http";
 import * as pty from "node-pty";
+import { terminalLogDir, terminalLogPath } from "../lib/terminal-log";
 
 const PORT = Number.parseInt(process.env.TERMINAL_PORT ?? "1339", 10);
 /** A shell that prints nothing for this long during startup is presumed hung. */
 const HANG_MS = 4_000;
+/** Session logs older than this are pruned on startup. */
+const LOG_TTL_MS = 3 * 24 * 60 * 60 * 1_000;
+
+/**
+ * Ensure the log directory exists and drop stale session logs. The full output
+ * of each session is tee'd here so the dashboard can "copy all output" without
+ * being limited by the browser's in-memory scrollback.
+ */
+function initLogDir(): void {
+  const dir = terminalLogDir();
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const now = Date.now();
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.endsWith(".log")) continue;
+      const file = path.join(dir, name);
+      try {
+        if (now - fs.statSync(file).mtimeMs > LOG_TTL_MS) fs.unlinkSync(file);
+      } catch {
+        /* ignore individual file errors */
+      }
+    }
+  } catch (err) {
+    log(`could not prepare log dir ${dir}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
 
 type ShellMode = "login" | "safe" | "bash";
 
@@ -160,7 +188,9 @@ function requestedCwd(req: IncomingMessage): string | null {
 const wss = new WebSocketServer({ host: "127.0.0.1", port: PORT });
 
 wss.on("listening", () => {
+  initLogDir();
   log(`PTY server listening on ws://127.0.0.1:${PORT} (cwd: ${developerDir()})`);
+  log(`session logs: ${terminalLogDir()}`);
 });
 
 wss.on("error", (err: unknown) => {
@@ -174,6 +204,24 @@ wss.on("connection", (socket: WebSocket, req: IncomingMessage) => {
   let rows = 24;
   let hangTimer: ReturnType<typeof setTimeout> | null = null;
   let closed = false;
+
+  // Tee this session's full output to disk so the dashboard can copy the whole
+  // scrollback later, unbounded by the browser's in-memory buffer. One file per
+  // connection, shared across a watchdog respawn (safe-mode fallback).
+  const sessionId = randomUUID();
+  const logFile = terminalLogPath(sessionId);
+  let logStream: fs.WriteStream | null = null;
+  if (logFile) {
+    try {
+      logStream = fs.createWriteStream(logFile, { flags: "a" });
+      logStream.on("error", (err) => {
+        log(`log write error (${sessionId}): ${err.message}`);
+        logStream = null;
+      });
+    } catch (err) {
+      log(`could not open log ${logFile}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
   const clearHangTimer = () => {
     if (hangTimer) {
@@ -195,13 +243,14 @@ wss.on("connection", (socket: WebSocket, req: IncomingMessage) => {
     });
     term = t;
     log(`session started (mode: ${mode}, shell: ${cmd} ${args.join(" ")}, pid: ${t.pid})`);
-    sendCtl(socket, { type: "session", mode, shell: `${cmd} ${args.join(" ")}`.trim(), cwd });
+    sendCtl(socket, { type: "session", mode, shell: `${cmd} ${args.join(" ")}`.trim(), cwd, sessionId });
 
     t.onData((data) => {
       if (!sawOutput) {
         sawOutput = true;
         clearHangTimer();
       }
+      logStream?.write(data);
       if (socket.readyState === socket.OPEN) socket.send(data);
     });
 
@@ -261,6 +310,8 @@ wss.on("connection", (socket: WebSocket, req: IncomingMessage) => {
     } catch {
       /* already gone */
     }
+    logStream?.end();
+    logStream = null;
   });
 });
 

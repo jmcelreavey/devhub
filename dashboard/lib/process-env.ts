@@ -8,15 +8,29 @@
  * ~/.local/bin       — Linux user installs (pip --user, cargo, etc.)
  * ~/Library/Python   — macOS pip --user console scripts
  */
-export const EXTRA_PATH_SEGMENTS = [
-  "/opt/homebrew/bin",
-  "/usr/local/bin",
-  "/opt/local/bin",
-  `${process.env.HOME ?? ""}/.local/bin`,
-  ...["3.9", "3.10", "3.11", "3.12", "3.13"].map((version) =>
-    `${process.env.HOME ?? ""}/Library/Python/${version}/bin`,
-  ),
-].filter(Boolean);
+import path from "node:path";
+
+const SYSTEM_PATH_SEGMENTS = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"];
+
+export function extraPathSegments(home?: string, executablePath = process.execPath): string[] {
+  return [
+    path.dirname(executablePath),
+    ...SYSTEM_PATH_SEGMENTS,
+    ...(home
+      ? [
+          path.join(home, ".opencode", "bin"),
+          path.join(home, ".npm", "bin"),
+          path.join(home, ".local", "bin"),
+          ...["3.9", "3.10", "3.11", "3.12", "3.13"].map((version) =>
+            path.join(home, "Library", "Python", version, "bin"),
+          ),
+        ]
+      : []),
+  ];
+}
+
+/** Current-process compatibility export; prefer extraPathSegments(env.HOME) for spawned environments. */
+export const EXTRA_PATH_SEGMENTS = extraPathSegments(process.env.HOME);
 
 const NPM_LIFECYCLE_KEYS = [
   "INIT_CWD",
@@ -44,14 +58,13 @@ export function scrubNpmEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.Proces
 }
 
 export function augmentedPathEnv(extra: Partial<NodeJS.ProcessEnv> = {}): NodeJS.ProcessEnv {
-  const base = scrubNpmEnv();
+  const base = { ...scrubNpmEnv(), ...extra };
   const existing = base.PATH ?? "";
-  const segments = existing.split(":").filter(Boolean);
-  const missing = EXTRA_PATH_SEGMENTS.filter((seg) => !segments.includes(seg));
+  const segments = existing.split(path.delimiter).filter(Boolean);
+  const missing = extraPathSegments(base.HOME).filter((segment) => !segments.includes(segment));
 
   return {
     ...base,
-    PATH: missing.length ? [...segments, ...missing].join(":") : existing,
-    ...extra,
+    PATH: [...segments, ...missing].join(path.delimiter),
   };
 }

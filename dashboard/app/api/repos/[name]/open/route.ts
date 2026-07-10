@@ -33,7 +33,7 @@ function resolveCursor(): string | null {
   return null;
 }
 
-export async function POST(_req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, { params }: Params) {
   const { name } = await params;
   if (!/^[a-zA-Z0-9_.\-]+$/.test(name) || name.includes("..")) {
     return NextResponse.json({ error: "Invalid repo name" }, { status: 400 });
@@ -43,16 +43,35 @@ export async function POST(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Repo not found" }, { status: 404 });
   }
 
+  const body = req.headers.get("content-type")?.includes("application/json")
+    ? ((await req.json().catch(() => ({}))) as { path?: unknown; line?: unknown })
+    : {};
+
+  const relativePath = typeof body.path === "string" && body.path.trim() ? body.path.trim() : "";
+  if (relativePath.startsWith("/") || relativePath.includes("..")) {
+    return NextResponse.json({ error: "Invalid repo path" }, { status: 400 });
+  }
+  const targetPath = relativePath ? path.resolve(repoPath, relativePath) : repoPath;
+  if (targetPath !== repoPath && !targetPath.startsWith(`${repoPath}${path.sep}`)) {
+    return NextResponse.json({ error: "Invalid repo path" }, { status: 400 });
+  }
+  if (!fs.existsSync(targetPath)) {
+    return NextResponse.json({ error: "Repo path not found" }, { status: 404 });
+  }
+
+  const line = typeof body.line === "number" && Number.isInteger(body.line) && body.line > 0 ? body.line : undefined;
+
   const cursorBin = resolveCursor();
   if (!cursorBin) {
     return NextResponse.json({ error: "Cursor CLI not found on PATH" }, { status: 503 });
   }
 
-  const child = spawn(cursorBin, [repoPath], {
+  const cursorArgs = line ? ["-g", `${targetPath}:${line}`] : [targetPath];
+  const child = spawn(cursorBin, cursorArgs, {
     detached: true,
     stdio: "ignore",
   });
   child.unref();
 
-  return NextResponse.json({ ok: true, path: repoPath });
+  return NextResponse.json({ ok: true, path: targetPath });
 }

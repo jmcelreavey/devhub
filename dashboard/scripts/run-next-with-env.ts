@@ -9,6 +9,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { envTrimOrDefault, resolveBindHost } from "./load-env-local-into-process";
 import { loadEnvWithOnePasswordFallback } from "./op-secrets";
+import { augmentedPathEnv } from "../lib/process-env";
 
 const dashboardRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -61,7 +62,7 @@ async function main(): Promise<void> {
 
   const child = spawn(process.execPath, [nextCli, sub, ...injected, ...rest], {
     stdio: "inherit",
-    env: process.env,
+    env: augmentedPathEnv(),
     cwd: dashboardRoot,
   });
 

@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import { scrubNpmEnv } from "./process-env";
+import { augmentedPathEnv } from "./process-env";
 
 export function getOpenCodeEnv(): NodeJS.ProcessEnv {
-  return scrubNpmEnv();
+  return augmentedPathEnv();
 }
 
 export function resolveOpenCodeBinary(): string {

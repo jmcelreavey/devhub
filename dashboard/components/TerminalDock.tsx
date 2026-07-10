@@ -1,16 +1,38 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, Plus, RotateCw, TerminalSquare, X } from "lucide-react";
+import { Check, ChevronDown, ClipboardCopy, Plus, RotateCw, TerminalSquare, X } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
 
 const TERMINAL_PORT = process.env.NEXT_PUBLIC_TERMINAL_PORT ?? "1339";
+
+/**
+ * Scrollback lines retained per session. The PTY server streams everything
+ * live and keeps no backlog of its own, so this is the only cap on how far
+ * you can scroll up — the old 8k default filled in ~10 min of chatty output.
+ * ~50k lines is a few hours of history at a modest memory cost; override with
+ * NEXT_PUBLIC_TERMINAL_SCROLLBACK.
+ */
+const TERMINAL_SCROLLBACK = Number.parseInt(
+  process.env.NEXT_PUBLIC_TERMINAL_SCROLLBACK ?? "50000",
+  10,
+);
 
 /** Nerd Font chain — p10k glyphs render instead of tofu. All local fonts. */
 const TERMINAL_FONT =
   '"JetBrainsMono Nerd Font", "MesloLGM Nerd Font", "MesloLGS NF", "Hack Nerd Font", "FiraCode Nerd Font", ui-monospace, Menlo, monospace';
 
 type Status = "connecting" | "open" | "closed";
+
+/**
+ * Lets the dock read a session's output for "copy all". `sessionId` (once the
+ * server has assigned one) points at the complete on-disk log; `getBuffer` is
+ * the RAM-capped xterm scrollback used as a fallback.
+ */
+export interface TerminalReader {
+  getBuffer: () => string;
+  sessionId: () => string | null;
+}
 
 /** Read a CSS custom property off :root, with a fallback. */
 function cssVar(name: string, fallback: string): string {
@@ -27,6 +49,12 @@ interface SessionProps {
   /** Sessions stay mounted when inactive; refit + focus when activated. */
   active: boolean;
   onStatus?: (status: Status) => void;
+  /**
+   * Register a reader for this session's output (called with the reader on
+   * open, and with null on teardown). Lets the dock offer a "copy all" action
+   * for whichever session is active.
+   */
+  onReader?: (reader: TerminalReader | null) => void;
 }
 
 /**
@@ -34,14 +62,19 @@ interface SessionProps {
  * the lifetime of the component — hiding the dock or switching tabs only
  * hides the DOM, so long-running commands keep running.
  */
-export function TerminalSession({ cwd, command, active, onStatus }: SessionProps) {
+export function TerminalSession({ cwd, command, active, onStatus, onReader }: SessionProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<{ fit: () => void } | null>(null);
   const termRef = useRef<{ focus: () => void } | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
   const onStatusRef = useRef(onStatus);
+  const onReaderRef = useRef(onReader);
   useEffect(() => {
     onStatusRef.current = onStatus;
   }, [onStatus]);
+  useEffect(() => {
+    onReaderRef.current = onReader;
+  }, [onReader]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -62,7 +95,7 @@ export function TerminalSession({ cwd, command, active, onStatus }: SessionProps
         fontFamily: TERMINAL_FONT,
         fontSize: 13,
         lineHeight: 1.2,
-        scrollback: 8_000,
+        scrollback: TERMINAL_SCROLLBACK,
         theme: {
           background: cssVar("--bg-surface", "#11161b"),
           foreground: cssVar("--text", "#e6edf3"),
@@ -76,6 +109,18 @@ export function TerminalSession({ cwd, command, active, onStatus }: SessionProps
       fit.fit();
       fitRef.current = fit;
       termRef.current = term;
+
+      // Serialize the whole scrollback (+ viewport) as plain text so the dock
+      // can copy it. translateToString(true) trims trailing whitespace per row.
+      const getText = () => {
+        const buffer = term.buffer.active;
+        const rows: string[] = [];
+        for (let i = 0; i < buffer.length; i++) {
+          rows.push(buffer.getLine(i)?.translateToString(true) ?? "");
+        }
+        return rows.join("\n").replace(/\n+$/, "") + "\n";
+      };
+      onReaderRef.current?.({ getBuffer: getText, sessionId: () => sessionIdRef.current });
 
       const proto = window.location.protocol === "https:" ? "wss" : "ws";
       const params = new URLSearchParams({ shell: "login" });
@@ -106,8 +151,19 @@ export function TerminalSession({ cwd, command, active, onStatus }: SessionProps
       };
       socket.onmessage = (event) => {
         // Control frames (session/fallback/exited) are dock-internal noise —
-        // swallow them; everything else is bytes for the terminal.
-        if (typeof event.data === "string" && event.data.startsWith('{"devhubCtl"')) return;
+        // swallow them; everything else is bytes for the terminal. The session
+        // frame carries the id used to fetch the full on-disk log for copy-all.
+        if (typeof event.data === "string" && event.data.startsWith('{"devhubCtl"')) {
+          try {
+            const ctl = JSON.parse(event.data) as { type?: string; sessionId?: string };
+            if (ctl.type === "session" && typeof ctl.sessionId === "string") {
+              sessionIdRef.current = ctl.sessionId;
+            }
+          } catch {
+            /* ignore malformed control frame */
+          }
+          return;
+        }
         term.write(event.data as string);
       };
       socket.onclose = () => !disposed && onStatusRef.current?.("closed");
@@ -126,6 +182,7 @@ export function TerminalSession({ cwd, command, active, onStatus }: SessionProps
       observer.observe(host);
 
       cleanup = () => {
+        onReaderRef.current?.(null);
         window.removeEventListener("resize", onResize);
         observer.disconnect();
         dataSub.dispose();
@@ -182,6 +239,16 @@ export function TerminalDock() {
   const [tabs, setTabs] = useState<DockTab[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
   const idRef = useRef(0);
+  /** Per-session output readers, keyed by tab id. */
+  const readersRef = useRef(new Map<number, TerminalReader>());
+  const [copied, setCopied] = useState(false);
+  /**
+   * Restart is a two-step action: first click arms, second click confirms.
+   * We track the armed tab by id (not a boolean) so switching tabs implicitly
+   * disarms it — no effect needed.
+   */
+  const [armedRestartId, setArmedRestartId] = useState<number | null>(null);
+  const restartTimerRef = useRef<number | undefined>(undefined);
 
   const addTab = useCallback((detail?: OpenDetail) => {
     const id = ++idRef.current;
@@ -249,8 +316,63 @@ export function TerminalDock() {
     );
   }, []);
 
+  const copyActive = useCallback(async () => {
+    if (activeId == null) return;
+    const reader = readersRef.current.get(activeId);
+    // Prefer the complete on-disk log (unbounded by scrollback); fall back to
+    // the in-memory buffer if the server log isn't reachable.
+    let text = "";
+    const sid = reader?.sessionId() ?? null;
+    if (sid) {
+      try {
+        const res = await fetch(`/api/terminal/log?session=${encodeURIComponent(sid)}`);
+        if (res.ok) text = await res.text();
+      } catch {
+        /* fall back to the buffer below */
+      }
+    }
+    if (!text) text = reader?.getBuffer() ?? "";
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // Clipboard API unavailable (e.g. non-secure context) — fall back to a
+      // hidden textarea + execCommand so copy still works over plain http.
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+      } catch {
+        /* nothing more we can do */
+      }
+      ta.remove();
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  }, [activeId]);
+
+  const handleRestart = useCallback(
+    (id: number) => {
+      if (armedRestartId === id) {
+        window.clearTimeout(restartTimerRef.current);
+        setArmedRestartId(null);
+        restartTab(id);
+      } else {
+        setArmedRestartId(id);
+        restartTimerRef.current = window.setTimeout(() => setArmedRestartId(null), 3000);
+      }
+    },
+    [armedRestartId, restartTab],
+  );
+
+  useEffect(() => () => window.clearTimeout(restartTimerRef.current), []);
+
   if (tabs.length === 0) return null;
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0];
+  const restartArmed = !!active && armedRestartId === active.id;
 
   return (
     <div className="terminal-dock" style={{ display: open ? undefined : "none" }} role="complementary" aria-label="Terminal">
@@ -282,13 +404,14 @@ export function TerminalDock() {
           ))}
           <button
             type="button"
-            className="hub-icon-btn"
+            className="hub-icon-btn terminal-dock-btn"
             onClick={() => addTab()}
             aria-label="New terminal"
             data-tooltip="New terminal"
             data-tooltip-pos="top"
           >
             <Plus size={13} aria-hidden />
+            <span className="hub-btn-label">New</span>
           </button>
         </div>
         <div className="terminal-dock-actions">
@@ -298,24 +421,40 @@ export function TerminalDock() {
           {active && (
             <button
               type="button"
-              className="hub-icon-btn"
-              onClick={() => restartTab(active.id)}
-              aria-label="Restart session"
-              data-tooltip="Restart session"
-              data-tooltip-pos="top"
+              className="hub-icon-btn terminal-dock-btn"
+              onClick={copyActive}
+              aria-label={copied ? "Copied" : "Copy all terminal output"}
+              data-tooltip={copied ? "Copied!" : "Copy all output"}
+              data-tooltip-pos="top-end"
+            >
+              {copied ? <Check size={12} aria-hidden /> : <ClipboardCopy size={12} aria-hidden />}
+              <span className="hub-btn-label">{copied ? "Copied" : "Copy"}</span>
+            </button>
+          )}
+          {active && (
+            <button
+              type="button"
+              className="hub-icon-btn terminal-dock-btn"
+              data-armed={restartArmed || undefined}
+              onClick={() => handleRestart(active.id)}
+              aria-label={restartArmed ? "Click again to confirm restart" : "Restart session"}
+              data-tooltip={restartArmed ? "Click again to confirm" : "Restart session"}
+              data-tooltip-pos="top-end"
             >
               <RotateCw size={12} aria-hidden />
+              <span className="hub-btn-label">{restartArmed ? "Confirm?" : "Restart"}</span>
             </button>
           )}
           <button
             type="button"
-            className="hub-icon-btn"
+            className="hub-icon-btn terminal-dock-btn"
             onClick={() => setOpen(false)}
             aria-label="Hide terminal (sessions keep running)"
             data-tooltip="Hide (⌃`)"
-            data-tooltip-pos="top"
+            data-tooltip-pos="top-end"
           >
             <ChevronDown size={14} aria-hidden />
+            <span className="hub-btn-label">Hide</span>
           </button>
         </div>
       </div>
@@ -330,6 +469,10 @@ export function TerminalDock() {
               command={tab.command}
               active={open && tab.id === active?.id}
               onStatus={(s) => setStatus(tab.id, s)}
+              onReader={(reader) => {
+                if (reader) readersRef.current.set(tab.id, reader);
+                else readersRef.current.delete(tab.id);
+              }}
             />
           </div>
         ))}

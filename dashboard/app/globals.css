@@ -2117,6 +2117,24 @@ a:focus-visible {
   top: calc(100% + 6px);
   transform: none;
 }
+/* Above the trigger, right-aligned — for buttons near the right viewport edge
+   where a centred tooltip (pos="top") would overflow and get clipped. */
+[data-tooltip-pos="top-end"]::after {
+  left: auto;
+  right: 0;
+  bottom: calc(100% + 6px);
+  top: auto;
+  transform: none;
+}
+
+/* Touch devices have no hover, so the hover-only tooltips never appear and can
+   also get "stuck" after a tap. Suppress them where hover is unavailable; the
+   always-visible button labels (.hub-btn-label) carry the meaning instead. */
+@media (hover: none) {
+  [data-tooltip]::after {
+    display: none !important;
+  }
+}
 
 /* ─── Top-of-page navigation progress ──────────────────────── */
 .nav-progress {
@@ -3937,6 +3955,31 @@ body[data-density="compact"] .card {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Action buttons carry an icon plus a text label. The label is hidden on
+   pointer devices (the hover tooltip covers it) and shown on touch, where
+   tooltips don't work. */
+.terminal-dock-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.hub-btn-label {
+  display: none;
+  font-size: 11px;
+  line-height: 1;
+}
+.terminal-dock-btn[data-armed] {
+  color: var(--danger, #f2555a);
+}
+@media (hover: none), (max-width: 640px) {
+  .terminal-dock-btn .hub-btn-label {
+    display: inline;
+  }
+  /* Give the labelled buttons a little breathing room on touch. */
+  .terminal-dock-btn {
+    padding-inline: 8px;
+  }
 }
 .terminal-dock-body {
   flex: 1;

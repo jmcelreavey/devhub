@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { augmentedPathEnv, scrubNpmEnv } from "./process-env";
+import path from "node:path";
+import { augmentedPathEnv, extraPathSegments, scrubNpmEnv } from "./process-env";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -52,8 +53,24 @@ describe("augmentedPathEnv", () => {
 
     expect(env.PATH).toContain("/usr/bin");
     expect(env.PATH).toContain("/opt/homebrew/bin");
+    expect(env.PATH).toContain(path.dirname(process.execPath));
     expect(env.PATH).toContain(`${process.env.HOME}/Library/Python/3.9/bin`);
+    expect(env.PATH).toContain(`${process.env.HOME}/.opencode/bin`);
+    expect(env.PATH).toContain(`${process.env.HOME}/.npm/bin`);
     expect(env.npm_config_prefix).toBeUndefined();
     expect(env.npm_lifecycle_event).toBeUndefined();
+  });
+
+  it("augments an explicitly supplied PATH and HOME", () => {
+    const env = augmentedPathEnv({ HOME: "/tmp/other-home", PATH: "/custom/bin" });
+
+    expect(env.PATH?.split(path.delimiter)).toEqual(
+      expect.arrayContaining(["/custom/bin", "/tmp/other-home/.opencode/bin", "/tmp/other-home/.local/bin"]),
+    );
+  });
+
+  it("does not invent home-relative paths when HOME is absent", () => {
+    expect(extraPathSegments(undefined)).not.toContain("/.local/bin");
+    expect(extraPathSegments(undefined)).not.toContain("/.opencode/bin");
   });
 });

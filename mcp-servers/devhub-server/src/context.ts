@@ -22,8 +22,8 @@ export interface Context {
 
 export function createContext(): Context {
   const repoRoot = process.env.REPO_ROOT || path.resolve(process.cwd(), "../..");
-  const notesDir = process.env.NOTES_DIR || path.resolve(process.cwd(), "notes");
-  const tasksDir = process.env.TASKS_DIR || path.resolve(process.cwd(), "tasks");
+  const notesDir = resolveContentDir("NOTES_DIR", repoRoot, "notes");
+  const tasksDir = resolveContentDir("TASKS_DIR", repoRoot, "tasks");
   const docsDir = resolveContentDir("DOCS_DIR", repoRoot, "docs");
   const baseUrl = process.env.DEVHUB_BASE_URL || "http://localhost:1337";
 

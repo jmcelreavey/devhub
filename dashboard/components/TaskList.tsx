@@ -8,6 +8,7 @@ import { statusTone } from "@/components/JiraWidget";
 import { JiraKeyChip } from "@/components/JiraKeyChip";
 import { AddToJiraModal } from "@/components/AddToJiraModal";
 import { JiraTransitionModal } from "@/components/JiraTransitionModal";
+import { RepoAwareLink } from "@/components/RepoAwareLink";
 import { SeverityPill } from "@/components/ui/Severity";
 import { SortableList } from "@/components/ui/SortableList";
 import { useGridSize } from "@/lib/use-grid-size";
@@ -95,22 +96,7 @@ export function renderTaskTextContent(text: string): ReactNode {
   }
   return parts.map((part, i) => {
     if (part.type === "link") {
-      return (
-        <a
-          key={i}
-          href={part.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            color: "var(--accent)",
-            textDecoration: "underline",
-            textUnderlineOffset: "2px",
-          }}
-        >
-          {part.text}
-        </a>
-      );
+      return <RepoAwareLink key={i} href={part.url ?? "#"}>{part.text}</RepoAwareLink>;
     }
     return <span key={i}>{part.text}</span>;
   });

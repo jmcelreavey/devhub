@@ -15,6 +15,7 @@ import { registerSearchTools } from "./tools/search.ts";
 import { registerScriptsTools } from "./tools/scripts.ts";
 import { registerReposTools } from "./tools/repos.ts";
 import { registerDatadogTools } from "./tools/datadog.ts";
+import { registerSessionTools } from "./tools/sessions.ts";
 
 const server = new McpServer({
   name: "devhub",
@@ -40,6 +41,7 @@ registerSearchTools(server, ctx);
 registerScriptsTools(server, ctx);
 registerReposTools(server, ctx);
 registerDatadogTools(server, ctx);
+registerSessionTools(server, ctx);
 
 async function main() {
   const transport = new StdioServerTransport();

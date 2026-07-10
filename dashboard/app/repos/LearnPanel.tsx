@@ -1,9 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import {
-  AlertCircle,
   BookOpen,
   Check,
   ClipboardCopy,
@@ -20,7 +18,7 @@ import { FetchError } from "@/components/FetchError";
 import { RepoLearnTutor } from "@/components/RepoLearnTutor";
 import { SidePanel } from "@/components/SidePanel";
 import { SimpleMarkdown } from "@/components/SimpleMarkdown";
-import { REPO_LEARN_NOT_CONFIGURED_MSG, repoLearnApiPath } from "@/lib/repo-learn-constants";
+import { repoLearnApiPath } from "@/lib/repo-learn-constants";
 import { openTerminal, opencodeCliCommand } from "@/lib/terminal-launch";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { useLive } from "@/lib/use-fetch";
@@ -126,7 +124,7 @@ export function LearnPanel({
     });
   }
 
-  const aiBlocked = data && !data.aiConfigured;
+  const aiConfigured = data?.aiConfigured === true;
   const aiError = data?.code === "error";
   const briefLoading = data?.aiConfigured && !artifacts?.briefMarkdown && !aiError && (initialLoading || refreshing);
 
@@ -163,21 +161,6 @@ export function LearnPanel({
         )}
         {context && (
           <>
-            {aiBlocked && (
-              <div className="card card-body flex gap-2 items-start" style={{ borderColor: "var(--warning)" }}>
-                <AlertCircle size={14} style={{ color: "var(--warning)", marginTop: 2 }} aria-hidden />
-                <div>
-                  <div className="text-xs font-medium" style={{ color: "var(--text)" }}>AI not configured</div>
-                  <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-                    {REPO_LEARN_NOT_CONFIGURED_MSG} Repo facts below are still available.{" "}
-                    <Link href="/setup" className="underline underline-offset-2" style={{ color: "var(--accent)" }}>
-                      Open Setup
-                    </Link>
-                  </p>
-                </div>
-              </div>
-            )}
-
             <div className="card card-body">
               <div className="text-xs font-medium mb-2" style={{ color: "var(--text-muted)" }}>Detected facts</div>
               <p className="text-xs leading-relaxed mb-2" style={{ color: "var(--text-subtle)" }}>{context.headline}</p>
@@ -192,104 +175,106 @@ export function LearnPanel({
               </div>
             </div>
 
-            <div className="card card-body">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
-                    <Sparkles size={14} aria-hidden /> Generated brief
+            {aiConfigured && (
+              <>
+                <div className="card card-body">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
+                        <Sparkles size={14} aria-hidden /> Generated brief
+                      </div>
+                      {artifacts && (
+                        <p className="mt-1 text-xs" style={{ color: "var(--text-subtle)" }}>
+                          {artifacts.cached ? "Cached" : "Fresh"} · {new Date(artifacts.generatedAt).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      style={{ fontSize: 12, padding: "3px 8px" }}
+                      disabled={refreshing || !data?.aiConfigured}
+                      onClick={() => void refreshLearn()}
+                    >
+                      <RefreshCw size={12} className={refreshing ? "animate-spin" : undefined} /> Refresh
+                    </button>
                   </div>
-                  {artifacts && (
-                    <p className="mt-1 text-xs" style={{ color: "var(--text-subtle)" }}>
-                      {artifacts.cached ? "Cached" : "Fresh"} · {new Date(artifacts.generatedAt).toLocaleString()}
-                    </p>
+                  {aiError && (
+                    <p className="mt-2 text-xs" style={{ color: "var(--danger)" }}>{data?.message}</p>
+                  )}
+                  {artifacts?.briefMarkdown ? (
+                    <div className="mt-3 rounded p-3" style={{ background: "var(--bg-elevated)" }}>
+                      <SimpleMarkdown text={artifacts.briefMarkdown} compact />
+                    </div>
+                  ) : briefLoading ? (
+                    <BriefLoading />
+                  ) : null}
+                  {artifacts?.briefMarkdown && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <PanelAction
+                        icon={<ClipboardCopy size={12} />}
+                        copied={copied === "brief"}
+                        label="Copy brief"
+                        onClick={() => copyText("brief", artifacts.briefMarkdown)}
+                      />
+                      <PanelAction
+                        icon={<TerminalSquare size={12} />}
+                        copied={copied === "opencode"}
+                        label="OpenCode handoff"
+                        onClick={handoffToOpenCode}
+                      />
+                    </div>
                   )}
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  style={{ fontSize: 12, padding: "3px 8px" }}
-                  disabled={refreshing || !data?.aiConfigured}
-                  onClick={() => void refreshLearn()}
-                >
-                  <RefreshCw size={12} className={refreshing ? "animate-spin" : undefined} /> Refresh
-                </button>
-              </div>
-              {aiError && (
-                <p className="mt-2 text-xs" style={{ color: "var(--danger)" }}>{data?.message}</p>
-              )}
-              {artifacts?.briefMarkdown ? (
-                <div className="mt-3 rounded p-3" style={{ background: "var(--bg-elevated)" }}>
-                  <SimpleMarkdown text={artifacts.briefMarkdown} compact />
-                </div>
-              ) : briefLoading ? (
-                <BriefLoading />
-              ) : aiBlocked ? (
-                <p className="mt-2 text-xs" style={{ color: "var(--text-subtle)" }}>Brief requires an AI provider.</p>
-              ) : null}
-              {artifacts?.briefMarkdown && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <PanelAction
-                    icon={<ClipboardCopy size={12} />}
-                    copied={copied === "brief"}
-                    label="Copy brief"
-                    onClick={() => copyText("brief", artifacts.briefMarkdown)}
-                  />
-                  <PanelAction
-                    icon={<TerminalSquare size={12} />}
-                    copied={copied === "opencode"}
-                    label="OpenCode handoff"
-                    onClick={handoffToOpenCode}
-                  />
-                </div>
-              )}
-            </div>
 
-            <div className="card card-body">
-              <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
-                <BookOpen size={14} aria-hidden /> Quiz me
-              </div>
-              <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-                Socratic tutor — answer questions, get follow-ups until something you don&apos;t know gets explained.
-              </p>
-              <div className="mt-3">
-                {repo && <RepoLearnTutor repoName={repo.name} aiConfigured={data?.aiConfigured === true} />}
-              </div>
-            </div>
+                <div className="card card-body">
+                  <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
+                    <BookOpen size={14} aria-hidden /> Quiz me
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+                    Socratic tutor — answer questions, get follow-ups until something you don&apos;t know gets explained.
+                  </p>
+                  <div className="mt-3">
+                    {repo && <RepoLearnTutor repoName={repo.name} aiConfigured={data?.aiConfigured === true} />}
+                  </div>
+                </div>
 
-            <div className="card card-body">
-              <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
-                <FileText size={14} aria-hidden /> NotebookLM source pack
-              </div>
-              <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-                Download a ZIP of curated Markdown sources. NotebookLM does not accept ZIP natively — use the NotebookLM Tools extension or unzip and upload files manually (free plan: 50 sources).
-              </p>
-              {artifacts?.packFiles && artifacts.packFiles.length > 0 && (
-                <ul className="mt-2 space-y-0.5 text-xs font-mono" style={{ color: "var(--text-subtle)" }}>
-                  {artifacts.packFiles.map((file) => (
-                    <li key={file.path}>
-                      {file.path} ({formatBytes(file.sizeBytes)})
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <PanelAction
-                  icon={<FileDown size={12} />}
-                  copied={false}
-                  label="Download ZIP"
-                  onClick={() => void downloadPackZip()}
-                  disabled={!artifacts?.packFiles.length}
-                />
-                {artifacts?.overviewMarkdown && (
-                  <PanelAction
-                    icon={<ClipboardCopy size={12} />}
-                    copied={copied === "overview"}
-                    label="Copy overview"
-                    onClick={() => copyText("overview", artifacts.overviewMarkdown!)}
-                  />
-                )}
-              </div>
-            </div>
+                <div className="card card-body">
+                  <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
+                    <FileText size={14} aria-hidden /> NotebookLM source pack
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+                    Download a ZIP of curated Markdown sources. NotebookLM does not accept ZIP natively — use the NotebookLM Tools extension or unzip and upload files manually (free plan: 50 sources).
+                  </p>
+                  {artifacts?.packFiles && artifacts.packFiles.length > 0 && (
+                    <ul className="mt-2 space-y-0.5 text-xs font-mono" style={{ color: "var(--text-subtle)" }}>
+                      {artifacts.packFiles.map((file) => (
+                        <li key={file.path}>
+                          {file.path} ({formatBytes(file.sizeBytes)})
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <PanelAction
+                      icon={<FileDown size={12} />}
+                      copied={false}
+                      label="Download ZIP"
+                      onClick={() => void downloadPackZip()}
+                      disabled={!artifacts?.packFiles.length}
+                    />
+                    {artifacts?.overviewMarkdown && (
+                      <PanelAction
+                        icon={<ClipboardCopy size={12} />}
+                        copied={copied === "overview"}
+                        label="Copy overview"
+                        onClick={() => copyText("overview", artifacts.overviewMarkdown!)}
+                      />
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </>
         )}
       </div>

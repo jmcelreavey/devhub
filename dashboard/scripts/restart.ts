@@ -6,6 +6,13 @@
  * `next build` while a server is already running, the running instance keeps
  * serving the old chunks and any new pages 500. This script makes the
  * rebuild-and-relaunch flow a single command.
+ *
+ * Process discovery: multiple processes can listen on the port at once (the
+ * next server on localhost plus the LAN port proxy on the machine's LAN IP).
+ * We kill every *next* listener — matched by command line — and leave the LAN
+ * proxy alone, then verify the relaunch with a real HTTP probe rather than
+ * "some process is on the port" (which used to report success while the OLD
+ * server was still the one listening).
  */
 import { spawn, spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
@@ -20,58 +27,92 @@ loadEnvLocalIntoProcessIfUnset(dashboardRoot);
 const port = envTrimOrDefault("PORT", "1337");
 const host = resolveBindHost(envTrimOrDefault("DEVHUB_BIND_HOST", "0.0.0.0"));
 
-function lineListeningOnPort(ssStdout: string, portArg: string): string | undefined {
-  const portBound = new RegExp(`:${portArg}\\b`);
-  return ssStdout.split("\n").find((l) => l.includes("LISTEN") && portBound.test(l));
-}
-
 function log(msg: string): void {
   process.stdout.write(`[restart] ${msg}\n`);
 }
 
-function tryPortLookupLinux(portArg: string): string | null {
-  const out = spawnSync("ss", ["-tlnp"], { encoding: "utf-8" });
-  if (out.status !== 0 || !out.stdout) return null;
-  return lineListeningOnPort(out.stdout, portArg) ?? null;
-}
+/** Every pid listening on the port (there can be several: next + LAN proxy). */
+function listListenerPids(portArg: string): number[] {
+  const pids = new Set<number>();
 
-function tryPortLookupMac(portArg: string): string | null {
-  const out = spawnSync("lsof", ["-nP", `-tiTCP:${portArg}`, "-sTCP:LISTEN"], { encoding: "utf-8" });
-  if (out.status !== 0 || !out.stdout?.trim()) return null;
-  return out.stdout.trim();
-}
-
-function findExistingServer(): number | null {
-  const line = tryPortLookupLinux(port) ?? tryPortLookupMac(port);
-  if (!line) return null;
-  if (process.platform === "darwin") {
-    const pid = line.trim().split("\n")[0]?.trim();
-    return pid ? Number.parseInt(pid, 10) : null;
+  // Linux: ss -tlnp lines carry users:(("cmd",pid=N,fd=M),…)
+  const ss = spawnSync("ss", ["-tlnp"], { encoding: "utf-8" });
+  if (ss.status === 0 && ss.stdout) {
+    const portBound = new RegExp(`:${portArg}\\b`);
+    for (const line of ss.stdout.split("\n")) {
+      if (!line.includes("LISTEN") || !portBound.test(line)) continue;
+      for (const m of line.matchAll(/pid=(\d+)/g)) pids.add(Number.parseInt(m[1], 10));
+    }
   }
-  const match = line.match(/pid=(\d+)/);
-  return match ? Number.parseInt(match[1], 10) : null;
-}
 
-function portListening(line: string | null): boolean {
-  return line !== null;
-}
-
-function checkPortListening(portArg: string): boolean {
-  return portListening(tryPortLookupLinux(portArg) ?? tryPortLookupMac(portArg));
-}
-
-async function waitForPort(timeoutMs: number): Promise<boolean> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    if (checkPortListening(port)) return true;
-    await new Promise((r) => setTimeout(r, 250));
+  // macOS (and Linux fallback): lsof prints one pid per line.
+  const lsof = spawnSync("lsof", ["-nP", `-tiTCP:${portArg}`, "-sTCP:LISTEN"], { encoding: "utf-8" });
+  if (lsof.status === 0 && lsof.stdout?.trim()) {
+    for (const line of lsof.stdout.trim().split("\n")) {
+      const pid = Number.parseInt(line.trim(), 10);
+      if (Number.isFinite(pid)) pids.add(pid);
+    }
   }
-  return false;
+
+  return [...pids];
+}
+
+function commandFor(pid: number): string {
+  const out = spawnSync("ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf-8" });
+  return out.status === 0 ? (out.stdout ?? "").trim() : "";
+}
+
+/** Is this listener one of ours to restart (next itself, or its launcher)? */
+function isNextListener(command: string): boolean {
+  return /next-server|next start|run-next-with-env|next\/dist\/bin\/next/.test(command);
+}
+
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function stopPids(pids: number[]): Promise<void> {
+  for (const pid of pids) {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      log(`could not signal pid ${pid} — continuing anyway`);
+    }
+  }
+  // Give them up to 5s to exit cleanly, then force-kill stragglers.
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline && pids.some(pidAlive)) {
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  for (const pid of pids.filter(pidAlive)) {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // already gone
+    }
+  }
+}
+
+/** True once the server actually answers HTTP on localhost (any status). */
+async function httpUp(): Promise<boolean> {
+  try {
+    await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(2_000) });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function main(): Promise<void> {
-  log("running next build…");
-  const build = spawnSync("npx", ["next", "build"], {
+  // `npm run build`, not bare `next build`: the script pins --webpack (the
+  // Turbopack CSS-cache issues) and the prebuild hook syncs plugins/skills.
+  log("running npm run build…");
+  const build = spawnSync("npm", ["run", "build"], {
     cwd: dashboardRoot,
     stdio: "inherit",
   });
@@ -80,38 +121,46 @@ async function main(): Promise<void> {
     process.exit(build.status ?? 1);
   }
 
-  const existing = findExistingServer();
-  if (existing) {
-    log(`stopping existing server (pid ${existing})…`);
-    try {
-      process.kill(existing, "SIGTERM");
-      await new Promise((r) => setTimeout(r, 1500));
-      try {
-        process.kill(existing, 0);
-        process.kill(existing, "SIGKILL");
-      } catch {
-        // already gone
-      }
-    } catch {
-      log(`could not stop pid ${existing} — continuing anyway`);
-    }
+  const listeners = listListenerPids(port);
+  const nextPids = listeners.filter((pid) => isNextListener(commandFor(pid)));
+  const otherPids = listeners.filter((pid) => !nextPids.includes(pid));
+  if (otherPids.length) {
+    log(`leaving non-next listeners alone (pids ${otherPids.join(", ")} — e.g. the LAN port proxy)`);
+  }
+  if (nextPids.length) {
+    log(`stopping existing next server${nextPids.length > 1 ? "s" : ""} (pid ${nextPids.join(", ")})…`);
+    await stopPids(nextPids);
   }
 
   log(`starting next on http://${host}:${port}…`);
+  let childExited: number | null = null;
   const child = spawn("npx", ["next", "start", "-p", port, "-H", host], {
     cwd: dashboardRoot,
     stdio: "ignore",
     detached: true,
     env: process.env,
   });
+  child.on("exit", (code) => {
+    childExited = code ?? 1;
+  });
   child.unref();
 
-  const ok = await waitForPort(15_000);
-  if (!ok) {
-    log(`server did not bind to ${host}:${port} within 15s — check logs`);
-    process.exit(1);
+  // Probe the server itself — merely seeing "a listener on the port" is not
+  // enough (a stale or unrelated process could be holding it).
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    if (childExited !== null) {
+      log(`next exited with code ${childExited} before binding — is something else on ${port}?`);
+      process.exit(1);
+    }
+    if (await httpUp()) {
+      log(`up at http://${host}:${port} (pid ${child.pid})`);
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 300));
   }
-  log(`up at http://${host}:${port} (pid ${child.pid})`);
+  log(`server did not answer on 127.0.0.1:${port} within 30s — check logs`);
+  process.exit(1);
 }
 
 main().catch((err) => {

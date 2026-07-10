@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
@@ -83,16 +82,9 @@ export function RepoLearnTutor({ repoName, aiConfigured }: RepoLearnTutorProps) 
     [repoName, toast],
   );
 
-  if (!aiConfigured) {
-    return (
-      <p className="text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-        Configure an AI provider to use the Socratic tutor.{" "}
-        <Link href="/setup" className="underline underline-offset-2" style={{ color: "var(--accent)" }}>
-          Open Setup
-        </Link>
-      </p>
-    );
-  }
+  // AI-only feature: the parent hides this entirely when AI is unconfigured.
+  // Guard defensively so it never renders without a working provider.
+  if (!aiConfigured) return null;
 
   return (
     <div className="flex flex-col gap-3">

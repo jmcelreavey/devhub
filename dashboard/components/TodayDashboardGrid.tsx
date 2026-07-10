@@ -44,17 +44,19 @@ export interface TodayDashboardGridProps {
   showBriefing: boolean;
   hasCalendar: boolean;
   hasJira: boolean;
+  hasGithub: boolean;
   showDatadog: boolean;
   collapsedSlots: ReadonlySet<TodayGridSlotId>;
   slots: TodayDashboardSlots;
 }
 
-function buildVisibleSet(props: Pick<TodayDashboardGridProps, "showWelcome" | "showBriefing" | "hasCalendar" | "hasJira" | "showDatadog">): Set<TodayGridSlotId> {
-  const s = new Set<TodayGridSlotId>(["main", "github"]);
+function buildVisibleSet(props: Pick<TodayDashboardGridProps, "showWelcome" | "showBriefing" | "hasCalendar" | "hasJira" | "hasGithub" | "showDatadog">): Set<TodayGridSlotId> {
+  const s = new Set<TodayGridSlotId>(["main"]);
   if (props.showWelcome) s.add("welcome");
   if (props.showBriefing) s.add("briefing");
   if (props.hasCalendar) s.add("calendar");
   if (props.hasJira) s.add("jira");
+  if (props.hasGithub) s.add("github");
   if (props.showDatadog) s.add("datadog");
   return s;
 }
@@ -262,9 +264,11 @@ function TodayDashboardGridBody({
           {slots.jira}
         </div>
       ) : null}
-      <div key="github" ref={setSlotRef("github")} className="today-grid-slot" data-today-grid-slot="github">
-        {slots.github}
-      </div>
+      {visible.has("github") ? (
+        <div key="github" ref={setSlotRef("github")} className="today-grid-slot" data-today-grid-slot="github">
+          {slots.github}
+        </div>
+      ) : null}
       {visible.has("datadog") ? (
         <div key="datadog" ref={setSlotRef("datadog")} className="today-grid-slot" data-today-grid-slot="datadog">
           {slots.datadog}
@@ -281,13 +285,14 @@ export function TodayDashboardGrid({
   showBriefing,
   hasCalendar,
   hasJira,
+  hasGithub,
   showDatadog,
   collapsedSlots,
   slots,
 }: TodayDashboardGridProps) {
   const visible = useMemo(
-    () => buildVisibleSet({ showWelcome, showBriefing, hasCalendar, hasJira, showDatadog }),
-    [showWelcome, showBriefing, hasCalendar, hasJira, showDatadog],
+    () => buildVisibleSet({ showWelcome, showBriefing, hasCalendar, hasJira, hasGithub, showDatadog }),
+    [showWelcome, showBriefing, hasCalendar, hasJira, hasGithub, showDatadog],
   );
 
   const visibleKey = useMemo(() => [...visible].sort().join(","), [visible]);

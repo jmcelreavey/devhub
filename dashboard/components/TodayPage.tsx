@@ -286,6 +286,7 @@ export function TodayPage() {
   useMarkPrsSeen();
   const hasCalendar = !cal?.error;
   const hasJira = jira?.configured === true && (jira?.tickets?.length ?? 0) > 0;
+  const hasGithub = prsProbe?.configured === true;
   const datadogTodayVisible = useDatadogTodayPanelVisible();
   const welcomeVisible = useWelcomeCardVisible(tasksTotal);
   const gridReady = welcomeVisible !== null && cal !== undefined && jira !== undefined;
@@ -571,6 +572,7 @@ export function TodayPage() {
         showBriefing={showBriefing}
         hasCalendar={hasCalendar}
         hasJira={hasJira}
+        hasGithub={hasGithub}
         showDatadog={datadogTodayVisible}
         collapsedSlots={collapsedSlots}
         slots={{

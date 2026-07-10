@@ -47,6 +47,7 @@ describe("getOpenCodeEnv", () => {
     const env = getOpenCodeEnv();
 
     expect(env.OPENCODE_PORT).toBe("1338");
+    expect(env.PATH).toContain(`${process.env.HOME}/.opencode/bin`);
     expect(env.npm_config_prefix).toBeUndefined();
     expect(env.npm_lifecycle_event).toBeUndefined();
     expect(env.npm_package_json).toBeUndefined();
