@@ -58,7 +58,7 @@ On mobile, the bottom shelf uses **Work** (`/work`) instead of separate Tasks/Ti
 
 ### Repo-aware links
 
-Tasks, Repo Learning tutor output, and lightweight markdown renderers recognize **`repo://`** and **`repo:`** links to sibling clones under the Repos scan directory:
+Tasks, BlockNote notes, Repo Learning tutor output, and lightweight markdown renderers recognize **`repo://`** and **`repo:`** links to sibling clones under the Repos scan directory:
 
 ```text
 repo://my-service/src/auth.ts#L42

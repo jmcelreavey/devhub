@@ -19,6 +19,7 @@ Most values live in the dashboard's local environment file and can be edited fro
 | `DEVHUB_BASE_URL`              | Dashboard URL used by dashboard-backed MCP tools. Defaults to `http://localhost:1337`                                  |
 | `DEVHUB_API_SECRET`            | Optional shared secret for sensitive dashboard routes (e.g. OpenCode recap). When set, callers must send `X-DevHub-Secret`; when unset, those routes require a strict same-origin `Origin` header (browser-only). Set the same value in the MCP server's env when using `sessions_recap`. Generate with `openssl rand -hex 32`. |
 | `DEVHUB_LAN_PROXY_HOST`        | Optional LAN proxy host. Use `auto` to detect a physical LAN IPv4 and exclude Tailscale CGNAT (`100.64.0.0/10`)        |
+| `DEVHUB_ALLOWED_DEV_ORIGINS`   | Comma-separated extra `allowedDevOrigins` for `npm run dev` (Next.js 16+). Default allowlist covers common private LAN ranges (`192.168.*.*`, `10.*.*.*`, etc.). Add custom host patterns when opening the dashboard from a phone/tablet at `http://<lan-ip>:1337` and the UI never finishes loading — see [Setup — LAN access](getting-started/setup.md#localhost-vs-lan-access). |
 | `OPENCHAMBER_HOST`             | OpenChamber local bind address. LAN access is proxied when enabled                                                     |
 | `NEXT_PUBLIC_OPENCHAMBER_PORT` | Browser-visible OpenChamber port                                                                                       |
 
@@ -116,6 +117,7 @@ See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md) for how the lo
 | `DEVHUB_TERMINAL_ARGS`                  | `-l` (login shell)      | Override shell args when interactive rc files deadlock in the embedded PTY (e.g. `-f` for zsh)                                                                      |
 | `DEVHUB_TERMINAL_SHELL`                 | `$SHELL`                | Override the shell binary for the terminal peer                                                                                                                     |
 | `DEVHUB_TERMINAL_LOG_DIR`               | `<tmpdir>/devhub-terminal-logs` | Per-session PTY output logs for **Copy all output** (`GET /api/terminal/log`)                                                                                |
+| `NEXT_PUBLIC_TERMINAL_SCROLLBACK`       | `50000`                         | Max xterm scrollback lines per terminal session in the browser. The on-disk log (`DEVHUB_TERMINAL_LOG_DIR`) is still the source of truth for **Copy all output** on long runs. |
 | `DEVHUB_OPENCODE_BINARY`                | —                       | Override path to the `opencode` binary                                                                                                                              |
 | `OPENCHAMBER_BIN`                       | —                       | Override path to the `openchamber` CLI. Otherwise DevHub uses `openchamber` on `PATH`; if neither exists the Chamber tab is hidden.                                 |
 | `OPENCHAMBER_DATA_DIR`                  | `~/.config/openchamber` | OpenChamber's data dir. DevHub seeds its default theme into `<dir>/settings.json` and copies themes into `<dir>/themes`.                                            |
@@ -133,8 +135,9 @@ Used by `dashboard/scripts/op-secrets.ts` at dev/start to fill missing secrets i
 | `DEVHUB_OP_VAULT`   | —        | Vault name when multiple items match the title          |
 | `DEVHUB_OP_REFRESH` | —        | Set to `1` to force re-fetch (ignores sync marker)      |
 | `DEVHUB_OP_CACHE`   | —        | Set to `0` to load secrets without writing `.env.local` |
+| `DEVHUB_OP_SYNC_LOCAL` | —     | Set to `1` to also pull **local-only** keys (paths, ports, bind hosts) from 1Password when unset in env. Off by default so a new machine's existing paths are never overwritten. Useful for identical multi-machine setups. |
 
-Requires the `op` CLI installed and signed in. Non-secret keys (paths, bind hosts, ports, `AWS_PROFILE`, URLs/model names, etc.) are never loaded from 1Password.
+Requires the `op` CLI installed and signed in. Non-secret keys (paths, bind hosts, ports, `AWS_PROFILE`, URLs/model names, etc.) are never loaded from 1Password unless `DEVHUB_OP_SYNC_LOCAL=1`.
 
 Suggested `devhub` item fields for shared local secrets:
 
