@@ -64,7 +64,7 @@ npm run doctor
 npm install
 ```
 
-The root install delegates to the dashboard install. It also prepares local directories and hooks used by DevHub.
+The root install delegates to the dashboard install. Dashboard `postinstall` (`dashboard/scripts/postinstall.ts`) bootstraps `dashboard/.env.local` from `.env.example`, creates notes archive dirs, wires `.githooks/pre-push`, seeds OpenChamber themes, and materialises plugin branding. Postinstall is skipped in CI or when `DEVHUB_SKIP_POSTINSTALL` is set — use the [full bootstrap](#full-bootstrap) in that case.
 
 ## Run The Dashboard
 

@@ -156,6 +156,16 @@ Suggested `devhub` item fields for shared local secrets:
 | `NOTION_API_KEY`          | Shell Notion workflows          |
 | `ITERABLE_API_KEY`        | Shell Iterable workflows        |
 
+## Development And CI
+
+Optional overrides for install, verify, and emergency pushes. These are not needed for normal day-to-day use.
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `DEVHUB_SKIP_POSTINSTALL` | — | Set to any truthy value to skip `dashboard/scripts/postinstall.ts` (also skipped when `CI` is set). Postinstall bootstraps `.env.local`, notes archive dirs, git hooks, OpenChamber theme seeding, and plugin branding materialisation — use `bash scripts/install.sh` for the full bootstrap when postinstall is disabled. |
+| `DEVHUB_SKIP_NEXT_TYPECHECK` | — | Set to `true` to skip Next.js's build-time TypeScript check. `npm run verify` sets this automatically because `tsc --noEmit` already ran; standalone `npm run build` still typechecks unless you set it. |
+| `DEVHUB_SKIP_VERIFY` | `0` | Set to `1` to bypass the `.githooks/pre-push` leak scan and `npm run verify`. Emergency only — fix and re-run verify before merging. |
+
 ## Secret Handling
 
 Do not commit real secrets. Use local environment files, shell environment variables, or a secret manager.

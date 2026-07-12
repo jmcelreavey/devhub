@@ -122,4 +122,12 @@ All mutating actions require same-origin `POST /api/scripts`. Only one instance 
 
 DevHub can install a pre-push hook that runs verification before pushing.
 
-If you must bypass it in an emergency, use the documented environment override, then run verification as soon as practical.
+The hook (`.githooks/pre-push`) runs `scripts/scan-leaks.sh` then `npm run verify` (lint, typecheck, tests, production build with `DEVHUB_SKIP_NEXT_TYPECHECK=true`). It is wired during `dashboard/scripts/postinstall.ts` and `scripts/install.sh`.
+
+Emergency bypass — use sparingly, then run `npm run verify` locally before merging:
+
+```bash
+DEVHUB_SKIP_VERIFY=1 git push
+```
+
+See [Environment Variables](environment-variables.md#development-and-ci).

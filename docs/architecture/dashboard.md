@@ -20,7 +20,7 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 
 ## Navigation (2026-06 IA)
 
-The sidebar is driven by `dashboard/lib/nav.ts` — twelve primary destinations grouped into **Workspace**, **Library**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag.
+The sidebar is driven by `dashboard/lib/nav.ts` — thirteen primary destinations grouped into **Workspace**, **Library**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag.
 
 | Sidebar | Route | Notes |
 | ------- | ----- | ----- |
