@@ -16,7 +16,8 @@ The server has two tool tiers:
 | Tier | Source Of Truth | Dashboard Required | Tool Groups |
 | ---- | --------------- | ------------------ | ----------- |
 | Filesystem-backed | Local files under configured content dirs | No | Notes, docs, tasks, diagrams, appraisal |
-| Dashboard-backed | DevHub HTTP routes on `DEVHUB_BASE_URL` | Yes | Status, briefing, calendar, work/PRs/Jira, assets, search, scripts, repos, Datadog |
+| Dashboard-backed | DevHub HTTP routes on `DEVHUB_BASE_URL` | Yes | Status, briefing, calendar, work/PRs/Jira, assets, search, scripts, repos (list/open/clone/learn), sessions, Datadog |
+| Hybrid | Local `git` in a resolved repo path; dashboard HTTP only for name→path lookup | Yes (for `repos_list` resolution) | `repos_git_status`, `repos_git_commit`, `repos_git_push` |
 
 Filesystem-backed tools call the vault/storage layer directly and work headless.
 Dashboard-backed tools proxy through `DashboardClient`, defaulting to
@@ -113,6 +114,8 @@ The shared config starts the server with `tsx` from the MCP server package:
 }
 ```
 
+When `DEVHUB_API_SECRET` is set in `dashboard/.env.local`, add the same value to the `env` block in `mcp/shared/devhub.json` (or your personal MCP overlay), then re-run MCP sync so client configs pick it up. `DashboardClient` sends `Origin` and `X-DevHub-Secret` on every dashboard request when the secret is present in the MCP process env.
+
 `REPO_ROOT` is replaced during MCP sync. The dashboard health check and bootstrap
 install the `devhub-server` package dependencies if `node_modules` is missing.
 
@@ -158,6 +161,15 @@ Use `sessions_recap` (or the `devhub-recap` skill) when you need **what happened
 4. On `409`, multiple root sessions are busy — pass an explicit `sessionId`.
 
 The dashboard route redacts secrets (tokens, env values, URL credentials) before returning JSON.
+
+### Commit and push a sibling repo from an agent
+
+1. Start the dashboard with `npm run dev` so `repos_list` can resolve repo names to paths.
+2. `repos_git_status` with `name` (from `repos_list`) or an explicit `path` to inspect branch, dirty files, and ahead/behind counts.
+3. `repos_git_commit` with `message` and `confirm: true` to stage all changes and commit.
+4. `repos_git_push` with `confirm: true` to push (optional `remote`, `branch`).
+
+These run local `git` in the resolved checkout. They are not dashboard script actions — they do not enforce the `main`/`master` branch guards used by scoped content sync.
 
 ### Capture appraisal notes from an agent
 

@@ -73,7 +73,7 @@ The docked terminal is opened from the bottom drawer (or programmatically via `d
 
 The PTY server binds **localhost only** and has no authentication — acceptable because DevHub is a local-only tool. Do not expose port `1339` off-host.
 
-Each session's output is **tee'd to disk** (`DEVHUB_TERMINAL_LOG_DIR`, default `<tmpdir>/devhub-terminal-logs/<session-uuid>.log`) so **Copy all output** in the terminal drawer can return the full log via `GET /api/terminal/log?session=<uuid>`. Browser xterm scrollback is RAM-capped; the on-disk log is the source of truth for long PR reviews or builds.
+Each session's output is **tee'd to disk** (`DEVHUB_TERMINAL_LOG_DIR`, default `<tmpdir>/devhub-terminal-logs/<session-uuid>.log`) so **Copy all output** in the terminal drawer can return the full log via `GET /api/terminal/log?session=<uuid>`. Browser xterm scrollback is RAM-capped; the on-disk log is the source of truth for long PR reviews or builds. Session logs older than three days are pruned on terminal peer startup.
 
 If an interactive shell framework (powerlevel10k, ftazsh, etc.) deadlocks inside the embedded PTY, the server auto-respawns in safe mode after 4 seconds of silence. Override manually with `DEVHUB_TERMINAL_ARGS=-f` or `DEVHUB_TERMINAL_SHELL=/bin/bash` in `dashboard/.env.local`.
 
