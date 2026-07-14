@@ -201,7 +201,7 @@ export function NotesChecklistsPanel({
           {filtered.length > PAGE_SIZE ? (
             <div className="mb-3 flex items-center justify-between gap-3">
               <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
-                Showing {rangeStart}–{rangeEnd} of {filtered.length}
+                Showing {rangeStart}-{rangeEnd} of {filtered.length}
               </span>
               <div className="flex items-center gap-2">
                 <button

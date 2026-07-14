@@ -86,7 +86,7 @@ export function RunLogModal({ open, onClose, runId }: RunLogModalProps) {
 
   const meta =
     state.status === "ok"
-      ? `${state.data.script} · exit ${state.data.exitCode ?? "—"} · ${state.data.lines.length} line(s)`
+      ? `${state.data.script} · exit ${state.data.exitCode ?? "-"}, ${state.data.lines.length} line(s)`
       : null;
 
   return (

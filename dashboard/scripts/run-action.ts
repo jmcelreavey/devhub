@@ -20,6 +20,7 @@ import { syncMcpServers } from "../lib/sync-mcp";
 import { syncPersona } from "../lib/sync-persona";
 import { materializePlugins } from "../lib/plugins/materialize";
 import { materializeBranding } from "../lib/plugins/branding";
+import { materializePluginNav } from "../lib/plugins/nav-materialize";
 
 const ACTIONS = ["validate", "sync", "sync_plugins", "update_and_sync"] as const;
 type Action = (typeof ACTIONS)[number];
@@ -34,6 +35,7 @@ async function runSync(repoRoot: string, dryRun: boolean): Promise<number> {
   for (const step of [
     () => Promise.resolve(materializePlugins({ emit, repoRoot, dryRun })),
     () => Promise.resolve(materializeBranding({ emit, repoRoot, dryRun })),
+    () => Promise.resolve(materializePluginNav({ emit, repoRoot, dryRun })),
     () => syncSkills({ emit, repoRoot, dryRun }),
     () => syncAgents({ emit, repoRoot, dryRun }),
     () => syncMcpServers({ emit, repoRoot, dryRun }),
@@ -63,6 +65,7 @@ async function main(): Promise<void> {
   } else if (action === "sync_plugins") {
     code = materializePlugins({ emit, repoRoot, dryRun });
     code = materializeBranding({ emit, repoRoot, dryRun }) || code;
+    code = materializePluginNav({ emit, repoRoot, dryRun }) || code;
   } else {
     code = await updateAndSync({
       emit,

@@ -1,13 +1,9 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getOpenCodeRecap, OpenCodeRecapError } from "@/lib/opencode-recap";
-import { requireDashboardAuth } from "@/lib/api-utils";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: NextRequest): Promise<NextResponse> {
-  const auth = requireDashboardAuth(request);
-  if (!auth.ok) return auth.response;
-
+export async function GET(request: Request): Promise<NextResponse> {
   const url = new URL(request.url);
   try {
     return NextResponse.json(

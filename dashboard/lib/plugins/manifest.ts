@@ -18,10 +18,24 @@ const contributesSchema = z
   .object(Object.fromEntries(CONTRIBUTE_KINDS.map((k) => [k, z.string().min(1).optional()])))
   .strict();
 
+const pluginNavItemSchema = z
+  .object({
+    href: z.string().min(1),
+    label: z.string().min(1),
+    icon: z.string().min(1),
+    group: z.enum(["workspace", "library", "system"]),
+    gate: z.string().min(1).optional(),
+    desktopOnly: z.boolean().optional(),
+    shortcut: z.string().min(1).optional(),
+    section: z.enum(["library", "system"]).optional(),
+  })
+  .strict();
+
 const dashboardSchema = z
   .object({
     root: z.string().min(1),
     paths: z.array(z.string().min(1)).min(1),
+    nav: z.array(pluginNavItemSchema).optional(),
   })
   .strict();
 

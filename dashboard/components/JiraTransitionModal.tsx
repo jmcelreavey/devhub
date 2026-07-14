@@ -27,7 +27,7 @@ export function JiraTransitionModal({
   open,
   jiraKey,
   title,
-  skipLabel = "Skip — leave Jira as-is",
+  skipLabel = "Skip - leave Jira as-is",
   suggest,
   onCancel,
   onConfirm,

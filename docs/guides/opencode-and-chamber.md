@@ -1,17 +1,14 @@
 # OpenCode and OpenChamber
 
-DevHub runs four cooperating local services during `npm run dev` and `npm run start`:
+DevHub runs three cooperating local services during `npm run dev` and `npm run start`:
 
 | Service     | Default port | Dashboard route | Role                             |
 | ----------- | ------------ | --------------- | -------------------------------- |
 | Dashboard   | `1337`       | `/`             | Main Next.js app                 |
 | OpenChamber | `1336`       | `/chamber`      | Thinking/workspace UI (iframe)   |
 | OpenCode    | `1338`       | `/opencode`     | Coding assistant web UI (iframe) |
-| Terminal    | `1339`       | Docked drawer   | In-app PTY shell (WebSocket peer) |
 
 OpenCode is a **shared peer service**. OpenChamber connects to the same `opencode serve` instance instead of starting its own embedded server.
-
-The **terminal peer** is a separate localhost-only WebSocket PTY (`dashboard/scripts/terminal-pty-server.ts`). The docked terminal (`TerminalDock`) connects over `ws://127.0.0.1:1339` and keeps sessions alive while hidden — long-running commands (including PR reviews) continue when you switch tabs.
 
 OpenChamber is **developer-managed**: DevHub does not bundle it. Install it yourself (`npm i -g @openchamber/web`, or point `OPENCHAMBER_BIN` at any build) and DevHub serves it on `OPENCHAMBER_PORT` and embeds it. When no `openchamber` is found on `PATH` (and `OPENCHAMBER_BIN` is unset), the Chamber tab and its iframe are hidden and nothing is started.
 
@@ -22,11 +19,10 @@ npm run dev
   -> start-peer-services.ts  -> opencode serve on OPENCODE_PORT (default 1338)
                              -> openchamber serve on OPENCHAMBER_PORT (default 1336)
                                 with OPENCODE_SKIP_START=true
-  -> terminal-pty-server.ts  -> WebSocket PTY on TERMINAL_PORT (default 1339)
   -> dashboard (Next.js on PORT, default 1337)
 ```
 
-Startup lives in `dashboard/scripts/start-peer-services.ts` (chained OpenCode + OpenChamber), with `start-opencode.ts` available for standalone OpenCode use and `terminal-pty-server.ts` for the docked shell. `npm run dev` starts all four via `concurrently`. Peer startup calls `loadEnvWithOnePasswordFallback` before binding ports so provider keys can be resolved from 1Password when local env vars are empty. OpenChamber is only started when a system install is detected.
+Startup lives in `dashboard/scripts/start-peer-services.ts` (chained), with `start-opencode.ts` available for standalone OpenCode use. It calls `loadEnvWithOnePasswordFallback` before binding ports so provider keys can be resolved from 1Password when local env vars are empty. OpenChamber is only started when a system install is detected.
 
 ### Peer Version Updates
 
@@ -61,36 +57,6 @@ This lets you attach DevHub to an existing OpenCode session. For OpenChamber, st
 
 OpenChamber waits up to 30 seconds for OpenCode to listen before starting its own daemon.
 
-## In-App Terminal
-
-The docked terminal is opened from the bottom drawer (or programmatically via `devhub:terminal-open`). Each session spawns a login shell rooted at `DEVHUB_DEVELOPER_DIR` (default `~/Developer`) unless a `cwd` is passed — PR **Review** on `/prs` passes the PR's repo path but still pins `REPO_ROOT`/`NOTES_DIR` to DevHub when `NEXT_PUBLIC_REPO_ROOT` is set.
-
-| Trigger | Behavior |
-| ------- | -------- |
-| Terminal drawer button | Opens a new shell session at the developer directory |
-| PR **Review** (`/prs`) | Runs `opencode run` with the `pr-explain-review` skill; streams output in the drawer |
-| Repo Learning **OpenCode handoff** | Opens a terminal in the target repo with a copied handoff prompt |
-
-The PTY server binds **localhost only** and has no authentication — acceptable because DevHub is a local-only tool. Do not expose port `1339` off-host.
-
-Each session's output is **tee'd to disk** (`DEVHUB_TERMINAL_LOG_DIR`, default `<tmpdir>/devhub-terminal-logs/<session-uuid>.log`) so **Copy all output** in the terminal drawer can return the full log via `GET /api/terminal/log?session=<uuid>`. Browser xterm scrollback is RAM-capped; the on-disk log is the source of truth for long PR reviews or builds. Session logs older than three days are pruned on terminal peer startup.
-
-If an interactive shell framework (powerlevel10k, ftazsh, etc.) deadlocks inside the embedded PTY, the server auto-respawns in safe mode after 4 seconds of silence. Override manually with `DEVHUB_TERMINAL_ARGS=-f` or `DEVHUB_TERMINAL_SHELL=/bin/bash` in `dashboard/.env.local`.
-
-For PR review notes to land under `notes/pr-reviews/...`, set `NEXT_PUBLIC_REPO_ROOT` to the same path as `REPO_ROOT` (not auto-written by postinstall). See [GitHub integration](../integrations/github.md#review-note-constraints).
-
-## OpenCode Session Recap
-
-Agents can summarize **what an OpenCode session did** (commands, MCP calls, file edits, failures) without replaying chat:
-
-| Surface | Entry point |
-| ------- | ----------- |
-| MCP | `sessions_recap` on the `devhub` server |
-| Skill | `devhub-recap` — call the tool and return the JSON unchanged |
-| HTTP | `GET /api/opencode/recap` (requires `requireDashboardAuth`; see [API Routes](../reference/api-routes.md)) |
-
-OpenCode must be running on `OPENCODE_PORT`. The recap builder reads the OpenCode HTTP API, redacts secrets, and omits prompts/reasoning. Use `directory` to scope sessions to a workspace; pass `sessionId` when multiple root sessions are busy (`409`).
-
 ## Configuration
 
 ### Environment Variables
@@ -109,6 +75,12 @@ OpenCode must be running on `OPENCODE_PORT`. The recap builder reads the OpenCod
 Legacy `OPENCODE_HOST` is still read as a bind host when it is not a full URL; prefer `OPENCODE_BIND_HOST` for new setups.
 
 See [Environment Variables](../reference/environment-variables.md) for 1Password-related keys.
+
+### Agent CLI (OpenCode vs Cursor)
+
+One-shot terminal handoffs (PR review, DX audit, capability labs, repo upstart) default to `opencode run`, but can be switched to the Cursor CLI (`cursor-agent -p … --force --model <model>`, default `cursor-grok-4.5-high`) from **/setup → Agent CLI** or **Skills → Agent CLI**. The Cursor option only appears when `cursor-agent` is installed. An optional OpenCode model override (`opencode run --model provider/model`) can be set the same way; blank keeps the shared `opencode.json` default.
+
+Settings are managed `.env.local` keys — `DEVHUB_AGENT_CLI`, `DEVHUB_AGENT_OPENCODE_MODEL`, `DEVHUB_AGENT_CURSOR_MODEL` — so the 1Password `devhub` item can populate them like other managed config. Server read/detection: `dashboard/lib/agent-cli-env.ts` (+ `/api/agent-cli`); command builders: `dashboard/lib/terminal-launch.ts` (`agent*Command`, async). Both CLIs see the same skills and notes MCP because sync writes them to `~/.cursor/skills` and `~/.cursor/mcp.json` as well as the OpenCode paths — run **Sync skills** / **Sync MCP** before first use.
 
 ### Shared OpenCode Config
 
@@ -151,7 +123,6 @@ The **Status** page probes OpenChamber and OpenCode ports via `/api/status/servi
 
 - `/api/actions/launch-chamber` — OpenChamber Desktop pointing at the existing DevHub server (port `1336` / shared OpenCode on `1338`)
 - `/api/actions/launch-opencode` — macOS OpenCode Desktop app (when present under `/Applications`)
-- `/api/actions/launch-claude` — Claude Desktop when installed; otherwise opens `https://claude.ai/new` in the browser. Available from the top-bar launch menu and command palette.
 
 ## Troubleshooting
 
@@ -162,8 +133,6 @@ The **Status** page probes OpenChamber and OpenCode ports via `/api/status/servi
 | Provider auth errors                    | `/setup` or 1Password item fields; run sync after env vars are set; `DEVHUB_OP_REFRESH=1` once to refresh                                    |
 | LAN device can't reach Chamber/OpenCode | Enable LAN mode in `/setup`; it starts the LAN proxy for `1336` and `1338`. On WSL, still forward those ports from Windows (see root README) |
 | Two OpenCode instances                  | Should not happen when `OPENCODE_SKIP_START=true`; if you run `opencode serve` manually, let DevHub reuse that port                          |
-| Terminal drawer blank or stuck          | Terminal peer on `1339`; check `concurrently` `term` process. Heavy zsh themes may need `DEVHUB_TERMINAL_ARGS=-f`. LAN proxy forwards `1339` when enabled |
-| PR review note in wrong repo            | Set `NEXT_PUBLIC_REPO_ROOT` in `dashboard/.env.local` to match `REPO_ROOT`; restart dev server |
 
 ## Related Docs
 

@@ -21,8 +21,7 @@ import {
 import { useLive } from "@/lib/use-fetch";
 import { TaskList } from "@/components/TaskList";
 import { JiraKeyChip } from "@/components/JiraKeyChip";
-import { SeverityPill } from "@/components/ui/Severity";
-import { statusTone } from "@/components/JiraWidget";
+import { JiraStatusPill } from "@/components/JiraStatusPill";
 import { LayoutPresetsButton } from "@/components/LayoutPresets";
 import { TodayBootScreen, useTodayBoot } from "@/components/TodayBootScreen";
 import { readFocusSession, writeFocusSession } from "@/lib/focus-session-storage";
@@ -185,7 +184,7 @@ function clearTimeUntil(iso: string): string {
 
 /** 45-minute deep-work block — same session store the top-bar timer uses. */
 function startDeepWork(): void {
-  if (readFocusSession()) return; // already running — the top-bar timer owns it
+  if (readFocusSession()) return; // already running - the top-bar timer owns it
   const totalMs = 45 * 60_000;
   writeFocusSession({ endsAt: Date.now() + totalMs, totalMs });
 }
@@ -329,7 +328,7 @@ export function TodayFocusView() {
     <div className="hub today-home">
       <TodayBootScreen state={boot} />
       <div className="w-full" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-        {/* Header — matches dashboard hero */}
+        {/* Header - matches dashboard hero */}
         <div className="hub-hero">
           <div>
             <div className="hub-hero-greeting" aria-hidden>
@@ -417,7 +416,7 @@ export function TodayFocusView() {
           </div>
         </div>
 
-        {/* Briefing — calm accent strip, same language as the dashboard's widget */}
+        {/* Briefing - calm accent strip, same language as the dashboard's widget */}
         {briefingLine !== null && (
           <div
             className="flex items-start gap-3"
@@ -456,11 +455,11 @@ export function TodayFocusView() {
                 {nextMeeting.title} · {formatTime(nextMeeting.start)}
               </b>{" "}
               <span style={{ color: "var(--text-subtle)" }}>
-                — {clearTimeUntil(nextMeeting.start)} of clear focus until then
+                - {clearTimeUntil(nextMeeting.start)} of clear focus until then
               </span>
             </span>
           ) : (
-            <span style={{ color: "var(--text-subtle)" }}>No more meetings today — the day is yours.</span>
+            <span style={{ color: "var(--text-subtle)" }}>No more meetings today - the day is yours.</span>
           )}
           <button
             type="button"
@@ -473,7 +472,7 @@ export function TodayFocusView() {
           </button>
         </div>
 
-        {/* Reviews — pick one or two, skip the rest until tomorrow */}
+        {/* Reviews - pick one or two, skip the rest until tomorrow */}
         {(activeReviews.length > 0 || skippedReviews.length > 0) && (
           <div>
             <SectionLabel>REVIEWS OWED</SectionLabel>
@@ -523,7 +522,7 @@ export function TodayFocusView() {
               })}
               {activeReviews.length === 0 && (
                 <div className="text-xs" style={{ color: "var(--text-subtle)", padding: "2px 2px" }}>
-                  Queue cleared — everything else is skipped until tomorrow.
+                  Queue cleared - everything else is skipped until tomorrow.
                 </div>
               )}
               {skippedReviews.length > 0 && (
@@ -568,7 +567,7 @@ export function TodayFocusView() {
           </div>
         )}
 
-        {/* Jira assignments — so a new one never slips past unnoticed */}
+        {/* Jira assignments - so a new one never slips past unnoticed */}
         {tickets.length > 0 && (
           <div>
             <SectionLabel>JIRA</SectionLabel>
@@ -591,14 +590,14 @@ export function TodayFocusView() {
                       {t.summary ?? t.key}
                     </span>
                   )}
-                  <SeverityPill tone={statusTone(t.status)}>{t.status}</SeverityPill>
+                  <JiraStatusPill ticketKey={t.key} status={t.status} />
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Then — the real task list (full check/strike animations, drag, add) */}
+        {/* Then - the real task list (full check/strike animations, drag, add) */}
         <div>
           <SectionLabel>TASKS</SectionLabel>
           <TaskList inputId="focus-task-add" />

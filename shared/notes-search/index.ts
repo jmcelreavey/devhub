@@ -6,4 +6,5 @@ export {
 } from "./extract.ts";
 export { isWorkspaceNoteRel } from "./scope.ts";
 export { searchNotes, type SearchNotesOptions, type SearchResult } from "./search.ts";
+export { lexicalSearchNotes, type LexicalSearchResult } from "./lexical.ts";
 export { semanticSearchNotes, type SemanticSearchResult } from "./semantic.ts";

@@ -16,6 +16,8 @@ export interface GithubPrRow {
   title: string;
   url: string;
   repo: string;
+  /** ISO timestamp from Search API `updated_at` when available. */
+  updatedAt?: string;
 }
 
 export interface RecentlyReviewedPr extends GithubPrRow {
@@ -42,6 +44,7 @@ function rowFromSearchItem(item: SearchIssueItem): GithubPrRow {
     title: item.title ?? "",
     url: item.html_url ?? "",
     repo: parseRepoFullNameFromApiUrl(item.repository_url),
+    updatedAt: item.updated_at,
   };
 }
 

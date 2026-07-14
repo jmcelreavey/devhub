@@ -38,7 +38,7 @@ const PRESETS = [
   { label: "Every hour", cron: "0 * * * *" },
   { label: "Every 30 min", cron: "*/30 * * * *" },
   { label: "Daily at 9am", cron: "0 9 * * *" },
-  { label: "Mon–Fri 9am", cron: "0 9 * * 1-5" },
+  { label: "Mon-Fri 9am", cron: "0 9 * * 1-5" },
 ];
 
 function formatAbsolute(ts: number | null | undefined): string {

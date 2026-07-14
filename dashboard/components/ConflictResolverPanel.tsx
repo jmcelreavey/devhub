@@ -66,7 +66,7 @@ export function ConflictResolverPanel() {
       <EmptyState
         icon={<Check size={28} style={{ color: "var(--success)" }} />}
         title="No merge conflicts"
-        subtitle="Content sync paths are clean — no unmerged files or conflict markers."
+        subtitle="Content sync paths are clean - no unmerged files or conflict markers."
       />
     );
   }
@@ -116,7 +116,7 @@ export function ConflictResolverPanel() {
             <>
               <div className="flex items-center gap-2 px-4 py-2 text-xs" style={{ color: "var(--text-subtle)" }}>
                 <FileWarning size={12} />
-                Edit below — remove all <code>{`<<<<<<<`}</code> markers before saving.
+                Edit below - remove all <code>{`<<<<<<<`}</code> markers before saving.
               </div>
               <textarea
                 value={draft}

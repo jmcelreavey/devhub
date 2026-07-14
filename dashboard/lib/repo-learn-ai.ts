@@ -116,7 +116,6 @@ export async function generateRepoLearnArtifacts(context: RepoContext): Promise<
     generateText({
       model,
       prompt: buildBriefPrompt(context),
-      maxOutputTokens: 2048,
       ...callOptions,
     }),
     generateText({
@@ -132,7 +131,7 @@ export async function generateRepoLearnArtifacts(context: RepoContext): Promise<
     throw new Error(`Brief generation returned empty (finish: ${briefResult.finishReason}).`);
   }
   if (briefResult.finishReason === "length") {
-    throw new Error("Brief was truncated (hit output token limit). Try Refresh.");
+    console.warn("[repo-learn-ai] Brief generation truncated; using partial brief.");
   }
 
   const packSections = parsePackSections(packResult.text);

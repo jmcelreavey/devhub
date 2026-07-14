@@ -11,6 +11,7 @@ export type BriefingSectionId =
   | "gaming"
   | "onThisDay"
   | "attractions"
+  | "research"
   | "interests";
 
 export interface BriefingSectionMeta {
@@ -22,20 +23,23 @@ export interface BriefingSectionMeta {
 
 export const BRIEFING_SECTIONS: BriefingSectionMeta[] = [
   { id: "weather", label: "Weather", description: "Local forecast for your area", defaultEnabled: true },
-  { id: "devTip", label: "Dev Tip", description: "AI tips tuned to your tech stack", defaultEnabled: true },
   { id: "news", label: "News", description: "Headlines from your RSS feeds", defaultEnabled: true },
   { id: "events", label: "Events", description: "Things to do near you", defaultEnabled: true },
-  { id: "github", label: "Trending Repos", description: "Hot repos in your languages", defaultEnabled: true },
+  { id: "github", label: "Trending Repos", description: "Top repos from GitHub Trending today", defaultEnabled: true },
   { id: "hackerNews", label: "Hacker News", description: "Top stories from HN", defaultEnabled: true },
   { id: "gaming", label: "Gaming", description: "Gaming news from RSS feeds", defaultEnabled: false },
   { id: "onThisDay", label: "On This Day", description: "Historical events", defaultEnabled: true },
   { id: "attractions", label: "Family Days Out", description: "Nearby attractions for kids", defaultEnabled: false },
+  { id: "research", label: "Background Research", description: "Cached Last30Days briefs for your interests", defaultEnabled: true },
   { id: "interests", label: "Interests", description: "AI-generated insights for your hobbies", defaultEnabled: false },
 ];
 
-export const DEFAULT_SECTION_VISIBILITY: Record<BriefingSectionId, boolean> = Object.fromEntries(
-  BRIEFING_SECTIONS.map((s) => [s.id, s.defaultEnabled]),
-) as Record<BriefingSectionId, boolean>;
+export const DEFAULT_SECTION_VISIBILITY: Record<BriefingSectionId, boolean> = {
+  // Retired section — the id stays in BriefingSectionId so previously stored
+  // prefs still typecheck, but it never renders and defaults off.
+  devTip: false,
+  ...Object.fromEntries(BRIEFING_SECTIONS.map((s) => [s.id, s.defaultEnabled])),
+} as Record<BriefingSectionId, boolean>;
 
 export interface BriefingLocation {
   name: string;

@@ -41,7 +41,7 @@ export default function LearningsPage() {
         title="Learnings"
         subtitle={
           <>
-            Distilled knowledge — <code className="text-[11px]">notes/learnings/</code>.{" "}
+            Distilled knowledge - <code className="text-[11px]">notes/learnings/</code>.{" "}
             <Link href="/notes" className="underline" style={{ color: "var(--accent)" }}>Browse in Notes</Link>
           </>
         }

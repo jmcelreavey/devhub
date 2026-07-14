@@ -38,7 +38,7 @@ const FONTS_DIR_REL = "public/fonts-plugin";
 const LOGO_STEM_REL = "public/plugin-brand-logo";
 const ELECTRON_ICON_REL = "public/plugin-electron-icon.png";
 
-const EMPTY_CSS = `/* GENERATED — machine-local plugin branding palette + @font-face.
+const EMPTY_CSS = `/* GENERATED - machine-local plugin branding palette + @font-face.
    Rewritten by lib/plugins/branding.ts (sync_plugins) from the active branding plugin,
    then git update-index --skip-worktree so local whitelabel state is not committed.
    Committed baseline is intentionally empty (no branding plugin). Do not edit by hand. */
@@ -218,7 +218,7 @@ export function materializeBranding(opts: BrandingOptions): number {
   }
 
   if (dryRun) {
-    emit(`branding: would apply "${plugin.name}" (preset=${b.defaultPreset ?? "—"}, mode=${b.defaultMode ?? "—"})`);
+    emit(`branding: would apply "${plugin.name}" (preset=${b.defaultPreset ?? "-"}, mode=${b.defaultMode ?? "-"})`);
     return 0;
   }
 
@@ -255,7 +255,7 @@ export function materializeBranding(opts: BrandingOptions): number {
   }
 
   // --- CSS: relocate the plugin's palette + @font-face verbatim. ---
-  const cssHeader = `/* GENERATED from plugin "${plugin.name}" branding — do not edit (see lib/plugins/branding.ts). */\n`;
+  const cssHeader = `/* GENERATED from plugin "${plugin.name}" branding - do not edit (see lib/plugins/branding.ts). */\n`;
   const cssBody = themeCssAbs ? fs.readFileSync(themeCssAbs, "utf8") : "";
   fs.writeFileSync(genCss, cssHeader + cssBody + "\n");
 
@@ -263,7 +263,7 @@ export function materializeBranding(opts: BrandingOptions): number {
   const tsLogo = logoUrl
     ? `{ src: ${JSON.stringify(logoUrl)}, label: ${JSON.stringify(logoLabel)} }`
     : "null";
-  const ts = `/* GENERATED from plugin "${plugin.name}" branding — do not edit (see lib/plugins/branding.ts). */
+  const ts = `/* GENERATED from plugin "${plugin.name}" branding - do not edit (see lib/plugins/branding.ts). */
 import type { ThemePresetMeta } from "./theme-presets-types";
 
 export interface PluginBrandLogo {
@@ -296,10 +296,10 @@ export const PLUGIN_BRAND_LOGO: PluginBrandLogo | null = ${tsLogo};
       );
       if (n > 0) emit(`branding: OpenChamber themed (${n} theme${n === 1 ? "" : "s"})`);
     } else {
-      emit("branding: OpenChamber not installed — skipping its theme");
+      emit("branding: OpenChamber not installed - skipping its theme");
     }
   }
 
-  emit(`branding: applied "${plugin.name}" — preset "${b.defaultPreset ?? "(none)"}", mode "${b.defaultMode ?? "(core default)"}"`);
+  emit(`branding: applied "${plugin.name}" - preset "${b.defaultPreset ?? "(none)"}", mode "${b.defaultMode ?? "(core default)"}"`);
   return 0;
 }

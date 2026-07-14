@@ -170,6 +170,14 @@ describe("syncMcpServers", () => {
       url: "https://mcp.context7.com/mcp",
       enabled: true,
     });
+
+    // Cursor only understands { url, headers? } for remote servers. An entry
+    // with OpenCode's type/enabled keys makes cursor-agent silently discard
+    // the ENTIRE mcp.json, so the cursor shape must stay strictly minimal.
+    const cursor = JSON.parse(fs.readFileSync(path.join(home, ".cursor/mcp.json"), "utf-8"));
+    expect(cursor.mcpServers.context7).toEqual({
+      url: "https://mcp.context7.com/mcp",
+    });
   });
 
   it("excludeServers skips writing and also prevents pruning that entry", async () => {

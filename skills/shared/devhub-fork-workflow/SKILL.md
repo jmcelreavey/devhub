@@ -12,7 +12,7 @@ metadata:
 A DevHub mirror is a private working copy with the shared public core wired in as the
 `upstream` remote. The public core has an **unrelated git history** (it's seeded from a
 clean tree so private history never leaks), so you can never rebase/merge across the two —
-both directions port *content diffs* via `git apply --3way`.
+both directions port _content diffs_ via `git apply --3way`.
 
 Two scripts do the mechanics; this skill is the judgement around them:
 
@@ -44,8 +44,8 @@ that the app rewrites live-dirty must be stashed before running, restored after.
 1. **Judge generic vs personal.** Only genuinely reusable, non-company, non-personal
    features belong in public. Company/private logic stays in a plugin (see
    `docs/architecture/plugins.md`); personal data (`notes/`, `tasks/`, `collections/`,
-   `persona/identity.txt`, `.env.local`) is auto-excluded but should never be the point of
-   the PR. If in doubt, it doesn't go to public.
+   `persona/identity.txt`, `.env.local`) and `.devhub/` are excluded and should never be
+   the point of the PR. If in doubt, it doesn't go to public.
 
 2. **Pick the source ref and base.** The script ports `BASE..SOURCE_REF`. `--base` defaults
    to `SOURCE_REF^` (correct for a single tip commit). For a multi-commit feature, pass the
@@ -101,6 +101,7 @@ your mirror customisation it aborts cleanly — resolve manually and commit.
 
 ## Rules
 
+- Never stage, commit, or backport `.devhub/`. Confirm it is absent from staged files and every backport preview; if staged, run `git restore --staged -- .devhub`.
 - Preview (no `--execute`) before every backport; read the diff stat.
 - Stash live-dirty personal files before running; restore after.
 - The leak scan is the safety net, not a substitute for judgement — keep company names and

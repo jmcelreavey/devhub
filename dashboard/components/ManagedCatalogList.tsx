@@ -336,8 +336,8 @@ export function ManagedCatalogList(props: ManagedCatalogListProps) {
                     title={
                       excluded
                         ? row.kind === "local-only"
-                          ? "Excluded from prune — local copies stay on disk until you include this item again."
-                          : "Excluded from sync and prune — existing copies stay on disk until you remove them manually or include this item again."
+                          ? "Excluded from prune - local copies stay on disk until you include this item again."
+                          : "Excluded from sync and prune - existing copies stay on disk until you remove them manually or include this item again."
                         : row.kind === "local-only"
                           ? "Not in catalog; click to exclude from prune so local copies are kept during sync."
                           : "Included in sync/prune. Click to exclude."
@@ -441,7 +441,7 @@ export function ManagedCatalogList(props: ManagedCatalogListProps) {
                         </span>
                       ) : (
                         <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
-                          Read-only — add to catalog to edit in repo
+                          Read-only - add to catalog to edit in repo
                         </span>
                       )}
                     </div>

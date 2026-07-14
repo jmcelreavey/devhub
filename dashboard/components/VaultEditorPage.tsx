@@ -403,7 +403,7 @@ export function VaultEditorPage({
 
       {!isNotes && (blocks !== null || isNew) ? (
         <p className="text-xs mb-3" style={{ color: "var(--text-subtle)" }}>
-          Saved as Markdown on disk. Complex tables or raw HTML may shift slightly after edit — review diffs
+          Saved as Markdown on disk. Complex tables or raw HTML may shift slightly after edit - review diffs
           before syncing.
         </p>
       ) : null}

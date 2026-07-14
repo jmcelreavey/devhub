@@ -110,6 +110,14 @@ data out of the repo tree entirely. Defaults stay `REPO_ROOT/<dir>` for back-com
 The `devhub-backport` flow (M4) branches off `upstream/main` and cherry-picks feature
 files only, so personal data can never ride along into a public PR.
 
+## M6 — deferred forever
+
+Publishing a scrubbed public template (`TEMPLATE_AND_PLUGIN_PLAN.md` M6) is **not on the
+active roadmap**. This private mirror *is* the working model. Dual-repo cognitive load
+(keeping a leak-free public tree + scanner + flip ceremony) is not worth the payoff right
+now. If a public template is needed later, start a new project — do not treat M6 as
+"almost done."
+
 ## Code standards
 
 - TypeScript, no `any`; `interface` for object shapes, early returns, `const` by default.

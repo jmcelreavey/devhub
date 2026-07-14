@@ -97,7 +97,7 @@ export function DiagramEmbedBlockView({ path, blockId }: DiagramEmbedBlockViewPr
           <div className="skeleton h-8 mt-2" />
         ) : diagrams.length === 0 ? (
           <p className="text-xs mt-2" style={{ color: "var(--text-subtle)" }}>
-            No diagrams yet — create one in Diagrams first.
+            No diagrams yet - create one in Diagrams first.
           </p>
         ) : (
           <select

@@ -25,6 +25,7 @@ import {
   Globe,
   Bot,
   Sparkles,
+  Radar,
   type LucideIcon,
 } from "lucide-react";
 import type { NavItem } from "@/lib/nav";
@@ -46,6 +47,7 @@ const ICONS: Record<string, LucideIcon> = {
   status: Activity,
   skills: Zap,
   repos: FolderGit2,
+  radar: Radar,
   actions: Play,
   setup: Settings2,
   datadog: LineChart,
@@ -125,7 +127,7 @@ export function NavLink({ item, onClick, collapsed, count = 0, unseen = false }:
         boxShadow: active ? "inset 0 0 0 1px color-mix(in oklab, var(--accent) 22%, transparent)" : "none",
       }}
     >
-      {/* 2px left-rail accent for active items — grows in via .nav-rail */}
+      {/* 2px left-rail accent for active items - grows in via .nav-rail */}
       {active && (
         <span
           aria-hidden
@@ -161,7 +163,7 @@ export function NavLink({ item, onClick, collapsed, count = 0, unseen = false }:
       <Icon size={14} strokeWidth={1.8} style={{ opacity: active ? 0.95 : 0.75 }} />
       <span style={{ fontWeight: active ? 600 : 500 }}>{item.label}</span>
       <span className="flex-1" />
-      {/* Count badge — only when > 0 */}
+      {/* Count badge - only when > 0 */}
       {count > 0 && (
         <span
           style={{

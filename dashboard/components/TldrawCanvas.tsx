@@ -53,7 +53,9 @@ export function TldrawCanvas({ initialData, onChange, onEditorReady, contentSlug
   const handleMount = useCallback(
     (editor: Editor) => {
       const snapshot = (initialData as TldrawDiagramData | undefined)?.store;
-      if (snapshot && typeof snapshot === "object" && Object.keys(snapshot).length > 0) {
+      const records = snapshot && typeof snapshot === "object" ? (snapshot as { store?: unknown }).store : null;
+      const hasRecords = records && typeof records === "object" && Object.keys(records).length > 0;
+      if (hasRecords) {
         try {
           editor.loadSnapshot(snapshot as unknown as TLStoreSnapshot);
         } catch {

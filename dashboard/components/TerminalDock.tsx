@@ -228,6 +228,13 @@ interface OpenDetail {
   command?: string;
 }
 
+interface TerminalSummary {
+  activeCount: number;
+  totalCount: number;
+}
+
+let latestTerminalSummary: TerminalSummary = { activeCount: 0, totalCount: 0 };
+
 /**
  * Global terminal drawer — toggled from anywhere (⌃` or the top-bar button),
  * any number of tabs, sessions persist across route changes and while the
@@ -370,6 +377,14 @@ export function TerminalDock() {
 
   useEffect(() => () => window.clearTimeout(restartTimerRef.current), []);
 
+  useEffect(() => {
+    latestTerminalSummary = {
+      activeCount: tabs.filter((tab) => tab.status !== "closed").length,
+      totalCount: tabs.length,
+    };
+    window.dispatchEvent(new CustomEvent<TerminalSummary>("devhub:terminal-summary", { detail: latestTerminalSummary }));
+  }, [tabs]);
+
   if (tabs.length === 0) return null;
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0];
   const restartArmed = !!active && armedRestartId === active.id;
@@ -483,16 +498,38 @@ export function TerminalDock() {
 
 /** Top-bar toggle — lives in the quick cluster. */
 export function TerminalDockButton() {
+  const [activeCount, setActiveCount] = useState(latestTerminalSummary.activeCount);
+  const shortcut = "⌃`";
+  const terminalLabel = activeCount > 0
+    ? `${activeCount} active terminal${activeCount === 1 ? "" : "s"} (${shortcut})`
+    : `Terminal (${shortcut})`;
+
+  useEffect(() => {
+    const onSummary = (event: Event) => {
+      setActiveCount((event as CustomEvent<TerminalSummary>).detail?.activeCount ?? 0);
+    };
+    window.addEventListener("devhub:terminal-summary", onSummary);
+    return () => window.removeEventListener("devhub:terminal-summary", onSummary);
+  }, []);
+
   return (
     <button
       type="button"
-      className="hub-icon-btn"
+      className="hub-icon-btn terminal-toggle-btn"
       onClick={() => window.dispatchEvent(new CustomEvent("devhub:terminal-toggle"))}
-      data-tooltip="Terminal (⌃`)"
+      data-tooltip={terminalLabel}
       data-tooltip-pos="bottom-end"
-      aria-label="Toggle terminal"
+      aria-label={terminalLabel}
     >
       <TerminalSquare size={14} aria-hidden />
+      {activeCount > 0 && (
+        <span
+          className="terminal-toggle-count"
+          aria-hidden="true"
+        >
+          {activeCount}
+        </span>
+      )}
     </button>
   );
 }

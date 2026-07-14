@@ -6,16 +6,15 @@ import {
   type AllowedScript,
   type RunScriptOptions,
 } from "@/lib/scripts-runner";
-import { isSameOrigin } from "@/lib/api-utils";
+import { requireDashboardAuth } from "@/lib/api-utils";
 
 export async function GET() {
   return NextResponse.json({ scripts: getAllowedScripts(), catalog: getScriptCatalog() });
 }
 
 export async function POST(req: NextRequest) {
-  if (!isSameOrigin(req)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const auth = requireDashboardAuth(req);
+  if (!auth.ok) return auth.response;
   const body = await req.json();
   const {
     script,

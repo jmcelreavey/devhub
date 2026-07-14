@@ -27,6 +27,7 @@ import {
 } from "./sync-orchestrator";
 import { validateRepo } from "./validate";
 import { pullCore } from "./pull-core";
+import { runDigest } from "./capability/digest";
 
 type Emit = (line: string) => void;
 
@@ -76,6 +77,22 @@ export interface ScriptCatalogEntry {
 }
 
 const ACTIONS: Record<string, ActionDef> = {
+  capability_digest: {
+    label: "Capability Digest (weekly)",
+    description: "Scan repos and write a 'what changed this week' evolution digest.",
+    timeoutMs: 300_000,
+    mutates: true,
+    effects: [
+      "Runs the Capability Radar scan across local (and optionally GitHub) repos",
+      "Writes a dated snapshot under notes/.cache/capability/",
+      "Saves a digest note under notes/learnings/digests/",
+    ],
+    cmd: "dashboard: runDigest (TypeScript)",
+    run: async (emit) => {
+      await runDigest({ emit });
+      return 0;
+    },
+  },
   update_and_sync: {
     label: "Update & Sync",
     description: "Pull, sync skills+agents+persona, optionally commit & push.",

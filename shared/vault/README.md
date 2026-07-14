@@ -4,8 +4,8 @@ Single source of truth for file-backed **notes** (`.json`) and **docs** (`.md`) 
 
 Used by:
 
-- **Dashboard** — [`dashboard/lib/vault/`](../../dashboard/lib/vault/) extends this layer with note assets, BlockNote search, and browser-only path helpers.
-- **MCP server** — [`mcp-servers/devhub-server/src/storage.ts`](../../mcp-servers/devhub-server/src/storage.ts) wraps `VaultStorage` for workspace-scoped note search and assets.
+- **Dashboard** — [`dashboard/lib/vault/`](../dashboard/lib/vault/) extends this layer with note assets, BlockNote search, and browser-only path helpers.
+- **MCP server** — [`mcp-servers/notes-server/src/storage.ts`](../mcp-servers/notes-server/src/storage.ts) wraps `VaultStorage` for workspace-scoped note search and assets.
 
 ## Dashboard imports
 

@@ -1,29 +1,114 @@
 {
-  "model": "zai-coding-plan/glm-5v-turbo",
+  "model": "opencode-go/deepseek-v4-flash",
   "provider": {
-    "zai-coding-plan": {
+    "openai-api": {
+      "npm": "@ai-sdk/openai",
+      "name": "OpenAI (API Key)",
       "models": {
-        "glm-4.7": {
-          "name": "GLM-4.7 (Z.AI Coding Plan)",
+        "gpt-5.6-sol": {
+          "name": "GPT-5.6 Sol",
           "limit": {
-            "context": 128000,
-            "output": 65536
+            "context": 1050000,
+            "output": 128000
+          },
+          "cost": {
+            "input": 5,
+            "output": 30,
+            "cache_read": 0.5,
+            "cache_write": 6.25
+          },
+          "variants": {
+            "low": { "reasoningEffort": "low" },
+            "high": { "reasoningEffort": "high" },
+            "xhigh": { "reasoningEffort": "xhigh" },
+            "max": { "reasoningEffort": "max" }
           }
         },
-        "glm-5v-turbo": {
-          "name": "GLM-5V-Turbo (Z.AI Coding Plan)",
+        "gpt-5.6-terra": {
+          "name": "GPT-5.6 Terra",
           "limit": {
-            "context": 128000,
-            "output": 65536
+            "context": 1050000,
+            "output": 128000
           },
-          "modalities": {
-            "input": [
-              "text",
-              "image"
-            ],
-            "output": [
-              "text"
-            ]
+          "cost": {
+            "input": 2.5,
+            "output": 15,
+            "cache_read": 0.25,
+            "cache_write": 3.125
+          },
+          "variants": {
+            "low": { "reasoningEffort": "low" },
+            "high": { "reasoningEffort": "high" },
+            "xhigh": { "reasoningEffort": "xhigh" },
+            "max": { "reasoningEffort": "max" }
+          }
+        },
+        "gpt-5.6-luna": {
+          "name": "GPT-5.6 Luna",
+          "limit": {
+            "context": 1050000,
+            "output": 128000
+          },
+          "cost": {
+            "input": 1,
+            "output": 6,
+            "cache_read": 0.1,
+            "cache_write": 1.25
+          },
+          "variants": {
+            "low": { "reasoningEffort": "low" },
+            "high": { "reasoningEffort": "high" },
+            "xhigh": { "reasoningEffort": "xhigh" },
+            "max": { "reasoningEffort": "max" }
+          }
+        },
+        "gpt-5.5": {
+          "name": "GPT-5.5",
+          "limit": {
+            "context": 1050000,
+            "output": 128000
+          },
+          "cost": {
+            "input": 5,
+            "output": 30,
+            "cache_read": 0.5,
+            "cache_write": 6.25
+          },
+          "variants": {
+            "low": { "reasoningEffort": "low" },
+            "high": { "reasoningEffort": "high" },
+            "xhigh": { "reasoningEffort": "xhigh" }
+          }
+        },
+        "gpt-5.4": {
+          "name": "GPT-5.4",
+          "limit": {
+            "context": 1050000,
+            "output": 128000
+          },
+          "cost": {
+            "input": 2.5,
+            "output": 15,
+            "cache_read": 0.25,
+            "cache_write": 3.125
+          },
+          "variants": {
+            "low": { "reasoningEffort": "low" },
+            "high": { "reasoningEffort": "high" },
+            "xhigh": { "reasoningEffort": "xhigh" }
+          }
+        },
+        "gpt-5.4-mini": {
+          "name": "GPT-5.4 Mini",
+          "limit": {
+            "context": 1050000,
+            "output": 128000
+          },
+          "cost": {
+            "input": 0.75,
+            "output": 4.5,
+            "cache_read": 0.075,
+            "cache_write": 0.9375
           }
         }
       }
@@ -38,14 +123,8 @@
             "output": 65535
           },
           "modalities": {
-            "input": [
-              "text",
-              "image",
-              "pdf"
-            ],
-            "output": [
-              "text"
-            ]
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
           },
           "variants": {
             "low": {
@@ -63,14 +142,8 @@
             "output": 65535
           },
           "modalities": {
-            "input": [
-              "text",
-              "image",
-              "pdf"
-            ],
-            "output": [
-              "text"
-            ]
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
           },
           "variants": {
             "low": {
@@ -88,14 +161,8 @@
             "output": 65536
           },
           "modalities": {
-            "input": [
-              "text",
-              "image",
-              "pdf"
-            ],
-            "output": [
-              "text"
-            ]
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
           },
           "variants": {
             "minimal": {
@@ -119,14 +186,8 @@
             "output": 64000
           },
           "modalities": {
-            "input": [
-              "text",
-              "image",
-              "pdf"
-            ],
-            "output": [
-              "text"
-            ]
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
           }
         },
         "antigravity-claude-opus-4-6-thinking": {
@@ -136,14 +197,8 @@
             "output": 64000
           },
           "modalities": {
-            "input": [
-              "text",
-              "image",
-              "pdf"
-            ],
-            "output": [
-              "text"
-            ]
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
           },
           "variants": {
             "low": {
@@ -157,6 +212,177 @@
               }
             }
           }
+        }
+      }
+    },
+    "cursor-acp": {
+      "name": "Cursor",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "http://127.0.0.1:32124/v1"
+      },
+      "models": {
+        "auto": {
+          "name": "Auto",
+          "cost": {
+            "input": 1.25,
+            "output": 6,
+            "cache_read": 0.25,
+            "cache_write": 1.25
+          }
+        },
+        "composer-2.5": {
+          "name": "Composer 2.5",
+          "cost": {
+            "input": 3.5,
+            "output": 17.5,
+            "cache_read": 0.35,
+            "cache_write": 3.5
+          }
+        },
+        "composer-2.5-fast": {
+          "name": "Composer 2.5 Fast"
+        },
+        "claude-opus-4-8-high": {
+          "name": "Opus 4.8 1M"
+        },
+        "claude-opus-4-8-thinking-high": {
+          "name": "Opus 4.8 1M Thinking"
+        },
+        "claude-sonnet-5-high": {
+          "name": "Sonnet 5 1M"
+        },
+        "claude-sonnet-5-thinking-high": {
+          "name": "Sonnet 5 1M Thinking"
+        },
+        "claude-4.6-opus-high": {
+          "name": "Opus 4.6 1M"
+        },
+        "claude-4.6-opus-high-thinking": {
+          "name": "Opus 4.6 1M Thinking"
+        },
+        "claude-4.6-sonnet-medium": {
+          "name": "Sonnet 4.6 1M"
+        },
+        "claude-4.6-sonnet-medium-thinking": {
+          "name": "Sonnet 4.6 1M Thinking"
+        },
+        "claude-4.5-opus-high": {
+          "name": "Opus 4.5"
+        },
+        "claude-4.5-opus-high-thinking": {
+          "name": "Opus 4.5 Thinking"
+        },
+        "claude-4.5-sonnet": {
+          "name": "Sonnet 4.5"
+        },
+        "claude-4.5-sonnet-thinking": {
+          "name": "Sonnet 4.5 Thinking"
+        },
+        "gpt-5.5-medium": {
+          "name": "GPT-5.5 1M"
+        },
+        "gpt-5.5-high": {
+          "name": "GPT-5.5 1M High"
+        },
+        "gpt-5.4-high": {
+          "name": "GPT-5.4 1M High",
+          "cost": {
+            "input": 2.5,
+            "output": 15,
+            "cache_read": 0.25,
+            "cache_write": 2.5,
+            "context_over_200k": {
+              "input": 5,
+              "output": 22.5,
+              "cache_read": 0.5,
+              "cache_write": 5
+            }
+          }
+        },
+        "gpt-5.4-medium": {
+          "name": "GPT-5.4 1M",
+          "cost": {
+            "input": 2.5,
+            "output": 15,
+            "cache_read": 0.25,
+            "cache_write": 2.5,
+            "context_over_200k": {
+              "input": 5,
+              "output": 22.5,
+              "cache_read": 0.5,
+              "cache_write": 5
+            }
+          }
+        },
+        "gpt-5.3-codex": {
+          "name": "Codex 5.3",
+          "cost": {
+            "input": 1.75,
+            "output": 14,
+            "cache_read": 0.175,
+            "cache_write": 1.75
+          }
+        },
+        "gpt-5.3-codex-high": {
+          "name": "Codex 5.3 High"
+        },
+        "gpt-5.2": {
+          "name": "GPT-5.2",
+          "cost": {
+            "input": 1.75,
+            "output": 14,
+            "cache_read": 0.175,
+            "cache_write": 1.75
+          }
+        },
+        "gemini-3.1-pro": {
+          "name": "Gemini 3.1 Pro",
+          "cost": {
+            "input": 2,
+            "output": 12,
+            "cache_read": 0.2,
+            "cache_write": 2,
+            "context_over_200k": {
+              "input": 4,
+              "output": 18,
+              "cache_read": 0.4,
+              "cache_write": 4
+            }
+          }
+        },
+        "gemini-3-flash": {
+          "name": "Gemini 3 Flash",
+          "cost": {
+            "input": 0.5,
+            "output": 3,
+            "cache_read": 0.05,
+            "cache_write": 0.5
+          }
+        },
+        "gemini-3.5-flash": {
+          "name": "Gemini 3.5 Flash"
+        },
+        "grok-4.3": {
+          "name": "Grok 4.3 1M"
+        },
+        "kimi-k2.5": {
+          "name": "Kimi K2.5",
+          "cost": {
+            "input": 0.6,
+            "output": 3,
+            "cache_read": 0.1,
+            "cache_write": 0.6
+          }
+        },
+        "glm-5.2-high": {
+          "name": "GLM 5.2"
+        },
+        "claude-fable-5-high": {
+          "name": "Fable 5 1M"
+        },
+        "claude-fable-5-thinking-high": {
+          "name": "Fable 5 1M Thinking"
         }
       }
     }

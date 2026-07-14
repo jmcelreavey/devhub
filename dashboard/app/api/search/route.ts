@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { semanticSearchNotes } from "@shared/notes-search/semantic.ts";
+import { lexicalSearchNotes } from "@shared/notes-search/lexical.ts";
 import { withErrorHandler } from "@/lib/api-utils";
 import { getVaultStorage, parseVaultId } from "@/lib/vault/vault-registry";
 import type { TextSearchResult } from "@/lib/vault/vault-storage";
@@ -16,14 +16,16 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const mode = req.nextUrl.searchParams.get("mode");
   const vaultId = parseVaultId(req.nextUrl.searchParams.get("vault"));
 
-  if (mode === "semantic" && vaultId === "notes") {
+  // mode=semantic kept as alias — implementation is lexical TF-IDF, not embeddings.
+  if ((mode === "semantic" || mode === "ranked" || mode === "lexical") && vaultId === "notes") {
     const storage = getVaultStorage("notes");
-    const semantic = semanticSearchNotes(storage.root, q, { includeTldraw: true });
-    const filtered = prefix ? semantic.filter((r) => r.path.startsWith(prefix)) : semantic;
+    const ranked = lexicalSearchNotes(storage.root, q, { includeTldraw: true });
+    const filtered = prefix ? ranked.filter((r) => r.path.startsWith(prefix)) : ranked;
     return NextResponse.json({
       query: q,
       vault: vaultId,
       mode: "semantic",
+      ranking: "lexical-tfidf",
       total: filtered.length,
       files: filtered.map((r) => ({
         path: r.path,

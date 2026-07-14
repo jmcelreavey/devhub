@@ -276,7 +276,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         perform: async () => {
           const r = await saveStandupAsDailyNote();
           if (r.ok) {
-            toast.success("Standup saved — opening note.");
+            toast.success("Standup saved - opening note.");
             router.push(`/notes/${r.notePath}`);
           } else {
             toast.error(r.message);

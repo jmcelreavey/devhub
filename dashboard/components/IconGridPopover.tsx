@@ -229,7 +229,7 @@ export function IconGridPopover<T extends string = string>({
       aria-expanded={open}
       aria-haspopup="listbox"
       aria-controls={open ? listId : undefined}
-      title={selected ? `${selected.label} — click to change` : triggerAriaLabel}
+      title={selected ? `${selected.label} - click to change` : triggerAriaLabel}
     >
       {selected ? selected.render(triggerIconSize) : null}
     </button>

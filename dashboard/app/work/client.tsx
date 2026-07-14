@@ -2,25 +2,39 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 import { ListTodo, Ticket, History } from "lucide-react";
 import { TaskList } from "@/components/TaskList";
 import { useLive } from "@/lib/use-fetch";
 import type { SetupGateStatus } from "@/lib/nav";
 import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
 
-// The Jira and History tabs reuse the existing pages wholesale — Work is a
-// shell that puts "things I owe" in one place (2026-06 IA), not a rewrite.
 const TicketsPage = dynamic(() => import("@/app/tickets/client"), { ssr: false });
 const TaskHistoryPage = dynamic(() => import("@/app/tasks/client"), { ssr: false });
 
 type WorkTab = "tasks" | "jira" | "history";
+
+function parseWorkTab(raw: string | null): WorkTab | null {
+  if (raw === "tasks" || raw === "jira" || raw === "history") return raw;
+  if (raw === "tickets") return "jira";
+  return null;
+}
 
 interface TaskCount {
   tasks?: { done?: boolean; abandonedAt?: string; movedAt?: string }[];
 }
 
 export default function WorkPage() {
-  const [tab, setTab] = useState<WorkTab>("tasks");
+  const searchParams = useSearchParams();
+  const paramTab = parseWorkTab(searchParams.get("tab"));
+  const [tab, setTab] = useState<WorkTab>(paramTab ?? "tasks");
+  // Track the last URL tab so in-app ?tab= navigation switches tabs without an
+  // effect (React "adjust state during render" pattern).
+  const [seenParamTab, setSeenParamTab] = useState(paramTab);
+  if (paramTab !== seenParamTab) {
+    setSeenParamTab(paramTab);
+    if (paramTab) setTab(paramTab);
+  }
   const { data: setup } = useLive<SetupGateStatus>("/api/setup/status", { refreshInterval: 0 });
   const { data: taskData } = useLive<TaskCount>("/api/tasks");
 
@@ -38,7 +52,7 @@ export default function WorkPage() {
     </div>
   );
 
-  if (tab !== "tasks") {
+  if (tab === "jira" || tab === "history") {
     return (
       <>
         <div className="page-wrapper" style={{ paddingBottom: 0 }}>
@@ -92,7 +106,11 @@ function WorkTabButton({
     >
       {icon}
       {label}
-      {count ? <span className="badge badge-muted ml-0.5" style={{ fontSize: 12 }}>{count}</span> : null}
+      {count ? (
+        <span className="badge badge-muted ml-0.5" style={{ fontSize: 12 }}>
+          {count}
+        </span>
+      ) : null}
     </button>
   );
 }

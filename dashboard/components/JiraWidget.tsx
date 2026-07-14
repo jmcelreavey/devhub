@@ -7,7 +7,8 @@ import { useLive } from "@/lib/use-fetch";
 import { useToast } from "@/lib/use-toast";
 import type { JiraTicket } from "@/lib/jira-client";
 import { TodayCollapseButton } from "@/components/TodayCollapseButton";
-import { SeverityPill, type SeverityTone } from "@/components/ui/Severity";
+import { type SeverityTone } from "@/components/ui/Severity";
+import { JiraStatusPill } from "@/components/JiraStatusPill";
 import { useGridSize } from "@/lib/use-grid-size";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { QueueRow } from "@/components/ui/QueueRow";
@@ -55,9 +56,9 @@ export function priorityIcon(priority: string): string {
 }
 
 function formatUpdatedShort(iso: string): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
@@ -148,9 +149,9 @@ export function JiraWidget({ collapsed = false, collapsedSummary, onToggle }: Ji
                   key={t.key}
                   monoKey={t.key}
                   title={t.summary}
-                  statusPill={<SeverityPill tone={statusTone(t.status)}>{t.status}</SeverityPill>}
                   size="compact"
                   href={t.url}
+                  statusPill={<JiraStatusPill ticketKey={t.key} status={t.status} />}
                 />
               ))}
               {sortedTickets.length > 4 && (
@@ -165,7 +166,7 @@ export function JiraWidget({ collapsed = false, collapsedSummary, onToggle }: Ji
                 <div
                   key={t.key}
                   role="listitem"
-                  className="jira-widget-ticket-row flex items-start gap-2 px-4 py-2.5 text-sm"
+                  className="group relative jira-widget-ticket-row flex items-start gap-2 px-4 py-2.5 text-sm"
                   style={{
                     borderTop: i === 0 ? "none" : "1px solid var(--border-muted)",
                   }}
@@ -175,7 +176,8 @@ export function JiraWidget({ collapsed = false, collapsedSummary, onToggle }: Ji
                     className="jira-widget-key font-mono text-xs shrink-0 px-1.5 py-0.5 rounded mt-0.5"
                     style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
                     onClick={() => void copyKey(t.key)}
-                    title={`Copy ${t.key}`}
+                    data-tooltip={`Copy ${t.key}`}
+                    data-tooltip-pos="top"
                     aria-label={`Copy issue key ${t.key}`}
                   >
                     {t.key}
@@ -188,6 +190,7 @@ export function JiraWidget({ collapsed = false, collapsedSummary, onToggle }: Ji
                     {t.summary}
                   </span>
                   <span className="jira-widget-meta flex shrink-0 items-center gap-2">
+                    <JiraStatusPill ticketKey={t.key} status={t.status} />
                     <span
                       className="text-[11px] shrink-0 tabular-nums text-right pt-0.5"
                       style={{ color: "var(--text-subtle)" }}
@@ -195,13 +198,14 @@ export function JiraWidget({ collapsed = false, collapsedSummary, onToggle }: Ji
                     >
                       {formatUpdatedShort(t.updatedAt)}
                     </span>
-                    <SeverityPill tone={statusTone(t.status)}>{t.status}</SeverityPill>
                     <a
                       href={t.url}
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label={`Open ${t.key} in Jira`}
                       className="shrink-0 rounded p-1 transition-colors jira-widget-open mt-0.5"
+                      data-tooltip={`Open ${t.key} in Jira`}
+                      data-tooltip-pos="top-end"
                       style={{ color: "var(--text-subtle)" }}
                     >
                       <ExternalLink size={11} aria-hidden />

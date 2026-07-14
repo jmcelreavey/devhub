@@ -5,7 +5,7 @@ export interface RepoInfo {
   dirtyCount: number;
   remote: string | null;
   unpushedCount?: number;
-  hasCompose?: boolean;
+  hasUpstart?: boolean;
 }
 
 export interface ReposApiPayload {
@@ -26,6 +26,32 @@ export interface GithubRepoInfo {
 
 export interface GithubReposApiPayload {
   repos: GithubRepoInfo[];
+}
+
+export interface BranchInfo {
+  name: string;
+  current: boolean;
+  remote: string | null;
+}
+
+export interface ChangedFileInfo {
+  path: string;
+  status: string;
+}
+
+export interface UnpushedCommitInfo {
+  hash: string;
+  subject: string;
+  files: string[];
+}
+
+export interface BranchesApiPayload {
+  branches: BranchInfo[];
+  currentBranch: string;
+  stashCount: number;
+  hasChanges: boolean;
+  changedFiles: ChangedFileInfo[];
+  unpushedCommits: UnpushedCommitInfo[];
 }
 
 export interface RepoSnippet {

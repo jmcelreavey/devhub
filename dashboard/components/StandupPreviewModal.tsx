@@ -57,7 +57,7 @@ export function StandupPreviewModal({
       await copyTextToClipboard(markdown);
       toast.success("Standup copied.");
     } catch {
-      toast.error("Clipboard unavailable — try again from a user tap.");
+      toast.error("Clipboard unavailable - try again from a user tap.");
     }
   }
 
@@ -105,7 +105,7 @@ export function StandupPreviewModal({
         </div>
 
         <div className="standup-preview-body" aria-busy={loading}>
-          {loading ? "Building standup…" : markdown || "_Empty — nothing to show for this window._"}
+          {loading ? "Building standup…" : markdown || "_Empty - nothing to show for this window._"}
         </div>
 
         <div className="standup-preview-footer">
@@ -117,7 +117,7 @@ export function StandupPreviewModal({
           )}
           {prScanFailureCount > 0 && (
             <span className="standup-preview-failure">
-              PR scan failed for {prScanFailureCount} repo{prScanFailureCount === 1 ? "" : "s"} — PRs may be missing
+              PR scan failed for {prScanFailureCount} repo{prScanFailureCount === 1 ? "" : "s"} - PRs may be missing
               {meta?.prScanFailedRepos?.length ? `: ${meta.prScanFailedRepos.join(", ")}` : ""}
             </span>
           )}

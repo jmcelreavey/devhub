@@ -38,7 +38,7 @@ describe("briefing-ai (AI unconfigured — all fallbacks)", () => {
       {
         weather: null, devTip: null, news: [], events: [],
         github: [], hackerNews: [], gaming: [], onThisDay: [],
-        aiSummary: null, interestSnippets: [],
+        aiSummary: null, bespokeHtml: null, researchCards: [], interestSnippets: [],
       },
       { techStack: ["typescript"], interests: ["F1"] },
     );

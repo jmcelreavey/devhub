@@ -293,7 +293,7 @@ export function McpPanel() {
       >
         <strong style={{ color: "var(--text)" }}>Repo</strong> servers live in <code>mcp/shared/</code> (git).
         <strong style={{ color: "var(--text)" }}> Personal</strong> servers live in{" "}
-        <code>~/.config/devhub/mcp-personal/</code> (machine-only — sync to every tool, never committed).
+        <code>~/.config/devhub/mcp-personal/</code> (machine-only - sync to every tool, never committed).
         Click <strong style={{ color: "var(--text)" }}>Sync all tools</strong> to push repo + personal catalogs to{" "}
         <code>~/.claude.json</code>, <code>~/.codex/mcp.json</code>,{" "}
         <code>~/.cursor/mcp.json</code>, and the <code>mcp</code> block in{" "}
@@ -479,7 +479,7 @@ export function McpPanel() {
                       style={{ color: "var(--text-subtle)" }}
                       title={server.description}
                     >
-                      — {server.description}
+                      - {server.description}
                     </span>
                   )}
                 </button>

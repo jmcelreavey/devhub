@@ -1540,9 +1540,15 @@ const retroStyle = `
   @keyframes kp-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
   .kp-blink { animation: kp-blink 1s steps(1) infinite; }
   .kp-float { animation: kp-float 1.8s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    .kp-blink, .kp-float { animation: none; }
+    .kp-overlay * { transition: none !important; }
+  }
   .kp-shadow { text-shadow: 2px 2px 0 #000, -1px -1px 0 #000; }
   .kp-card { background: #1a1530; border: 4px solid #c8a84e; box-shadow: inset 0 0 0 2px #0d0a18, 0 6px 0 rgba(0,0,0,.5); }
   .kp-btn { background: #1a1530; box-shadow: inset 0 -3px 0 rgba(0,0,0,.35); }
+  .kp-btn:active:not(:disabled) { transform: translateY(2px); box-shadow: inset 0 -1px 0 rgba(0,0,0,.35); }
+  .kp-overlay button:focus-visible { outline: 2px solid #fde047; outline-offset: 2px; }
 `;
 
 // ============================================================
@@ -1739,37 +1745,41 @@ export function KonamiPong() {
   return (
     <>
       <style>{retroStyle}</style>
-      <div className="kp-overlay fixed inset-0 z-[9999] bg-black flex items-center justify-center select-none overflow-hidden">
+      <div role="dialog" aria-modal="true" aria-label="Pong Quest" className="kp-overlay fixed inset-0 z-[9999] bg-black flex items-center justify-center select-none overflow-hidden">
         {/* Close + mute */}
-        <button onClick={close} className="absolute top-3 right-4 z-10 text-white/30 hover:text-white text-lg transition-colors" aria-label="Close">[X]</button>
-        <button onClick={toggleMute} className="absolute top-3 right-14 z-10 text-white/30 hover:text-white text-sm transition-colors font-mono" aria-label="Sound">
+        <button onClick={close} className="absolute top-3 right-4 z-10 p-1 text-white/60 hover:text-white text-lg transition-colors" aria-label="Close game">[X]</button>
+        <button onClick={toggleMute} className="absolute top-3 right-14 z-10 p-1 text-white/60 hover:text-white text-sm transition-colors font-mono" aria-label={save.muted ? "Unmute sound" : "Mute sound"} aria-pressed={save.muted}>
           {save.muted ? "[MUTE]" : "[SND]"}
         </button>
 
         {/* ─── MENU ─── */}
         {phase === "menu" && (
           <div className="kp-card text-center text-white px-8 py-7 max-w-2xl">
-            <div className="kp-float text-4xl mb-2 text-amber-300 kp-shadow">/\</div>
+            <div className="kp-float text-4xl mb-2 text-yellow-200 kp-shadow">/\</div>
             <h1 className="text-4xl sm:text-5xl font-black tracking-[0.15em] text-yellow-200 kp-shadow mb-1">
               PONG QUEST
             </h1>
             <h2 className="text-xl sm:text-2xl font-bold tracking-[0.28em] text-purple-300 kp-shadow mb-2">
               PADDLE DUNGEON
             </h2>
-            <p className="text-white/35 text-xs tracking-widest mb-8">DEFLECT THE CURSED ORB · FEED YOUR FAMILIAR · ROB THE MONSTERS</p>
+            <div className="flex flex-wrap gap-x-5 gap-y-1 justify-center text-white/50 text-xs tracking-widest mb-8">
+              <span>DEFLECT THE CURSED ORB</span>
+              <span>FEED YOUR FAMILIAR</span>
+              <span>ROB THE MONSTERS</span>
+            </div>
 
             <div className="flex gap-8 justify-center mb-10 text-sm font-mono">
               <div className="text-center">
-                <div className="text-white/30 text-xs tracking-widest">BEST</div>
+                <div className="text-white/50 text-xs tracking-widest">BEST</div>
                 <div className="text-2xl font-bold text-yellow-200">R{String(save.bestRound).padStart(2, "0")}</div>
               </div>
               <div className="text-center">
-                <div className="text-white/30 text-xs tracking-widest">RUNS</div>
+                <div className="text-white/50 text-xs tracking-widest">RUNS</div>
                 <div className="text-2xl font-bold text-purple-300">{String(save.totalRuns).padStart(3, "0")}</div>
               </div>
               <div className="text-center">
-                <div className="text-white/30 text-xs tracking-widest">GOLD</div>
-                <div className="text-2xl font-bold text-amber-400">{String(save.coins).padStart(4, "0")}</div>
+                <div className="text-white/50 text-xs tracking-widest">GOLD</div>
+                <div className="text-2xl font-bold text-yellow-200">{String(save.coins).padStart(4, "0")}</div>
               </div>
             </div>
 
@@ -1777,12 +1787,12 @@ export function KonamiPong() {
               <button onClick={startRun} className="kp-btn px-8 py-3 border-2 border-yellow-300 text-yellow-200 font-bold tracking-widest text-sm hover:bg-yellow-300/10 transition-colors kp-shadow">
                 ▶ START RUN
               </button>
-              <button onClick={() => setPhase("shop")} className="kp-btn px-6 py-3 border border-white/20 text-white/60 font-semibold tracking-widest text-sm hover:border-white/40 hover:text-white/80 transition-colors">
+              <button onClick={() => setPhase("shop")} className="kp-btn px-6 py-3 border border-white/25 text-white/70 font-semibold tracking-widest text-sm hover:border-white/50 hover:text-white transition-colors">
                 TAVERN
               </button>
             </div>
 
-            <div className="mt-12 flex gap-6 justify-center text-xs text-white/20 tracking-widest font-mono">
+            <div className="mt-12 flex flex-wrap gap-x-6 gap-y-1 justify-center text-xs text-white/45 tracking-widest font-mono">
               <span>MOUSE / ARROWS / WASD</span>
               <span>L-CLICK PET</span>
               <span>HOLD R-CLICK SLOW</span>
@@ -1804,22 +1814,22 @@ export function KonamiPong() {
                       style={i < hud.hp ? { boxShadow: "0 0 4px rgba(34,197,94,0.6)" } : {}} />
                   ))}
                 </div>
-                {hud.hasShield && <span className="text-amber-400 text-xs tracking-widest kp-shadow">[SHIELD]</span>}
+                {hud.hasShield && <span className="text-yellow-200 text-xs tracking-widest kp-shadow">[SHIELD]</span>}
               </div>
               <div className="text-yellow-200 text-2xl font-bold tracking-widest kp-shadow">
-                {String(hud.points).padStart(2, "0")}<span className="text-yellow-200/30 mx-1">/</span>{String(hud.needed).padStart(2, "0")}
+                {String(hud.points).padStart(2, "0")}<span className="text-yellow-200/40 mx-1">/</span>{String(hud.needed).padStart(2, "0")}
               </div>
-              <div className="text-amber-400 text-sm tracking-widest">★ {String(hud.coins).padStart(4, "0")}</div>
+              <div className="text-yellow-200 text-sm tracking-widest">★ {String(hud.coins).padStart(4, "0")}</div>
             </div>
 
-            <div className="w-full max-w-[800px] flex items-center justify-between mb-2 px-1 font-mono text-[10px] tracking-widest text-white/35">
+            <div className="w-full max-w-[800px] flex items-center justify-between mb-2 px-1 font-mono text-[10px] tracking-widest">
               <div className="flex items-center gap-2">
                 <span className="text-yellow-200">R-CLICK SLOW</span>
                 <Meter value={hud.slowMeter} color="bg-yellow-300" />
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-purple-300">{PETS[equippedPet].name}</span>
-                <span className="text-white/25">L-CLICK</span>
+                <span className="text-white/45">L-CLICK</span>
                 <Meter value={1 - hud.petCooldown} color="bg-purple-300" />
               </div>
             </div>
@@ -1829,9 +1839,12 @@ export function KonamiPong() {
               <canvas ref={canvasRef} width={W} height={H} className="w-full h-full block cursor-none" />
             </div>
 
-            <p className="text-white/20 text-xs mt-3 tracking-widest font-mono">
-              SCORE {hud.needed} TO ADVANCE · POWER-UPS IN CENTER · L-CLICK PET · HOLD R-CLICK FOR BULLET TIME
-            </p>
+            <div className="flex flex-wrap gap-x-5 gap-y-1 justify-center text-white/45 text-xs mt-3 tracking-widest font-mono">
+              <span>SCORE {hud.needed} TO ADVANCE</span>
+              <span>POWER-UPS IN CENTER</span>
+              <span>L-CLICK PET</span>
+              <span>HOLD R-CLICK FOR BULLET TIME</span>
+            </div>
           </div>
         )}
 
@@ -1839,7 +1852,7 @@ export function KonamiPong() {
         {phase === "draft" && (
           <div className="kp-card text-center text-white px-6 py-6 max-w-3xl w-full font-mono">
             <h2 className="text-2xl font-black tracking-widest text-yellow-200 kp-shadow mb-1">ROOM CLEARED</h2>
-            <p className="text-white/30 text-xs tracking-widest mb-8">CHOOSE ONE RELIC</p>
+            <p className="text-white/50 text-xs tracking-widest mb-8">CHOOSE ONE RELIC</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {draftChoices.map((perk) => {
                 const stacks = runPerks[perk.id] ?? 0;
@@ -1848,13 +1861,13 @@ export function KonamiPong() {
                     className="group kp-btn relative p-5 border-2 border-white/10 hover:border-yellow-300/60 transition-all hover:scale-105 text-center bg-black/40">
                     <div className="text-2xl mb-3 text-yellow-200 group-hover:scale-125 transition-transform font-bold kp-float">{perk.icon}</div>
                     <div className="font-bold text-white text-sm tracking-widest mb-1">{perk.name}</div>
-                    <div className="text-xs text-white/40">{perk.desc}</div>
-                    {stacks > 0 && <div className="text-xs text-yellow-200/50 mt-2">LV {stacks}/{perk.maxStacks}</div>}
+                    <div className="text-xs text-white/55">{perk.desc}</div>
+                    {stacks > 0 && <div className="text-xs text-yellow-200/70 mt-2">LV {stacks}/{perk.maxStacks}</div>}
                   </button>
                 );
               })}
             </div>
-            <div className="mt-6 text-sm text-amber-400/50 tracking-widest">★ {runCoinsDisplay} EARNED</div>
+            <div className="mt-6 text-sm text-yellow-200/70 tracking-widest">★ {runCoinsDisplay} EARNED</div>
           </div>
         )}
 
@@ -1862,15 +1875,15 @@ export function KonamiPong() {
         {phase === "gameover" && (
           <div className="kp-card text-center text-white px-8 py-7 font-mono">
             <h2 className="text-4xl font-black tracking-widest text-red-500 kp-shadow mb-2 kp-blink">GAME OVER</h2>
-            <p className="text-white/30 text-sm tracking-widest mb-8">REACHED ROUND {resultRound}</p>
+            <p className="text-white/50 text-sm tracking-widest mb-8">REACHED ROUND {resultRound}</p>
             <div className="flex gap-8 justify-center mb-10">
               <div className="text-center">
-                <div className="text-white/30 text-xs tracking-widest">ROUND</div>
+                <div className="text-white/50 text-xs tracking-widest">ROUND</div>
                 <div className="text-3xl font-bold text-yellow-200 kp-shadow">{String(resultRound).padStart(2, "0")}</div>
               </div>
               <div className="text-center">
-                <div className="text-white/30 text-xs tracking-widest">GOLD</div>
-                <div className="text-3xl font-bold text-amber-400 kp-shadow">{String(resultCoins).padStart(4, "0")}</div>
+                <div className="text-white/50 text-xs tracking-widest">GOLD</div>
+                <div className="text-3xl font-bold text-yellow-200 kp-shadow">{String(resultCoins).padStart(4, "0")}</div>
               </div>
               {resultRound >= save.bestRound && resultRound > 0 && (
                 <div className="text-center">
@@ -1881,12 +1894,12 @@ export function KonamiPong() {
             </div>
             <div className="flex gap-3 justify-center">
               <button onClick={startRun} className="kp-btn px-8 py-3 border-2 border-yellow-300 text-yellow-200 font-bold tracking-widest text-sm hover:bg-yellow-300/10 transition-colors kp-shadow">
-                ▶ RUN AGAIN
+                ▶ START RUN
               </button>
-              <button onClick={() => setPhase("shop")} className="kp-btn px-6 py-3 border border-white/20 text-white/60 font-semibold tracking-widest text-sm hover:border-white/40 hover:text-white/80 transition-colors">
+              <button onClick={() => setPhase("shop")} className="kp-btn px-6 py-3 border border-white/25 text-white/70 font-semibold tracking-widest text-sm hover:border-white/50 hover:text-white transition-colors">
                 TAVERN
               </button>
-              <button onClick={() => setPhase("menu")} className="kp-btn px-6 py-3 border border-white/10 text-white/40 font-semibold tracking-widest text-sm hover:border-white/20 hover:text-white/60 transition-colors">
+              <button onClick={() => setPhase("menu")} className="kp-btn px-6 py-3 border border-white/25 text-white/70 font-semibold tracking-widest text-sm hover:border-white/50 hover:text-white transition-colors">
                 MENU
               </button>
             </div>
@@ -1898,12 +1911,12 @@ export function KonamiPong() {
           <div className="kp-card w-full max-w-2xl px-6 py-6 text-white font-mono">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-black tracking-widest text-purple-300 kp-shadow">FAMILIAR TAVERN</h2>
-              <div className="text-amber-400 font-bold tracking-widest">★ {String(save.coins).padStart(5, "0")}</div>
+              <div className="text-yellow-200 font-bold tracking-widest">★ {String(save.coins).padStart(5, "0")}</div>
             </div>
             <div className="flex gap-1 mb-4 border-b border-white/10">
               {(["weapons", "balls", "courts", "pets", "upgrades"] as const).map((tab) => (
-                <button key={tab} onClick={() => setShopTab(tab)}
-                  className={`px-4 py-2 text-xs font-bold uppercase tracking-widest transition-colors ${shopTab === tab ? "text-yellow-200 border-b-2 border-yellow-300" : "text-white/30 hover:text-white/60"}`}>
+                <button key={tab} onClick={() => setShopTab(tab)} aria-pressed={shopTab === tab}
+                  className={`px-4 py-2 text-xs font-bold uppercase tracking-widest transition-colors ${shopTab === tab ? "text-yellow-200 border-b-2 border-yellow-300" : "text-white/50 hover:text-white/80"}`}>
                   {tab}
                 </button>
               ))}
@@ -1944,12 +1957,12 @@ export function KonamiPong() {
                     <div className="flex-1">
                       <div className="font-bold text-sm flex items-center gap-2 tracking-widest">
                         {upg.name}
-                        <span className="text-xs text-white/30">{"*".repeat(level)}{".".repeat(upg.maxLevel - level)}</span>
+                        <span className="text-xs text-white/50" aria-label={`Level ${level} of ${upg.maxLevel}`}>{"*".repeat(level)}{".".repeat(upg.maxLevel - level)}</span>
                       </div>
-                      <div className="text-xs text-white/40">{upg.desc}</div>
+                      <div className="text-xs text-white/55">{upg.desc}</div>
                     </div>
                     <button onClick={() => buyUpgrade(upgradeRef(upg))} disabled={maxed || save.coins < price}
-                      className={`px-4 py-2 text-xs font-bold tracking-widest transition-colors ${maxed ? "text-white/20" : save.coins >= price ? "text-amber-400 hover:bg-amber-400/10 border border-amber-400/40" : "text-white/15"}`}>
+                      className={`kp-btn px-4 py-2 text-xs font-bold tracking-widest transition-colors ${maxed ? "text-white/45 border border-white/10" : save.coins >= price ? "text-yellow-200 hover:bg-yellow-300/10 border border-yellow-300/50" : "text-white/45 border border-white/10"}`}>
                       {maxed ? "MAX" : `${price}G`}
                     </button>
                   </div>
@@ -1958,11 +1971,11 @@ export function KonamiPong() {
             </div>
 
             <div className="flex gap-3 justify-center mt-6">
-              <button onClick={startRun} className="px-6 py-3 border-2 border-yellow-300 text-yellow-200 font-bold tracking-widest text-sm hover:bg-yellow-300/10 transition-colors kp-shadow">
+              <button onClick={startRun} className="kp-btn px-6 py-3 border-2 border-yellow-300 text-yellow-200 font-bold tracking-widest text-sm hover:bg-yellow-300/10 transition-colors kp-shadow">
                 ▶ START RUN
               </button>
-              <button onClick={() => setPhase("menu")} className="px-6 py-3 border border-white/20 text-white/60 font-semibold tracking-widest text-sm hover:border-white/40 hover:text-white/80 transition-colors">
-                BACK
+              <button onClick={() => setPhase("menu")} className="kp-btn px-6 py-3 border border-white/25 text-white/70 font-semibold tracking-widest text-sm hover:border-white/50 hover:text-white transition-colors">
+                MENU
               </button>
             </div>
           </div>
@@ -2011,15 +2024,15 @@ function ShopRow({ name, price, owned, equipped, canAfford, onBuy, onEquip, prev
       <div className="flex items-center justify-center w-12 h-8">{preview}</div>
       <div className="flex-1">
         <div className="font-bold text-sm tracking-widest">{name}</div>
-        {desc ? <div className="text-[10px] text-white/35 tracking-widest mt-0.5">{desc}</div> : null}
+        {desc ? <div className="text-[10px] text-white/55 tracking-widest mt-0.5">{desc}</div> : null}
       </div>
       {equipped ? (
         <span className="px-4 py-2 text-xs font-bold text-yellow-200 tracking-widest">[EQUIPPED]</span>
       ) : owned ? (
-        <button onClick={onEquip} className="px-4 py-2 text-xs font-bold border border-white/20 hover:border-white/40 hover:bg-white/5 transition-colors tracking-widest">EQUIP</button>
+        <button onClick={onEquip} className="kp-btn px-4 py-2 text-xs font-bold border border-white/25 text-white/70 hover:border-white/50 hover:text-white hover:bg-white/5 transition-colors tracking-widest">EQUIP</button>
       ) : (
         <button onClick={onBuy} disabled={!canAfford}
-          className={`px-4 py-2 text-xs font-bold tracking-widest transition-colors ${canAfford ? "text-amber-400 hover:bg-amber-400/10 border border-amber-400/40" : "text-white/15"}`}>
+          className={`kp-btn px-4 py-2 text-xs font-bold tracking-widest transition-colors ${canAfford ? "text-yellow-200 hover:bg-yellow-300/10 border border-yellow-300/50" : "text-white/45 border border-white/10"}`}>
           {price}G
         </button>
       )}

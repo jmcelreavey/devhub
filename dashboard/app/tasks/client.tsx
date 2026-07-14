@@ -276,8 +276,12 @@ export default function TasksPage() {
       <div className="page-header">
         <div>
           <div className="page-title">Tasks</div>
-          <div className="text-xs" style={{ color: "var(--text-subtle)" }}>
-            {counts.all} total · {counts.open} open · {counts.done} done · {counts.abandoned} abandoned · {counts.moved} moved
+          <div className="text-xs flex flex-wrap gap-x-3" style={{ color: "var(--text-subtle)" }}>
+            <span>{counts.all} total</span>
+            <span>{counts.open} open</span>
+            <span>{counts.done} done</span>
+            <span>{counts.abandoned} abandoned</span>
+            <span>{counts.moved} moved</span>
           </div>
         </div>
       </div>

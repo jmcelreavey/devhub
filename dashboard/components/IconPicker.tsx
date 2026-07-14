@@ -533,7 +533,7 @@ export function IconPicker({
               boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
             }}
           >
-            {/* Brand section — only when a plugin whitelabels the logo, so the user can
+            {/* Brand section - only when a plugin whitelabels the logo, so the user can
                 flip between the brand mark and the stock DevHub mark. */}
             {!search && HAS_PLUGIN_BRAND && (
               <div style={{ borderBottom: "1px solid var(--border)" }}>

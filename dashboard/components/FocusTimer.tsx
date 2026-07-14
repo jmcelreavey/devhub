@@ -27,7 +27,7 @@ function parseCustomMinutes(raw: string): { mins: number } | { error: string } {
     return { error: "Use a whole number of minutes." };
   }
   if (n < CUSTOM_MIN_MINUTES || n > CUSTOM_MAX_MINUTES) {
-    return { error: `Use ${CUSTOM_MIN_MINUTES}–${CUSTOM_MAX_MINUTES} minutes.` };
+    return { error: `Use ${CUSTOM_MIN_MINUTES}-${CUSTOM_MAX_MINUTES} minutes.` };
   }
   return { mins: n };
 }
@@ -125,7 +125,7 @@ export function FocusTimer() {
         setCompleteOpen(true);
         if (typeof Notification !== "undefined" && Notification.permission === "granted") {
           try {
-            new Notification("Focus complete", { body: "Time's up — take a break." });
+            new Notification("Focus complete", { body: "Time's up - take a break." });
           } catch {
             // Notification constructor may throw on unsupported platforms.
           }
@@ -299,7 +299,7 @@ export function FocusTimer() {
           />
 
           <p className="text-xs mb-3" style={{ color: "var(--text-subtle)" }}>
-            Whole minutes, {CUSTOM_MIN_MINUTES}–{CUSTOM_MAX_MINUTES} ({Math.floor(CUSTOM_MAX_MINUTES / 60)}h max).
+            Whole minutes, {CUSTOM_MIN_MINUTES}-{CUSTOM_MAX_MINUTES} ({Math.floor(CUSTOM_MAX_MINUTES / 60)}h max).
           </p>
 
           {customError && (
@@ -346,7 +346,7 @@ export function FocusTimer() {
             Focus block complete
           </h2>
           <p className="focus-complete-body">
-            {"Time's up — step away, stretch, or start another block when you're ready."}
+            {"Time's up - step away, stretch, or start another block when you're ready."}
           </p>
           <button
             ref={completeDismissRef}
@@ -439,7 +439,7 @@ export function FocusTimer() {
               }}
             >
               <span>Custom…</span>
-              <span className="focus-preset-mins">—</span>
+              <span className="focus-preset-mins">-</span>
             </button>
           </div>,
           document.body,

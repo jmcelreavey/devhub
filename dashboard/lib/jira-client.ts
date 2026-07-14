@@ -1,4 +1,4 @@
-import { readDashboardEnvLocalFile, resolveEnvValue } from "@/lib/dashboard-env-local";
+import { getResolvedJiraEnv, authHeader, apiBase, jsonHeaders, type ResolvedJira } from "@/lib/jira-env";
 
 export interface JiraTicket {
   key: string;
@@ -41,29 +41,6 @@ interface JiraIssue {
 
 interface JiraSearchResponse {
   issues?: JiraIssue[];
-}
-
-interface ResolvedJira {
-  domain: string;
-  email: string;
-  apiToken: string;
-}
-
-function getResolvedJiraEnv(): ResolvedJira | null {
-  const { overrides } = readDashboardEnvLocalFile();
-  const domain = resolveEnvValue("JIRA_DOMAIN", overrides);
-  const email = resolveEnvValue("JIRA_EMAIL", overrides);
-  const apiToken = resolveEnvValue("JIRA_API_TOKEN", overrides);
-  if (!(domain && email && apiToken)) return null;
-  return { domain, email, apiToken };
-}
-
-function authHeader(j: ResolvedJira): string {
-  return "Basic " + Buffer.from(`${j.email}:${j.apiToken}`).toString("base64");
-}
-
-function apiBase(j: ResolvedJira): string {
-  return `https://${j.domain}/rest/api/3`;
 }
 
 export async function getMyTickets(): Promise<JiraTicket[]> {
@@ -162,13 +139,24 @@ export async function getMyAssignedTicketsTouchedInRange(
   });
 }
 
-export async function getTicket(
-  key: string,
-): Promise<{ status: { name: string }; summary: string; issuetype: string } | null> {
+export interface JiraTicketRef {
+  key: string;
+  summary: string;
+}
+
+export interface JiraTicketDetail {
+  key: string;
+  status: { name: string };
+  summary: string;
+  issuetype: string;
+  parent: JiraTicketRef | null;
+}
+
+export async function getTicket(key: string): Promise<JiraTicketDetail | null> {
   const j = getResolvedJiraEnv();
   if (!j) return null;
 
-  const res = await fetch(`${apiBase(j)}/issue/${key}?fields=status,summary,issuetype`, {
+  const res = await fetch(`${apiBase(j)}/issue/${key}?fields=status,summary,issuetype,parent`, {
     headers: {
       Authorization: authHeader(j),
       Accept: "application/json",
@@ -177,26 +165,31 @@ export async function getTicket(
 
   if (!res.ok) return null;
   const data = (await res.json()) as {
-    fields?: { status?: { name?: string }; summary?: string; issuetype?: { name?: string } };
+    key?: string;
+    fields?: {
+      status?: { name?: string };
+      summary?: string;
+      issuetype?: { name?: string };
+      parent?: { key?: string; fields?: { summary?: string } };
+    };
   };
+  const parentRaw = data.fields?.parent;
+  const parent =
+    parentRaw?.key != null
+      ? { key: parentRaw.key, summary: parentRaw.fields?.summary ?? "" }
+      : null;
   return {
+    key: data.key ?? key,
     status: { name: data.fields?.status?.name ?? "Unknown" },
     summary: data.fields?.summary ?? "",
     issuetype: data.fields?.issuetype?.name ?? "Task",
+    parent,
   };
 }
 
 /* -------------------------------------------------------------------------- */
 /*  Write + Agile support (create issue, transitions, board/sprint/team)      */
 /* -------------------------------------------------------------------------- */
-
-function jsonHeaders(j: ResolvedJira): Record<string, string> {
-  return {
-    Authorization: authHeader(j),
-    Accept: "application/json",
-    "Content-Type": "application/json",
-  };
-}
 
 /** Atlassian Cloud Greenhopper sprint field schema marker. */
 const SPRINT_SCHEMA = "com.pyxis.greenhopper.jira:gh-sprint";
@@ -346,6 +339,21 @@ function teamValueLabel(raw: unknown): string | null {
   return null;
 }
 
+/** Walk the parent chain until a Team value is found (epic often owns the team). */
+async function inheritTeamFromChain(startKey: string, teamFieldId: string): Promise<unknown> {
+  let currentKey: string | null = startKey;
+  const visited = new Set<string>();
+
+  while (currentKey && !visited.has(currentKey)) {
+    visited.add(currentKey);
+    const teamValue = await getIssueFieldRaw(currentKey, teamFieldId).catch(() => null);
+    if (teamValueLabel(teamValue)) return teamValue;
+    const ticket: JiraTicketDetail | null = await getTicket(currentKey).catch(() => null);
+    currentKey = ticket?.parent?.key ?? null;
+  }
+  return null;
+}
+
 export interface JiraMeta {
   configured: boolean;
   domain: string;
@@ -392,17 +400,19 @@ export async function getJiraMeta(
     findTeamFieldId(j),
   ]);
 
-  // Inherit the Team value from a reference ticket (parent first, else a recent
-  // ticket assigned to me in this project).
+  // Inherit Team from the reference ticket's parent chain (epic/grandparent often
+  // holds the team when the immediate parent is a bare task). Only fall back to a
+  // recent assigned ticket when no reference was given.
   let teamValue: unknown = null;
   if (teamFieldId) {
-    let refKey = referenceKey;
-    if (!refKey) {
+    if (referenceKey) {
+      teamValue = await inheritTeamFromChain(referenceKey, teamFieldId);
+    } else {
       const mine = await getMyTickets().catch(() => []);
-      refKey = mine.find((t) => t.projectKey === projectKey)?.key;
-    }
-    if (refKey) {
-      teamValue = await getIssueFieldRaw(refKey, teamFieldId).catch(() => null);
+      const refKey = mine.find((t) => t.projectKey === projectKey)?.key;
+      if (refKey) {
+        teamValue = await inheritTeamFromChain(refKey, teamFieldId);
+      }
     }
   }
 
