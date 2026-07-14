@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { normalizeAgentCli } from "@/lib/agent-cli-env";
 import {
   readDashboardEnvLocalFile,
+  syncAgentProcessEnvFromOverrides,
   syncBiProcessEnvFromOverrides,
   syncChamberProcessEnvFromOverrides,
   syncDatadogProcessEnvFromOverrides,
@@ -41,13 +43,14 @@ function validateDirectory(p: string): string | null {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { calendar, jira, datadog, core, network, bi } = body as {
+  const { calendar, jira, datadog, core, network, bi, agent } = body as {
     calendar?: { clientId?: string; clientSecret?: string; refreshToken?: string };
     jira?: { domain: string; email: string; apiToken: string };
     datadog?: { apiKey?: string; applicationKey?: string; email?: string; scheduleId?: string } | null;
     core?: { repoRoot?: string; notesDir?: string };
     network?: { allowLan: boolean; openchamberUiPassword?: string };
     bi?: { capiRepoPath?: string };
+    agent?: { cli?: string; opencodeModel?: string; cursorModel?: string };
   };
 
   // Validate core paths up-front so we don't half-write the env file.
@@ -175,12 +178,31 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  if (agent) {
+    // "opencode" is the default → store nothing so a fresh clone stays clean.
+    if (agent.cli !== undefined) {
+      if (normalizeAgentCli(agent.cli) === "cursor") overrides.set("DEVHUB_AGENT_CLI", "cursor");
+      else overrides.delete("DEVHUB_AGENT_CLI");
+    }
+    if (agent.opencodeModel !== undefined) {
+      const v = agent.opencodeModel.trim();
+      if (v) overrides.set("DEVHUB_AGENT_OPENCODE_MODEL", v);
+      else overrides.delete("DEVHUB_AGENT_OPENCODE_MODEL");
+    }
+    if (agent.cursorModel !== undefined) {
+      const v = agent.cursorModel.trim();
+      if (v) overrides.set("DEVHUB_AGENT_CURSOR_MODEL", v);
+      else overrides.delete("DEVHUB_AGENT_CURSOR_MODEL");
+    }
+  }
+
   writeDashboardEnvLocalFile(overrides, passthrough);
   syncGoogleProcessEnvFromOverrides(overrides);
   syncJiraProcessEnvFromOverrides(overrides);
   syncDatadogProcessEnvFromOverrides(overrides);
   syncBiProcessEnvFromOverrides(overrides);
   syncChamberProcessEnvFromOverrides(overrides);
+  syncAgentProcessEnvFromOverrides(overrides);
 
   const saved: string[] = [];
   if (core?.repoRoot && overrides.get("REPO_ROOT")) saved.push(`REPO_ROOT=${overrides.get("REPO_ROOT")}`);
@@ -196,6 +218,9 @@ export async function POST(req: NextRequest) {
   if (datadog?.email?.trim()) saved.push(`BI_OPS_USER_EMAIL=${datadog.email.trim()}`);
   if (datadog?.scheduleId?.trim()) saved.push(`DATADOG_ONCALL_SCHEDULE_ID=${datadog.scheduleId.trim()}`);
   if (bi?.capiRepoPath && overrides.get("CAPI_REPO_PATH")) saved.push(`CAPI_REPO_PATH=${overrides.get("CAPI_REPO_PATH")}`);
+  if (agent?.cli !== undefined) saved.push(`DEVHUB_AGENT_CLI=${normalizeAgentCli(agent.cli)}`);
+  if (agent?.opencodeModel?.trim()) saved.push(`DEVHUB_AGENT_OPENCODE_MODEL=${agent.opencodeModel.trim()}`);
+  if (agent?.cursorModel?.trim()) saved.push(`DEVHUB_AGENT_CURSOR_MODEL=${agent.cursorModel.trim()}`);
   if (network?.openchamberUiPassword?.trim() && overrides.get("OPENCHAMBER_UI_PASSWORD")) {
     saved.push(`OPENCHAMBER_UI_PASSWORD=${mask(overrides.get("OPENCHAMBER_UI_PASSWORD")!)}`);
   }

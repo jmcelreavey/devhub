@@ -11,6 +11,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { FocusTimer } from "./FocusTimer";
 import { QuickActions } from "./QuickActions";
 import { ContentSyncIndicator } from "./ContentSyncIndicator";
+import { AgentSoundtrack } from "./AgentSoundtrack";
 import { LaunchMenu, type LaunchMenuItem } from "./LaunchMenu";
 import { useLaunchClaudeDesktop } from "@/lib/launch-claude";
 import { useLaunchChamberDesktop } from "@/lib/launch-chamber";
@@ -155,7 +156,7 @@ export function HubTopBar() {
         ))}
       </nav>
       <SectionTabs />
-      {/* Visible search box — opens the ⌘K palette. */}
+      {/* Visible search box - opens the ⌘K palette. */}
       <button
         type="button"
         className="hub-search"
@@ -167,17 +168,18 @@ export function HubTopBar() {
         <kbd className="hub-search-kbd" aria-hidden>⌘K</kbd>
       </button>
       <div className="hub-topbar-actions">
-        {/* Signal cluster — git sync + dirty indicators */}
+        {/* Signal cluster - git sync + dirty indicators */}
         <ContentSyncIndicator />
 
-        {/* Focus cluster — timer */}
+        {/* Focus cluster - timer */}
         <span role="group" className="flex items-center gap-0.5" aria-label="Focus">
           <FocusTimer />
         </span>
 
-        {/* Quick cluster — notes/tasks/diagrams/theme/accent/chamber */}
+        {/* Quick cluster - notes/tasks/diagrams/theme/accent/chamber */}
         <span role="group" className="hub-cluster" aria-label="Quick actions">
           <QuickActions />
+          <AgentSoundtrack />
           <ThemeToggle />
           {toolLaunchItems && (
             <LaunchMenu

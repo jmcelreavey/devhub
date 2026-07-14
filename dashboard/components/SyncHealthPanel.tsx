@@ -28,7 +28,7 @@ export function SyncHealthPanel() {
         <div className="flex items-center gap-2 text-sm">
           {data.healthy ? <Check size={14} style={{ color: "var(--success)" }} /> : <AlertTriangle size={14} style={{ color: "var(--warning)" }} />}
           <span style={{ color: "var(--text)" }}>
-            {data.healthy ? `Sync health OK — ${data.skillsVerified} checks passed` : `${issueCount} sync issue${issueCount !== 1 ? "s" : ""} across tool directories`}
+            {data.healthy ? `Sync health OK - ${data.skillsVerified} checks passed` : `${issueCount} sync issue${issueCount !== 1 ? "s" : ""} across tool directories`}
           </span>
         </div>
         <div className="flex items-center gap-2">

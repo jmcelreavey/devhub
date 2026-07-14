@@ -52,13 +52,14 @@ export default function ActionsPage() {
 
   useEffect(() => {
     fetch("/api/scripts/history")
-      .then((r) => r.json())
-      .then(setHistory);
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setHistory)
+      .catch(() => setHistory([]));
   }, [refreshed]);
 
   return (
     <div className="page-wrapper">
-      <h1 className="text-lg font-semibold mb-1" style={{ color: "var(--text)" }}>Actions</h1>
+      <h1 className="page-title mb-1">Actions</h1>
       <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
         Run DevHub actions (TypeScript) with live output. One action at a time. For git blockers and hints, see{" "}
         <a href="/status" className="underline" style={{ color: "var(--accent)" }}>Status</a>.

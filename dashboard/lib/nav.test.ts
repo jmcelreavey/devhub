@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ALL_NAV_DESTINATIONS, LEGACY_NAV_ITEMS, NAV_ITEMS, filterNavBySetup } from "./nav";
+import { ALL_NAV_DESTINATIONS, LEGACY_NAV_ITEMS, NAV_ITEMS, SECTION_TABS, filterNavBySetup } from "./nav";
+import { PLUGIN_NAV_ITEMS } from "./plugin-nav.generated";
 
 const hrefs = (items: ReturnType<typeof filterNavBySetup>) => items.map((i) => i.href);
 
@@ -10,10 +11,17 @@ describe("NAV_ITEMS (13-destination IA)", () => {
 
   it("keeps merged pages out of the sidebar but in the destination list", () => {
     const sidebar = hrefs(NAV_ITEMS);
-    for (const legacy of ["/tasks", "/tickets", "/search", "/docs", "/learnings", "/diagrams", "/setup"]) {
+    for (const legacy of ["/search", "/docs", "/learnings", "/diagrams", "/setup"]) {
       expect(sidebar).not.toContain(legacy);
       expect(hrefs(ALL_NAV_DESTINATIONS)).toContain(legacy);
     }
+  });
+
+  it("does not breed extinct /tasks and /tickets destinations", () => {
+    expect(hrefs(LEGACY_NAV_ITEMS)).not.toContain("/tasks");
+    expect(hrefs(LEGACY_NAV_ITEMS)).not.toContain("/tickets");
+    expect(hrefs(ALL_NAV_DESTINATIONS)).not.toContain("/tasks");
+    expect(hrefs(ALL_NAV_DESTINATIONS)).not.toContain("/tickets");
   });
 
   it("exposes Work, Library and System as the merged destinations", () => {
@@ -33,18 +41,20 @@ describe("filterNavBySetup", () => {
     expect(visible).toContain("/notes");
   });
 
-  it("hides Ops when BI is not configured", () => {
-    const visible = hrefs(filterNavBySetup(LEGACY_NAV_ITEMS, { bi: false }));
+  it("hides Ops when BI is not configured (plugin nav present)", () => {
+    if (!PLUGIN_NAV_ITEMS.some((i) => i.href === "/ops")) return; // skip when BI plugin nav not materialised
+    const visible = hrefs(filterNavBySetup(ALL_NAV_DESTINATIONS, { bi: false }));
     expect(visible).not.toContain("/ops");
   });
 
-  it("shows Ops only when BI is configured", () => {
-    expect(hrefs(filterNavBySetup(LEGACY_NAV_ITEMS, { bi: true }))).toContain("/ops");
-    expect(hrefs(filterNavBySetup(LEGACY_NAV_ITEMS, {}))).not.toContain("/ops");
+  it("shows Ops only when BI is configured (plugin nav present)", () => {
+    if (!PLUGIN_NAV_ITEMS.some((i) => i.href === "/ops")) return;
+    expect(hrefs(filterNavBySetup(ALL_NAV_DESTINATIONS, { bi: true }))).toContain("/ops");
+    expect(hrefs(filterNavBySetup(ALL_NAV_DESTINATIONS, {}))).not.toContain("/ops");
   });
 
   it("gates other integrations independently of Ops", () => {
-    const visible = hrefs(filterNavBySetup(LEGACY_NAV_ITEMS, { datadog: true, bi: false }));
+    const visible = hrefs(filterNavBySetup(ALL_NAV_DESTINATIONS, { datadog: true, bi: false }));
     expect(visible).toContain("/datadog");
     expect(visible).not.toContain("/ops");
   });
@@ -72,5 +82,12 @@ describe("filterNavBySetup", () => {
 
   it("shows Claude only when installed", () => {
     expect(hrefs(filterNavBySetup(NAV_ITEMS, { claude: true }))).toContain("/claude");
+  });
+});
+
+describe("SECTION_TABS", () => {
+  it("keeps Setup last on the system strip", () => {
+    const system = SECTION_TABS.system.map((t) => t.href);
+    expect(system[system.length - 1]).toBe("/setup");
   });
 });

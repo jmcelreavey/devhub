@@ -61,9 +61,9 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
 
   const otherKeyValid = parentMode !== "other" || JIRA_KEY_RE.test(otherKey.trim().toUpperCase());
 
-  // Detected board / sprint / team / assignee for confirmation. Keyed by the
-  // chosen project + parent (the Team value is inherited from the parent), so
-  // SWR refetches whenever either changes.
+  const parentLookupKey = resolvedParentKey?.trim().toUpperCase() ?? null;
+  const parentKeyValid = !parentLookupKey || JIRA_KEY_RE.test(parentLookupKey);
+
   const metaParams = new URLSearchParams({ project: projectKey });
   if (resolvedParentKey) metaParams.set("reference", resolvedParentKey);
   const { data: meta, isLoading: metaLoading } = useLive<JiraMeta>(
@@ -71,15 +71,20 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
     { refreshInterval: 0 },
   );
 
-  // Look up the chosen parent's title so it can be eyeballed before creating.
-  const { data: parent, isLoading: parentLoading } = useLive<{ key: string; summary?: string; issuetype?: string }>(
-    open && resolvedParentKey && otherKeyValid ? `/api/jira/ticket/${resolvedParentKey}` : null,
-    { refreshInterval: 0 },
-  );
+  // Look up the chosen parent's title (and its parent) before creating.
+  const { data: parent, isLoading: parentLoading } = useLive<{
+    key: string;
+    summary?: string;
+    issuetype?: string;
+    grandparent?: { key: string; summary: string } | null;
+  }>(open && parentLookupKey && parentKeyValid ? `/api/jira/ticket/${parentLookupKey}` : null, {
+    refreshInterval: 0,
+  });
 
   const willRemoveLink = !!linkedKey && parentMode !== "linked";
   const issueTypeName = resolvedParentKey ? issueTypeForParent(parent?.issuetype) : "Task";
   const parentMissing = !!resolvedParentKey && !parentLoading && !parent?.key;
+  const descriptionValid = description.trim().length > 0;
 
   const create = useCallback(async () => {
     if (creating) return;
@@ -100,6 +105,11 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
       toast.error("That parent ticket wasn't found in Jira.");
       return;
     }
+    const trimmedDescription = description.trim();
+    if (!trimmedDescription) {
+      toast.error("Add a description first.");
+      return;
+    }
     setCreating(true);
     try {
       const res = await fetch("/api/jira/issue", {
@@ -108,7 +118,7 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
         body: JSON.stringify({
           projectKey,
           summary: trimmedSummary,
-          description: description.trim() || undefined,
+          description: trimmedDescription,
           parentKey: resolvedParentKey,
           issuetypeName: issueTypeName,
           assignToMe: true,
@@ -170,7 +180,14 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
             type="button"
             className="btn"
             onClick={create}
-            disabled={creating || !summary.trim() || !otherKeyValid || parentLoading || parentMissing}
+            disabled={
+              creating ||
+              !summary.trim() ||
+              !descriptionValid ||
+              !otherKeyValid ||
+              parentLoading ||
+              parentMissing
+            }
             style={{ background: "var(--accent)", color: "var(--accent-contrast, #fff)" }}
           >
             {creating ? (
@@ -218,7 +235,7 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
             checked={parentMode === "other"}
             onSelect={() => setParentMode("other")}
             label="Another ticket"
-            hint="e.g. an epic like PTF-3896 — the new Task is parented to it."
+            hint="e.g. an epic like PTF-3896 - the new Task is parented to it."
           >
             {parentMode === "other" && (
               <input
@@ -258,14 +275,14 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
         {/* Description */}
         <div className="block">
           <span className="text-xs font-medium" style={{ color: "var(--text-subtle)" }}>
-            Description <span style={{ color: "var(--text-subtle)" }}>(optional)</span>
+            Description
           </span>
           <div className="mt-1">
             <RichTextField onChangeMarkdown={setDescription} />
           </div>
         </div>
 
-        {/* Detected context — confirm before creating */}
+        {/* Detected context - confirm before creating */}
         <div className="rounded-lg p-3" style={{ background: "var(--bg)", border: "1px solid var(--border-muted)" }}>
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-medium" style={{ color: "var(--text-subtle)" }}>
@@ -280,7 +297,7 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
               label="Parent"
               value={
                 resolvedParentKey ? (
-                  <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
                     <span className="font-mono">{resolvedParentKey}</span>
                     {parentLoading ? (
                       <Loader2 size={11} className="animate-spin" style={{ color: "var(--text-subtle)" }} />
@@ -295,8 +312,21 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
                 )
               }
             />
+            {parent?.grandparent && (
+              <MetaRow
+                label="Parent's parent"
+                value={
+                  <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
+                    <span className="font-mono">{parent.grandparent.key}</span>
+                    {parent.grandparent.summary ? (
+                      <span style={{ color: "var(--text-subtle)" }}>· {parent.grandparent.summary}</span>
+                    ) : null}
+                  </span>
+                }
+              />
+            )}
             <MetaRow label="Assignee" value={meta?.me?.displayName ?? "Me"} />
-            <MetaRow label="Board" value={meta?.board?.name ?? (meta?.configured === false ? "Jira not configured" : "—")} />
+            <MetaRow label="Board" value={meta?.board?.name ?? (meta?.configured === false ? "Jira not configured" : "-")} />
             <MetaRow
               label="Sprint"
               value={
@@ -311,7 +341,7 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
                 </label>
               }
             />
-            <MetaRow label="Team" value={meta?.teamLabel ?? "—"} />
+            <MetaRow label="Team" value={meta?.teamLabel ?? "-"} />
           </dl>
         </div>
       </div>

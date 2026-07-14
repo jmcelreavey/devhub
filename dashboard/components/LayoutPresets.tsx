@@ -124,7 +124,7 @@ export function LayoutPresetsButton() {
             border: "1px solid var(--border-muted)",
           }}
         >
-          {/* View mode — Calm Focus (design B) vs dashboard grid (A+B) */}
+          {/* View mode - Calm Focus (design B) vs dashboard grid (A+B) */}
           <div style={{ padding: "4px 0", borderBottom: "1px solid var(--border-muted)" }}>
             <div
               className="px-3 pb-1 pt-1.5 text-[10.5px] font-bold uppercase"
@@ -134,7 +134,7 @@ export function LayoutPresetsButton() {
             </div>
             {(
               [
-                ["focus", "Focus", "One thing now — the rest whispers"],
+                ["focus", "Focus", "One thing now - the rest whispers"],
                 ["dashboard", "Dashboard", "Draggable grid with all the cards"],
               ] as [TodayView, string, string][]
             ).map(([id, name, desc]) => (

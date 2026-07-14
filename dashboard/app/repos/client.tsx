@@ -1,23 +1,31 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowUpFromLine, Container, RefreshCw } from "lucide-react";
+import { AlertCircle, ArrowUpFromLine, RefreshCw } from "lucide-react";
 import { useLive } from "@/lib/use-fetch";
 import { useToast } from "@/lib/use-toast";
 import { FetchError } from "@/components/FetchError";
 import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
 import { useLaunchClaudeDesktop } from "@/lib/launch-claude";
-import { openTerminal } from "@/lib/terminal-launch";
+import { useConfirm, usePrompt } from "@/components/ConfirmDialog";
+import {
+  agentRepoDxAuditCommand,
+  agentRepoUpstartCommand,
+  agentRepoUpstartDebugCommand,
+  agentRepoUpstartUpdateCommand,
+  openTerminal,
+  repoUpstartCommand,
+} from "@/lib/terminal-launch";
 import {
   EmptyReposCard,
   GithubRepoCard,
   LocalRepoCard,
-  OpenChamberCard,
   SearchCard,
   SectionHeader,
   StatCard,
 } from "./cards";
 import { LearnPanel } from "./LearnPanel";
+import { EvolutionStrip } from "./EvolutionStrip";
 import type { GithubReposApiPayload, RepoInfo, ReposApiPayload } from "./types";
 
 function parseGithubFetchErrorMessage(error: unknown): string {
@@ -66,16 +74,16 @@ export default function ReposPage() {
     isValidating: isGithubValidating,
   } = useLive<GithubReposApiPayload>(githubKey, { refreshInterval: 120_000 });
   const scanDirDisplay = data?.scanDirDisplay ?? "";
+  const [localFilter, setLocalFilter] = useState<"changed" | "unpushed" | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
   const [cloning, setCloning] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
-  const [composing, setComposing] = useState<string | null>(null);
   const [learningRepoName, setLearningRepoName] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return new URLSearchParams(window.location.search).get("learn");
   });
   const learningRepoNameRef = useRef<string | null>(learningRepoName);
-  const { data: apps } = useLive<{ gitkraken: boolean; docker: boolean }>("/api/repos/apps", {
+  const { data: apps } = useLive<{ gitkraken: boolean }>("/api/repos/apps", {
     refreshInterval: 0,
   });
   const [isDesktop] = useState(() => {
@@ -84,17 +92,21 @@ export default function ReposPage() {
   });
   const toast = useToast();
   const launchClaudeDesktop = useLaunchClaudeDesktop();
+  const prompt = usePrompt();
+  const confirm = useConfirm();
   const githubRepos = githubData?.repos ?? [];
   const normalizedLocalQuery = query.trim().toLowerCase();
-  const filteredLocalRepos = normalizedLocalQuery
-    ? repos.filter((repo) => repo.name.toLowerCase().includes(normalizedLocalQuery))
-    : repos;
+  const filteredLocalRepos = repos.filter((repo) => {
+    if (normalizedLocalQuery && !repo.name.toLowerCase().includes(normalizedLocalQuery)) return false;
+    if (localFilter === "changed") return repo.dirtyCount > 0;
+    if (localFilter === "unpushed") return (repo.unpushedCount ?? 0) > 0;
+    return true;
+  });
   const learningRepo = learningRepoName
     ? repos.find((repo) => repo.name === learningRepoName) ?? null
     : null;
   const changedRepos = repos.filter((repo) => repo.dirtyCount > 0).length;
   const unpushedRepos = repos.filter((repo) => (repo.unpushedCount ?? 0) > 0).length;
-  const composeRepos = repos.filter((repo) => repo.hasCompose).length;
 
   useEffect(() => {
     learningRepoNameRef.current = learningRepoName;
@@ -152,19 +164,44 @@ export default function ReposPage() {
     }
   }
 
-  async function composeUp(name: string) {
-    setComposing(name);
-    try {
-      const res = await fetch(`/api/repos/${encodeURIComponent(name)}/compose-up`, { method: "POST" });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error ?? "compose failed");
-      toast.success(`${name}: docker compose up -d finished.`);
-    } catch (e) {
-      console.error("compose up:", e);
-      toast.error(`${name}: compose failed — ${e instanceof Error ? e.message : "unknown error"}`);
-    } finally {
-      setComposing(null);
+  async function openUpstart(repo: RepoInfo, debug = false, context?: string) {
+    let trimmedContext = context?.trim();
+    if (!debug && !repo.hasUpstart && context === undefined) {
+      const entered = await prompt({
+        title: "Create and run upstart",
+        message: "Optional startup context for the agent. Leave blank to continue without it.",
+        input: { placeholder: "Context..." },
+        confirmLabel: "Run",
+      });
+      trimmedContext = entered?.trim() ?? "";
     }
+    openTerminal({
+      cwd: repo.path,
+      label: `${debug ? "Debug upstart" : "Upstart"} · ${repo.name}`,
+      command: debug
+        ? await agentRepoUpstartDebugCommand(repo.name, trimmedContext)
+        : repo.hasUpstart && trimmedContext
+          ? await agentRepoUpstartUpdateCommand(repo.name, trimmedContext)
+        : repo.hasUpstart
+          ? repoUpstartCommand()
+          : await agentRepoUpstartCommand(repo.name, trimmedContext),
+    });
+  }
+
+  async function openDxAudit(repo: RepoInfo) {
+    const context = await prompt({
+      title: `DX audit · ${repo.name}`,
+      message:
+        "Optional live question for the audit (e.g. \"should we move to Expo Go?\"). Leave blank for a full sweep.",
+      input: { placeholder: "Question/context..." },
+      confirmLabel: "Run audit",
+    });
+    if (context === null) return;
+    openTerminal({
+      cwd: repo.path,
+      label: `DX audit · ${repo.name}`,
+      command: await agentRepoDxAuditCommand(repo.name, context.trim() || undefined),
+    });
   }
 
   async function cloneRepo(fullName: string) {
@@ -187,7 +224,12 @@ export default function ReposPage() {
   }
 
   async function removeRepo(name: string) {
-    const ok = window.confirm(`Remove local repo "${name}"? This will delete the local folder only.`);
+    const ok = await confirm({
+      title: `Remove local repo "${name}"?`,
+      message: "This will delete the local folder only.",
+      confirmLabel: "Remove",
+      variant: "danger",
+    });
     if (!ok) return;
     setRemoving(name);
     try {
@@ -238,6 +280,8 @@ export default function ReposPage() {
         </div>
       </div>
 
+      <EvolutionStrip />
+
       {localError && (
         <div className="card card-body mb-3" style={{ borderLeft: "3px solid var(--danger)" }}>
           <div className="flex items-center gap-2 text-sm" style={{ color: "var(--text-muted)" }}>
@@ -250,11 +294,23 @@ export default function ReposPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-4 mb-3">
-        <StatCard label="Changed" value={changedRepos} tone={changedRepos ? "warning" : "muted"} icon={<AlertCircle size={13} />} />
-        <StatCard label="Unpushed" value={unpushedRepos} tone={unpushedRepos ? "accent" : "muted"} icon={<ArrowUpFromLine size={13} />} />
-        <StatCard label="Compose-ready" value={composeRepos} tone={composeRepos ? "success" : "muted"} icon={<Container size={13} />} />
-        <OpenChamberCard />
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 mb-3">
+        <StatCard
+          label="Changed"
+          value={changedRepos}
+          tone={changedRepos ? "warning" : "muted"}
+          icon={<AlertCircle size={13} />}
+          active={localFilter === "changed"}
+          onClick={() => setLocalFilter((current) => current === "changed" ? null : "changed")}
+        />
+        <StatCard
+          label="Unpushed"
+          value={unpushedRepos}
+          tone={unpushedRepos ? "accent" : "muted"}
+          icon={<ArrowUpFromLine size={13} />}
+          active={localFilter === "unpushed"}
+          onClick={() => setLocalFilter((current) => current === "unpushed" ? null : "unpushed")}
+        />
       </div>
 
       {isLoading && !data && (
@@ -272,7 +328,13 @@ export default function ReposPage() {
           <SectionHeader
             label="Local"
             count={`${filteredLocalRepos.length}/${repos.length}`}
-            description="Repos already cloned next to this DevHub checkout."
+            description={
+              localFilter === "changed"
+                ? "Showing repos with local changes."
+                : localFilter === "unpushed"
+                  ? "Showing repos with unpushed commits."
+                  : "Repos already cloned next to this DevHub checkout."
+            }
           />
 
           {filteredLocalRepos.map((repo) => (
@@ -284,14 +346,15 @@ export default function ReposPage() {
               isDesktop={isDesktop}
               opening={opening}
               removing={removing}
-              composing={composing}
               onLearn={openLearn}
+              onDxAudit={openDxAudit}
+              onUpstart={openUpstart}
               onTerminal={openInTerminal}
               onGitKraken={openInGitKraken}
-              onCompose={composeUp}
               onCursor={openInCursor}
               onClaudeDesktop={launchClaudeDesktop}
               onRemove={removeRepo}
+              onRefreshLocal={() => mutateLocal()}
             />
           ))}
 
@@ -299,6 +362,10 @@ export default function ReposPage() {
             <EmptyReposCard>
               {normalizedLocalQuery
                 ? `No local repos matching "${query}".`
+                : localFilter === "changed"
+                ? "No local repos with changes."
+                : localFilter === "unpushed"
+                ? "No local repos with unpushed commits."
                 : scanDirDisplay
                 ? `No repos found in ${scanDirDisplay}${scanDirDisplay.endsWith("/") ? "" : "/"}.`
                 : "No repos found."}

@@ -12,6 +12,7 @@ import { formatRelativePastAge } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { ConflictResolverPanel } from "@/components/ConflictResolverPanel";
 import { SyncHealthPanel } from "@/components/SyncHealthPanel";
+import { MaterializeHonestyBanner } from "@/components/MaterializeHonestyBanner";
 import { StatusDot } from "@/components/StatusDot";
 import { CopyButton } from "@/components/CopyButton";
 import { HoverTip } from "@/components/HoverTip";
@@ -157,8 +158,9 @@ function ServiceCard({ info, onRestart, restarting }: {
             style={{ fontSize: "11px", padding: "2px 6px" }}
             onClick={onRestart}
             disabled={restarting}
+            aria-label={restarting ? `Restarting ${info.name}` : `Restart ${info.name}`}
           >
-            <RotateCw size={11} className={restarting ? "animate-spin" : ""} />
+            <RotateCw size={11} className={restarting ? "animate-spin" : ""} aria-hidden />
           </button>
         </HoverTip>
       </div>
@@ -519,6 +521,7 @@ export default function StatusPage() {
   return (
     <div className="page-wrapper">
       <BootScreen state={boot} />
+      <MaterializeHonestyBanner />
       <CommitMessageModal
         open={syncDirtyModal !== null}
         onClose={() => setSyncDirtyModal(null)}
@@ -760,7 +763,7 @@ export default function StatusPage() {
                   <p className="text-xs leading-snug" style={{ color: "var(--text)" }}>
                     {otherDirty > 0
                       ? "Automated sync is paused until these changes are committed (or discarded)."
-                      : "Notes, tasks, and diagrams have unsynced changes — sync them (cloud button in the top bar) before automated sync resumes."}
+                      : "Notes, tasks, and diagrams have unsynced changes - sync them (cloud button in the top bar) before automated sync resumes."}
                   </p>
                 </div>
               )}
@@ -843,7 +846,7 @@ export default function StatusPage() {
                       </div>
                     ))}
                     <p className="border-t border-[var(--border-muted)] pt-2 text-[11px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-                      After you resolve blockers, use <strong className="font-medium" style={{ color: "var(--text-muted)" }}>Sync</strong> on this page or run <strong className="font-medium" style={{ color: "var(--text-muted)" }}>Update &amp; Sync</strong> from Actions — live output matches what you see there.
+                      After you resolve blockers, use <strong className="font-medium" style={{ color: "var(--text-muted)" }}>Sync</strong> on this page or run <strong className="font-medium" style={{ color: "var(--text-muted)" }}>Update &amp; Sync</strong> from Actions - live output matches what you see there.
                     </p>
                   </div>
                 </details>

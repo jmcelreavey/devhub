@@ -50,7 +50,7 @@ export default function ReviewPage() {
         <div>
           <div className="page-title">Weekly review</div>
           <div className="text-xs" style={{ color: "var(--text-subtle)" }}>
-            {data ? `${shortDate(data.start)} – ${shortDate(data.end)}` : "Last 7 days"}
+            {data ? `${shortDate(data.start)} - ${shortDate(data.end)}` : "Last 7 days"}
           </div>
         </div>
         <div className="flex items-center gap-2">

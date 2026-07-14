@@ -545,7 +545,7 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
         <div className="page-title">Agents</div>
         {(tab === "skills" || tab === "agents") && (
           <span className="badge badge-muted" suppressHydrationWarning>
-            {mounted ? filteredRows.length : "–"}
+            {mounted ? filteredRows.length : "-"}
           </span>
         )}
       </div>
@@ -556,7 +556,7 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
           ["agents", "Agents"],
           ["persona", "Persona"],
           ["mcp", "MCP servers"],
-          ["opencode", "OpenCode"],
+          ["opencode", "Agent CLI"],
         ] as const).map(([id, label]) => (
           <button key={id} role="tab" aria-selected={tab === id} className={`hub-tab ${tab === id ? "active" : ""}`} onClick={() => selectTab(id)}>
             {label}
@@ -575,7 +575,7 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
             style={{ color: "var(--text-muted)", lineHeight: 1.5, marginBottom: "12px", paddingLeft: "18px" }}
           >
             <li>
-              <strong style={{ color: "var(--text)" }}>Catalog</strong> —{" "}
+              <strong style={{ color: "var(--text)" }}>Catalog</strong> -{" "}
               {visibleKind === "skill" ? (
                 <>
                   <code>skills/shared/</code> plus read-only <code>ai-tools</code> upstream.
@@ -586,7 +586,7 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
               Rows with <strong>Add to catalog</strong> exist only on your machine; import them to share via git.
             </li>
             <li>
-              <strong style={{ color: "var(--text)" }}>Local tools</strong> — sync pushes the catalog to install dirs.
+              <strong style={{ color: "var(--text)" }}>Local tools</strong> - sync pushes the catalog to install dirs.
               Prune removes extras not in the catalog. Use the eye icon to exclude catalog entries from sync/prune.
             </li>
           </ul>

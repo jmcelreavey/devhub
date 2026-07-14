@@ -218,6 +218,45 @@ const richTextFromText = (text: string): Record<string, unknown> => ({
   })),
 });
 
+const TLDRAW_SCHEMA = {
+  schemaVersion: 2,
+  sequences: {
+    "com.tldraw.store": 5,
+    "com.tldraw.asset": 1,
+    "com.tldraw.camera": 1,
+    "com.tldraw.document": 2,
+    "com.tldraw.instance": 26,
+    "com.tldraw.instance_page_state": 5,
+    "com.tldraw.page": 1,
+    "com.tldraw.instance_presence": 6,
+    "com.tldraw.pointer": 1,
+    "com.tldraw.shape": 4,
+    "com.tldraw.user": 1,
+    "com.tldraw.asset.image": 6,
+    "com.tldraw.asset.video": 5,
+    "com.tldraw.asset.bookmark": 2,
+    "com.tldraw.shape.group": 0,
+    "com.tldraw.shape.text": 4,
+    "com.tldraw.shape.bookmark": 2,
+    "com.tldraw.shape.draw": 4,
+    "com.tldraw.shape.geo": 11,
+    "com.tldraw.shape.note": 12,
+    "com.tldraw.shape.line": 5,
+    "com.tldraw.shape.frame": 1,
+    "com.tldraw.shape.arrow": 8,
+    "com.tldraw.shape.highlight": 3,
+    "com.tldraw.shape.embed": 4,
+    "com.tldraw.shape.image": 5,
+    "com.tldraw.shape.video": 4,
+    "com.tldraw.binding.arrow": 1,
+  },
+};
+
+const createTldrawSnapshot = (store: Record<string, unknown> = {}): Record<string, unknown> => ({
+  store,
+  schema: TLDRAW_SCHEMA,
+});
+
 export class DiagramsStorage {
   private notesStorage: NotesStorage;
 
@@ -284,7 +323,7 @@ export class DiagramsStorage {
       : `diagrams/${diagramPath}`;
     const existing = this.notesStorage.read(fullPath);
     if (!existing) return false;
-    this.notesStorage.write(fullPath, data);
+    this.notesStorage.write(fullPath, this.normalizeDiagramData(data));
     return true;
   }
 
@@ -297,7 +336,9 @@ export class DiagramsStorage {
 
     const outerStore = this.ensureRecord(data, "store");
     const records = this.ensureRecord(outerStore, "store");
+    outerStore.schema ??= TLDRAW_SCHEMA;
     this.ensurePageRecords(records);
+    this.ensureNoteShapeProps(records);
 
     const shapeId = `shape:${randomUUID().replaceAll("-", "").slice(0, 20)}`;
     const { x, y } = this.nextNotePosition(records, note.x, note.y);
@@ -324,7 +365,7 @@ export class DiagramsStorage {
         fontSizeAdjustment: 1,
         url: "",
         scale: 1,
-        ...(userId ? { textFirstEditedBy: userId } : {}),
+        textFirstEditedBy: userId ?? null,
       },
       parentId: "page:page",
       index: this.nextIndex(records),
@@ -367,6 +408,26 @@ export class DiagramsStorage {
     const created: Record<string, unknown> = {};
     parent[key] = created;
     return created;
+  }
+
+  private normalizeDiagramData(data: unknown): unknown {
+    if (!isRecord(data) || data.type !== "tldraw") return data;
+    const outerStore = this.ensureRecord(data, "store");
+    const records = this.ensureRecord(outerStore, "store");
+    outerStore.schema ??= TLDRAW_SCHEMA;
+    this.ensurePageRecords(records);
+    this.ensureNoteShapeProps(records);
+    return data;
+  }
+
+  private ensureNoteShapeProps(records: Record<string, unknown>): void {
+    for (const record of Object.values(records)) {
+      if (!isRecord(record) || record.typeName !== "shape" || record.type !== "note") continue;
+      const props = this.ensureRecord(record, "props");
+      if (typeof props.textFirstEditedBy !== "string" && props.textFirstEditedBy !== null) {
+        props.textFirstEditedBy = null;
+      }
+    }
   }
 
   private ensurePageRecords(records: Record<string, unknown>): void {

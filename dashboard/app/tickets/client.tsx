@@ -5,23 +5,14 @@ import { Ticket, ExternalLink, RefreshCw } from "lucide-react";
 import { useLive } from "@/lib/use-fetch";
 import type { JiraTicket } from "@/lib/jira-client";
 import { useMarkTicketsSeen } from "@/lib/use-sidebar-counts";
-import { priorityIcon, statusColor } from "@/components/JiraWidget";
+import { priorityIcon } from "@/components/JiraWidget";
+import { JiraStatusPill } from "@/components/JiraStatusPill";
 import { FetchError, EmptyState, SkeletonRows } from "@/components";
 import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
 
 interface JiraResponse {
   tickets?: JiraTicket[];
   configured?: boolean;
-}
-
-function statusBadgeClass(status: string): string {
-  const cat = statusColor(status);
-  const map: Record<string, string> = {
-    "var(--success)": "badge badge-success",
-    "var(--accent)": "badge badge-accent",
-    "var(--warning)": "badge badge-warning",
-  };
-  return map[cat] ?? "badge badge-muted";
 }
 
 const STATUS_GROUPS = ["All", "To Do", "In Progress", "In Review", "Done"] as const;
@@ -50,7 +41,7 @@ function TicketCard({ ticket }: { ticket: JiraTicket }) {
             >
               {ticket.key}
             </span>
-            <span className={statusBadgeClass(ticket.status)}>{ticket.status}</span>
+            <JiraStatusPill ticketKey={ticket.key} status={ticket.status} />
             <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
               {ticket.issuetype}
             </span>

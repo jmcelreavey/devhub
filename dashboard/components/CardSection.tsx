@@ -51,8 +51,8 @@ function SectionHelpModal({
           <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
             {title}
           </span>
-          <button type="button" className="btn btn-ghost" style={{ padding: 4 }} onClick={onClose}>
-            <X size={14} />
+          <button type="button" className="btn btn-ghost" style={{ padding: 4 }} onClick={onClose} aria-label="Close">
+            <X size={14} aria-hidden />
           </button>
         </div>
         <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>

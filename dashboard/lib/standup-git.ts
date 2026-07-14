@@ -142,16 +142,28 @@ export async function gitLogLinesLocalMidnightWindow(
   }
 }
 
+async function currentBranchUnpushedArgs(cwd: string): Promise<string[]> {
+  try {
+    const { stdout } = await exec("git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], { cwd });
+    const upstream = stdout.trim();
+    if (upstream) return [`${upstream}..HEAD`];
+  } catch {
+    // No upstream configured. Fall back to current HEAD versus all remotes.
+  }
+  return ["HEAD", "--not", "--remotes"];
+}
+
 /**
- * Count of local commits that are ahead of every remote tracking ref.
- * Returns 0 on failure (e.g. no upstream configured) — this is informational
- * only, surfaced as an "unpushed" badge.
+ * Count local commits on the current branch that are not on its upstream.
+ * Returns 0 on failure — this is informational only, surfaced as an
+ * "unpushed" badge.
  */
 export async function gitUnpushedCount(cwd: string): Promise<number> {
   try {
+    const rangeArgs = await currentBranchUnpushedArgs(cwd);
     const { stdout } = await exec(
       "git",
-      ["log", "--branches", "--not", "--remotes", "--pretty=format:%H"],
+      ["log", ...rangeArgs, "--pretty=format:%H"],
       { cwd, maxBuffer: 1 * 1024 * 1024 },
     );
     const lines = stdout.trim().split("\n").filter(Boolean);

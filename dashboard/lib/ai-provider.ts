@@ -1,4 +1,5 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 import { isNotesAiConfigured } from "@/lib/notes-ai/config";
 
@@ -26,10 +27,24 @@ function resolveProviderConfig(): ProviderConfig {
   return { apiKey, baseURL, modelId };
 }
 
-/** OpenAI-compatible chat model for the notes/briefing/repo-learn routes. Returns null when unset. */
+/** True when the endpoint is OpenAI proper (needs the official provider). */
+function isOpenAiEndpoint(baseURL: string): boolean {
+  return /api\.openai\.com/i.test(baseURL);
+}
+
+/**
+ * Chat model for the notes/briefing/repo-learn/capability routes. Returns null
+ * when unset. OpenAI proper uses the official provider (it emits
+ * `max_completion_tokens` for the gpt-5 / reasoning family, which the generic
+ * openai-compatible provider doesn't); everything else (GLM/z.ai, OpenRouter,
+ * Together, local Ollama/LM Studio, …) uses the openai-compatible provider.
+ */
 export function getNotesAiModel(): LanguageModel | null {
   if (!isNotesAiConfigured()) return null;
   const { apiKey, baseURL, modelId } = resolveProviderConfig();
+  if (isOpenAiEndpoint(baseURL)) {
+    return createOpenAI({ apiKey, baseURL })(modelId);
+  }
   return createOpenAICompatible({ name: PROVIDER_NAME, baseURL, apiKey })(modelId);
 }
 

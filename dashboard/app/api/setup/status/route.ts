@@ -6,6 +6,7 @@ import { getResolvedGoogleCalendarEnv } from "@/lib/google-calendar";
 import { isGithubCliAuthenticated } from "@/lib/repos";
 import { detectBiPresence } from "@/lib/bi-presence";
 import { getPeerServiceGateStatus } from "@/lib/peer-service-availability";
+import { isCursorAgentInstalled, readAgentCliSettings } from "@/lib/agent-cli-env";
 
 export const dynamic = "force-dynamic";
 
@@ -112,6 +113,10 @@ export async function GET() {
       hasScheduleId: datadogScheduleId,
       email: resolveEnvValue("BI_OPS_USER_EMAIL", overrides) ?? "",
       scheduleId: resolveEnvValue("DATADOG_ONCALL_SCHEDULE_ID", overrides) ?? "",
+    },
+    agentVars: {
+      ...readAgentCliSettings(),
+      cursorAgentInstalled: isCursorAgentInstalled(),
     },
     biVars: {
       awsProfile: biPresence.awsProfile,

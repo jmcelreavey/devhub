@@ -10,7 +10,7 @@ It brings together a dashboard, shared agent configuration, persistent notes, ta
 | ------------- | --------------------------------------------------------------------- |
 | Dashboard     | The local web app used day to day                                     |
 | Notes storage | File-backed notes, tasks, learnings, and diagrams                     |
-| MCP server    | Lets AI tools use DevHub filesystem data and dashboard-backed workflows |
+| MCP server    | Lets AI tools read and write DevHub notes and tasks                   |
 | Sync engine   | Copies shared skills, persona, agents, and MCP configs to local tools |
 | Electron app  | Optional desktop launcher for the dashboard                           |
 | Integrations  | Calendar, Jira, Datadog, GitHub, and internal ops helpers             |
@@ -31,9 +31,7 @@ The repo is the source of truth for shared configuration. Local tool directories
 
 DevHub is built for one user on a trusted machine or trusted LAN.
 
-There is no user login or session system. Most routes rely on local-only access and a loose same-origin check for mutating calls. A small set of **sensitive** routes (currently OpenCode session recap) use `requireDashboardAuth`: when `DEVHUB_API_SECRET` is set, callers must send `X-DevHub-Secret`; when unset, a strict same-origin `Origin` header is required. See [API Routes — Common Behavior](../reference/api-routes.md#common-behavior) and [Environment Variables](../reference/environment-variables.md#core-variables).
-
-Do not expose DevHub to the public internet without adding a proper perimeter auth layer on top of these guards.
+It does not include built-in authentication. Do not expose it to the public internet without adding a proper auth layer.
 
 ## Data Storage
 

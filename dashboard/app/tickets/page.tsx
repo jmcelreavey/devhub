@@ -1,5 +1,6 @@
-import Client from "./client";
+import { redirect } from "next/navigation";
 
-export default function Page() {
-  return <Client />;
+/** /tickets is extinct — /work is canonical (Jira tab). */
+export default function TicketsRedirectPage() {
+  redirect("/work?tab=jira");
 }

@@ -133,7 +133,7 @@ export function StandupCopyButton({ variant = "strip" }: StandupCopyButtonProps)
     try {
       const r = await saveStandupAsDailyNote(params);
       if (r.ok) {
-        toast.success("Standup saved — opening note.");
+        toast.success("Standup saved - opening note.");
         setPreviewOpen(false);
         router.push(`/notes/${r.notePath}`);
       } else {
@@ -158,7 +158,7 @@ export function StandupCopyButton({ variant = "strip" }: StandupCopyButtonProps)
         toast.error(`${result.data.meta?.repoFailures.length} repo(s) failed git scan.`);
       }
       if ((result.data.meta?.prScanFailedRepos?.length ?? 0) > 0) {
-        toast.error(`PR scan failed for: ${result.data.meta?.prScanFailedRepos?.join(", ")} — some PRs may be missing.`);
+        toast.error(`PR scan failed for: ${result.data.meta?.prScanFailedRepos?.join(", ")} - some PRs may be missing.`);
       }
     } else {
       toast.error(result.message);

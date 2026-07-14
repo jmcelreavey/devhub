@@ -37,8 +37,6 @@ LAN use requires DevHub to bind to a LAN-accessible address and your firewall to
 
 Do not expose DevHub directly to the public internet without adding authentication.
 
-When binding the dashboard to LAN (`DEVHUB_BIND_HOST=0.0.0.0` or `auto`), consider setting `DEVHUB_API_SECRET` so sensitive routes (OpenCode recap) reject anonymous cross-origin callers. MCP and other local clients must send the same secret in `X-DevHub-Secret`. See [Environment Variables](reference/environment-variables.md#core-variables).
-
 ## WSL Notes
 
 For WSL2, mirrored networking is usually the simplest LAN option. NAT-mode WSL may require Windows port forwarding.

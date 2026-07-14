@@ -124,7 +124,7 @@ export function MermaidBlockView({ code, blockId }: MermaidBlockViewProps) {
             <MermaidSvg svg={svg} />
           ) : (
             <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
-              Empty diagram — click Edit to add Mermaid syntax.
+              Empty diagram - click Edit to add Mermaid syntax.
             </p>
           )}
         </div>

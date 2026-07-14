@@ -49,9 +49,9 @@ export function KeyboardShortcuts() {
           k: "/skills",
           c: "/chamber",
           l: "/calendar",
-          j: "/tickets",
+          j: "/work?tab=jira",
           d: "/datadog",
-          t: "/tasks",
+          t: "/work?tab=tasks",
           w: "/work",
           p: "/prs",
         };

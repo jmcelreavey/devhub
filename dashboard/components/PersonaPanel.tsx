@@ -56,7 +56,7 @@ interface PersonaBlockResult {
 }
 
 function relTime(ms: number | null): string {
-  if (!ms) return "—";
+  if (!ms) return "-";
   return formatRelativePastAge(Date.now() - ms);
 }
 
@@ -475,7 +475,7 @@ export function PersonaPanel() {
                       </div>
                       {t.id === "deep-preferences" && (
                         <div>
-                          Mode files: <code className="font-mono">persona/modes/*.md</code> — skill{" "}
+                          Mode files: <code className="font-mono">persona/modes/*.md</code> - skill{" "}
                           <code className="font-mono">skills/shared/deep-preferences</code>
                         </div>
                       )}
@@ -556,7 +556,7 @@ export function PersonaPanel() {
                           ? "Loading…"
                           : t.exists
                             ? "Loading…"
-                            : "(file does not exist yet — saving will create it)"}
+                            : "(file does not exist yet - saving will create it)"}
                     </pre>
                   )}
                 </div>
@@ -610,7 +610,7 @@ export function PersonaPanel() {
                   <div className="font-medium mb-1" style={{ color: "var(--text)" }}>
                     {s.label}
                     {!s.exists && (
-                      <span style={{ color: "var(--text-subtle)", fontWeight: 400 }}> — not found</span>
+                      <span style={{ color: "var(--text-subtle)", fontWeight: 400 }}> - not found</span>
                     )}
                   </div>
                   <code style={{ color: "var(--text-subtle)", fontSize: "10px" }}>{s.resolved}</code>
@@ -736,8 +736,8 @@ export function PersonaPanel() {
                       : pullBlock.toolBlock === null
                         ? "no markers in tool file"
                         : pullBlock.inSync
-                          ? "in sync — pull would do nothing"
-                          : "different — pull will overwrite source"}
+                          ? "in sync - pull would do nothing"
+                          : "different - pull will overwrite source"}
                   </div>
                 </div>
 

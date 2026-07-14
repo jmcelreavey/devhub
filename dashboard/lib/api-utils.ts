@@ -45,23 +45,25 @@ export function isSameOriginStrict(req: NextRequest): boolean {
 }
 
 /**
- * Authentication guard for sensitive dashboard routes.
+ * Authentication guard for sensitive / mutating dashboard routes.
  *
- * - If `DEVHUB_API_SECRET` is configured, requests must provide it in the
- *   `X-DevHub-Secret` header.
- * - Otherwise, a strict same-origin check is enforced (browser requests only).
+ * Accepts either:
+ * 1. `X-DevHub-Secret` matching `DEVHUB_API_SECRET` (MCP / local tooling), or
+ * 2. A **strict** same-origin browser request (Origin present and matches Host).
+ *
+ * Missing Origin without a valid secret is rejected — that closes the LAN hole
+ * where any local process could POST with no Origin. Prefer setting
+ * `DEVHUB_API_SECRET` when the dashboard is reachable off localhost.
+ * See README + `.env.example`.
  */
 export function requireDashboardAuth(req: NextRequest): { ok: true } | { ok: false; response: NextResponse } {
   const secret = process.env.DEVHUB_API_SECRET?.trim();
   if (secret) {
     const provided = req.headers.get("x-devhub-secret")?.trim();
-    if (provided !== secret) {
-      return { ok: false, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
-    }
-    return { ok: true };
+    if (provided === secret) return { ok: true };
   }
-  if (!isSameOriginStrict(req)) {
-    return { ok: false, response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
-  }
-  return { ok: true };
+  if (isSameOriginStrict(req)) return { ok: true };
+  const status = secret ? 401 : 403;
+  const error = secret ? "Unauthorized" : "Forbidden";
+  return { ok: false, response: NextResponse.json({ error }, { status }) };
 }

@@ -11,7 +11,7 @@ metadata:
 
 A Tier-2 plugin (e.g. `devhub-bi`) is a **separate repo** that ships Next.js dashboard
 code — pages, API routes, libs, components — into the core DevHub dashboard. The plugin
-has **no standalone build**: its files are *materialized* (copied) into core at the same
+has **no standalone build**: its files are _materialized_ (copied) into core at the same
 relative path, and core compiles them as if they were its own.
 
 This skill is the day-to-day dev loop. For the design/reference see
@@ -38,7 +38,7 @@ This skill is the day-to-day dev loop. For the design/reference see
 
 1. **Edit the plugin source** in the plugin repo (e.g. `devhub-bi/dashboard/...`).
 
-2. **Register new files.** Any *new* file must be listed in `devhub-plugin.json`
+2. **Register new files.** Any _new_ file must be listed in `devhub-plugin.json`
    under `dashboard.paths` (paths are relative to the plugin's `dashboard.root`).
    Editing an already-listed file needs no manifest change. Bump `version` when the
    contributed surface changes.
@@ -61,10 +61,12 @@ This skill is the day-to-day dev loop. For the design/reference see
    ```
 
 5. **Commit in the plugin repo**, not core. The core copies are git-ignored; nothing to
-   commit there. Use a feature branch + conventional commit in the plugin repo.
+   commit there. Use a feature branch + conventional commit in the plugin repo, and
+   exclude `.devhub/` from staging.
 
 ## Rules
 
+- **Never commit `.devhub/`.** Before committing plugin work, confirm `git diff --cached --name-only` contains no `.devhub/` paths; unstage them with `git restore --staged -- .devhub` if needed.
 - **Client-safe libs:** a lib imported by a client component (`"use client"`) must have
   **no Node imports** (`node:fs`, `child_process`, etc.). Put shared pure logic (command
   string builders, types) in a client-safe module; keep `fs`/`exec` server-only.

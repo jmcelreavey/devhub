@@ -15,29 +15,10 @@ It does not replace the dashboard. It runs the same local DevHub app you can ope
 | `1337` | Dashboard   |
 | `1336` | OpenChamber |
 | `1338` | OpenCode    |
-| `1339` | Terminal (in-app PTY peer) |
 
-The launcher can detect whether each port is reachable, start `npm run dev` or `npm run start` when needed, and restart listeners on all four before relaunching.
+The launcher can detect whether each port is reachable, start `npm run dev` or `npm run start` when needed, and restart listeners on all three before relaunching.
 
 The Electron app always opens the dashboard through `localhost`. LAN access is handled separately by DevHub's LAN proxy, so enabling network access does not make Electron chase the machine's Wi‑Fi or Tailscale IP.
-
-### Dashboard URL Resolution
-
-Electron resolves the window URL from `DEVHUB_BIND_HOST` in `process.env` or
-`dashboard/.env.local` (`electron-wrapper/src/main.ts`):
-
-| `DEVHUB_BIND_HOST` value | Electron opens |
-| ------------------------ | -------------- |
-| `0.0.0.0`, `::` (default) | `http://localhost:<PORT>` |
-| `auto`, `lan` | `http://localhost:<PORT>` |
-| `127.0.0.1` or other explicit host | `http://<host>:<PORT>` |
-
-The dashboard may bind `0.0.0.0` for LAN proxy access while Electron still loads
-`localhost`. Phones and other devices use the LAN URLs from `/setup` or Status — not
-the Electron window URL.
-
-If Electron shows a blank window but the browser works, confirm the dashboard is
-listening on the resolved port and that `PORT` in `.env.local` matches.
 
 ## Start The App Locally
 
@@ -84,7 +65,7 @@ Per-service quit behavior is configurable in the app menu (stored in `launcher-s
 | Kill OpenChamber on close | on      | Stops the OpenChamber daemon on `1336`   |
 | Kill OpenCode on close    | on      | Stops `opencode serve` on `1338`         |
 
-Turn off individual toggles when you want DevHub to keep supported peer services running after closing the window. Note: OpenChamber is currently still stopped during launcher cleanup even if **Kill OpenChamber on close** is disabled. Restart and full port cleanup always include the terminal peer on `1339` even though it has no separate quit toggle.
+Turn off individual toggles when you want DevHub to keep supported peer services running after closing the window. Note: OpenChamber is currently still stopped during launcher cleanup even if **Kill OpenChamber on close** is disabled.
 
 Port cleanup uses graceful shutdown with a short wait, then `SIGKILL` fallback when a listener does not exit in time.
 

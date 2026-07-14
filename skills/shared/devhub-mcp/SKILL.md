@@ -1,6 +1,6 @@
 ---
 name: devhub-mcp
-description: "Use the DevHub MCP (stdio server `mcp-servers/devhub-server`). Covers filesystem tools — BlockNote JSON notes under notes/, Markdown docs under docs/, daily tasks, tldraw diagrams, self-appraisal — AND dashboard-backed tools that proxy the local DevHub dashboard (status, scripts/sync, briefing, calendar, work/PRs, repos, search). Keywords: devhub MCP, notes_list, notes_search, docs_read, tasks_create, scripts_run, status_services, briefing_get, prs_list, jira_tickets, repos_list."
+description: "Use the DevHub MCP (stdio server `mcp-servers/devhub-server`). Covers filesystem tools — BlockNote JSON notes under notes/, Markdown docs under docs/, daily tasks, tldraw diagrams, self-appraisal, DX audit reports — AND dashboard-backed tools that proxy the local DevHub dashboard (status, scripts/sync, briefing, calendar, work/PRs, repos, search). Keywords: devhub MCP, notes_list, notes_search, docs_read, tasks_create, scripts_run, status_services, briefing_get, prs_list, jira_tickets, repos_list, dx_audit_list, dx_audit_read."
 ---
 
 DevHub ships a **stdio MCP server** at `mcp-servers/devhub-server`, wired from
@@ -36,9 +36,15 @@ errors. Tool **descriptions** are the source of truth for args; this skill carri
 unlike the filtered notes slice).
 
 **Tasks** — `tasks_list/create/update/delete/history`. Jira keys in text (e.g. `DAD-1234`)
-are auto-detected. **Diagrams** — `diagrams_*` over tldraw JSON. **Appraisal** —
+are auto-detected. **Diagrams** — `diagrams_*` over tldraw JSON; prefer
+`diagrams_create`/`diagrams_add_note` over hand-written `diagrams_update` payloads, because
+tldraw snapshots must include both `store` and `schema`. **Appraisal** —
 `appraisal_record/set_goal/list_goals/read/list/people/summarize/delete` for performance
 review notes.
+
+**DX audits** — `dx_audit_list` / `dx_audit_read` over reports the `dx-audit` skill writes
+to `reviews/dx-audit-<repo>-<YYYY-MM-DD>`. `dx_audit_read` with just a repo name returns
+the latest audit as markdown; run new audits from the Repos page **DX Audit** button.
 
 ## Dashboard tools
 

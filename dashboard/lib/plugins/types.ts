@@ -26,19 +26,43 @@ export function pluginOrigin(name: string): AssetOrigin {
 export const SUPPORTED_DEVHUB_API = ["1"] as const;
 export type DevhubApiVersion = (typeof SUPPORTED_DEVHUB_API)[number];
 
+/** Nav entry a plugin can contribute (materialised into `plugin-nav.generated.ts`). */
+export interface PluginNavItem {
+  href: string;
+  label: string;
+  icon: string;
+  group: "workspace" | "library" | "system";
+  /** Defaults to the plugin's top-level `navGate` when omitted. */
+  gate?: string;
+  desktopOnly?: boolean;
+  shortcut?: string;
+  /** When set, also appears in that section's top-bar tabs (Library / System). */
+  section?: "library" | "system";
+}
+
 /**
  * Tier-2 dashboard contribution. The materialiser copies each `paths` entry from
  * `<pluginRoot>/<root>/<path>` into the core dashboard at the same relative path (so the
  * plugin's `@/lib`, `@/components` imports resolve unchanged) and git-ignores them.
  *
- * Nav entries for plugin pages currently live as gated stubs in core `lib/nav.ts`
- * (generic plugin-contributed nav is a future enhancement).
+ * Optional `nav` entries are materialised into `lib/plugin-nav.generated.ts` and merged
+ * by core `lib/nav.ts` — plugins no longer need hand stubs in core for /ops-style pages.
  */
 export interface DashboardContribution {
   /** Plugin-root-relative dir holding the dashboard subtree (e.g. "dashboard"). */
   root: string;
   /** Dashboard-relative paths the plugin owns (files or dirs), e.g. "app/ops", "lib/bi-ops.ts". */
   paths: string[];
+  /**
+   * Dashboard-relative FILES whose core version is a committed empty baseline the plugin
+   * overwrites locally (marked `git update-index --skip-worktree`, same convention as
+   * `plugin-nav.generated.ts`). Lets a core-owned page render a plugin component slot —
+   * the baseline renders nothing so core builds without the plugin. Restored to the
+   * baseline when the plugin is disabled.
+   */
+  overlays?: string[];
+  /** Optional palette / section-tab contributions for plugin pages. */
+  nav?: PluginNavItem[];
 }
 
 /**

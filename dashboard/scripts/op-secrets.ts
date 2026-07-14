@@ -29,6 +29,10 @@ const LOCAL_ONLY_KEYS = new Set<string>([
   "CAPI_REPO_PATH",
   "AI_BASE_URL",
   "AI_MODEL",
+  "LAST30DAYS_MEMORY_DIR",
+  "LAST30DAYS_SCRIPT",
+  "LAST30DAYS_SOURCES",
+  "LAST30DAYS_MAX_AGE_HOURS",
 ]);
 
 /** When set, the LOCAL_ONLY_KEYS above also sync from 1Password (when unset). */

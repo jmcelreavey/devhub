@@ -36,7 +36,7 @@ export function ShareControls({ vaultId, path }: Props) {
       if (!res.ok || !body.share) throw new Error(body.error ?? res.statusText);
       await mutate();
       await copyTextToClipboard(body.share.url).catch(() => {});
-      toast.success(live ? "Updated — link copied" : "Live — link copied");
+      toast.success(live ? "Updated - link copied" : "Live - link copied");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not publish.");
     } finally {
@@ -98,7 +98,7 @@ export function ShareControls({ vaultId, path }: Props) {
           rel="noreferrer"
           className="btn btn-ghost text-xs flex items-center gap-1 no-underline"
           style={{ color: live.stale ? "var(--warning)" : "var(--success)" }}
-          title={live.stale ? "Live, but out of date — open published gist" : "Open live gist"}
+          title={live.stale ? "Live, but out of date - open published gist" : "Open live gist"}
         >
           {live.stale ? <AlertTriangle size={14} aria-hidden /> : <Globe size={14} aria-hidden />}
           {live.stale ? "Stale" : "Live"}

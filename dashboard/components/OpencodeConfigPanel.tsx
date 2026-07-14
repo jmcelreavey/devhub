@@ -1,16 +1,189 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Edit3, Save, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Edit3, Save, TerminalSquare, X } from "lucide-react";
 import { useToast } from "@/lib/use-toast";
 import { SyncButton } from "@/components/SyncButton";
 import { SkeletonRows } from "@/components/SkeletonRows";
+import {
+  DEFAULT_CURSOR_AGENT_MODEL,
+  getAgentCliConfig,
+  saveAgentCliConfig,
+  type AgentCli,
+  type AgentCliConfig,
+} from "@/lib/agent-cli-config";
 
 interface OpencodeConfigResponse {
   exists: boolean;
   content: string;
   envNames: string[];
   unresolved: string[];
+}
+
+const MODEL_INPUT_STYLE = {
+  background: "var(--bg-elevated)",
+  border: "1px solid var(--border)",
+  borderRadius: "6px",
+  padding: "3px 8px",
+  color: "var(--text)",
+  fontSize: "11px",
+  fontFamily: '"SFMono-Regular", Consolas, monospace',
+  width: "180px",
+  outline: "none",
+} as const;
+
+/**
+ * Picks which CLI one-shot agent jobs (PR review, DX audit, labs, repo
+ * upstart) are handed to, plus per-CLI model overrides. Stored in `.env.local`
+ * via `/api/agent-cli` (1Password-backed managed keys) — see
+ * `lib/agent-cli-env.ts`. The Cursor option only appears when `cursor-agent`
+ * is installed.
+ */
+function AgentCliCard() {
+  const [config, setConfig] = useState<AgentCliConfig | null>(null);
+  const [cli, setCli] = useState<AgentCli>("opencode");
+  const [opencodeModel, setOpencodeModel] = useState("");
+  const [cursorModel, setCursorModel] = useState("");
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+
+  useEffect(() => {
+    void getAgentCliConfig(true).then((c) => {
+      setConfig(c);
+      setCli(c.cli);
+      setOpencodeModel(c.opencodeModel);
+      setCursorModel(c.cursorModel);
+    });
+  }, []);
+
+  const dirty =
+    !!config &&
+    (cli !== config.cli ||
+      opencodeModel.trim() !== config.opencodeModel ||
+      (cursorModel.trim() || DEFAULT_CURSOR_AGENT_MODEL) !== config.cursorModel);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const next = await saveAgentCliConfig({ cli, opencodeModel, cursorModel });
+      setConfig(next);
+      setCli(next.cli);
+      setOpencodeModel(next.opencodeModel);
+      setCursorModel(next.cursorModel);
+      toast.success("Agent CLI settings saved to .env.local.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save agent CLI settings.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="card mb-3" style={{ padding: "10px 14px" }}>
+      <div className="flex items-center gap-2" style={{ marginBottom: "6px" }}>
+        <TerminalSquare size={14} style={{ color: "var(--accent)" }} aria-hidden />
+        <span className="font-medium text-sm" style={{ color: "var(--text)" }}>
+          Agent CLI
+        </span>
+        {dirty && (
+          <button
+            onClick={() => void save()}
+            disabled={saving}
+            className="btn btn-primary"
+            style={{ fontSize: "11px", padding: "3px 8px", marginLeft: "auto" }}
+          >
+            {saving ? "Saving..." : "Save"}
+          </button>
+        )}
+      </div>
+      <p className="text-xs" style={{ color: "var(--text-muted)", lineHeight: 1.5, marginBottom: "8px" }}>
+        Which CLI handles one-shot terminal jobs (PR review, DX audit, labs, repo upstart). Both see
+        the same skills and notes MCP via sync (<code>~/.cursor/skills</code>,{" "}
+        <code>~/.cursor/mcp.json</code>). Saved to <code>.env.local</code> as{" "}
+        <code>DEVHUB_AGENT_*</code> keys, so the 1Password <code>devhub</code> item can populate
+        them like other managed config.
+      </p>
+      {!config ? (
+        <div role="status" aria-label="Loading agent CLI settings">
+          <SkeletonRows count={1} height={28} />
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-3 flex-wrap" role="radiogroup" aria-label="Agent CLI">
+            <label className="text-xs flex items-center gap-1" style={{ color: "var(--text)", cursor: "pointer" }}>
+              <input
+                type="radio"
+                name="agent-cli"
+                value="opencode"
+                checked={cli === "opencode"}
+                onChange={() => setCli("opencode")}
+              />
+              OpenCode
+            </label>
+            {config.cursorAgentInstalled && (
+              <label className="text-xs flex items-center gap-1" style={{ color: "var(--text)", cursor: "pointer" }}>
+                <input
+                  type="radio"
+                  name="agent-cli"
+                  value="cursor"
+                  checked={cli === "cursor"}
+                  onChange={() => setCli("cursor")}
+                />
+                Cursor CLI (cursor-agent)
+              </label>
+            )}
+            {cli === "opencode" ? (
+              <label className="text-xs flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
+                Model
+                <input
+                  type="text"
+                  value={opencodeModel}
+                  placeholder="opencode.json default"
+                  onChange={(e) => setOpencodeModel(e.target.value)}
+                  spellCheck={false}
+                  style={MODEL_INPUT_STYLE}
+                />
+              </label>
+            ) : (
+              <label className="text-xs flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
+                Model
+                <input
+                  type="text"
+                  value={cursorModel}
+                  placeholder={DEFAULT_CURSOR_AGENT_MODEL}
+                  onChange={(e) => setCursorModel(e.target.value)}
+                  spellCheck={false}
+                  style={MODEL_INPUT_STYLE}
+                />
+              </label>
+            )}
+          </div>
+          <p className="text-xs" style={{ color: "var(--text-subtle)", lineHeight: 1.5, marginTop: "6px" }}>
+            {cli === "opencode" ? (
+              <>
+                Model uses <code>provider/model</code> form (e.g.{" "}
+                <code>cursor-acp/grok-4.3</code>); blank uses the shared{" "}
+                <code>opencode.json</code> default below.
+              </>
+            ) : (
+              <>
+                Verify the model slug with <code>cursor-agent --help</code> or the{" "}
+                <code>/model</code> picker; blank falls back to{" "}
+                <code>{DEFAULT_CURSOR_AGENT_MODEL}</code>.
+              </>
+            )}
+            {!config.cursorAgentInstalled && (
+              <>
+                {" "}
+                Cursor CLI not detected — install <code>cursor-agent</code> to unlock the Cursor
+                option.
+              </>
+            )}
+          </p>
+        </>
+      )}
+    </div>
+  );
 }
 
 export function OpencodeConfigPanel() {
@@ -58,11 +231,13 @@ export function OpencodeConfigPanel() {
 
   return (
     <>
+      <AgentCliCard />
+
       <p className="text-xs" style={{ color: "var(--text-muted)", lineHeight: 1.5, marginBottom: "12px" }}>
         <code>opencode/shared/opencode.json</code> is the source of truth for OpenCode{" "}
         <strong style={{ color: "var(--text)" }}>model, small_model, provider and theme</strong>. Click{" "}
         <strong style={{ color: "var(--text)" }}>Sync OpenCode</strong> to write those keys into{" "}
-        <code>~/.config/opencode/opencode.json</code> — the <code>mcp</code> block and anything OpenCode
+        <code>~/.config/opencode/opencode.json</code> - the <code>mcp</code> block and anything OpenCode
         manages itself are left untouched, so its model catalogue keeps auto-updating. Provider API keys
         are stored as <code>{"{env:VAR}"}</code> placeholders (never raw secrets) and resolved from your
         environment, which the 1Password <code>devhub</code> item populates.

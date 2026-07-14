@@ -1,227 +1,51 @@
 # MCP Server
 
-DevHub ships a local Model Context Protocol (MCP) server named `devhub`. AI tools
-launch it as a stdio process so agents can read/write local DevHub content and call
-selected dashboard workflows through one standard interface.
+DevHub includes a local MCP server so AI tools can work with notes, docs, tasks, and diagrams.
 
-The canonical server lives in `mcp-servers/devhub-server/src/mcp.ts`; the shared
-tool config lives in `mcp/shared/devhub.json`. Users normally do not start the
-server manually. Claude, Cursor, Codex, OpenCode, or another MCP client starts it
-from the synced config when a tool is invoked.
+MCP stands for Model Context Protocol. It is a way for AI tools to call local capabilities through a standard interface.
 
-## Architecture
+## What The Server Provides
 
-The server has two tool tiers:
-
-| Tier | Source Of Truth | Dashboard Required | Tool Groups |
-| ---- | --------------- | ------------------ | ----------- |
-| Filesystem-backed | Local files under configured content dirs | No | Notes, docs, tasks, diagrams, appraisal |
-| Dashboard-backed | DevHub HTTP routes on `DEVHUB_BASE_URL` | Yes | Status, briefing, calendar, work/PRs/Jira, assets, search, scripts, repos (list/open/clone/learn), sessions, Datadog |
-| Hybrid | Local `git` in a resolved repo path; dashboard HTTP only for name→path lookup | Yes (for `repos_list` resolution) | `repos_git_status`, `repos_git_commit`, `repos_git_push` |
-
-Filesystem-backed tools call the vault/storage layer directly and work headless.
-Dashboard-backed tools proxy through `DashboardClient`, defaulting to
-`http://localhost:1337`, because the dashboard owns runtime state such as service
-status, script run history, loaded integration secrets, and repo actions.
-
-If a dashboard-backed tool returns `Could not reach the DevHub dashboard`, start the
-dashboard with `npm run dev` or set `DEVHUB_BASE_URL` to the port where it is
-running.
-
-## Package Layout
-
-`mcp-servers/devhub-server/src/mcp.ts` is a thin registrar (v4.0.0). It wires tool
-groups and does not hold business logic.
-
-| Path | Role |
-| ---- | ---- |
-| `src/mcp.ts` | Entry point — creates `McpServer`, calls each `register*Tools` |
-| `src/context.ts` | `createContext()` — reads `NOTES_DIR`, `TASKS_DIR`, `DOCS_DIR`, `DEVHUB_BASE_URL` |
-| `src/tools/*.ts` | One registrar per tool group (`notes.ts`, `status.ts`, …) |
-| `src/storage.ts`, `src/task-diagram-storage.ts` | Filesystem-backed vault access |
-| `src/dashboard-client.ts` | HTTP proxy for dashboard-backed tools |
-| `src/convert.ts` | BlockNote ↔ Markdown conversion for notes |
-
-Filesystem tools import from `shared/vault/` via relative paths. Dashboard tools call
-matching routes on `DEVHUB_BASE_URL` through `DashboardClient`.
-
-To add a tool group: create `src/tools/<group>.ts` with a `register*Tools(server, ctx)`
-function, import it in `mcp.ts`, and add a dashboard API route when the tool is
-dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
-
-## Tool Inventory
-
-| Group | Tools |
-| ----- | ----- |
-| Notes | `notes_list`, `notes_read`, `notes_write`, `notes_write_asset`, `notes_append`, `notes_search`, `notes_delete` |
-| Docs | `docs_list`, `docs_read`, `docs_write`, `docs_append`, `docs_search`, `docs_delete` |
-| Tasks | `tasks_list`, `tasks_create`, `tasks_update`, `tasks_delete`, `tasks_history` |
-| Diagrams | `diagrams_list`, `diagrams_read`, `diagrams_create`, `diagrams_update`, `diagrams_add_note`, `diagrams_delete`, `diagrams_rename` |
-| Appraisal | `appraisal_record`, `appraisal_set_goal`, `appraisal_list_goals`, `appraisal_read`, `appraisal_list`, `appraisal_people`, `appraisal_summarize`, `appraisal_delete` |
-| Status | `status_services`, `status_git`, `status_mcp`, `services_restart` |
-| Briefing | `briefing_get` |
-| Calendar | `calendar_week`, `calendar_list` |
-| Work | `prs_list`, `jira_tickets`, `jira_ticket_get`, `standup_markdown`, `tasks_weekly`, `jira_ticket_transition` |
-| Assets | `assets_list` |
-| Search | `search` |
-| Scripts | `scripts_list`, `scripts_run`, `scripts_run_status`, `scripts_history` |
-| Repos | `repos_list`, `repos_open`, `repos_clone`, `repo_learn`, `repos_git_status`, `repos_git_commit`, `repos_git_push` |
-| Sessions | `sessions_recap` |
-| Datadog | `datadog_oncall`, `datadog_recent_alerts`, `datadog_investigate` |
-
-BI-specific MCP tools are contributed by the private BI plugin as a separate server; they are not part of the core DevHub server.
-
-Dashboard-backed tools that mutate runtime or external state require `confirm: true` (for example `services_restart`, mutating `scripts_run` entries, `repos_git_commit`, `repos_git_push`, and `jira_ticket_transition`). Long-running actions return a `runId`; poll the matching status tool, such as `scripts_run_status`, until the run exits. MCP cannot stream the dashboard's live run log.
-
-`repos_git_status`, `repos_git_commit`, and `repos_git_push` run `git` locally in the resolved repo path (by `name` from `repos_list` or an explicit `path`). They do not go through dashboard HTTP beyond path resolution.
-
-Sensitive dashboard routes (currently `GET /api/opencode/recap`) use `requireDashboardAuth`. Set `DEVHUB_API_SECRET` in `dashboard/.env.local` and in the synced MCP env when LAN exposure or non-browser callers need access; `DashboardClient` sends `Origin` and `X-DevHub-Secret` automatically.
+| Tool Group | Capabilities                                            |
+| ---------- | ------------------------------------------------------- |
+| Notes      | List, read, write, append, search, and delete notes     |
+| Docs       | List, read, write, append, search, and delete docs      |
+| Tasks      | List, create, update, delete, and view task history     |
+| Diagrams   | List, read, create, update, delete, and rename diagrams |
 
 ## Storage Model
 
 The MCP server uses local files, not a database.
 
-| Data | Format | Directory |
-| ---- | ------ | --------- |
-| Notes | BlockNote JSON | `NOTES_DIR` |
-| Docs | Markdown (`.md`) | `DOCS_DIR` |
-| Tasks | JSON files grouped by date | `TASKS_DIR` |
-| Diagrams | tldraw JSON embedded in note storage | `NOTES_DIR` |
-| Appraisal | BlockNote JSON under `notes/appraisal/` | `NOTES_DIR` |
+| Data     | Format                     |
+| -------- | -------------------------- |
+| Notes    | BlockNote JSON             |
+| Docs     | Markdown (`.md`)           |
+| Tasks    | JSON files grouped by date |
+| Diagrams | tldraw JSON            |
 
-The server converts notes between Markdown-like text and BlockNote JSON so AI tools
-can read and write notes naturally. Docs are read and written as raw Markdown. Core
-vault filesystem logic lives in [`shared/vault/`](../../shared/vault/README.md) and
-is shared by the dashboard and MCP server.
+The server also converts notes between Markdown-like text and BlockNote JSON so AI tools can read and write notes naturally. Docs are read and written as raw Markdown. Core vault filesystem logic lives in [`shared/vault/`](../../shared/vault/README.md) and is shared by the dashboard and MCP server.
 
-The MCP server runs as plain Node. Imports that cross into shared code must use
-relative paths; dashboard `@/` aliases are not resolved when tools spawn the server.
+The MCP server runs as plain Node (stdio). It imports `shared/vault` with **relative paths**, not dashboard `@/` aliases — those aliases are not resolved when tools spawn the server. See the vault README for the import rules dashboard contributors use as well.
 
-## Configuration
+## How AI Tools Use It
 
-The shared config starts the server with `tsx` from the MCP server package:
+AI tools launch the MCP server as a local stdio process. The shared MCP config tells each tool how to start it and where the notes, docs, and task directories live.
 
-```json
-{
-  "command": "REPO_ROOT/mcp-servers/devhub-server/node_modules/.bin/tsx",
-  "args": ["REPO_ROOT/mcp-servers/devhub-server/src/mcp.ts"],
-  "env": {
-    "NOTES_DIR": "REPO_ROOT/notes",
-    "TASKS_DIR": "REPO_ROOT/tasks",
-    "DOCS_DIR": "REPO_ROOT/docs",
-    "DEVHUB_BASE_URL": "http://localhost:1337"
-  }
-}
-```
+Users normally do not need to start the MCP server manually. The AI tool starts it when needed.
 
-When `DEVHUB_API_SECRET` is set in `dashboard/.env.local`, add the same value to the `env` block in `mcp/shared/devhub.json` (or your personal MCP overlay), then re-run MCP sync so client configs pick it up. `DashboardClient` sends `Origin` and `X-DevHub-Secret` on every dashboard request when the secret is present in the MCP process env.
+## Common Uses
 
-`REPO_ROOT` is replaced during MCP sync. The dashboard health check and bootstrap
-install the `devhub-server` package dependencies if `node_modules` is missing.
-
-Useful commands:
-
-```bash
-npm run dev
-(cd dashboard && npx tsx scripts/run-action.ts sync)
-(cd mcp-servers/devhub-server && npm install)
-```
-
-Run `npm run dev` for dashboard-backed tools. Run the sync action after changing MCP
-catalog entries so client configs pick up the new command, args, and environment.
-
-## Common Workflows
-
-### Read or update docs from an agent
-
-1. Use `docs_search` or `docs_list` to find the page.
-2. Use `docs_read` to load the current Markdown.
-3. Use `docs_write` only after merging your intended change into the full current content.
-
-`docs_write` is a full-file replacement, not a patch API.
-
-### Run a dashboard action
-
-1. Start the dashboard with `npm run dev`.
-2. Call `scripts_list` and inspect whether the target action mutates state.
-3. Call `scripts_run` with the script id. Add `confirm: true` only after checking the listed effects.
-4. Poll `scripts_run_status` with the returned `runId`.
-
-### Check local health from an agent
-
-Use `status_services`, `status_git`, and `status_mcp` when the dashboard is running. These are dashboard-backed because they inspect live process and repo state.
-
-### Recap an OpenCode session
-
-Use `sessions_recap` (or the `devhub-recap` skill) when you need **what happened** in an OpenCode run — commands, MCP calls, file changes, failures — without prompts or reasoning.
-
-1. Start the dashboard and ensure OpenCode is listening on `OPENCODE_PORT`.
-2. Call `sessions_recap` with `directory` set to the workspace path. Omit `sessionId` to pick the current busy root, then the latest root in that directory.
-3. Pass `includeChildren: true` only when subagent/child sessions matter.
-4. On `409`, multiple root sessions are busy — pass an explicit `sessionId`.
-
-The dashboard route redacts secrets (tokens, env values, URL credentials) before returning JSON.
-
-### Commit and push a sibling repo from an agent
-
-1. Start the dashboard with `npm run dev` so `repos_list` can resolve repo names to paths.
-2. `repos_git_status` with `name` (from `repos_list`) or an explicit `path` to inspect branch, dirty files, and ahead/behind counts.
-3. `repos_git_commit` with `message` and `confirm: true` to stage all changes and commit.
-4. `repos_git_push` with `confirm: true` to push (optional `remote`, `branch`).
-
-These run local `git` in the resolved checkout. They are not dashboard script actions — they do not enforce the `main`/`master` branch guards used by scoped content sync.
-
-### Capture appraisal notes from an agent
-
-Appraisal data lives under `notes/appraisal/` as BlockNote JSON. Filesystem-backed tools work without the dashboard.
-
-1. `appraisal_record` — append a moment, win, or feedback entry for a year (self or a person slug).
-2. `appraisal_set_goal` / `appraisal_list_goals` — define and review goals for the review period.
-3. `appraisal_read` / `appraisal_list` / `appraisal_people` — browse existing entries.
-4. `appraisal_summarize` — generate a year-end summary from captured notes and goals.
-5. `appraisal_delete` — remove an entry when correcting mistakes.
-
-Storage layout: `notes/appraisal/self/<year>.json` for self-reviews; `notes/appraisal/people/<slug>/<year>.json` for others. See [Notes System — Appraisal](notes-system.md) for vault details.
-
-## Plugin MCP Servers
-
-Plugins can contribute simple MCP config files under `mcp/` and full stdio MCP
-server packages under `mcp-servers/<name>/`. Full server packages are normal Node
-packages with their own `package.json` and `node_modules`.
-
-A plugin MCP config can use `PLUGIN_ROOT` when its command or args need to point
-back to the plugin checkout:
-
-```json
-{
-  "command": "PLUGIN_ROOT/mcp-servers/my-plugin-server/node_modules/.bin/tsx",
-  "args": ["PLUGIN_ROOT/mcp-servers/my-plugin-server/src/server.ts"]
-}
-```
-
-During MCP sync, `PLUGIN_ROOT` is replaced with that plugin's registered path.
-During bootstrap and `npm run dev`, DevHub installs missing dependencies for enabled
-plugin MCP packages. See [Plugin System](plugins.md) and
-[Creating a Plugin](../guides/creating-plugins.md) for the plugin-side layout.
-
-## Troubleshooting
-
-| Symptom | Check |
-| ------- | ----- |
-| Dashboard-backed tool cannot connect | Confirm `npm run dev` is running and `DEVHUB_BASE_URL` matches the dashboard port. |
-| Filesystem tool reads the wrong content | Check `NOTES_DIR`, `TASKS_DIR`, and `DOCS_DIR` in the synced MCP config. |
-| Work tools return auth/setup errors | GitHub PR tools need `gh auth login`; Jira and Datadog tools need their integrations configured in `/setup` or env vars. |
-| `sessions_recap` returns `401` / `403` | Set `DEVHUB_API_SECRET` in dashboard and MCP env (or call from a same-origin browser tab). Restart the dashboard after changing the secret. |
-| `repos_git_*` can't find the repo | Pass `path` for clones outside the DevHub scan directory, or use `repos_list` names only for siblings under `dirname(REPO_ROOT)`. |
-| MCP client shows an old tool list | Re-run MCP sync, then restart the AI tool so it reloads server metadata. |
-| `tsx` is missing for `devhub` | Run `cd mcp-servers/devhub-server && npm install`. |
-| Plugin MCP server fails to start | Run `npm install` inside the plugin's `mcp-servers/<name>/` package and re-run MCP sync. |
-| A plugin MCP tool is missing | Check plugin registration in `~/.config/devhub/plugins.json`, then run the sync action so plugin MCP configs are materialized. |
-| Status page says a command is missing | Bare commands such as `npx`, `tsx`, and `uvx` must resolve on `PATH`; absolute or relative command paths must exist on disk. |
+- Read today's note.
+- Read or search repo docs (architecture, guides, reference).
+- Append meeting notes.
+- Create or complete a task.
+- Search recent daily notes.
+- Store a reusable learning.
+- Create a tldraw diagram shell.
 
 ## Safety Model
 
-The server is scoped to configured local directories plus documented dashboard
-routes. It is not a general filesystem API.
+The server is scoped to configured local directories. It should not be treated as a general filesystem API.
 
-Keep secrets out of notes and docs unless you intentionally want them committed in this private mirror. Public/template backports must still respect the personal-data boundary in `CONTRIBUTING.md`. Dashboard integrations may use local secrets from `.env.local` or configured credential stores, but MCP responses should still be treated as local developer data.
+Keep secrets out of notes unless you intentionally store them there.

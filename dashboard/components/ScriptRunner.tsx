@@ -263,7 +263,7 @@ export function ScriptRunner({ onDone }: { onDone?: () => void } = {}) {
             )}
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                {previewMeta.mutates ? "Will modify your system" : "Read-only — safe to run"}
+                {previewMeta.mutates ? "Will modify your system" : "Read-only - safe to run"}
               </div>
               <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
                 {previewMeta.description}

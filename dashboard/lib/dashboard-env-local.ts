@@ -26,11 +26,28 @@ export const DASHBOARD_MANAGED_ENV_KEYS = [
   "AI_API_KEY",
   "AI_BASE_URL",
   "AI_MODEL",
+  // Last30Days research integration. Secrets can be fetched from the "devhub"
+  // 1Password item; local paths stay in .env.local unless DEVHUB_OP_SYNC_LOCAL=1.
+  "LAST30DAYS_MEMORY_DIR",
+  "LAST30DAYS_SCRIPT",
+  "LAST30DAYS_SOURCES",
+  "LAST30DAYS_MAX_AGE_HOURS",
+  "XAI_API_KEY",
+  "XQUIK_API_KEY",
+  "BRAVE_SEARCH_API_KEY",
+  "PERPLEXITY_API_KEY",
+  "OPENROUTER_API_KEY",
+  "SCRAPECREATORS_API_KEY",
+  "BLUESKY_APP_PASSWORD",
   // Ops integration keys (used by the optional ops plugin: AWS/SSO + repo path)
   "AWS_PROFILE",
   "OKTA_PASSWORD",
   "BI_OPS_USER_EMAIL",
   "CAPI_REPO_PATH",
+  // Agent CLI handoff (which CLI runs one-shot jobs + model overrides)
+  "DEVHUB_AGENT_CLI",
+  "DEVHUB_AGENT_OPENCODE_MODEL",
+  "DEVHUB_AGENT_CURSOR_MODEL",
 ] as const;
 
 export type DashboardManagedEnvKey = (typeof DASHBOARD_MANAGED_ENV_KEYS)[number];
@@ -53,37 +70,36 @@ const BI_PROCESS_KEYS = ["AWS_PROFILE", "OKTA_PASSWORD", "BI_OPS_USER_EMAIL", "C
 
 const CHAMBER_PROCESS_KEYS = ["OPENCHAMBER_HOST", "OPENCHAMBER_UI_PASSWORD"] as const;
 
-/** Keeps Google Calendar routes working in the same dev process after `.env.local` changes. */
-export function syncGoogleProcessEnvFromOverrides(overrides: Map<string, string>): void {
-  for (const key of GOOGLE_PROCESS_KEYS) {
+const AGENT_PROCESS_KEYS = [
+  "DEVHUB_AGENT_CLI",
+  "DEVHUB_AGENT_OPENCODE_MODEL",
+  "DEVHUB_AGENT_CURSOR_MODEL",
+] as const;
+
+/** Copies the given managed keys from overrides into process.env (deleting when absent/blank). */
+function syncProcessEnvFromOverrides(keys: readonly string[], overrides: Map<string, string>): void {
+  for (const key of keys) {
     const v = overrides.get(key)?.trim();
     if (v) process.env[key] = v;
     else delete process.env[key];
   }
+}
+
+/** Keeps Google Calendar routes working in the same dev process after `.env.local` changes. */
+export function syncGoogleProcessEnvFromOverrides(overrides: Map<string, string>): void {
+  syncProcessEnvFromOverrides(GOOGLE_PROCESS_KEYS, overrides);
 }
 
 export function syncJiraProcessEnvFromOverrides(overrides: Map<string, string>): void {
-  for (const key of JIRA_PROCESS_KEYS) {
-    const v = overrides.get(key)?.trim();
-    if (v) process.env[key] = v;
-    else delete process.env[key];
-  }
+  syncProcessEnvFromOverrides(JIRA_PROCESS_KEYS, overrides);
 }
 
 export function syncDatadogProcessEnvFromOverrides(overrides: Map<string, string>): void {
-  for (const key of DATADOG_PROCESS_KEYS) {
-    const v = overrides.get(key)?.trim();
-    if (v) process.env[key] = v;
-    else delete process.env[key];
-  }
+  syncProcessEnvFromOverrides(DATADOG_PROCESS_KEYS, overrides);
 }
 
 export function syncBiProcessEnvFromOverrides(overrides: Map<string, string>): void {
-  for (const key of BI_PROCESS_KEYS) {
-    const v = overrides.get(key)?.trim();
-    if (v) process.env[key] = v;
-    else delete process.env[key];
-  }
+  syncProcessEnvFromOverrides(BI_PROCESS_KEYS, overrides);
 }
 
 /**
@@ -92,11 +108,12 @@ export function syncBiProcessEnvFromOverrides(overrides: Map<string, string>): v
  * process.env) picks up changes without a full relaunch.
  */
 export function syncChamberProcessEnvFromOverrides(overrides: Map<string, string>): void {
-  for (const key of CHAMBER_PROCESS_KEYS) {
-    const v = overrides.get(key)?.trim();
-    if (v) process.env[key] = v;
-    else delete process.env[key];
-  }
+  syncProcessEnvFromOverrides(CHAMBER_PROCESS_KEYS, overrides);
+}
+
+/** Keeps agent CLI handoff settings live in this process after a save. */
+export function syncAgentProcessEnvFromOverrides(overrides: Map<string, string>): void {
+  syncProcessEnvFromOverrides(AGENT_PROCESS_KEYS, overrides);
 }
 
 export function getDashboardEnvLocalPath(): string {
@@ -132,8 +149,9 @@ export function readDashboardEnvLocalFile(): {
   for (const line of existing.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
-    const key = trimmed.split("=")[0]?.trim() ?? "";
-    const value = trimmed.slice(key.length + 1);
+    const eqIdx = trimmed.indexOf("=");
+    const key = eqIdx < 0 ? "" : trimmed.slice(0, eqIdx).trim();
+    const value = eqIdx < 0 ? "" : trimmed.slice(eqIdx + 1);
     if (MANAGED_SET.has(key)) {
       overrides.set(key, value);
     } else {

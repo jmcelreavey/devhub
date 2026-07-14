@@ -2,10 +2,17 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildBriefPrompt,
   buildPackPrompt,
+  generateRepoLearnArtifacts,
   buildTutorSystemPrompt,
   parsePackSections,
 } from "./repo-learn-ai";
+import { generateText } from "ai";
+import { getNotesAiModel } from "@/lib/ai-provider";
 import type { RepoContext } from "./repo-context";
+
+vi.mock("ai", () => ({
+  generateText: vi.fn(),
+}));
 
 vi.mock("@/lib/ai-provider", () => ({
   getNotesAiModel: vi.fn(),
@@ -60,5 +67,21 @@ describe("repo-learn-ai prompts", () => {
     expect(parsePackSections(raw)).toEqual([
       { path: "00-overview.md", content: "# Overview" },
     ]);
+  });
+
+  it("does not cap brief output and keeps partial length-finished briefs", async () => {
+    vi.mocked(getNotesAiModel).mockReturnValue({} as never);
+    vi.mocked(generateText)
+      .mockResolvedValueOnce({ text: "## Partial brief", finishReason: "length" } as never)
+      .mockResolvedValueOnce({
+        text: JSON.stringify({ packSections: [{ path: "00-overview.md", content: "# Overview" }] }),
+        finishReason: "stop",
+      } as never);
+
+    const artifacts = await generateRepoLearnArtifacts(sampleContext);
+
+    expect(artifacts.briefMarkdown).toBe("## Partial brief");
+    expect(vi.mocked(generateText).mock.calls[0]?.[0]).not.toHaveProperty("maxOutputTokens");
+    expect(vi.mocked(generateText).mock.calls[1]?.[0]).toHaveProperty("maxOutputTokens", 4096);
   });
 });

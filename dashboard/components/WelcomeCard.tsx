@@ -104,7 +104,7 @@ export function WelcomeCard({ visible, collapsed, onToggle }: WelcomeCardProps) 
         {!collapsed ? (
           <>
             <p className="welcome-sub">
-              Your personal hub for tasks, notes, calendar and tickets — all in one place. Start by capturing what&apos;s on
+              Your personal hub for tasks, notes, calendar and tickets - all in one place. Start by capturing what&apos;s on
               your plate today.
             </p>
             <div className="welcome-actions">

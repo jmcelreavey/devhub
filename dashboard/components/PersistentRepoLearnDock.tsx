@@ -54,7 +54,12 @@ export function PersistentRepoLearnDock() {
   const status = learnStatus({ data, error, isLoading });
 
   function showPanel() {
-    router.push(`/repos?learn=${encodeURIComponent(repoName!)}`);
+    // The dedicated learn screen always mounts fresh, so Show reliably reopens
+    // the experience — unlike pushing ?learn= onto an already-mounted /repos,
+    // which only reads the param on first mount.
+    const name = repoName!;
+    setRepoName(null);
+    router.push(`/repos/learn/${encodeURIComponent(name)}`);
   }
 
   return (

@@ -127,7 +127,7 @@ export function ChecklistRow({
           <HoverTip
             label={
               masterLabel
-                ? `Master: "${masterLabel}" — use this name or keep "${label}" unlinked`
+                ? `Master: "${masterLabel}" - use this name or keep "${label}" unlinked`
                 : "Name changed in master list"
             }
           >

@@ -277,7 +277,7 @@ export function TasksOverlay({ open, onClose }: TasksOverlayProps) {
                           opacity: 0.6,
                         }}
                       >
-                        — {task.abandonReason}
+                        - {task.abandonReason}
                       </span>
                     )}
                   </div>

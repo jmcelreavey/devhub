@@ -16,7 +16,7 @@ export default function NotFound() {
           This page wandered off
         </h1>
         <p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>
-          Nothing lives at this address. It may have moved in the last reshuffle — search knows where
+          Nothing lives at this address. It may have moved in the last reshuffle - search knows where
           everything went.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-2">

@@ -52,6 +52,7 @@ export function SearchInput({
         type="search"
         autoFocus={autoFocus}
         className={`input w-full ${inputClassName}`.trim()}
+        aria-label={placeholder}
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}

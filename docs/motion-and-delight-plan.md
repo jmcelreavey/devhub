@@ -48,7 +48,7 @@ Confetti, particle effects, looping ambient animation on healthy state, sound be
 
 ## Order & verification
 
-Ship phases as separate commits (1 → 2 → 3 → 4); each phase ends with `npm run verify` plus a manual reduced-motion + `data-motion="off"` sweep. Phase 5 (later): revisit the design's "The Wire" (direction C) as a Work tab once the motion language is fully landed.
+Ship phases as separate commits (1 → 2 → 3 → 4); each phase ends with `npm run verify` plus a manual reduced-motion + `data-motion="off"` sweep.
 
 ## Status (2026-06-10) — all four phases landed
 
@@ -57,4 +57,14 @@ Ship phases as separate commits (1 → 2 → 3 → 4); each phase ends with `npm
 - **Phase 3**: check stroke draw-in (`check-draw` on the lucide paths), `.btn:active` press scale, card hover lift (hover devices only). Focus-timer ring skipped — the running pill already shows progress as a horizontal fill; a ring would duplicate the same information.
 - **Phase 4**: queue-cleared line in TaskList (date-seeded, one pass), greeting variants (Early start / Late one), `EmptyState` quips (PR reviews + tickets), n-day completion streak in the Focus whisper (from `/api/tasks/history`, shown from 2 days). Seasonal accent tint skipped — it would fight the user-owned AccentPicker.
 
-Everything is `prefers-reduced-motion`-gated and killed by `body[data-motion="off"]`. Remaining future idea: "The Wire" triage queue as a Work tab.
+Everything is `prefers-reduced-motion`-gated and killed by `body[data-motion="off"]`.
+
+## Status (2026-07-14) — delight is done
+
+Motion/loaders/delight vocabulary is **closed**. Do not open another easings / shimmer /
+entrance-animation epic. The ground rules above stay as permanent loading & motion
+vocabulary (also in `AGENTS.md`).
+
+**Next delight = functional weirdness**, not more polish: Agent Vibes soundtrack,
+queue-cleared personality — product behaviors that feel alive because they *do something*,
+not because the curve is nicer.

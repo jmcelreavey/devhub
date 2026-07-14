@@ -9,7 +9,7 @@ import { useDebouncedSearch } from "@/lib/use-debounced-search";
 
 const MODE_OPTIONS: { id: Exclude<SearchMode, "auto">; label: string; hint: string }[] = [
   { id: "exact", label: "Exact", hint: "Substring match in note text" },
-  { id: "semantic", label: "Semantic", hint: "TF-IDF — related notes without exact wording" },
+  { id: "semantic", label: "Ranked", hint: "TF-IDF lexical ranking — not embeddings" },
 ];
 
 export default function SearchPage() {
@@ -75,7 +75,7 @@ export default function SearchPage() {
 
         {mode === "semantic" ? (
           <p className="text-[11px] leading-snug" style={{ color: "var(--text-subtle)" }}>
-            Semantic mode ranks related notes by term relevance — useful when you remember the topic, not the exact phrase.
+            Semantic mode ranks related notes by term relevance - useful when you remember the topic, not the exact phrase.
           </p>
         ) : null}
       </div>
@@ -87,7 +87,7 @@ export default function SearchPage() {
         <EmptyState
           icon={<Search size={32} />}
           title={`No results for "${query}"`}
-          subtitle={mode === "semantic" ? "Try exact mode, or different keywords." : "Try semantic mode for related notes."}
+          subtitle={mode === "semantic" ? "Try exact mode, or different keywords." : "Try ranked (TF-IDF) mode for related notes."}
         />
       ) : null}
 
@@ -95,7 +95,7 @@ export default function SearchPage() {
         <>
           <p className="text-xs mb-3" style={{ color: "var(--text-subtle)" }}>
             {results.total} result{results.total !== 1 ? "s" : ""} in {results.files.length} file{results.files.length !== 1 ? "s" : ""}
-            {results.mode === "semantic" ? " · semantic" : ""}
+            {results.mode === "semantic" ? " · ranked" : ""}
           </p>
           <SearchResultList files={results.files} query={query} semantic={mode === "semantic"} />
         </>
@@ -105,7 +105,7 @@ export default function SearchPage() {
         <EmptyState
           icon={<Search size={36} />}
           title="Search your vault"
-          subtitle="Find tasks, learnings, daily notes, and diagrams. Use semantic mode for fuzzy topic matches."
+          subtitle="Find tasks, learnings, daily notes, and diagrams. Use ranked mode for fuzzy topic matches (lexical TF-IDF, not embeddings)."
         />
       ) : null}
     </div>

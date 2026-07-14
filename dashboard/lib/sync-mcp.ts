@@ -84,6 +84,23 @@ function remoteToTool(server: SharedMcpServer): Json {
   return out;
 }
 
+/**
+ * Cursor's mcp.json remote shape is just `{ url, headers? }` — it does NOT
+ * understand OpenCode's `type: "remote"` / `enabled` keys. Worse than being
+ * ignored, ONE unrecognized entry makes cursor-agent silently discard the
+ * entire mcp.json (verified against cursor-agent 2026.07.09), which knocked
+ * out every synced server for the Cursor CLI. Emit strictly Cursor-shaped
+ * entries here.
+ */
+function cursorToTool(server: SharedMcpServer): Json {
+  if (server.url) {
+    const out: { [key: string]: Json } = { url: server.url };
+    if (server.headers && Object.keys(server.headers).length > 0) out.headers = server.headers;
+    return out;
+  }
+  return stdioToTool(server);
+}
+
 function sharedFromTool(entry: Json): SharedMcpServer | null {
   if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
   const url = (entry as { url?: unknown }).url;
@@ -185,7 +202,7 @@ export const MCP_TOOL_TARGETS: McpToolTarget[] = [
     extraReadConfigPaths: (home) => [cursorMcpLegacyConfigPath(home)],
     topKey: "mcpServers",
     mergeRest: false,
-    toTool: stdioToTool,
+    toTool: cursorToTool,
     fromTool: sharedFromTool,
   },
   {

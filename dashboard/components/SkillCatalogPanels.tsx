@@ -32,7 +32,7 @@ export function SkillUpstreamBanner(props: {
   if (!aiTools.available) {
     return (
       <p className="text-xs mb-2" style={{ color: "var(--text-muted)", lineHeight: 1.5 }}>
-        ai-tools not found at <code>{aiTools.root}</code> — clone the repo or set{" "}
+        ai-tools not found at <code>{aiTools.root}</code> - clone the repo or set{" "}
         <code>AI_TOOLS_ROOT</code>. Only DevHub skills will sync until then.
       </p>
     );
@@ -63,7 +63,7 @@ export function CatalogSourceFilterBar<T extends string>(props: {
 }) {
   const mounted = useClientMounted();
   const countLabel = (id: T) => {
-    if (!mounted) return "–";
+    if (!mounted) return "-";
     if (props.loading && props.counts.all === 0 && id !== ("all" as T)) return "…";
     return String(props.counts[id]);
   };

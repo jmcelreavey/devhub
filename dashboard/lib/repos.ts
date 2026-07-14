@@ -24,14 +24,12 @@ export interface RepoInfo {
   remote: string | null;
   dirtyCount: number;
   unpushedCount: number;
-  /** docker-compose.yml / compose.yaml present in the repo root. */
-  hasCompose: boolean;
+  /** Repo has a reusable DevHub startup script. */
+  hasUpstart: boolean;
 }
 
-const COMPOSE_FILES = ["docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"];
-
-function detectCompose(repoPath: string): boolean {
-  return COMPOSE_FILES.some((f) => fs.existsSync(path.join(repoPath, f)));
+function detectUpstart(repoPath: string): boolean {
+  return fs.existsSync(path.join(repoPath, ".devhub", "upstart.sh"));
 }
 
 export interface GithubRepoInfo {
@@ -138,7 +136,7 @@ export async function listRepos(): Promise<RepoInfo[]> {
           path: repoPath,
           branch: readHead(repoPath),
           remote: readRemote(repoPath),
-          hasCompose: detectCompose(repoPath),
+          hasUpstart: detectUpstart(repoPath),
           dirtyCount,
           unpushedCount,
         });
@@ -229,6 +227,24 @@ export async function listGithubRepos(query?: string): Promise<GithubRepoInfo[]>
   });
 
   return result;
+}
+
+/**
+ * Every accessible GitHub repo (owner/collaborator/org member), each tagged with
+ * its local clone name when one exists. Used by Capability Radar to scan
+ * un-cloned repos remotely. Reuses the same 5-min cache as the search path.
+ */
+export async function listAccessibleGithubRepos(): Promise<GithubRepoInfo[]> {
+  const [localRepoMappings, repos] = await Promise.all([
+    getLocalGithubMappings(),
+    getAccessibleGithubRepos(),
+  ]);
+  return repos
+    .map((repo) => ({
+      ...repo,
+      localRepoName: localRepoMappings.get(repo.fullName.toLowerCase()) ?? null,
+    }))
+    .sort((a, b) => a.fullName.localeCompare(b.fullName));
 }
 
 function sanitizeGithubFullName(fullName: string): string {

@@ -108,7 +108,7 @@ export function CollapsibleSidebar() {
         ))}
       </nav>
 
-      {/* Footer — collapse toggle. Theme picker lives in /setup. */}
+      {/* Footer - collapse toggle. Theme picker lives in /setup. */}
       <div
         className="shrink-0 flex items-center justify-center"
         style={{ borderTop: "1px solid var(--border-muted)" }}

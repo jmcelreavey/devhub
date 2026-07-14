@@ -1,14 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useEffect, useCallback, useRef, type HTMLAttributes, type ReactNode } from "react";
 import { Plus, X, ExternalLink, Circle, CheckCircle2, Pencil, Ban, RotateCcw, Link as LinkIcon, ChevronRight, ChevronDown, ArrowRight, Play, Pause, GripVertical, Ticket } from "lucide-react";
 import { useToast } from "@/lib/use-toast";
 import { useLive } from "@/lib/use-fetch";
 import { statusTone } from "@/components/JiraWidget";
 import { JiraKeyChip } from "@/components/JiraKeyChip";
+import { JiraStatusPill } from "@/components/JiraStatusPill";
 import { AddToJiraModal } from "@/components/AddToJiraModal";
+import { HoverTip } from "@/components/HoverTip";
 import { JiraTransitionModal } from "@/components/JiraTransitionModal";
-import { RepoAwareLink } from "@/components/RepoAwareLink";
 import { SeverityPill } from "@/components/ui/Severity";
 import { SortableList } from "@/components/ui/SortableList";
 import { useGridSize } from "@/lib/use-grid-size";
@@ -95,8 +97,31 @@ export function renderTaskTextContent(text: string): ReactNode {
     return text;
   }
   return parts.map((part, i) => {
-    if (part.type === "link") {
-      return <RepoAwareLink key={i} href={part.url ?? "#"}>{part.text}</RepoAwareLink>;
+    if (part.type === "link" && part.url) {
+      // In-app links (e.g. a lab's Learnings note) navigate like every other
+      // internal link; only external URLs get a new tab.
+      const internal = part.url.startsWith("/");
+      return internal ? (
+        <Link
+          key={i}
+          href={part.url}
+          onClick={(e) => e.stopPropagation()}
+          className="text-accent underline underline-offset-2"
+        >
+          {part.text}
+        </Link>
+      ) : (
+        <a
+          key={i}
+          href={part.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="text-accent underline underline-offset-2"
+        >
+          {part.text}
+        </a>
+      );
     }
     return <span key={i}>{part.text}</span>;
   });
@@ -121,7 +146,7 @@ const CLEARED_LINES = [
   "Done for today. Touch grass.",
   "Queue clear. Go build something.",
   "Nothing owed. Savour it.",
-  "All clear — the rest of the day is yours.",
+  "All clear - the rest of the day is yours.",
 ] as const;
 
 function clearedLineForToday(): string {
@@ -156,7 +181,6 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
   const [linkName, setLinkName] = useState("");
   const [jiraStatuses, setJiraStatuses] = useState<Record<string, JiraStatus>>({});
   const [jiraModalTask, setJiraModalTask] = useState<Task | null>(null);
-  const [statusChangeTask, setStatusChangeTask] = useState<Task | null>(null);
   const [transitionPrompt, setTransitionPrompt] = useState<{
     task: Task;
     action: "complete" | "abandon";
@@ -687,29 +711,6 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
     }
   }, []);
 
-  // Apply a status change requested by clicking the status pill.
-  const resolveStatusChange = useCallback(
-    async (transitionId: string | null) => {
-      const task = statusChangeTask;
-      setStatusChangeTask(null);
-      if (!transitionId || !task?.jiraKey) return;
-      const key = task.jiraKey;
-      try {
-        const res = await fetch(`/api/jira/ticket/${key}/transition`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ transitionId }),
-        });
-        if (!res.ok) throw new Error(await res.text());
-        await refreshJiraStatus(key);
-      } catch (e) {
-        console.error("change jira status:", e);
-        toast.error("Couldn't update the Jira status.");
-      }
-    },
-    [statusChangeTask, refreshJiraStatus, toast],
-  );
-
   // After a ticket is created, point the task at the new key.
   const handleJiraCreated = useCallback(
     (task: Task, newKey: string) => {
@@ -742,7 +743,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
               onEdit={(text) => updateTaskText(task.id, text)}
               onAbandon={(reason) => requestAbandon(task, reason)}
               onAddToJira={() => setJiraModalTask(task)}
-              onStatusClick={task.jiraKey ? () => setStatusChangeTask(task) : undefined}
+              onStatusClick={task.jiraKey ? () => refreshJiraStatus(task.jiraKey!) : undefined}
               onTimer={() => toggleTimer(task.id)}
             />
           </div>
@@ -767,9 +768,9 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
     return (
       <div className="space-y-2 px-2 py-1">
         {inFlight && (
-          <div className="truncate text-[13px]" style={{ color: "var(--text)" }}>{inFlight.text}</div>
+          <div className="truncate text-[13px] text-text">{inFlight.text}</div>
         )}
-        <div className="flex gap-2 text-[11px] font-mono tabular-nums" style={{ color: "var(--text-subtle)" }}>
+        <div className="flex gap-2 text-[11px] font-mono tabular-nums text-text-subtle">
           {pending.length > 0 && <span>+{pending.length} todo</span>}
           {completed.length > 0 && <span>✓{completed.length} done</span>}
         </div>
@@ -783,7 +784,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
       <div className="space-y-2">
         {renderPendingTasks()}
         {completed.length > 0 && (
-          <div className="text-[11px] font-mono" style={{ color: "var(--text-subtle)" }}>
+          <div className="text-[11px] font-mono text-text-subtle">
             ✓ {completed.length} done
           </div>
         )}
@@ -829,6 +830,8 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
           className="btn btn-ghost task-add-btn"
           onClick={addTask}
           disabled={!newText.trim()}
+          data-tooltip="Add task"
+          data-tooltip-pos="top-end"
           aria-label="Add task"
         >
           <Plus size={14} aria-hidden />
@@ -837,11 +840,10 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
 
       {detectedUrl && (
         <div
-          className="flex items-center gap-2 px-2 py-1.5 rounded"
-          style={{ background: "var(--bg-elevated)" }}
+          className="flex items-center gap-2 px-2 py-1.5 rounded bg-bg-elevated"
         >
           <LinkIcon size={12} style={{ color: "var(--accent)", flexShrink: 0 }} aria-hidden />
-          <span className="text-xs shrink-0" style={{ color: "var(--text-subtle)" }}>
+          <span className="text-xs shrink-0 text-text-subtle">
             Link name:
           </span>
           <input
@@ -875,10 +877,9 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
 
       {pending.length === 0 && exitingIds.size === 0 && completed.length > 0 && !q && (
         <div
-          className="fade-rise flex items-center gap-2 py-2 text-sm"
-          style={{ color: "var(--text-muted)" }}
+          className="fade-rise flex items-center gap-2 py-2 text-sm text-text-muted"
         >
-          <CheckCircle2 size={15} style={{ color: "var(--success)" }} aria-hidden />
+          <CheckCircle2 size={15} aria-hidden className="text-success" />
           {clearedLineForToday()}
         </div>
       )}
@@ -954,7 +955,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
       )}
 
       {tasks.length === 0 && (
-        <p className="text-xs text-center py-4" style={{ color: "var(--text-subtle)" }}>
+        <p className="text-xs text-center py-4 text-text-subtle">
           No tasks yet. Add one above.
         </p>
       )}
@@ -972,24 +973,13 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
         <JiraTransitionModal
           open
           jiraKey={transitionPrompt.task.jiraKey}
-          title={transitionPrompt.action === "complete" ? "Completed — update Jira?" : "Abandoned — update Jira?"}
+          title={transitionPrompt.action === "complete" ? "Completed - update Jira?" : "Abandoned - update Jira?"}
           suggest={transitionPrompt.action === "complete" ? "Done" : "Won't Do"}
           onCancel={() => setTransitionPrompt(null)}
           onConfirm={resolveTransition}
         />
       )}
 
-      {statusChangeTask && statusChangeTask.jiraKey && (
-        <JiraTransitionModal
-          open
-          jiraKey={statusChangeTask.jiraKey}
-          title="Update Jira status"
-          skipLabel="Cancel"
-          suggest={statusChangeTask.jiraKey ? jiraStatuses[statusChangeTask.jiraKey]?.name : undefined}
-          onCancel={() => setStatusChangeTask(null)}
-          onConfirm={resolveStatusChange}
-        />
-      )}
     </div>
   );
 }
@@ -1072,12 +1062,18 @@ export function TaskItem({
     opacity: task.done ? 0.6 : isInactive ? 0.45 : 1,
   };
 
+  // The trailing meta cluster (Jira status, due date, timer readout) is
+  // right-aligned; only render it when it has content so plain tasks keep the
+  // text's full width (an always-present margin-left:auto would starve it).
+  const showJiraStatus = !!jiraStatus && !task.done && !isAbandoned;
+  const showTimerReadout = !isInactive && (!!task.timerStartedAt || (task.timeSpentMs ?? 0) > 0);
+
   const dueDateLabel = task.due ? new Date(task.due).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : null;
 
   return (
     <div>
       <div
-        className={`flex items-start gap-2.5 group rounded px-2 py-1.5 transition-colors${isDragging ? " row-dragging" : ""}`}
+        className={`task-row flex items-start gap-2.5 group rounded px-2 py-1.5 transition-colors${isDragging ? " row-dragging" : ""}`}
         style={{
           opacity: isDragging ? 0.45 : undefined,
           background: isDropTarget ? "var(--bg-elevated)" : undefined,
@@ -1085,17 +1081,18 @@ export function TaskItem({
         }}
       >
         {dragHandleProps && !isInactive && !editing && !showAbandon && (
-          <button
-            type="button"
-            {...dragHandleProps}
-            className="shrink-0 rounded p-0.5 opacity-30 hover:opacity-100 group-hover:opacity-100 focus:opacity-100"
-            style={{ color: "var(--text-subtle)", cursor: "grab" }}
-            aria-label={`Drag to reorder ${task.text}`}
-            title="Drag to reorder. Arrow keys also work."
-            onClick={(e) => e.stopPropagation()}
-          >
-            <GripVertical size={14} aria-hidden />
-          </button>
+          <HoverTip label="Drag to reorder. Arrow keys also work." pos="top">
+            <button
+              type="button"
+              {...dragHandleProps}
+              className="shrink-0 rounded p-0.5 opacity-30 hover:opacity-100 group-hover:opacity-100 focus:opacity-100"
+              style={{ color: "var(--text-subtle)", cursor: "grab" }}
+              aria-label={`Drag to reorder ${task.text}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <GripVertical size={14} aria-hidden />
+            </button>
+          </HoverTip>
         )}
         {isMoved ? (
           <span
@@ -1160,18 +1157,17 @@ export function TaskItem({
                 <CheckCircle2
                   key="done"
                   size={16}
-                  style={{ color: "var(--success)" }}
-                  className="task-check-pulse"
+                  className="text-success task-check-pulse"
                   aria-hidden
                 />
               </span>
             ) : (
-              <Circle size={16} style={{ color: "var(--text-subtle)" }} aria-hidden />
+              <Circle size={16} aria-hidden className="text-text-subtle" />
             )}
           </button>
         )}
 
-        <div className="flex-1 min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <div className="task-row-content flex-1 min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-1">
           {task.jiraKey && !isAbandoned && <JiraKeyChip jiraKey={task.jiraKey} done={task.done} />}
 
           {editing ? (
@@ -1199,175 +1195,97 @@ export function TaskItem({
             </span>
           )}
 
-          {jiraStatus && !task.done && !isAbandoned && (
-            onStatusClick ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStatusClick();
-                }}
-                aria-label={`Change Jira status (currently ${jiraStatus.name})`}
-                title="Click to change status in Jira"
-                style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
-              >
-                <SeverityPill tone={statusTone(jiraStatus.name)} style={{ cursor: "pointer" }}>
-                  {jiraStatus.name}
-                </SeverityPill>
-              </button>
-            ) : (
-              <SeverityPill tone={statusTone(jiraStatus.name)}>{jiraStatus.name}</SeverityPill>
-            )
-          )}
-
           {isAbandoned && task.abandonReason && (
             <span
               className="text-xs min-w-0 basis-full break-words leading-snug"
               style={{ color: "var(--text-subtle)", opacity: 0.6 }}
             >
-              — {task.abandonReason}
+              - {task.abandonReason}
             </span>
           )}
-          {dueDateLabel && !task.done && !isAbandoned && (
-            <span className="text-xs shrink-0 font-mono" style={{ color: "var(--text-subtle)" }}>
-              due {dueDateLabel}
-            </span>
-          )}
-          {onTimer && !isInactive && <TimerControl task={task} onTimer={onTimer} />}
-          {!onTimer && !task.timerStartedAt && (task.timeSpentMs ?? 0) > 0 && (
-            <span className="text-xs shrink-0 font-mono" style={{ color: "var(--text-subtle)" }}>
-              {formatDuration(task.timeSpentMs ?? 0)}
-            </span>
+
+          {/* Right-aligned meta: Jira status, due date, and the always-visible
+              timer readout. The timer *control* (play/pause) lives with the
+              other action icons in .task-row-actions so its spacing stays
+              consistent whether or not the task has a Jira link. */}
+          {(showJiraStatus || (!!dueDateLabel && !task.done && !isAbandoned) || showTimerReadout) && (
+            <div className="task-row-meta">
+              {showJiraStatus && (
+                onStatusClick ? (
+                  <span className="task-jira-status" onClick={(e) => e.stopPropagation()}>
+                    <JiraStatusPill ticketKey={task.jiraKey!} status={jiraStatus!.name} onChanged={onStatusClick} />
+                  </span>
+                ) : (
+                  <span className="task-jira-status">
+                    <SeverityPill tone={statusTone(jiraStatus!.name)}>{jiraStatus!.name}</SeverityPill>
+                  </span>
+                )
+              )}
+              {dueDateLabel && !task.done && !isAbandoned && (
+                <span className="text-xs shrink-0 font-mono text-text-subtle">
+                  due {dueDateLabel}
+                </span>
+              )}
+              {!isInactive && <TimerReadout task={task} />}
+            </div>
           )}
         </div>
 
         {!editing && !showAbandon && (
-          <div className="flex items-start gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+          <div className="task-row-actions flex items-start gap-1">
+            {onTimer && !isInactive && (
+              <TaskActionTip label={task.timerStartedAt ? "Stop timer" : "Start timer"}>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onTimer(); }}
+                  aria-label={task.timerStartedAt ? "Stop timer" : "Start timer"}
+                  className="task-icon-action"
+                  data-running={task.timerStartedAt ? "true" : undefined}
+                >
+                  {task.timerStartedAt ? <Pause size={12} aria-hidden /> : <Play size={12} aria-hidden />}
+                </button>
+              </TaskActionTip>
+            )}
             {!isInactive && !task.done && onAddToJira && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddToJira();
-                }}
-                aria-label={task.jiraKey ? "Create a Jira ticket from this task" : "Add to Jira"}
-                title={task.jiraKey ? "Create a Jira ticket from this task" : "Add to Jira"}
-                style={{
-                  color: "var(--text-subtle)",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  padding: "4px",
-                  display: "flex",
-                  alignItems: "center",
-                }}
-              >
-                <Ticket size={12} aria-hidden />
-              </button>
+              <TaskActionTip label={task.jiraKey ? "Update Jira ticket from this task" : "Add to Jira"}>
+                <button type="button" onClick={(e) => { e.stopPropagation(); onAddToJira(); }} aria-label={task.jiraKey ? "Update Jira ticket from this task" : "Add to Jira"} className="task-icon-action">
+                  <Ticket size={12} aria-hidden />
+                </button>
+              </TaskActionTip>
             )}
             {!isAbandoned && task.jiraKey && (
-              <a
-                href={jiraBrowseUrl(task.jiraKey)}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                aria-label={`Open ${task.jiraKey} in Jira`}
-                style={{
-                  color: "var(--text-subtle)",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  padding: "4px",
-                  display: "flex",
-                  alignItems: "center",
-                }}
-              >
-                <ExternalLink size={12} aria-hidden />
-              </a>
+              <TaskActionTip label={`Open ${task.jiraKey} in Jira`}>
+                <a href={jiraBrowseUrl(task.jiraKey)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} aria-label={`Open ${task.jiraKey} in Jira`} className="task-icon-action">
+                  <ExternalLink size={12} aria-hidden />
+                </a>
+              </TaskActionTip>
             )}
             {!isInactive && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditing(true);
-                  setEditText(task.text);
-                }}
-                aria-label="Edit task"
-                style={{
-                  color: "var(--text-subtle)",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  padding: "4px",
-                  display: "flex",
-                  alignItems: "center",
-                }}
-              >
-                <Pencil size={12} aria-hidden />
-              </button>
+              <TaskActionTip label="Edit task">
+                <button type="button" onClick={(e) => { e.stopPropagation(); setEditing(true); setEditText(task.text); }} aria-label="Edit task" className="task-icon-action">
+                  <Pencil size={12} aria-hidden />
+                </button>
+              </TaskActionTip>
             )}
             {!isInactive && !task.done && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowAbandon(true);
-                }}
-                aria-label="Abandon task"
-                style={{
-                  color: "var(--text-subtle)",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  padding: "4px",
-                  display: "flex",
-                  alignItems: "center",
-                }}
-              >
-                <Ban size={12} aria-hidden />
-              </button>
+              <TaskActionTip label="Abandon task">
+                <button type="button" onClick={(e) => { e.stopPropagation(); setShowAbandon(true); }} aria-label="Abandon task" className="task-icon-action">
+                  <Ban size={12} aria-hidden />
+                </button>
+              </TaskActionTip>
             )}
             {isAbandoned && onReactivate && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onReactivate();
-                }}
-                aria-label="Reactivate task"
-                style={{
-                  color: "var(--text-subtle)",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  padding: "4px",
-                  display: "flex",
-                  alignItems: "center",
-                }}
-              >
-                <RotateCcw size={12} aria-hidden />
-              </button>
+              <TaskActionTip label="Reactivate task">
+                <button type="button" onClick={(e) => { e.stopPropagation(); onReactivate(); }} aria-label="Reactivate task" className="task-icon-action">
+                  <RotateCcw size={12} aria-hidden />
+                </button>
+              </TaskActionTip>
             )}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-              aria-label="Delete task"
-              style={{
-                color: "var(--text-subtle)",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                padding: "4px",
-                display: "flex",
-                alignItems: "center",
-              }}
-            >
-              <X size={12} aria-hidden />
-            </button>
+            <TaskActionTip label="Delete task">
+              <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }} aria-label="Delete task" className="task-icon-action">
+                <X size={12} aria-hidden />
+              </button>
+            </TaskActionTip>
           </div>
         )}
       </div>
@@ -1419,8 +1337,18 @@ export function TaskItem({
   );
 }
 
-/** Play/pause control with live-ticking elapsed time for an active task. */
-function TimerControl({ task, onTimer }: { task: Task; onTimer: () => void }) {
+function TaskActionTip({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <HoverTip label={label} pos="top-end" className="task-action-tip">
+      {children}
+    </HoverTip>
+  );
+}
+
+/** Always-visible elapsed/running time for a task. The play/pause control lives
+ *  with the other action icons (see .task-row-actions) so the timer is spaced
+ *  consistently with the rest; this is just the readout. */
+function TimerReadout({ task }: { task: Task }) {
   const running = !!task.timerStartedAt;
   const base = task.timeSpentMs ?? 0;
   const startedMs = running ? Date.parse(task.timerStartedAt!) : 0;
@@ -1434,35 +1362,17 @@ function TimerControl({ task, onTimer }: { task: Task; onTimer: () => void }) {
     return () => clearInterval(id);
   }, [base, running, startedMs]);
 
-  const hasTime = elapsedMs > 0;
+  if (!running && elapsedMs <= 0) return null;
 
   return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onTimer();
-      }}
-      aria-label={running ? "Stop timer" : "Start timer"}
-      title={running ? "Stop timer" : "Start timer"}
-      className={running ? undefined : "opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 3,
-        flexShrink: 0,
-        background: "none",
-        border: "none",
-        cursor: "pointer",
-        padding: "0 2px",
-        fontFamily: "var(--font-mono, monospace)",
-        fontSize: 12,
-        color: running ? "var(--accent)" : "var(--text-subtle)",
-      }}
+    <span
+      className="task-timer-readout tabular-nums"
+      data-running={running ? "true" : undefined}
+      aria-label={running ? "Timer running" : "Time spent"}
     >
-      {running ? <Pause size={12} aria-hidden /> : <Play size={12} aria-hidden />}
-      {hasTime && <span className="tabular-nums">{formatDuration(elapsedMs)}</span>}
-    </button>
+      {running && <span className="task-timer-dot" aria-hidden />}
+      {formatDuration(elapsedMs)}
+    </span>
   );
 }
 
@@ -1487,9 +1397,8 @@ function SegmentedProgressBar({ open, done, abandoned }: { open: number; done: n
         )}
       </div>
       <span
-        className="shrink-0 font-mono text-[11px] tabular-nums"
-        style={{ color: "var(--text-subtle)" }}
-        title={`${open} open · ${done} done · ${abandoned} abandoned`}
+        className="shrink-0 font-mono text-[11px] tabular-nums text-text-subtle"
+        title={`${open} open, ${done} done, ${abandoned} abandoned`}
       >
         <span key={done} className="count-tick">{done}</span>/{activeTotal} done{abandoned > 0 ? ` · ${abandoned} abandoned` : ""}
       </span>

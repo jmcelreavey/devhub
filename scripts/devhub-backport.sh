@@ -52,7 +52,30 @@ git remote get-url upstream >/dev/null 2>&1 || fail "No 'upstream' remote. Add t
 if [[ "$EXECUTE" == "1" ]]; then command -v gh >/dev/null || fail "--execute needs the GitHub CLI (gh)."; fi
 
 ORIG_BRANCH="$(git branch --show-current)"
-restore() { git checkout --quiet "$ORIG_BRANCH" 2>/dev/null || true; }
+
+# Skip-worktree files (plugin overlays, generated baselines like plugin-nav) hold
+# machine-local content that upstream lacks, which blocks the branch switch. Reset
+# them to the committed baseline for the branch dance; `sync_plugins` re-applies
+# the overlays (and re-marks skip-worktree) on restore.
+SKIP_FILES="$(git ls-files -v | awk '/^S /{print substr($0, 3)}')"
+reset_skip_worktree_baselines() {
+  [[ -n "$SKIP_FILES" ]] || return 0
+  log "Resetting skip-worktree baselines for the branch switch..."
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    git update-index --no-skip-worktree -- "$f"
+    git checkout --quiet -- "$f" 2>/dev/null || true
+  done <<< "$SKIP_FILES"
+}
+
+restore() {
+  git checkout --quiet "$ORIG_BRANCH" 2>/dev/null || true
+  if [[ -n "$SKIP_FILES" ]]; then
+    log "Re-applying plugin overlays (sync_plugins)..."
+    (cd "$REPO_ROOT/dashboard" && npx tsx scripts/run-action.ts sync_plugins >/dev/null 2>&1) || \
+      log "WARN: sync_plugins failed — re-run it manually to restore overlays."
+  fi
+}
 
 log "Fetching upstream..."
 git fetch --quiet upstream
@@ -81,6 +104,7 @@ log "Porting ${BASE_REF}..${SOURCE_REF} onto ${UPSTREAM_REF}"
 # --- build the backport branch off upstream ---
 SAFE_NAME="$(echo "$SOURCE_REF" | tr '/ ' '--' | tr -cd 'A-Za-z0-9._-')"
 BACKPORT_BRANCH="backport/${SAFE_NAME}"
+reset_skip_worktree_baselines
 log "Creating ${BACKPORT_BRANCH} off ${UPSTREAM_REF}..."
 git branch -f "$BACKPORT_BRANCH" "$UPSTREAM_REF" >/dev/null
 git checkout --quiet "$BACKPORT_BRANCH"

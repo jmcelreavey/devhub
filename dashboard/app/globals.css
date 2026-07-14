@@ -71,7 +71,7 @@
   --border-muted: #deede4;
   --text: #11261d;
   --text-muted: #3d5e4f;
-  --text-subtle: #678676;
+  --text-subtle: #5b7668;
   --accent: #1f8f61;
   --accent-hover: #17744e;
   --accent-dim: rgba(31, 143, 97, 0.1);
@@ -117,7 +117,7 @@
   --border-muted: #dbe5fb;
   --text: #17233b;
   --text-muted: #4a5b7a;
-  --text-subtle: #6c7ea0;
+  --text-subtle: #5f7193;
   --accent: #2d6ef2;
   --accent-hover: #1f5dd8;
   --accent-dim: rgba(45, 110, 242, 0.11);
@@ -163,7 +163,7 @@
   --border-muted: #e1e8ee;
   --text: #1f2a33;
   --text-muted: #4f6171;
-  --text-subtle: #758595;
+  --text-subtle: #637281;
   --accent: #5d9e10;
   --accent-hover: #4f860d;
   --accent-dim: rgba(93, 158, 16, 0.12);
@@ -209,7 +209,7 @@
   --border-muted: #d8e2fd;
   --text: #1d2640;
   --text-muted: #4d5f89;
-  --text-subtle: #6f80a9;
+  --text-subtle: #5b6d99;
   --accent: #2f7ecf;
   --accent-hover: #286db5;
   --accent-dim: rgba(47, 126, 207, 0.11);
@@ -254,8 +254,8 @@
   --border: #cdd4e2;
   --border-muted: #dbe1eb;
   --text: #4c4f69;
-  --text-muted: #6c6f85;
-  --text-subtle: #8c8fa1;
+  --text-muted: #696b81;
+  --text-subtle: #676b7e;
   --accent: #8839ef;
   --accent-hover: #742ad5;
   --accent-dim: rgba(136, 57, 239, 0.11);
@@ -2036,12 +2036,133 @@ a:focus-visible {
   flex-shrink: 0;
 }
 
+.task-row {
+  /* Reserves room on hover for the absolute action cluster (timer, Jira, open,
+     edit, abandon, delete). Wide enough for the full 6-icon set. */
+  --task-action-space: 9.25rem;
+  position: relative;
+}
+
+.task-row-content {
+  transition: padding-right 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.task-row:hover .task-row-content,
+.task-row:focus-within .task-row-content {
+  padding-right: var(--task-action-space);
+}
+
+/* Right-aligned meta cluster (Jira status pill, due date, timer readout). Anchored
+   right so the trailing content sits in a consistent place whether or not the
+   task has a Jira link, due date, or tracked time. */
+.task-row-meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.task-timer-readout {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: var(--text-subtle);
+  flex-shrink: 0;
+}
+
+.task-timer-readout[data-running="true"] {
+  color: var(--accent);
+}
+
+.task-timer-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--accent);
+  animation: task-timer-pulse 1.6s ease-out infinite;
+}
+
+@keyframes task-timer-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+  70% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+
+body[data-motion="off"] .task-timer-dot {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-timer-dot { animation: none; }
+}
+
+/* A running timer's play/pause icon picks up the accent, matching the readout. */
+.task-icon-action[data-running="true"] {
+  color: var(--accent);
+}
+
+.task-row-actions {
+  position: absolute;
+  right: 0.5rem;
+  top: 0.375rem;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(6px);
+  transition:
+    opacity 140ms ease,
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.task-row:hover .task-row-actions,
+.task-row:focus-within .task-row-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.task-icon-action {
+  color: var(--text-subtle);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.task-icon-action:hover,
+.task-icon-action:focus-visible {
+  color: var(--text);
+}
+
+body[data-motion="off"] .task-row-content,
+body[data-motion="off"] .task-row-actions {
+  transition: none;
+}
+
 @media (max-width: 520px) {
   .task-add-row {
     flex-wrap: wrap;
   }
   .task-add-row .task-add-text {
     flex-basis: 100%;
+  }
+}
+
+@media (hover: none) {
+  .task-row-actions {
+    position: static;
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
+
+  .task-row:hover .task-row-content,
+  .task-row:focus-within .task-row-content {
+    padding-right: 0;
   }
 }
 
@@ -2571,19 +2692,6 @@ body[data-density="compact"] .card {
   border-radius: 999px;
   white-space: nowrap;
 }
-.briefing-tip {
-  border-left: 3px solid var(--accent);
-  background: var(--accent-dim);
-  border-radius: var(--radius-sm);
-  padding: 9px 12px;
-}
-.briefing-tip code {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.85em;
-  background: var(--bg-overlay);
-  padding: 0.5px 4px;
-  border-radius: 4px;
-}
 .briefing-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
@@ -2600,11 +2708,56 @@ body[data-density="compact"] .card {
   flex-direction: column;
   gap: 18px;
 }
-.briefing-hero-band {
-  display: flex;
-  flex-direction: column;
+.briefing-research-list {
+  display: grid;
   gap: 12px;
-  max-width: 720px;
+}
+.briefing-research-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-muted, var(--border));
+  border-radius: var(--radius-sm);
+  background: var(--bg-overlay);
+}
+.briefing-research-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.briefing-research-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.briefing-research-summary {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.briefing-research-signals {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.briefing-note-link {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-subtle);
+  font-size: 11px;
+  text-decoration: none;
+}
+.briefing-note-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
 }
 .briefing-card {
   background: var(--bg-surface);
@@ -2787,34 +2940,6 @@ body[data-density="compact"] .card {
   background: var(--bg-overlay);
   color: var(--text);
 }
-.briefing-ai-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  font-size: 9px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--accent);
-  background: var(--accent-dim);
-  padding: 1px 5px;
-  border-radius: 999px;
-  margin-left: 4px;
-}
-.briefing-ai-summary {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  border-left: 3px solid var(--accent);
-  background: var(--accent-dim);
-  border-radius: var(--radius-sm);
-  padding: 9px 12px;
-}
-.briefing-ai-summary svg {
-  flex: none;
-  margin-top: 1px;
-}
-
 /* ── Briefing edit dialog ── */
 .briefing-edit-chip {
   display: inline-flex;
@@ -3972,6 +4097,29 @@ body[data-density="compact"] .card {
 .terminal-dock-btn[data-armed] {
   color: var(--danger, #f2555a);
 }
+.terminal-toggle-btn {
+  position: relative;
+}
+.terminal-toggle-count {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: inline-flex;
+  min-width: 15px;
+  height: 15px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 1px solid var(--bg-surface);
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+}
 @media (hover: none), (max-width: 640px) {
   .terminal-dock-btn .hub-btn-label {
     display: inline;
@@ -4220,4 +4368,497 @@ main,
   .terminal-dock {
     height: 92dvh;
   }
+}
+
+/* ───────────────────────────────────────────────────────────
+   Capability Radar — signature visuals + micro-interactions.
+   Colors and layout are always-on; every animation and transform
+   is gated on prefers-reduced-motion.
+   ─────────────────────────────────────────────────────────── */
+
+/* The radar scope — the feature's signature mark. Pure CSS: concentric
+   rings + crosshair (::before), a rotating sweep beam, and pulsing blips
+   positioned by the component. */
+.radar-scope {
+  position: relative;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--border));
+  background: radial-gradient(
+    circle,
+    color-mix(in oklab, var(--accent) 10%, transparent) 0%,
+    transparent 72%
+  );
+}
+.radar-scope::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      circle,
+      transparent 31.5%,
+      color-mix(in oklab, var(--accent) 24%, transparent) 32%,
+      transparent 33.5%
+    ),
+    radial-gradient(
+      circle,
+      transparent 64.5%,
+      color-mix(in oklab, var(--accent) 24%, transparent) 65%,
+      transparent 66.5%
+    ),
+    linear-gradient(color-mix(in oklab, var(--accent) 15%, transparent) 0 0) 50%
+      0 / 1px 100% no-repeat,
+    linear-gradient(color-mix(in oklab, var(--accent) 15%, transparent) 0 0) 0
+      50% / 100% 1px no-repeat;
+}
+.radar-scope-sweep {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  opacity: 0.5;
+  background: conic-gradient(
+    from 0deg,
+    color-mix(in oklab, var(--accent) 55%, transparent),
+    transparent 75deg,
+    transparent 360deg
+  );
+}
+.radar-scope-blip {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  translate: -50% -50%;
+}
+
+/* Slim indeterminate scanline shown while a scan runs. */
+.radar-scanline {
+  position: relative;
+  height: 2px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--accent) 18%, transparent);
+}
+.radar-scanline::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 35%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+/* Delta tone badges — NEW / SPREADING / GONE each get their own hue. */
+.radar-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+.radar-badge-new {
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+.radar-badge-spread {
+  color: var(--warning);
+  background: var(--warning-dim);
+}
+.radar-badge-gone {
+  color: var(--text-subtle);
+  background: var(--bg-muted);
+}
+
+/* Interactive rows read as interactive: accent-tinted border on hover. */
+.radar-card {
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+.radar-card:hover {
+  border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
+}
+
+/* Coverage bars fill left → right (gradient always-on, growth gated below). */
+.radar-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  transform-origin: left;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--accent) 55%, transparent),
+    var(--accent)
+  );
+}
+
+/* Digest expander chevron rotates to show state. */
+.radar-chevron[data-open="true"] {
+  transform: rotate(90deg);
+}
+
+/* /repos evolution strip: the arrow beckons on hover. */
+.evolution-strip {
+  transition: border-color 140ms ease;
+}
+.evolution-strip:hover {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+}
+.evolution-arrow {
+  display: inline-block;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .radar-scope-sweep {
+    animation: radar-rotate 3.2s linear infinite;
+  }
+  .radar-scope-blip {
+    animation: radar-blip 2.6s ease-out infinite;
+    animation-delay: calc(var(--i, 0) * 350ms);
+  }
+  .radar-scanline::after {
+    animation: radar-scanline-slide 1.1s ease-in-out infinite;
+  }
+  /* Lists cascade in; each child sets --i to its index. */
+  .radar-stagger > * {
+    animation: fadeSlideIn 320ms var(--ease-spring) both;
+    animation-delay: calc(var(--i, 0) * 45ms);
+  }
+  .radar-bar-fill {
+    animation: radar-bar-grow 560ms var(--ease-spring) both;
+    animation-delay: calc(var(--i, 0) * 55ms);
+  }
+  .radar-card:hover {
+    transform: translateY(-1px);
+  }
+  .radar-card {
+    transition:
+      transform 140ms var(--ease-spring),
+      border-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+  .radar-chevron {
+    transition: transform 180ms var(--ease-spring);
+  }
+  .evolution-arrow {
+    transition: transform 160ms var(--ease-spring);
+  }
+  .evolution-strip:hover .evolution-arrow {
+    transform: translateX(3px);
+  }
+  /* Lab panel + digest body slide in when expanded. */
+  .lab-panel-enter {
+    animation: fadeSlideIn 200ms var(--ease-spring) both;
+  }
+  /* Each tutor message fades up as it arrives. */
+  .lab-msg-enter {
+    animation: fadeSlideIn 240ms var(--ease-spring) both;
+  }
+  /* Evidence references nudge on hover to signal they're links. */
+  .lab-evidence-link {
+    transition:
+      transform 140ms var(--ease-spring),
+      color 140ms ease;
+  }
+  .lab-evidence-link:hover {
+    transform: translateX(2px);
+  }
+  /* Done badge gives a little confirmation pop. */
+  .lab-done-pop {
+    animation: check-pulse 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+}
+
+@keyframes radar-rotate {
+  to {
+    transform: rotate(1turn);
+  }
+}
+@keyframes radar-blip {
+  0%,
+  100% {
+    opacity: 0.3;
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 45%, transparent);
+  }
+  12% {
+    opacity: 1;
+  }
+  45% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+@keyframes radar-scanline-slide {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+@keyframes radar-bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* ── Bespoke briefing canvas (AI-authored /briefing) ─────────────────── */
+.briefing-canvas-page {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 520px;
+  padding: 16px;
+  gap: 12px;
+}
+.briefing-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.briefing-toolbar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--text);
+}
+.briefing-toolbar-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.briefing-toolbar-hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-subtle);
+}
+.briefing-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.briefing-toolbar-btn {
+  font-size: 12px;
+  padding: 5px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.briefing-canvas-frame {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.briefing-canvas-iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+.briefing-canvas-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-subtle);
+  background: var(--bg);
+}
+.briefing-research-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.briefing-research-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 0;
+  text-align: center;
+}
+.briefing-task-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.briefing-task-row {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.briefing-task-row:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+.briefing-task-row:not(:disabled):hover {
+  border-color: var(--accent);
+}
+.briefing-task-topic {
+  font-size: 14px;
+  font-weight: 500;
+  min-width: 0;
+}
+.briefing-task-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.briefing-task-summary {
+  color: var(--text-subtle);
+  font-size: 12px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.briefing-task-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.briefing-task-badge.is-queued {
+  background: var(--bg-muted);
+  color: var(--text-subtle);
+}
+.briefing-task-badge.is-running {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+.briefing-task-badge.is-done {
+  background: var(--success-dim);
+  color: var(--success);
+}
+.briefing-task-badge.is-failed {
+  background: var(--danger-dim);
+  color: var(--danger);
+}
+.briefing-research-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.briefing-research-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+.briefing-task-via {
+  text-transform: capitalize;
+}
+.briefing-research-md {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  max-height: 52vh;
+  overflow: auto;
+  margin: 0;
+}
+.briefing-task-error {
+  color: var(--danger);
+  font-size: 13px;
+  margin: 0;
+}
+
+/* ── Theme quarantine: tone panels (avoid multi-prop style={{}}) ── */
+.tone-panel {
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-muted);
+  background: var(--bg-elevated);
+  padding: 1rem;
+}
+.tone-panel--danger {
+  border-color: color-mix(in oklab, var(--danger) 30%, transparent);
+}
+.tone-panel--warning {
+  border-color: color-mix(in oklab, var(--warning) 30%, transparent);
+}
+.tone-panel--accent {
+  border-color: color-mix(in oklab, var(--accent) 35%, transparent);
+  background: color-mix(in oklab, var(--accent) 8%, var(--bg-elevated));
+}
+.tone-panel--muted {
+  border-color: color-mix(in oklab, var(--text-subtle) 35%, transparent);
+  background: color-mix(in oklab, var(--text-subtle) 8%, var(--bg-elevated));
+}
+.tone-panel--warning-banner {
+  border-color: color-mix(in oklab, var(--warning) 35%, transparent);
+  background: color-mix(in oklab, var(--warning) 8%, var(--bg-elevated));
+}
+.tone-dot {
+  display: inline-block;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: var(--text-subtle);
+}
+.tone-dot--sm {
+  width: 0.375rem;
+  height: 0.375rem;
+  margin-top: 0.25rem;
+}
+.tone-dot--md {
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-top: 0.375rem;
+}
+.tone-dot--accent { background: var(--accent); }
+.tone-dot--warning { background: var(--warning); }
+.tone-dot--danger { background: var(--danger); }
+.tone-dot--muted { background: var(--text-subtle); }
+
+.dd-link-btn--danger {
+  border-color: color-mix(in oklab, var(--danger) 40%, transparent);
+}
+.dd-link-btn--warning {
+  border-color: color-mix(in oklab, var(--warning) 40%, transparent);
 }

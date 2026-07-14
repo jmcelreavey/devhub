@@ -5,7 +5,7 @@ import { CircleCheck, MessageSquare, ScanSearch } from "lucide-react";
 import type { LucideProps } from "lucide-react";
 import type { GithubPrRow } from "@/lib/github-prs";
 import { buildSlackMessage, copyWithToast } from "@/lib/pr-slack";
-import { opencodeReviewCommand, openTerminal } from "@/lib/terminal-launch";
+import { agentReviewCommand, openTerminal } from "@/lib/terminal-launch";
 import { notifyPrReviewNoteWatch, prReviewNotePath } from "@/lib/pr-review-notes";
 import { PrReviewNoteLink } from "@/components/PrReviewNoteLink";
 import { PR_ACTION_BASE, PR_ACTION_SIZE, type PrActionSize } from "@/components/pr-row-action-style";
@@ -73,15 +73,15 @@ export function PrRowActions({
         <PrActionButton
           icon={ScanSearch}
           label="Review"
-          title="Explain & review this PR with OpenCode"
+          title="Explain & review this PR with your agent CLI"
           size={size}
-          onClick={() => {
+          onClick={async () => {
             openTerminal({
               label: `review ${row.repo}#${row.number}`,
-              command: opencodeReviewCommand(row.url, prReviewNotePath(row)),
+              command: await agentReviewCommand(row.url, prReviewNotePath(row)),
             });
             notifyPrReviewNoteWatch(row);
-            toast.info("Reviewing in the terminal — a note link appears here when it's saved.");
+            toast.info("Reviewing in the terminal - a note link appears here when it's saved.");
           }}
         />
       )}
@@ -91,7 +91,7 @@ export function PrRowActions({
           <PrActionButton
             icon={CircleCheck}
             label="Copy approved"
-            title="Copy a Slack “reviewed — approved” message"
+            title="Copy a Slack “reviewed - approved” message"
             size={size}
             onClick={copyWithToast(buildSlackMessage(row, "reviewed-approved"), "Slack message", toast)}
           />

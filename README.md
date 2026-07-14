@@ -89,7 +89,14 @@ After install, start a session in any supported AI tool. It will automatically r
 
 A Next.js-based personal dev dashboard (default `http://localhost:1337`).
 
-> **Trusted network only.** DevHub ships with no authentication. Use it on a LAN you control (home Wi‑Fi) or lock it to this machine (below). Do not expose it to the public internet without adding auth (out of scope). The Actions page can spawn whitelisted scripts on your machine.
+> **Trusted network only.** Mutating dashboard APIs (POST/PUT/PATCH/DELETE)
+> require either a matching `Origin` (browser same-origin) or `DEVHUB_API_SECRET`
+> via `X-DevHub-Secret` (MCP / local tooling). Missing `Origin` alone is **not**
+> enough. Enforced globally for every `/api` route by `dashboard/proxy.ts`, so
+> new routes are guarded by default. Use DevHub on a LAN you control (home Wi‑Fi) or lock it to this machine
+> (below). Do not expose it to the public internet. The Actions page can spawn
+> whitelisted scripts on your machine — set `DEVHUB_API_SECRET` (see `.env.example`)
+> if anything other than your browser talks to the dashboard.
 
 DevHub keeps the local services on `127.0.0.1` so the Electron app can always use `http://localhost:1337`. Use **Setup** (`/setup`) — checkbox _Allow access from other devices on my network_ — to add LAN access. LAN mode starts a small proxy on the detected physical LAN IPv4 and forwards ports `1337`, `1336`, `1338`, and `1339` back to localhost. The `auto` detector excludes Tailscale/VPN CGNAT addresses (`100.64.0.0/10`) by default.
 
@@ -110,7 +117,7 @@ Microsoft documents [Hyper-V firewall rules](https://learn.microsoft.com/en-us/w
 powershell.exe -ExecutionPolicy Bypass -File "\\wsl$\YOUR_DISTRO_NAME\home\YOU\dev\devhub\scripts\wsl\forward-devhub.ps1"
 ```
 
-That sets `netsh` portproxy for ports **1337**, **1336**, and **1338** plus a firewall rule. The in-app terminal peer (`1339`) is not included — use mirrored networking for full LAN access, or add `1339` to the portproxy manually if you need the terminal over Wi‑Fi. Re-run after reboot if your phone can’t connect anymore.
+That sets `netsh` portproxy for ports **1337**, **1336**, and **1338** plus a firewall rule. Re-run after reboot if your phone can’t connect anymore.
 
 `npm run dev` prints a WSL reminder when relevant.
 
@@ -119,7 +126,7 @@ Features:
 - **Today page** — Tasks with Jira key detection + due dates, notes editor, calendar widget, ticket widget, daily activity digest; **Copy standup** (markdown for Slack: git **subjects** in `REPO_ROOT` over the same local window, **Jira** issues still assigned to you with any update in that window, **GitHub PRs you authored** that merged in that window via `gh pr list`, **GitHub PRs you reviewed** (merged, not your own) via `gh api search/issues`, tasks with **due date = today**); **GitHub PRs** (open + review queue via `gh pr status` across devhub and sibling clones with a `github.com` remote when the GitHub CLI is logged in)
 - **Calendar** — Week view with Google Calendar integration (optional)
 - **Tickets** — Jira Cloud tickets with status filters (optional)
-- **Notes** — BlockNote editor, file tree, search overlay, folder-scoped **master checklists** (shared task blocks across notes), optional **in-editor AI** via an OpenAI-compatible provider (`/ai`, selection toolbar — see env vars below)
+- **Notes** — BlockNote editor, file tree, search overlay, folder-scoped **master checklists** (shared task blocks across notes), optional **in-editor AI** via z.ai (`/ai`, selection toolbar — see env vars below)
 - **Chamber** — OpenChamber iframe integration (uses the shared OpenCode server on `1338`)
 - **OpenCode** — OpenCode web UI iframe on port `1338`
 - **Terminal** — in-app PoC terminal backed by a local PTY peer on port `1339`
@@ -146,7 +153,7 @@ A starter `dashboard/.env.example` is checked in — copy to `dashboard/.env.loc
 | `NOTES_DIR` | `~/dev/devhub/notes` | Notes storage path |
 | `REPO_ROOT` | `~/dev/devhub` | Repository root |
 | `PORT` | `1337` | Dashboard port |
-| `DEVHUB_BIND_HOST` | `0.0.0.0` | Next.js listen address; Electron maps `0.0.0.0`/`auto`/`lan` to `localhost` for its window |
+| `DEVHUB_BIND_HOST` | `127.0.0.1` | Next.js listen address; keep localhost for Electron |
 | `DEVHUB_LAN_PROXY_HOST` | unset | Optional LAN proxy bind host. Use `auto` to pick a physical LAN IPv4 and exclude Tailscale CGNAT |
 | `OPENCHAMBER_HOST` | `127.0.0.1` | OpenChamber local bind address; LAN access is proxied when enabled |
 | `NEXT_PUBLIC_OPENCHAMBER_PORT` | `1336` | Port embedded in the Chamber iframe URL in the browser |
@@ -178,7 +185,7 @@ Calendar setup steps:
 | `JIRA_DOMAIN` | Yes | Your Jira Cloud domain (e.g., `yourcompany.atlassian.net`) |
 | `JIRA_EMAIL` | Yes | Your Jira email |
 | `JIRA_API_TOKEN` | Yes | [Atlassian API Token](https://id.atlassian.com/manage-profile/security/api-tokens) |
-| `NEXT_PUBLIC_JIRA_DOMAIN` | No | Same domain as `JIRA_DOMAIN`; used client-side for JIRA links in PR copy messages. Defaults to `your-domain.atlassian.net` when unset — configure via `/setup` or env. |
+| `NEXT_PUBLIC_JIRA_DOMAIN` | No | Same domain as `JIRA_DOMAIN`; used client-side for JIRA links in PR copy messages. Defaults to `businessinsider.atlassian.net`. |
 
 **Datadog (optional):** `DATADOG_API_KEY` is saved from `/setup` (used by skills and to unlock the Datadog nav entry). Datadog’s **Events** REST API expects **both** an API key and an [application key](https://docs.datadoghq.com/account_management/api-app-keys/) — the API key alone is not enough for read/search endpoints we use for counts. Deep links default to US1 (`datadoghq.com`); override as needed:
 
@@ -205,7 +212,7 @@ Works with any OpenAI-compatible provider (z.ai by default, or OpenAI, OpenRoute
 | `AI_BASE_URL` | No       | OpenAI-compatible base; defaults to `https://api.z.ai/api/coding/paas/v4` |
 | `AI_MODEL`    | No       | Defaults to `glm-5-turbo` (e.g. `gpt-4o-mini` for OpenAI)        |
 
-Restart the dev server after setting these. See [docs/reference/environment-variables.md](docs/reference/environment-variables.md#notes-repo-learning-and-briefing-ai-optional).
+Restart the dev server after setting these. See [docs/reference/environment-variables.md](docs/reference/environment-variables.md#notes-and-repo-learning-ai-optional).
 
 ### Keyboard Shortcuts
 
@@ -368,7 +375,7 @@ MCP (Model Context Protocol) servers extend tool capabilities. This repo configu
 A stdio MCP server (`mcp-servers/devhub-server`, wired from `mcp/shared/devhub.json`) exposes two tiers of tools:
 
 - **Filesystem-backed** (work without the dashboard): notes, docs, tasks, diagrams, appraisal.
-- **Dashboard-backed** (proxy `http://localhost:1337`): status, scripts/sync, briefing, calendar, work/PRs, repos, search, Datadog. These need the dashboard running.
+- **Dashboard-backed** (proxy `http://localhost:1337`): status, scripts/sync, briefing, calendar, work/PRs, repos, search. These need the dashboard running.
 
 ```bash
 # Run the server directly (normally launched by your AI tool via the synced MCP config)
@@ -380,7 +387,7 @@ MCP configs are installed to your tool directories by `install.sh` / Actions wit
 
 ### Web UI
 
-When the dashboard is running, open `http://localhost:1337` to:
+When the notes server is running, open `http://localhost:1337` to:
 
 - Browse and search all notes
 - Create and edit notes with a markdown editor

@@ -35,19 +35,19 @@ export const metadata: Metadata = {
     default: "DevHub",
     template: "%s · DevHub",
   },
-  description: "Personal developer dashboard — repos, skills, actions, notes, and more.",
+  description: "Personal developer dashboard - repos, skills, actions, notes, and more.",
   keywords: ["developer", "dashboard", "devhub", "productivity"],
   openGraph: {
     type: "website",
     locale: "en_US",
     siteName: "DevHub",
-    title: "DevHub — Personal Developer Dashboard",
-    description: "Personal developer dashboard — repos, skills, actions, notes, and more.",
+    title: "DevHub - Personal Developer Dashboard",
+    description: "Personal developer dashboard - repos, skills, actions, notes, and more.",
   },
   twitter: {
     card: "summary",
-    title: "DevHub — Personal Developer Dashboard",
-    description: "Personal developer dashboard — repos, skills, actions, notes, and more.",
+    title: "DevHub - Personal Developer Dashboard",
+    description: "Personal developer dashboard - repos, skills, actions, notes, and more.",
   },
   icons: {
     icon: [
@@ -90,7 +90,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         {/*
           Apply the saved theme (mode + preset, resolving "system") before first paint to
           avoid a flash of the wrong palette. Must be a raw inline <script> as the FIRST
-          child of <head> so it runs synchronously during HTML parse — next/script's
+          child of <head> so it runs synchronously during HTML parse - next/script's
           `beforeInteractive` can execute after the initial paint in the App Router, which
           caused a dark→light flash on reload.
         */}
@@ -117,11 +117,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
 
             {/* Main area */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-              {/* Mobile chrome — top bar (burger drawer + search + overflow)
+              {/* Mobile chrome - top bar (burger drawer + search + overflow)
                   and the fixed bottom shelf, owned by one component. */}
               <MobileShell />
 
-              {/* Desktop topbar — breadcrumbs + actions */}
+              {/* Desktop topbar - breadcrumbs + actions */}
               <HubTopBar />
 
               <main className="flex-1 overflow-y-auto relative">

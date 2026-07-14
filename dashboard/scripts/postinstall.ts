@@ -13,6 +13,7 @@ import { execSync } from "node:child_process";
 import process from "node:process";
 import { applyOpenChamberTheme } from "../lib/openchamber-theme";
 import { materializeBranding } from "../lib/plugins/branding";
+import { materializePluginNav } from "../lib/plugins/nav-materialize";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(scriptDir, "../..");
@@ -77,6 +78,13 @@ try {
   materializeBranding({ repoRoot: REPO_ROOT, emit: log });
 } catch (e) {
   warn(`Plugin branding skipped: ${e instanceof Error ? e.message : String(e)}`);
+}
+
+// --- 6. Plugin nav (materialise dashboard.nav into plugin-nav.generated.ts) ---
+try {
+  materializePluginNav({ repoRoot: REPO_ROOT, emit: log });
+} catch (e) {
+  warn(`Plugin nav skipped: ${e instanceof Error ? e.message : String(e)}`);
 }
 
 log("Done");

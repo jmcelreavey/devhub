@@ -6,8 +6,7 @@ import { usePathname } from "next/navigation";
 const PAGE_TITLES: Record<string, string> = {
   "/": "Today",
   "/calendar": "Calendar",
-  "/tickets": "Tickets",
-  "/tasks": "Tasks",
+  "/work": "Work",
   "/prs": "PRs",
   "/notes": "Notes",
   "/docs": "Docs",
@@ -20,6 +19,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/search": "Search",
   "/setup": "Setup",
   "/learnings": "Learnings",
+  "/radar": "Radar",
 };
 
 export function TabTitle() {

@@ -50,7 +50,7 @@ git -C <repo> branch -vv
 4. Commit and push private-only state to `origin/main`. Personal data is expected in `devhub-private`; do not push it to public/core.
 
 ```bash
-git -C ~/Developer/devhub-private add -A
+git -C ~/Developer/devhub-private add -A -- . ':(exclude).devhub'
 git -C ~/Developer/devhub-private commit -m "chore: devhub private sync YYYY-MM-DD"
 git -C ~/Developer/devhub-private push origin main
 ```
@@ -58,7 +58,7 @@ git -C ~/Developer/devhub-private push origin main
 5. Commit and push BI plugin work in `devhub-bi` to its default branch (`master` today unless the repo has moved to `main`). Then materialize into private/core only if verifying dashboard integration.
 
 ```bash
-git -C ~/Developer/devhub-bi add -A
+git -C ~/Developer/devhub-bi add -A -- . ':(exclude).devhub'
 git -C ~/Developer/devhub-bi commit -m "feat: <short plugin change>"
 git -C ~/Developer/devhub-bi push origin HEAD
 ```
@@ -79,6 +79,7 @@ If `devhub-update.sh` blocks on dirty non-personal paths, commit or stash those 
 notes/
 tasks/
 collections/
+.devhub/
 dashboard/.env.local
 persona/identity.txt
 TEMPLATE_AND_PLUGIN_PLAN.md
@@ -116,6 +117,7 @@ git -C ~/Developer/devhub-private push origin main
 
 ## Rules
 
+- Never stage or commit `.devhub/` in any repo. Before every commit, check `git diff --cached --name-only`; if `.devhub/` appears, unstage it with `git restore --staged -- .devhub`.
 - Never merge/rebase public and private histories; they are intentionally unrelated.
 - Never push personal paths to public/core.
 - Do not create a PR if the user chose direct main and direct push succeeds.

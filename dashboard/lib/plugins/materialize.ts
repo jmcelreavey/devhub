@@ -39,6 +39,12 @@ export interface MaterializeEntry {
   to: string;
   /** dashboard-relative path (used for .gitignore + collision checks) */
   rel: string;
+  /**
+   * Overlay: the core version is a committed empty baseline the plugin overwrites
+   * locally under `git update-index --skip-worktree` (not git-ignored). Restored to the
+   * baseline when the plugin stops contributing it.
+   */
+  overlay?: boolean;
 }
 
 export interface MaterializePlan {
@@ -66,7 +72,12 @@ export function planDashboardMaterialization(
     if (!dash) continue;
     const pluginDashRoot = path.resolve(plugin.path, dash.root);
 
-    for (const rel of dash.paths) {
+    const contributions: Array<{ rel: string; overlay: boolean }> = [
+      ...dash.paths.map((rel) => ({ rel, overlay: false })),
+      ...(dash.overlays ?? []).map((rel) => ({ rel, overlay: true })),
+    ];
+
+    for (const { rel, overlay } of contributions) {
       const from = path.resolve(pluginDashRoot, rel);
       const to = path.resolve(coreDash, rel);
       const relNorm = path.relative(coreDash, to);
@@ -83,12 +94,16 @@ export function planDashboardMaterialization(
         errors.push(`[${plugin.name}] missing source: ${rel}`);
         continue;
       }
+      if (overlay && !fs.statSync(from).isFile()) {
+        errors.push(`[${plugin.name}] overlay must be a single file: ${rel}`);
+        continue;
+      }
       if (claimed.has(relNorm)) {
         errors.push(`[${plugin.name}] path already claimed by another plugin: ${rel}`);
         continue;
       }
       claimed.add(relNorm);
-      entries.push({ plugin: plugin.name, from, to, rel: relNorm });
+      entries.push({ plugin: plugin.name, from, to, rel: relNorm, ...(overlay ? { overlay } : {}) });
     }
   }
 
@@ -142,6 +157,29 @@ export interface MaterializeOptions {
   dryRun?: boolean;
 }
 
+function setSkipWorktree(repoRoot: string, repoRel: string, skip: boolean): void {
+  spawnSync(
+    "git",
+    ["-C", repoRoot, "update-index", skip ? "--skip-worktree" : "--no-skip-worktree", repoRel],
+    { encoding: "utf-8" },
+  );
+}
+
+/** Machine-local record of applied overlays (repo-root-relative), for pruning. */
+function overlayStatePath(repoRoot: string): string | null {
+  const exclude = gitExcludePath(repoRoot);
+  return exclude ? path.join(path.dirname(exclude), "devhub-overlays.json") : null;
+}
+
+function readOverlayState(statePath: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(statePath, "utf-8"));
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 /** Copy enabled plugins' dashboard modules into core, manage .gitignore, prune stale. */
 export function materializePlugins(opts: MaterializeOptions): number {
   const { repoRoot, emit, dryRun } = opts;
@@ -153,8 +191,22 @@ export function materializePlugins(opts: MaterializeOptions): number {
   for (const err of plan.errors) emit(`ERROR: ${err}`);
   if (plan.errors.length > 0) return 1;
 
+  // Overlays overwrite a committed baseline (kept machine-local via skip-worktree);
+  // everything else must NOT be tracked in core.
+  const overlays = plan.entries.filter((e) => {
+    if (!e.overlay) return false;
+    if (!isGitTracked(coreDash, e.rel)) {
+      emit(
+        `SKIP overlay (no committed core baseline — commit an empty baseline first): ${e.rel}`,
+      );
+      return false;
+    }
+    return true;
+  });
+
   // Refuse to overwrite core-owned (git-tracked) paths.
   const safe = plan.entries.filter((e) => {
+    if (e.overlay) return false;
     if (isGitTracked(coreDash, e.rel)) {
       emit(`SKIP (git-tracked in core, would clobber): ${e.rel}`);
       return false;
@@ -176,15 +228,25 @@ export function materializePlugins(opts: MaterializeOptions): number {
   const oldPatterns = readManagedPatterns(excludePath);
   const stale = oldPatterns.filter((p) => !newPatterns.includes(p));
 
+  const statePath = overlayStatePath(repoRoot);
+  const newOverlayRels = overlays.map((e) => `dashboard/${e.rel}`).sort();
+  const oldOverlayRels = statePath ? readOverlayState(statePath) : [];
+  const staleOverlays = oldOverlayRels.filter((p) => !newOverlayRels.includes(p));
+
   emit(
     `Materialising ${safe.length} dashboard path(s) from ${plugins.filter((p) => p.manifest.dashboard).length} plugin(s)` +
-      (stale.length ? `; pruning ${stale.length} stale` : "") +
+      (overlays.length ? `; ${overlays.length} overlay(s)` : "") +
+      (stale.length || staleOverlays.length
+        ? `; pruning ${stale.length + staleOverlays.length} stale`
+        : "") +
       (dryRun ? " (DRY RUN)" : ""),
   );
 
   if (dryRun) {
     for (const e of safe) emit(`  WOULD: ${e.plugin} → dashboard/${e.rel}`);
+    for (const e of overlays) emit(`  WOULD OVERLAY: ${e.plugin} → dashboard/${e.rel}`);
     for (const p of stale) emit(`  WOULD PRUNE: ${p}`);
+    for (const p of staleOverlays) emit(`  WOULD RESTORE BASELINE: ${p}`);
     return 0;
   }
 
@@ -194,6 +256,13 @@ export function materializePlugins(opts: MaterializeOptions): number {
     emit(`  PRUNED: ${pat}`);
   }
 
+  // Stale overlays: restore the committed baseline and stop hiding local churn.
+  for (const pat of staleOverlays) {
+    setSkipWorktree(repoRoot, pat, false);
+    spawnSync("git", ["-C", repoRoot, "checkout", "--", pat], { encoding: "utf-8" });
+    emit(`  RESTORED BASELINE: ${pat}`);
+  }
+
   for (const e of safe) {
     fs.rmSync(e.to, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(e.to), { recursive: true });
@@ -201,6 +270,17 @@ export function materializePlugins(opts: MaterializeOptions): number {
     emit(`  ${e.plugin} → dashboard/${e.rel}`);
   }
 
+  // Overlays: overwrite the committed baseline locally, hidden via skip-worktree.
+  for (const e of overlays) {
+    const repoRel = `dashboard/${e.rel}`;
+    setSkipWorktree(repoRoot, repoRel, false);
+    fs.mkdirSync(path.dirname(e.to), { recursive: true });
+    fs.copyFileSync(e.from, e.to);
+    setSkipWorktree(repoRoot, repoRel, true);
+    emit(`  OVERLAY: ${e.plugin} → ${repoRel}`);
+  }
+
   writeManagedBlock(excludePath, newPatterns);
+  if (statePath) fs.writeFileSync(statePath, JSON.stringify(newOverlayRels, null, 2) + "\n");
   return 0;
 }

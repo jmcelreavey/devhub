@@ -7,6 +7,7 @@ import {
   attractionMapsUrl,
   formatStars,
   parseDiscoverNiEvents,
+  parseGithubTrendingRepos,
   parseRssItems,
   forecastDayLabel,
   FAMILY_ATTRACTIONS,
@@ -29,6 +30,8 @@ const EMPTY: DailyBriefing = {
   gaming: [],
   onThisDay: [],
   aiSummary: null,
+  bespokeHtml: null,
+  researchCards: [],
   interestSnippets: [],
 };
 
@@ -113,6 +116,37 @@ describe("parseDiscoverNiEvents", () => {
     expect(parseDiscoverNiEvents(rel)[0].url).toBe(
       "https://discovernorthernireland.com/event/some-fair/55501101/",
     );
+  });
+});
+
+describe("parseGithubTrendingRepos", () => {
+  it("extracts daily trending repo cards", () => {
+    const html = `
+      <article class="Box-row">
+        <h2 class="h3 lh-condensed">
+          <a href="/acme/widgets">
+            <span class="text-normal">acme /</span>
+            widgets
+          </a>
+        </h2>
+        <p class="col-9 color-fg-muted my-1 pr-4">Tiny &amp; useful widgets.</p>
+        <span itemprop="programmingLanguage">TypeScript</span>
+        <a href="/acme/widgets/stargazers">1,234</a>
+      </article>
+      <article class="Box-row">
+        <h2><a href="/other/tool"><span>other /</span> tool</a></h2>
+      </article>
+    `;
+
+    expect(parseGithubTrendingRepos(html, 1)).toEqual([
+      {
+        name: "acme/widgets",
+        url: "https://github.com/acme/widgets",
+        description: "Tiny & useful widgets.",
+        stars: 1234,
+        language: "TypeScript",
+      },
+    ]);
   });
 });
 

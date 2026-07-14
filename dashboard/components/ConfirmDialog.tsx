@@ -8,14 +8,19 @@ interface ConfirmOptions {
   confirmLabel?: string;
   cancelLabel?: string;
   variant?: "default" | "danger";
+  input?: {
+    placeholder?: string;
+    defaultValue?: string;
+  };
 }
 
-interface PendingConfirm extends ConfirmOptions {
-  resolve: (ok: boolean) => void;
-}
+type PendingConfirm =
+  | (ConfirmOptions & { kind: "confirm"; resolve: (ok: boolean) => void })
+  | (ConfirmOptions & { kind: "prompt"; resolve: (value: string | null) => void });
 
 interface ConfirmContextValue {
   request: (opts: ConfirmOptions) => Promise<boolean>;
+  requestString: (opts: ConfirmOptions) => Promise<string | null>;
 }
 
 const ConfirmContext = createContext<ConfirmContextValue | null>(null);
@@ -25,48 +30,82 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
 
   const request = useCallback((opts: ConfirmOptions): Promise<boolean> => {
     return new Promise<boolean>((resolve) => {
-      setPending({ ...opts, resolve });
+      setPending({ ...opts, kind: "confirm", resolve });
     });
   }, []);
 
-  const close = useCallback(
+  const requestString = useCallback((opts: ConfirmOptions): Promise<string | null> => {
+    return new Promise<string | null>((resolve) => {
+      setPending({ ...opts, kind: "prompt", resolve });
+    });
+  }, []);
+
+  const closeConfirm = useCallback(
     (ok: boolean) => {
-      if (pending) {
+      if (!pending) return;
+      if (pending.kind === "confirm") {
         pending.resolve(ok);
-        setPending(null);
       }
+      setPending(null);
     },
     [pending],
   );
 
-  const value = useMemo(() => ({ request }), [request]);
+  const closePrompt = useCallback(
+    (value: string | null) => {
+      if (!pending || pending.kind !== "prompt") return;
+      pending.resolve(value);
+      setPending(null);
+    },
+    [pending],
+  );
+
+  const value = useMemo(() => ({ request, requestString }), [request, requestString]);
 
   return (
     <ConfirmContext.Provider value={value}>
       {children}
-      {pending && <ConfirmDialogView pending={pending} onClose={close} />}
+      {pending && (
+        <ConfirmDialogView
+          pending={pending}
+          onConfirm={closeConfirm}
+          onPrompt={closePrompt}
+        />
+      )}
     </ConfirmContext.Provider>
   );
 }
 
 function ConfirmDialogView({
   pending,
-  onClose,
+  onConfirm,
+  onPrompt,
 }: {
   pending: PendingConfirm;
-  onClose: (ok: boolean) => void;
+  onConfirm: (ok: boolean) => void;
+  onPrompt: (value: string | null) => void;
 }) {
   const titleId = "confirm-dialog-title";
+  const inputRef = useRef<HTMLInputElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
+  const [inputValue, setInputValue] = useState(pending.input?.defaultValue ?? "");
 
   useEffect(() => {
     previousFocus.current = document.activeElement as HTMLElement | null;
-    confirmRef.current?.focus();
+    if (pending.kind === "prompt") {
+      inputRef.current?.focus();
+    } else {
+      confirmRef.current?.focus();
+    }
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        onClose(false);
+        if (pending.kind === "prompt") {
+          onPrompt(null);
+        } else {
+          onConfirm(false);
+        }
       }
     };
     document.addEventListener("keydown", onKeyDown);
@@ -74,7 +113,15 @@ function ConfirmDialogView({
       document.removeEventListener("keydown", onKeyDown);
       previousFocus.current?.focus?.();
     };
-  }, [onClose]);
+  }, [pending, onConfirm, onPrompt]);
+
+  function handleConfirm() {
+    if (pending.kind === "prompt") {
+      onPrompt(inputValue);
+    } else {
+      onConfirm(true);
+    }
+  }
 
   return (
     <div
@@ -93,7 +140,13 @@ function ConfirmDialogView({
         padding: 16,
       }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose(false);
+        if (e.target === e.currentTarget) {
+          if (pending.kind === "prompt") {
+            onPrompt(null);
+          } else {
+            onConfirm(false);
+          }
+        }
       }}
     >
       <div
@@ -113,15 +166,38 @@ function ConfirmDialogView({
             {pending.message}
           </p>
         )}
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
-          <button type="button" className="btn btn-ghost" onClick={() => onClose(false)}>
+        {pending.kind === "prompt" && (
+          <input
+            ref={inputRef}
+            className="input"
+            placeholder={pending.input?.placeholder ?? ""}
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleConfirm();
+            }}
+            style={{ marginBottom: 16, fontSize: 13 }}
+          />
+        )}
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => {
+              if (pending.kind === "prompt") {
+                onPrompt(null);
+              } else {
+                onConfirm(false);
+              }
+            }}
+          >
             {pending.cancelLabel ?? "Cancel"}
           </button>
           <button
             ref={confirmRef}
             type="button"
             className={pending.variant === "danger" ? "btn btn-danger-ghost" : "btn btn-primary"}
-            onClick={() => onClose(true)}
+            onClick={handleConfirm}
           >
             {pending.confirmLabel ?? "Confirm"}
           </button>
@@ -134,12 +210,27 @@ function ConfirmDialogView({
 export function useConfirm() {
   const ctx = useContext(ConfirmContext);
   return useCallback(
-    (opts: ConfirmOptions): Promise<boolean> => {
+    (opts: Omit<ConfirmOptions, "input">): Promise<boolean> => {
       if (!ctx) {
         // Safe fallback if provider isn't mounted (e.g. in tests)
         return Promise.resolve(window.confirm(opts.message ?? opts.title));
       }
       return ctx.request(opts);
+    },
+    [ctx],
+  );
+}
+
+export function usePrompt() {
+  const ctx = useContext(ConfirmContext);
+  return useCallback(
+    (opts: ConfirmOptions): Promise<string | null> => {
+      if (!ctx) {
+        // Safe fallback if provider isn't mounted (e.g. in tests)
+        const value = window.prompt(opts.message ?? opts.title, opts.input?.defaultValue ?? "");
+        return Promise.resolve(value);
+      }
+      return ctx.requestString(opts);
     },
     [ctx],
   );

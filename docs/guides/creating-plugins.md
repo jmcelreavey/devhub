@@ -39,7 +39,6 @@ devhub-myplugin/
   skills/<skill-name>/SKILL.md      # one dir per skill
   agents/<agent-name>.md            # one flat .md per agent
   mcp/<server-name>.json            # one canonical server JSON per file
-  mcp-servers/<server-name>/         # optional stdio server package
 ```
 
 Declare the directories in `contributes`:
@@ -53,26 +52,6 @@ Declare the directories in `contributes`:
 ```
 
 That's it — at sync time these merge into DevHub's catalogs alongside core and ai-tools.
-
-For MCP, `mcp/<server-name>.json` is the catalog entry that gets synced into Claude,
-Cursor, Codex, OpenCode, and other configured clients. If the plugin only points at
-an existing command, the JSON file is enough. If it ships its own stdio server, put
-that Node package under `mcp-servers/<server-name>/` with its own `package.json`;
-DevHub's bootstrap and health check install missing dependencies for enabled plugin
-server packages.
-
-Use the `PLUGIN_ROOT` placeholder when the MCP command or args need to point back to
-the plugin checkout:
-
-```json
-{
-  "command": "PLUGIN_ROOT/mcp-servers/myplugin-server/node_modules/.bin/tsx",
-  "args": ["PLUGIN_ROOT/mcp-servers/myplugin-server/src/server.ts"]
-}
-```
-
-`PLUGIN_ROOT` is replaced with the registered plugin path during MCP sync. Use
-`REPO_ROOT` only for files in the DevHub core checkout.
 
 ## 3. Register the plugin locally
 

@@ -4,6 +4,7 @@
  * individual `tools/*.ts` modules stay free of wiring.
  */
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { NotesStorage } from "./storage.ts";
 import { TasksStorage, DiagramsStorage } from "./task-diagram-storage.ts";
 import { VaultStorage, markdownVaultCodec, resolveContentDir } from "./shared.ts";
@@ -21,7 +22,8 @@ export interface Context {
 }
 
 export function createContext(): Context {
-  const repoRoot = process.env.REPO_ROOT || path.resolve(process.cwd(), "../..");
+  const sourceDir = path.dirname(fileURLToPath(import.meta.url));
+  const repoRoot = process.env.REPO_ROOT || path.resolve(sourceDir, "../../..");
   const notesDir = resolveContentDir("NOTES_DIR", repoRoot, "notes");
   const tasksDir = resolveContentDir("TASKS_DIR", repoRoot, "tasks");
   const docsDir = resolveContentDir("DOCS_DIR", repoRoot, "docs");

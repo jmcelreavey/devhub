@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   collectDiagramFolderRelPaths,
+  createEmptyDiagram,
   diagramBreadcrumbs,
   diagramFolderChildren,
   diagramFolderHref,
@@ -70,6 +71,13 @@ describe("hasVisibleDiagramShapes", () => {
       store: { "page:page": { id: "page:page" } },
       schema: { schemaVersion: 2 },
     })).toBe(false);
+  });
+});
+
+describe("createEmptyDiagram", () => {
+  it("creates an empty diagram without forcing tldraw to load fake session state", () => {
+    const diagram = createEmptyDiagram();
+    expect(diagram.store).toEqual({});
   });
 });
 

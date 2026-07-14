@@ -46,7 +46,7 @@ export function MobileBottomShelf() {
         transition: "height 200ms ease",
       }}
     >
-      {/* Collapse / expand grabber — always visible */}
+      {/* Collapse / expand grabber - always visible */}
       <button
         type="button"
         onClick={toggle}
@@ -57,7 +57,7 @@ export function MobileBottomShelf() {
         {collapsed ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
       </button>
 
-      {/* Tab row — only renders when expanded */}
+      {/* Tab row - only renders when expanded */}
       {!collapsed && (
         <div className="flex items-stretch h-full pt-[8px]">
           {TABS.map(({ href, label, Icon }) => {
@@ -87,7 +87,7 @@ export function MobileBottomShelf() {
             <span style={{ fontSize: 10 }}>Search</span>
           </button>
 
-          {/* More — fires existing mobile nav hamburger */}
+          {/* More - fires existing mobile nav hamburger */}
           <button
             type="button"
             onClick={() => window.dispatchEvent(new CustomEvent("devhub:mobile-nav-open"))}

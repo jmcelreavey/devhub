@@ -141,7 +141,7 @@ export function PWAInstallPrompt() {
           <p>{uninstallHelp}</p>
           {!runningStandalone && typeof navigator !== "undefined" && /Chrome|Chromium|Edg\//i.test(navigator.userAgent) && (
             <p>
-              In this normal tab, Chrome/Edge may show <strong className="font-medium" style={{ color: "var(--text)" }}>Open in app</strong> in the address bar — that means DevHub is installed. Open it from there to get the app window, then use that window’s menu to uninstall.
+              In this normal tab, Chrome/Edge may show <strong className="font-medium" style={{ color: "var(--text)" }}>Open in app</strong> in the address bar - that means DevHub is installed. Open it from there to get the app window, then use that window’s menu to uninstall.
             </p>
           )}
           {!runningStandalone && (
@@ -155,7 +155,7 @@ export function PWAInstallPrompt() {
                   setShowUninstallHelp(false);
                 }}
               >
-                I already removed the app — reset this notice
+                I already removed the app - reset this notice
               </button>
             </p>
           )}

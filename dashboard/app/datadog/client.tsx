@@ -34,7 +34,7 @@ function OncallBanner() {
     detail = (
       <>
         {data.message}{" "}
-        <Link href="/setup" className="underline underline-offset-2" style={{ color: "var(--accent)" }}>
+        <Link href="/setup" className="underline underline-offset-2 text-accent">
           Open Setup
         </Link>
       </>
@@ -45,24 +45,20 @@ function OncallBanner() {
     detail = data.message;
   }
 
-  const accent =
-    tone === "accent" ? "var(--accent)" : tone === "warning" ? "var(--warning)" : "var(--text-subtle)";
+  const panelTone =
+    tone === "accent" ? "tone-panel--accent" : tone === "warning" ? "tone-panel--warning-banner" : "tone-panel--muted";
+  const dotTone =
+    tone === "accent" ? "tone-dot--accent" : tone === "warning" ? "tone-dot--warning" : "tone-dot--muted";
 
   return (
-    <div
-      className="rounded-lg border p-3 mb-4 flex items-start gap-3"
-      style={{
-        borderColor: `color-mix(in oklab, ${accent} 35%, transparent)`,
-        background: `color-mix(in oklab, ${accent} 8%, var(--bg-elevated))`,
-      }}
-    >
-      <span className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: accent }} aria-hidden />
+    <div className={`tone-panel ${panelTone} mb-4 flex items-start gap-3 !p-3`}>
+      <span className={`tone-dot tone-dot--md ${dotTone}`} aria-hidden />
       <div className="min-w-0">
-        <div className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+        <div className="text-sm font-semibold text-text">
           {title}
         </div>
         {detail ? (
-          <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+          <div className="text-xs mt-0.5 text-text-muted">
             {detail}
           </div>
         ) : null}
@@ -80,10 +76,10 @@ function RecentAlertList({
   scope: "oncall" | "team";
   tone: "danger" | "warning";
 }) {
-  const accent = tone === "danger" ? "var(--danger)" : "var(--warning)";
+  const dotTone = tone === "danger" ? "tone-dot--danger" : "tone-dot--warning";
   if (events.length === 0) {
     return (
-      <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
+      <p className="text-xs text-text-subtle">
         Nothing in the last 24h. Quiet is good.
       </p>
     );
@@ -92,16 +88,12 @@ function RecentAlertList({
     <div className="space-y-2">
       {events.map((e) => (
         <div key={e.id || `${e.title}-${e.timestampMs}`} className="group flex items-start gap-2">
-          <span
-            className="mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full"
-            style={{ background: accent }}
-            aria-hidden
-          />
+          <span className={`tone-dot tone-dot--sm ${dotTone}`} aria-hidden />
           <div className="min-w-0 flex-1">
-            <div className="text-sm break-words leading-snug" style={{ color: "var(--text)" }}>
+            <div className="text-sm break-words leading-snug text-text">
               {e.title}
             </div>
-            <div className="text-[11px] font-mono" style={{ color: "var(--text-subtle)" }}>
+            <div className="text-[11px] font-mono text-text-subtle">
               {e.timestampMs ? formatTime(e.timestampMs) : ""}
               {e.status ? ` · ${e.status}` : ""}
             </div>
@@ -133,7 +125,7 @@ export default function DatadogClient() {
 
   if (linksLoading && !links) {
     return (
-      <div className="page-wrapper" style={{ padding: "24px" }}>
+      <div className="page-wrapper p-6">
         <div className="skeleton" style={{ height: 24, width: "40%", marginBottom: 16 }} />
         <div className="skeleton" style={{ height: 140, width: "100%", marginBottom: 12 }} />
         <div className="skeleton" style={{ height: 200, width: "100%" }} />
@@ -143,7 +135,7 @@ export default function DatadogClient() {
 
   if (linksError || !links) {
     return (
-      <div className="page-wrapper" style={{ padding: "24px", color: "var(--danger)" }}>
+      <div className="page-wrapper p-6 text-danger">
         Could not load Datadog links. Try again or check the dev server.
       </div>
     );
@@ -151,11 +143,11 @@ export default function DatadogClient() {
 
   if (!links.configured) {
     return (
-      <div className="page-wrapper" style={{ padding: "24px", maxWidth: 520 }}>
-        <h1 className="text-lg font-semibold mb-2" style={{ color: "var(--text)" }}>
+      <div className="page-wrapper max-w-[520px] p-6">
+        <h1 className="page-title mb-2">
           Datadog
         </h1>
-        <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
+        <p className="text-sm mb-4 text-text-muted">
           Add your Datadog API key in Setup to unlock this page and the Today strip.
         </p>
         <Link href="/setup" className="btn btn-primary text-sm">
@@ -174,25 +166,17 @@ export default function DatadogClient() {
     recent && recent.ok === false && (recent.code === "upstream" || recent.code === "not_configured");
 
   return (
-    <div className="page-wrapper" style={{ padding: "24px", maxWidth: 900 }}>
+    <div className="page-wrapper max-w-[900px] p-6">
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div className="flex items-start gap-3 min-w-0">
-          <div
-            className="flex items-center justify-center rounded-lg shrink-0"
-            style={{
-              width: 44,
-              height: 44,
-              background: "var(--accent-dim)",
-              color: "var(--accent)",
-            }}
-          >
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-accent-dim text-accent">
             <LineChart size={24} aria-hidden />
           </div>
           <div className="min-w-0">
-            <h1 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
+            <h1 className="page-title">
               Datadog
             </h1>
-            <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+            <p className="text-sm mt-1 text-text-muted">
               On-call queues, today&apos;s stream, and the most recent alerts (last 24h) when an
               application key is set. Site <span className="font-mono text-xs">{links.ddSite}</span>.
             </p>
@@ -214,11 +198,11 @@ export default function DatadogClient() {
       {/* Recent alerts */}
       <section className="mb-6" aria-label="Recent alerts last 24 hours">
         <div className="flex items-center justify-between gap-2 mb-3">
-          <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-            Recent alerts <span className="font-normal" style={{ color: "var(--text-subtle)" }}>· last 24h</span>
+          <h2 className="text-sm font-semibold text-text">
+            Recent alerts <span className="font-normal text-text-subtle">· last 24h</span>
           </h2>
           {recentOk && (
-            <span className="text-[11px] font-mono" style={{ color: "var(--text-subtle)" }}>
+            <span className="text-[11px] font-mono text-text-subtle">
               Updated {new Date(recent.fetchedAt).toLocaleTimeString()}
             </span>
           )}
@@ -233,43 +217,34 @@ export default function DatadogClient() {
         )}
 
         {recent && recentNeedsKey && (
-          <div
-            className="rounded-lg border p-4 text-sm"
-            style={{ borderColor: "var(--border-muted)", background: "var(--bg-elevated)", color: "var(--text-muted)" }}
-          >
+          <div className="tone-panel text-sm text-text-muted">
             <p className="mb-2">{recent.message}</p>
-            <Link href="/setup" className="text-sm underline underline-offset-2" style={{ color: "var(--accent)" }}>
-              Open Setup — add application key
+            <Link href="/setup" className="text-sm underline underline-offset-2 text-accent">
+              Open Setup - add application key
             </Link>
           </div>
         )}
 
         {recent && recentErr && (
-          <p className="text-sm" style={{ color: "var(--danger)" }}>
+          <p className="text-sm text-danger">
             {recent.message}
           </p>
         )}
 
         {recentOk && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <div
-              className="rounded-lg border p-4"
-              style={{ borderColor: "color-mix(in oklab, var(--danger) 30%, transparent)", background: "var(--bg-elevated)" }}
-            >
+            <div className="tone-panel tone-panel--danger">
               <div className="flex items-center justify-between gap-2 mb-3">
-                <h3 className="text-sm font-semibold" style={{ color: "var(--danger)" }}>
-                  @oncall-dad <span className="font-normal text-xs" style={{ color: "var(--text-subtle)" }}>(urgent)</span>
+                <h3 className="text-sm font-semibold text-danger">
+                  @oncall-dad <span className="font-normal text-xs text-text-subtle">(urgent)</span>
                 </h3>
                 <DatadogInvestigateButton scope="oncall" label="Investigate queue" />
               </div>
               <RecentAlertList events={recent.oncall} scope="oncall" tone="danger" />
             </div>
-            <div
-              className="rounded-lg border p-4"
-              style={{ borderColor: "color-mix(in oklab, var(--warning) 30%, transparent)", background: "var(--bg-elevated)" }}
-            >
+            <div className="tone-panel tone-panel--warning">
               <div className="flex items-center justify-between gap-2 mb-3">
-                <h3 className="text-sm font-semibold" style={{ color: "var(--warning)" }}>
+                <h3 className="text-sm font-semibold text-warning">
                   @slack-dad-team-alerts
                 </h3>
                 <DatadogInvestigateButton scope="team" label="Investigate queue" />
@@ -281,77 +256,63 @@ export default function DatadogClient() {
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <section
-          className="rounded-lg border p-4"
-          style={{ borderColor: "var(--border-muted)", background: "var(--bg-elevated)" }}
-        >
-          <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--danger)" }}>
+        <section className="tone-panel">
+          <h2 className="text-sm font-semibold mb-1 text-danger">
             On-call (urgent)
           </h2>
-          <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>
-            Monitors that notify <code className="font-mono">@oncall-dad</code> — pages / SMS the on-call engineer.
+          <p className="text-xs mb-3 text-text-muted">
+            Monitors that notify <code className="font-mono">@oncall-dad</code> - pages / SMS the on-call engineer.
           </p>
           <a
             href={links.oncallUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className={linkBtn}
-            style={{ borderColor: "color-mix(in oklab, var(--danger) 40%, transparent)" }}
+            className={`${linkBtn} dd-link-btn--danger`}
           >
-            Open monitors — @oncall-dad
+            Open monitors - @oncall-dad
             <ExternalLink size={14} aria-hidden />
           </a>
         </section>
 
-        <section
-          className="rounded-lg border p-4"
-          style={{ borderColor: "var(--border-muted)", background: "var(--bg-elevated)" }}
-        >
-          <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--warning)" }}>
+        <section className="tone-panel">
+          <h2 className="text-sm font-semibold mb-1 text-warning">
             Team warnings (Slack)
           </h2>
-          <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>
-            Monitors that notify <code className="font-mono">@slack-dad-team-alerts</code> — team channel, not paging.
+          <p className="text-xs mb-3 text-text-muted">
+            Monitors that notify <code className="font-mono">@slack-dad-team-alerts</code> - team channel, not paging.
           </p>
           <a
             href={links.teamAlertsUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className={linkBtn}
-            style={{ borderColor: "color-mix(in oklab, var(--warning) 40%, transparent)" }}
+            className={`${linkBtn} dd-link-btn--warning`}
           >
-            Open monitors — @slack-dad-team-alerts
+            Open monitors - @slack-dad-team-alerts
             <ExternalLink size={14} aria-hidden />
           </a>
         </section>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <section
-          className="rounded-lg border p-4"
-          style={{ borderColor: "var(--border-muted)", background: "var(--bg-elevated)" }}
-        >
-          <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text)" }}>
+        <section className="tone-panel">
+          <h2 className="text-sm font-semibold mb-1 text-text">
             Today&apos;s events (local day)
           </h2>
-          <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>
+          <p className="text-xs mb-3 text-text-muted">
             Event stream from local midnight to now. Override with{" "}
             <code className="font-mono">DATADOG_LINK_EVENTS_TODAY</code> if needed.
           </p>
           <a href={links.eventsTodayUrl} target="_blank" rel="noopener noreferrer" className={linkBtn}>
-            Open event stream — today
+            Open event stream - today
             <ExternalLink size={14} aria-hidden />
           </a>
         </section>
 
-        <section
-          className="rounded-lg border p-4"
-          style={{ borderColor: "var(--border-muted)", background: "var(--bg-elevated)" }}
-        >
-          <h2 className="text-sm font-semibold mb-2" style={{ color: "var(--text)" }}>
+        <section className="tone-panel">
+          <h2 className="text-sm font-semibold mb-2 text-text">
             Investigate
           </h2>
-          <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>
+          <p className="text-xs mb-3 text-text-muted">
             Hand the on-call queue to OpenCode with the investigation skill pre-loaded, or use the
             per-alert Investigate buttons above.
           </p>

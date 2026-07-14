@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 
-type TipPos = "top" | "bottom" | "left" | "bottom-end" | "bottom-start";
+type TipPos = "top" | "top-end" | "bottom" | "left" | "bottom-end" | "bottom-start";
 
 /**
  * Electron/Chromium-safe tooltip wrapper.

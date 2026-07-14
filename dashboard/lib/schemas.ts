@@ -42,7 +42,7 @@ const JIRA_KEY_PATTERN = /^[A-Z][A-Z0-9]+-\d+$/;
 export const JiraCreateIssueSchema = z.object({
   projectKey: z.string().regex(/^[A-Z][A-Z0-9]+$/, "projectKey must be a Jira project key"),
   summary: z.string().min(1, "summary is required").max(255),
-  description: z.string().max(5000).optional(),
+  description: z.string().min(1, "description is required").max(5000),
   parentKey: z.union([z.string().regex(JIRA_KEY_PATTERN), z.null()]).optional(),
   issuetypeName: z.string().min(1).max(60).optional(),
   assignToMe: z.boolean().optional(),

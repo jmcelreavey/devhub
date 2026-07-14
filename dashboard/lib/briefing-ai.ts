@@ -1,10 +1,10 @@
-// AI enrichment for the daily briefing. Every function is additive: if AI is
-// not configured or the call fails, it falls back to a deterministic result so
-// the briefing never breaks.
+// AI enrichment helpers for the daily briefing. Every function is additive: if
+// AI is not configured or the call fails, it falls back to a deterministic
+// result so nothing ever breaks.
 //
-// All calls are cached alongside the briefing data (the API route caches the
-// full DailyBriefing object per day), so these run once per refresh — not per
-// page load.
+// The bespoke /briefing surface no longer uses a sanitized HTML fragment — it's
+// a full AI-authored canvas now (see lib/briefing-canvas.ts). These remaining
+// helpers produce small text bits (dev tip, one-line summary, interest snippets).
 
 import { generateText } from "ai";
 import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai-provider";
