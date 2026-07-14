@@ -53,6 +53,17 @@ Prune on sync removes tool-dir agents that are no longer in the catalog (e.g. re
 
 After edits, run **Sync agents** so local tools pick up changes.
 
+### Dashboard API
+
+| Route | Purpose |
+| ----- | ------- |
+| `GET /api/agents` | List catalog agents (core + plugin; plugin rows are `readOnly`) |
+| `POST /api/agents` | Create `agents/shared/<name>.md` |
+| `GET/PUT/PATCH/DELETE /api/agents/<name>` | Read or edit one agent (mutations return `403` for plugin agents) |
+| `GET /api/agents/local` | Scan tool dirs for import candidates |
+
+See [API Routes](../reference/api-routes.md) for request/response details.
+
 ## Core Agents
 
 | Agent | Focus |

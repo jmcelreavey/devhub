@@ -156,6 +156,19 @@ Notes and docs can be published as secret GitHub Gists for short-lived read-only
 
 Notes and docs autosave on a short debounce. Each navigation or vault switch bumps a **save generation** so in-flight saves from the previous page are dropped instead of overwriting the new page. If you edit and navigate away within the debounce window, wait a moment or use explicit save before leaving.
 
+### In-app links
+
+BlockNote link clicks in notes and docs resolve in-app when possible:
+
+| Link form | Behavior |
+| --------- | -------- |
+| `/notes/...`, `/docs/...` | Navigate within the dashboard |
+| Relative `.md` / `.json` paths | Resolve relative to the current note or doc slug |
+| `repo://` / `repo:` | Open a sibling repo file in Cursor via `POST /api/repos/<name>/open` |
+| `http(s):`, `mailto:`, `tel:` | Open externally (⌘/Ctrl-click opens in a new tab) |
+
+See [Dashboard — Repo-aware links](dashboard.md#repo-aware-links) for repo link syntax.
+
 ## Maintenance
 
 Keep active notes small enough to browse. Archive old or noisy material when it stops being useful day to day.

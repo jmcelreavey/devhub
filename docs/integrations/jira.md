@@ -25,6 +25,22 @@ When a task contains a key such as `DAD-1234`, DevHub can treat it as a Jira ref
 
 This helps with linking and standup generation.
 
+## Create Tickets From Tasks
+
+Each task row has an **Add to Jira** action (Jira icon) when Jira is configured. It opens a confirmation modal that:
+
+- Seeds the summary from task text (strips an existing linked key if present).
+- Lets you pick a parent: the task's linked ticket, another key, or none.
+- Resolves the project from the parent key prefix (or `JIRA_DEFAULT_PROJECT` when there is no parent).
+- Shows board, active sprint, assignee, and inherited **Team** from `GET /api/jira/meta` (pass `reference=<parentKey>` to inherit Team from the parent).
+- Optionally adds the issue to the active sprint.
+- Creates a **Task** or **Sub-task** (when a parent is set) via `POST /api/jira/issue`, assigns to you by default, and rewrites the task text with the new key.
+
+| Route | Purpose |
+| ----- | ------- |
+| `GET /api/jira/meta?project=<KEY>&reference=<parentKey>?` | Board, sprint, Team field ids/values, and assignee for the modal |
+| `POST /api/jira/issue` | Body: `{ projectKey, summary, description?, parentKey?, issuetypeName?, assignToMe?, sprintId? }` — returns `{ key, url }` (`201`) |
+
 ## Workflow Transitions
 
 When you complete or abandon a task that includes a Jira key, DevHub can prompt you to move the ticket to a new workflow state.

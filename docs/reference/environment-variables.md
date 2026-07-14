@@ -38,6 +38,7 @@ Most values live in the dashboard's local environment file and can be edited fro
 | `JIRA_DOMAIN`             | Atlassian Cloud domain                |
 | `JIRA_EMAIL`              | Jira account email                    |
 | `JIRA_API_TOKEN`          | Jira API token                        |
+| `JIRA_DEFAULT_PROJECT`    | Default project key for **Add to Jira** when the task has no linked parent (defaults to `PTF` in code) |
 | `NEXT_PUBLIC_JIRA_DOMAIN` | Browser-visible Jira domain for links |
 
 ## Datadog

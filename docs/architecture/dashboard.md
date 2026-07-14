@@ -117,6 +117,10 @@ Daily tasks live in repo-root `tasks/YYYY-MM-DD.json` (one file per calendar day
 
 Completed and abandoned tasks stay in the file for history and standup; they are not included in reorder requests.
 
+### Add to Jira
+
+When Jira is configured, each task exposes an **Add to Jira** action. The modal creates a Jira issue from the task text, optionally under the task's linked parent or another key, inherits Team/sprint context from `GET /api/jira/meta`, and rewrites the task with the new key on success. See [Jira integration](../integrations/jira.md#create-tickets-from-tasks).
+
 ### Focus timer
 
 Each task can track focused work time via `timerStartedAt` (ISO start) and `timeSpentMs` (accumulated). Only **one** timer runs per calendar day — starting a timer on a new task stops any other running timer that day and folds elapsed time into `timeSpentMs`.
