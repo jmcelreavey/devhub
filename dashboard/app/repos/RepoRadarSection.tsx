@@ -6,6 +6,7 @@
  * version renders nothing so the core builds without plugins.
  */
 
-export function RepoRadarSection(_props: { repoName: string; autoOpenSignal?: string }) {
+export function RepoRadarSection(props: { repoName: string; autoOpenSignal?: string }) {
+  void props; // baseline renders nothing; the plugin overlay uses the props
   return null;
 }
