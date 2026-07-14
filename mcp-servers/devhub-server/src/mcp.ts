@@ -7,6 +7,7 @@ import { registerTasksTools } from "./tools/tasks.ts";
 import { registerDiagramsTools } from "./tools/diagrams.ts";
 import { registerAppraisalTools } from "./tools/appraisal.ts";
 import { registerDxAuditTools } from "./tools/dx-audit.ts";
+import { registerShipTools } from "./tools/ship.ts";
 import { registerStatusTools } from "./tools/status.ts";
 import { registerBriefingTools } from "./tools/briefing.ts";
 import { registerCalendarTools } from "./tools/calendar.ts";
@@ -33,6 +34,7 @@ registerTasksTools(server, ctx);
 registerDiagramsTools(server, ctx);
 registerAppraisalTools(server, ctx);
 registerDxAuditTools(server, ctx);
+registerShipTools(server, ctx);
 
 // Dashboard-backed tools (proxy localhost:1337; need the dashboard running).
 registerStatusTools(server, ctx);
