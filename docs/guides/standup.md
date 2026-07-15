@@ -20,6 +20,12 @@ Depending on your setup, standup can include:
 4. Copy the generated Markdown.
 5. Edit before posting if needed.
 
+For a backward-looking view of the same task data, use **Review** (`/review`) — a seven-day window with per-day stats and slipped (repeatedly rolled-over) tasks. See [Dashboard — Weekly Review](../architecture/dashboard.md#weekly-review).
+
+## API
+
+The standup preview calls `GET /api/standup/markdown`. Defaults to yesterday through today (local midnight window). Optional query params: `startDate`, `endDate`, `startTime`, `endTime`, `excludeRepos` (comma-separated sibling repo names to skip). Returns `{ markdown, meta }` — see [API Routes](../reference/api-routes.md). MCP agents can use `standup_markdown` on the `devhub` server.
+
 ## Good Standup Hygiene
 
 - Treat generated text as a draft.

@@ -43,6 +43,7 @@ the [Fork Workflow](../guides/fork-workflow.md) guide):
 | ------- | ------- |
 | `bash scripts/devhub-update.sh [--since <ref>] [--dry-run] [--no-sync] [--mark-synced]` | Pull core updates from `upstream` by porting hunks (`git apply --3way`, since public history is unrelated), then validate + sync. Tracks the last pull in `refs/devhub/upstream-sync`; first run needs `--since`. `--mark-synced` records sync without applying (use after a backport). Guards: on main/master, upstream remote present, and no *non-personal* uncommitted changes (live-dirty `notes/`/`tasks/`/`collections/` are ignored). |
 | `bash scripts/devhub-backport.sh <source-ref> [--base <ref>] [--execute] [--title "…"]` | Build a clean PR branch off `upstream` and port the feature's hunks onto it (`git apply --3way`, preserving public-side templatisation), personal data excluded, leak-scanned. `--base` defaults to `<source-ref>^`. Previews by default; `--execute` pushes the branch to `upstream` and opens the PR. |
+| `bash scripts/devhub-ship.sh ["commit message"] [--dry-run] [--no-upstream]` | One-shot **ship everything**: commit `notes/`/`tasks/`/`collections/` separately, commit remaining work, push `origin main` (pre-push verify runs), port the content diff onto `upstream` main directly (leak-scanned, no PR), then commit+push every enabled plugin repo. Requires `main`/`master`. `--no-upstream` skips the public-core push. Also exposed as MCP `repo_ship` / `repo_ship_status`. |
 
 These call the CLI action runner, which is also usable directly:
 
@@ -70,8 +71,65 @@ The dashboard owns most operational scripts. They handle tasks such as:
 
 Prefer root commands or dashboard UI actions unless you are debugging a specific script.
 
+## In-Process Action Catalog
+
+Maintenance actions run in-process via `dashboard/lib/scripts-runner.ts` (not shell scripts). The Actions page, Status page, top-bar sync indicator, and scheduled jobs all call `POST /api/scripts` with one of these IDs.
+
+`GET /api/scripts` returns `{ scripts: string[], catalog: ScriptCatalogEntry[] }` where each catalog entry includes `id`, `label`, `description`, `mutates`, `effects[]`, and `cmd`.
+
+### Git and content sync
+
+| ID | Label | Mutates | Notes |
+| -- | ----- | ------- | ----- |
+| `update_and_sync` | Update & Sync | yes | Pull/rebase, sync skills+agents+persona, optional commit+push |
+| `commit_dirty_push` | Commit & Push Dirty Files | yes | `commitMessage` required (max 180 chars) |
+| `sync_notes_tasks_push` | Sync content (Commit + Push) | yes | `notes/`, `collections/`, `tasks/`, `docs/` only |
+| `sync_notes_push` | Sync Notes (Commit + Push) | yes | Legacy notes-only variant |
+| `dry_run_scoped_sync` | Dry Run Scoped Sync | no | Preview content sync without committing |
+| `push_unpushed_commits` | Push Unpushed Commits | yes | Push existing ahead commits only |
+| `pull_core_preview` | Pull Core Updates (Preview) | no | Read-only upstream diff |
+| `pull_core` | Pull Core Updates | yes | Apply upstream public-core changes |
+
+### Catalog sync (repo → local tools)
+
+| ID | Label | Mutates | Optional POST fields |
+| -- | ----- | ------- | -------------------- |
+| `sync_skills` | Sync Skills | yes | `prune`, `skills[]`, `excludeSkills[]` |
+| `sync_agents` | Sync Agents | yes | `prune`, `agents[]`, `excludeAgents[]` |
+| `sync_mcp_servers` | Sync MCP Servers | yes | `prune`, `servers[]`, `excludeServers[]` |
+| `sync_native_persona` | Sync Persona | yes | — |
+| `sync_opencode_config` | Sync OpenCode Config | yes | — |
+
+### Collect (local tools → repo)
+
+| ID | Label | Mutates | Optional POST fields |
+| -- | ----- | ------- | -------------------- |
+| `collect_local_skills` | Collect Skills | yes | `importSkillNames[]`, `excludeSkills[]` |
+| `collect_local_agents` | Collect Agents | yes | `importAgentNames[]`, `excludeAgents[]` |
+| `collect_local_mcp_servers` | Collect MCP Servers | yes | `importServerNames[]`, `excludeServers[]`, `importMcpTarget` |
+| `collect_opencode_config` | Collect OpenCode Config | yes | — |
+| `collect_local_persona` | Collect Persona | yes | `personaTool` (required), `personaSources[]` |
+
+### Validation
+
+| ID | Label | Mutates |
+| -- | ----- | ------- |
+| `validate` | Validate | no |
+| `verify_sync` | Verify Sync Health | no |
+| `capability_digest` | Weekly Capability Digest | yes | Runs scan + diff + digest; writes `notes/learnings/digests/<date>.json` |
+
+All mutating actions require same-origin `POST /api/scripts`. Only one instance of a given script ID can run at a time (`409` if already running). Output streams via `GET /api/scripts/stream/<runId>`; history persists under `~/.local/state/devhub/runs.jsonl`.
+
 ## Git Hooks
 
 DevHub can install a pre-push hook that runs verification before pushing.
 
-If you must bypass it in an emergency, use the documented environment override, then run verification as soon as practical.
+The hook (`.githooks/pre-push`) runs `scripts/scan-leaks.sh` then `npm run verify` (lint, typecheck, tests, production build with `DEVHUB_SKIP_NEXT_TYPECHECK=true`). It is wired during `dashboard/scripts/postinstall.ts` and `scripts/install.sh`.
+
+Emergency bypass — use sparingly, then run `npm run verify` locally before merging:
+
+```bash
+DEVHUB_SKIP_VERIFY=1 git push
+```
+
+See [Environment Variables](environment-variables.md#development-and-ci).

@@ -69,6 +69,31 @@ back** — just advance the marker:
 scripts/devhub-update.sh --mark-synced
 ```
 
+## One-shot ship (private mirror + public core + plugins)
+
+When you want to push **everything** in one deliberate flow — personal data, code, the
+public core, and enabled plugin repos — use `scripts/devhub-ship.sh` (or MCP `repo_ship` +
+`repo_ship_status`):
+
+```bash
+bash scripts/devhub-ship.sh "feat: my feature"   # from main/master
+bash scripts/devhub-ship.sh --dry-run            # preview paths only
+bash scripts/devhub-ship.sh --no-upstream        # skip public-core push
+```
+
+The script:
+
+1. Commits `notes/`, `tasks/`, and `collections/` as their own commit (private-only paths).
+2. Commits all remaining work with your message.
+3. Pushes `origin main` — the pre-push hook runs leak scan + `npm run verify` (takes minutes).
+4. Ports the content diff onto `upstream` main **directly** (no PR) via `devhub-backport.sh`,
+   then advances the sync marker.
+5. Commits and pushes each enabled plugin repo from `~/.config/devhub/plugins.json`.
+
+Personal paths never reach the public core; the backport step drops them and the leak scan
+blocks internal names/secrets. For a **reviewed** public contribution, prefer the manual
+backport + PR flow above instead.
+
 ## See also
 
 - The **`devhub-fork-workflow`** skill loads this workflow on demand in AI tools (triggers:

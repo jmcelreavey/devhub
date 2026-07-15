@@ -17,7 +17,19 @@ Cmd+K
 - Tickets.
 - Common actions.
 - Standup shortcuts.
-- **Content** — full-text matches inside notes when your query is at least two characters (debounced; uses `/api/search`).
+- **Content** — full-text matches inside notes when your query is at least two characters (debounced; uses `GET /api/search` substring mode).
+
+For TF-IDF "related notes" search across the full notes vault, use the **Search** page at `/search` (`?mode=semantic` on the API). The palette always uses exact substring matching so results stay predictable for quick navigation.
+
+## Actions
+
+| Action | Shortcut / hint | What it does |
+| ------ | --------------- | ------------ |
+| Copy context pack for AI session | Empty-query default list | Fetches `GET /api/context-pack?format=markdown`, copies a markdown bundle to the clipboard: today's open tasks, recent learnings, daily note preview, and standup markdown. Use when starting an external AI session and you want local DevHub state in one paste. |
+| Quick capture | `⌘⇧C` | Opens the capture dialog for a task, note, or learning. |
+| Toggle animations | — | Flips the motion kill-switch (`body[data-motion="off"]`). |
+
+**Copy context pack** is different from **Copy standup** on Today: the context pack adds tasks, learnings, and the daily note preview around the same standup window data.
 
 ### Result Ordering
 

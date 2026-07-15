@@ -1,8 +1,19 @@
-# Performance Appraisal (MCP)
+# Performance Appraisal (MCP + Dashboard)
 
 DevHub captures review evidence through MCP tools on the `devhub` server. Entries are BlockNote JSON under `notes/appraisal/` so the dashboard can render them like other notes.
 
 Use this when you want **dated, reference-backed moments** during the year — not a scramble to reconstruct impact at review time.
+
+## Dashboard UI
+
+| Route | Purpose |
+| ----- | ------- |
+| `/appraisal` | Self-review hub — goals, themed entries, coverage bars, evidence suggestions from recent PRs/Jira/tasks, HR markdown export |
+| `/one-on-one` | 1:1 prep template seeded from appraisal themes and open goals |
+
+Both live under **Library** section tabs (or **⌘K**). The evidence panel on `/appraisal` calls `GET /api/appraisal/evidence?days=`; the main year view uses `GET /api/appraisal/year?year=`. Goal status updates go through `PATCH` on the same year route.
+
+MCP tools remain the primary capture path for agents (`appraisal_record`, etc.); the UI is for review, export, and spotting gaps before review season.
 
 ## Storage layout
 
