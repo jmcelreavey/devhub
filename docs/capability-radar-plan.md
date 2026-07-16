@@ -52,7 +52,7 @@ open http://localhost:1337/radar
 - **Shared lab UI** — extracted to `components/LabInline.tsx` (`useLab`, `LabButton`, `LabPanel`) so `/radar` and `LearnPanel` share one implementation.
 - **Task links** — follow-up tasks now use a markdown link to the note (`Lab: [<label>](/notes/learnings/<category>)`); existing tasks migrated.
 - **GitHub toggle fix** — the "This week" **Generate** now honors the *Also scan un-cloned GitHub repos* checkbox + org filter (e.g. `businessinsider`); previously it ignored them and returned instantly (local-only).
-- **MCP coverage** — `mcp-servers/devhub-server/src/tools/capability.ts` exposes `capability_radar`, `capability_scan`, `capability_digest`, `capability_build_lab`, `capability_complete_lab` (registered in `mcp.ts`). Everything the /radar UI does is now doable via the MCP.
+- **MCP coverage** — `mcp-servers/devhub-server/src/tools/capability.ts` exposes `capability_radar`, `capability_scan`, `capability_digest`, `capability_get_lab`, `capability_complete_lab` (registered in `mcp.ts`). Lab **generation** still runs from the UI or terminal skill; MCP reads existing labs by `signalId`.
 - **Mobile** — `/radar` no longer `desktopOnly` in `lib/nav.ts` (reachable on phones); lab panels/evidence/tutor use responsive wrapping + truncation; coverage labels shrink on narrow screens.
 - **UX polish** — reduced-motion-safe micro-interactions in `globals.css` (`.lab-panel-enter`, `.lab-msg-enter`, `.lab-evidence-link` hover, `.lab-done-pop`) + a spinner on the Build-lab button while generating.
 

@@ -142,6 +142,30 @@ Rules to know:
   (generic plugin-contributed nav is a future enhancement) — add one there, or gate your
   page behind an existing nav gate.
 
+## 5a. (Optional) Overlay a core stub (single file)
+
+When core already imports a component but the real implementation is plugin-specific,
+declare an **overlay** instead of a `paths` copy. Core keeps a committed no-op baseline
+(builds without your plugin); your plugin overwrites it locally.
+
+In core, commit a stub first (example: `dashboard/app/repos/RepoRadarSection.tsx` returns
+`null`). In the plugin manifest:
+
+```json
+"dashboard": {
+  "root": "dashboard",
+  "overlays": ["app/repos/RepoRadarSection.tsx"]
+}
+```
+
+Ship the real file at `dashboard/app/repos/RepoRadarSection.tsx` inside the plugin repo.
+On materialise, DevHub copies your file over the stub and marks the path
+`skip-worktree` so it never shows as local churn. Overlays must be **single files** —
+directories belong in `paths`.
+
+When you remove or disable the overlay, DevHub restores the committed baseline. See
+[Plugins › Overlays](../architecture/plugins.md#overlays-single-file-extensions).
+
 ## 5b. (Optional) Require machine tooling
 
 If your plugin needs a CLI tool present (e.g. a security guard, a cloud CLI), declare it so

@@ -52,6 +52,24 @@ Set `AI_API_KEY` in `dashboard/.env.local` or a matching 1Password `devhub` item
    - **Quiz me** to start the tutor.
    - **Download ZIP** to export a NotebookLM source pack.
 
+## DX Audit (same page)
+
+**DX Audit** on a repo card launches the `dx-audit` skill through the configured agent CLI
+(OpenCode or Cursor — see [Agent CLI selection](opencode-and-chamber.md#agent-cli-selection)).
+The agent inspects the checkout (dev loop, CI, dependencies, release path), optionally
+researches current ecosystem guidance, and writes a prioritised report to DevHub notes:
+
+```text
+notes/reviews/dx-audit-<repo-name>-<YYYY-MM-DD>.json
+```
+
+Reports are BlockNote JSON like other notes. Read them in the notes tree, or via MCP
+`dx_audit_list` / `dx_audit_read` without the dashboard running. Re-run audits over time
+to diff against prior reports — the skill reads the latest note for the repo when present.
+
+Requires the agent CLI handoff env vars (`DEVHUB_AGENT_*`) and a synced `dx-audit` skill.
+No separate API route — the Repos button opens a terminal session with the skill prompt.
+
 ## How It Works
 
 ```text

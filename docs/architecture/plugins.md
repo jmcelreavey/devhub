@@ -73,6 +73,42 @@ Nav: a plugin's pages still need a sidebar entry. Today the gated entry (e.g. `/
 dependency-free `lib/bi-presence.ts` detector so core holds no BI feature code. (Generic
 plugin-contributed nav is a possible future enhancement.)
 
+### Overlays (single-file extensions)
+
+When a plugin needs to **replace one core file** that must stay in the public template
+(buildable without the plugin), use `dashboard.overlays` instead of `paths`:
+
+```json
+"dashboard": {
+  "root": "dashboard",
+  "overlays": ["app/repos/RepoRadarSection.tsx"]
+}
+```
+
+Overlays differ from normal `paths` copies:
+
+| | `paths` | `overlays` |
+| - | ------- | ---------- |
+| Core baseline | Must **not** be git-tracked | Must be a **committed stub** in core (e.g. renders `null`) |
+| Local copy | Copied into core; listed in `.git/info/exclude` | Overwrites the stub on disk |
+| Git visibility | Fully ignored | Hidden via `git update-index --skip-worktree` (same convention as tier-3 branding baselines) |
+| Source shape | File or directory | **Single file only** |
+| Prune | Deletes the materialised copy | Restores the committed baseline with `git checkout --` |
+
+Workflow:
+
+1. Core commits an empty/no-op baseline at the target path so CI and fresh clones build
+   without the plugin (`app/repos/RepoRadarSection.tsx` is the reference pattern).
+2. The plugin ships the real implementation at the same relative path under its
+   `dashboard/` root.
+3. `sync_plugins` / `predev` copies the plugin file over the baseline and marks the path
+   skip-worktree. Applied overlays are tracked in `.git/devhub-overlays.json` for pruning.
+4. Disabling the plugin or removing the overlay entry restores the baseline and clears
+   skip-worktree.
+
+Use overlays for optional UI hooks wired into core pages; use `paths` for whole pages,
+API routes, and libs that core does not own at all.
+
 ## Tier 3 — branding (whitelabel)
 
 A plugin can **whitelabel** DevHub when it's enabled: contribute a theme palette + presets,

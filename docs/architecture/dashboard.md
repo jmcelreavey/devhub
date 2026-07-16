@@ -156,15 +156,26 @@ The morning briefing is a personal start-of-day digest, not a work standup. It a
 
 | Surface | Route | Behavior |
 | ------- | ----- | -------- |
-| Today widget | `GET /api/dashboard/morning-briefing` | Compact card in the Today grid. |
-| Briefing page | `/briefing` | Full layout with collapsible sections and refresh. |
+| Today widget | `GET /api/dashboard/morning-briefing` | Compact card in the Today grid (structured sections + rendered `text` summary). |
+| Briefing page | `/briefing` | Full-page **AI-authored canvas** in a same-origin iframe (`GET /api/briefing/canvas`). Reshape via **Design** chat; refresh data without losing layout. |
 | MCP | `briefing_get` | Returns the same rendered text through the dashboard-backed MCP tool. |
 
-The API fetches only sections the user has enabled in briefing preferences. Results are cached once per calendar day under `notes/.cache/briefing/`; add `?refresh=1` to bypass the cache.
+### Canvas page (`/briefing`)
+
+The full briefing page is no longer a fixed React layout. Instead:
+
+1. **Data assembly** — `lib/briefing/assemble.ts` builds a `BriefingContext` from prefs, feeds, calendar, and optional AI enrichment. Cached once per calendar day under `notes/.cache/briefing/`; `?refresh=1` bypasses the cache.
+2. **Canvas document** — A complete HTML/CSS/JS page persisted in `notes/.config/briefing-canvas.json` (`lib/briefing-canvas.ts`). The default ships in-repo; AI edits stick until you redesign.
+3. **Iframe shell** — `app/briefing/client.tsx` embeds `/api/briefing/canvas?theme=…` so arbitrary canvas CSS cannot touch app chrome. The canvas runs same-origin and reads injected `window.__BRIEFING__` (and may call `/api/briefing/data`).
+4. **Design chat** — `POST /api/briefing/design` streams AI-assisted layout edits when `AI_API_KEY` is set. Reloads the iframe without rebuilding data.
+5. **Share** — `POST /api/briefing/share` publishes the rendered canvas to a secret gist and returns a preview URL.
+6. **Research queue** — `GET/POST/PATCH/DELETE /api/briefing/tasks` backs the **Research** drawer for follow-up reading tasks tied to briefing interests.
+
+Theme is bridged from the app shell (`lib/briefing-theme.ts`) so a dark-mode canvas does not sit on a light chrome (and vice versa).
 
 ### Sections and preferences
 
-Preferences live in `notes/.config/briefing-prefs.json` and sync with the repo like other notes config. The **Tune briefing** chat on `/briefing` (`POST /api/briefing/prefs/chat`) updates prefs conversationally when `AI_API_KEY` is set. Manual edits use `GET`/`PUT /api/briefing/prefs`.
+Preferences live in `notes/.config/briefing-prefs.json` and sync with the repo like other notes config. The **Tune briefing** chat (`POST /api/briefing/prefs/chat`) updates prefs conversationally when `AI_API_KEY` is set. Manual edits use `GET`/`PUT /api/briefing/prefs`. These prefs control **what data** the canvas receives, not the canvas layout itself.
 
 | Section | Default | Source |
 | ------- | ------- | ------ |
