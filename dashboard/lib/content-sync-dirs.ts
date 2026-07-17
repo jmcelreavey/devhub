@@ -53,12 +53,24 @@ export function isDevhubRepoRoot(repoRoot: string): boolean {
 /**
  * Bucketed repo-relative content prefixes. Diagrams come first so a diagrams
  * dir nested under notes/ classifies as "diagrams", matching the top bar.
+ *
+ * Each bucket always includes its conventional in-repo folder (notes/,
+ * tasks/, …) — that is what the content-sync action commits
+ * (CONTENT_SYNC_PATHS is repo-relative), so dirty files there are syncable
+ * content even when the live NOTES_DIR/TASKS_DIR env points elsewhere (a
+ * relocated or inherited env value must not turn repo content into "other
+ * dirty files"). A configured dir that resolves inside the repo adds its
+ * prefix on top.
  */
 export function buildContentBuckets(root: string): ContentPrefix[] {
   const buckets: ContentPrefix[] = [{ bucket: "diagrams", prefix: `${DIAGRAMS_DIR}/` }];
-  const add = (bucket: ContentBucket, dir: string | null, fallback: string): void => {
-    const prefix = dir ? repoRelativePrefix(root, dir) : `${fallback}/`;
-    if (prefix) buckets.push({ bucket, prefix });
+  const add = (bucket: ContentBucket, dir: string | null, conventional: string): void => {
+    const prefixes = new Set<string>([`${conventional}/`]);
+    if (dir) {
+      const configured = repoRelativePrefix(root, dir);
+      if (configured) prefixes.add(configured);
+    }
+    for (const prefix of prefixes) buckets.push({ bucket, prefix });
   };
   add("notes", safeContentDir(getNotesDir), "notes");
   add("notes", safeContentDir(getCollectionsDir), "collections");
