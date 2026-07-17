@@ -9,6 +9,8 @@ import { readBriefingPrefs } from "@/lib/briefing-prefs";
 import { getRepoRoot } from "@/lib/notes-dir";
 import { writeAtomic, safeReadJSON } from "@/lib/atomic-write";
 import { todayISO } from "@/lib/utils";
+import { fetchWeather } from "@/lib/morning-briefing-sources";
+import { buildBriefingSummary, type DailyBriefing } from "@/lib/morning-briefing";
 
 export type { BriefingContext } from "@/lib/briefing/assemble";
 export { assembleBriefingContext } from "@/lib/briefing/assemble";
@@ -19,28 +21,74 @@ function contextFile(date: string): string {
   return path.join(getRepoRoot(), "notes", ".cache", "briefing", `context-v${CONTEXT_VERSION}-${date}.json`);
 }
 
-export function readCachedContext(date = todayISO()): BriefingContext | null {
-  const cached = safeReadJSON<BriefingContext | null>(contextFile(date), null);
-  return cached && cached.date === date ? cached : null;
-}
-
-export async function buildBriefingContext(opts: { refresh?: boolean } = {}): Promise<BriefingContext> {
-  const date = todayISO();
-  if (!opts.refresh) {
-    const cached = readCachedContext(date);
-    if (cached) return cached;
-  }
-
-  const prefs = readBriefingPrefs();
-  const context = await assembleBriefingContext(prefs, { refresh: opts.refresh, date });
-
+async function writeContextCache(date: string, context: BriefingContext): Promise<void> {
   try {
     fs.mkdirSync(path.dirname(contextFile(date)), { recursive: true });
     await writeAtomic(contextFile(date), JSON.stringify(context));
   } catch {
     // Cache is best-effort.
   }
+}
 
+export function readCachedContext(date = todayISO()): BriefingContext | null {
+  const cached = safeReadJSON<BriefingContext | null>(contextFile(date), null);
+  return cached && cached.date === date ? cached : null;
+}
+
+/**
+ * A day-cache entry without weather is incomplete: Open-Meteo often fails on the
+ * cold first assemble (research runs first and eats the timeout budget), and we
+ * used to persist weather:null for the rest of the day. Soft-fill retries weather
+ * only so a refresh isn't required to see the hero.
+ */
+async function softFillMissingWeather(cached: BriefingContext): Promise<BriefingContext> {
+  if (cached.weather) return cached;
+
+  const prefs = readBriefingPrefs();
+  let weather = null;
+  try {
+    weather = await fetchWeather(prefs.location);
+  } catch {
+    weather = null;
+  }
+  if (!weather) return cached;
+
+  const forSummary: DailyBriefing = {
+    weather,
+    devTip: null,
+    news: cached.news,
+    events: cached.events,
+    github: cached.github,
+    hackerNews: cached.hackerNews,
+    gaming: cached.gaming,
+    onThisDay: cached.onThisDay,
+    aiSummary: null,
+    bespokeHtml: null,
+    researchCards: cached.research,
+    interestSnippets: cached.interests,
+  };
+
+  const patched: BriefingContext = {
+    ...cached,
+    weather,
+    generatedAt: new Date().toISOString(),
+    summary: buildBriefingSummary(forSummary),
+  };
+  await writeContextCache(cached.date, patched);
+  return patched;
+}
+
+export async function buildBriefingContext(opts: { refresh?: boolean } = {}): Promise<BriefingContext> {
+  const date = todayISO();
+  if (!opts.refresh) {
+    const cached = readCachedContext(date);
+    if (cached?.weather) return cached;
+    if (cached) return softFillMissingWeather(cached);
+  }
+
+  const prefs = readBriefingPrefs();
+  const context = await assembleBriefingContext(prefs, { refresh: opts.refresh, date });
+  await writeContextCache(date, context);
   return context;
 }
 

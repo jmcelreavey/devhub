@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * Seasonal marks: Microsoft **Fluent Emoji Flat** via Iconify (~17KB bundled subset),
- * not hand-drawn SVGs. Regenerate JSON with `npx tsx scripts/build-seasonal-iconify-subset.ts`.
+ * Seasonal marks: Microsoft **Fluent Emoji Flat** via Iconify (~17KB bundled subset).
+ * Confined to brand mark + IconPicker seasonal row — chrome UI stays Lucide.
+ * Regenerate JSON with `npx tsx scripts/build-seasonal-iconify-subset.ts`.
  */
 
 import { Icon, addCollection } from "@iconify/react";

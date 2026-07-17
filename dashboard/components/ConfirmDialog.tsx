@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { RefreshCw, Sparkles } from "lucide-react";
 
 interface ConfirmOptions {
   title: string;
@@ -11,6 +12,11 @@ interface ConfirmOptions {
   input?: {
     placeholder?: string;
     defaultValue?: string;
+    /** Optional AI / helper action that fills the prompt input. */
+    generateAi?: {
+      label?: string;
+      onGenerate: () => Promise<string>;
+    };
   };
 }
 
@@ -90,6 +96,9 @@ function ConfirmDialogView({
   const confirmRef = useRef<HTMLButtonElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   const [inputValue, setInputValue] = useState(pending.input?.defaultValue ?? "");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const generateAi = pending.kind === "prompt" ? pending.input?.generateAi : undefined;
 
   useEffect(() => {
     previousFocus.current = document.activeElement as HTMLElement | null;
@@ -123,6 +132,21 @@ function ConfirmDialogView({
     }
   }
 
+  async function handleGenerateAi() {
+    if (!generateAi || aiBusy) return;
+    setAiBusy(true);
+    setAiError(null);
+    try {
+      const next = await generateAi.onGenerate();
+      setInputValue(next);
+      inputRef.current?.focus();
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "AI draft failed");
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
   return (
     <div
       role="dialog"
@@ -132,7 +156,7 @@ function ConfirmDialogView({
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.5)",
+        background: "var(--scrim)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -167,22 +191,43 @@ function ConfirmDialogView({
           </p>
         )}
         {pending.kind === "prompt" && (
-          <input
-            ref={inputRef}
-            className="input"
-            placeholder={pending.input?.placeholder ?? ""}
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleConfirm();
-            }}
-            style={{ marginBottom: 16, fontSize: 13 }}
-          />
+          <>
+            <input
+              ref={inputRef}
+              className="input"
+              placeholder={pending.input?.placeholder ?? ""}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !aiBusy) handleConfirm();
+              }}
+              style={{ marginBottom: generateAi || aiError ? 8 : 16, fontSize: 13 }}
+              disabled={aiBusy}
+            />
+            {generateAi && (
+              <div style={{ display: "flex", marginBottom: aiError ? 8 : 16 }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ fontSize: 11 }}
+                  disabled={aiBusy}
+                  onClick={() => void handleGenerateAi()}
+                >
+                  {aiBusy ? <RefreshCw size={11} className="animate-spin" /> : <Sparkles size={11} />}
+                  {generateAi.label ?? "AI message"}
+                </button>
+              </div>
+            )}
+            {aiError && (
+              <p style={{ margin: "0 0 16px", color: "var(--danger)", fontSize: 12 }}>{aiError}</p>
+            )}
+          </>
         )}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button
             type="button"
             className="btn btn-ghost"
+            disabled={aiBusy}
             onClick={() => {
               if (pending.kind === "prompt") {
                 onPrompt(null);
@@ -197,6 +242,7 @@ function ConfirmDialogView({
             ref={confirmRef}
             type="button"
             className={pending.variant === "danger" ? "btn btn-danger-ghost" : "btn btn-primary"}
+            disabled={aiBusy}
             onClick={handleConfirm}
           >
             {pending.confirmLabel ?? "Confirm"}

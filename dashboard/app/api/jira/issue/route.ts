@@ -3,6 +3,8 @@ import { createIssue, getJiraMeta, getTicket } from "@/lib/jira-client";
 import { issueTypeForParent } from "@/lib/jira-issue-type";
 import { JiraCreateIssueSchema, formatZodError } from "@/lib/schemas";
 import { withErrorHandler, parseBody } from "@/lib/api-utils";
+import { invalidateJiraTicketsCache } from "@/lib/jira-tickets-cache";
+import { invalidateSidebarCountsCache } from "@/lib/sidebar-counts-cache";
 
 /**
  * Create a Jira issue (Task by default) under an optional parent.
@@ -40,5 +42,7 @@ export const POST = withErrorHandler(async (req: Request) => {
     teamValue: meta.teamValue,
   });
 
+  invalidateJiraTicketsCache();
+  invalidateSidebarCountsCache();
   return NextResponse.json(created, { status: 201 });
 }, "jira.issue.create");

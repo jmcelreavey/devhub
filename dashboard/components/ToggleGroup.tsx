@@ -77,7 +77,7 @@ export function ToggleGroup<T extends string>({
             >
               {opt.dotColor && (
                 <span
-                  className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+                  className="inline-block w-1.5 h-1.5 rounded-[var(--radius-sm)] shrink-0"
                   style={{ background: opt.dotColor, opacity: opt.disabled ? 0.4 : 1 }}
                   aria-hidden
                 />

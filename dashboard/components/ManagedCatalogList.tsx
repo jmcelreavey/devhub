@@ -467,7 +467,7 @@ export function ManagedCatalogList(props: ManagedCatalogListProps) {
                         padding: "12px",
                         color: "var(--text)",
                         fontSize: "12px",
-                        fontFamily: '"SFMono-Regular", Consolas, monospace',
+                        fontFamily: "var(--font-mono)",
                         lineHeight: 1.5,
                         outline: "none",
                         resize: "vertical",
@@ -479,7 +479,7 @@ export function ManagedCatalogList(props: ManagedCatalogListProps) {
                       className="text-xs overflow-x-auto whitespace-pre-wrap"
                       style={{
                         color: "var(--text-muted)",
-                        fontFamily: '"SFMono-Regular", Consolas, monospace',
+                        fontFamily: "var(--font-mono)",
                         maxHeight: "400px",
                         overflowY: "auto",
                         lineHeight: 1.5,

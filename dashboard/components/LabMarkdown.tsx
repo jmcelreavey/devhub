@@ -81,7 +81,7 @@ function CodeBlock({ code, lang }: { code: string; lang: string }) {
         className="flex items-center justify-between px-2 py-0.5"
         style={{ background: "var(--bg-muted)" }}
       >
-        <span className="text-[10px] uppercase tracking-wide" style={{ color: "var(--text-subtle)" }}>
+        <span className="text-[10px] font-medium tracking-tight" style={{ color: "var(--text-subtle)" }}>
           {lang || "code"}
         </span>
         <button

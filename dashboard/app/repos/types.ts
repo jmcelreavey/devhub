@@ -6,6 +6,8 @@ export interface RepoInfo {
   remote: string | null;
   unpushedCount?: number;
   hasUpstart?: boolean;
+  /** Absolute path to the DevHub-managed upstart script (may not exist yet). */
+  upstartPath?: string;
 }
 
 export interface ReposApiPayload {
@@ -53,6 +55,19 @@ export interface BranchesApiPayload {
   changedFiles: ChangedFileInfo[];
   unpushedCommits: UnpushedCommitInfo[];
 }
+
+/** HTTP 409 body when stash pop/apply leaves conflicts. */
+export interface StashConflictPayload {
+  code: "stash_conflict";
+  action: "checkout" | "stash-apply";
+  branch?: string;
+  switched: boolean;
+  conflictFiles: string[];
+  error: string;
+}
+
+/** HTTP 422 body when a git hook blocks commit/push/amend. */
+export type { GitHookFailurePayload } from "@/lib/git-hook-failure";
 
 export interface RepoSnippet {
   relativePath: string;

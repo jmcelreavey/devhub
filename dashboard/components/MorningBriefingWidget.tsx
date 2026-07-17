@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Sparkles, RefreshCw, ArrowRight } from "lucide-react";
+import { Sun, RefreshCw } from "lucide-react";
 import { useLive } from "@/lib/use-fetch";
 import type { DailyBriefing } from "@/lib/morning-briefing";
 import { TodayCollapseButton } from "@/components/TodayCollapseButton";
-import { WeatherStrip } from "@/components/briefing-parts";
+import { DashboardBriefingWeather } from "@/components/DashboardBriefingWeather";
 
 interface BriefingResponse {
   ok: boolean;
@@ -48,33 +48,38 @@ export function MorningBriefingWidget({ collapsed = false, onToggle }: MorningBr
     <div
       className="card today-grid-drag-handle"
       data-collapsed={collapsed ? "true" : undefined}
-      style={{ borderLeft: "3px solid var(--accent)", padding: "10px 14px" }}
+      style={{ padding: "var(--space-3) var(--space-3)" }}
     >
-      <div className="flex items-center gap-2 mb-2">
-        <Sparkles size={13} style={{ color: "var(--accent)" }} aria-hidden />
-        <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
-          MORNING BRIEFING
+      <div className="flex items-center gap-2" style={{ marginBottom: "var(--space-2)" }}>
+        <Sun size={13} style={{ color: "var(--warning)" }} aria-hidden />
+        <span className="text-xs font-semibold" style={{ color: "var(--text)" }}>
+          Morning briefing
         </span>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          disabled={loading}
-          className="hub-icon-btn ml-auto today-grid-drag-cancel"
-          title="Refresh weather"
-          aria-label="Refresh weather"
-        >
-          <RefreshCw size={12} aria-hidden className={refreshing ? "animate-spin" : undefined} />
-        </button>
-        {onToggle && (
-          <TodayCollapseButton collapsed={collapsed} label="Morning briefing" onToggle={onToggle} />
-        )}
+        <span className="ml-auto flex min-w-0 items-center gap-2">
+          <Link href="/briefing" className="text-xs today-grid-drag-cancel" style={{ color: "var(--accent)" }}>
+            View all →
+          </Link>
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={loading}
+            className="hub-icon-btn today-grid-drag-cancel"
+            title="Refresh weather"
+            aria-label="Refresh weather"
+          >
+            <RefreshCw size={12} aria-hidden className={refreshing ? "animate-spin" : undefined} />
+          </button>
+          {onToggle ? (
+            <TodayCollapseButton collapsed={collapsed} label="Morning briefing" onToggle={onToggle} />
+          ) : null}
+        </span>
       </div>
 
       {!collapsed && (
         <>
           {loading ? (
             <div className="space-y-2">
-              <div className="skeleton" style={{ height: 86, width: "100%", borderRadius: 8 }} />
+              <div className="skeleton" style={{ height: 88, width: "100%", borderRadius: 12 }} />
             </div>
           ) : !b ? (
             <p className="text-sm" style={{ color: "var(--text-subtle)" }}>
@@ -82,10 +87,7 @@ export function MorningBriefingWidget({ collapsed = false, onToggle }: MorningBr
             </p>
           ) : (
             <div key={data?.generatedAt ?? "briefing"} className="briefing-settle space-y-2.5">
-              {b.weather && <WeatherStrip weather={b.weather} />}
-              <Link href="/briefing" className="briefing-more-btn today-grid-drag-cancel">
-                View full briefing <ArrowRight size={12} aria-hidden />
-              </Link>
+              {b.weather && <DashboardBriefingWeather weather={b.weather} />}
             </div>
           )}
         </>

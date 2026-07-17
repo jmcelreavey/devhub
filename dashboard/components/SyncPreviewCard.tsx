@@ -10,6 +10,8 @@ interface SyncPreviewCardProps {
   onRefresh: () => void;
   /** When set, shows a button to focus local-only rows in the catalog list. */
   onShowPrunableInList?: (names: string[]) => void;
+  /** Flat panel when already inside a card (avoids card-in-card). */
+  embedded?: boolean;
 }
 
 function targetChangeCount(target: SyncPreviewTarget): number {
@@ -27,14 +29,22 @@ function previewTotals(preview: SyncPreviewResult): { writes: number; prunes: nu
   );
 }
 
-export function SyncPreviewCard({ preview, loading, onRefresh, onShowPrunableInList }: SyncPreviewCardProps) {
+export function SyncPreviewCard({ preview, loading, onRefresh, onShowPrunableInList, embedded }: SyncPreviewCardProps) {
   const totals = preview ? previewTotals(preview) : null;
   const changedTargets = preview?.targets.filter((target) => targetChangeCount(target) > 0) ?? [];
   const label = preview?.kind === "agent" ? "agents" : "skills";
   const prunableNames = preview ? uniquePruneNames(preview) : [];
 
   return (
-    <div className="card mb-3" style={{ padding: "12px 14px", borderColor: "var(--border)" }}>
+    <div
+      className={embedded ? "mb-3 rounded-md" : "card mb-3"}
+      style={{
+        padding: "12px 14px",
+        border: embedded ? "1px solid var(--border-muted)" : undefined,
+        borderColor: embedded ? undefined : "var(--border)",
+        background: embedded ? "var(--bg-elevated)" : undefined,
+      }}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-xs font-semibold" style={{ color: "var(--text)" }}>

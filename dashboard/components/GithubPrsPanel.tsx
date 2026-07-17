@@ -43,7 +43,7 @@ function SubList({ title, rows, kind }: { title: string; rows: GithubPrRow[]; ki
       items={rows}
       renderList={(items) => (
         <div className="min-w-0 space-y-1">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
+          <h3 className="text-[11px] font-semibold tracking-tight" style={{ color: "var(--text-muted)" }}>
             {title}
           </h3>
           <ul className="m-0 list-none space-y-0.5 p-0">
@@ -304,7 +304,7 @@ export function GithubPrsPanel({
     <div className="divide-y" style={{ borderColor: "var(--border-muted)" }}>
       {authored.length > 0 && (
         <div className="px-3 py-2">
-          <div className="text-[10px] uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)", fontWeight: 600 }}>Mine</div>
+          <div className="text-[10px] font-medium tracking-tight mb-1" style={{ color: "var(--text-muted)", fontWeight: 600 }}>Mine</div>
           {authored.slice(0, 3).map((r) => (
             <a key={r.url} href={r.url} target="_blank" rel="noopener noreferrer" className="block truncate text-[12px] py-0.5 no-underline hover:underline" style={{ color: "var(--text)" }}>
               {r.title}
@@ -315,7 +315,7 @@ export function GithubPrsPanel({
       )}
       {reviews.length > 0 && (
         <div className="px-3 py-2">
-          <div className="text-[10px] uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)", fontWeight: 600 }}>Review</div>
+          <div className="text-[10px] font-medium tracking-tight mb-1" style={{ color: "var(--text-muted)", fontWeight: 600 }}>Review</div>
           {reviews.slice(0, 3).map((r) => (
             <a key={r.url} href={r.url} target="_blank" rel="noopener noreferrer" className="block truncate text-[12px] py-0.5 no-underline hover:underline" style={{ color: "var(--text)" }}>
               {r.title}
@@ -332,7 +332,7 @@ export function GithubPrsPanel({
     : gridSize === "2x1"
     ? compact2x1
     : (
-    <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-3">
+    <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,0.85fr)]">
       <SubList title="Mine (open)" rows={authored} kind="authored" />
       <SubList title="Review requested" rows={reviews} kind="reviews" />
       <SubList title="Recently reviewed" rows={recentlyReviewed} kind="reviewed" />

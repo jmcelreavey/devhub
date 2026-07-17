@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Instrument_Sans } from "next/font/google";
 import {
   DEFAULT_THEME_MODE_SETTING,
   DEFAULT_THEME_PRESET_ID,
@@ -29,6 +30,13 @@ import { PersistentClaude } from "@/components/PersistentClaude";
 import { PersistentRepoLearnDock } from "@/components/PersistentRepoLearnDock";
 import { UiPrefsBootstrap } from "@/components/UiPrefsBootstrap";
 import { KonamiPong } from "@/components/KonamiPong";
+
+/** Display face for headings — pairs with the system body stack (Hallmark 2+1). */
+const displayFont = Instrument_Sans({
+  subsets: ["latin"],
+  variable: "--font-display-loaded",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: {
@@ -80,7 +88,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html
       lang="en"
-      className="h-full"
+      className={`h-full ${displayFont.variable}`}
       data-theme={resolveMode(DEFAULT_THEME_MODE_SETTING)}
       data-theme-mode={DEFAULT_THEME_MODE_SETTING}
       data-theme-preset={DEFAULT_THEME_PRESET_ID}
@@ -99,7 +107,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
       <body
-        className="h-full flex overflow-hidden"
+        className="h-full flex overflow-y-hidden"
         style={{ background: "var(--bg)", color: "var(--text)" }}
       >
         <ServiceWorkerRegister />

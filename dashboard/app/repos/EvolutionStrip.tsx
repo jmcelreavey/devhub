@@ -32,7 +32,7 @@ export function EvolutionStrip() {
     <Link
       href="/radar"
       className="card card-body mb-3 flex items-center gap-3 no-underline evolution-strip"
-      style={{ borderLeft: "3px solid var(--accent)", textDecoration: "none" }}
+      style={{ textDecoration: "none" }}
     >
       <TrendingUp size={15} style={{ color: "var(--accent)" }} className="shrink-0" aria-hidden />
       <div className="flex-1 min-w-0 text-sm truncate" style={{ color: "var(--text)" }}>

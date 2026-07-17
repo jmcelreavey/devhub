@@ -86,11 +86,13 @@ UPSTREAM_URL="$(git remote get-url upstream)"
 UPSTREAM_SLUG="$(echo "$UPSTREAM_URL" | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##')"
 
 # --- personal-data exclusions (these never go to the public core) ---
-EXCLUDES=(':!notes' ':!tasks' ':!collections' ':!dashboard/.env.local'
+# upstarts/ holds per-repo startup scripts for private/company repos (the
+# "DevHub private store") — personal by definition, like tasks/ and notes/.
+EXCLUDES=(':!notes' ':!tasks' ':!collections' ':!upstarts' ':!dashboard/.env.local'
           ':!persona/identity.txt' ':!TEMPLATE_AND_PLUGIN_PLAN.md' ':!scripts/make-public-seed.sh')
 
 # Personal paths that were touched but will be dropped (informational).
-DROPPED="$(git diff --name-only "${BASE_REF}..${SOURCE_REF}" -- notes tasks collections \
+DROPPED="$(git diff --name-only "${BASE_REF}..${SOURCE_REF}" -- notes tasks collections upstarts \
             dashboard/.env.local persona/identity.txt TEMPLATE_AND_PLUGIN_PLAN.md \
             scripts/make-public-seed.sh 2>/dev/null || true)"
 [[ -n "$DROPPED" ]] && { log "Dropping personal/strategy paths from the PR:"; echo "$DROPPED" | sed 's/^/  - /'; }

@@ -130,7 +130,7 @@ export function QueueRow({
 
       {/* Hover-shelf actions */}
       {actions && (
-        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 reveal-on-hover transition-opacity">
           {actions}
         </div>
       )}

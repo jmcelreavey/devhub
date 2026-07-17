@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isGitNetworkCommand } from "./git-repo-local";
+import { GIT_NETWORK_TIMEOUT_MS, isGitNetworkCommand } from "./git-repo-local";
 
 describe("isGitNetworkCommand", () => {
   it("treats fetch, pull, and push as network commands", () => {
@@ -12,5 +12,9 @@ describe("isGitNetworkCommand", () => {
     expect(isGitNetworkCommand(["status", "--porcelain"])).toBe(false);
     expect(isGitNetworkCommand(["commit", "-m", "msg"])).toBe(false);
     expect(isGitNetworkCommand(["add", "-A"])).toBe(false);
+  });
+
+  it("exports a multi-minute default network timeout", () => {
+    expect(GIT_NETWORK_TIMEOUT_MS).toBeGreaterThanOrEqual(60_000);
   });
 });

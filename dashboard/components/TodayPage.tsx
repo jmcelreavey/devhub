@@ -28,7 +28,6 @@ import { todayISO, yesterdayISO, dailyNotePath, formatDayLabel } from "@/lib/uti
 import type { DevHubPartialBlock } from "@/lib/blocknote-schema";
 import { broadcastNoteAutosaveInvalidation } from "@/lib/note-autosave-invalidation";
 import type { TodayGridSlotId } from "@/lib/today-grid-layout";
-import { ConfettiRain } from "@/components/today/ConfettiRain";
 import { EMPTY_NOTE_BLOCKS, isNoteEffectivelyEmpty } from "@/components/today/note-helpers";
 import { TodayBannersHost } from "@/components/today/TodayBannersHost";
 import { TodayHero } from "@/components/today/TodayHero";
@@ -95,19 +94,6 @@ export function TodayPage() {
       tasksDone: tasks.filter((t) => t.done).length,
     };
   }, [taskData]);
-
-  const [celebrate, setCelebrate] = useState(false);
-  const prevDoneRef = useRef<number | null>(null);
-  useEffect(() => {
-    const prev = prevDoneRef.current;
-    prevDoneRef.current = tasksDone;
-    if (prev === null) return;
-    if (tasksTotal > 0 && tasksDone === tasksTotal && prev < tasksTotal) {
-      setCelebrate(true);
-      const t = setTimeout(() => setCelebrate(false), 1800);
-      return () => clearTimeout(t);
-    }
-  }, [tasksDone, tasksTotal]);
 
   const { data: cal } = useLive<CalendarProbe>("/api/calendar");
   const { data: jira } = useLive<JiraProbe>("/api/jira/tickets");
@@ -269,12 +255,41 @@ export function TodayPage() {
 
   const handleChange = useCallback(
     (newBlocks: DevHubPartialBlock[]) => {
+      // Keep React state in sync with the editor. Notes unmount when switching
+      // to Tasks (and when the card collapses); without this, remount feeds
+      // stale initialContent until a full page reload re-fetches from disk.
+      blocksRef.current = newBlocks;
+      setBlocks(newBlocks);
       if (saveTimer.current) clearTimeout(saveTimer.current);
       setStatus("saving");
       saveTimer.current = setTimeout(() => save(newBlocks), 1200);
     },
     [save],
   );
+
+  const flushPendingNoteSave = useCallback(() => {
+    if (!saveTimer.current) return;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = null;
+    const pending = blocksRef.current;
+    if (pending) void save(pending);
+  }, [save]);
+
+  const handleTabChange = useCallback(
+    (next: TodayTab) => {
+      if (tab === "notes" && next !== "notes") flushPendingNoteSave();
+      setTab(next);
+    },
+    [tab, flushPendingNoteSave],
+  );
+
+  const handleToggleMainCollapsed = useCallback(() => {
+    setMainCollapsed((collapsed) => {
+      // Collapsing unmounts the editor the same way tab-switching does.
+      if (!collapsed && tab === "notes") flushPendingNoteSave();
+      return !collapsed;
+    });
+  }, [tab, flushPendingNoteSave, setMainCollapsed]);
 
   const handleClear = useCallback(async () => {
     const ok = await confirm({
@@ -299,7 +314,6 @@ export function TodayPage() {
   return (
     <div className="hub today-home">
       <TodayBootScreen state={boot} />
-      {celebrate && <ConfettiRain />}
       <TodayBannersHost />
       <TodayHero
         mounted={mounted}
@@ -310,7 +324,7 @@ export function TodayPage() {
         calendarEvents={cal?.events}
         tasks={taskData?.tasks}
         onFocusTasks={() => {
-          setTab("tasks");
+          handleTabChange("tasks");
           setMainCollapsed(false);
         }}
       />
@@ -341,9 +355,9 @@ export function TodayPage() {
           main: (
             <TodayMainCard
               tab={tab}
-              onTabChange={setTab}
+              onTabChange={handleTabChange}
               mainCollapsed={mainCollapsed}
-              onToggleCollapsed={() => setMainCollapsed((c) => !c)}
+              onToggleCollapsed={handleToggleMainCollapsed}
               mainCollapsedSummary={mainCollapsedSummary}
               status={status}
               tasksTotal={tasksTotal}

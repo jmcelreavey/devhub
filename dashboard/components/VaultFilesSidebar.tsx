@@ -60,7 +60,6 @@ export function VaultFilesSidebar({
     () => DEFAULT_WIDTH,
   );
   const [resizingWidth, setResizingWidth] = useState<number | null>(null);
-  const [isResizing, setIsResizing] = useState(false);
   const dragging = useRef(false);
   const expandedWidth = resizingWidth ?? storedWidth;
   const expandedWidthRef = useRef(expandedWidth);
@@ -76,12 +75,11 @@ export function VaultFilesSidebar({
     (e: React.MouseEvent) => {
       e.preventDefault();
       dragging.current = true;
-      setIsResizing(true);
       const startX = e.clientX;
       const startWidth = expandedWidthRef.current;
 
       const shield = document.createElement("div");
-      shield.style.cssText = "position:fixed;inset:0;z-index:9999;cursor:col-resize;";
+      shield.style.cssText = "position:fixed;inset:0;z-index:var(--z-shield);cursor:col-resize;";
       document.body.appendChild(shield);
 
       let nextWidth = startWidth;
@@ -92,7 +90,6 @@ export function VaultFilesSidebar({
       };
       const onUp = () => {
         dragging.current = false;
-        setIsResizing(false);
         localStorage.setItem(widthKey, String(nextWidth));
         window.dispatchEvent(new Event(storageEvent));
         setResizingWidth(null);
@@ -116,7 +113,7 @@ export function VaultFilesSidebar({
         minWidth: width,
         background: "var(--bg-surface)",
         borderColor: "var(--border)",
-        transition: isResizing ? "none" : "width 200ms ease, min-width 200ms ease",
+        transition: "none",
       }}
     >
       {collapsed ? (
@@ -200,13 +197,7 @@ export function VaultFilesSidebar({
         <button
           type="button"
           onClick={toggle}
-          className="flex items-center justify-center py-2 w-full px-2"
-          style={{
-            color: "var(--text-subtle)",
-            background: "transparent",
-            cursor: "pointer",
-            border: "none",
-          }}
+          className="sidebar-collapse-btn"
           title={collapsed ? "Expand files panel" : "Collapse files panel"}
           aria-label={collapsed ? "Expand files panel" : "Collapse files panel"}
         >

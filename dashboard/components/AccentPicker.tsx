@@ -131,9 +131,9 @@ export function AccentPicker() {
                       width: "100%",
                       height: 14,
                       borderRadius: 4,
-                      border: "1px solid rgba(255,255,255,0.15)",
+                      border: "1px solid color-mix(in oklab, #fff 15%, transparent)",
                       background: preset.darkSwatch,
-                      boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.35)",
+                      boxShadow: "var(--shadow-inset)",
                     }}
                   />
                   <span

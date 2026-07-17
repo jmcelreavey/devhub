@@ -1853,13 +1853,13 @@ export function KonamiPong() {
           <div className="kp-card text-center text-white px-6 py-6 max-w-3xl w-full font-mono">
             <h2 className="text-2xl font-black tracking-widest text-yellow-200 kp-shadow mb-1">ROOM CLEARED</h2>
             <p className="text-white/50 text-xs tracking-widest mb-8">CHOOSE ONE RELIC</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.9fr)]">
               {draftChoices.map((perk) => {
                 const stacks = runPerks[perk.id] ?? 0;
                 return (
                   <button key={perk.id} onClick={() => pickPerk(perk)}
-                    className="group kp-btn relative p-5 border-2 border-white/10 hover:border-yellow-300/60 transition-all hover:scale-105 text-center bg-black/40">
-                    <div className="text-2xl mb-3 text-yellow-200 group-hover:scale-125 transition-transform font-bold kp-float">{perk.icon}</div>
+                    className="group kp-btn relative p-5 border-2 border-white/10 hover:border-yellow-300/60 transition-[border-color,background-color] duration-150 text-center bg-black/40">
+                    <div className="text-2xl mb-3 text-yellow-200 font-bold kp-float">{perk.icon}</div>
                     <div className="font-bold text-white text-sm tracking-widest mb-1">{perk.name}</div>
                     <div className="text-xs text-white/55">{perk.desc}</div>
                     {stacks > 0 && <div className="text-xs text-yellow-200/70 mt-2">LV {stacks}/{perk.maxStacks}</div>}

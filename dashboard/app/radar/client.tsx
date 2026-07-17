@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 import {
   Activity,
   Boxes,
@@ -12,7 +12,7 @@ import {
   Globe,
   GraduationCap,
   RefreshCw,
-  Sparkles,
+  CircleHelp,
   SquareArrowOutUpRight,
   TrendingUp,
 } from "lucide-react";
@@ -50,11 +50,6 @@ function timeAgo(iso: string): string {
   const d = Date.parse(iso);
   if (Number.isNaN(d)) return "";
   return formatShortDate(d);
-}
-
-/** Index-addressable CSS var for staggered entrances / pulses. */
-function delayVar(i: number): CSSProperties {
-  return { "--i": i } as CSSProperties;
 }
 
 interface PersonalRadarPayload {
@@ -106,7 +101,7 @@ function PersonalRadarPanel() {
           const items = data.items.filter((i) => i.ring === ring);
           return (
             <div key={ring}>
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+              <div className="mb-1 text-[11px] font-semibold tracking-tight text-text-muted">
                 {RING_LABEL[ring]}
               </div>
               {items.length === 0 ? (
@@ -147,7 +142,7 @@ function RadarScope({ size, blips = 4 }: { size: number; blips?: number }) {
     <div className="radar-scope" style={{ width: size, height: size }} aria-hidden>
       <div className="radar-scope-sweep" />
       {SCOPE_BLIPS.slice(0, Math.max(0, Math.min(blips, SCOPE_BLIPS.length))).map(([x, y], i) => (
-        <span key={i} className="radar-scope-blip" style={{ left: `${x}%`, top: `${y}%`, ...delayVar(i) }} />
+        <span key={i} className="radar-scope-blip" style={{ left: `${x}%`, top: `${y}%` }} />
       ))}
     </div>
   );
@@ -182,8 +177,6 @@ export default function RadarClient() {
         snapshot: CapabilitySnapshot;
         diff?: CapabilityDiff;
       };
-      const added = result.diff?.added.length ?? 0;
-      toast.success(`Scanned ${result.snapshot.repoCount} repos${added ? ` · ${added} new since last time` : ""}`);
       for (const w of result.warnings ?? []) toast.info(w);
       await mutate();
     } catch (err) {
@@ -335,9 +328,8 @@ function DigestSection({ includeGithub, githubFilter }: { includeGithub: boolean
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ includeGithub, githubFilter: githubFilter.trim() || undefined }),
       });
-      const body = (await res.json()) as { headline?: string; error?: string };
+      const body = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(body.error || "Digest failed");
-      toast.success(body.headline || "Digest updated");
       setOpen(true);
       await mutate();
     } catch (err) {
@@ -419,18 +411,17 @@ function EvolutionFeed({ diff, aiConfigured }: { diff: CapabilityDiff; aiConfigu
           {diff.fromId ? "No changes since the last scan." : "Everything here is new - this is your baseline. The next scan will show what changed."}
         </p>
       ) : (
-        <div className="flex flex-col gap-2 mt-2 radar-stagger">
+        <div className="flex flex-col gap-2 mt-2">
           {[
             ...diff.added.map((e) => ({ entry: e, tone: "new" as const })),
             ...diff.spread.map((e) => ({ entry: e, tone: "spread" as const })),
             ...diff.removed.map((e) => ({ entry: e, tone: "removed" as const })),
-          ].map(({ entry, tone }, i) => (
+          ].map(({ entry, tone }) => (
             <DeltaCard
               key={`${tone}-${entry.id}`}
               entry={entry}
               tone={tone}
               aiConfigured={aiConfigured}
-              index={i}
               record={bySignal.get(entry.id)}
             />
           ))}
@@ -450,13 +441,11 @@ function DeltaCard({
   entry,
   tone,
   aiConfigured,
-  index = 0,
   record,
 }: {
   entry: DiffEntry;
   tone: "new" | "spread" | "removed";
   aiConfigured: boolean;
-  index?: number;
   record?: LabRecordSummary;
 }) {
   const [explanation, setExplanation] = useState<string | null>(null);
@@ -487,7 +476,7 @@ function DeltaCard({
   }
 
   return (
-    <div className="card radar-card" style={{ padding: "12px 14px", ...delayVar(index) }}>
+    <div className="card radar-card" style={{ padding: "12px 14px" }}>
       <div className="flex items-center gap-3">
         <span className={TONE_META[tone].badgeClass}>{TONE_META[tone].label}</span>
         <div className="flex-1 min-w-0">
@@ -510,7 +499,7 @@ function DeltaCard({
               style={{ padding: "4px 8px" }}
               onClick={() => (open ? setOpen(false) : void explain())}
             >
-              <Sparkles size={12} />
+              <CircleHelp size={12} />
               {loading ? "Thinking…" : open ? "Hide" : "Why?"}
             </button>
             <LabButton
@@ -559,11 +548,11 @@ function Coverage({ snapshot }: { snapshot: CapabilitySnapshot }) {
       <div className="flex flex-col gap-4 mt-2">
         {byArea.map((group) => (
           <div key={group.area}>
-            <div className="text-[11px] uppercase tracking-wide mb-1.5 text-text-subtle">
+            <div className="text-[11px] font-medium tracking-tight mb-1.5 text-text-subtle">
               {AREA_LABEL[group.area]}
             </div>
             <div className="flex flex-col gap-1">
-              {group.items.map((item, i) => (
+              {group.items.map((item) => (
                 <div
                   key={item.id}
                   className="flex items-center gap-2"
@@ -575,7 +564,7 @@ function Coverage({ snapshot }: { snapshot: CapabilitySnapshot }) {
                   <div className="flex-1 h-3 rounded overflow-hidden bg-bg-muted">
                     <div
                       className="radar-bar-fill"
-                      style={{ width: `${(item.repos.length / maxRepos) * 100}%`, ...delayVar(i) }}
+                      style={{ width: `${(item.repos.length / maxRepos) * 100}%` }}
                     />
                   </div>
                   <div className="text-[11px] w-16 text-right shrink-0 text-text-subtle">
@@ -598,9 +587,9 @@ function DriftPanel({ drift, aiConfigured }: { drift: DriftEntry[]; aiConfigured
       <SectionTitle icon={<Activity size={15} />} title="Knowledge drift">
         Growing across repos while your hands-on exposure goes stale - close the gap with a lab
       </SectionTitle>
-      <div className="flex flex-col gap-2 mt-2 radar-stagger">
-        {drift.map((d, i) => (
-          <DriftRow key={d.id} d={d} aiConfigured={aiConfigured} index={i} record={bySignal.get(d.id)} />
+      <div className="flex flex-col gap-2 mt-2">
+        {drift.map((d) => (
+          <DriftRow key={d.id} d={d} aiConfigured={aiConfigured} record={bySignal.get(d.id)} />
         ))}
       </div>
     </section>
@@ -610,17 +599,15 @@ function DriftPanel({ drift, aiConfigured }: { drift: DriftEntry[]; aiConfigured
 function DriftRow({
   d,
   aiConfigured,
-  index = 0,
   record,
 }: {
   d: DriftEntry;
   aiConfigured: boolean;
-  index?: number;
   record?: LabRecordSummary;
 }) {
   const labState = useLab(d.id, undefined, !!record);
   return (
-    <div className="card radar-card flex flex-col" style={{ padding: "10px 14px", ...delayVar(index) }}>
+    <div className="card radar-card flex flex-col" style={{ padding: "10px 14px" }}>
       <div className="flex items-center gap-3">
         <Clock size={14} className="shrink-0 text-warning" />
         <div className="flex-1 min-w-0">
@@ -659,9 +646,9 @@ function LabsSection() {
       <SectionTitle icon={<GraduationCap size={15} />} title="Your labs">
         Hands-on labs you&apos;ve generated - saved to Learnings, workspaces under kitchen-sink
       </SectionTitle>
-      <div className="flex flex-col gap-1.5 mt-2 radar-stagger">
-        {records.map((r, i) => (
-          <div key={r.category} className="card radar-card flex items-center gap-3" style={{ padding: "8px 14px", ...delayVar(i) }}>
+      <div className="flex flex-col gap-1.5 mt-2">
+        {records.map((r) => (
+          <div key={r.category} className="card radar-card flex items-center gap-3" style={{ padding: "8px 14px" }}>
             {r.done ? (
               <CheckCircle2 size={14} className="shrink-0 text-success" aria-label="Done" />
             ) : (

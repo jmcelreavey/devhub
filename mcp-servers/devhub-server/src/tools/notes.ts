@@ -4,6 +4,11 @@ import type { Context } from "../context.ts";
 import type { TreeEntry } from "../storage.ts";
 import { flattenTree } from "../shared.ts";
 import { blocksToText, textToBlocks } from "../convert.ts";
+import {
+  buildMeetingNoteMarkdown,
+  meetingNotePath,
+  type MeetingNoteEvent,
+} from "../../../../shared/meeting-note/index.ts";
 
 /** Workspace slice surfaced by notes_list / notes_search: daily/ + root .json. */
 function filterAgentNoteTree(entries: TreeEntry[]): TreeEntry[] {
@@ -184,6 +189,62 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
         return { content: [{ type: "text", text: `Not found: ${filePath}` }] };
       }
       return { content: [{ type: "text", text: `Deleted: ${filePath}` }] };
+    },
+  );
+
+  server.registerTool(
+    "notes_create_meeting",
+    {
+      description:
+        "Create a meeting note under meetings/YYYY-MM-DD-<slug> with agenda/notes/action-items scaffold (same as the Today strip button). Overwrites if the path already exists unless overwrite is false.",
+      inputSchema: {
+        title: z.string().describe("Meeting title"),
+        start: z.string().describe("ISO start datetime or YYYY-MM-DD"),
+        end: z.string().describe("ISO end datetime or YYYY-MM-DD"),
+        isAllDay: z.boolean().optional(),
+        location: z.string().optional(),
+        conferenceUrl: z.string().optional().describe("Meet/Zoom/etc URL"),
+        htmlLink: z.string().optional().describe("Calendar event URL"),
+        attendees: z.array(z.string()).optional(),
+        overwrite: z
+          .boolean()
+          .optional()
+          .describe("If false and note exists, leave it and return the path (default true)"),
+      },
+    },
+    async ({ title, start, end, isAllDay, location, conferenceUrl, htmlLink, attendees, overwrite }) => {
+      const event: MeetingNoteEvent = {
+        title,
+        start,
+        end,
+        isAllDay,
+        location,
+        conferenceUrl,
+        htmlLink,
+        attendees,
+      };
+      const path = meetingNotePath(event);
+      const existing = storage.read(path);
+      if (existing && overwrite === false) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Already exists: ${path}\nOpen in DevHub notes UI or notes_read this path.`,
+            },
+          ],
+        };
+      }
+      const markdown = buildMeetingNoteMarkdown(event);
+      storage.write(path, textToBlocks(markdown));
+      return {
+        content: [
+          {
+            type: "text",
+            text: `${existing ? "Updated" : "Created"}: ${path}\n\n${markdown}`,
+          },
+        ],
+      };
     },
   );
 }

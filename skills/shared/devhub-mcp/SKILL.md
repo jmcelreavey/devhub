@@ -29,6 +29,7 @@ errors. Tool **descriptions** are the source of truth for args; this skill carri
 `daily/` dated journals (`daily/YYYY-MM-DD`) plus root-level `*.json` scratch. Other trees
 (e.g. `learnings/engineering`) are intentionally out of list/search but reachable via
 `notes_read`/`notes_write`/`notes_append`/`notes_delete` with an explicit path.
+`notes_create_meeting` scaffolds `meetings/YYYY-MM-DD-<slug>` (same as the Today strip).
 `notes_write_asset` writes image bytes (jpg, png, gif, webp); reference them as
 `![caption](garden/project/assets/photo-1.jpg)`. Toggles: `::toggle <title>` … `::end-toggle`.
 
@@ -56,7 +57,13 @@ the latest audit as markdown; run new audits from the Repos page **DX Audit** bu
   (lists transitions, then applies with `confirm`), `standup_markdown`, `tasks_weekly`.
 - **On-call** — `datadog_oncall`, `datadog_recent_alerts`, `datadog_investigate`
   (starts an OpenCode investigation session).
-- **Repos** — `repos_list`, `repos_open`, `repos_clone`, `repo_learn`.
+- **Repos** — `repos_list`, `repos_open`, `repos_reveal`, `repos_clone`, `repo_learn`.
+- **Repo git workspace** (proxies `/api/repos/:name/git/*` + branches) —
+  `repos_git_status`, `repos_git_stage`, `repos_git_discard`, `repos_git_stage_hunk`,
+  `repos_git_diff`, `repos_git_stash`, `repos_git_branches`, `repos_git_branch`
+  (checkout/create/delete/fetch/pull/push/undo-commit), `repos_git_commit`,
+  `repos_git_push`, `repos_git_log`, `repos_git_show`, `repos_git_blame`,
+  `repos_git_conflicts`. Mutating tools need `confirm:true`.
 - **Inventory/search** — `assets_list` (agents|skills|mcp|persona), `search` (notes|docs).
 
 **Confirmation contract:** any tool that mutates state (a mutating script, a service

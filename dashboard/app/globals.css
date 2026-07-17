@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Hallmark · genre: modern-minimal · designed-as-app · theme: graphite-neon (user-selectable presets) · enrichment: none · nav: app-sidebar · footer: none · contrast: pass
+ * quarantine: /api/briefing/canvas — iframe canvas emits local CSS constrained to --app-* tokens bridged from shell (lib/briefing-theme.ts). Not app chrome.
+ */
+
 /* ───────────────────────────────────────────────────────────
    Theme palettes
    - data-theme-preset chooses the palette family
@@ -11,13 +15,35 @@
   --radius-sm: 6px;
   --radius-lg: 14px;
 
+  /* 4pt spacing scale — use for chrome; don't boil every legacy px */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Stacking — prefer these over raw 9999 */
+  --z-base: 1;
+  --z-sticky: 40;
+  --z-dropdown: 50;
+  --z-overlay: 200;
+  --z-modal: 250;
+  --z-toast: 300;
+  --z-nav-progress: 400;
+  --z-shield: 500;
+
   --sidebar-w: 220px;
   --notestree-w: 200px;
 
-  /* Typography tokens — single source of truth for font stacks */
+  /* Typography tokens — display face paired with system body (Hallmark 2+1) */
   --font-sans:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica,
     Arial, sans-serif;
+  /* Set by next/font on <html>; sans fallback matches Instrument Sans */
+  --font-display: var(--font-display-loaded, var(--font-sans));
   --font-mono:
     "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
@@ -28,11 +54,31 @@
   --text-xs: 12px;
   --bg-muted: var(--bg-elevated);
 
+  /* Scrims / elevation — named so components don't invent rgba mid-render */
+  --scrim: color-mix(in oklab, #000 45%, transparent);
+  --scrim-strong: color-mix(in oklab, #000 55%, transparent);
+  --shadow-elevated: 0 8px 24px color-mix(in oklab, #000 35%, transparent);
+  --shadow-elevated-strong: 0 18px 60px color-mix(in oklab, #000 45%, transparent);
+  --shadow-panel: 0 -4px 24px color-mix(in oklab, #000 25%, transparent);
+  --shadow-panel-side: -4px 0 24px color-mix(in oklab, #000 25%, transparent);
+  --shadow-toast: 0 8px 24px color-mix(in oklab, #000 35%, transparent);
+  --shadow-popover: 0 8px 32px color-mix(in oklab, #000 40%, transparent);
+  --shadow-prompt: 0 4px 24px color-mix(in oklab, #000 30%, transparent);
+  --shadow-raised: 0 1px 2px color-mix(in oklab, #000 14%, transparent);
+  --shadow-inset: inset 0 0 0 1px color-mix(in oklab, #000 35%, transparent);
+  --shadow-inset-accent: inset 0 0 0 1px color-mix(in oklab, var(--accent) 22%, transparent);
+
+  /* Named easings (token block only — call sites use var(--ease-*)) */
+  --ease-swift: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: var(--ease-swift);
+  --ease-spring-soft: var(--ease-swift);
+
   /* Semantic status colours (fixed — not theme-shifted) */
   --info: #6eb4eb;
   --info-dim: rgba(110, 180, 235, 0.14);
-  --violet: #b48cff;
-  --violet-dim: rgba(180, 140, 255, 0.14);
+  /* Fifth severity was purple — reassigned to info (no violet in default set) */
+  --violet: var(--info);
+  --violet-dim: var(--info-dim);
 }
 
 /* Forest Fizz (default fallback) */
@@ -234,10 +280,10 @@
   --text: #cdd6f4;
   --text-muted: #a6adc8;
   --text-subtle: #7f849c;
-  --accent: #cba6f7;
-  --accent-hover: #dac0fa;
-  --accent-dim: rgba(203, 166, 247, 0.15);
-  --accent-fg: #2b1f38;
+  --accent: #74c7ec;
+  --accent-hover: #89dceb;
+  --accent-dim: rgba(116, 199, 236, 0.15);
+  --accent-fg: #11111b;
   --success: #a6e3a1;
   --success-dim: rgba(166, 227, 161, 0.13);
   --warning: #f9e2af;
@@ -256,9 +302,9 @@
   --text: #4c4f69;
   --text-muted: #696b81;
   --text-subtle: #676b7e;
-  --accent: #8839ef;
-  --accent-hover: #742ad5;
-  --accent-dim: rgba(136, 57, 239, 0.11);
+  --accent: #209fb5;
+  --accent-hover: #1a8fa3;
+  --accent-dim: rgba(32, 159, 181, 0.11);
   --accent-fg: #ffffff;
   --success: #40a02b;
   --success-dim: rgba(64, 160, 43, 0.1);
@@ -308,12 +354,12 @@
   html.theme-transition *::before,
   html.theme-transition *::after {
     transition:
-      background-color 280ms ease,
-      border-color 280ms ease,
-      color 280ms ease,
-      fill 280ms ease,
-      stroke 280ms ease,
-      box-shadow 280ms ease !important;
+      background-color 280ms var(--ease-swift),
+      border-color 280ms var(--ease-swift),
+      color 280ms var(--ease-swift),
+      fill 280ms var(--ease-swift),
+      stroke 280ms var(--ease-swift),
+      box-shadow 280ms var(--ease-swift) !important;
   }
 }
 
@@ -329,6 +375,8 @@ html,
 body {
   height: 100%;
   margin: 0;
+  /* clip (not hidden) preserves position:sticky / fixed descendants */
+  overflow-x: clip;
 }
 @media (prefers-reduced-motion: no-preference) {
   html {
@@ -345,6 +393,18 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  overflow-y: hidden; /* app shell: main scrolls, not the body */
+}
+
+h1,
+h2,
+h3,
+.hub-hero-date,
+.page-title,
+.font-display {
+  font-family: var(--font-display);
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 /* Scrollbar */
@@ -369,8 +429,8 @@ body {
   font: inherit;
   line-height: 1.25;
   transition:
-    background 120ms ease,
-    color 120ms ease;
+    background 120ms var(--ease-swift),
+    color 120ms var(--ease-swift);
 }
 .jira-widget-key:hover {
   background: var(--accent-dim) !important;
@@ -393,28 +453,45 @@ body {
   overflow: hidden;
   transition:
     border-color 0.15s,
-    box-shadow 0.15s;
+    background-color 0.15s;
 }
 .card:hover {
-  border-color: color-mix(in oklab, var(--accent) 28%, transparent);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.03),
-    0 14px 32px -18px rgba(0, 0, 0, 0.6),
-    0 0 0 1px color-mix(in oklab, var(--accent) 12%, transparent);
+  border-color: var(--border);
+  background: color-mix(in oklab, var(--bg-surface) 88%, var(--bg-elevated) 12%);
 }
 
 .card-header {
   padding: 10px 16px;
   border-bottom: 1px solid var(--border-muted);
   background: var(--bg-elevated);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  text-transform: none;
   color: var(--text-muted);
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+/* Hover-reveal actions: always visible on touch / coarse pointers */
+.reveal-on-hover {
+  opacity: 1;
+  transition: opacity 120ms var(--ease-swift);
+}
+@media (hover: hover) and (pointer: fine) {
+  .reveal-on-hover {
+    opacity: 0;
+  }
+  .group:hover .reveal-on-hover,
+  .group\/item:hover .reveal-on-hover,
+  .group:focus-within .reveal-on-hover,
+  .group\/item:focus-within .reveal-on-hover,
+  .reveal-on-hover:focus,
+  .reveal-on-hover:focus-visible,
+  .reveal-on-hover:focus-within {
+    opacity: 1;
+  }
 }
 
 .card-body {
@@ -427,7 +504,7 @@ body {
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   font-size: 11px;
   font-weight: 500;
   line-height: 1.5;
@@ -457,16 +534,19 @@ body {
 .btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
+  gap: var(--space-2);
+  padding: 5px var(--space-3);
   border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
   transition:
-    background 0.1s,
-    color 0.1s,
-    border-color 0.1s;
+    background 120ms var(--ease-swift),
+    color 120ms var(--ease-swift),
+    border-color 120ms var(--ease-swift),
+    opacity 120ms var(--ease-swift);
   border: 1px solid transparent;
   line-height: 1.4;
 }
@@ -495,9 +575,33 @@ body {
 .btn-danger-ghost:hover {
   background: var(--danger-dim);
 }
+.btn:not(:disabled):active,
+.btn.is-active {
+  opacity: 0.88;
+}
 .btn:disabled {
-  opacity: 0.4;
+  background: var(--bg-overlay);
+  color: var(--text-subtle);
+  border-color: var(--border-muted);
+  opacity: 1;
   cursor: not-allowed;
+}
+.btn-primary:disabled {
+  background: color-mix(in oklab, var(--accent) 35%, var(--bg-overlay));
+  color: color-mix(in oklab, var(--accent-fg) 55%, var(--text-subtle));
+  border-color: transparent;
+}
+.btn[data-state="error"],
+.btn.is-error {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-dim);
+}
+.btn[data-state="success"],
+.btn.is-success {
+  border-color: var(--success);
+  color: var(--success);
+  background: var(--success-dim);
 }
 
 /* ─── Input ─── */
@@ -508,12 +612,15 @@ body {
   color: var(--text);
   font-size: 13px;
   padding: 6px 10px;
-  outline: none;
-  transition: border-color 0.15s;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition: outline-color 120ms var(--ease-swift);
   width: 100%;
 }
-.input:focus {
-  border-color: var(--accent);
+.input:focus,
+.input:focus-visible {
+  outline-color: var(--accent);
+  border-color: var(--border);
 }
 .input::placeholder {
   color: var(--text-subtle);
@@ -611,7 +718,7 @@ body {
 }
 
 .markdown-body blockquote {
-  border-left: 3px solid var(--border);
+  border-left: 1px solid var(--border);
   margin: 0 0 0.75em;
   padding: 4px 0 4px 16px;
   color: var(--text-muted);
@@ -676,12 +783,15 @@ body {
   border-radius: var(--radius);
   padding: 12px 14px;
   resize: none;
-  outline: none;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
   width: 100%;
-  transition: border-color 0.15s;
+  transition: outline-color 120ms var(--ease-swift);
 }
-.editor-textarea:focus {
-  border-color: var(--accent);
+.editor-textarea:focus,
+.editor-textarea:focus-visible {
+  outline-color: var(--accent);
+  border-color: var(--border);
 }
 
 /* ─── Page layout ─── */
@@ -692,12 +802,12 @@ body {
   max-width: var(--page-max);
   min-width: 0;
   margin: 0 auto;
-  padding: 24px;
+  padding: var(--space-6);
 }
 
 @media (max-width: 640px) {
   .page-wrapper {
-    padding: 16px;
+    padding: var(--space-4);
   }
 }
 
@@ -705,8 +815,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
-  gap: 12px;
+  margin-bottom: var(--space-5);
+  gap: var(--space-3);
 }
 
 .page-title {
@@ -759,21 +869,20 @@ body {
   flex-shrink: 0;
 }
 
-/* ─── Focus ring (a11y) ─── */
+/* ─── Focus ring (a11y) — outline only, resting transparent ─── */
 *:focus {
-  outline: none;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
 }
 *:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline-color: var(--accent);
   border-radius: var(--radius-sm);
 }
 .input:focus-visible,
 .editor-textarea:focus-visible,
 button:focus-visible,
 a:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline-color: var(--accent);
 }
 
 /* ─── Visually-hidden label ─── */
@@ -797,7 +906,9 @@ a:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  z-index: 200;
+  /* Above git workspace modal (260) + hook dialog (280). Was 200 (= --z-overlay),
+     which buried push success/error toasts under the open modal — looked like silence. */
+  z-index: var(--z-toast);
   max-width: calc(100vw - 32px);
   pointer-events: none;
 }
@@ -815,8 +926,8 @@ a:focus-visible {
   color: var(--text);
   font-size: 13px;
   line-height: 1.4;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  animation: toast-slide-in 320ms var(--ease-spring) both;
+  box-shadow: var(--shadow-toast);
+  animation: toast-slide-in 320ms var(--ease-swift) both;
 }
 @keyframes toast-slide-in {
   from {
@@ -922,6 +1033,7 @@ a:focus-visible {
 
 .hub-hero-date {
   /* Fluid: 24px on small viewports up to 30px on wide ones */
+  font-family: var(--font-display);
   font-size: clamp(24px, 1.2vw + 18px, 30px);
   font-weight: 650;
   letter-spacing: -0.025em;
@@ -936,8 +1048,8 @@ a:focus-visible {
   height: 18px;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  text-transform: none;
   color: var(--accent);
   display: flex;
   align-items: center;
@@ -972,8 +1084,9 @@ a:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 2px;
-  font-family: var(--font-mono);
+  gap: var(--space-1);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
 }
 
 .hub-clock {
@@ -983,14 +1096,6 @@ a:focus-visible {
   letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
-  background: linear-gradient(
-    180deg,
-    var(--text),
-    color-mix(in oklab, var(--text-muted) 70%, var(--text) 30%)
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 
 .hub-hero-meta {
@@ -1016,28 +1121,17 @@ a:focus-visible {
 }
 
 .hub-card {
-  background: linear-gradient(
-    180deg,
-    var(--bg-surface),
-    color-mix(in oklab, var(--bg-surface) 78%, var(--bg) 22%)
-  );
+  background: var(--bg-surface);
   border: 1px solid var(--border-muted);
   border-radius: var(--radius-lg);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.02),
-    0 8px 24px -16px rgba(0, 0, 0, 0.5);
   overflow: hidden;
   transition:
-    border-color 180ms ease,
-    box-shadow 220ms ease,
-    transform 220ms ease;
+    border-color 180ms var(--ease-swift),
+    background-color 180ms var(--ease-swift);
 }
 .hub-card:hover {
-  border-color: color-mix(in oklab, var(--accent) 28%, transparent);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.03),
-    0 14px 32px -18px rgba(0, 0, 0, 0.6),
-    0 0 0 1px color-mix(in oklab, var(--accent) 12%, transparent);
+  border-color: var(--border);
+  background: color-mix(in oklab, var(--bg-surface) 85%, var(--bg-elevated) 15%);
 }
 
 .hub-card-head {
@@ -1058,7 +1152,7 @@ a:focus-visible {
   color: var(--text-subtle);
   background: var(--bg);
   border: 1px solid var(--border-muted);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   padding: 2px 8px;
 }
 
@@ -1094,9 +1188,7 @@ a:focus-visible {
 .hub-tab.active {
   background: var(--bg-elevated);
   color: var(--text);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.04),
-    inset 0 0 0 1px color-mix(in oklab, var(--accent) 20%, transparent);
+  box-shadow: inset 0 0 0 1px var(--border);
 }
 
 .hub-aside {
@@ -1125,7 +1217,7 @@ a:focus-visible {
   letter-spacing: -3px;
   color: var(--text-subtle);
   opacity: 0;
-  transition: opacity 120ms ease;
+  transition: opacity 120ms var(--ease-swift);
   pointer-events: none;
   user-select: none;
   line-height: 1;
@@ -1152,9 +1244,9 @@ a:focus-visible {
   color: var(--text-muted);
   cursor: pointer;
   transition:
-    background 0.12s ease,
-    border-color 0.12s ease,
-    color 0.12s ease;
+    background 0.12s var(--ease-swift),
+    border-color 0.12s var(--ease-swift),
+    color 0.12s var(--ease-swift);
 }
 .today-collapse-toggle:hover {
   background: var(--bg-overlay);
@@ -1223,6 +1315,8 @@ a:focus-visible {
 /* v2 nests handles inside `.react-resizable`, not as direct children of `.react-grid-item` */
 .today-dashboard-grid .react-resizable {
   position: relative;
+  display: flex;
+  flex-direction: column;
   height: 100%;
   min-height: 0;
   min-width: 0;
@@ -1241,9 +1335,56 @@ a:focus-visible {
   min-height: 0;
   height: 100%;
 }
-.today-grid-slot > * {
+/* Cards fill the grid cell; body scrolls inside instead of the whole tile floating short. */
+.today-grid-slot > .hub-card,
+.today-grid-slot > .card,
+.today-grid-slot > .skeleton,
+.today-grid-slot > .react-resizable > .hub-card,
+.today-grid-slot > .react-resizable > .card,
+.today-grid-slot > .react-resizable > .skeleton {
+  width: 100%;
+  height: 100%;
   max-height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+}
+.today-grid-slot > .hub-card,
+.today-grid-slot > .card,
+.today-grid-slot > .react-resizable > .hub-card,
+.today-grid-slot > .react-resizable > .card {
+  display: flex;
+  flex-direction: column;
   overflow: auto !important;
+}
+/* Structured cards scroll in the body so the header stays pinned. */
+.today-dashboard-grid .hub-card:has(.hub-card-body),
+.today-dashboard-grid .card:has(.card-body) {
+  overflow: hidden !important;
+}
+.today-dashboard-grid .hub-card-body,
+.today-dashboard-grid .card-body,
+.today-dashboard-grid .today-card-body-compact {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+/* Flatten Tasks/Notes chrome so its top edge matches sibling card headers. */
+.today-dashboard-grid .hub-card-head {
+  padding: 10px 16px;
+  flex: 0 0 auto;
+}
+.today-dashboard-grid .hub-tabs {
+  padding: 2px;
+}
+.today-dashboard-grid .hub-tab {
+  padding: 3px 8px;
+}
+.today-dashboard-grid .card-header,
+.today-dashboard-grid .today-card-inline-head,
+.today-dashboard-grid .today-signal-head {
+  flex: 0 0 auto;
 }
 /* Keep card headers above in-tile scroll layers after overlap fixes */
 .today-dashboard-grid .hub-card-head,
@@ -1252,20 +1393,20 @@ a:focus-visible {
   position: relative;
   z-index: 2;
 }
+/* Header icons inherit muted chrome; accent is reserved for real signals. */
 .today-dashboard-grid .card-header > * > svg,
 .today-dashboard-grid .today-signal-head > * > svg,
 .today-dashboard-grid .hub-card-head .hub-tabs svg,
 .today-dashboard-grid .today-card-inline-head svg {
-  color: var(--accent);
+  color: var(--text-muted);
 }
 
 /* Hero meta row holds the task count + focus timer */
 .hub-hero-meta-row {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
   justify-content: flex-end;
-  font-family: var(--font-mono);
 }
 
 /* Focus timer pill */
@@ -1284,9 +1425,9 @@ a:focus-visible {
   font-size: 11px;
   cursor: pointer;
   transition:
-    background 140ms ease,
-    color 140ms ease,
-    border-color 140ms ease;
+    background 140ms var(--ease-swift),
+    color 140ms var(--ease-swift),
+    border-color 140ms var(--ease-swift);
   font-family: var(--font-mono);
 }
 .focus-pill:hover {
@@ -1295,8 +1436,10 @@ a:focus-visible {
   border-color: var(--border);
 }
 .focus-pill.running {
-  border-color: color-mix(in oklab, var(--accent) 35%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
   color: var(--text);
+  background: color-mix(in oklab, var(--accent-dim) 55%, var(--bg-elevated));
+  box-shadow: none;
 }
 .focus-popover {
   position: fixed;
@@ -1322,7 +1465,7 @@ a:focus-visible {
   color: var(--text);
   font-size: 12px;
   cursor: pointer;
-  transition: background 120ms ease;
+  transition: background 120ms var(--ease-swift);
   text-align: left;
   font-family: inherit;
 }
@@ -1392,11 +1535,15 @@ a:focus-visible {
   border-radius: 4px;
   background: var(--bg);
   color: var(--text);
-  outline: none;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
 }
 .standup-config-date:focus,
-.standup-config-time:focus {
-  border-color: var(--accent);
+.standup-config-date:focus-visible,
+.standup-config-time:focus,
+.standup-config-time:focus-visible {
+  outline-color: var(--accent);
+  border-color: var(--border-muted);
 }
 .standup-config-date {
   width: 120px;
@@ -1432,7 +1579,7 @@ a:focus-visible {
   gap: 4px;
   font-size: 11px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-muted);
   background: var(--bg);
   color: var(--text-muted);
@@ -1458,12 +1605,12 @@ a:focus-visible {
 .standup-preview-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--scrim);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 300;
-  padding: 16px;
+  z-index: var(--z-toast);
+  padding: var(--space-4);
 }
 .standup-preview-card {
   width: 100%;
@@ -1530,37 +1677,36 @@ a:focus-visible {
   align-items: center;
   gap: 4px;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   font-size: 11px;
   color: var(--warning);
   background: var(--warning-dim, rgba(210, 153, 34, 0.16));
   border: 1px solid var(--warning);
   font-weight: 500;
+  cursor: pointer;
 }
 
 /* Focus session complete — blocks interaction until dismissed */
 .focus-complete-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 9500;
+  z-index: var(--z-shield);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
+  padding: var(--space-5);
+  background: var(--scrim-strong);
 }
 .focus-complete-card {
   width: 100%;
   max-width: 380px;
   padding: 22px 22px 18px;
   text-align: center;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-elevated);
 }
 .focus-complete-card:hover {
   border-color: var(--border);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-elevated);
 }
 .focus-complete-icon {
   display: flex;
@@ -1593,13 +1739,6 @@ a:focus-visible {
   font-size: 13px;
   font-weight: 500;
 }
-@media (prefers-reduced-motion: reduce) {
-  .focus-complete-backdrop {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-}
-
 /* Animated progress bar inside the tasks card */
 .hub-progress {
   height: 4px;
@@ -1610,55 +1749,28 @@ a:focus-visible {
 }
 .hub-progress-fill {
   height: 100%;
-  background: linear-gradient(
-    90deg,
-    color-mix(in oklab, var(--accent) 75%, black 25%),
-    var(--accent)
-  );
+  width: 100%;
+  transform: scaleX(var(--progress, 0));
+  transform-origin: left center;
+  background: var(--accent);
   border-radius: 3px;
-  transition: width 480ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 480ms var(--ease-swift);
 }
 
-/* Welcome card — first-run onboarding. Glow follows the active accent. */
+/* Welcome card — first-run onboarding. Quiet surface + hairline accent. */
 .welcome-card {
   display: flex;
-  gap: 14px;
-  padding: 18px 20px;
-  border-radius: 12px;
-  background:
-    radial-gradient(
-      120% 120% at 0% 0%,
-      color-mix(in oklab, var(--accent) 16%, transparent),
-      transparent 60%
-    ),
-    linear-gradient(
-      180deg,
-      var(--bg-surface),
-      color-mix(in oklab, var(--bg-surface) 78%, var(--bg) 22%)
-    );
-  border: 1px solid color-mix(in oklab, var(--accent) 22%, transparent);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.02),
-    0 12px 32px -20px color-mix(in oklab, var(--accent) 50%, transparent);
-  transition:
-    border-color 220ms ease,
-    box-shadow 220ms ease,
-    background 220ms ease;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius);
+  background: color-mix(in oklab, var(--bg-surface) 92%, var(--bg-elevated) 8%);
+  border: 1px solid color-mix(in oklab, var(--accent) 18%, var(--border));
+  transition: border-color 180ms var(--ease-swift);
 }
 .welcome-icon {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(
-    135deg,
-    color-mix(in oklab, var(--accent) 30%, transparent),
-    color-mix(in oklab, var(--accent) 18%, transparent)
-  );
+  margin-top: 2px;
   color: var(--accent);
-  border: 1px solid color-mix(in oklab, var(--accent) 25%, transparent);
 }
 .welcome-body {
   flex: 1;
@@ -1669,26 +1781,26 @@ a:focus-visible {
   font-weight: 600;
   color: var(--text);
   letter-spacing: -0.01em;
-  margin: 0 0 4px;
+  margin: 0 0 var(--space-1);
 }
 .welcome-sub {
   font-size: 12.5px;
   color: var(--text-muted);
   line-height: 1.55;
-  margin: 0 0 12px;
+  margin: 0 0 var(--space-3);
   max-width: none;
 }
 .welcome-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 .welcome-action {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-elevated);
   border: 1px solid var(--border-muted);
   color: var(--text-muted);
@@ -1696,9 +1808,9 @@ a:focus-visible {
   cursor: pointer;
   text-decoration: none;
   transition:
-    background 140ms ease,
-    color 140ms ease,
-    border-color 140ms ease;
+    background 140ms var(--ease-swift),
+    color 140ms var(--ease-swift),
+    border-color 140ms var(--ease-swift);
 }
 .welcome-action:hover {
   background: var(--bg-overlay);
@@ -1725,14 +1837,12 @@ a:focus-visible {
   flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
-  padding: 0 18px;
+  padding: 0 var(--space-5);
   border-bottom: 1px solid var(--border-muted);
-  background: color-mix(in oklab, var(--bg-sidebar) 88%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: var(--bg-sidebar);
   position: sticky;
   top: 0;
-  z-index: 30;
+  z-index: var(--z-sticky);
 }
 @media (min-width: 768px) {
   .hub-topbar {
@@ -1795,25 +1905,29 @@ a:focus-visible {
   margin-left: auto;
   margin-right: 10px;
   width: 180px;
-  padding: 4px 8px 4px 9px;
-  border-radius: 8px;
+  padding: var(--space-1) var(--space-2) var(--space-1) 9px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-muted);
   background: var(--bg-elevated);
   color: var(--text-subtle);
   font-size: 12px;
   cursor: pointer;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
   transition:
-    width 280ms var(--ease-spring-soft),
-    border-color 140ms ease,
-    background 140ms ease,
-    color 140ms ease;
+    border-color 140ms var(--ease-swift),
+    background 140ms var(--ease-swift),
+    color 140ms var(--ease-swift),
+    outline-color 120ms var(--ease-swift);
 }
 .hub-search:hover,
 .hub-search:focus-visible {
-  width: 230px;
   border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
   background: var(--bg-overlay);
   color: var(--text-muted);
+}
+.hub-search:focus-visible {
+  outline-color: var(--accent);
 }
 .hub-search-label {
   flex: 1;
@@ -1838,10 +1952,6 @@ a:focus-visible {
     justify-content: center;
     gap: 0;
   }
-  .hub-search:hover,
-  .hub-search:focus-visible {
-    width: 34px;
-  }
   .hub-search-label,
   .hub-search-kbd {
     display: none;
@@ -1858,15 +1968,21 @@ a:focus-visible {
   background: transparent;
   color: var(--text-subtle);
   cursor: pointer;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
   transition:
-    background 140ms ease,
-    color 140ms ease,
-    border-color 140ms ease;
+    background 140ms var(--ease-swift),
+    color 140ms var(--ease-swift),
+    border-color 140ms var(--ease-swift),
+    outline-color 120ms var(--ease-swift);
 }
 .hub-icon-btn:hover {
   background: var(--bg-elevated);
   border-color: var(--border-muted);
   color: var(--text);
+}
+.hub-icon-btn:focus-visible {
+  outline-color: var(--accent);
 }
 
 .file-stats-bar {
@@ -1909,8 +2025,8 @@ a:focus-visible {
   flex-direction: column;
   gap: 6px;
   z-index: 50;
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
-  animation: plus-pop 140ms ease-out both;
+  box-shadow: var(--shadow-popover);
+  animation: plus-pop 140ms var(--ease-swift) both;
 }
 
 /* Brand dot — sidebar/topbar logo. Background follows the live accent. */
@@ -1918,22 +2034,13 @@ a:focus-visible {
   width: 50px;
   height: 50px;
   border-radius: 10px;
-  background: linear-gradient(
-    135deg,
-    color-mix(in oklab, var(--accent) 75%, white 25%),
-    var(--accent)
-  );
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-fg);
   border: none;
   padding: 0;
   cursor: pointer;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.06),
-    0 6px 12px -4px color-mix(in oklab, var(--accent) 50%, transparent);
-  transition:
-    transform 160ms ease,
-    box-shadow 200ms ease,
-    background 220ms ease;
+  box-shadow: none;
+  transition: background 160ms var(--ease-swift);
 }
 
 .mobile-brand-logo {
@@ -1956,21 +2063,17 @@ a:focus-visible {
   display: block;
 }
 .brand-dot:hover {
-  transform: translateY(-1px);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.1),
-    0 8px 16px -4px color-mix(in oklab, var(--accent) 60%, transparent);
+  background: var(--accent-hover);
 }
 /* Seasonal / pinned colorful marks — transparent container so full-color art reads cleanly */
 .brand-dot[data-full-icon="true"] {
   background: transparent;
   box-shadow: none;
-  filter: drop-shadow(0 3px 12px rgba(0, 0, 0, 0.45));
+  filter: none;
 }
 .brand-dot[data-full-icon="true"]:hover {
-  transform: none;
-  box-shadow: none;
-  filter: drop-shadow(0 3px 12px rgba(0, 0, 0, 0.5));
+  background: transparent;
+  filter: none;
 }
 
 /* Sidebar group labels — quiet wayfinding, not content */
@@ -1980,10 +2083,10 @@ a:focus-visible {
   gap: 8px;
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.14em;
+  letter-spacing: -0.01em;
   color: var(--text-subtle);
   padding: 4px 10px 6px;
-  text-transform: uppercase;
+  text-transform: none;
 }
 /* Hairline rule after the label text fills remaining width */
 .nav-group-label::after {
@@ -1998,6 +2101,15 @@ a:focus-visible {
     transform: scaleY(0);
   }
 }
+.nav-rail {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
 @media (prefers-reduced-motion: no-preference) {
   .nav-rail {
     transform-origin: center;
@@ -2005,20 +2117,115 @@ a:focus-visible {
   }
 }
 
-/* Sidebar nav item polish */
-.nav-item {
+/* Sidebar nav — defaults in CSS so :hover isn't killed by inline background/color.
+   One quiet hover signal (bg-overlay). Active stays accent-dim + inset rail. */
+.nav-item,
+.nav-item-collapsed {
   position: relative;
+  color: var(--text-muted);
+  background: transparent;
+  box-shadow: none;
   transition:
-    background 140ms ease,
-    color 140ms ease,
-    box-shadow 140ms ease;
+    background 140ms var(--ease-swift),
+    color 140ms var(--ease-swift),
+    box-shadow 140ms var(--ease-swift);
 }
-.nav-item:hover {
-  background: rgba(255, 255, 255, 0.03);
+.nav-item {
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.nav-item-collapsed {
+  height: 32px;
+  width: 32px;
+  border-radius: 6px;
+}
+.nav-item-icon {
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+.nav-item-label {
+  font-weight: 500;
+}
+.nav-item[data-active],
+.nav-item-collapsed[data-active] {
   color: var(--text);
+  background: var(--accent-dim);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 22%, transparent);
 }
-.nav-item[data-active] {
-  background: var(--accent-dim) !important;
+.nav-item[data-active] .nav-item-icon {
+  opacity: 0.95;
+}
+.nav-item[data-active] .nav-item-label {
+  font-weight: 600;
+}
+@media (hover: hover) {
+  .nav-item:not([data-active]):hover,
+  .nav-item-collapsed:not([data-active]):hover {
+    background: var(--bg-overlay);
+    color: var(--text);
+  }
+}
+.nav-item:focus-visible,
+.nav-item-collapsed:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
+  outline-offset: 2px;
+}
+
+/* Sidebar / files-panel collapse toggles — same quiet bg hover */
+.sidebar-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 8px;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-subtle);
+  transition:
+    background 140ms var(--ease-swift),
+    color 140ms var(--ease-swift);
+}
+@media (hover: hover) {
+  .sidebar-collapse-btn:hover {
+    background: var(--bg-overlay);
+    color: var(--text);
+  }
+}
+.sidebar-collapse-btn:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
+  outline-offset: 2px;
+}
+
+/* Conflict path list — selected vs hover without inline bg killing :hover */
+.conflict-path-row {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 12px;
+  border: none;
+  border-bottom: 1px solid var(--border-muted);
+  cursor: pointer;
+  color: var(--text-muted);
+  background: transparent;
+  transition:
+    background 140ms var(--ease-swift),
+    color 140ms var(--ease-swift);
+}
+.conflict-path-row[data-active] {
+  color: var(--text);
+  background: var(--accent-dim);
+}
+@media (hover: hover) {
+  .conflict-path-row:not([data-active]):hover {
+    background: var(--bg-overlay);
+    color: var(--text);
+  }
+}
+.conflict-path-row:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
+  outline-offset: -2px;
 }
 
 /* TaskList add row — responsive */
@@ -2041,10 +2248,6 @@ a:focus-visible {
      edit, abandon, delete). Wide enough for the full 6-icon set. */
   --task-action-space: 9.25rem;
   position: relative;
-}
-
-.task-row-content {
-  transition: padding-right 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .task-row:hover .task-row-content,
@@ -2080,7 +2283,7 @@ a:focus-visible {
 .task-timer-dot {
   width: 6px;
   height: 6px;
-  border-radius: 9999px;
+  border-radius: var(--radius-sm);
   background: var(--accent);
   animation: task-timer-pulse 1.6s ease-out infinite;
 }
@@ -2112,8 +2315,8 @@ body[data-motion="off"] .task-timer-dot {
   pointer-events: none;
   transform: translateX(6px);
   transition:
-    opacity 140ms ease,
-    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    opacity 140ms var(--ease-swift),
+    transform 180ms var(--ease-swift);
 }
 
 .task-row:hover .task-row-actions,
@@ -2193,18 +2396,29 @@ body[data-motion="off"] .task-row-actions {
      preserve the fade/scale in and out. */
   display: none;
   transition:
-    opacity 0.12s ease,
-    scale 0.2s var(--ease-spring),
+    opacity 0.12s var(--ease-swift),
+    scale 0.12s var(--ease-swift),
     display 0.12s allow-discrete;
-  z-index: 1000;
+  transition-delay: 0s;
+  z-index: var(--z-dropdown);
 }
+/* Hover: 800ms discipline — focus path is instant */
 [data-tooltip]:hover::after {
   display: block;
   opacity: 1;
   scale: 1;
+  transition-delay: 800ms;
+}
+[data-tooltip]:focus-within::after,
+[data-tooltip]:focus-visible::after {
+  display: block;
+  opacity: 1;
+  scale: 1;
+  transition-delay: 0s;
 }
 @starting-style {
-  [data-tooltip]:hover::after {
+  [data-tooltip]:hover::after,
+  [data-tooltip]:focus-within::after {
     opacity: 0;
     scale: 0.9;
   }
@@ -2263,35 +2477,35 @@ body[data-motion="off"] .task-row-actions {
   top: 0;
   left: 0;
   height: 2px;
-  width: 0%;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--accent) 30%,
-    var(--accent) 70%,
-    transparent 100%
-  );
-  z-index: 9999;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: left center;
+  background: var(--accent);
+  z-index: var(--z-nav-progress);
   pointer-events: none;
   opacity: 0;
   transition:
-    width 0.4s cubic-bezier(0.1, 0.5, 0.1, 1),
-    opacity 0.18s ease;
-  box-shadow: 0 0 8px color-mix(in oklab, var(--accent) 60%, transparent);
+    transform 0.4s var(--ease-swift),
+    opacity 0.18s var(--ease-swift);
+  box-shadow: none;
 }
 .nav-progress-loading {
   opacity: 1;
-  width: 70%;
+  transform: scaleX(0.7);
   transition:
-    width 8s cubic-bezier(0.05, 0.6, 0.05, 1),
-    opacity 0.15s ease;
+    transform 8s cubic-bezier(0.05, 0.6, 0.05, 1),
+    opacity 0.15s var(--ease-swift);
 }
 .nav-progress-done {
   opacity: 1;
-  width: 100%;
+  transform: scaleX(1);
   transition:
-    width 0.18s ease-out,
-    opacity 0.18s ease 0.18s;
+    transform 0.18s ease-out,
+    opacity 0.18s var(--ease-swift) 0.18s;
+}
+.nav-progress-idle {
+  opacity: 0;
+  transform: scaleX(0);
 }
 
 /* ─── Global focus & press feedback ───────────────────────── */
@@ -2308,12 +2522,8 @@ a[role="button"]:not(.disabled):active {
 /* ─── Task completion check pulse ─────────────────────────── */
 @keyframes check-pulse {
   0% {
-    transform: scale(0.6);
+    transform: scale(0.92);
     opacity: 0;
-  }
-  50% {
-    transform: scale(1.15);
-    opacity: 1;
   }
   100% {
     transform: scale(1);
@@ -2321,7 +2531,7 @@ a[role="button"]:not(.disabled):active {
   }
 }
 .task-check-pulse {
-  animation: check-pulse 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: check-pulse 0.32s var(--ease-swift) both;
 }
 
 /* ─── Subtle "now" pulse for live indicators ──────────────── */
@@ -2335,7 +2545,7 @@ a[role="button"]:not(.disabled):active {
   }
 }
 .live-dot {
-  animation: now-pulse 1.8s ease-in-out infinite;
+  animation: now-pulse 1.8s var(--ease-swift) infinite;
 }
 
 .task-link-name-input {
@@ -2471,9 +2681,12 @@ body[data-density="compact"] .card {
 .hub-hero-progress > i {
   display: block;
   height: 100%;
+  width: 100%;
   border-radius: 3px;
-  background: linear-gradient(90deg, var(--success), var(--accent));
-  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  background: var(--accent);
+  transform: scaleX(var(--progress, 0));
+  transform-origin: left center;
+  transition: transform 0.5s var(--ease-swift);
 }
 
 /* ── Top-bar section tabs (merged Library / System destinations) ── */
@@ -2546,7 +2759,7 @@ body[data-density="compact"] .card {
   }
 }
 .urgency-pulse {
-  animation: urgency-pulse 2s ease-out infinite;
+  animation: urgency-pulse 2s var(--ease-swift) infinite;
 }
 @keyframes danger-pulse {
   0%,
@@ -2567,35 +2780,13 @@ body[data-density="compact"] .card {
   }
 }
 
-/* ── Page entrance: cards rise 10px and fade, 40ms apart, one pass.
-   Base state is visible; the animation dips from hidden with no fill
-   so content can never render blank (reduced-motion gated). ── */
+/* ── Page entrance: one shared settle, no nth-child cascade. ── */
 .today-grid-slot > * {
   opacity: 1;
 }
 @media (prefers-reduced-motion: no-preference) {
   .today-grid-slot > * {
-    /* `backwards` holds the hidden from-state only during the stagger
-       delay; if the animation never runs, the base state is visible. */
-    animation: hub-enter 350ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
-  }
-  .today-grid-slot:nth-of-type(2) > * {
-    animation-delay: 40ms;
-  }
-  .today-grid-slot:nth-of-type(3) > * {
-    animation-delay: 80ms;
-  }
-  .today-grid-slot:nth-of-type(4) > * {
-    animation-delay: 120ms;
-  }
-  .today-grid-slot:nth-of-type(5) > * {
-    animation-delay: 160ms;
-  }
-  .today-grid-slot:nth-of-type(6) > * {
-    animation-delay: 200ms;
-  }
-  .today-grid-slot:nth-of-type(7) > * {
-    animation-delay: 240ms;
+    animation: hub-enter 350ms var(--ease-swift) backwards;
   }
 }
 
@@ -2635,7 +2826,7 @@ body[data-density="compact"] .card {
 
 /* ── Briefing settle: generated lines rise in after the shimmer ── */
 .briefing-settle {
-  animation: hub-enter 350ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: hub-enter 350ms var(--ease-swift);
   animation-fill-mode: none;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2644,12 +2835,12 @@ body[data-density="compact"] .card {
   }
 }
 
-/* ── Morning briefing: bespoke digest layout ── */
+/* ── Morning briefing: weather-driven atmosphere ── */
 .briefing-hero {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 13px 15px;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   /* Background is set inline per weather condition; this is the calm fallback. */
@@ -2670,15 +2861,18 @@ body[data-density="compact"] .card {
   letter-spacing: -0.01em;
 }
 .briefing-hero-vibe {
-  font-size: 11px;
-  font-style: italic;
-  color: var(--text-muted);
-  margin-top: 1px;
+  font-size: 12px;
+  font-style: normal;
+  color: var(--text);
+  opacity: 0.9;
+  letter-spacing: -0.005em;
+  flex: 1 1 auto;
+  min-width: 10ch;
 }
 .briefing-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-2);
   margin-top: 5px;
 }
 .briefing-chip {
@@ -2686,11 +2880,17 @@ body[data-density="compact"] .card {
   align-items: center;
   gap: 3px;
   font-size: 11px;
-  color: var(--text-muted);
-  background: var(--bg-overlay);
-  padding: 1px 7px;
-  border-radius: 999px;
+  font-weight: 500;
+  color: var(--text);
+  background: color-mix(in oklab, var(--bg-elevated) 78%, transparent);
+  border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
+}
+.briefing-chip-loc {
+  font-weight: 600;
+  background: color-mix(in oklab, var(--bg-surface) 88%, var(--text-subtle));
 }
 .briefing-grid {
   display: grid;
@@ -2776,9 +2976,9 @@ body[data-density="compact"] .card {
 .briefing-card-title {
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.03em;
+  letter-spacing: -0.01em;
   color: var(--text);
-  text-transform: uppercase;
+  text-transform: none;
 }
 .briefing-list {
   display: flex;
@@ -2797,7 +2997,7 @@ body[data-density="compact"] .card {
   color: var(--accent);
   background: var(--accent-dim);
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   line-height: 16px;
   vertical-align: 1px;
 }
@@ -2812,9 +3012,9 @@ body[data-density="compact"] .card {
 .briefing-panel-title {
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: -0.01em;
   color: var(--text-muted);
-  text-transform: uppercase;
+  text-transform: none;
 }
 .briefing-count {
   margin-left: auto;
@@ -2822,13 +3022,13 @@ body[data-density="compact"] .card {
   color: var(--text-subtle);
   background: var(--bg-overlay);
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   line-height: 16px;
 }
 .briefing-link {
   color: var(--text);
   text-decoration: none;
-  transition: color 120ms ease;
+  transition: color 120ms var(--ease-swift);
 }
 .briefing-link:hover {
   color: var(--accent);
@@ -2843,71 +3043,327 @@ body[data-density="compact"] .card {
   color: var(--text);
   opacity: 0.85;
 }
+
+/* Dashboard morning-briefing weather — mirrors canvas hero, size-aware for the Today grid.
+   Hero uses elevated fill (not --bg-surface) so it reads inside the parent .card. */
+.mbw-wx {
+  container-type: inline-size;
+  container-name: mbw-wx;
+  min-width: 0;
+}
+.mbw-wx-hero {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  /* Contrast against parent .card which is already --bg-surface */
+  background:
+    linear-gradient(135deg, var(--accent-dim), transparent 55%),
+    var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  min-width: 0;
+  box-shadow: inset 0 1px 0 color-mix(in oklab, #fff 10%, transparent);
+}
+.mbw-wx-now {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.mbw-wx-temp {
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  flex: none;
+}
+.mbw-wx-meta {
+  color: var(--text-muted);
+  font-size: 13px;
+  min-width: 0;
+}
+.mbw-wx-loc {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+.mbw-wx-cond {
+  margin-top: 3px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+.mbw-wx-forecast {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  justify-content: flex-end;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+.mbw-wx-fday {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 2px;
+  /* Chips step up from the elevated hero */
+  background: var(--bg-overlay);
+  border: 1px solid color-mix(in oklab, var(--border) 80%, var(--text-subtle));
+  border-radius: 10px;
+  padding: 8px 12px;
+  min-width: 66px;
+  flex: 0 0 auto;
+  box-shadow: 0 1px 2px color-mix(in oklab, #000 18%, transparent);
+}
+.mbw-wx-fday-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-subtle);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.mbw-wx-fday-temp {
+  display: block;
+  font-size: 14px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  line-height: 1.2;
+}
+/* Narrow / short grid tiles — collapse like other Today widgets. */
+.mbw-wx[data-size="1x1"] .mbw-wx-temp {
+  font-size: 32px;
+}
+.mbw-wx[data-size="1x1"] .mbw-wx-hero {
+  gap: 10px;
+  padding: 10px 12px;
+}
+.mbw-wx[data-size="1x1"] .mbw-wx-now {
+  gap: 10px;
+}
+.mbw-wx[data-size="2x1"] .mbw-wx-temp {
+  font-size: 40px;
+}
+.mbw-wx[data-size="2x1"] .mbw-wx-fday {
+  min-width: 56px;
+  padding: 7px 10px;
+}
+@container mbw-wx (max-width: 520px) {
+  .mbw-wx-hero {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .mbw-wx-forecast {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+}
+@container mbw-wx (max-width: 360px) {
+  .mbw-wx-hero {
+    gap: 10px;
+    padding: 10px 12px;
+  }
+  .mbw-wx-temp {
+    font-size: 32px;
+  }
+  .mbw-wx-fday:nth-child(n + 3) {
+    display: none;
+  }
+}
+@container mbw-wx (max-width: 240px) {
+  .mbw-wx-forecast {
+    display: none;
+  }
+  .mbw-wx-now {
+    width: 100%;
+  }
+}
+
+.briefing-wx {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
 .briefing-wx-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
-  gap: 8px;
+  grid-template-columns: minmax(148px, 1.45fr) repeat(auto-fit, minmax(108px, 1fr));
+  gap: var(--space-2);
+}
+@media (max-width: 520px) {
+  .briefing-wx-row {
+    grid-template-columns: 1fr;
+  }
 }
 .briefing-wx-card {
+  --wx-sky: color-mix(in oklab, #fff 40%, transparent);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
+  gap: 4px;
+  padding: 12px 12px 11px;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in oklab, var(--border) 50%, transparent);
   background: var(--accent-dim);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 118px;
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, #fff 16%, transparent),
+    var(--shadow-raised);
+  transition:
+    border-color 180ms var(--ease-swift),
+    transform 180ms var(--ease-swift);
+}
+/* Condition-tinted sky light — atmosphere, not glass. */
+.briefing-wx-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(125% 85% at 16% -10%, var(--wx-sky), transparent 56%),
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--wx-sky) 26%, transparent) 0%,
+      transparent 44%
+    );
+  opacity: 0.78;
+}
+.briefing-wx-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    180deg,
+    transparent 52%,
+    color-mix(in oklab, var(--bg) 22%, transparent) 100%
+  );
+  opacity: 0.5;
+}
+.briefing-wx-card > * {
+  position: relative;
+  z-index: 1;
+}
+.briefing-wx-card[data-today="true"] {
+  min-height: 140px;
+  padding: 14px 14px 12px;
+  border-color: color-mix(in oklab, var(--border) 30%, var(--text-subtle) 28%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, #fff 20%, transparent),
+    0 2px 10px color-mix(in oklab, #000 16%, transparent);
+}
+.briefing-wx-card[data-today="true"] .briefing-wx-temp {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.briefing-wx-card[data-today="true"] .briefing-wx-label {
+  font-size: 12px;
+  color: var(--text);
+}
+.briefing-wx-card[data-today="true"] .briefing-wx-icon {
+  opacity: 1;
+  margin: 4px 0 2px;
+}
+/* Warm bands: keep the gold honest — no muddy cool overlay. */
+.briefing-wx-card[data-band="scorch"]::before,
+.briefing-wx-card[data-band="warm"]::before,
+.briefing-wx-card[data-band="overcast-warm"]::before {
+  opacity: 0.9;
+}
+.briefing-wx-card[data-band="storm"]::after,
+.briefing-wx-card[data-band="wet"]::after {
+  opacity: 0.65;
 }
 .briefing-wx-label {
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: color-mix(in oklab, var(--text) 74%, var(--text-muted));
 }
 .briefing-wx-icon {
   color: var(--text);
-  opacity: 0.85;
-  margin: 1px 0;
+  opacity: 0.94;
+  margin: 2px 0;
+  filter: drop-shadow(0 1px 2px color-mix(in oklab, #000 20%, transparent));
 }
 .briefing-wx-temp {
-  font-size: 19px;
-  font-weight: 650;
+  font-size: 22px;
+  font-weight: 700;
   color: var(--text);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
 }
 .briefing-wx-lo {
-  color: var(--text-subtle);
+  color: color-mix(in oklab, var(--text) 55%, var(--text-subtle));
   font-weight: 500;
+  font-size: 0.72em;
 }
 .briefing-wx-sub {
   font-size: 11px;
-  color: var(--text-muted);
+  color: color-mix(in oklab, var(--text) 70%, var(--text-muted));
+  line-height: 1.3;
+}
+.briefing-wx-precip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: color-mix(in oklab, var(--info) 72%, var(--text));
 }
 .briefing-wx-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  margin-top: 6px;
+  gap: 6px 8px;
+  padding-top: 2px;
 }
-.briefing-more-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 2px;
-  padding: 4px 10px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-muted);
-  background: var(--bg-overlay);
-  border: none;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: color 120ms ease;
+:root[data-theme="light"] .briefing-wx-card {
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, #fff 58%, transparent),
+    var(--shadow-raised);
 }
-.briefing-more-btn:hover {
-  color: var(--accent);
+:root[data-theme="light"] .briefing-wx-card[data-today="true"] {
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, #fff 72%, transparent),
+    0 2px 8px color-mix(in oklab, var(--text) 8%, transparent);
+}
+:root[data-theme="light"] .briefing-wx-card::after {
+  background: linear-gradient(
+    180deg,
+    transparent 55%,
+    color-mix(in oklab, var(--bg-surface) 42%, transparent) 100%
+  );
+}
+:root[data-theme="light"] .briefing-chip {
+  color: var(--text);
+  background: color-mix(in oklab, var(--bg-surface) 92%, var(--text-subtle));
+}
+@media (prefers-reduced-motion: reduce) {
+  .briefing-wx-card {
+    transition: none;
+  }
+}
+body[data-motion="off"] .briefing-wx-card {
+  transition: none;
 }
 .briefing-item {
   padding: 1px 0;
@@ -2931,8 +3387,8 @@ body[data-density="compact"] .card {
   color: var(--text-subtle);
   cursor: pointer;
   transition:
-    background 120ms ease,
-    color 120ms ease;
+    background 120ms var(--ease-swift),
+    color 120ms var(--ease-swift);
   background: transparent;
   border: none;
 }
@@ -2948,7 +3404,7 @@ body[data-density="compact"] .card {
   font-size: 11px;
   background: var(--bg-overlay);
   border: 1px solid var(--border-muted);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   padding: 2px 4px 2px 8px;
   color: var(--text);
 }
@@ -2958,12 +3414,12 @@ body[data-density="compact"] .card {
   justify-content: center;
   width: 14px;
   height: 14px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   color: var(--text-subtle);
   cursor: pointer;
   border: none;
   background: transparent;
-  transition: color 120ms ease;
+  transition: color 120ms var(--ease-swift);
 }
 .briefing-edit-chip button:hover {
   color: var(--danger, #e53e3e);
@@ -2984,8 +3440,8 @@ body[data-density="compact"] .card {
   background: var(--bg-surface);
   cursor: pointer;
   transition:
-    border-color 120ms ease,
-    background 120ms ease;
+    border-color 120ms var(--ease-swift),
+    background 120ms var(--ease-swift);
   user-select: none;
 }
 .briefing-edit-toggle[data-checked] {
@@ -3037,7 +3493,7 @@ body[data-density="compact"] .card {
   gap: 5px;
   max-width: 100%;
   border: 1px solid var(--border-muted);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--bg-overlay);
   color: var(--text-muted);
   font-size: 11px;
@@ -3045,9 +3501,9 @@ body[data-density="compact"] .card {
   padding: 5px 9px;
   cursor: pointer;
   transition:
-    border-color 120ms ease,
-    color 120ms ease,
-    background 120ms ease;
+    border-color 120ms var(--ease-swift),
+    color 120ms var(--ease-swift),
+    background 120ms var(--ease-swift);
 }
 .briefing-chat-starter:hover {
   border-color: var(--accent);
@@ -3085,7 +3541,7 @@ body[data-density="compact"] .card {
   width: 24px;
   height: 24px;
   flex: none;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--bg-overlay);
   color: var(--text-subtle);
 }
@@ -3226,51 +3682,33 @@ body[data-density="compact"] .card {
   }
 }
 
-/* ── Press feedback on buttons: spring lift on hover, squash on press ── */
+/* ── Press feedback on buttons: opacity + light scale on press ── */
 .btn {
   transition:
-    background 0.12s,
-    color 0.12s,
-    border-color 0.12s,
-    translate 200ms var(--ease-spring),
-    scale 200ms var(--ease-spring),
-    box-shadow 200ms ease;
+    background 120ms var(--ease-swift),
+    color 120ms var(--ease-swift),
+    border-color 120ms var(--ease-swift),
+    opacity 120ms var(--ease-swift),
+    scale 120ms var(--ease-swift);
 }
 @media (hover: hover) {
-  .btn:not(:disabled):hover {
-    translate: 0 -1px;
-  }
   .btn-primary:not(:disabled):hover {
-    box-shadow: 0 5px 18px -6px
-      color-mix(in oklab, var(--accent) 65%, transparent);
+    background: var(--accent-hover);
   }
 }
-.btn:not(:disabled):active {
-  translate: 0 0;
-  scale: 0.96;
+.btn:not(:disabled):active,
+.btn.is-active {
+  opacity: 0.88;
+  scale: 0.98;
 }
 
-/* ── Card hover lift (pointer devices only) ── */
+/* ── Card hover: elevate via lightness, not glow / lift ── */
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
   .hub-card,
   .today-grid-slot > .card {
     transition:
-      border-color 150ms,
-      box-shadow 200ms,
-      translate 260ms var(--ease-spring-soft);
-  }
-  .hub-card:hover,
-  .today-grid-slot > .card:hover {
-    border-color: color-mix(in oklab, var(--accent) 26%, var(--border));
-    translate: 0 -2px;
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.03),
-      0 18px 36px -18px rgba(0, 0, 0, 0.6);
-  }
-  /* Grid slots clip overflow — a lifted card would lose its top edge. */
-  .today-grid-slot .hub-card:hover,
-  .today-grid-slot > .card:hover {
-    translate: none;
+      border-color 150ms var(--ease-swift),
+      background-color 180ms var(--ease-swift);
   }
 }
 
@@ -3289,108 +3727,40 @@ body[data-density="compact"] .card {
 }
 
 /* ───────────────────────────────────────────────────────────
-   2026-06 Delight pass — springy motion layer
-   Builds on the restrained system above. Same rules apply:
-   one pass per event, reduced-motion + data-motion="off" gates
-   respected — but the curves got bouncier, interactive things
-   respond to touch, and finishing a thing feels like winning.
+   Delight pass — motion layer
+   One pass per event; reduced-motion + data-motion="off" gates.
+   Easings live in the primary :root token block.
    ─────────────────────────────────────────────────────────── */
 
-:root {
-  /* Overshoot spring — micro-interactions, pops, celebrations */
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  /* Gentle spring — larger surfaces (cards, panels) */
-  --ease-spring-soft: cubic-bezier(0.3, 1.3, 0.45, 1);
-  /* Fast settle, no overshoot — entrances, exits */
-  --ease-swift: cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-/* ── Icon buttons: spring scale on hover, squash on press ── */
+/* ── Icon buttons: settle on hover/press, no bounce-scale ── */
 .hub-icon-btn {
   transition:
-    background 140ms ease,
-    color 140ms ease,
-    border-color 140ms ease,
-    scale 220ms var(--ease-spring);
-}
-@media (hover: hover) {
-  .hub-icon-btn:hover {
-    scale: 1.1;
-  }
+    background 140ms var(--ease-swift),
+    color 140ms var(--ease-swift),
+    border-color 140ms var(--ease-swift);
 }
 .hub-icon-btn:active {
-  scale: 0.88;
+  opacity: 0.85;
 }
 .toast-dismiss,
 .toast-action {
   transition:
-    background 140ms ease,
-    color 140ms ease,
-    scale 200ms var(--ease-spring);
+    background 140ms var(--ease-swift),
+    color 140ms var(--ease-swift);
 }
 .toast-dismiss:active,
 .toast-action:active {
-  scale: 0.9;
+  opacity: 0.85;
 }
 
-/* ── Inputs: soft glow blooms in on focus ── */
-.input,
-.editor-textarea {
-  transition:
-    border-color 0.15s,
-    box-shadow 0.25s var(--ease-swift);
-}
+/* ── Inputs: focus via outline only (no border/box-shadow bloom) ── */
 .input:focus,
 .editor-textarea:focus {
-  box-shadow: 0 0 0 3px var(--accent-dim);
+  box-shadow: none;
 }
 
-/* ── Sidebar nav: rows nudge right, icons perk up ── */
-.nav-item {
-  transition:
-    background 140ms ease,
-    color 140ms ease,
-    box-shadow 140ms ease,
-    translate 220ms var(--ease-spring);
-}
-@media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  .nav-item:hover {
-    translate: 2px 0;
-  }
-  .nav-item svg {
-    transition:
-      scale 240ms var(--ease-spring),
-      rotate 240ms var(--ease-spring);
-  }
-  .nav-item:hover svg {
-    scale: 1.15;
-    rotate: -4deg;
-  }
-}
-
-/* ── Brand dot: happy wiggle on hover ── */
-@keyframes brand-wiggle {
-  0% {
-    rotate: 0deg;
-    scale: 1;
-  }
-  30% {
-    rotate: -7deg;
-    scale: 1.06;
-  }
-  60% {
-    rotate: 5deg;
-  }
-  100% {
-    rotate: 0deg;
-    scale: 1;
-  }
-}
-@media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  .brand-dot:hover {
-    animation: brand-wiggle 480ms var(--ease-spring);
-  }
-}
+/* ── Sidebar nav: colour/background only — no translate/scale tells.
+   Defaults + hover live with .nav-item / .nav-item-collapsed above. ── */
 
 /* ── Tabs: active pill pops in ── */
 @keyframes tab-pop {
@@ -3420,8 +3790,9 @@ body[data-density="compact"] .card {
   }
 }
 .modal-backdrop {
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
+  background: var(--scrim);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 /* Lift BlockNote's base UI z-index so any floating element that derives from it
@@ -3447,13 +3818,6 @@ body[data-density="compact"] .card {
     animation: modal-pop-in 300ms var(--ease-spring);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .modal-backdrop {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-}
-
 /* ── Side panel: slides in from its edge ── */
 @keyframes side-panel-in {
   from {
@@ -3602,22 +3966,15 @@ body[data-density="compact"] .card {
   }
 }
 
-/* ── Reward: focus session complete gets a celebration ── */
+/* ── Reward: focus session complete — settle in, no bounce ── */
 @keyframes celebrate-pop {
   0% {
-    scale: 0.4;
-    rotate: -10deg;
     opacity: 0;
-  }
-  60% {
-    scale: 1.12;
-    rotate: 3deg;
-    opacity: 1;
+    translate: 0 4px;
   }
   100% {
-    scale: 1;
-    rotate: 0deg;
     opacity: 1;
+    translate: 0 0;
   }
 }
 .focus-complete-icon {
@@ -3625,31 +3982,18 @@ body[data-density="compact"] .card {
 }
 @media (prefers-reduced-motion: no-preference) {
   .focus-complete-card {
-    animation: modal-pop-in 340ms var(--ease-spring);
+    animation: modal-pop-in 340ms var(--ease-swift);
   }
   .focus-complete-icon {
-    animation: celebrate-pop 550ms var(--ease-spring) 120ms backwards;
-  }
-  .focus-complete-icon::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    pointer-events: none;
-    animation: burst-ring 900ms var(--ease-swift) 250ms both;
+    animation: celebrate-pop 420ms var(--ease-swift) 80ms backwards;
   }
 }
 
-/* ── Empty states: icon pops in with a little personality ── */
+/* ── Empty states: icon settles in ── */
 @media (prefers-reduced-motion: no-preference) {
   .empty-pop {
-    animation: celebrate-pop 480ms var(--ease-spring) 80ms backwards;
+    animation: celebrate-pop 360ms var(--ease-swift) 40ms backwards;
   }
-}
-
-/* ── Focus pill: ticking timer gets a gentle live glow ── */
-.focus-pill.running {
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 20%, transparent);
 }
 
 /* ── Toast exit: slides back out the way it came (200ms, see EXIT_MS) ── */
@@ -3673,7 +4017,7 @@ body[data-density="compact"] .card {
     transition:
       rotate 160ms var(--ease-spring),
       scale 160ms var(--ease-spring),
-      box-shadow 160ms ease;
+      box-shadow 160ms var(--ease-swift);
   }
 }
 
@@ -3870,37 +4214,6 @@ body[data-density="compact"] .card {
   }
 }
 
-/* ── Confetti rain: the all-tasks-done moment (one pass, ~1.8s) ── */
-.confetti-rain {
-  position: fixed;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  z-index: 9990;
-}
-.confetti-rain > i {
-  position: absolute;
-  top: -14px;
-  width: 7px;
-  height: 11px;
-  opacity: 0;
-}
-@keyframes confetti-fall {
-  0% {
-    transform: translate(0, 0) rotate(0deg);
-    opacity: 1;
-  }
-  100% {
-    transform: translate(var(--drift, 0px), 105vh) rotate(540deg);
-    opacity: 0.7;
-  }
-}
-@media (prefers-reduced-motion: no-preference) {
-  .confetti-rain > i {
-    animation: confetti-fall var(--dur, 1.4s) ease-in var(--delay, 0s) both;
-  }
-}
-
 /* ── PoC terminal ── */
 .terminal-shell {
   flex: 1;
@@ -3970,7 +4283,7 @@ body[data-density="compact"] .card {
   padding: 2px 6px;
   outline: none;
   cursor: pointer;
-  transition: border-color 140ms ease;
+  transition: border-color 140ms var(--ease-swift);
 }
 .terminal-mode-select:hover,
 .terminal-mode-select:focus-visible {
@@ -4033,9 +4346,9 @@ body[data-density="compact"] .card {
   cursor: pointer;
   white-space: nowrap;
   transition:
-    background 120ms ease,
-    color 120ms ease,
-    border-color 120ms ease;
+    background 120ms var(--ease-swift),
+    color 120ms var(--ease-swift),
+    border-color 120ms var(--ease-swift);
 }
 .terminal-dock-tab:hover {
   background: var(--bg-overlay);
@@ -4111,7 +4424,7 @@ body[data-density="compact"] .card {
   justify-content: center;
   padding: 0 4px;
   border: 1px solid var(--bg-surface);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--accent);
   color: var(--accent-fg);
   font-size: 9.5px;
@@ -4148,7 +4461,7 @@ body[data-density="compact"] .card {
   gap: 7px;
   max-width: 340px;
   padding: 4px 11px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-muted);
   background: var(--bg-elevated);
   color: var(--text-muted);
@@ -4157,9 +4470,9 @@ body[data-density="compact"] .card {
   cursor: pointer;
   text-decoration: none;
   transition:
-    border-color 140ms ease,
-    background 140ms ease,
-    color 140ms ease,
+    border-color 140ms var(--ease-swift),
+    background 140ms var(--ease-swift),
+    color 140ms var(--ease-swift),
     translate 220ms var(--ease-spring);
 }
 @media (hover: hover) {
@@ -4183,8 +4496,8 @@ body[data-density="compact"] .card {
 .hero-signal-kind {
   font-size: 9.5px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  text-transform: none;
   color: var(--accent);
   flex-shrink: 0;
 }
@@ -4294,7 +4607,7 @@ body[data-density="compact"] .card {
 .task-toggle svg {
   transition:
     scale 200ms var(--ease-spring),
-    color 140ms ease;
+    color 140ms var(--ease-swift);
 }
 @media (hover: hover) {
   .task-toggle:hover svg {
@@ -4321,6 +4634,9 @@ body[data-density="compact"] .card {
   [role="button"]:not([aria-disabled="true"]):active,
   a.nav-item:active,
   .nav-item:active,
+  a.nav-item-collapsed:active,
+  .nav-item-collapsed:active,
+  .sidebar-collapse-btn:active,
   .hub-icon-btn:active,
   .btn:active {
     scale: 0.96;
@@ -4439,7 +4755,7 @@ main,
 .radar-scanline {
   position: relative;
   height: 2px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   background: color-mix(in oklab, var(--accent) 18%, transparent);
 }
@@ -4448,7 +4764,7 @@ main,
   position: absolute;
   inset: 0;
   width: 35%;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--accent);
 }
 
@@ -4461,7 +4777,7 @@ main,
   font-weight: 600;
   letter-spacing: 0.05em;
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
 }
 .radar-badge-new {
   color: var(--accent);
@@ -4476,17 +4792,15 @@ main,
   background: var(--bg-muted);
 }
 
-/* Interactive rows read as interactive: accent-tinted border on hover. */
+/* Interactive rows: one hover signal — border only. */
 .radar-card {
-  transition:
-    border-color 140ms ease,
-    box-shadow 140ms ease;
+  transition: border-color 140ms var(--ease-swift);
 }
 .radar-card:hover {
   border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
 }
 
-/* Coverage bars fill left → right (gradient always-on, growth gated below). */
+/* Coverage bars: settled fill, no delayed grow. */
 .radar-bar-fill {
   height: 100%;
   border-radius: inherit;
@@ -4505,10 +4819,85 @@ main,
 
 /* /repos evolution strip: the arrow beckons on hover. */
 .evolution-strip {
-  transition: border-color 140ms ease;
+  transition: border-color 140ms var(--ease-swift);
 }
 .evolution-strip:hover {
   border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+}
+
+/* Repos — progressive disclosure on cards + learn panel chrome */
+.repos-card-more {
+  border-top: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+  padding-top: 8px;
+}
+.repos-card-more-summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-subtle);
+  user-select: none;
+}
+.repos-card-more-summary::-webkit-details-marker {
+  display: none;
+}
+.repos-card-more-summary::before {
+  content: "▸";
+  font-size: 10px;
+  opacity: 0.7;
+  transition: transform 150ms var(--ease-swift);
+}
+.repos-card-more[open] > .repos-card-more-summary::before {
+  transform: rotate(90deg);
+}
+.repos-card-more-summary:hover {
+  color: var(--text-muted);
+}
+.repos-learn-chrome {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--bg-elevated) 55%, var(--bg-surface));
+}
+.repos-learn-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-subtle);
+}
+.repos-learn-title {
+  margin-top: 4px;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1.2;
+}
+.repos-learn-path {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-subtle);
+}
+.repos-learn-actions {
+  display: flex;
+  shrink: 0;
+  gap: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .repos-card-more-summary::before {
+    transition: none;
+  }
+}
+body[data-motion="off"] .repos-card-more-summary::before {
+  transition: none;
 }
 .evolution-arrow {
   display: inline-block;
@@ -4519,59 +4908,32 @@ main,
     animation: radar-rotate 3.2s linear infinite;
   }
   .radar-scope-blip {
-    animation: radar-blip 2.6s ease-out infinite;
-    animation-delay: calc(var(--i, 0) * 350ms);
+    animation: radar-blip 2.6s var(--ease-swift) infinite;
   }
   .radar-scanline::after {
-    animation: radar-scanline-slide 1.1s ease-in-out infinite;
-  }
-  /* Lists cascade in; each child sets --i to its index. */
-  .radar-stagger > * {
-    animation: fadeSlideIn 320ms var(--ease-spring) both;
-    animation-delay: calc(var(--i, 0) * 45ms);
-  }
-  .radar-bar-fill {
-    animation: radar-bar-grow 560ms var(--ease-spring) both;
-    animation-delay: calc(var(--i, 0) * 55ms);
-  }
-  .radar-card:hover {
-    transform: translateY(-1px);
-  }
-  .radar-card {
-    transition:
-      transform 140ms var(--ease-spring),
-      border-color 140ms ease,
-      box-shadow 140ms ease;
+    animation: radar-scanline-slide 1.1s var(--ease-swift) infinite;
   }
   .radar-chevron {
-    transition: transform 180ms var(--ease-spring);
+    transition: transform 180ms var(--ease-swift);
   }
   .evolution-arrow {
-    transition: transform 160ms var(--ease-spring);
+    transition: transform 160ms var(--ease-swift);
   }
   .evolution-strip:hover .evolution-arrow {
     transform: translateX(3px);
   }
-  /* Lab panel + digest body slide in when expanded. */
+  /* Lab panel + digest body: one entrance max when expanded. */
   .lab-panel-enter {
-    animation: fadeSlideIn 200ms var(--ease-spring) both;
+    animation: fadeSlideIn 200ms var(--ease-swift) both;
   }
-  /* Each tutor message fades up as it arrives. */
   .lab-msg-enter {
-    animation: fadeSlideIn 240ms var(--ease-spring) both;
+    animation: fadeSlideIn 240ms var(--ease-swift) both;
   }
-  /* Evidence references nudge on hover to signal they're links. */
   .lab-evidence-link {
-    transition:
-      transform 140ms var(--ease-spring),
-      color 140ms ease;
+    transition: color 140ms var(--ease-swift);
   }
-  .lab-evidence-link:hover {
-    transform: translateX(2px);
-  }
-  /* Done badge gives a little confirmation pop. */
   .lab-done-pop {
-    animation: check-pulse 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: check-pulse 0.32s var(--ease-swift);
   }
 }
 
@@ -4754,7 +5116,7 @@ main,
   font-size: 11px;
   font-weight: 600;
   padding: 3px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
 }
 .briefing-task-badge.is-queued {
@@ -4792,7 +5154,7 @@ main,
 .briefing-research-md {
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.5;
   color: var(--text);
@@ -4838,7 +5200,7 @@ main,
 .tone-dot {
   display: inline-block;
   flex-shrink: 0;
-  border-radius: 9999px;
+  border-radius: var(--radius-sm);
   background: var(--text-subtle);
 }
 .tone-dot--sm {
@@ -4861,4 +5223,1155 @@ main,
 }
 .dd-link-btn--warning {
   border-color: color-mix(in oklab, var(--warning) 40%, transparent);
+}
+
+/* ── Repos Git workspace ─────────────────────────────────────────── */
+.repo-git-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.repo-git-workspace-trigger {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.repo-git-open-btn {
+  font-size: 12px;
+  padding: 3px 8px;
+}
+.repo-git-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  /* Above ModalShell (250); below toasts (300). */
+  z-index: 260;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Safe-area + gutter so hub chrome never peeks under a clipped modal edge. */
+  padding:
+    max(12px, env(safe-area-inset-top, 0px))
+    max(12px, env(safe-area-inset-right, 0px))
+    max(12px, env(safe-area-inset-bottom, 0px))
+    max(12px, env(safe-area-inset-left, 0px));
+  box-sizing: border-box;
+}
+.repo-git-modal-backdrop[data-fullscreen] {
+  padding: 0;
+  align-items: stretch;
+  justify-content: stretch;
+}
+.repo-git-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(1280px, calc(100vw - 24px));
+  height: min(920px, calc(100dvh - 24px));
+  max-height: calc(100dvh - 24px);
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  box-shadow: 0 24px 64px color-mix(in oklab, #000 45%, transparent);
+  overflow: hidden;
+  animation: hub-enter 220ms var(--ease-swift);
+  /* Expand/collapse size only — opacity stays put. */
+  transition:
+    width 240ms var(--ease-swift),
+    height 240ms var(--ease-swift),
+    max-height 240ms var(--ease-swift),
+    border-radius 240ms var(--ease-swift);
+}
+.repo-git-modal[data-fullscreen] {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  border-radius: 0;
+}
+.repo-git-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--bg-surface) 70%, var(--bg-elevated));
+  flex-shrink: 0;
+}
+.repo-git-modal-title-block {
+  min-width: 0;
+}
+.repo-git-modal-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.repo-git-modal-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.repo-git-modal-path {
+  color: var(--text-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: min(48vw, 420px);
+}
+.repo-git-modal-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.repo-git-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.repo-git-header-push {
+  font-size: 11px;
+  padding: 3px 8px;
+  gap: 5px;
+}
+.repo-git-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+.repo-git-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  transition:
+    background 150ms var(--ease-swift),
+    color 150ms var(--ease-swift);
+}
+.repo-git-tab[data-active] {
+  color: var(--text);
+  background: color-mix(in oklab, var(--accent) 14%, var(--bg-elevated));
+  box-shadow: inset 0 -2px 0 color-mix(in oklab, var(--accent) 70%, transparent);
+}
+.repo-git-tab:hover:not([data-active]) {
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+.repo-git-tab:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 55%, transparent);
+  outline-offset: 1px;
+}
+.repo-git-close {
+  padding: 4px 6px;
+  color: var(--text-subtle);
+}
+/* Compact controls inside the workspace — one place instead of per-button inline styles. */
+.repo-git-modal .btn {
+  font-size: 11px;
+}
+.repo-git-icon-btn {
+  font-size: 10px;
+  padding: 1px 5px;
+}
+.repo-git-icon-btn[data-danger] {
+  color: var(--danger);
+}
+/* Commit split button: caret half + drop-up menu. */
+.repo-git-commit-split > .btn:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.repo-git-commit-caret {
+  padding-left: 6px;
+  padding-right: 6px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: 1px solid color-mix(in srgb, var(--bg) 25%, transparent);
+}
+.repo-git-commit-menu {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  z-index: 50;
+  margin-bottom: 8px;
+  width: 11rem;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-popover);
+}
+.repo-git-commit-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.repo-git-commit-menu-item[data-active] {
+  color: var(--accent);
+}
+.repo-git-commit-menu-item:hover {
+  background: var(--bg-elevated);
+}
+/* Scrollable body + pinned panel footers (commit bar). Never clip chrome. */
+.repo-git-tab-body {
+  padding: 12px 14px 14px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.repo-git-pane-enter {
+  animation: hub-enter 180ms var(--ease-swift);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.repo-git-changes,
+.repo-git-stash,
+.repo-git-history,
+.repo-git-branches,
+.repo-git-conflicts,
+.repo-git-blame {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.repo-git-changes-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+.repo-git-spacer {
+  flex: 1;
+  min-width: 8px;
+}
+.repo-git-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.repo-git-filter-search {
+  flex: 1 1 180px;
+  max-width: 280px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+  color: var(--text-subtle);
+  transition:
+    border-color 150ms var(--ease-swift),
+    background 150ms var(--ease-swift);
+}
+.repo-git-filter-search:focus-within {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+  background: var(--bg-surface);
+}
+.repo-git-filter-select,
+.repo-git-filter-input {
+  font-size: 11px;
+  min-height: 28px;
+  padding: 3px 8px;
+}
+.repo-git-filter-select {
+  max-width: 180px;
+  background: var(--bg);
+}
+.repo-git-filter-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding-left: 0;
+  box-shadow: none;
+}
+.repo-git-filter-input:focus {
+  outline: none;
+}
+.repo-git-filter-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 8px;
+  font-size: 11px;
+  color: var(--text-subtle);
+}
+.repo-git-changes-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(280px, 1.5fr);
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+@media (max-width: 720px) {
+  .repo-git-changes-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.repo-git-file-cols {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+.repo-git-file-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  overflow: hidden;
+  background: var(--bg-surface);
+}
+.repo-git-section-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--bg-elevated) 45%, transparent);
+}
+.repo-git-section-label-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.repo-git-file-row,
+.repo-git-stash-row,
+.repo-git-branch-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 55%, transparent);
+  transition: background 150ms var(--ease-swift);
+}
+.repo-git-file-row:last-child,
+.repo-git-stash-row:last-child,
+.repo-git-branch-row:last-child {
+  border-bottom: 0;
+}
+.repo-git-file-row:hover,
+.repo-git-stash-row:hover,
+.repo-git-branch-row:hover {
+  background: color-mix(in oklab, var(--bg-elevated) 70%, transparent);
+}
+.repo-git-file-row[data-active],
+.repo-git-stash-row[data-active],
+.repo-git-branch-row[data-current] {
+  background: color-mix(in oklab, var(--accent) 11%, transparent);
+}
+.repo-git-file-main,
+.repo-git-stash-main,
+.repo-git-branch-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.repo-git-file-main:focus-visible,
+.repo-git-stash-main:focus-visible,
+.repo-git-branch-main:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 55%, transparent);
+  outline-offset: -2px;
+}
+.repo-git-file-status {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--warning);
+  min-width: 1.5rem;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.repo-git-file-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+  opacity: 0.55;
+  transition: opacity 140ms var(--ease-swift);
+}
+.repo-git-file-row:hover .repo-git-file-actions,
+.repo-git-file-row[data-active] .repo-git-file-actions,
+.repo-git-stash-row:hover .repo-git-file-actions,
+.repo-git-stash-row[data-active] .repo-git-file-actions {
+  opacity: 1;
+}
+.repo-git-diff-pane {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 1;
+}
+.repo-git-diff-head {
+  padding: 6px 10px;
+  font-size: 11px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.repo-git-diff-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+/* Tab/pane enter keeps motion; selection swaps must not re-fire hub-enter (feels like bounce). */
+.repo-git-diff-body:not(.repo-git-diff-body-static) {
+  animation: hub-enter 160ms var(--ease-swift);
+}
+.repo-git-diff-body-static {
+  animation: none;
+}
+.repo-git-dir-preview {
+  padding: 12px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.repo-git-dir-preview-lead {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--accent);
+}
+.repo-git-dir-preview-title {
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 500;
+}
+.repo-git-dir-preview-msg {
+  margin: 3px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.repo-git-dir-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  overflow: hidden;
+  background: var(--bg-surface);
+}
+.repo-git-dir-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--text);
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 50%, transparent);
+}
+.repo-git-dir-item:last-child {
+  border-bottom: 0;
+}
+.repo-git-dir-kind {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.repo-git-diff-wrap {
+  position: relative;
+  min-height: 0;
+}
+.repo-git-diff-selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--bg-elevated) 70%, transparent);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.repo-git-diff {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.repo-git-diff-line {
+  display: flex;
+  align-items: center;
+  min-width: max-content;
+  gap: 6px;
+}
+.repo-git-diff-gutter {
+  width: 1.25rem;
+  flex-shrink: 0;
+  text-align: center;
+  color: var(--text-subtle);
+  user-select: none;
+  opacity: 0.7;
+}
+.repo-git-diff-text {
+  padding-right: 12px;
+  white-space: pre;
+  flex: 1;
+  min-width: 0;
+}
+.repo-git-diff-selectable {
+  cursor: pointer;
+}
+.repo-git-diff-selectable:hover {
+  outline: 1px solid color-mix(in oklab, var(--accent) 35%, transparent);
+  outline-offset: -1px;
+}
+.repo-git-diff-selected {
+  outline: 1px solid color-mix(in oklab, var(--accent) 55%, transparent);
+  outline-offset: -1px;
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+}
+.repo-git-hunk-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-right: 8px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-family: inherit;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 140ms var(--ease-swift), background 140ms var(--ease-swift);
+}
+.repo-git-diff-hunk:hover .repo-git-hunk-btn,
+.repo-git-hunk-btn:focus-visible {
+  opacity: 1;
+}
+.repo-git-hunk-btn:hover {
+  background: color-mix(in oklab, var(--accent) 12%, var(--bg-surface));
+  color: var(--text);
+}
+.repo-git-hunk-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.repo-git-diff-ai-pop {
+  position: absolute;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-elevated);
+  box-shadow: 0 8px 24px color-mix(in oklab, #000 28%, transparent);
+  animation: hub-enter 140ms var(--ease-swift);
+}
+.repo-git-diff-add {
+  background: color-mix(in oklab, var(--success) 12%, transparent);
+  color: color-mix(in oklab, var(--success) 35%, var(--text));
+}
+.repo-git-diff-del {
+  background: color-mix(in oklab, var(--danger) 12%, transparent);
+  color: color-mix(in oklab, var(--danger) 35%, var(--text));
+}
+.repo-git-diff-hunk {
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+  color: var(--text-muted);
+}
+.repo-git-diff-meta {
+  color: var(--text-subtle);
+}
+.repo-git-diff-empty,
+.repo-git-empty,
+.repo-git-empty-sm {
+  padding: 12px 10px;
+  font-size: 12px;
+  color: var(--text-subtle);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+.repo-git-empty {
+  padding: 10px 8px 4px;
+}
+.repo-git-empty-sm {
+  padding: 6px 8px;
+  font-size: 11px;
+}
+.repo-git-noise-hint {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--text-subtle);
+  opacity: 0.85;
+}
+.repo-git-commit-bar {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  padding-bottom: 2px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--bg-elevated);
+}
+.repo-git-commit-input {
+  font-size: 12px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  resize: vertical;
+  min-height: 44px;
+}
+.repo-git-commit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  overflow: visible;
+}
+.repo-git-commit-split {
+  /* Menu opens upward into the changes pane; keep it above siblings. */
+  z-index: 2;
+}
+.repo-git-commit-menu {
+  /* Match Upstart card menu density. */
+  min-width: 11rem;
+}
+.repo-git-ref-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  color: var(--accent);
+  white-space: nowrap;
+}
+.repo-git-branch-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--bg-surface);
+}
+.repo-git-history-split {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.15fr);
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+@media (max-width: 900px) {
+  .repo-git-history-split {
+    grid-template-columns: 1fr;
+  }
+}
+.repo-git-history-list {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.repo-git-history-detail {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+.repo-git-commit-meta {
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.repo-git-commit-meta-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.repo-git-commit-subject {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.35;
+}
+.repo-git-commit-body {
+  margin: 6px 0 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  line-height: 1.4;
+}
+.repo-git-commit-byline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.repo-git-commit-meta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.repo-git-commit-meta-actions .btn {
+  color: var(--warning);
+}
+.repo-git-commit-meta-actions-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25em;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
+  color: var(--warning);
+}
+.repo-git-commit-meta-note {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-subtle);
+}
+.repo-git-history-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.75fr) minmax(180px, 1.25fr);
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+@media (max-width: 720px) {
+  .repo-git-history-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.repo-git-commit-files {
+  border-right: 1px solid var(--border);
+  overflow: auto;
+  min-height: 0;
+}
+.repo-git-commit-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms var(--ease-swift);
+}
+.repo-git-commit-file:hover {
+  background: var(--bg-elevated);
+}
+.repo-git-commit-file[data-active] {
+  background: color-mix(in oklab, var(--accent) 11%, transparent);
+}
+/* Beat global `button:active { scale: 0.96 }` — selection rows must not bounce. */
+@media (prefers-reduced-motion: no-preference) {
+  button.repo-git-graph-row:not(:disabled):active,
+  button.repo-git-commit-file:not(:disabled):active,
+  button.repo-unpushed-badge:not(:disabled):active {
+    scale: 1;
+  }
+}
+.repo-git-ref-chip[data-tone="warning"] {
+  background: color-mix(in oklab, var(--warning) 16%, transparent);
+  color: var(--warning);
+}
+.repo-git-graph {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  overflow: auto;
+  background: var(--bg-surface);
+  flex: 1;
+  min-height: 0;
+}
+.repo-git-history-list .repo-git-graph {
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+}
+.repo-git-graph-rail {
+  flex-shrink: 0;
+  position: sticky;
+  left: 0;
+  background: var(--bg-surface);
+  z-index: 1;
+  border-right: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+}
+.repo-git-graph-rows {
+  flex: 1;
+  min-width: 0;
+}
+.repo-git-graph-row {
+  display: grid;
+  grid-template-columns: 4.2rem minmax(0, 1fr) auto minmax(6.5rem, 9rem);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms var(--ease-swift);
+  scale: 1;
+}
+.repo-git-graph-row:hover {
+  background: var(--bg-elevated);
+}
+.repo-git-graph-row[data-selected] {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+}
+.repo-git-graph-row[data-unpushed]:not([data-selected]) {
+  box-shadow: inset 2px 0 0 color-mix(in oklab, var(--warning) 70%, transparent);
+}
+.repo-git-graph-row:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 55%, transparent);
+  outline-offset: -2px;
+  z-index: 1;
+}
+.repo-git-graph-hash {
+  color: var(--accent);
+  font-size: 10px;
+}
+.repo-git-graph-subject {
+  font-weight: 500;
+}
+.repo-git-graph-refs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.repo-git-graph-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+  color: var(--text-subtle);
+  font-size: 10px;
+  min-width: 0;
+  line-height: 1.25;
+}
+.repo-git-graph-date {
+  white-space: nowrap;
+}
+.repo-git-conflicts-grid {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.7fr) minmax(200px, 1.3fr);
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg-surface);
+}
+@media (max-width: 720px) {
+  .repo-git-conflicts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.repo-git-conflict-list {
+  border-right: 1px solid var(--border);
+  min-height: 0;
+  overflow: auto;
+}
+.repo-git-conflict-editor {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.repo-git-conflict-textarea {
+  flex: 1;
+  min-height: 160px;
+  width: 100%;
+  resize: vertical;
+  border: 0;
+  outline: none;
+  padding: 10px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.4;
+  background: var(--bg);
+  color: var(--text);
+}
+.repo-git-blame-history {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-surface);
+  max-height: 96px;
+  overflow: auto;
+}
+.repo-git-blame-history-row {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr) auto;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.repo-git-blame-table {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg);
+  font-size: 11px;
+}
+.repo-git-blame-line {
+  display: grid;
+  grid-template-columns: 4.2rem 5.5rem 2.5rem minmax(0, 1fr);
+  gap: 6px;
+  padding: 1px 8px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 40%, transparent);
+}
+.repo-git-blame-meta {
+  color: var(--accent);
+  font-size: 10px;
+}
+.repo-git-blame-author {
+  color: var(--text-subtle);
+  font-size: 10px;
+}
+.repo-git-blame-num {
+  color: var(--text-subtle);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.repo-git-blame-code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  white-space: pre;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Hook failure dialog — sits above the Git workspace modal */
+.repo-git-hook-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 280;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5vh 2.5vw;
+  background: var(--scrim);
+}
+.repo-git-hook-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 96vw);
+  max-height: min(720px, 90vh);
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  box-shadow: 0 24px 64px color-mix(in oklab, #000 45%, transparent);
+  overflow: hidden;
+  animation: hub-enter 220ms var(--ease-swift);
+}
+.repo-git-hook-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--bg-surface) 70%, var(--bg-elevated));
+  flex-shrink: 0;
+}
+.repo-git-hook-title-block {
+  min-width: 0;
+}
+.repo-git-hook-eyebrow {
+  margin: 0 0 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--warning);
+}
+.repo-git-hook-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.repo-git-hook-summary {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.repo-git-hook-logpath {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--text-subtle);
+}
+.repo-git-hook-log {
+  margin: 0;
+  padding: 12px 14px;
+  flex: 1;
+  min-height: 160px;
+  max-height: min(420px, 50vh);
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+  background: var(--bg);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+}
+.repo-git-hook-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 14px;
+  flex-shrink: 0;
+  background: color-mix(in oklab, var(--bg-surface) 55%, var(--bg-elevated));
+}
+.repo-git-hook-actions .btn {
+  font-size: 12px;
+  gap: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .repo-git-modal,
+  .repo-git-pane-enter,
+  .repo-git-diff-body,
+  .repo-git-hook-dialog {
+    animation: none;
+    transition: none;
+  }
+  .repo-git-tab,
+  .repo-git-file-row,
+  .repo-git-stash-row,
+  .repo-git-branch-row,
+  .repo-git-graph-row,
+  .repo-git-file-actions,
+  .repo-git-filter-search {
+    transition: none;
+  }
+}
+body[data-motion="off"] .repo-git-modal,
+body[data-motion="off"] .repo-git-pane-enter,
+body[data-motion="off"] .repo-git-diff-body,
+body[data-motion="off"] .repo-git-hook-dialog {
+  animation: none;
+  transition: none;
+}
+body[data-motion="off"] .repo-git-tab,
+body[data-motion="off"] .repo-git-file-row,
+body[data-motion="off"] .repo-git-stash-row,
+body[data-motion="off"] .repo-git-branch-row,
+body[data-motion="off"] .repo-git-graph-row,
+body[data-motion="off"] .repo-git-file-actions,
+body[data-motion="off"] .repo-git-filter-search {
+  transition: none;
 }

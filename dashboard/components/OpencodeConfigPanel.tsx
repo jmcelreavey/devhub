@@ -27,7 +27,7 @@ const MODEL_INPUT_STYLE = {
   padding: "3px 8px",
   color: "var(--text)",
   fontSize: "11px",
-  fontFamily: '"SFMono-Regular", Consolas, monospace',
+  fontFamily: "var(--font-mono)",
   width: "180px",
   outline: "none",
 } as const;
@@ -360,7 +360,7 @@ export function OpencodeConfigPanel() {
                   padding: "12px",
                   color: "var(--text)",
                   fontSize: "12px",
-                  fontFamily: '"SFMono-Regular", Consolas, monospace',
+                  fontFamily: "var(--font-mono)",
                   lineHeight: 1.5,
                   outline: "none",
                   resize: "vertical",
@@ -372,7 +372,7 @@ export function OpencodeConfigPanel() {
                 className="text-xs overflow-x-auto whitespace-pre-wrap"
                 style={{
                   color: "var(--text-muted)",
-                  fontFamily: '"SFMono-Regular", Consolas, monospace',
+                  fontFamily: "var(--font-mono)",
                   maxHeight: "480px",
                   overflowY: "auto",
                   lineHeight: 1.5,

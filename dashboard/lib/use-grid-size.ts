@@ -12,7 +12,8 @@ export const GridSizeContext = createContext<GridSizeMap>({});
 
 /** Map raw grid w×h to an abstract size tier. */
 export function categorizeGridSize(w: number, h: number): GridSizeCategory {
-  if (w <= 4) return "1x1";
+  // Short tiles clip multi-row heroes — collapse before width-based "wide" tiers.
+  if (w <= 4 || h <= 3) return "1x1";
   if (w >= 10 && h >= 6) return "3x2";
   if (w >= 10) return "3x1";
   if (h >= 6) return "default";

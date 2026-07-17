@@ -1085,7 +1085,7 @@ export function TaskItem({
             <button
               type="button"
               {...dragHandleProps}
-              className="shrink-0 rounded p-0.5 opacity-30 hover:opacity-100 group-hover:opacity-100 focus:opacity-100"
+              className="shrink-0 rounded p-0.5 reveal-on-hover focus:opacity-100"
               style={{ color: "var(--text-subtle)", cursor: "grab" }}
               aria-label={`Drag to reorder ${task.text}`}
               onClick={(e) => e.stopPropagation()}
@@ -1387,13 +1387,13 @@ function SegmentedProgressBar({ open, done, abandoned }: { open: number; done: n
     <div className="flex items-center gap-3">
       <div className="flex flex-1 h-1.5 rounded-full overflow-hidden gap-px" aria-hidden>
         {done > 0 && (
-          <div className="h-full shrink-0 transition-all duration-300" style={{ width: `${pDone}%`, background: "var(--success)", borderRadius: 9 }} />
+          <div className="h-full shrink-0" style={{ width: `${pDone}%`, background: "var(--success)", borderRadius: 9 }} />
         )}
         {open > 0 && (
-          <div className="h-full shrink-0 transition-all duration-300" style={{ width: `${pOpen}%`, background: "var(--bg-elevated)", border: "1px solid var(--border-muted)", borderRadius: 9 }} />
+          <div className="h-full shrink-0" style={{ width: `${pOpen}%`, background: "var(--bg-elevated)", border: "1px solid var(--border-muted)", borderRadius: 9 }} />
         )}
         {abandoned > 0 && (
-          <div className="h-full flex-1 min-w-0 transition-all duration-300" style={{ background: "var(--text-subtle)", opacity: 0.4, borderRadius: 9 }} />
+          <div className="h-full flex-1 min-w-0" style={{ background: "var(--text-subtle)", opacity: 0.4, borderRadius: 9 }} />
         )}
       </div>
       <span

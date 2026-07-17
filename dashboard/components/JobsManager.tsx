@@ -85,7 +85,6 @@ export function JobsManager() {
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Failed to create job");
-      toast.success(`Scheduled "${form.name}"`);
       setCreating(false);
       mutate();
     } catch (e) {
@@ -118,7 +117,6 @@ export function JobsManager() {
         const res = await fetch(`/api/jobs/${job.id}`, { method: "POST" });
         const body = await res.json();
         if (!res.ok) throw new Error(body.error ?? "Couldn't run job");
-        toast.success(`Started "${job.name}"`);
         mutate();
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Couldn't run job");

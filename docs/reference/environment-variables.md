@@ -12,6 +12,7 @@ Most values live in the dashboard's local environment file and can be edited fro
 | `DOCS_DIR`                     | Optional override for repo docs (default: `REPO_ROOT/docs`)                                                            |
 | `TASKS_DIR`                    | Optional override for daily tasks (default: `REPO_ROOT/tasks`) — point elsewhere to keep personal data out of the tree |
 | `COLLECTIONS_DIR`              | Optional override for checklist collections (default: `REPO_ROOT/collections`)                                         |
+| `UPSTARTS_DIR`                 | Optional override for per-repo Upstart scripts (default: `REPO_ROOT/upstarts`)                                         |
 | `REPO_ROOT`                    | DevHub repository root                                                                                                 |
 | `NEXT_PUBLIC_REPO_ROOT`        | Browser-visible mirror of `REPO_ROOT` for client-side terminal commands (PR review notes). Set to the same path as `REPO_ROOT` in `dashboard/.env.local`; not auto-populated by postinstall. Without it, OpenCode PR reviews launched from `/prs` may write notes outside DevHub's `notes/` tree. |
 | `PORT`                         | Dashboard port                                                                                                         |

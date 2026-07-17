@@ -467,7 +467,7 @@ export function LabPanel({
 
       {(lab.evidence.length > 0 || lab.introducedCommit) && (
         <div className="mt-3">
-          <div className="text-[10px] uppercase tracking-wide mb-1" style={{ color: "var(--text-subtle)" }}>
+          <div className="text-[10px] font-medium tracking-tight mb-1" style={{ color: "var(--text-subtle)" }}>
             Evidence
           </div>
           <div className="flex flex-col gap-0.5">

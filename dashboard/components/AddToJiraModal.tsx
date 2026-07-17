@@ -140,6 +140,7 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
       onCreated(created.key, created.url);
       // Refresh the "My Tickets" widgets so the new ticket shows up.
       void globalMutate("/api/jira/tickets");
+      void globalMutate("/api/sidebar/counts");
       onClose();
     } catch (e) {
       console.error("create jira issue:", e);
@@ -188,7 +189,7 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
               parentLoading ||
               parentMissing
             }
-            style={{ background: "var(--accent)", color: "var(--accent-contrast, #fff)" }}
+            style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
           >
             {creating ? (
               <span className="inline-flex items-center gap-1.5">

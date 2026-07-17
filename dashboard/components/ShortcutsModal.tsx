@@ -61,7 +61,7 @@ export function ShortcutsModal({ open, onClose }: { open: boolean; onClose: () =
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "rgba(0,0,0,0.5)",
+        background: "var(--scrim)",
       }}
       onClick={onClose}
     >

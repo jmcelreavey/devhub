@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
-  Sparkles,
   Clock,
   Timer,
   ExternalLink,
@@ -217,8 +216,8 @@ function writeSkips(skips: Record<string, string>): void {
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="font-bold"
-      style={{ fontSize: 10.5, letterSpacing: ".08em", color: "var(--text-subtle)", marginBottom: 8 }}
+      className="font-semibold"
+      style={{ fontSize: 10.5, letterSpacing: "-0.01em", color: "var(--text-subtle)", marginBottom: 8 }}
     >
       {children}
     </div>
@@ -361,7 +360,7 @@ export function TodayFocusView() {
                     aria-valuenow={doneToday}
                     aria-label="Tasks done today"
                   >
-                    <i style={{ width: `${tasksTotal > 0 ? Math.round((doneToday / tasksTotal) * 100) : 0}%` }} />
+                    <i style={{ ["--progress" as string]: String(tasksTotal > 0 ? doneToday / tasksTotal : 0) }} />
                   </span>
                 </>
               )}
@@ -423,12 +422,11 @@ export function TodayFocusView() {
             style={{
               background: "var(--bg-surface)",
               border: "1px solid var(--border)",
-              borderLeft: "3px solid var(--accent)",
               borderRadius: "var(--radius, 8px)",
               padding: "12px 16px",
             }}
           >
-            <Sparkles size={14} style={{ color: "var(--accent)", flex: "none", marginTop: 3 }} aria-hidden />
+            <Sun size={14} style={{ color: "var(--accent)", flex: "none", marginTop: 3 }} aria-hidden />
             {briefingLine === undefined ? (
               <div className="min-w-0 flex-1 space-y-1.5 py-0.5">
                 <div className="skeleton" style={{ height: 12, width: "92%" }} />
@@ -475,7 +473,7 @@ export function TodayFocusView() {
         {/* Reviews - pick one or two, skip the rest until tomorrow */}
         {(activeReviews.length > 0 || skippedReviews.length > 0) && (
           <div>
-            <SectionLabel>REVIEWS OWED</SectionLabel>
+            <SectionLabel>Reviews owed</SectionLabel>
             <div className="space-y-1">
               {activeReviews.map((r) => {
                 const id = prId(r);
@@ -511,7 +509,7 @@ export function TodayFocusView() {
                     <button
                       type="button"
                       onClick={() => skipPr(id)}
-                      className="btn btn-ghost shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                      className="btn btn-ghost shrink-0 reveal-on-hover transition-opacity"
                       style={{ fontSize: 11, padding: "1px 8px", color: "var(--text-subtle)" }}
                       title="Skip until tomorrow"
                     >
@@ -570,7 +568,7 @@ export function TodayFocusView() {
         {/* Jira assignments - so a new one never slips past unnoticed */}
         {tickets.length > 0 && (
           <div>
-            <SectionLabel>JIRA</SectionLabel>
+            <SectionLabel>Jira</SectionLabel>
             <div className="space-y-1">
               {tickets.slice(0, 6).map((t) => (
                 <div key={t.key} className="flex items-center gap-2.5 px-2 py-1">
@@ -599,7 +597,7 @@ export function TodayFocusView() {
 
         {/* Then - the real task list (full check/strike animations, drag, add) */}
         <div>
-          <SectionLabel>TASKS</SectionLabel>
+          <SectionLabel>Tasks</SectionLabel>
           <TaskList inputId="focus-task-add" />
         </div>
 

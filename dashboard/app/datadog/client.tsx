@@ -98,7 +98,7 @@ function RecentAlertList({
               {e.status ? ` · ${e.status}` : ""}
             </div>
           </div>
-          <span className="opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          <span className="reveal-on-hover transition-opacity">
             <DatadogInvestigateButton scope={scope} alert={e} compact />
           </span>
         </div>

@@ -4,26 +4,19 @@ import { getMyTickets } from "@/lib/jira-client";
 import { fetchMyGithubPrs } from "@/lib/github-prs";
 import { buildPrActivitySignature, buildTicketActivitySignature } from "@/lib/activity-signatures";
 import { countStaleShares } from "@/lib/share/share-content";
+import {
+  getSidebarCountsCache,
+  setSidebarCountsCache,
+  SIDEBAR_COUNTS_TTL_MS,
+  type SidebarCounts,
+} from "@/lib/sidebar-counts-cache";
 
-export interface SidebarCounts {
-  tasks: number;
-  tickets: number;
-  prs: number;
-  /** Live links whose source has drifted (Live → Stale). */
-  shared: number;
-  signatures: {
-    tickets: string;
-    prs: string;
-  };
-}
-
-// Reuse a short cache so rapid navigation doesn't hammer the sub-APIs.
-let cache: { data: SidebarCounts; ts: number } | null = null;
-const TTL = 60_000;
+export type { SidebarCounts };
 
 export async function GET() {
-  if (cache && Date.now() - cache.ts < TTL) {
-    return NextResponse.json(cache.data);
+  const cached = getSidebarCountsCache();
+  if (cached && Date.now() - cached.ts < SIDEBAR_COUNTS_TTL_MS) {
+    return NextResponse.json(cached.data);
   }
 
   const [tasks, tickets, prs] = await Promise.allSettled([
@@ -58,6 +51,6 @@ export async function GET() {
     },
   };
 
-  cache = { data, ts: Date.now() };
+  setSidebarCountsCache(data);
   return NextResponse.json(data);
 }

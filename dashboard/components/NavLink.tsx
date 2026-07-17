@@ -24,7 +24,7 @@ import {
   BarChart3,
   Globe,
   Bot,
-  Sparkles,
+  Newspaper,
   Radar,
   type LucideIcon,
 } from "lucide-react";
@@ -32,7 +32,7 @@ import type { NavItem } from "@/lib/nav";
 
 const ICONS: Record<string, LucideIcon> = {
   today: CalendarDays,
-  briefing: Sparkles,
+  briefing: Newspaper,
   calendar: CalendarDays,
   tickets: Ticket,
   notes: FileText,
@@ -82,15 +82,8 @@ export function NavLink({ item, onClick, collapsed, count = 0, unseen = false }:
       <Link
         href={item.href}
         onClick={onClick}
-        className="relative flex items-center justify-center mx-1 my-0.5 rounded-md transition-colors"
-        style={{
-          height: 32,
-          color: active ? "var(--text)" : "var(--text-muted)",
-          background: active ? "var(--accent-dim)" : "transparent",
-          boxShadow: active
-            ? "inset 0 0 0 1px color-mix(in oklab, var(--accent) 22%, transparent)"
-            : "none",
-        }}
+        className="nav-item-collapsed relative flex items-center justify-center mx-1 my-0.5"
+        data-active={active || undefined}
         data-tooltip={item.label}
       >
         <Icon size={15} strokeWidth={active ? 2 : 1.7} />
@@ -118,31 +111,9 @@ export function NavLink({ item, onClick, collapsed, count = 0, unseen = false }:
       onClick={onClick}
       className="nav-item relative flex items-center gap-2.5 overflow-hidden"
       data-active={active || undefined}
-      style={{
-        padding: "6px 10px",
-        borderRadius: 6,
-        fontSize: 13,
-        color: active ? "var(--text)" : "var(--text-muted)",
-        background: active ? "var(--accent-dim)" : "transparent",
-        boxShadow: active ? "inset 0 0 0 1px color-mix(in oklab, var(--accent) 22%, transparent)" : "none",
-      }}
     >
-      {/* 2px left-rail accent for active items - grows in via .nav-rail */}
-      {active && (
-        <span
-          aria-hidden
-          className="nav-rail"
-          style={{
-            position: "absolute",
-            left: 0,
-            top: 4,
-            bottom: 4,
-            width: 2,
-            borderRadius: 1,
-            background: "var(--accent)",
-          }}
-        />
-      )}
+      {/* 2px left-rail accent for active items — grows in via .nav-rail */}
+      {active && <span aria-hidden className="nav-rail" />}
       {/* Unseen activity dot at left edge (non-active rows). */}
       {unseen && !active && (
         <span
@@ -160,8 +131,8 @@ export function NavLink({ item, onClick, collapsed, count = 0, unseen = false }:
           }}
         />
       )}
-      <Icon size={14} strokeWidth={1.8} style={{ opacity: active ? 0.95 : 0.75 }} />
-      <span style={{ fontWeight: active ? 600 : 500 }}>{item.label}</span>
+      <Icon size={14} strokeWidth={1.8} className="nav-item-icon" />
+      <span className="nav-item-label">{item.label}</span>
       <span className="flex-1" />
       {/* Count badge - only when > 0 */}
       {count > 0 && (

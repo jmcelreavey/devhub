@@ -156,7 +156,7 @@ export function MasterChecklistCard({
                 </div>
                 <button
                   type="button"
-                  className="btn btn-ghost shrink-0 opacity-0 transition-opacity group-hover/item:opacity-100"
+                  className="btn btn-ghost shrink-0 reveal-on-hover transition-opacity"
                   style={{ padding: "4px 6px", color: "var(--text-subtle)" }}
                   title={`Rename ${item.name}`}
                   onClick={() => {

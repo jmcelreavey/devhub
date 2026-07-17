@@ -59,11 +59,12 @@ export function ConflictResolverPanel() {
   }
 
   if (isLoading) return <LoadingLine message="Checking for merge conflicts…" />;
-  if (error) return <FetchError message={error.message} onRetry={() => void mutate()} />;
+  if (error) return <FetchError message={error.message} onRetry={() => void mutate()} bare />;
 
   if (conflicts.length === 0) {
     return (
       <EmptyState
+        bare
         icon={<Check size={28} style={{ color: "var(--success)" }} />}
         title="No merge conflicts"
         subtitle="Content sync paths are clean - no unmerged files or conflict markers."
@@ -72,7 +73,7 @@ export function ConflictResolverPanel() {
   }
 
   return (
-    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+    <div style={{ padding: 0, overflow: "hidden" }}>
       <div
         className="flex items-center justify-between gap-3 px-4 py-3"
         style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}
@@ -96,12 +97,8 @@ export function ConflictResolverPanel() {
               key={c.path}
               type="button"
               onClick={() => selectConflict(c.path)}
-              className="w-full text-left px-3 py-2.5 text-xs"
-              style={{
-                background: activePath === c.path ? "var(--accent-dim)" : "transparent",
-                color: activePath === c.path ? "var(--text)" : "var(--text-muted)",
-                borderBottom: "1px solid var(--border-muted)",
-              }}
+              className="conflict-path-row"
+              data-active={activePath === c.path || undefined}
             >
               <div className="font-medium truncate">{c.path}</div>
               <div style={{ color: "var(--text-subtle)", marginTop: 2 }}>

@@ -9,7 +9,7 @@ export const blocknoteDashboardTheme = {
     menu: { text: "var(--text)", background: "var(--bg-elevated)" },
     tooltip: { text: "var(--text)", background: "var(--bg-elevated)" },
     hovered: { text: "var(--text)", background: "var(--bg-overlay)" },
-    selected: { text: "#ffffff", background: "var(--accent)" },
+    selected: { text: "var(--accent-fg)", background: "var(--accent)" },
     disabled: { text: "var(--text-subtle)", background: "var(--bg-surface)" },
     shadow: "var(--border)",
     border: "var(--border)",

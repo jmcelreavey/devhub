@@ -530,7 +530,7 @@ export function IconPicker({
               display: "flex",
               flexDirection: "column",
               overflow: "hidden",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+              boxShadow: "var(--shadow-popover)",
             }}
           >
             {/* Brand section - only when a plugin whitelabels the logo, so the user can
@@ -538,7 +538,7 @@ export function IconPicker({
             {!search && HAS_PLUGIN_BRAND && (
               <div style={{ borderBottom: "1px solid var(--border)" }}>
                 <div style={{ padding: "8px 12px 4px" }}>
-                  <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-subtle)", letterSpacing: "-0.01em" }}>
                     Brand
                   </span>
                 </div>
@@ -583,7 +583,7 @@ export function IconPicker({
                     padding: "8px 12px 4px",
                   }}
                 >
-                  <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-subtle)", letterSpacing: "-0.01em" }}>
                     Seasonal
                   </span>
                   {seasonalEntry && (
@@ -631,12 +631,13 @@ export function IconPicker({
                         title={s.label}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (s.fullIcon && (s.emoji || s.markId)) {
+                          // Prefer SVG seasonal marks; skip emoji-as-chrome when no markId
+                          if (s.fullIcon && s.markId) {
                             pick(
                               encodePinnedGlyph({
                                 icon: s.iconName,
                                 label: s.label,
-                                emoji: s.emoji ?? "",
+                                emoji: "",
                                 markId: s.markId,
                               }),
                             );
@@ -672,9 +673,8 @@ export function IconPicker({
                           }
                         }}
                       >
-                        {s.fullIcon && (s.emoji || s.markId) ? (
+                        {s.fullIcon && s.markId ? (
                           <SeasonalGlyphVisual
-                            emoji={s.emoji}
                             markId={s.markId}
                             markPixels={PICKER_GLYPH_MARK_PX}
                             emojiPixels={PICKER_GLYPH_EMOJI_PX}
@@ -690,7 +690,7 @@ export function IconPicker({
             )}
             <div style={{ padding: "8px", borderBottom: "1px solid var(--border)" }}>
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: "var(--text-subtle)" }}>
+                <span className="text-[11px] font-semibold tracking-tight" style={{ color: "var(--text-subtle)" }}>
                   Icon
                 </span>
                 <button

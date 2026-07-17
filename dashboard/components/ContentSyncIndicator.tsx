@@ -1,31 +1,67 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, CloudUpload } from "lucide-react";
+import { AlertTriangle, CloudUpload, Loader2, Upload } from "lucide-react";
 import { revalidateScriptsHistory } from "@/lib/scripts-history-swr";
+import {
+  detectGitHookFailureFromLog,
+  HOOK_FAILURE_LOG_REL,
+  type GitHookFailurePayload,
+} from "@/lib/git-hook-failure";
 import { useToast } from "@/lib/use-toast";
 import { waitForScriptRun } from "@/lib/wait-for-script-run";
-import { CommitMessageModal, defaultCommitCheckpointMessage } from "@/components/CommitMessageModal";
 import { HoverTip } from "@/components/HoverTip";
+import { GitHookFailureDialog } from "@/components/repo-git/GitHookFailureDialog";
+import {
+  RepoGitWorkspace,
+  type RepoGitTabId,
+} from "@/components/repo-git/RepoGitWorkspace";
 
 interface GitSyncState {
   dirtyCount: number;
+  otherDirtyCount?: number;
   notesCount: number;
   tasksCount: number;
   diagramsCount: number;
   docsCount: number;
+  ahead: number;
   behind: number;
   conflictCount?: number;
+  repoName?: string;
+  repoPath?: string;
 }
 
 const EMPTY_GIT_SYNC: GitSyncState = {
   dirtyCount: 0,
+  otherDirtyCount: 0,
   notesCount: 0,
   tasksCount: 0,
   diagramsCount: 0,
   docsCount: 0,
+  ahead: 0,
   behind: 0,
 };
+
+/** Map orchestrator stdout lines → short topbar phase labels. */
+function syncPhaseFromLine(line: string): string | null {
+  const l = line.toLowerCase();
+  if (l.includes("staging")) return "Staging…";
+  if (l.includes("committing")) return "Committing…";
+  if (
+    l.includes("pushing to origin") ||
+    l.includes("retrying with --set-upstream") ||
+    l.includes("publishing branch")
+  ) {
+    return "Pushing (hooks may take a minute)…";
+  }
+  if (l.includes("unpushed commit") && l.includes("found")) return "Pushing…";
+  if (l.includes("checking for remote") || l.includes("pulling")) return "Updating…";
+  return null;
+}
+
+function contentChangeCount(git: GitSyncState): number {
+  return git.notesCount + git.tasksCount + git.diagramsCount + (git.docsCount ?? 0);
+}
 
 async function loadGitSyncState(): Promise<GitSyncState> {
   const git = (await fetch("/api/status/git")
@@ -40,8 +76,9 @@ async function loadGitSyncState(): Promise<GitSyncState> {
 
 /**
  * Pending-changes indicator: a one-tap "sync notes/tasks/diagrams" button
- * plus a "commit & push other dirty files" button (with message modal).
- * Self-hides when the working tree is clean.
+ * plus a warning control that opens the DevHub Git workspace for non-content
+ * dirty files / conflicts (or pulls when only behind).
+ * Self-hides when the working tree is clean and fully pushed.
  *
  * Single source of truth for the content-sync workflow — used by the
  * desktop HubTopBar and the mobile top bar so the two never drift.
@@ -49,33 +86,39 @@ async function loadGitSyncState(): Promise<GitSyncState> {
 export function ContentSyncIndicator() {
   const toast = useToast();
   const [gitDirty, setGitDirty] = useState<GitSyncState>(EMPTY_GIT_SYNC);
-  const [cleaning, setCleaning] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncPhase, setSyncPhase] = useState("Syncing…");
   const [updating, setUpdating] = useState(false);
-  const [commitModalOpen, setCommitModalOpen] = useState(false);
+  const [gitOpen, setGitOpen] = useState(false);
+  const [gitTab, setGitTab] = useState<RepoGitTabId>("changes");
+  const [hookFailure, setHookFailure] = useState<GitHookFailurePayload | null>(null);
 
-  const contentChanges =
-    gitDirty.notesCount +
-    gitDirty.tasksCount +
-    gitDirty.diagramsCount +
-    (gitDirty.docsCount ?? 0);
-  const otherDirty = gitDirty.dirtyCount - contentChanges;
+  const contentChanges = contentChangeCount(gitDirty);
+  const otherDirty =
+    typeof gitDirty.otherDirtyCount === "number"
+      ? gitDirty.otherDirtyCount
+      : Math.max(0, gitDirty.dirtyCount - contentChanges);
   const hasConflicts = (gitDirty.conflictCount ?? 0) > 0;
+  const hasUnpushed = gitDirty.ahead > 0;
   const gitActionPending = otherDirty > 0 || gitDirty.behind > 0 || hasConflicts;
-  const gitActionBusy = cleaning || updating;
+  const canOpenWorkspace = Boolean(gitDirty.repoName && gitDirty.repoPath);
+  // Cloud button: sync dirty content, or retry push when only unpushed commits remain.
+  // Stay visible while a push/sync is in flight so phase labels don't vanish mid-hook.
+  const showContentAction =
+    syncing || contentChanges > 0 || (hasUnpushed && !hasConflicts);
 
   const gitActionLabel = (() => {
     if (hasConflicts) {
-      return `${gitDirty.conflictCount} merge conflict${gitDirty.conflictCount !== 1 ? "s" : ""}. Resolve on Status before syncing.`;
+      return `${gitDirty.conflictCount} merge conflict${gitDirty.conflictCount !== 1 ? "s" : ""}. Click to open Git.`;
     }
     if (otherDirty > 0 && gitDirty.behind > 0) {
-      return `${otherDirty} dirty file${otherDirty !== 1 ? "s" : ""} and ${gitDirty.behind} upstream commit${gitDirty.behind !== 1 ? "s" : ""} waiting. Click to commit & push first.`;
+      return `${otherDirty} changed · ${gitDirty.behind} upstream. Open Git to commit before pulling.`;
     }
     if (otherDirty > 0) {
-      return `${otherDirty} dirty file${otherDirty !== 1 ? "s" : ""}.${cleaning ? " Working…" : " Click to commit & push."}`;
+      return `${otherDirty} changed — open Git`;
     }
     if (gitDirty.dirtyCount > 0) {
-      return `${gitDirty.behind} upstream commit${gitDirty.behind !== 1 ? "s" : ""} waiting. Sync or commit local changes before pulling.`;
+      return `${gitDirty.behind} upstream commit${gitDirty.behind !== 1 ? "s" : ""} waiting. Sync content or open Git before pulling.`;
     }
     return `${gitDirty.behind} upstream commit${gitDirty.behind !== 1 ? "s" : ""} waiting.${updating ? " Updating…" : " Click to pull and sync."}`;
   })();
@@ -95,27 +138,105 @@ export function ContentSyncIndicator() {
     };
   }, []);
 
+  async function runScript(
+    script: string,
+    onPhase?: (phase: string) => void,
+  ): Promise<{ code: number; lines: string[] }> {
+    const r = await fetch("/api/scripts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ script }),
+    });
+    if (!r.ok) throw new Error(`Could not start ${script}.`);
+    const { runId } = (await r.json()) as { runId: string };
+    const lines: string[] = [];
+    const code = await waitForScriptRun(runId, {
+      onLine: (line) => {
+        lines.push(line);
+        const phase = syncPhaseFromLine(line);
+        if (phase) onPhase?.(phase);
+      },
+    });
+    // SSE can miss lines on fast failures — pull the persisted run log as backup.
+    if (code !== 0 && lines.length < 8) {
+      try {
+        const logRes = await fetch(`/api/scripts/runs/${runId}`);
+        if (logRes.ok) {
+          const payload = (await logRes.json()) as { lines?: string[] };
+          if (Array.isArray(payload.lines) && payload.lines.length > lines.length) {
+            lines.splice(0, lines.length, ...payload.lines);
+          }
+        }
+      } catch {
+        /* keep streamed lines */
+      }
+    }
+    revalidateScriptsHistory();
+    return { code, lines };
+  }
+
+  function offerHookFailureFromLog(lines: string[], phase: "push" | "commit" = "push"): boolean {
+    const failure = detectGitHookFailureFromLog(lines.join("\n"), phase);
+    if (!failure) return false;
+    setHookFailure({
+      ...failure,
+      logPath: failure.logPath ?? HOOK_FAILURE_LOG_REL,
+    });
+    return true;
+  }
+
   async function syncNotesTasks() {
     if (contentChanges < 1 || syncing || hasConflicts) return;
+    setSyncPhase("Syncing…");
     setSyncing(true);
     try {
-      const r = await fetch("/api/scripts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ script: "sync_notes_tasks_push" }),
-      });
-      if (!r.ok) throw new Error("Could not start sync.");
-      const { runId } = (await r.json()) as { runId: string };
-      const code = await waitForScriptRun(runId);
-      revalidateScriptsHistory();
-      if (code !== 0) {
-        toast.error(`Notes sync failed (exit ${code}).`);
+      const { code, lines } = await runScript("sync_notes_tasks_push", setSyncPhase);
+      const next = await loadGitSyncState();
+      setGitDirty(next);
+      const nextContent = contentChangeCount(next);
+      if (code === 0) {
+        toast.success("Notes, checklists, tasks, and docs synced.");
         return;
       }
-      toast.success("Notes, checklists, tasks, and docs synced.");
-      setGitDirty(await loadGitSyncState());
+      // Exit 2 (orchestrator) or content clean + still ahead = commit landed, push did not.
+      if (code === 2 || (nextContent === 0 && next.ahead > 0)) {
+        if (offerHookFailureFromLog(lines, "push")) return;
+        toast.error(
+          `Committed locally, but push failed (exit ${code}). ${next.ahead} unpushed commit${next.ahead !== 1 ? "s" : ""} remain.`,
+        );
+        return;
+      }
+      if (offerHookFailureFromLog(lines, "push") || offerHookFailureFromLog(lines, "commit")) return;
+      toast.error(`Notes sync failed (exit ${code}).`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Sync failed.");
+      setGitDirty(await loadGitSyncState());
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function pushUnpushedCommits() {
+    if (gitDirty.ahead < 1 || syncing || contentChanges > 0 || hasConflicts) return;
+    setSyncPhase("Pushing…");
+    setSyncing(true);
+    try {
+      const { code, lines } = await runScript("push_unpushed_commits", setSyncPhase);
+      const next = await loadGitSyncState();
+      setGitDirty(next);
+      if (code === 0) {
+        toast.success("Pushed unpushed commits.");
+        return;
+      }
+      if (offerHookFailureFromLog(lines, "push")) return;
+      toast.error(
+        next.ahead > 0
+          ? `Push failed (exit ${code}). ${next.ahead} unpushed commit${next.ahead !== 1 ? "s" : ""} remain.`
+          : `Push failed (exit ${code}).`,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Push failed.");
+      setGitDirty(await loadGitSyncState());
     } finally {
       setSyncing(false);
     }
@@ -130,67 +251,92 @@ export function ContentSyncIndicator() {
 
     setUpdating(true);
     try {
-      const r = await fetch("/api/scripts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ script: "update_and_sync" }),
-      });
-      if (!r.ok) throw new Error("Could not start Update & Sync.");
-      const { runId } = (await r.json()) as { runId: string };
-      const code = await waitForScriptRun(runId);
-      revalidateScriptsHistory();
+      const { code } = await runScript("update_and_sync");
+      setGitDirty(await loadGitSyncState());
       if (code !== 0) {
         toast.error(`Update & Sync failed (exit ${code}).`);
         return;
       }
       toast.success("Pulled upstream commits and synced.");
-      setGitDirty(await loadGitSyncState());
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Update & Sync failed.");
+      setGitDirty(await loadGitSyncState());
     } finally {
       setUpdating(false);
     }
   }
 
-  async function commitDirtyWithMessage(message: string) {
-    if (otherDirty < 1 || cleaning) return;
-    setCleaning(true);
-    try {
-      const r = await fetch("/api/scripts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ script: "commit_dirty_push", commitMessage: message }),
-      });
-      if (!r.ok) throw new Error("Could not start Commit & Push.");
-      const { runId } = (await r.json()) as { runId: string };
-      const code = await waitForScriptRun(runId);
-      revalidateScriptsHistory();
-      if (code !== 0) {
-        toast.error(`Commit & Push failed (exit ${code}).`);
-        return;
-      }
-      toast.success("Committed and pushed dirty files.");
-      setGitDirty(await loadGitSyncState());
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Commit & Push failed.");
-    } finally {
-      setCleaning(false);
+  function openGitWorkspace(tab: RepoGitTabId = "changes") {
+    if (!canOpenWorkspace) {
+      toast.error("Could not resolve this DevHub checkout for Git.");
+      return;
     }
+    setGitTab(tab);
+    setGitOpen(true);
   }
 
   function handleGitAction() {
     if (hasConflicts) {
-      window.location.href = "/status";
+      openGitWorkspace("conflicts");
       return;
     }
     if (otherDirty > 0) {
-      setCommitModalOpen(true);
+      openGitWorkspace("changes");
       return;
     }
     void updateAndSync();
   }
 
-  if (contentChanges < 1 && otherDirty < 1 && gitDirty.behind < 1 && !hasConflicts) return null;
+  function handleContentAction() {
+    if (contentChanges > 0) {
+      void syncNotesTasks();
+      return;
+    }
+    void pushUnpushedCommits();
+  }
+
+  // Stay mounted while the Git modal / hook dialog is open so a mid-session
+  // clean doesn't tear down the portal under the user. Keep visible for
+  // unpushed commits too — otherwise a commit+failed-push looks like success.
+  // Also stay up while a content sync/push is in flight (long pre-push hooks).
+  if (
+    !gitOpen &&
+    !hookFailure &&
+    !syncing &&
+    !updating &&
+    contentChanges < 1 &&
+    otherDirty < 1 &&
+    gitDirty.behind < 1 &&
+    !hasConflicts &&
+    !hasUnpushed
+  ) {
+    return null;
+  }
+
+  const contentActionLabel = (() => {
+    if (syncing) return syncPhase;
+    if (contentChanges > 0) {
+      return `${contentChanges} content change${contentChanges !== 1 ? "s" : ""}. Click to sync.`;
+    }
+    return `${gitDirty.ahead} unpushed commit${gitDirty.ahead !== 1 ? "s" : ""}. Click to push.`;
+  })();
+
+  const contentBusyStyle = syncing
+    ? {
+        color: "var(--accent)",
+        width: "auto" as const,
+        minWidth: 28,
+        padding: "0 8px",
+        gap: 6,
+        display: "inline-flex" as const,
+        alignItems: "center" as const,
+        fontSize: 11,
+        fontWeight: 500,
+        letterSpacing: "0.01em",
+        whiteSpace: "nowrap" as const,
+        cursor: "wait" as const,
+      }
+    : { color: "var(--accent)" };
 
   return (
     <>
@@ -199,22 +345,33 @@ export function ContentSyncIndicator() {
         className="hub-cluster"
         aria-label="Pending changes"
       >
-        {contentChanges > 0 && (
-          <HoverTip
-            label={`${contentChanges} content change${contentChanges !== 1 ? "s" : ""}.${
-              syncing ? " Syncing…" : " Click to sync."
-            }`}
-            pos="bottom-end"
-          >
+        {showContentAction && (
+          <HoverTip label={contentActionLabel} pos="bottom-end">
             <button
               type="button"
               className="hub-icon-btn"
-              onClick={() => void syncNotesTasks()}
-              aria-label={`Sync ${contentChanges} content changes`}
-              style={{ color: "var(--accent)" }}
+              onClick={handleContentAction}
+              aria-label={
+                syncing
+                  ? syncPhase
+                  : contentChanges > 0
+                    ? `Sync ${contentChanges} content changes`
+                    : `Push ${gitDirty.ahead} unpushed commits`
+              }
+              aria-busy={syncing}
+              style={contentBusyStyle}
               disabled={syncing}
             >
-              <CloudUpload size={14} aria-hidden className={syncing ? "animate-pulse" : ""} />
+              {syncing ? (
+                <>
+                  <Loader2 size={14} aria-hidden className="animate-spin" />
+                  <span aria-live="polite">{syncPhase}</span>
+                </>
+              ) : contentChanges > 0 ? (
+                <CloudUpload size={14} aria-hidden />
+              ) : (
+                <Upload size={14} aria-hidden />
+              )}
             </button>
           </HoverTip>
         )}
@@ -227,35 +384,56 @@ export function ContentSyncIndicator() {
               type="button"
               className="hub-icon-btn"
               onClick={handleGitAction}
-              aria-label="Resolve pending git changes"
+              aria-label={
+                updating
+                  ? "Updating…"
+                  : otherDirty > 0 || hasConflicts
+                    ? "Open Git workspace"
+                    : "Pull and sync upstream commits"
+              }
+              aria-busy={updating}
               style={{ color: "var(--warning)" }}
-              disabled={gitActionBusy}
+              disabled={updating}
             >
-              <AlertTriangle size={14} aria-hidden className={gitActionBusy ? "animate-pulse" : ""} />
+              {updating ? (
+                <Loader2 size={14} aria-hidden className="animate-spin" />
+              ) : (
+                <AlertTriangle size={14} aria-hidden />
+              )}
             </button>
           </HoverTip>
         )}
       </span>
 
-      <CommitMessageModal
-        open={commitModalOpen}
-        onClose={() => setCommitModalOpen(false)}
-        title="Commit & push dirty files"
-        description="Stage all changes, commit, and push to origin."
-        defaultMessage={defaultCommitCheckpointMessage()}
-        confirmLabel="Commit & push"
-        variant="warning"
-        fileStats={{
-          notes: gitDirty.notesCount,
-          tasks: gitDirty.tasksCount,
-          diagrams: gitDirty.diagramsCount,
-          other: otherDirty,
-        }}
-        onConfirm={(msg) => {
-          setCommitModalOpen(false);
-          void commitDirtyWithMessage(msg);
-        }}
-      />
+      {/* Keep mounted while open even if dirty/ahead briefly flickers after commit —
+          otherwise the portal unmounts and the modal feels like it "closed". */}
+      {(canOpenWorkspace || gitOpen) && gitDirty.repoName && gitDirty.repoPath && (
+        <RepoGitWorkspace
+          repoName={gitDirty.repoName}
+          repoPath={gitDirty.repoPath}
+          dirtyCount={otherDirty}
+          unpushedCount={gitDirty.ahead}
+          hideTrigger
+          open={gitOpen}
+          onOpenChange={(next) => {
+            setGitOpen(next);
+            if (!next) void loadGitSyncState().then(setGitDirty);
+          }}
+          initialTab={gitTab}
+          onMutate={() => {
+            void loadGitSyncState().then(setGitDirty);
+          }}
+        />
+      )}
+
+      {canOpenWorkspace && (
+        <GitHookFailureDialog
+          failure={hookFailure}
+          repoName={gitDirty.repoName!}
+          repoPath={gitDirty.repoPath!}
+          onClose={() => setHookFailure(null)}
+        />
+      )}
     </>
   );
 }

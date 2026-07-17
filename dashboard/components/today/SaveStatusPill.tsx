@@ -11,13 +11,12 @@ export function SaveStatusPill({ status }: { status: "idle" | "saving" | "saved"
   const { label, color } = SAVE_STATUS_CONFIG[status];
   return (
     <span
-      className="flex items-center gap-1 overflow-hidden rounded text-xs"
+      className="inline-flex items-center gap-1.5 overflow-hidden rounded text-xs"
       style={{
         color,
         background: `color-mix(in oklab, ${color} 10%, transparent)`,
         paddingInline: "6px",
         paddingBlock: "2px",
-        borderLeft: `2px solid ${color}`,
       }}
     >
       {label}

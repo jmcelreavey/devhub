@@ -614,7 +614,7 @@ function BlockNoteEditorReady({
           style={{
             borderColor: "var(--border)",
             background: "var(--bg-surface)",
-            boxShadow: "0 18px 60px rgba(0, 0, 0, 0.45)",
+            boxShadow: "var(--shadow-elevated-strong)",
             color: "var(--text-muted)",
           }}
           role="dialog"

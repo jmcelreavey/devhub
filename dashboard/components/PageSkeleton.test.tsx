@@ -48,4 +48,10 @@ describe("EmptyState quips", () => {
     const b = renderToStaticMarkup(<EmptyState title="t" quips={quips} />);
     expect(a).toBe(b);
   });
+
+  it("bare omits the card chrome", () => {
+    const html = renderToStaticMarkup(<EmptyState bare title="Inside a card" />);
+    expect(html).not.toContain('class="card');
+    expect(html).toContain("Inside a card");
+  });
 });

@@ -5,7 +5,7 @@
 export function StatusDot({ ok }: { ok: boolean }) {
   return (
     <span
-      className="inline-block h-2 w-2 shrink-0 rounded-full"
+      className="inline-block h-2 w-2 shrink-0 rounded-[var(--radius-sm)]"
       style={{ background: ok ? "var(--success)" : "var(--danger)" }}
       aria-hidden
     />

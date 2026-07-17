@@ -1,6 +1,6 @@
 import { cloneLayout, verticalCompactor, type LayoutItem, type ResponsiveLayouts } from "react-grid-layout";
 
-export const TODAY_GRID_STORAGE_KEY = "devhub-today-grid-layouts-v9";
+export const TODAY_GRID_STORAGE_KEY = "devhub-today-grid-layouts-v10";
 
 export const TODAY_GRID_BREAKPOINTS = { lg: 1200, md: 996, sm: 768, xs: 0 } as const;
 
@@ -77,27 +77,28 @@ export function applyHeightPatchAndCompact(
 
 const LG: LayoutItem[] = [
   { i: "welcome", x: 0, y: 0, w: 12, h: 2, minW: 12, maxW: 12, minH: 2 },
-  { i: "briefing", x: 0, y: 2, w: 12, h: 3, minW: 4, minH: 2 },
+  /* Side-by-side with calendar at matching height so the top row reads as one band. */
+  { i: "briefing", x: 0, y: 2, w: 8, h: 7, minW: 4, minH: 6 },
+  { i: "calendar", x: 8, y: 2, w: 4, h: 7, minW: 3, minH: 2 },
   { i: "datadog", x: 0, y: 0, w: 7, h: 4, minH: 2 },
-  { i: "main", x: 0, y: 2, w: 8, h: 18, minW: 5, minH: 6 },
-  { i: "calendar", x: 8, y: 2, w: 4, h: 4, minW: 3, minH: 2 },
-  { i: "jira", x: 8, y: 0, w: 4, h: 14, minW: 3, minH: 2 },
-  { i: "github", x: 8, y: 6, w: 4, h: 8, minW: 3, minH: 2 },
+  { i: "main", x: 0, y: 9, w: 8, h: 14, minW: 5, minH: 6 },
+  { i: "jira", x: 8, y: 9, w: 4, h: 14, minW: 3, minH: 2 },
+  { i: "github", x: 0, y: 23, w: 12, h: 8, minW: 3, minH: 2 },
 ];
 
 const MD: LayoutItem[] = [
   { i: "welcome", x: 0, y: 0, w: 12, h: 2, minW: 12, maxW: 12, minH: 2 },
-  { i: "briefing", x: 0, y: 2, w: 12, h: 3, minW: 4, minH: 2 },
-  { i: "main", x: 0, y: 2, w: 8, h: 16, minW: 5, minH: 6 },
-  { i: "calendar", x: 8, y: 2, w: 4, h: 4, minW: 3, minH: 2 },
-  { i: "jira", x: 8, y: 6, w: 4, h: 8, minW: 3, minH: 2 },
-  { i: "github", x: 8, y: 14, w: 4, h: 6, minW: 3, minH: 2 },
-  { i: "datadog", x: 0, y: 18, w: 12, h: 4, minH: 2 },
+  { i: "briefing", x: 0, y: 2, w: 8, h: 7, minW: 4, minH: 6 },
+  { i: "calendar", x: 8, y: 2, w: 4, h: 7, minW: 3, minH: 2 },
+  { i: "main", x: 0, y: 9, w: 8, h: 14, minW: 5, minH: 6 },
+  { i: "jira", x: 8, y: 9, w: 4, h: 14, minW: 3, minH: 2 },
+  { i: "github", x: 0, y: 23, w: 12, h: 6, minW: 3, minH: 2 },
+  { i: "datadog", x: 0, y: 29, w: 12, h: 4, minH: 2 },
 ];
 
 const SM: LayoutItem[] = [
   { i: "welcome", x: 0, y: 0, w: 12, h: 2, minW: 12, maxW: 12, minH: 2 },
-  { i: "briefing", x: 0, y: 2, w: 12, h: 3, minW: 12, minH: 2 },
+  { i: "briefing", x: 0, y: 2, w: 12, h: 7, minW: 12, minH: 6 },
   { i: "main", x: 0, y: 2, w: 12, h: 16, minW: 12, minH: 6 },
   { i: "calendar", x: 0, y: 18, w: 12, h: 4, minW: 12, minH: 2 },
   { i: "github", x: 0, y: 22, w: 12, h: 6, minW: 12, minH: 2 },
@@ -194,6 +195,16 @@ function normalizeSavedItem(saved: LayoutItem, fallback: LayoutItem): LayoutItem
   if (next.i === "datadog" && saved.h === 5) {
     next.h = fallback.h;
   } else if (legacyOversizedHeight === saved.h && fallback.h < saved.h) {
+    next.h = fallback.h;
+  }
+
+  // Pre-hero briefing tiles were h:3 (~80px) and clipped the weather block — lift to the new default.
+  if (next.i === "briefing" && saved.h <= 5 && fallback.h > saved.h) {
+    next.h = fallback.h;
+  }
+
+  // Stub calendar tiles looked empty beside a matched-height briefing band.
+  if (next.i === "calendar" && saved.h <= 4 && fallback.h > saved.h) {
     next.h = fallback.h;
   }
 

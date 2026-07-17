@@ -57,7 +57,7 @@ function CopyRefButton({ path }: { path: string }) {
     <button
       type="button"
       title={`Copy reference: ${path}`}
-      className="shrink-0 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+      className="shrink-0 rounded p-0.5 reveal-on-hover transition-opacity"
       style={{ color: copied ? "var(--success)" : "var(--text-subtle)" }}
       onClick={handleClick}
     >

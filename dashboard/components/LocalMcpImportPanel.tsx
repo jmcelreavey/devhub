@@ -245,7 +245,7 @@ export function LocalMcpImportPanel({ onImported }: Props) {
               style={{
                 background: "var(--bg)",
                 color: "var(--text-muted)",
-                fontFamily: '"SFMono-Regular", Consolas, monospace',
+                fontFamily: "var(--font-mono)",
               }}
             >
               {log.join("\n")}

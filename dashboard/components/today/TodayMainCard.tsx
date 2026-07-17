@@ -156,7 +156,7 @@ export function TodayMainCard({
                 onChange={onNoteChange}
                 vaultId="notes"
                 contentSlug={todayPath}
-                style={{ minHeight: "50vh" }}
+                style={{ minHeight: 0, height: "100%", flex: 1 }}
               />
             ) : (
               <div className="space-y-3">

@@ -90,7 +90,7 @@ export function TaskRefBlockView({ taskId, date, label }: TaskRefBlockViewProps)
       </span>
       <a
         href="/work?tab=tasks"
-        className="hub-icon-btn opacity-0 group-hover:opacity-100"
+        className="hub-icon-btn reveal-on-hover"
         title="Open in Work"
         aria-label="Open in Work"
         contentEditable={false}

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Calendar, Sparkles, Plus, GitBranch, Activity, X } from "lucide-react";
+import { ArrowRight, Calendar, LayoutDashboard, Plus, GitBranch, Activity, X } from "lucide-react";
 import { useLive } from "@/lib/use-fetch";
 import { TodayCollapseButton } from "@/components/TodayCollapseButton";
 
@@ -75,8 +75,8 @@ export function WelcomeCard({ visible, collapsed, onToggle }: WelcomeCardProps) 
       data-collapsed={collapsed ? "true" : undefined}
       aria-label="Welcome"
     >
-      <div className="welcome-icon">
-        <Sparkles size={18} aria-hidden />
+      <div className="welcome-icon" aria-hidden>
+        <LayoutDashboard size={16} />
       </div>
       <div className="welcome-body">
         <div className="welcome-head">

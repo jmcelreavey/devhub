@@ -41,9 +41,8 @@ export function MobileBottomShelf() {
       className="md:hidden fixed bottom-0 left-0 right-0 z-40 overflow-hidden"
       style={{
         height: shelfH,
-        background: "var(--bg-sidebar, #0a0d12)",
+        background: "var(--bg-sidebar)",
         borderTop: "1px solid var(--border-muted)",
-        transition: "height 200ms ease",
       }}
     >
       {/* Collapse / expand grabber - always visible */}

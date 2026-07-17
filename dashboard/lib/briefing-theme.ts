@@ -6,6 +6,10 @@
 // <html data-theme=...> and passes them to the canvas, which grounds its whole
 // design in them. Pure/DOM-only here (no node imports) so both client and server
 // can use it.
+//
+// Quarantine: canvas CSS must only consume --app-* vars injected from this
+// bridge (see Hallmark stamp on globals.css). Hex values below exist solely as
+// SSR / decode mirrors of named shell tokens — never invent colours at call sites.
 
 export interface CanvasTheme {
   mode: "dark" | "light";
@@ -20,30 +24,32 @@ export interface CanvasTheme {
   accentFg: string;
 }
 
+/** Mirrors Graphite Neon dark (`--bg`, `--bg-surface`, …). */
 export const FALLBACK_DARK_THEME: CanvasTheme = {
   mode: "dark",
-  bg: "#0f1216",
-  surface: "#161a1f",
-  elevated: "#1c2127",
-  text: "#e7ecf3",
-  muted: "#9aa7b8",
-  subtle: "#66748a",
-  border: "#262b33",
-  accent: "#4f8cff",
-  accentFg: "#ffffff",
+  bg: "#111416",
+  surface: "#1b2024",
+  elevated: "#232a30",
+  text: "#ebeff3",
+  muted: "#a5b0ba",
+  subtle: "#7d8892",
+  border: "#37414b",
+  accent: "#9ed84a",
+  accentFg: "#121710",
 };
 
+/** Mirrors Graphite Neon light. */
 const FALLBACK_LIGHT_THEME: CanvasTheme = {
   mode: "light",
   bg: "#f7f8f9",
-  surface: "#ffffff",
-  elevated: "#ffffff",
-  text: "#1a1d21",
-  muted: "#5a6472",
-  subtle: "#8a94a3",
-  border: "#e3e6ea",
-  accent: "#2f6bff",
-  accentFg: "#ffffff",
+  surface: "#f7f8f9",
+  elevated: "#f1f4f7",
+  text: "#1f2a33",
+  muted: "#4f6171",
+  subtle: "#637281",
+  border: "#cfd8df",
+  accent: "#5d9e10",
+  accentFg: "#f7f8f9",
 };
 
 /** Colour values only ever come from computed CSS; keep them to a safe charset. */

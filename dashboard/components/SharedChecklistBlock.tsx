@@ -393,7 +393,7 @@ export function SharedChecklistBlockView({
         aria-orientation="vertical"
         aria-label="Resize checklist"
         title="Drag to resize"
-        className="absolute right-0 top-0 h-full w-1.5 cursor-ew-resize select-none opacity-0 transition-opacity group-hover:opacity-100 hover:bg-[var(--accent)]"
+        className="absolute right-0 top-0 h-full w-1.5 cursor-ew-resize select-none reveal-on-hover transition-opacity hover:bg-[var(--accent)]"
         style={{ borderTopRightRadius: "inherit", borderBottomRightRadius: "inherit" }}
       />
     </div>
