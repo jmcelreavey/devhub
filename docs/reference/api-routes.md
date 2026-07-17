@@ -56,7 +56,8 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | `GET /api/dashboard/morning-briefing` | Today briefing widget, `/briefing`, MCP `briefing_get` | Returns structured briefing data plus a rendered `text` summary. Cached per calendar day under `notes/.cache/briefing/`; `?refresh=1` bypasses the cache. AI sections fall back gracefully when `AI_API_KEY` is unset. |
 | `GET /api/briefing/canvas` | `/briefing` iframe | Returns same-origin HTML for the bespoke briefing canvas (`?refresh=1`, `?theme=`). |
 | `GET /api/briefing/data` | Briefing design UI | Returns live briefing context JSON for the canvas editor. |
-| `POST /api/briefing/design` | Briefing **Design** chat | Streams AI-assisted canvas edits. Requires `AI_API_KEY`. |
+| `POST /api/briefing/design` | Briefing **Design** chat | Plans and applies canvas layout edits; returns JSON with `reply`, `canvasUpdated`, and added feeds/tasks. Requires `AI_API_KEY`. |
+| `GET /api/briefing/image` | Briefing canvas `<img>` / CSS | `?prompt=` (required), `?size=` (`1024x1024`, `1536x1024`, `1024x1536`). Returns cached PNG when image AI is configured; `404` otherwise. |
 | `GET/POST /api/briefing/share` | Briefing share links | Read or create secret gist links for the current canvas. |
 | `GET/POST/PATCH/DELETE /api/briefing/tasks` | Briefing task queue | CRUD for follow-up tasks surfaced on the briefing page. |
 | `GET /api/agent-cli`, `PUT /api/agent-cli` | Setup → Agent CLI, Skills → Agent CLI | `GET` returns `{ cli, opencodeModel, cursorModel, cursorAgentInstalled }`. `PUT` persists `DEVHUB_AGENT_*` keys to `.env.local`. Cursor option rejected when `cursor-agent` is not on `PATH`. |
@@ -86,8 +87,24 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | `POST /api/repos/<name>/open-gitkraken` | Repos **Open in GitKraken** | macOS uses the `gitkraken://` URL scheme; Linux spawns `gitkraken -p`. |
 | `POST /api/repos/<name>/compose-up` | Repos **Compose up** | Runs `docker compose up -d` in the repo root (120s timeout). Shown only when `hasCompose` is true. |
 | `GET /api/repos/<name>/learn`, `GET /api/repos/<name>/learn/status`, `GET /api/repos/<name>/learn/pack.zip`, `POST /api/repos/<name>/learn/tutor` | Repo Learning panel | Resolves sibling git checkouts only. Deterministic facts work without AI; generated briefs, NotebookLM packs, and tutor responses require `AI_API_KEY`. |
+
+### Repo Git routes
+
+Sibling-repo git operations power `RepoGitWorkspace` on `/repos` and the DevHub top-bar warning control. All routes resolve `<name>` through the repo scan directory (`resolveScannedRepo`); unknown names return `404`.
+
+| Route | Method | Purpose |
+| ----- | ------ | ------- |
+| `/api/repos/<name>/git/status` | GET | Porcelain status, staged/unstaged split, `conflictCount`. DevHub checkout omits personal-content paths (`contentSyncCount`). |
+| `/api/repos/<name>/git/diff` | GET | Unified diff for a path (`?path=`, `?staged=1`). |
+| `/api/repos/<name>/git/stage` | POST | `action`: `stage`, `unstage`, `discard`, `stage-hunk`, `unstage-hunk` with `path`/`paths`/`rawDiff`/`hunkIndex`. |
+| `/api/repos/<name>/git/commit-message` | POST | AI conventional commit message from staged diff (`AI_API_KEY`). |
+| `/api/repos/<name>/git/conflicts` | GET/POST | List conflicted files with content; save resolved content (`path`, `content`). |
+| `/api/repos/<name>/git/stash`, `/git/stash-message` | GET/POST | Stash list, apply/pop/drop, AI stash message. |
+| `/api/repos/<name>/git/log`, `/git/show`, `/git/blame` | GET | History graph, commit show, porcelain blame. |
+| `/api/repos/<name>/branches` | GET/POST | List branches; `action`: `checkout`, `create`, `delete`, `pull`, `push`, `commit` (with `message`, `mode`). Push/commit return `422` with hook-failure payload when pre-push verify fails. |
+
 | `GET /api/learnings` | Learnings browser | Without query: `{ entries }` from `notes/learnings/`. With `?category=<slug>`: returns one learning detail or `404`. |
-| `GET /api/status/git` | Top-bar sync indicator, Status page | Returns `branch`, `dirtyCount`, `contentDirtyCount`, `otherDirtyCount`, per-bucket counts (`notesCount`, `tasksCount`, `diagramsCount`, `docsCount`), `ahead`/`behind`, `conflictCount`, `conflictFiles`, `lastCommit`, and `hints[]`. Content buckets use configured `NOTES_DIR`, `TASKS_DIR`, `DOCS_DIR`, and `collections/` — relocated paths still count as content when inside the repo. `otherDirtyCount` excludes content; the Status health banner uses it so notes/tasks are not mislabeled as generic dirty paths. Upstream `git fetch` runs at most every four minutes; intermediate polls recount against the last fetched upstream ref. |
+| `GET /api/status/git` | Top-bar sync indicator, Status page | Returns `branch`, `dirtyCount`, `contentDirtyCount`, `otherDirtyCount`, per-bucket counts (`notesCount`, `tasksCount`, `diagramsCount`, `docsCount`), `ahead`/`behind`, `conflictCount`, `conflictFiles`, `lastCommit`, and `hints[]`. Content buckets use `lib/content-sync-dirs.ts` (conventional `notes/`/`tasks/`/`docs/`/`collections/`/`upstarts/`/`diagrams/` prefixes plus configured env dirs inside the repo). `otherDirtyCount` excludes content; the Status health banner uses it so notes/tasks are not mislabeled as generic dirty paths. Upstream `git fetch` runs at most every four minutes; intermediate polls recount against the last fetched upstream ref. |
 | `GET /api/git/conflicts` | Status merge-conflict panel | Lists files with Git unmerged status or conflict markers under scoped content paths and includes readable file content for editing. |
 | `POST /api/git/conflicts` | Status merge-conflict panel | Body: `{ path, content }`. Rejects invalid paths or content that still contains `<<<<<<<` markers; on success writes the content, runs `git add -- <path>`, and returns the remaining conflict count. |
 | `GET /api/status/mcp` | Status MCP panel | Scans running processes for each server in `mcp/shared/`. Returns `command`, `fingerprint`, `binaryExists`, `runningCount`, and `pids`. Bare launch commands (`npx`, `tsx`, `uvx`, …) are considered present when resolvable on `PATH`; path-based commands must exist on disk. |

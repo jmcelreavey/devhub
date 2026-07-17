@@ -67,10 +67,12 @@ BlockNote AI in the notes editor, Repo Learning generated artifacts, and morning
 | `AI_API_KEY`  | Yes      | —                                     | Bearer token for your provider                          |
 | `AI_BASE_URL` | No       | `https://api.z.ai/api/coding/paas/v4` | OpenAI-compatible API base (no trailing slash)          |
 | `AI_MODEL`    | No       | `glm-5-turbo`                         | Model id sent in chat completion requests               |
+| `AI_IMAGE_BASE_URL` | No | mirrors `AI_BASE_URL` when it points at `api.openai.com` | OpenAI-compatible **images** API base for briefing canvas art |
+| `AI_IMAGE_MODEL`    | No | `gpt-image-1` when base is OpenAI     | Image model id (`/images/generations`)                  |
 
 The GLM-specific `thinking` request option is only sent when `AI_BASE_URL`/`AI_MODEL` point at a z.ai GLM model, so other providers (OpenAI, etc.) aren't sent fields they'd reject.
 
-For OpenAI, set `AI_BASE_URL=https://api.openai.com/v1` and `AI_MODEL=gpt-4o-mini` (or similar).
+For OpenAI chat, set `AI_BASE_URL=https://api.openai.com/v1` and `AI_MODEL=gpt-4o-mini` (or similar). Briefing canvas imagery auto-enables on OpenAI bases; for other image endpoints set `AI_IMAGE_BASE_URL` and `AI_IMAGE_MODEL` explicitly. Generated PNGs cache under `~/.cache/devhub/briefing-images/`.
 
 Copy the commented block from `dashboard/.env.example` into `.env.local`, set `AI_API_KEY`, and restart the dev server.
 

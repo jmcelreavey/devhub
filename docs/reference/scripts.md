@@ -126,6 +126,8 @@ DevHub can install a pre-push hook that runs verification before pushing.
 
 The hook (`.githooks/pre-push`) runs `scripts/scan-leaks.sh` then `npm run verify` (lint, typecheck, tests, production build with `DEVHUB_SKIP_NEXT_TYPECHECK=true`). It is wired during `dashboard/scripts/postinstall.ts` and `scripts/install.sh`.
 
+When the active shell's Node does not match `.nvmrc`, the hook sources `nvm.sh` and runs `nvm use` before verify — so pushes from IDEs or GUI clients do not false-fail under a system Node. Install the pinned version (`nvm install` from repo root) if you see a warning about a Node mismatch.
+
 Emergency bypass — use sparingly, then run `npm run verify` locally before merging:
 
 ```bash

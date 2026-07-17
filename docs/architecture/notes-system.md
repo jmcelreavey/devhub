@@ -122,16 +122,18 @@ Open **Docs** in the sidebar (`/docs`) for the file tree, search, and BlockNote 
 
 ### Content sync workflow
 
-Content sync is the low-friction path for personal content that changes while using the dashboard. It is intentionally scoped: `dashboard/lib/content-sync-paths.ts` defines `notes/`, `collections/`, `tasks/`, and `docs/` as the paths staged by the `sync_notes_tasks_push` action.
+Content sync is the low-friction path for personal content that changes while using the dashboard. It is intentionally scoped: `dashboard/lib/content-sync-paths.ts` defines `notes/`, `collections/`, `tasks/`, `docs/`, and `upstarts/` as the paths staged by the `sync_notes_tasks_push` action.
 
 | Surface | Behavior |
 | ------- | -------- |
-| Top bar cloud button | Appears when `/api/status/git` reports dirty content. It starts `POST /api/scripts` with `script: "sync_notes_tasks_push"`, which stages only the scoped content paths, creates an auto-generated `chore(content): ...` commit, and pushes the current branch. |
-| Top bar warning triangle | Handles everything that is not a scoped content sync: non-content dirty files, upstream commits waiting to be pulled, or merge conflicts. Dirty non-content files open the commit-message modal and run `commit_dirty_push`; upstream-only changes run `update_and_sync`; conflicts redirect to `/status`. |
+| Top bar cloud button | Appears when `/api/status/git` reports dirty content (or unpushed commits after a successful content commit). It starts `POST /api/scripts` with `script: "sync_notes_tasks_push"`, which stages only the scoped content paths, creates an auto-generated `chore(content): ...` commit, and pushes the current branch. |
+| Top bar warning triangle | Opens the **Repo Git workspace** when non-content files are dirty or merge conflicts exist; runs `update_and_sync` when only upstream commits are waiting on a clean tree. Pre-push failures show an inline hook-failure dialog. |
 | Status page | Shows repo branch, ahead/behind counts, dirty content vs other dirty files, recent sync failures, merge conflicts, and sync-health checks. Use it when the top bar blocks sync or a scripted action fails. |
 | Actions page | Exposes the same allowlisted script IDs for manual runs and log inspection. `dry_run_scoped_sync` previews the scoped content commit without staging anything. |
 
-`/api/status/git` classifies content using the configured directories (`NOTES_DIR`, `TASKS_DIR`, `DOCS_DIR`, and `collections/`), so relocated notes or tasks still show as content when they live inside the repo. Root `diagrams/` files are also shown as content-adjacent in dirty counts, but the scoped content script stages only `notes/`, `collections/`, `tasks/`, and `docs/`; if a diagram remains after a content sync, use the general commit flow or commit it manually.
+`/api/status/git` classifies content via `lib/content-sync-dirs.ts`. Each bucket always includes its **conventional in-repo folder** (`notes/`, `tasks/`, …) even when `NOTES_DIR` / `TASKS_DIR` env vars point elsewhere — relocated env values must not turn repo content into "other dirty files". A configured dir that resolves inside the repo adds its prefix on top. Root `diagrams/` counts as content-adjacent in dirty badges but is **not** staged by `sync_notes_tasks_push`; commit diagrams through the Repo Git workspace or a manual commit.
+
+In the DevHub checkout, the Repo Git workspace **hides** classified content paths from the Changes tab (`contentSyncCount` on `GET /api/repos/<devhub>/git/status`) so notes/tasks edits do not clutter the code-commit UI. Sibling repos on `/repos` show all files.
 
 #### Conflict recovery
 

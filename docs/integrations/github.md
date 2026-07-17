@@ -41,6 +41,7 @@ See [Sharing](../guides/sharing.md) for the full workflow, security model, and t
 | Clone | `POST /api/repos/clone` | Body `{ fullName: "owner/repo" }`. Clones into the scan directory using the repo name as the folder. |
 | Remove | `DELETE /api/repos/<name>` | Deletes the local folder. Cannot remove the current DevHub checkout. |
 | Open | `POST /api/repos/<name>/open` | Cursor CLI when available. |
+| Open Git | `RepoGitWorkspace` on the card | Full in-dashboard git UI (changes, branches, stash, history, conflicts, blame). Same component as the top-bar warning control for the DevHub checkout. |
 | GitKraken | `POST /api/repos/<name>/open-gitkraken` | When `GET /api/repos/apps` reports `gitkraken: true`. |
 | Compose | `POST /api/repos/<name>/compose-up` | `docker compose up -d` when the repo has a compose file and Docker is available. |
 
@@ -71,6 +72,14 @@ The **Review** action is intentionally local. It streams the explanation and rev
 in DevHub's terminal drawer and tells the skill to save the finished write-up as a
 note through the notes MCP. It does **not** post comments, approve, or request
 changes on GitHub unless the human explicitly asks the tool to do that later.
+
+The `pr-explain-review` skill pulls full PR context before judging the diff:
+
+- **Conversation** — top-level comments, review verdicts, and inline review threads (`gh pr view` + `gh api …/pulls/…/comments`).
+- **Linked ticket** — Jira key from title/branch/body via `jira_ticket_get` when DevHub MCP is available, or the linked GitHub issue via `gh issue view`. Reviews answer "does this PR deliver what the ticket asks?" not just "is the code fine?".
+- **Unresolved threads** — flagged when the diff does not address requested changes.
+
+Saved notes include a **Ticket & Conversation** section when that context exists. See `skills/shared/pr-explain-review/SKILL.md` for the full workflow and note layout.
 
 Review notes use a stable notes path:
 

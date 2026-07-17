@@ -167,9 +167,10 @@ The full briefing page is no longer a fixed React layout. Instead:
 1. **Data assembly** — `lib/briefing/assemble.ts` builds a `BriefingContext` from prefs, feeds, calendar, and optional AI enrichment. Cached once per calendar day under `notes/.cache/briefing/`; `?refresh=1` bypasses the cache.
 2. **Canvas document** — A complete HTML/CSS/JS page persisted in `notes/.config/briefing-canvas.json` (`lib/briefing-canvas.ts`). The default ships in-repo; AI edits stick until you redesign.
 3. **Iframe shell** — `app/briefing/client.tsx` embeds `/api/briefing/canvas?theme=…` so arbitrary canvas CSS cannot touch app chrome. The canvas runs same-origin and reads injected `window.__BRIEFING__` (and may call `/api/briefing/data`).
-4. **Design chat** — `POST /api/briefing/design` streams AI-assisted layout edits when `AI_API_KEY` is set. Reloads the iframe without rebuilding data.
+4. **Design chat** — `POST /api/briefing/design` plans and applies layout edits when `AI_API_KEY` is set. The response includes a deterministic status line (`✓ Done — the canvas has been redrawn…`) so it is obvious whether the iframe reloaded. **Fresh look** requests (new visual identity — anime, neon, retro terminal, etc.) regenerate the canvas from scratch instead of revising in place; content-only tweaks (move/hide a section) keep the current document. Custom aesthetics stick across later edits until you reset.
 5. **Share** — `POST /api/briefing/share` publishes the rendered canvas to a secret gist and returns a preview URL.
 6. **Research queue** — `GET/POST/PATCH/DELETE /api/briefing/tasks` backs the **Research** drawer for follow-up reading tasks tied to briefing interests.
+7. **AI imagery** — When image generation is configured, the canvas can reference `GET /api/briefing/image?prompt=…&size=1536x1024` for same-origin PNG backgrounds and card art. Prompts are cached on disk per model/size; a 404 hides the image cleanly via `<img>` fallbacks.
 
 Theme is bridged from the app shell (`lib/briefing-theme.ts`) so a dark-mode canvas does not sit on a light chrome (and vice versa).
 
@@ -201,8 +202,8 @@ Notes in-editor AI, Repo Learning generation, briefing enrichment, and the **Tun
 The dashboard keeps Git sync state visible without making every page own Git logic:
 
 - `ContentSyncIndicator` is mounted in the desktop and mobile top bars. It polls `GET /api/status/git` every 30 seconds and hides itself when the repo is clean and up to date.
-- The cloud button is for scoped content only: `notes/`, `collections/`, `tasks/`, and `docs/`. It runs the `sync_notes_tasks_push` action through `POST /api/scripts`.
-- The warning triangle is for blockers and broader Git work: non-content dirty files run `commit_dirty_push`, upstream-only changes run `update_and_sync`, and merge conflicts send the user to `/status`.
+- The cloud button is for scoped content only: `notes/`, `collections/`, `tasks/`, `docs/`, and `upstarts/`. It runs the `sync_notes_tasks_push` action through `POST /api/scripts`. When content is clean but commits are unpushed, the cloud retries `push_unpushed_commits`.
+- The warning triangle opens the **Repo Git workspace** for non-content dirty files and merge conflicts, or runs `update_and_sync` when only upstream commits are waiting (clean tree). Pre-push hook failures surface a **GitHookFailureDialog** with log excerpts and a Chamber fix-it prompt.
 - The Status page is the runbook surface. It shows repo branch, dirty content vs other dirty paths, ahead/behind counts, latest failed sync logs, conflict resolution, skill sync health, service status, MCP runtime status, and LAN access.
 - The MCP panel (`GET /api/status/mcp`) lists each server under `mcp/shared/` only — not plugin or personal catalog entries. It reports whether each server's launch command resolves and how many matching processes are running. Bare command names such as `npx`, `tsx`, or `uvx` count as present when they resolve on `PATH`; only absolute or relative command paths must exist on disk. Idle servers are normal — MCP clients start stdio servers on demand. Plugin and personal MCP servers sync to Cursor/Claude/etc. but do not appear here; troubleshoot those via the AI client's MCP logs and `npm install` inside the plugin's `mcp-servers/<name>/` package. **Catalog editing** (`/api/mcp*`) is separate from runtime status — use **Agents → MCP** to add or edit repo/personal entries.
 
@@ -226,6 +227,23 @@ Failed sync runs surface from `GET /api/scripts/history` with log detail from `G
 The page reloads on manual refresh and polls Git/services/MCP/LAN every 30 seconds in the background.
 
 Merge conflict recovery lives on Status through `ConflictResolverPanel`. It reads `GET /api/git/conflicts`, lets the user edit the conflicted file, and saves with `POST /api/git/conflicts`; the backend writes the resolved content and stages the file only after conflict markers are removed. The full content-sync runbook is in [Notes System -> Content sync workflow](notes-system.md#content-sync-workflow).
+
+### Repo Git workspace
+
+`RepoGitWorkspace` is the in-dashboard git UI for the DevHub checkout and every sibling repo on `/repos`. Open it from the top-bar warning control, a repo card's **Open Git** badge, or `/status` when code changes block sync.
+
+| Tab | Purpose |
+| --- | ------- |
+| Changes | Stage/unstage (per file, hunk, or all), inline diff, discard, AI commit message, commit-only or commit-and-push |
+| Branches | Checkout, create, delete, pull, push (with pre-push hook failure handling) |
+| Stash | List, apply, pop, drop; stash conflicts open the terminal with a resolve command |
+| History | Commit graph, file history, show commit |
+| Conflicts | Inline conflict editor (same semantics as Status) |
+| Blame | Porcelain blame for a file path |
+
+API routes are scoped under `/api/repos/<name>/git/…` (and branch push/pull under `/api/repos/<name>/branches`). See [API Routes](../reference/api-routes.md#repo-git-routes).
+
+**DevHub-only:** personal content paths (`notes/`, `tasks/`, `docs/`, `diagrams/`, etc.) are classified by `lib/content-sync-dirs.ts` and **hidden from the Changes list** in the DevHub repo — they sync via the top-bar cloud button, not the generic commit flow. Sibling repos show every file.
 
 ## Safety Boundaries
 
