@@ -32,6 +32,8 @@ interface DesignRequest {
 interface DesignPlan {
   reply: string;
   redesign: boolean;
+  /** New visual identity requested (anime, neon, retro…): regenerate from scratch, user owns the palette. */
+  freshLook: boolean;
   canvasInstruction: string;
   feeds: AddFeedInput[];
   research: string[];
@@ -92,7 +94,7 @@ function fallbackPlan(message: string): DesignPlan {
   if (research.length) parts.push(`kicked off background research`);
   const reply = parts.length ? `Done — ${parts.join(", ")}.` : "Tell me how you'd like the briefing to look, what to add, or what to research.";
 
-  return { reply, redesign, canvasInstruction: message, feeds, research, prefs: {} };
+  return { reply, redesign, freshLook: false, canvasInstruction: message, feeds, research, prefs: {} };
 }
 
 async function planDesign(message: string, history: ChatMessage[], ctx: BriefingContext): Promise<DesignPlan> {
@@ -108,10 +110,11 @@ async function planDesign(message: string, history: ChatMessage[], ctx: Briefing
       prompt: [
         "You are the controller for a bespoke personal briefing screen. The user chats to reshape it.",
         "Decide what their message means and return a plan as JSON ONLY, shape:",
-        '{ "reply": string, "redesign": boolean, "canvasInstruction": string, "feeds": [{"url": string, "label": string, "kind": "rss"|"json", "itemsPath"?: string, "titleField"?: string, "urlField"?: string}], "research": string[], "prefs": object, "reset": boolean }',
+        '{ "reply": string, "redesign": boolean, "freshLook": boolean, "canvasInstruction": string, "feeds": [{"url": string, "label": string, "kind": "rss"|"json", "itemsPath"?: string, "titleField"?: string, "urlField"?: string}], "research": string[], "prefs": object, "reset": boolean }',
         "",
         "Rules:",
-        "- redesign=true whenever they want the page to look or be laid out differently, or to show/hide/emphasise something. canvasInstruction = a clear, specific instruction to the front-end designer.",
+        "- redesign=true whenever they want the page to look or be laid out differently, or to show/hide/emphasise something. canvasInstruction = a clear, specific instruction to the front-end designer — preserve the user's aesthetic words (anime, neon, silly, bright...) verbatim, don't dilute them.",
+        "- freshLook=true when they ask for a new visual identity or overall aesthetic (a theme/style/vibe change like anime, neon, retro terminal, pastel). The canvas is then regenerated from scratch with the user owning the palette. False for content-only tweaks (add/move/hide a section).",
         "- feeds: only when they ask to pull in a specific source you can name a real URL for (RSS or JSON). Never invent URLs you're unsure of; leave empty instead.",
         "- research: short topics to research in the background (e.g. 'things to do with kids in Northern Ireland this weekend'). Use for one-off asks, not recurring layout.",
         "- prefs: optional patch. Keys allowed: location{name,lat,lon}, interests[], techStack[], hasKids, newsFeeds[], gamingFeeds[], newsRegion. Don't guess coordinates.",
@@ -131,6 +134,7 @@ async function planDesign(message: string, history: ChatMessage[], ctx: Briefing
     return {
       reply: typeof parsed.reply === "string" && parsed.reply.trim() ? parsed.reply.slice(0, 500) : "Updated.",
       redesign: parsed.redesign === true,
+      freshLook: parsed.freshLook === true,
       canvasInstruction: typeof parsed.canvasInstruction === "string" && parsed.canvasInstruction.trim() ? parsed.canvasInstruction : message,
       feeds: normaliseFeeds(parsed.feeds),
       research: Array.isArray(parsed.research) ? parsed.research.map(String).map((s) => s.trim()).filter((s) => s.length >= 3).slice(0, 4) : [],
@@ -200,9 +204,16 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       addedFeeds.length > 0 && !plan.redesign
         ? `Incorporate the newly added feed(s): ${addedFeeds.map((f) => f.label).join(", ")}. ${plan.canvasInstruction}`
         : plan.canvasInstruction || message;
-    const html = await generateCanvasHtml(instruction, contextForPrompt(ctx), canvas.aiAuthored ? canvas.html : null, theme);
+    // A new visual identity starts from a blank slate (the old document would
+    // anchor both palette and layout); ordinary tweaks revise in place. Once a
+    // custom aesthetic is chosen it sticks for later revisions until reset.
+    const customAesthetic = plan.freshLook || canvas.customAesthetic === true;
+    const baseHtml = plan.freshLook ? null : canvas.aiAuthored ? canvas.html : null;
+    const html = await generateCanvasHtml(instruction, contextForPrompt(ctx), baseHtml, theme, {
+      customAesthetic,
+    });
     if (html) {
-      await saveCanvas(html, instruction);
+      await saveCanvas(html, instruction, { customAesthetic });
       canvasUpdated = true;
     }
   }
