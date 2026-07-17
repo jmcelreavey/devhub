@@ -39,7 +39,12 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
   if (!resolved.ok) return resolved.response;
   const { repoRoot } = resolved;
 
-  const commit = (req.nextUrl.searchParams.get("commit") || req.nextUrl.searchParams.get("hash") || "").trim();
+  const commit = (
+    req.nextUrl.searchParams.get("commit") ||
+    req.nextUrl.searchParams.get("ref") ||
+    req.nextUrl.searchParams.get("hash") ||
+    ""
+  ).trim();
   const filePath = req.nextUrl.searchParams.get("path");
 
   if (!commit || !isSafeCommitRef(commit)) {

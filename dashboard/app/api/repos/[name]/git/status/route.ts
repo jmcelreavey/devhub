@@ -11,7 +11,7 @@ export async function GET(_req: NextRequest, { params }: RepoParams) {
   const { repoRoot } = resolved;
 
   const [status, branch, upstream] = await Promise.all([
-    runGitRepoAsync(repoRoot, ["status", "--porcelain=v1"]),
+    runGitRepoAsync(repoRoot, ["status", "--porcelain=v1", "-z"]),
     runGitRepoAsync(repoRoot, ["rev-parse", "--abbrev-ref", "HEAD"]),
     runGitRepoAsync(repoRoot, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]),
   ]);

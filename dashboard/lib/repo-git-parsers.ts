@@ -5,6 +5,8 @@
 
 export interface StagedFileInfo {
   path: string;
+  /** Source path for a rename/copy; `path` is the destination. */
+  originalPath?: string;
   /** Index (staged) status letter, or empty if unstaged-only. */
   indexStatus: string;
   /** Worktree status letter, or empty if staged-only / clean worktree. */
@@ -49,23 +51,35 @@ export interface FileHistoryCommit {
   relativeDate: string;
 }
 
-/** Parse `git status --porcelain=v1` into staged / unstaged / untracked rows. */
+/** Parse `git status --porcelain=v1 -z` (or legacy line output) into file rows. */
 export function parsePorcelainStatus(stdout: string): StagedFileInfo[] {
   const rows: StagedFileInfo[] = [];
-  for (const line of stdout.split("\n")) {
-    if (!line.trim() || line.length < 3) continue;
-    const indexStatus = line[0] === " " ? "" : line[0]!;
-    const worktreeStatus = line[1] === " " ? "" : line[1]!;
-    let filePath = line.slice(3);
-    // Rename: `R  old -> new` — show the new path.
-    if (filePath.includes(" -> ")) {
-      filePath = filePath.split(" -> ").pop()!.trim();
+  const nulDelimited = stdout.includes("\0");
+  const entries = stdout.split(nulDelimited ? "\0" : "\n");
+
+  for (let i = 0; i < entries.length; i += 1) {
+    const entry = entries[i] ?? "";
+    if (!entry || entry.length < 3) continue;
+    const indexStatus = entry[0] === " " ? "" : entry[0]!;
+    const worktreeStatus = entry[1] === " " ? "" : entry[1]!;
+    let filePath = entry.slice(3);
+    let originalPath: string | undefined;
+    const renamed = indexStatus === "R" || indexStatus === "C" || worktreeStatus === "R" || worktreeStatus === "C";
+    if (nulDelimited && renamed) {
+      originalPath = entries[++i];
+    } else if (!nulDelimited) {
+      const arrow = filePath.indexOf(" -> ");
+      if (arrow !== -1) {
+        originalPath = filePath.slice(0, arrow);
+        filePath = filePath.slice(arrow + 4);
+      }
     }
     const untracked = indexStatus === "?" && worktreeStatus === "?";
     const staged = !untracked && indexStatus !== "";
     const unstaged = untracked || worktreeStatus !== "";
     rows.push({
       path: filePath,
+      ...(originalPath !== undefined ? { originalPath } : {}),
       indexStatus: untracked ? "?" : indexStatus,
       worktreeStatus: untracked ? "?" : worktreeStatus,
       staged,

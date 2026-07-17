@@ -12,7 +12,7 @@ company/personal features, see [Plugins](../architecture/plugins.md).
 
 The public core has an **unrelated git history** — it's seeded from a clean tree so your
 private history never leaks. That means you can't `git merge`/`rebase` across the two.
-Both directions instead port *content diffs* with `git apply --3way`:
+Both directions instead port _content diffs_ with `git apply --3way`:
 
 - **Pull** (`scripts/devhub-update.sh`) applies new upstream changes onto your mirror.
 - **Push** (`scripts/devhub-backport.sh`) ports a generic feature onto a branch off
@@ -31,8 +31,8 @@ On the **Actions** page:
 2. If the incoming changes look right, run **Pull Core Updates** — it applies them onto
    your mirror, commits, advances the sync marker, then validates and re-syncs your tools.
 
-Your live-dirty personal files (`tasks/`, `notes/`, `collections/`) don't block a pull —
-the guard only stops on *non-personal* uncommitted changes that could collide with the
+Your live-dirty personal files (`tasks/`, `notes/`, `collections/`, `upstarts/`) don't block a pull —
+the guard only stops on _non-personal_ uncommitted changes that could collide with the
 apply. Commit or stash those first.
 
 ### From the CLI
@@ -77,21 +77,22 @@ public core, and enabled plugin repos — use `scripts/devhub-ship.sh` (or MCP `
 
 ```bash
 bash scripts/devhub-ship.sh "feat: my feature"   # from main/master
-bash scripts/devhub-ship.sh --dry-run            # preview paths only
+bash scripts/devhub-ship.sh --dry-run            # preview the actual public patch
 bash scripts/devhub-ship.sh --no-upstream        # skip public-core push
 ```
 
 The script:
 
-1. Commits `notes/`, `tasks/`, and `collections/` as their own commit (private-only paths).
+1. Commits `notes/`, `tasks/`, `collections/`, and `upstarts/` as their own commit (private-only paths).
 2. Commits all remaining work with your message.
-3. Pushes `origin main` — the pre-push hook runs leak scan + `npm run verify` (takes minutes).
-4. Ports the content diff onto `upstream` main **directly** (no PR) via `devhub-backport.sh`,
+3. Imports newer `upstream` changes before deriving any outbound patch, then pushes `origin main`.
+4. Previews and ports only generic catalog paths onto `upstream` main **directly** (no PR) via `devhub-backport.sh`,
    then advances the sync marker.
 5. Commits and pushes each enabled plugin repo from `~/.config/devhub/plugins.json`.
 
-Personal paths never reach the public core; the backport step drops them and the leak scan
-blocks internal names/secrets. For a **reviewed** public contribution, prefer the manual
+Personal paths and root-level local skills never reach the public core; the backport step
+allows only catalog-owned paths and the leak scan blocks internal names/secrets. The MCP
+tool previews by default and requires `confirm: true` before mutation. For a **reviewed** public contribution, prefer the manual
 backport + PR flow above instead.
 
 ## See also

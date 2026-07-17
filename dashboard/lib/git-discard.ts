@@ -9,6 +9,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { runGitRepoAsync, type GitRepoRunResult } from "./git-repo-local";
+import { parsePorcelainStatus } from "./repo-git-parsers";
 
 export type DiscardScope = "staged" | "unstaged";
 
@@ -18,6 +19,8 @@ export interface DiscardResult {
 }
 
 interface PathStatus {
+  path: string;
+  originalPath?: string;
   index: string;
   worktree: string;
   untracked: boolean;
@@ -33,20 +36,25 @@ function fail(result: GitRepoRunResult, fallback: string): DiscardResult {
 }
 
 async function porcelainForPath(repoRoot: string, filePath: string): Promise<PathStatus | null> {
-  const status = await runGitRepoAsync(repoRoot, ["status", "--porcelain=v1", "--", filePath]);
+  const status = await runGitRepoAsync(repoRoot, ["status", "--porcelain=v1", "-z"]);
   if (status.status !== 0) return null;
-  const line = (status.stdout || "").split("\n").find((l) => l.trim());
-  if (!line || line.length < 3) return null;
-  const index = line[0] === " " ? "" : line[0]!;
-  const worktree = line[1] === " " ? "" : line[1]!;
-  const untracked = index === "?" && worktree === "?";
+  const file = parsePorcelainStatus(status.stdout || "").find(
+    (entry) => entry.path === filePath || entry.originalPath === filePath,
+  );
+  if (!file) return null;
   return {
-    index: untracked ? "?" : index,
-    worktree: untracked ? "?" : worktree,
-    untracked,
-    staged: !untracked && index !== "",
-    unstaged: untracked || worktree !== "",
+    path: file.path,
+    ...(file.originalPath ? { originalPath: file.originalPath } : {}),
+    index: file.indexStatus,
+    worktree: file.worktreeStatus,
+    untracked: file.untracked,
+    staged: file.staged,
+    unstaged: file.unstaged,
   };
+}
+
+function isUnmerged(st: PathStatus): boolean {
+  return st.index === "U" || st.worktree === "U" || ["AA", "DD"].includes(`${st.index}${st.worktree}`);
 }
 
 async function pathInHead(repoRoot: string, filePath: string): Promise<boolean> {
@@ -54,11 +62,7 @@ async function pathInHead(repoRoot: string, filePath: string): Promise<boolean> 
   return out.status === 0;
 }
 
-async function blobToTemp(
-  repoRoot: string,
-  spec: string | null,
-  label: string,
-): Promise<string> {
+async function blobToTemp(repoRoot: string, spec: string | null, label: string): Promise<string> {
   const tmp = path.join(os.tmpdir(), `devhub-discard-${label}-${process.pid}-${Date.now()}`);
   if (spec === null) {
     fs.writeFileSync(tmp, "");
@@ -71,6 +75,12 @@ async function blobToTemp(
   }
   fs.writeFileSync(tmp, out.stdout ?? "");
   return tmp;
+}
+
+async function indexFileMode(repoRoot: string, filePath: string): Promise<string | null> {
+  const out = await runGitRepoAsync(repoRoot, ["ls-files", "--stage", "-z", "--", filePath]);
+  if (out.status !== 0) return null;
+  return out.stdout.match(/^(\d{6}) /)?.[1] ?? null;
 }
 
 function cleanupTemps(paths: string[]) {
@@ -88,9 +98,12 @@ function cleanupTemps(paths: string[]) {
  * Text files: merge-file of HEAD ← index ← worktree, then reset index+WT and write result.
  * New files (A/AM): remove from index; keep worktree (becomes untracked) when unstaged edits exist.
  */
-async function discardStagedKeepUnstaged(repoRoot: string, filePath: string): Promise<DiscardResult> {
+async function discardStagedKeepUnstaged(repoRoot: string, st: PathStatus): Promise<DiscardResult> {
+  const filePath = st.path;
+  const headPath = st.originalPath ?? filePath;
   const abs = path.join(repoRoot, filePath);
-  const inHead = await pathInHead(repoRoot, filePath);
+  const outputAbs = path.join(repoRoot, headPath);
+  const inHead = await pathInHead(repoRoot, headPath);
   const temps: string[] = [];
 
   try {
@@ -101,21 +114,27 @@ async function discardStagedKeepUnstaged(repoRoot: string, filePath: string): Pr
       return { ok: true };
     }
 
-    if (!fs.existsSync(abs)) {
-      // Staged modification/delete with missing WT — just restore HEAD both sides.
+    let stat: fs.Stats;
+    try {
+      stat = fs.lstatSync(abs);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      // Preserve an unstaged deletion while resetting the index to HEAD.
       const restore = await runGitRepoAsync(repoRoot, [
-        "restore",
-        "--source=HEAD",
-        "--staged",
-        "--worktree",
-        "--",
-        filePath,
+        "restore", "--staged", "--", headPath, filePath,
       ]);
       if (restore.status !== 0) return fail(restore, "Discard staged failed");
       return { ok: true };
     }
 
-    const headFile = await blobToTemp(repoRoot, `HEAD:${filePath}`, "head");
+    const mode = await indexFileMode(repoRoot, filePath);
+    if (!stat.isFile() || (mode !== "100644" && mode !== "100755")) {
+      return { ok: false, error: "Cannot safely preserve unstaged changes for this file type" };
+    }
+    const worktreeMode = stat.mode & 0o777;
+    const preserveWorktreeMode = Boolean(worktreeMode & 0o111) !== (mode === "100755");
+
+    const headFile = await blobToTemp(repoRoot, `HEAD:${headPath}`, "head");
     const indexFile = await blobToTemp(repoRoot, `:${filePath}`, "index");
     const wtFile = path.join(os.tmpdir(), `devhub-discard-wt-${process.pid}-${Date.now()}`);
     fs.copyFileSync(abs, wtFile);
@@ -132,27 +151,17 @@ async function discardStagedKeepUnstaged(repoRoot: string, filePath: string): Pr
     ]);
 
     const merged = fs.readFileSync(resultFile, "utf-8");
-    if (/^<<<<<<< /m.test(merged) || /^>>>>>>> /m.test(merged)) {
-      // Conflict: keep full worktree, reset index only (safe — no data loss).
-      const unstage = await runGitRepoAsync(repoRoot, ["restore", "--staged", "--", filePath]);
-      if (unstage.status !== 0) return fail(unstage, "Discard staged failed");
-      return { ok: true };
-    }
-    if (mergeInPlace.status !== 0 && mergeInPlace.status !== 1) {
+    if (mergeInPlace.status !== 0 || /^<<<<<<< /m.test(merged) || /^>>>>>>> /m.test(merged)) {
       return fail(mergeInPlace, "Discard staged failed");
     }
 
     const restore = await runGitRepoAsync(repoRoot, [
-      "restore",
-      "--source=HEAD",
-      "--staged",
-      "--worktree",
-      "--",
-      filePath,
+      "restore", "--source=HEAD", "--staged", "--worktree", "--", headPath, filePath,
     ]);
     if (restore.status !== 0) return fail(restore, "Discard staged failed");
 
-    fs.writeFileSync(abs, merged);
+    fs.writeFileSync(outputAbs, merged);
+    if (preserveWorktreeMode) fs.chmodSync(outputAbs, worktreeMode);
     return { ok: true };
   } finally {
     cleanupTemps(temps);
@@ -163,16 +172,28 @@ async function discardStagedOnly(repoRoot: string, filePath: string): Promise<Di
   const st = await porcelainForPath(repoRoot, filePath);
   if (!st || !st.staged) return { ok: true };
 
+  if (isUnmerged(st)) {
+    return { ok: false, error: "Resolve the conflict before discarding staged changes" };
+  }
+
   if (st.unstaged) {
-    return discardStagedKeepUnstaged(repoRoot, filePath);
+    return discardStagedKeepUnstaged(repoRoot, st);
+  }
+
+  if (st.originalPath && (st.index === "R" || st.index === "C")) {
+    const restore = await runGitRepoAsync(repoRoot, [
+      "restore", "--source=HEAD", "--staged", "--worktree", "--", st.originalPath, st.path,
+    ]);
+    if (restore.status !== 0) return fail(restore, "Discard staged failed");
+    return { ok: true };
   }
 
   // Staged only — wipe index + worktree back to HEAD (or remove added files).
   if (st.index === "A" || st.index === "?") {
-    const rm = await runGitRepoAsync(repoRoot, ["rm", "-f", "--", filePath]);
+    const rm = await runGitRepoAsync(repoRoot, ["rm", "-f", "--", st.path]);
     if (rm.status !== 0) {
       // Not in index as expected — try clean
-      const clean = await runGitRepoAsync(repoRoot, ["clean", "-f", "--", filePath]);
+      const clean = await runGitRepoAsync(repoRoot, ["clean", "-f", "--", st.path]);
       if (clean.status !== 0) return fail(rm, "Discard staged failed");
     }
     return { ok: true };

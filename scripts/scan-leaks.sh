@@ -27,7 +27,7 @@ case "$mode" in
     # Tracked files, excluding this scanner, the strategy doc, internal review docs,
     # personal data, and the backport script (all legitimately reference the denylist).
     hits="$(cd "$ROOT" && git ls-files -- \
-              ':!notes' ':!tasks' ':!TEMPLATE_AND_PLUGIN_PLAN.md' \
+              ':!notes' ':!tasks' ':!collections' ':!upstarts' ':!TEMPLATE_AND_PLUGIN_PLAN.md' \
               ':!scripts/scan-leaks.sh' ':!scripts/devhub-backport.sh' \
               ':(exclude,glob)docs/codebase-review-*.md' \
             | tr '\n' '\0' \

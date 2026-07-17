@@ -89,9 +89,8 @@ export function RepoGitWorkspace({
   const toast = useToast();
   const confirm = useConfirm();
   const titleId = useId();
-  const closeRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const tabRefs = useRef<Map<RepoGitTabId, HTMLButtonElement>>(new Map());
-  const previousFocus = useRef<HTMLElement | null>(null);
   const wasOpen = useRef(false);
 
   const setOpen = useCallback(
@@ -181,32 +180,21 @@ export function RepoGitWorkspace({
 
   useEffect(() => {
     if (!open) return;
-    previousFocus.current = document.activeElement as HTMLElement | null;
-    const t = window.setTimeout(() => closeRef.current?.focus(), 0);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const dialog = dialogRef.current;
+    if (!dialog?.open) dialog?.showModal();
     return () => {
-      window.clearTimeout(t);
-      document.body.style.overflow = prevOverflow;
-      previousFocus.current?.focus?.();
+      if (dialog?.open) dialog.close();
     };
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
-    // Esc: exit fullscreen first, then close — less surprising than nuking the modal.
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      if (fullscreen) {
-        setFullscreenPref(false);
-        return;
-      }
-      closeWorkspace();
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
     };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, closeWorkspace, fullscreen, setFullscreenPref]);
+  }, [open]);
 
   /** Roving arrow-key navigation for the tablist (WAI-ARIA tabs pattern). */
   const onTablistKeyDown = useCallback(
@@ -262,20 +250,27 @@ export function RepoGitWorkspace({
   const modal =
     open && typeof document !== "undefined"
       ? createPortal(
-          <div
-            className="repo-git-modal-backdrop modal-backdrop"
+          <dialog
+            ref={dialogRef}
+            className="repo-git-modal-backdrop"
             data-fullscreen={fullscreen || undefined}
+            aria-labelledby={titleId}
+            onCancel={(e) => {
+              e.preventDefault();
+              if (hookFailure) return;
+              if (fullscreen) {
+                setFullscreenPref(false);
+                return;
+              }
+              closeWorkspace();
+            }}
             onClick={(e) => {
               if (e.target === e.currentTarget) closeWorkspace();
             }}
-            role="presentation"
           >
             <div
               className="repo-git-modal"
               data-fullscreen={fullscreen || undefined}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby={titleId}
               onClick={(e) => e.stopPropagation()}
             >
               <header className="repo-git-modal-header">
@@ -336,7 +331,6 @@ export function RepoGitWorkspace({
                       {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
                     </button>
                     <button
-                      ref={closeRef}
                       type="button"
                       className="btn btn-ghost repo-git-close"
                       onClick={closeWorkspace}
@@ -429,7 +423,7 @@ export function RepoGitWorkspace({
                 </div>
               </div>
             </div>
-          </div>,
+          </dialog>,
           document.body,
         )
       : null;

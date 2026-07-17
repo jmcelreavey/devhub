@@ -13,12 +13,12 @@ from the synced config when a tool is invoked.
 
 The server has two tool tiers:
 
-| Tier | Source Of Truth | Dashboard Required | Tool Groups |
-| ---- | --------------- | ------------------ | ----------- |
-| Filesystem-backed | Local files under configured content dirs | No | Notes, docs, tasks, diagrams, appraisal, DX audit |
-| Dashboard-backed | DevHub HTTP routes on `DEVHUB_BASE_URL` | Yes | Status, briefing, calendar, work/PRs/Jira, assets, search, scripts, repos (list/open/clone/learn), capability, sessions, Datadog |
-| Hybrid | Local `git` in a resolved repo path; dashboard HTTP only for name→path lookup | Yes (for `repos_list` resolution) | `repos_git_status`, `repos_git_commit`, `repos_git_push` |
-| Script-backed | Local shell scripts under `REPO_ROOT` | No (runs detached) | `repo_ship`, `repo_ship_status` |
+| Tier              | Source Of Truth                                                               | Dashboard Required                | Tool Groups                                                                                                                      |
+| ----------------- | ----------------------------------------------------------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Filesystem-backed | Local files under configured content dirs                                     | No                                | Notes, docs, tasks, diagrams, appraisal, DX audit                                                                                |
+| Dashboard-backed  | DevHub HTTP routes on `DEVHUB_BASE_URL`                                       | Yes                               | Status, briefing, calendar, work/PRs/Jira, assets, search, scripts, repos (list/open/clone/learn), capability, sessions, Datadog |
+| Hybrid            | Local `git` in a resolved repo path; dashboard HTTP only for name→path lookup | Yes (for `repos_list` resolution) | `repos_git_status`, `repos_git_commit`, `repos_git_push`                                                                         |
+| Script-backed     | Local shell scripts under `REPO_ROOT`                                         | No (runs detached)                | `repo_ship`, `repo_ship_status`                                                                                                  |
 
 Filesystem-backed tools call the vault/storage layer directly and work headless.
 Dashboard-backed tools proxy through `DashboardClient`, defaulting to
@@ -34,14 +34,14 @@ running.
 `mcp-servers/devhub-server/src/mcp.ts` is a thin registrar (v4.0.0). It wires tool
 groups and does not hold business logic.
 
-| Path | Role |
-| ---- | ---- |
-| `src/mcp.ts` | Entry point — creates `McpServer`, calls each `register*Tools` |
-| `src/context.ts` | `createContext()` — reads `NOTES_DIR`, `TASKS_DIR`, `DOCS_DIR`, `DEVHUB_BASE_URL` |
-| `src/tools/*.ts` | One registrar per tool group (`notes.ts`, `status.ts`, …) |
-| `src/storage.ts`, `src/task-diagram-storage.ts` | Filesystem-backed vault access |
-| `src/dashboard-client.ts` | HTTP proxy for dashboard-backed tools |
-| `src/convert.ts` | BlockNote ↔ Markdown conversion for notes |
+| Path                                            | Role                                                                              |
+| ----------------------------------------------- | --------------------------------------------------------------------------------- |
+| `src/mcp.ts`                                    | Entry point — creates `McpServer`, calls each `register*Tools`                    |
+| `src/context.ts`                                | `createContext()` — reads `NOTES_DIR`, `TASKS_DIR`, `DOCS_DIR`, `DEVHUB_BASE_URL` |
+| `src/tools/*.ts`                                | One registrar per tool group (`notes.ts`, `status.ts`, …)                         |
+| `src/storage.ts`, `src/task-diagram-storage.ts` | Filesystem-backed vault access                                                    |
+| `src/dashboard-client.ts`                       | HTTP proxy for dashboard-backed tools                                             |
+| `src/convert.ts`                                | BlockNote ↔ Markdown conversion for notes                                         |
 
 Filesystem tools import from `shared/vault/` via relative paths. Dashboard tools call
 matching routes on `DEVHUB_BASE_URL` through `DashboardClient`.
@@ -52,26 +52,26 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 
 ## Tool Inventory
 
-| Group | Tools |
-| ----- | ----- |
-| Notes | `notes_list`, `notes_read`, `notes_write`, `notes_write_asset`, `notes_append`, `notes_search`, `notes_delete` |
-| Docs | `docs_list`, `docs_read`, `docs_write`, `docs_append`, `docs_search`, `docs_delete` |
-| Tasks | `tasks_list`, `tasks_create`, `tasks_update`, `tasks_delete`, `tasks_history` |
-| Diagrams | `diagrams_list`, `diagrams_read`, `diagrams_create`, `diagrams_update`, `diagrams_add_note`, `diagrams_delete`, `diagrams_rename` |
-| Appraisal | `appraisal_record`, `appraisal_set_goal`, `appraisal_list_goals`, `appraisal_read`, `appraisal_list`, `appraisal_people`, `appraisal_summarize`, `appraisal_delete` |
-| DX audit | `dx_audit_list`, `dx_audit_read` — reads `reviews/dx-audit-<repo>-<date>` notes written by the `dx-audit` skill |
-| Capability | `capability_radar`, `capability_scan`, `capability_digest`, `capability_get_lab`, `capability_complete_lab` |
-| Ship | `repo_ship`, `repo_ship_status` — wraps `scripts/devhub-ship.sh` (detached; poll status while pre-push verify runs) |
-| Status | `status_services`, `status_git`, `status_mcp`, `services_restart` |
-| Briefing | `briefing_get` |
-| Calendar | `calendar_week`, `calendar_list` |
-| Work | `prs_list`, `jira_tickets`, `jira_ticket_get`, `standup_markdown`, `tasks_weekly`, `jira_ticket_transition` |
-| Assets | `assets_list` |
-| Search | `search` |
-| Scripts | `scripts_list`, `scripts_run`, `scripts_run_status`, `scripts_history` |
-| Repos | `repos_list`, `repos_open`, `repos_clone`, `repo_learn`, `repos_git_status`, `repos_git_commit`, `repos_git_push` |
-| Sessions | `sessions_recap` |
-| Datadog | `datadog_oncall`, `datadog_recent_alerts`, `datadog_investigate` |
+| Group      | Tools                                                                                                                                                               |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Notes      | `notes_list`, `notes_read`, `notes_write`, `notes_write_asset`, `notes_append`, `notes_search`, `notes_delete`                                                      |
+| Docs       | `docs_list`, `docs_read`, `docs_write`, `docs_append`, `docs_search`, `docs_delete`                                                                                 |
+| Tasks      | `tasks_list`, `tasks_create`, `tasks_update`, `tasks_delete`, `tasks_history`                                                                                       |
+| Diagrams   | `diagrams_list`, `diagrams_read`, `diagrams_create`, `diagrams_update`, `diagrams_add_note`, `diagrams_delete`, `diagrams_rename`                                   |
+| Appraisal  | `appraisal_record`, `appraisal_set_goal`, `appraisal_list_goals`, `appraisal_read`, `appraisal_list`, `appraisal_people`, `appraisal_summarize`, `appraisal_delete` |
+| DX audit   | `dx_audit_list`, `dx_audit_read` — reads `reviews/dx-audit-<repo>-<date>` notes written by the `dx-audit` skill                                                     |
+| Capability | `capability_radar`, `capability_scan`, `capability_digest`, `capability_get_lab`, `capability_complete_lab`                                                         |
+| Ship       | `repo_ship`, `repo_ship_status` — wraps `scripts/devhub-ship.sh` (detached; poll status while pre-push verify runs)                                                 |
+| Status     | `status_services`, `status_git`, `status_mcp`, `services_restart`                                                                                                   |
+| Briefing   | `briefing_get`                                                                                                                                                      |
+| Calendar   | `calendar_week`, `calendar_list`                                                                                                                                    |
+| Work       | `prs_list`, `jira_tickets`, `jira_ticket_get`, `standup_markdown`, `tasks_weekly`, `jira_ticket_transition`                                                         |
+| Assets     | `assets_list`                                                                                                                                                       |
+| Search     | `search`                                                                                                                                                            |
+| Scripts    | `scripts_list`, `scripts_run`, `scripts_run_status`, `scripts_history`                                                                                              |
+| Repos      | `repos_list`, `repos_open`, `repos_clone`, `repo_learn`, `repos_git_status`, `repos_git_commit`, `repos_git_push`                                                   |
+| Sessions   | `sessions_recap`                                                                                                                                                    |
+| Datadog    | `datadog_oncall`, `datadog_recent_alerts`, `datadog_investigate`                                                                                                    |
 
 BI-specific MCP tools are contributed by the private BI plugin as a separate server; they are not part of the core DevHub server.
 
@@ -85,12 +85,12 @@ Sensitive dashboard routes (currently `GET /api/opencode/recap`) use `requireDas
 
 The MCP server uses local files, not a database.
 
-| Data | Format | Directory |
-| ---- | ------ | --------- |
-| Notes | BlockNote JSON | `NOTES_DIR` |
-| Docs | Markdown (`.md`) | `DOCS_DIR` |
-| Tasks | JSON files grouped by date | `TASKS_DIR` |
-| Diagrams | tldraw JSON embedded in note storage | `NOTES_DIR` |
+| Data      | Format                                  | Directory   |
+| --------- | --------------------------------------- | ----------- |
+| Notes     | BlockNote JSON                          | `NOTES_DIR` |
+| Docs      | Markdown (`.md`)                        | `DOCS_DIR`  |
+| Tasks     | JSON files grouped by date              | `TASKS_DIR` |
+| Diagrams  | tldraw JSON embedded in note storage    | `NOTES_DIR` |
 | Appraisal | BlockNote JSON under `notes/appraisal/` | `NOTES_DIR` |
 
 The server converts notes between Markdown-like text and BlockNote JSON so AI tools
@@ -208,7 +208,7 @@ See [Capability Radar plan](../capability-radar-plan.md) for the full feature ma
 
 ### Ship everything to main
 
-`repo_ship` wraps `scripts/devhub-ship.sh`: commits notes/tasks separately from code, pushes the private mirror, ports the leak-scanned content diff to the public core's `main` directly (no PR), and pushes enabled plugin repos. Pre-push verify takes several minutes, so the tool starts the script **detached** and returns immediately — poll `repo_ship_status` until the log shows `SHIP DONE` or `SHIP FAILED`. Use `dryRun: true` to preview changed paths without committing.
+`repo_ship` wraps `scripts/devhub-ship.sh`. It previews the actual public patch by default; pass `confirm: true` to allow commits and pushes. A confirmed run imports newer public-core changes first, commits personal data separately from code, pushes the private mirror, ports only the leak-scanned generic catalog patch to public `main` (no PR), and pushes enabled plugin repos. Confirmed runs start **detached** because pre-push verification takes several minutes; poll `repo_ship_status` until the log shows `SHIP DONE` or `SHIP FAILED`.
 
 ## Plugin MCP Servers
 
@@ -233,18 +233,18 @@ plugin MCP packages. See [Plugin System](plugins.md) and
 
 ## Troubleshooting
 
-| Symptom | Check |
-| ------- | ----- |
-| Dashboard-backed tool cannot connect | Confirm `npm run dev` is running and `DEVHUB_BASE_URL` matches the dashboard port. |
-| Filesystem tool reads the wrong content | Check `NOTES_DIR`, `TASKS_DIR`, and `DOCS_DIR` in the synced MCP config. |
-| Work tools return auth/setup errors | GitHub PR tools need `gh auth login`; Jira and Datadog tools need their integrations configured in `/setup` or env vars. |
-| `sessions_recap` returns `401` / `403` | Set `DEVHUB_API_SECRET` in dashboard and MCP env (or call from a same-origin browser tab). Restart the dashboard after changing the secret. |
-| `repos_git_*` can't find the repo | Pass `path` for clones outside the DevHub scan directory, or use `repos_list` names only for siblings under `dirname(REPO_ROOT)`. |
-| MCP client shows an old tool list | Re-run MCP sync, then restart the AI tool so it reloads server metadata. |
-| `tsx` is missing for `devhub` | Run `cd mcp-servers/devhub-server && npm install`. |
-| Plugin MCP server fails to start | Run `npm install` inside the plugin's `mcp-servers/<name>/` package and re-run MCP sync. |
-| A plugin MCP tool is missing | Check plugin registration in `~/.config/devhub/plugins.json`, then run the sync action so plugin MCP configs are materialized. |
-| Status page says a command is missing | Bare commands such as `npx`, `tsx`, and `uvx` must resolve on `PATH`; absolute or relative command paths must exist on disk. |
+| Symptom                                 | Check                                                                                                                                       |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dashboard-backed tool cannot connect    | Confirm `npm run dev` is running and `DEVHUB_BASE_URL` matches the dashboard port.                                                          |
+| Filesystem tool reads the wrong content | Check `NOTES_DIR`, `TASKS_DIR`, and `DOCS_DIR` in the synced MCP config.                                                                    |
+| Work tools return auth/setup errors     | GitHub PR tools need `gh auth login`; Jira and Datadog tools need their integrations configured in `/setup` or env vars.                    |
+| `sessions_recap` returns `401` / `403`  | Set `DEVHUB_API_SECRET` in dashboard and MCP env (or call from a same-origin browser tab). Restart the dashboard after changing the secret. |
+| `repos_git_*` can't find the repo       | Pass `path` for clones outside the DevHub scan directory, or use `repos_list` names only for siblings under `dirname(REPO_ROOT)`.           |
+| MCP client shows an old tool list       | Re-run MCP sync, then restart the AI tool so it reloads server metadata.                                                                    |
+| `tsx` is missing for `devhub`           | Run `cd mcp-servers/devhub-server && npm install`.                                                                                          |
+| Plugin MCP server fails to start        | Run `npm install` inside the plugin's `mcp-servers/<name>/` package and re-run MCP sync.                                                    |
+| A plugin MCP tool is missing            | Check plugin registration in `~/.config/devhub/plugins.json`, then run the sync action so plugin MCP configs are materialized.              |
+| Status page says a command is missing   | Bare commands such as `npx`, `tsx`, and `uvx` must resolve on `PATH`; absolute or relative command paths must exist on disk.                |
 
 ## Safety Model
 

@@ -19,6 +19,12 @@ export interface GitRepoRunResult {
   status: number | null;
 }
 
+interface GitRepoRunOptions {
+  useGhCredentials?: boolean;
+  timeout?: number;
+  maxBuffer?: number;
+}
+
 export function gitEnv(): NodeJS.ProcessEnv {
   return augmentedPathEnv({ GIT_TERMINAL_PROMPT: "0" });
 }
@@ -31,6 +37,19 @@ export function isGitNetworkCommand(args: string[]): boolean {
 
 /** Default cap for fetch/pull/push so a hung credential helper or network never stalls the API forever. */
 export const GIT_NETWORK_TIMEOUT_MS = 300_000;
+export const GIT_MAX_BUFFER_BYTES = 50 * 1024 * 1024;
+
+function outputLimitError(args: string[], maxBuffer: number): string {
+  return `git ${args[0] ?? "command"} output exceeded the ${maxBuffer}-byte limit.`;
+}
+
+function isOutputLimitError(error: { code?: string | number; message?: string }): boolean {
+  return (
+    error.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" ||
+    error.code === "ENOBUFS" ||
+    /maxBuffer|ENOBUFS/i.test(error.message ?? "")
+  );
+}
 
 function gitArgsForRepo(
   repoRoot: string,
@@ -46,31 +65,41 @@ function gitArgsForRepo(
 export function runGitRepo(
   repoRoot: string,
   args: string[],
-  opts?: { useGhCredentials?: boolean },
+  opts?: GitRepoRunOptions,
 ): GitRepoRunResult {
   const useGh = opts?.useGhCredentials ?? isGitNetworkCommand(args);
+  const maxBuffer = opts?.maxBuffer ?? GIT_MAX_BUFFER_BYTES;
   const r = spawnSync("git", gitArgsForRepo(repoRoot, args, useGh), {
     encoding: "utf-8",
     env: gitEnv(),
+    maxBuffer,
   });
+  const processError = r.error
+    ? isOutputLimitError(r.error)
+      ? outputLimitError(args, maxBuffer)
+      : r.error.message
+    : "";
   return {
     stdout: r.stdout ?? "",
-    stderr: r.stderr ?? "",
-    status: r.status,
+    stderr: processError || r.stderr,
+    status: r.error ? 1 : r.status,
   };
 }
 
 export async function runGitRepoAsync(
   repoRoot: string,
   args: string[],
-  opts?: { useGhCredentials?: boolean; timeout?: number },
+  opts?: GitRepoRunOptions,
 ): Promise<GitRepoRunResult> {
   const useGh = opts?.useGhCredentials ?? isGitNetworkCommand(args);
   const timeout =
     opts?.timeout ?? (isGitNetworkCommand(args) ? GIT_NETWORK_TIMEOUT_MS : undefined);
+  const maxBuffer = opts?.maxBuffer ?? GIT_MAX_BUFFER_BYTES;
   try {
     const { stdout, stderr } = await execFileAsync("git", gitArgsForRepo(repoRoot, args, useGh), {
+      encoding: "utf-8",
       env: gitEnv(),
+      maxBuffer,
       timeout,
     });
     return { stdout, stderr, status: 0 };
@@ -81,15 +110,19 @@ export async function runGitRepoAsync(
       code?: number | string;
       killed?: boolean;
       signal?: NodeJS.Signals | string;
+      message?: string;
     };
     const timedOut =
       typeof timeout === "number" && (e.killed || e.signal === "SIGTERM");
+    const outputExceeded = isOutputLimitError(e);
     const cmd = args[0] ?? "git";
     return {
       stdout: e.stdout ?? "",
-      stderr: timedOut
-        ? `git ${cmd} timed out after ${Math.round(timeout / 1000)}s — check network, auth, or a stuck hook.`
-        : (e.stderr ?? ""),
+      stderr: outputExceeded
+        ? outputLimitError(args, maxBuffer)
+        : timedOut
+          ? `git ${cmd} timed out after ${Math.round(timeout / 1000)}s — check network, auth, or a stuck hook.`
+          : (e.stderr ?? e.message ?? ""),
       status: typeof e.code === "number" ? e.code : 1,
     };
   }

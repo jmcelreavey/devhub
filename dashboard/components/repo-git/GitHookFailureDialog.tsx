@@ -23,29 +23,24 @@ export function GitHookFailureDialog({
   onClose,
 }: GitHookFailureDialogProps) {
   const titleId = useId();
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const previousFocus = useRef<HTMLElement | null>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const toast = useToast();
   const [launching, setLaunching] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!failure) return;
-    previousFocus.current = document.activeElement as HTMLElement | null;
-    const t = window.setTimeout(() => closeRef.current?.focus(), 0);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", onKey);
+    const dialog = dialogRef.current;
+    // The workspace may be reopening in the same render. Let it enter the top
+    // layer first, then stack this failure dialog above it.
+    const t = window.setTimeout(() => {
+      if (dialog && !dialog.open) dialog.showModal();
+    }, 0);
     return () => {
       window.clearTimeout(t);
-      document.removeEventListener("keydown", onKey);
-      previousFocus.current?.focus?.();
+      if (dialog?.open) dialog.close();
     };
-  }, [failure, onClose]);
+  }, [failure]);
 
   if (!failure) return null;
 
@@ -86,18 +81,20 @@ export function GitHookFailureDialog({
   }
 
   return (
-    <div
+    <dialog
+      ref={dialogRef}
       className="repo-git-hook-backdrop"
-      role="presentation"
+      aria-labelledby={titleId}
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         className="repo-git-hook-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}
       >
         <header className="repo-git-hook-header">
@@ -116,7 +113,6 @@ export function GitHookFailureDialog({
             ) : null}
           </div>
           <button
-            ref={closeRef}
             type="button"
             className="btn btn-ghost repo-git-close"
             aria-label="Dismiss"
@@ -149,6 +145,6 @@ export function GitHookFailureDialog({
           </button>
         </footer>
       </div>
-    </div>
+    </dialog>
   );
 }
