@@ -1,54 +1,10 @@
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { detectGitConflicts } from "@/lib/git-conflicts";
-import {
-  getRepoRoot,
-  getNotesDir,
-  getCollectionsDir,
-  getTasksDir,
-  getDocsDir,
-  getUpstartsDir,
-} from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes-dir";
+import { buildContentBuckets, matchContentBucket } from "@/lib/content-sync-dirs";
 import { runGitRepo, runGitRepoAsync } from "@/lib/git-repo-local";
-import { DIAGRAMS_DIR } from "@/lib/diagram-utils";
 import { isGitNoisePath } from "@/lib/repo-git-parsers";
-
-type ContentBucket = "notes" | "tasks" | "docs";
-
-/** Repo-relative POSIX prefix (trailing slash) for a content dir, or null when it lives outside the repo. */
-function repoRelativePrefix(root: string, dir: string): string | null {
-  const rel = path.relative(root, dir);
-  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return null;
-  return `${rel.split(path.sep).join("/")}/`;
-}
-
-function safeContentDir(resolve: () => string): string | null {
-  try {
-    return resolve();
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Classify dirty files by their CONFIGURED content directory rather than
- * hardcoded path literals. This keeps tasks/notes/docs counted as syncable
- * "content" (not generic "dirty files") even when TASKS_DIR/NOTES_DIR are
- * relocated — a supported setup per the personal-data boundary in CONTRIBUTING.
- */
-function buildContentBuckets(root: string): { bucket: ContentBucket; prefix: string }[] {
-  const buckets: { bucket: ContentBucket; prefix: string }[] = [];
-  const add = (bucket: ContentBucket, dir: string | null, fallback: string): void => {
-    const prefix = dir ? repoRelativePrefix(root, dir) : `${fallback}/`;
-    if (prefix) buckets.push({ bucket, prefix });
-  };
-  add("notes", safeContentDir(getNotesDir), "notes");
-  add("notes", safeContentDir(getCollectionsDir), "collections");
-  add("tasks", safeContentDir(getTasksDir), "tasks");
-  add("tasks", safeContentDir(getUpstartsDir), "upstarts");
-  add("docs", safeContentDir(getDocsDir), "docs");
-  return buckets;
-}
 
 /** Throttle the network fetch — local counting stays per-request. */
 const FETCH_TTL_MS = 4 * 60 * 1000;
@@ -77,7 +33,6 @@ export async function GET() {
       });
     const dirtyCount = dirtyLines.length;
     const contentBuckets = buildContentBuckets(root);
-    const diagramsPrefix = `${DIAGRAMS_DIR}/`;
     let notesCount = 0;
     let tasksCount = 0;
     let diagramsCount = 0;
@@ -85,15 +40,11 @@ export async function GET() {
     for (const line of dirtyLines) {
       let fp = line.slice(3);
       if (fp.includes(" -> ")) fp = fp.split(" -> ").pop()!.trim();
-      if (fp.startsWith(diagramsPrefix)) {
-        diagramsCount++;
-        continue;
-      }
-      const hit = contentBuckets.find((b) => fp.startsWith(b.prefix));
-      if (!hit) continue;
-      if (hit.bucket === "notes") notesCount++;
-      else if (hit.bucket === "tasks") tasksCount++;
-      else docsCount++;
+      const bucket = matchContentBucket(contentBuckets, fp);
+      if (bucket === "diagrams") diagramsCount++;
+      else if (bucket === "notes") notesCount++;
+      else if (bucket === "tasks") tasksCount++;
+      else if (bucket === "docs") docsCount++;
     }
     // Dirty files that are NOT syncable content (notes/tasks/diagrams/docs).
     // The top bar treats content as a one-click sync; everything else opens

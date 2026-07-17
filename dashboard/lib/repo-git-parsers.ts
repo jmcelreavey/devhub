@@ -104,11 +104,6 @@ export function isGitNoisePath(filePath: string): boolean {
   return base === ".DS_Store" || base.endsWith(".pyc") || parts.includes("__pycache__");
 }
 
-/** Dirty paths that should drive badges / "N changed" (excludes system junk). */
-export function countVisibleDirtyFromPorcelain(stdout: string): number {
-  return parsePorcelainStatus(stdout).filter((f) => !isGitNoisePath(f.path)).length;
-}
-
 /**
  * Parse `git stash list --format=%gd%x00%gs`.
  * Typical message: `WIP on main: abc1234 subject` or `On main: named stash`.

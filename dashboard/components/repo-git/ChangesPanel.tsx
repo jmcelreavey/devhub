@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import {
   Check,
   ChevronDown,
+  CloudUpload,
   File,
   Folder,
   GitCommit,
@@ -435,6 +436,17 @@ export function ChangesPanel({
     Boolean(status?.clean) ||
     ((status?.files.length ?? 0) === 0 && !loading) ||
     (visibleDirtyCount === 0 && noiseCount === 0 && !loading);
+  const contentSyncCount = status?.contentSyncCount ?? 0;
+  const contentSyncHint =
+    contentSyncCount > 0 ? (
+      <div className="repo-git-noise-hint">
+        <CloudUpload size={11} aria-hidden />
+        <span>
+          {contentSyncCount} content file{contentSyncCount === 1 ? "" : "s"} (notes / tasks /
+          docs) not shown — synced from the cloud button in the top bar
+        </span>
+      </div>
+    ) : null;
 
   return (
     <div className="repo-git-changes">
@@ -462,6 +474,7 @@ export function ChangesPanel({
               ? "No real changes — only system junk left behind."
               : "Nothing to stage. History and branches are one tab over."}
           </div>
+          {contentSyncHint && <div style={{ marginTop: 10 }}>{contentSyncHint}</div>}
           {noiseOnly && (
             <div className="repo-git-noise-hint" style={{ marginTop: 10 }}>
               <span>
@@ -600,6 +613,7 @@ export function ChangesPanel({
               </button>
             </div>
           )}
+          {contentSyncHint}
         </div>
 
         <div className="repo-git-diff-pane">
