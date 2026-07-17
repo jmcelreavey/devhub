@@ -29,6 +29,12 @@ export interface CanvasDoc {
   lastInstruction: string | null;
   /** True once the AI (rather than the built-in default) has authored it. */
   aiAuthored: boolean;
+  /**
+   * True when the user chose their own aesthetic (anime, neon, retro…) — the
+   * canvas is intentionally off-theme, and later revisions must keep the
+   * user-owns-the-palette rules instead of snapping back to the app theme.
+   */
+  customAesthetic?: boolean;
 }
 
 const CANVAS_VERSION = 1;
@@ -56,7 +62,11 @@ export function readCanvas(): CanvasDoc {
   return stored.doc;
 }
 
-export async function saveCanvas(html: string, instruction: string | null): Promise<CanvasDoc> {
+export async function saveCanvas(
+  html: string,
+  instruction: string | null,
+  opts?: { customAesthetic?: boolean },
+): Promise<CanvasDoc> {
   const prev = readCanvas();
   const doc: CanvasDoc = {
     html,
@@ -64,6 +74,7 @@ export async function saveCanvas(html: string, instruction: string | null): Prom
     updatedAt: new Date().toISOString(),
     lastInstruction: instruction,
     aiAuthored: true,
+    customAesthetic: opts?.customAesthetic ?? prev.customAesthetic ?? false,
   };
   const file = canvasFile();
   await withMutex(file, async () => {
@@ -166,23 +177,27 @@ export async function generateCanvasHtml(
   dataForPrompt: Record<string, unknown>,
   currentHtml: string | null,
   theme?: CanvasTheme | null,
+  opts?: { customAesthetic?: boolean },
 ): Promise<string | null> {
   if (!isNotesAiConfigured()) return null;
   const model = getNotesAiModel();
   if (!model) return null;
 
+  const customAesthetic = opts?.customAesthetic ?? false;
   const revising = Boolean(currentHtml && currentHtml.length > 200);
   const themeLine = theme
-    ? `HOST THEME (the app's tokens — the DEFAULT palette; see STYLE PRECEDENCE): the injected window.__BRIEFING__.theme and these CSS variables are available: --app-bg ${theme.bg}, --app-surface ${theme.surface}, --app-elevated ${theme.elevated}, --app-text ${theme.text}, --app-muted ${theme.muted}, --app-subtle ${theme.subtle}, --app-border ${theme.border}, --app-accent ${theme.accent}, --app-accent-fg ${theme.accentFg}. By default use theme.bg as the page background, theme.text as the primary text, theme.accent as the single accent, and theme.border/surface for structure. The canvas sits inside a ${theme.mode}-mode app, so keep a ${theme.mode} page unless the user explicitly asks otherwise.`
+    ? customAesthetic
+      ? `HOST APP CONTEXT: the canvas sits inside a ${theme.mode}-mode app, so lean ${theme.mode} unless the user asked otherwise. The --app-* CSS variables and window.__BRIEFING__.theme exist but are OPTIONAL — the user's chosen aesthetic defines the palette, not the app theme.`
+      : `HOST THEME (the app's tokens — the palette to match): the injected window.__BRIEFING__.theme and these CSS variables are available: --app-bg ${theme.bg}, --app-surface ${theme.surface}, --app-elevated ${theme.elevated}, --app-text ${theme.text}, --app-muted ${theme.muted}, --app-subtle ${theme.subtle}, --app-border ${theme.border}, --app-accent ${theme.accent}, --app-accent-fg ${theme.accentFg}. Use theme.bg as the page background, theme.text as the primary text, theme.accent as the single accent, and theme.border/surface for structure. The canvas sits inside a ${theme.mode}-mode app; ship a ${theme.mode} design.`
     : "";
-  const precedence = [
-    "STYLE PRECEDENCE (read carefully):",
-    "- The taste rules and host theme above are the DEFAULT style, not a cage.",
-    "- When the user's request names a specific aesthetic (colourful, anime, neon, retro terminal, pastel, cyberpunk, playful, brutalist...), THEIR AESTHETIC WINS over theme-matching and the colour-quarantine/single-accent rules: commit to it fully with a custom palette, multiple accents, gradients, or expressive backgrounds as the look demands. A half-hearted default-theme page with the requested style ignored is a failure.",
-    "- An aesthetic overhaul is licence to redesign the LAYOUT too — new structure, new card shapes, new hero. Do not preserve the previous document's skeleton with recoloured chrome and call it done.",
-    "- Layout quality, readability, accessibility, motion restraint, content honesty, and punctuation rules ALWAYS apply regardless of aesthetic.",
-    "- When the user has not asked for a look, follow the host theme and taste rules exactly.",
-  ].join("\n");
+  const mandate = customAesthetic
+    ? [
+        "AESTHETIC MANDATE:",
+        "- The user has chosen a custom look for this page. Deliver it at FULL commitment — the new identity must be unmistakable within one second of looking at the page.",
+        "- You may (and should) redesign the layout to serve the aesthetic: new structure, new hero, new card shapes. Do not reproduce the previous document's skeleton with different colours.",
+        "- Layout quality, readability, accessibility, motion restraint, content honesty, and punctuation rules always apply.",
+      ].join("\n")
+    : "";
   const imagery = isImageAiConfigured()
     ? [
         "GENERATED IMAGERY (available on this machine):",
@@ -190,6 +205,7 @@ export async function generateCanvasHtml(
         "- Use it when the user asks for generated/illustrated imagery or when their chosen aesthetic begs for art (an anime look wants an illustrated backdrop, not just gradients).",
         "- Write rich, specific prompts: style, palette, subject, mood, and ALWAYS append 'no text, no words, no captions'. Example: a full-bleed hero background plus one small themed illustration per major card.",
         "- Keep it to at most 4 distinct image prompts per page. Reuse one prompt for repeated decorations.",
+        "- The artwork must stay VISIBLE: use translucent card surfaces (backdrop-filter or rgba backgrounds) over background art — do not bury a generated backdrop under near-opaque panels.",
         "- Text must stay readable: put a contrast overlay (scrim/gradient) between any background image and text.",
         "- Generation takes a few seconds on first load: give <img> loading=\"lazy\", a CSS background-color placeholder, meaningful alt text, and an error listener (addEventListener('error', ...)) that hides the element so a failed/unconfigured image never leaves a broken icon.",
       ].join("\n")
@@ -204,11 +220,11 @@ export async function generateCanvasHtml(
         "You are the sole designer and front-end engineer for a personal daily-briefing screen.",
         "You have real creative control of layout, colour, typography and motion, but you must ship tasteful, professional work that obeys the house rules below. Tasteful and restrained beats busy and decorative.",
         "",
-        tasteDirectivesForPrompt(),
+        tasteDirectivesForPrompt({ customAesthetic }),
         "",
         themeLine,
         "",
-        precedence,
+        mandate,
         "",
         imagery,
         "",

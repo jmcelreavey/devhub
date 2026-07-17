@@ -33,12 +33,21 @@ export function tasteSkillAvailable(): boolean {
 // Distilled from skills/shared/taste-skill (sections 4, 6, 8, 9). Framework-
 // agnostic, tuned for a personal daily-briefing dashboard rendered as a single
 // vanilla HTML document.
-export const TASTE_DIRECTIVES = [
+//
+// Composition: the palette rules come in two mutually exclusive flavours.
+// HOUSE_PALETTE_RULES lock the canvas to the app theme (the default).
+// CUSTOM_PALETTE_RULES apply when the user has explicitly chosen an aesthetic
+// (anime, neon, retro…) — the user owns the palette, and the house colour
+// quarantine must NOT be in the prompt at all (a rule that is present but
+// "overridden" still drags generations back to the theme).
+const FRAME_RULES = [
   "TASTE RULES (house anti-slop standard — follow all of them):",
   "",
-  "Frame: this is a personal daily-briefing DASHBOARD, not a marketing landing page. It should feel calm, dense-but-scannable, and genuinely useful. No marketing hero, no scroll-tricks, no fake product UI, no filler copy.",
-  "",
-  "Theme (match the host app by default — when the user explicitly requests a specific aesthetic, STYLE PRECEDENCE in the prompt overrides this section and the Colour section):",
+  "Frame: this is a personal daily-briefing DASHBOARD, not a marketing landing page. It should feel dense-but-scannable and genuinely useful. No marketing hero, no scroll-tricks, no fake product UI, no filler copy.",
+].join("\n");
+
+const HOUSE_PALETTE_RULES = [
+  "Theme (match the host app):",
   "- The canvas is embedded in the DevHub app. Read window.__BRIEFING__.theme = { mode: 'dark'|'light', bg, surface, elevated, text, muted, subtle, border, accent, accentFg } and ground the WHOLE design in it. The matching CSS variables (--app-bg, --app-text, --app-accent, etc.) are also injected.",
   "- Page background = theme.bg / var(--app-bg), primary text = theme.text / var(--app-text), single accent = theme.accent / var(--app-accent), structure = theme.border/surface. If mode is dark, ship a dark design; if light, ship a light one. Never mismatch the host.",
   "- QUARANTINE: every colour in the canvas MUST be a --app-* token or a value from window.__BRIEFING__.theme. No freestyle hex, rgba stacks, or purple/blue glow blobs.",
@@ -47,7 +56,16 @@ export const TASTE_DIRECTIVES = [
   "- Exactly ONE accent colour, locked across the whole page. Neutral base (zinc/slate/stone, or a single warm neutral). Accent saturation under ~80%.",
   "- No AI-purple/blue glow, no neon, no rainbow or multi-stop gradients, no oversaturated accents. A restrained single-hue gradient is fine.",
   "- Off-black and off-white only. Never pure #000 or #fff. Tint shadows to the background hue; never pure-black drop shadows.",
-  "",
+].join("\n");
+
+const CUSTOM_PALETTE_RULES = [
+  "Colour & theme (USER-DIRECTED AESTHETIC — the user chose this look; you own the palette):",
+  "- Ignore the app's theme tokens for colour. Build a bespoke palette that delivers the requested aesthetic at full commitment: saturated colour, multiple accents, gradients, glow, illustrated backgrounds — whatever the look demands. A page that could pass as the app's default theme is a FAILURE.",
+  "- The new identity must be unmistakable at a glance: background, cards, headings, and chips should all carry the aesthetic, not just a tinted border.",
+  "- Non-negotiables that survive any aesthetic: text meets WCAG AA contrast (put scrims/overlays between artwork and text), shadows are tinted (never pure black), and the page stays cohesive — bold is great, incoherent is not.",
+].join("\n");
+
+const UNIVERSAL_RULES = [
   "Type:",
   "- ONE sans family (a clean grotesk; a good system stack is fine). Optionally ONE mono, used only for numbers/times. Do not mix a random serif into a sans headline.",
   "- Control hierarchy with weight, size and colour, not one giant scream headline. Body measure ~60-75 characters.",
@@ -74,10 +92,16 @@ export const TASTE_DIRECTIVES = [
   "- ZERO em-dashes (—) and zero en-dashes (–) anywhere the user can see them: headlines, labels, body, captions, buttons. Use a normal hyphen (-) or restructure the sentence. Ration the middle-dot (·) to at most one per metadata line.",
 ].join("\n");
 
-/** The block to inject into the canvas-generation prompt. */
-export function tasteDirectivesForPrompt(): string {
+/**
+ * The block to inject into the canvas-generation prompt. With
+ * `customAesthetic` the house theme/colour lockdown is REPLACED by
+ * user-owns-the-palette rules — conflicting rules must not co-exist in the
+ * prompt, or generations drift back to the app theme.
+ */
+export function tasteDirectivesForPrompt(opts?: { customAesthetic?: boolean }): string {
+  const palette = opts?.customAesthetic ? CUSTOM_PALETTE_RULES : HOUSE_PALETTE_RULES;
   const provenance = tasteSkillAvailable()
     ? "(derived from your team's taste-skill; these are hard house rules, not suggestions)"
     : "(house design rules)";
-  return `${TASTE_DIRECTIVES}\n\n${provenance}`;
+  return [FRAME_RULES, "", palette, "", UNIVERSAL_RULES, "", provenance].join("\n");
 }
