@@ -58,7 +58,8 @@
   --scrim: color-mix(in oklab, #000 45%, transparent);
   --scrim-strong: color-mix(in oklab, #000 55%, transparent);
   --shadow-elevated: 0 8px 24px color-mix(in oklab, #000 35%, transparent);
-  --shadow-elevated-strong: 0 18px 60px color-mix(in oklab, #000 45%, transparent);
+  --shadow-elevated-strong: 0 18px 60px
+    color-mix(in oklab, #000 45%, transparent);
   --shadow-panel: 0 -4px 24px color-mix(in oklab, #000 25%, transparent);
   --shadow-panel-side: -4px 0 24px color-mix(in oklab, #000 25%, transparent);
   --shadow-toast: 0 8px 24px color-mix(in oklab, #000 35%, transparent);
@@ -66,7 +67,8 @@
   --shadow-prompt: 0 4px 24px color-mix(in oklab, #000 30%, transparent);
   --shadow-raised: 0 1px 2px color-mix(in oklab, #000 14%, transparent);
   --shadow-inset: inset 0 0 0 1px color-mix(in oklab, #000 35%, transparent);
-  --shadow-inset-accent: inset 0 0 0 1px color-mix(in oklab, var(--accent) 22%, transparent);
+  --shadow-inset-accent: inset 0 0 0 1px
+    color-mix(in oklab, var(--accent) 22%, transparent);
 
   /* Named easings (token block only — call sites use var(--ease-*)) */
   --ease-swift: cubic-bezier(0.22, 1, 0.36, 1);
@@ -457,7 +459,11 @@ h3,
 }
 .card:hover {
   border-color: var(--border);
-  background: color-mix(in oklab, var(--bg-surface) 88%, var(--bg-elevated) 12%);
+  background: color-mix(
+    in oklab,
+    var(--bg-surface) 88%,
+    var(--bg-elevated) 12%
+  );
 }
 
 .card-header {
@@ -1131,7 +1137,11 @@ a:focus-visible {
 }
 .hub-card:hover {
   border-color: var(--border);
-  background: color-mix(in oklab, var(--bg-surface) 85%, var(--bg-elevated) 15%);
+  background: color-mix(
+    in oklab,
+    var(--bg-surface) 85%,
+    var(--bg-elevated) 15%
+  );
 }
 
 .hub-card-head {
@@ -2151,7 +2161,8 @@ a:focus-visible {
 .nav-item-collapsed[data-active] {
   color: var(--text);
   background: var(--accent-dim);
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 22%, transparent);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in oklab, var(--accent) 22%, transparent);
 }
 .nav-item[data-active] .nav-item-icon {
   opacity: 0.95;
@@ -2289,9 +2300,15 @@ a:focus-visible {
 }
 
 @keyframes task-timer-pulse {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
-  70% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 0%, transparent); }
-  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent);
+  }
 }
 
 body[data-motion="off"] .task-timer-dot {
@@ -2299,7 +2316,9 @@ body[data-motion="off"] .task-timer-dot {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .task-timer-dot { animation: none; }
+  .task-timer-dot {
+    animation: none;
+  }
 }
 
 /* A running timer's play/pause icon picks up the accent, matching the readout. */
@@ -3197,7 +3216,10 @@ body[data-density="compact"] .card {
 }
 .briefing-wx-row {
   display: grid;
-  grid-template-columns: minmax(148px, 1.45fr) repeat(auto-fit, minmax(108px, 1fr));
+  grid-template-columns: minmax(148px, 1.45fr) repeat(
+      auto-fit,
+      minmax(108px, 1fr)
+    );
   gap: var(--space-2);
 }
 @media (max-width: 520px) {
@@ -5213,10 +5235,18 @@ body[data-motion="off"] .repos-card-more-summary::before {
   height: 0.5rem;
   margin-top: 0.375rem;
 }
-.tone-dot--accent { background: var(--accent); }
-.tone-dot--warning { background: var(--warning); }
-.tone-dot--danger { background: var(--danger); }
-.tone-dot--muted { background: var(--text-subtle); }
+.tone-dot--accent {
+  background: var(--accent);
+}
+.tone-dot--warning {
+  background: var(--warning);
+}
+.tone-dot--danger {
+  background: var(--danger);
+}
+.tone-dot--muted {
+  background: var(--text-subtle);
+}
 
 .dd-link-btn--danger {
   border-color: color-mix(in oklab, var(--danger) 40%, transparent);
@@ -5244,18 +5274,30 @@ body[data-motion="off"] .repos-card-more-summary::before {
 .repo-git-modal-backdrop {
   position: fixed;
   inset: 0;
-  /* Above ModalShell (250); below toasts (300). */
-  z-index: 260;
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  overflow: hidden;
+  display: none;
+}
+.repo-git-modal-backdrop[open] {
   display: flex;
   align-items: center;
   justify-content: center;
   /* Safe-area + gutter so hub chrome never peeks under a clipped modal edge. */
-  padding:
-    max(12px, env(safe-area-inset-top, 0px))
+  padding: max(12px, env(safe-area-inset-top, 0px))
     max(12px, env(safe-area-inset-right, 0px))
     max(12px, env(safe-area-inset-bottom, 0px))
     max(12px, env(safe-area-inset-left, 0px));
   box-sizing: border-box;
+}
+.repo-git-modal-backdrop::backdrop {
+  background: var(--scrim);
 }
 .repo-git-modal-backdrop[data-fullscreen] {
   padding: 0;
@@ -5733,19 +5775,6 @@ body[data-motion="off"] .repos-card-more-summary::before {
   position: relative;
   min-height: 0;
 }
-.repo-git-diff-selection-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  font-size: 11px;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--border);
-  background: color-mix(in oklab, var(--bg-elevated) 70%, transparent);
-  position: sticky;
-  top: 0;
-  z-index: 2;
-}
 .repo-git-diff {
   margin: 0;
   padding: 0;
@@ -5773,25 +5802,14 @@ body[data-motion="off"] .repos-card-more-summary::before {
   flex: 1;
   min-width: 0;
 }
-.repo-git-diff-selectable {
-  cursor: pointer;
-}
-.repo-git-diff-selectable:hover {
-  outline: 1px solid color-mix(in oklab, var(--accent) 35%, transparent);
-  outline-offset: -1px;
-}
-.repo-git-diff-selected {
-  outline: 1px solid color-mix(in oklab, var(--accent) 55%, transparent);
-  outline-offset: -1px;
-  background: color-mix(in oklab, var(--accent) 14%, transparent);
-}
 .repo-git-hunk-btn {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 3px;
   margin-right: 8px;
-  padding: 1px 6px;
+  min-height: 28px;
+  padding: 4px 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm, 4px);
   background: var(--bg-surface);
@@ -5799,8 +5817,10 @@ body[data-motion="off"] .repos-card-more-summary::before {
   font-size: 10px;
   font-family: inherit;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 140ms var(--ease-swift), background 140ms var(--ease-swift);
+  opacity: 0.72;
+  transition:
+    opacity 140ms var(--ease-swift),
+    background 140ms var(--ease-swift);
 }
 .repo-git-diff-hunk:hover .repo-git-hunk-btn,
 .repo-git-hunk-btn:focus-visible {
@@ -6253,11 +6273,25 @@ body[data-motion="off"] .repos-card-more-summary::before {
 .repo-git-hook-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 280;
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  overflow: hidden;
+  box-sizing: border-box;
+  display: none;
+}
+.repo-git-hook-backdrop[open] {
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 2.5vh 2.5vw;
+}
+.repo-git-hook-backdrop::backdrop {
   background: var(--scrim);
 }
 .repo-git-hook-dialog {

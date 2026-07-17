@@ -115,4 +115,85 @@ describe("discardGitPaths", () => {
     expect(result.ok).toBe(true);
     expect(fs.existsSync(path.join(repo, "new.txt"))).toBe(false);
   });
+
+  it("discards both sides of a staged rename", async () => {
+    const repo = mkTempRepo();
+    repos.push(repo);
+    const oldPath = "old → name.txt";
+    const newPath = "new -> name ü.txt";
+    write(repo, oldPath, "original\n");
+    runGitRepo(repo, ["add", oldPath]);
+    runGitRepo(repo, ["commit", "-m", "init"]);
+    runGitRepo(repo, ["mv", oldPath, newPath]);
+
+    const result = await discardGitPaths(repo, [newPath], "staged");
+
+    expect(result.ok).toBe(true);
+    expect(fs.readFileSync(path.join(repo, oldPath), "utf-8")).toBe("original\n");
+    expect(fs.existsSync(path.join(repo, newPath))).toBe(false);
+    expect(runGitRepo(repo, ["status", "--porcelain=v1"]).stdout).toBe("");
+  });
+
+  it("moves unstaged rename edits back to the source path", async () => {
+    const repo = mkTempRepo();
+    repos.push(repo);
+    write(repo, "old.txt", "line1\nline2\nline3\n");
+    runGitRepo(repo, ["add", "old.txt"]);
+    runGitRepo(repo, ["commit", "-m", "init"]);
+    runGitRepo(repo, ["mv", "old.txt", "new.txt"]);
+    write(repo, "new.txt", "line1\nchanged\nline3\n");
+
+    const result = await discardGitPaths(repo, ["new.txt"], "staged");
+
+    expect(result.ok).toBe(true);
+    expect(fs.readFileSync(path.join(repo, "old.txt"), "utf-8")).toBe(
+      "line1\nchanged\nline3\n",
+    );
+    expect(fs.existsSync(path.join(repo, "new.txt"))).toBe(false);
+    expect(runGitRepo(repo, ["status", "--porcelain=v1"]).stdout).toBe(" M old.txt\n");
+  });
+
+  it("rejects staged discard for an unresolved conflict", async () => {
+    const repo = mkTempRepo();
+    repos.push(repo);
+    write(repo, "file.txt", "base\n");
+    runGitRepo(repo, ["add", "file.txt"]);
+    runGitRepo(repo, ["commit", "-m", "init"]);
+    runGitRepo(repo, ["checkout", "-b", "side"]);
+    write(repo, "file.txt", "side\n");
+    runGitRepo(repo, ["add", "file.txt"]);
+    runGitRepo(repo, ["commit", "-m", "side"]);
+    runGitRepo(repo, ["checkout", "main"]);
+    write(repo, "file.txt", "main\n");
+    runGitRepo(repo, ["add", "file.txt"]);
+    runGitRepo(repo, ["commit", "-m", "main"]);
+    expect(runGitRepo(repo, ["merge", "side"]).status).not.toBe(0);
+
+    const before = runGitRepo(repo, ["ls-files", "-u"]).stdout;
+    const result = await discardGitPaths(repo, ["file.txt"], "staged");
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Resolve the conflict before discarding staged changes",
+    });
+    expect(runGitRepo(repo, ["ls-files", "-u"]).stdout).toBe(before);
+  });
+
+  it("preserves an unstaged executable-bit change while discarding staged content", async () => {
+    const repo = mkTempRepo();
+    repos.push(repo);
+    write(repo, "file.txt", "original\n");
+    runGitRepo(repo, ["add", "file.txt"]);
+    runGitRepo(repo, ["commit", "-m", "init"]);
+    setIndexBlob(repo, "file.txt", "staged\n");
+    write(repo, "file.txt", "staged\n");
+    fs.chmodSync(path.join(repo, "file.txt"), 0o755);
+
+    const result = await discardGitPaths(repo, ["file.txt"], "staged");
+
+    expect(result.ok).toBe(true);
+    expect(fs.readFileSync(path.join(repo, "file.txt"), "utf-8")).toBe("original\n");
+    expect(fs.statSync(path.join(repo, "file.txt")).mode & 0o111).not.toBe(0);
+    expect(runGitRepo(repo, ["status", "--porcelain=v1"]).stdout).toBe(" M file.txt\n");
+  });
 });

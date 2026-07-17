@@ -51,8 +51,17 @@ describe("parsePorcelainStatus", () => {
     ]);
   });
 
-  it("uses rename target path", () => {
-    expect(parsePorcelainStatus("R  old.ts -> new.ts\n")[0]?.path).toBe("new.ts");
+  it("preserves NUL-delimited rename paths without interpreting their contents", () => {
+    const rows = parsePorcelainStatus(
+      "R  new → name -> literal.ts\0old ü name.ts\0?? line\nbreak.txt\0",
+    );
+
+    expect(rows[0]).toMatchObject({
+      path: "new → name -> literal.ts",
+      originalPath: "old ü name.ts",
+      indexStatus: "R",
+    });
+    expect(rows[1]?.path).toBe("line\nbreak.txt");
   });
 });
 

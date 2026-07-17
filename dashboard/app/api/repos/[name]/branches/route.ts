@@ -285,16 +285,21 @@ export async function POST(req: NextRequest, { params }: Params) {
       if (!body.message || typeof body.message !== "string") {
         return NextResponse.json({ error: "Missing commit message" }, { status: 400 });
       }
-      // Prefer committing only what's already staged; fall back to add -A when empty.
       const staged = await runGitRepoAsync(rp, ["diff", "--cached", "--name-only"]);
+      if (staged.status !== 0) {
+        return NextResponse.json(
+          {
+            error:
+              staged.stderr.trim() || staged.stdout.trim() || "Could not inspect staged changes",
+          },
+          { status: 500 },
+        );
+      }
       if ((staged.stdout || "").trim().length === 0 && !body.amend) {
-        const add = await runGitRepoAsync(rp, ["add", "-A"]);
-        if (add.status !== 0) {
-          return NextResponse.json(
-            { error: add.stderr.trim() || add.stdout.trim() || "Stage failed" },
-            { status: 500 },
-          );
-        }
+        return NextResponse.json(
+          { error: "Nothing is staged — stage the files you want to commit first." },
+          { status: 400 },
+        );
       }
       const commitArgs = body.amend
         ? ["commit", "--amend", "-m", body.message]
@@ -315,13 +320,20 @@ export async function POST(req: NextRequest, { params }: Params) {
           );
         }
       }
+      const prep = prepareGitIndexWrite(rp);
+      if (!prep.ok) return indexLockResponse(rp, prep.error);
+
       const commit = await runGitRepoAsync(rp, commitArgs);
       if (commit.status !== 0) {
+        const gitError = commit.stderr.trim() || commit.stdout.trim() || "Commit failed";
+        if (looksLikeIndexLockError(commit.stderr, commit.stdout)) {
+          return indexLockResponse(rp, gitError);
+        }
         const phase: GitHookPhase = body.amend ? "amend" : "commit";
         const hookRes = hookFailureResponse(rp, commit.stdout, commit.stderr, phase);
         if (hookRes) return hookRes;
         return NextResponse.json(
-          { error: commit.stderr.trim() || commit.stdout.trim() || "Commit failed" },
+          { error: gitError },
           { status: 500 },
         );
       }
@@ -367,22 +379,6 @@ export async function POST(req: NextRequest, { params }: Params) {
           { error: "No upstream branch — set upstream or push with -u first." },
           { status: 400 },
         );
-      }
-      const counts = await runGitRepoAsync(rp, [
-        "rev-list",
-        "--left-right",
-        "--count",
-        `${upstream}...HEAD`,
-      ]);
-      if (counts.status === 0) {
-        const { left: behind } = parseLeftRightCount(counts.stdout || "");
-        if (behind === 0) {
-          return NextResponse.json({
-            ok: true,
-            alreadyUpToDate: true,
-            message: "Already up to date — nothing to pull.",
-          });
-        }
       }
       const pull = await runGitRepoAsync(rp, ["pull", "--ff-only"], { timeout: 120_000 });
       if (pull.status !== 0) {

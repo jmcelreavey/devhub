@@ -28,10 +28,14 @@ fail() { echo "[devhub-backport] ERROR: $*" >&2; exit 1; }
 SOURCE_REF=""
 BASE_REF=""
 EXECUTE=0
+PATCH_ONLY=0
+REQUIRE_SYNCED=0
 TITLE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --execute) EXECUTE=1; shift ;;
+    --patch-only) PATCH_ONLY=1; shift ;;
+    --require-synced) REQUIRE_SYNCED=1; shift ;;
     --title) TITLE="${2:-}"; shift 2 ;;
     --base) BASE_REF="${2:-}"; shift 2 ;;
     -*) fail "Unknown flag: $1" ;;
@@ -45,7 +49,9 @@ done
 [[ -n "$BASE_REF" ]] || BASE_REF="${SOURCE_REF}^"
 
 # --- guards ---
-[[ -z "$(git status --porcelain --untracked-files=no)" ]] || fail "Tracked changes present. Commit or stash, then re-run."
+if [[ "$PATCH_ONLY" != "1" ]]; then
+  [[ -z "$(git status --porcelain --untracked-files=no)" ]] || fail "Tracked changes present. Commit or stash, then re-run."
+fi
 git rev-parse --verify --quiet "$SOURCE_REF" >/dev/null || fail "Unknown ref: $SOURCE_REF"
 git rev-parse --verify --quiet "$BASE_REF" >/dev/null || fail "Unknown base ref: $BASE_REF"
 git remote get-url upstream >/dev/null 2>&1 || fail "No 'upstream' remote. Add the public core first."
@@ -85,21 +91,50 @@ UPSTREAM_REF="upstream/${UPSTREAM_BRANCH}"
 UPSTREAM_URL="$(git remote get-url upstream)"
 UPSTREAM_SLUG="$(echo "$UPSTREAM_URL" | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##')"
 
-# --- personal-data exclusions (these never go to the public core) ---
-# upstarts/ holds per-repo startup scripts for private/company repos (the
-# "DevHub private store") — personal by definition, like tasks/ and notes/.
-EXCLUDES=(':!notes' ':!tasks' ':!collections' ':!upstarts' ':!dashboard/.env.local'
-          ':!persona/identity.txt' ':!TEMPLATE_AND_PLUGIN_PLAN.md' ':!scripts/make-public-seed.sh')
+if [[ "$REQUIRE_SYNCED" == "1" ]]; then
+  SYNCED_SHA="$(git rev-parse --verify --quiet refs/devhub/upstream-sync || true)"
+  UPSTREAM_SHA="$(git rev-parse "$UPSTREAM_REF")"
+  [[ "$SYNCED_SHA" == "$UPSTREAM_SHA" ]] || fail \
+    "Public core moved since the mirror was synced. Run scripts/devhub-update.sh, then retry."
+fi
+
+# --- public catalog boundary ---
+# Only catalog-owned shared assets are public. In particular, skills outside
+# skills/shared are local tool installs and must never hitch a ride to core.
+PUBLIC_PATHS=(.gitattributes .githooks .github .gitignore .nvmrc AGENTS.md
+              CONTRIBUTING.md LICENSE PLAN.md README.md package.json
+              agents/shared dashboard docs electron-wrapper mcp/shared mcp-servers
+              opencode/shared persona/deep-preferences.md persona/modes
+              persona/shared-persona.md scripts shared skills/shared
+              ':!dashboard/.env.local' ':!scripts/make-public-seed.sh')
 
 # Personal paths that were touched but will be dropped (informational).
-DROPPED="$(git diff --name-only "${BASE_REF}..${SOURCE_REF}" -- notes tasks collections upstarts \
+DROPPED="$(git diff --name-only "$BASE_REF" "$SOURCE_REF" -- notes tasks collections upstarts \
             dashboard/.env.local persona/identity.txt TEMPLATE_AND_PLUGIN_PLAN.md \
             scripts/make-public-seed.sh 2>/dev/null || true)"
 [[ -n "$DROPPED" ]] && { log "Dropping personal/strategy paths from the PR:"; echo "$DROPPED" | sed 's/^/  - /'; }
+LOCAL_SKILLS="$(git diff --name-only "$BASE_REF" "$SOURCE_REF" -- skills ':(exclude)skills/shared' 2>/dev/null \
+  | awk -F/ 'NF > 1 { print $1 "/" $2 }' | sort -u || true)"
+[[ -n "$LOCAL_SKILLS" ]] && { log "Dropping non-catalog skills from the PR:"; echo "$LOCAL_SKILLS" | sed 's/^/  - /'; }
 
-# The feature's patch (hunks only), personal paths excluded.
-PATCH="$(git diff "${BASE_REF}..${SOURCE_REF}" -- . "${EXCLUDES[@]}")"
-[[ -n "$PATCH" ]] || fail "No feature changes to backport after exclusions (check --base)."
+# The feature's patch (hunks only), constrained to the public catalog.
+PATCH="$(git diff "$BASE_REF" "$SOURCE_REF" -- "${PUBLIC_PATHS[@]}")"
+if [[ -z "$PATCH" ]]; then
+  log "No public-catalog changes to backport after exclusions."
+  [[ "$PATCH_ONLY" == "1" ]] && exit 3
+  fail "No feature changes to backport after exclusions (check --base)."
+fi
+
+if [[ "$PATCH_ONLY" == "1" ]]; then
+  log "Scanning previewed public patch for internal names / secrets..."
+  ADDED_LINES="$(printf '%s\n' "$PATCH" | grep -E '^\+' | grep -vE '^\+\+\+' || true)"
+  printf '%s\n' "$ADDED_LINES" | bash "$REPO_ROOT/scripts/scan-leaks.sh" stdin
+  echo "----- public patch (stat) -----"
+  git diff --stat "$BASE_REF" "$SOURCE_REF" -- "${PUBLIC_PATHS[@]}"
+  echo "----- public patch -----"
+  printf '%s\n' "$PATCH"
+  exit 0
+fi
 
 log "Porting ${BASE_REF}..${SOURCE_REF} onto ${UPSTREAM_REF}"
 

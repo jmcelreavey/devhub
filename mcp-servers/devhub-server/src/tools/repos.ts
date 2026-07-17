@@ -465,7 +465,7 @@ export function registerReposTools(server: McpServer, ctx: Context): void {
     async ({ name, ref, path: filePath }) =>
       withDashboardErrors(async () => {
         const data = await dashboard.get(repoPath(name, "/git/show"), {
-          ref,
+          commit: ref,
           path: filePath,
         });
         return { content: [{ type: "text", text: jsonText(data) }] };

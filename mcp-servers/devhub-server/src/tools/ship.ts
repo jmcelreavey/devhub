@@ -8,11 +8,9 @@ import { z } from "zod";
 import type { Context } from "../context.ts";
 
 /**
- * "Ship everything to main" — wraps scripts/devhub-ship.sh: commits notes/tasks
- * and code as separate commits, pushes origin main, ports the content diff to
- * the public core's main directly (leak scan gates; no PR), and pushes enabled
- * plugin repos. The pre-push verify makes a run take several minutes, so
- * `repo_ship` starts it detached and `repo_ship_status` polls the log.
+ * Wraps scripts/devhub-ship.sh. Calls preview synchronously unless mutation is
+ * explicitly confirmed; confirmed runs are detached because pre-push verify
+ * takes several minutes.
  */
 
 const LOG_PATH = path.join(os.tmpdir(), "devhub-ship.log");
@@ -32,17 +30,18 @@ export function registerShipTools(server: McpServer, _ctx: Context): void {
     "repo_ship",
     {
       description:
-        "Ship all local DevHub work: commit notes/tasks + code, push the private mirror (origin main), port the content diff straight to the public core's main (leak-scanned, personal paths dropped, no PR), and push enabled plugin repos. Runs detached (verify takes minutes) — poll repo_ship_status. Use dryRun to preview what would be committed.",
+        "Preview shipping by default. With confirm=true, commit local work, reconcile newer public-core changes, push the private mirror, port the leak-scanned generic catalog patch to public main, and push enabled plugins. Runs detached — poll repo_ship_status.",
       inputSchema: {
         message: z.string().optional().describe("Feature commit message (default 'chore: ship local work')"),
-        dryRun: z.boolean().optional().describe("Preview the changed paths without committing or pushing"),
+        dryRun: z.boolean().optional().describe("Preview the actual public patch without committing or pushing"),
+        confirm: z.boolean().optional().describe("Required (true) to commit or push; omitted/false previews safely"),
         includeUpstream: z
           .boolean()
           .optional()
           .describe("Also push the public core (default true); false = private + plugins only"),
       },
     },
-    async ({ message, dryRun, includeUpstream }) => {
+    async ({ message, dryRun, confirm, includeUpstream }) => {
       const root = repoRoot();
       const script = path.join(root, "scripts", "devhub-ship.sh");
       if (!fs.existsSync(script)) {
@@ -50,10 +49,11 @@ export function registerShipTools(server: McpServer, _ctx: Context): void {
       }
       const args = [script];
       if (message?.trim()) args.push(message.trim());
-      if (dryRun) args.push("--dry-run");
+      const preview = dryRun === true || confirm !== true;
+      if (preview) args.push("--dry-run");
       if (includeUpstream === false) args.push("--no-upstream");
 
-      if (dryRun) {
+      if (preview) {
         const res = spawnSync("bash", args, { cwd: root, encoding: "utf-8", timeout: 60_000 });
         const out = `${res.stdout ?? ""}${res.stderr ?? ""}`.trim();
         return { content: [{ type: "text", text: out || "(no output)" }], isError: res.status !== 0 };

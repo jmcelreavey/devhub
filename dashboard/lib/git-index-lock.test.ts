@@ -3,8 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  STALE_INDEX_LOCK_MS,
-  clearStaleIndexLock,
   formatIndexLockError,
   gitIndexLockPath,
   looksLikeIndexLockError,
@@ -37,44 +35,26 @@ describe("looksLikeIndexLockError", () => {
   });
 });
 
-describe("clearStaleIndexLock / prepareGitIndexWrite", () => {
+describe("prepareGitIndexWrite", () => {
   it("is a no-op when no lock exists", () => {
     const root = makeRepo();
-    expect(clearStaleIndexLock(root)).toEqual({
-      cleared: false,
-      lockPath: gitIndexLockPath(root),
-    });
-    expect(prepareGitIndexWrite(root)).toEqual({ ok: true, clearedStaleLock: false });
+    expect(prepareGitIndexWrite(root)).toEqual({ ok: true });
   });
 
-  it("removes locks older than the stale threshold", () => {
+  it("never removes an old lock and returns manual recovery guidance", () => {
     const root = makeRepo();
     const lockPath = gitIndexLockPath(root);
     fs.writeFileSync(lockPath, "");
-    const staleMtime = Date.now() - STALE_INDEX_LOCK_MS - 1_000;
+    const staleMtime = Date.now() - 24 * 60 * 60 * 1_000;
     fs.utimesSync(lockPath, staleMtime / 1000, staleMtime / 1000);
 
-    const cleared = clearStaleIndexLock(root);
-    expect(cleared.cleared).toBe(true);
-    expect(fs.existsSync(lockPath)).toBe(false);
-  });
-
-  it("keeps fresh locks and returns a clear prepare error", () => {
-    const root = makeRepo();
-    const lockPath = gitIndexLockPath(root);
-    fs.writeFileSync(lockPath, "");
-    const now = Date.now();
-    fs.utimesSync(lockPath, now / 1000, now / 1000);
-
-    const cleared = clearStaleIndexLock(root, { now });
-    expect(cleared.cleared).toBe(false);
-    expect(fs.existsSync(lockPath)).toBe(true);
-
-    const prep = prepareGitIndexWrite(root, { now });
+    const prep = prepareGitIndexWrite(root);
     expect(prep.ok).toBe(false);
+    expect(fs.existsSync(lockPath)).toBe(true);
     if (!prep.ok) {
       expect(prep.error).toContain(lockPath);
-      expect(prep.error).toMatch(/remove that file/i);
+      expect(prep.error).toMatch(/will not remove it automatically/i);
+      expect(prep.error).toMatch(/remove the lock file manually/i);
     }
   });
 });

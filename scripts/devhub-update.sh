@@ -58,11 +58,11 @@ run_post_pull_steps() {
 }
 
 # Personal-data paths: excluded from the pull (never expected from upstream) AND ignored by
-# the dirty-tree guard, so the app's live-dirty tasks/notes don't block a pull from the UI.
-EXCLUDES=(':!notes' ':!tasks' ':!collections' ':!dashboard/.env.local'
+# the dirty-tree guard, so live-dirty notes/tasks/upstarts don't block a pull from the UI.
+EXCLUDES=(':!notes' ':!tasks' ':!collections' ':!upstarts' ':!dashboard/.env.local'
           ':!persona/identity.txt' ':!TEMPLATE_AND_PLUGIN_PLAN.md' ':!scripts/make-public-seed.sh')
 # Paths that may stay dirty during a pull — never commit them as part of a core update.
-PERSONAL_PATHS=(notes tasks collections dashboard/.env.local persona/identity.txt
+PERSONAL_PATHS=(notes tasks collections upstarts dashboard/.env.local persona/identity.txt
                 TEMPLATE_AND_PLUGIN_PLAN.md scripts/make-public-seed.sh)
 
 # --- guards ---
@@ -142,7 +142,7 @@ fi
 log "Applying ${SINCE}..${UPSTREAM_REF} onto ${BRANCH}..."
 if ! printf '%s\n' "$PATCH" | git apply --index --3way 2>/tmp/devhub-update-apply.err; then
   cat /tmp/devhub-update-apply.err >&2 || true
-  # Revert only files from the upstream patch — personal paths (tasks/notes/…) may stay
+  # Revert only files from the upstream patch — personal paths (tasks/notes/upstarts/…) may stay
   # dirty on purpose and must not be wiped by a failed apply.
   for f in "${PATCH_FILES[@]}"; do
     [[ -n "$f" ]] || continue
