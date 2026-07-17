@@ -11,6 +11,32 @@ fi
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 DASHBOARD_DIR="$REPO_ROOT/dashboard"
 
+# Verify needs the repo's pinned Node (.nvmrc) — pushes from shells without nvm
+# loaded (IDEs, GUI clients, plain terminals) would otherwise run vitest under
+# an older system Node and false-fail. Source nvm here when node doesn't match.
+if [[ -f "$REPO_ROOT/.nvmrc" ]]; then
+    WANT_NODE="$(tr -d '[:space:]' < "$REPO_ROOT/.nvmrc")"
+    HAVE_NODE="$(node --version 2>/dev/null || true)"
+    case "${HAVE_NODE#v}" in
+        "$WANT_NODE" | "$WANT_NODE".*) : ;; # already on the pinned major
+        *)
+            export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+            if [[ -s "$NVM_DIR/nvm.sh" ]]; then
+                # shellcheck disable=SC1091
+                . "$NVM_DIR/nvm.sh" --no-use
+                nvm use --silent "$WANT_NODE" >/dev/null 2>&1 || true
+            fi
+            HAVE_NODE="$(node --version 2>/dev/null || echo none)"
+            case "${HAVE_NODE#v}" in
+                "$WANT_NODE" | "$WANT_NODE".*)
+                    echo "[pre-push] Using Node $HAVE_NODE via nvm (.nvmrc: $WANT_NODE)." ;;
+                *)
+                    echo "[pre-push] WARNING: Node $HAVE_NODE does not match .nvmrc ($WANT_NODE) and nvm couldn't switch — verify may fail. Run 'nvm install $WANT_NODE'." ;;
+            esac
+            ;;
+    esac
+fi
+
 echo "[pre-push] Scanning for internal-name / secret leaks…"
 if ! bash "$REPO_ROOT/scripts/scan-leaks.sh" tree; then
     echo "[pre-push] Leak scan failed. Fix the hits above or set DEVHUB_SKIP_VERIFY=1 to override."
