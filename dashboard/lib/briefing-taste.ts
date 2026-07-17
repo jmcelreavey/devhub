@@ -38,7 +38,7 @@ export const TASTE_DIRECTIVES = [
   "",
   "Frame: this is a personal daily-briefing DASHBOARD, not a marketing landing page. It should feel calm, dense-but-scannable, and genuinely useful. No marketing hero, no scroll-tricks, no fake product UI, no filler copy.",
   "",
-  "Theme (match the host app):",
+  "Theme (match the host app by default — when the user explicitly requests a specific aesthetic, STYLE PRECEDENCE in the prompt overrides this section and the Colour section):",
   "- The canvas is embedded in the DevHub app. Read window.__BRIEFING__.theme = { mode: 'dark'|'light', bg, surface, elevated, text, muted, subtle, border, accent, accentFg } and ground the WHOLE design in it. The matching CSS variables (--app-bg, --app-text, --app-accent, etc.) are also injected.",
   "- Page background = theme.bg / var(--app-bg), primary text = theme.text / var(--app-text), single accent = theme.accent / var(--app-accent), structure = theme.border/surface. If mode is dark, ship a dark design; if light, ship a light one. Never mismatch the host.",
   "- QUARANTINE: every colour in the canvas MUST be a --app-* token or a value from window.__BRIEFING__.theme. No freestyle hex, rgba stacks, or purple/blue glow blobs.",
