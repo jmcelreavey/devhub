@@ -17,6 +17,7 @@ import { getRepoRoot } from "@/lib/notes-dir";
 import { writeAtomic, safeReadJSON, withMutex } from "@/lib/atomic-write";
 import { BRIEFING_DATA_SHAPE, type BriefingContext } from "@/lib/briefing-context";
 import { DEFAULT_CANVAS_HTML } from "@/lib/briefing-canvas-default";
+import { isImageAiConfigured } from "@/lib/briefing-images";
 import { tasteDirectivesForPrompt } from "@/lib/briefing-taste";
 import type { CanvasTheme } from "@/lib/briefing-theme";
 
@@ -178,9 +179,21 @@ export async function generateCanvasHtml(
     "STYLE PRECEDENCE (read carefully):",
     "- The taste rules and host theme above are the DEFAULT style, not a cage.",
     "- When the user's request names a specific aesthetic (colourful, anime, neon, retro terminal, pastel, cyberpunk, playful, brutalist...), THEIR AESTHETIC WINS over theme-matching and the colour-quarantine/single-accent rules: commit to it fully with a custom palette, multiple accents, gradients, or expressive backgrounds as the look demands. A half-hearted default-theme page with the requested style ignored is a failure.",
+    "- An aesthetic overhaul is licence to redesign the LAYOUT too — new structure, new card shapes, new hero. Do not preserve the previous document's skeleton with recoloured chrome and call it done.",
     "- Layout quality, readability, accessibility, motion restraint, content honesty, and punctuation rules ALWAYS apply regardless of aesthetic.",
     "- When the user has not asked for a look, follow the host theme and taste rules exactly.",
   ].join("\n");
+  const imagery = isImageAiConfigured()
+    ? [
+        "GENERATED IMAGERY (available on this machine):",
+        "- GET /api/briefing/image?prompt=<url-encoded description>&size=1536x1024 returns an AI-generated PNG (sizes: 1024x1024, 1536x1024, 1024x1536). Same-origin, cached per prompt — safe to reference from <img> or CSS url().",
+        "- Use it when the user asks for generated/illustrated imagery or when their chosen aesthetic begs for art (an anime look wants an illustrated backdrop, not just gradients).",
+        "- Write rich, specific prompts: style, palette, subject, mood, and ALWAYS append 'no text, no words, no captions'. Example: a full-bleed hero background plus one small themed illustration per major card.",
+        "- Keep it to at most 4 distinct image prompts per page. Reuse one prompt for repeated decorations.",
+        "- Text must stay readable: put a contrast overlay (scrim/gradient) between any background image and text.",
+        "- Generation takes a few seconds on first load: give <img> loading=\"lazy\", a CSS background-color placeholder, meaningful alt text, and an error listener (addEventListener('error', ...)) that hides the element so a failed/unconfigured image never leaves a broken icon.",
+      ].join("\n")
+    : "";
 
   try {
     const result = await generateText({
@@ -196,6 +209,8 @@ export async function generateCanvasHtml(
         themeLine,
         "",
         precedence,
+        "",
+        imagery,
         "",
         "TECHNICAL CONTRACT:",
         "- Output a SINGLE, COMPLETE, self-contained HTML document (start with <!doctype html>). Inline all CSS in one <style> and all JS in one <script>. No external stylesheets or fonts unless from a well-known CDN.",
