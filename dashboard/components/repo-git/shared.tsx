@@ -27,6 +27,9 @@ export interface StatusPayload {
   staged: StatusFile[];
   unstaged: StatusFile[];
   conflictCount: number;
+  /** DevHub repo only: dirty personal-content files (notes / tasks / docs / diagrams)
+   * hidden from Changes — they sync via the top-bar content-sync button. */
+  contentSyncCount?: number;
   clean: boolean;
 }
 

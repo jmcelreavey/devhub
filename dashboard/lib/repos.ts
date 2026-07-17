@@ -6,7 +6,8 @@ import { getHome, getRepoRoot } from "./notes-dir";
 import { execGhJsonLines, isGithubCliAuthenticated } from "./gh-exec";
 import { parseRepoFullNameFromRemote } from "./github-repo-url";
 import { gitUnpushedCount } from "./standup-git";
-import { countVisibleDirtyFromPorcelain } from "./repo-git-parsers";
+import { isGitNoisePath, parsePorcelainStatus } from "./repo-git-parsers";
+import { buildContentBuckets, isDevhubRepoRoot, matchContentBucket } from "./content-sync-dirs";
 import { detectRepoUpstart, safeUpstartScriptPath } from "./repo-upstart";
 
 const execFileAsync = promisify(execFile);
@@ -76,8 +77,13 @@ async function getDirtyCount(repoPath: string): Promise<number> {
     const { stdout } = await execFileAsync("/usr/bin/git", [
       "-C", repoPath, "status", "--porcelain",
     ]);
-    // Match the Git workspace UI: .DS_Store / __pycache__ don't count as "changed".
-    return countVisibleDirtyFromPorcelain(stdout);
+    // Match the Git workspace UI: .DS_Store / __pycache__ don't count as "changed",
+    // and in the DevHub repo itself neither does synced content (notes / tasks / …) —
+    // that flows through the top-bar content-sync button instead.
+    const visible = parsePorcelainStatus(stdout).filter((f) => !isGitNoisePath(f.path));
+    if (!isDevhubRepoRoot(repoPath)) return visible.length;
+    const buckets = buildContentBuckets(repoPath);
+    return visible.filter((f) => !matchContentBucket(buckets, f.path)).length;
   } catch {
     return 0;
   }

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  countVisibleDirtyFromPorcelain,
   fileStatusGlyph,
   isGitNoisePath,
   parseBlamePorcelain,
@@ -72,16 +71,6 @@ describe("isGitNoisePath", () => {
     expect(isGitNoisePath("__pycache__/x.pyc")).toBe(true);
     expect(isGitNoisePath("mod.pyc")).toBe(true);
     expect(isGitNoisePath("src/app.ts")).toBe(false);
-  });
-});
-
-describe("countVisibleDirtyFromPorcelain", () => {
-  it("excludes noise paths from dirty count", () => {
-    expect(countVisibleDirtyFromPorcelain("?? .DS_Store\n?? skills/.DS_Store\n")).toBe(0);
-    expect(
-      countVisibleDirtyFromPorcelain(" M src/app.ts\n?? .DS_Store\n?? __pycache__/x.pyc\n"),
-    ).toBe(1);
-    expect(countVisibleDirtyFromPorcelain("M  a.ts\n M b.ts\n")).toBe(2);
   });
 });
 
