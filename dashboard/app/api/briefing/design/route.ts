@@ -116,7 +116,7 @@ async function planDesign(message: string, history: ChatMessage[], ctx: Briefing
         "- research: short topics to research in the background (e.g. 'things to do with kids in Northern Ireland this weekend'). Use for one-off asks, not recurring layout.",
         "- prefs: optional patch. Keys allowed: location{name,lat,lon}, interests[], techStack[], hasKids, newsFeeds[], gamingFeeds[], newsRegion. Don't guess coordinates.",
         "- reset=true only if they explicitly ask to start the design over / go back to default.",
-        "- reply: one or two warm, concrete sentences. No lists.",
+        "- reply: one or two warm, concrete sentences. No lists. The plan executes immediately after you answer, so describe what IS changing (\"I'm making it…\" / \"The page now…\") — never promise future work, never ask permission, and never leave it ambiguous whether anything happened.",
         "",
         "Current design revision: " + readCanvas().revision + (readCanvas().aiAuthored ? " (AI-authored)" : " (default)"),
         "Available data summary: " + JSON.stringify(contextForPrompt(ctx)).slice(0, 4000),
@@ -207,12 +207,22 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     }
   }
 
-  let reply = plan.reply;
-  if (wantRedesign && !canvasUpdated) {
-    reply += isNotesAiConfigured()
-      ? " (I couldn't regenerate the layout just now, so I kept the current one — try again in a moment.)"
-      : " (AI isn't configured, so I can't redraw the layout — set AI_API_KEY to enable custom designs.)";
+  // Deterministic outcome line — never leave "did anything happen?" to the
+  // model's phrasing. Success states confirm; the failure note stays.
+  const status: string[] = [];
+  if (canvasUpdated) {
+    status.push(
+      `✓ Done — the canvas has been redrawn (rev ${readCanvas().revision}) and is live behind this dialog.`,
+    );
+  } else if (wantRedesign) {
+    status.push(
+      isNotesAiConfigured()
+        ? "(I couldn't regenerate the layout just now, so I kept the current one — try again in a moment.)"
+        : "(AI isn't configured, so I can't redraw the layout — set AI_API_KEY to enable custom designs.)",
+    );
   }
+  if (prefsChanged) status.push("Preferences saved.");
+  const reply = [plan.reply, ...status].join(" ");
 
   return NextResponse.json({ ok: true, reply, canvasUpdated, addedFeeds, tasks });
 }, "briefing.design");

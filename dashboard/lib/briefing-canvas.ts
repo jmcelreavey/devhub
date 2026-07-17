@@ -172,8 +172,15 @@ export async function generateCanvasHtml(
 
   const revising = Boolean(currentHtml && currentHtml.length > 200);
   const themeLine = theme
-    ? `HOST THEME (match it exactly — the canvas sits inside a ${theme.mode}-mode app): the injected window.__BRIEFING__.theme and these CSS variables are available: --app-bg ${theme.bg}, --app-surface ${theme.surface}, --app-elevated ${theme.elevated}, --app-text ${theme.text}, --app-muted ${theme.muted}, --app-subtle ${theme.subtle}, --app-border ${theme.border}, --app-accent ${theme.accent}, --app-accent-fg ${theme.accentFg}. Use theme.bg as the page background, theme.text as the primary text, theme.accent as the single accent, and theme.border/surface for structure. Do NOT ship a ${theme.mode === "dark" ? "light" : "dark"} design.`
+    ? `HOST THEME (the app's tokens — the DEFAULT palette; see STYLE PRECEDENCE): the injected window.__BRIEFING__.theme and these CSS variables are available: --app-bg ${theme.bg}, --app-surface ${theme.surface}, --app-elevated ${theme.elevated}, --app-text ${theme.text}, --app-muted ${theme.muted}, --app-subtle ${theme.subtle}, --app-border ${theme.border}, --app-accent ${theme.accent}, --app-accent-fg ${theme.accentFg}. By default use theme.bg as the page background, theme.text as the primary text, theme.accent as the single accent, and theme.border/surface for structure. The canvas sits inside a ${theme.mode}-mode app, so keep a ${theme.mode} page unless the user explicitly asks otherwise.`
     : "";
+  const precedence = [
+    "STYLE PRECEDENCE (read carefully):",
+    "- The taste rules and host theme above are the DEFAULT style, not a cage.",
+    "- When the user's request names a specific aesthetic (colourful, anime, neon, retro terminal, pastel, cyberpunk, playful, brutalist...), THEIR AESTHETIC WINS over theme-matching and the colour-quarantine/single-accent rules: commit to it fully with a custom palette, multiple accents, gradients, or expressive backgrounds as the look demands. A half-hearted default-theme page with the requested style ignored is a failure.",
+    "- Layout quality, readability, accessibility, motion restraint, content honesty, and punctuation rules ALWAYS apply regardless of aesthetic.",
+    "- When the user has not asked for a look, follow the host theme and taste rules exactly.",
+  ].join("\n");
 
   try {
     const result = await generateText({
@@ -187,6 +194,9 @@ export async function generateCanvasHtml(
         tasteDirectivesForPrompt(),
         "",
         themeLine,
+        "",
+        precedence,
+        "",
         "TECHNICAL CONTRACT:",
         "- Output a SINGLE, COMPLETE, self-contained HTML document (start with <!doctype html>). Inline all CSS in one <style> and all JS in one <script>. No external stylesheets or fonts unless from a well-known CDN.",
         "- The document runs same-origin in an iframe. The data is ALREADY injected before your script as window.__BRIEFING__ (shape below). Read from it; never hardcode data. You may also call fetch('/api/briefing/data') at runtime.",
