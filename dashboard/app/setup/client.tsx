@@ -32,7 +32,7 @@ import {
   FolderOpen,
   GitBranch,
   SkipForward,
-  Sparkles,
+  Hand,
   TerminalSquare,
   TicketCheck,
 } from "lucide-react";
@@ -43,7 +43,7 @@ const STEPS: Step[] = [
   {
     id: "welcome",
     title: "Welcome",
-    icon: <Sparkles size={18} />,
+    icon: <Hand size={18} />,
     description: "Let's configure your DevHub integrations",
     configured: true,
     optional: false,
@@ -536,10 +536,12 @@ export default function SetupPage() {
           <div
             style={{
               height: "100%",
-              width: `${progress}%`,
+              width: "100%",
+              transform: `scaleX(${Math.min(1, Math.max(0, progress / 100))})`,
+              transformOrigin: "left center",
               background: "var(--accent)",
               borderRadius: "2px",
-              transition: "width 0.3s ease",
+              transition: "transform 0.3s var(--ease-swift, ease)",
             }}
           />
         </div>

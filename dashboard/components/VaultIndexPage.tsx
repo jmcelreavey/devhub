@@ -43,7 +43,7 @@ function IndexFileRow({ file }: { file: VaultIndexFile }) {
       ) : null}
       <ChevronRight
         size={12}
-        className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+        className="shrink-0 reveal-on-hover transition-opacity"
         style={{ color: "var(--text-subtle)" }}
         aria-hidden
       />
@@ -65,7 +65,7 @@ function FolderSection({
   return (
     <section className={depth > 0 ? "mt-3" : "mt-4"}>
       <h3
-        className="mb-1 px-2 text-xs font-semibold uppercase tracking-wide"
+        className="mb-1 px-2 text-xs font-semibold tracking-tight"
         style={{
           color: "var(--text-subtle)",
           paddingLeft: `${8 + depth * 12}px`,
@@ -177,7 +177,7 @@ export function VaultIndexPage({
             {summary.rootFiles.length > 0 ? (
               <div className="mb-2">
                 <h3
-                  className="mb-1 px-2 text-xs font-semibold uppercase tracking-wide"
+                  className="mb-1 px-2 text-xs font-semibold tracking-tight"
                   style={{ color: "var(--text-subtle)" }}
                 >
                   Top level

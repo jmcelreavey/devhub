@@ -46,14 +46,19 @@ export default function ReviewPage() {
   return (
     <div className="page-wrapper">
       <BootScreen state={boot} />
-      <div className="page-header">
+      <div
+        className="page-header"
+        style={{ alignItems: "flex-end", marginBottom: "var(--space-8)", gap: "var(--space-4)" }}
+      >
         <div>
-          <div className="page-title">Weekly review</div>
-          <div className="text-xs" style={{ color: "var(--text-subtle)" }}>
-            {data ? `${shortDate(data.start)} - ${shortDate(data.end)}` : "Last 7 days"}
+          <div className="page-title" style={{ fontFamily: "var(--font-display)" }}>
+            Weekly review
+          </div>
+          <div className="text-xs mt-1" style={{ color: "var(--text-subtle)" }}>
+            {data ? `${shortDate(data.start)} – ${shortDate(data.end)}` : "Last 7 days"}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
             className="btn btn-ghost"
@@ -101,27 +106,28 @@ export default function ReviewPage() {
             ))}
           </div>
 
-          <div className="card card-body mb-4">
+          <div className="mb-4 py-1">
             <div className="text-xs font-medium mb-3" style={{ color: "var(--text-muted)" }}>
               Throughput
             </div>
             <div className="space-y-2">
               {data.days.map((d) => (
                 <div key={d.date} className="flex items-center gap-3">
-                  <span className="w-10 shrink-0 text-xs font-mono" style={{ color: "var(--text-subtle)" }}>
+                  <span className="w-10 shrink-0 text-xs font-mono" style={{ color: "var(--text-subtle)", fontFamily: "var(--font-mono)" }}>
                     {weekdayLabel(d.date)}
                   </span>
                   <div className="flex-1 h-3 rounded-full overflow-hidden" style={{ background: "var(--bg-elevated)" }}>
                     <div
-                      className="h-full transition-all"
+                      className="h-full origin-left transition-transform duration-300"
                       style={{
-                        width: `${(d.completed / maxCreated) * 100}%`,
+                        width: "100%",
+                        transform: `scaleX(${Math.min(1, d.completed / maxCreated)})`,
                         background: "var(--success)",
                         borderRadius: 9,
                       }}
                     />
                   </div>
-                  <span className="w-16 shrink-0 text-right text-xs font-mono tabular-nums" style={{ color: "var(--text-subtle)" }}>
+                  <span className="w-16 shrink-0 text-right text-xs tabular-nums" style={{ color: "var(--text-subtle)", fontFamily: "var(--font-mono)" }}>
                     {d.completed}/{d.created}
                   </span>
                 </div>

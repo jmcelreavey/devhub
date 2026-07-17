@@ -59,105 +59,212 @@ export function weatherIconName(code: number): WeatherIconName {
   return "sun";
 }
 
+/**
+ * Atmosphere band — drives CSS hooks so each day reads as a distinct sky moment.
+ * Thermal first; condition modulates (warm overcast stays warm, never muddy grey).
+ */
+export type WeatherBand =
+  | "scorch"
+  | "warm"
+  | "mild"
+  | "fresh"
+  | "crisp"
+  | "bitter"
+  | "overcast-warm"
+  | "overcast-cool"
+  | "wet-warm"
+  | "wet"
+  | "storm"
+  | "snow"
+  | "fog";
+
 export interface WeatherTheme {
-  /** CSS gradient for the hero background (semi-transparent so it works in both themes). */
+  /**
+   * Layered CSS background (thermal wash). Applied inline as `background`.
+   * Named `gradient` for back-compat with tests / callers.
+   */
   gradient: string;
+  /** Tinted sky-light for the card's top wash (`--wx-sky`). */
+  sky: string;
   /** A short, playful one-liner about the day. */
   vibe: string;
+  /** Semantic band for `data-band` styling hooks. */
+  band: WeatherBand;
+}
+
+/** Three-stop wash — richer than a flat two-stop, still tokenized. */
+function wash(a: string, b: string, c: string): string {
+  return `linear-gradient(162deg, ${a} 0%, ${b} 48%, ${c} 100%)`;
 }
 
 /**
- * Pick a mood for the weather hero from the condition code and temperature.
- * Gradients use rgba overlays over the card surface, so they read well in light
- * and dark mode without hard-coding theme colours.
+ * Atmosphere stops — temperature sets the thermal band; condition modulates.
+ * Mixes stay punchy on purpose: each day should read as weather, not a pastel chip.
+ * Warm days keep warning/amber even under cloud. Storms stay cool info (never accent).
+ */
+const MIX = {
+  amberBlast: "color-mix(in oklab, var(--warning) 78%, var(--bg-elevated))",
+  amberCore: "color-mix(in oklab, var(--warning) 64%, var(--bg-elevated))",
+  amberMid: "color-mix(in oklab, var(--warning) 48%, var(--bg-elevated))",
+  amberSoft: "color-mix(in oklab, var(--warning) 34%, var(--bg-surface))",
+  amberGlow: "color-mix(in oklab, var(--warning-dim) 96%, var(--bg-elevated))",
+  goldDeep: "color-mix(in oklab, var(--warning) 58%, var(--bg-overlay))",
+  mildHi: "color-mix(in oklab, var(--success) 46%, var(--bg-elevated))",
+  mildMid: "color-mix(in oklab, var(--success) 30%, var(--bg-elevated))",
+  mildLo: "color-mix(in oklab, var(--success) 16%, var(--bg-surface))",
+  skyCore: "color-mix(in oklab, var(--info) 68%, var(--bg-elevated))",
+  skyMid: "color-mix(in oklab, var(--info) 48%, var(--bg-elevated))",
+  skySoft: "color-mix(in oklab, var(--info) 30%, var(--bg-surface))",
+  skyDeep: "color-mix(in oklab, var(--info) 62%, var(--bg-overlay))",
+  slateHi: "color-mix(in oklab, var(--text-subtle) 30%, var(--bg-elevated))",
+  slateMid: "color-mix(in oklab, var(--text-subtle) 18%, var(--bg-elevated))",
+  mist: "color-mix(in oklab, var(--bg-overlay) 86%, var(--bg-surface))",
+  ground: "color-mix(in oklab, var(--bg-elevated) 90%, transparent)",
+} as const;
+
+/** Sky-light tints — top-of-card atmospheric glow, not generic white. */
+const SKY = {
+  sun: "color-mix(in oklab, var(--warning) 62%, #fff)",
+  warmCloud: "color-mix(in oklab, var(--warning) 42%, #fff)",
+  mild: "color-mix(in oklab, var(--success) 34%, #fff)",
+  cool: "color-mix(in oklab, var(--info) 52%, #fff)",
+  storm: "color-mix(in oklab, var(--info) 58%, var(--bg-elevated))",
+  snow: "color-mix(in oklab, var(--info) 28%, #fff)",
+  fog: "color-mix(in oklab, var(--text-subtle) 22%, #fff)",
+  slate: "color-mix(in oklab, var(--text-subtle) 14%, #fff)",
+} as const;
+
+function theme(
+  band: WeatherBand,
+  a: string,
+  b: string,
+  c: string,
+  sky: string,
+  vibe: string,
+): WeatherTheme {
+  return { band, gradient: wash(a, b, c), sky, vibe };
+}
+
+/**
+ * Pick a mood for the weather surface from the condition code and temperature.
+ * Each day gets its own atmospheric wash + sky tint so the strip reads as
+ * different weather moments, not identical chips.
  */
 export function weatherTheme(code: number, tempC: number): WeatherTheme {
-  // Vivid three-stop diagonal blends. Alphas are high enough to read as real
-  // colour in both light and dark mode while staying behind the card text.
-  const g = (from: string, mid: string, to: string) =>
-    `linear-gradient(135deg, ${from} 0%, ${mid} 55%, ${to} 100%)`;
-
-  // Thunderstorm — electric violet → indigo.
   if (code >= 95) {
-    return {
-      gradient: g("rgba(167,123,255,0.62)", "rgba(110,80,210,0.42)", "rgba(60,45,120,0.30)"),
-      vibe: "Wild skies — keep an eye out.",
-    };
+    return theme(
+      "storm",
+      MIX.skyDeep,
+      MIX.slateHi,
+      MIX.ground,
+      SKY.storm,
+      "Wild skies. Keep an eye out.",
+    );
   }
-  // Snow — icy cyan → white-blue.
   if ((code >= 71 && code <= 77) || code === 85 || code === 86) {
-    return {
-      gradient: g("rgba(120,205,250,0.60)", "rgba(170,225,250,0.40)", "rgba(232,245,252,0.30)"),
-      vibe: "Snow about — wrap up warm.",
-    };
+    return theme("snow", MIX.skyMid, MIX.skySoft, MIX.ground, SKY.snow, "Snow about. Wrap up warm.");
   }
-  // Rain / drizzle / showers. A warm wet day blends blue → orange — a grand soft day.
   if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) {
     if (tempC >= 20) {
-      return {
-        gradient: g("rgba(64,150,215,0.60)", "rgba(150,170,180,0.40)", "rgba(255,150,55,0.50)"),
-        vibe: "Warm and wet — a grand soft day.",
-      };
+      return theme(
+        "wet-warm",
+        MIX.skyMid,
+        MIX.amberSoft,
+        MIX.mildLo,
+        SKY.warmCloud,
+        "Warm and wet. A grand soft day.",
+      );
     }
-    return {
-      gradient: g("rgba(70,150,205,0.58)", "rgba(70,110,165,0.40)", "rgba(50,70,120,0.30)"),
-      vibe: "Bring a brolly — it's a wet one.",
-    };
+    return theme(
+      "wet",
+      MIX.skyDeep,
+      MIX.skyMid,
+      MIX.slateMid,
+      SKY.cool,
+      "Bring a brolly. It's a wet one.",
+    );
   }
-  // Fog — soft pewter.
   if (code === 45 || code === 48) {
-    return {
-      gradient: g("rgba(180,190,205,0.55)", "rgba(150,160,178,0.38)", "rgba(128,138,155,0.26)"),
-      vibe: "Murky and grey out there.",
-    };
+    return theme("fog", MIX.slateHi, MIX.mist, MIX.ground, SKY.fog, "Murky and grey out there.");
   }
-  // Overcast — but a hot, grey day still feels warm/muggy here.
+  // Overcast: keep the thermal band honest. Hot under cloud still reads warm
+  // gold/amber, never warning-mixed-into-muted mud.
   if (code === 3) {
-    if (tempC >= 20) {
-      return {
-        gradient: g("rgba(240,185,105,0.55)", "rgba(190,180,165,0.38)", "rgba(140,148,160,0.28)"),
-        vibe: "Warm but grey — a muggy one.",
-      };
+    if (tempC >= 25) {
+      return theme(
+        "overcast-warm",
+        MIX.amberCore,
+        MIX.amberGlow,
+        MIX.goldDeep,
+        SKY.warmCloud,
+        "Hot under the cloud. Still a scorcher.",
+      );
     }
-    return {
-      gradient: g("rgba(165,178,195,0.52)", "rgba(140,152,170,0.36)", "rgba(120,132,150,0.26)"),
-      vibe: "Cloud's in for the day.",
-    };
+    if (tempC >= 20) {
+      return theme(
+        "overcast-warm",
+        MIX.amberMid,
+        MIX.amberSoft,
+        MIX.amberGlow,
+        SKY.warmCloud,
+        "Warm but grey. Soft gold light.",
+      );
+    }
+    if (tempC >= 12) {
+      return theme(
+        "overcast-cool",
+        MIX.slateHi,
+        MIX.skySoft,
+        MIX.mist,
+        SKY.slate,
+        "Cloud's in for the day.",
+      );
+    }
+    return theme("overcast-cool", MIX.slateMid, MIX.mist, MIX.ground, SKY.fog, "Cool and closed-in.");
   }
-  // Clear or mainly/partly clear → warmth scales with temperature.
-  // Bands tuned for Northern Ireland, where 20°C+ counts as a hot day.
+  // Clear / partly cloudy — brightness scales with temp.
   if (tempC >= 25) {
-    return {
-      gradient: g("rgba(255,205,70,0.70)", "rgba(255,140,55,0.52)", "rgba(255,95,75,0.40)"),
-      vibe: "Scorcher for here — find some shade.",
-    };
+    return theme(
+      "scorch",
+      MIX.amberBlast,
+      MIX.amberCore,
+      MIX.amberMid,
+      SKY.sun,
+      "Scorcher for here. Find some shade.",
+    );
   }
   if (tempC >= 20) {
-    return {
-      gradient: g("rgba(255,210,85,0.66)", "rgba(255,160,60,0.48)", "rgba(255,120,70,0.34)"),
-      vibe: "Properly warm for NI — get the shorts out.",
-    };
+    return theme(
+      "warm",
+      MIX.amberCore,
+      MIX.amberSoft,
+      MIX.mildMid,
+      SKY.sun,
+      "Properly warm for NI. Get the shorts out.",
+    );
   }
   if (tempC >= 15) {
-    return {
-      gradient: g("rgba(255,222,110,0.60)", "rgba(190,215,110,0.42)", "rgba(110,200,140,0.32)"),
-      vibe: "Lovely and mild — get outside.",
-    };
+    return theme(
+      "mild",
+      MIX.amberSoft,
+      MIX.mildHi,
+      MIX.mildLo,
+      SKY.mild,
+      "Lovely and mild. Get outside.",
+    );
   }
   if (tempC >= 9) {
-    return {
-      gradient: g("rgba(255,224,140,0.52)", "rgba(160,205,200,0.38)", "rgba(110,180,230,0.34)"),
-      vibe: "Fresh and bright — grab a jacket.",
-    };
+    return theme(
+      "fresh",
+      MIX.mildMid,
+      MIX.skySoft,
+      MIX.amberSoft,
+      SKY.mild,
+      "Fresh and bright. Grab a jacket.",
+    );
   }
   if (tempC >= 3) {
-    return {
-      gradient: g("rgba(150,205,245,0.56)", "rgba(175,210,245,0.40)", "rgba(205,225,250,0.30)"),
-      vibe: "Crisp and cold — wrap up.",
-    };
+    return theme("crisp", MIX.skyCore, MIX.skyMid, MIX.skySoft, SKY.cool, "Crisp and cold. Wrap up.");
   }
-  return {
-    gradient: g("rgba(120,195,245,0.60)", "rgba(165,210,248,0.42)", "rgba(210,232,252,0.32)"),
-    vibe: "Bitterly cold — bundle up.",
-  };
+  return theme("bitter", MIX.skyDeep, MIX.skyMid, MIX.ground, SKY.cool, "Bitterly cold. Bundle up.");
 }

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { Loader2, RotateCcw, Send, Sparkles } from "lucide-react";
+import { Loader2, MessageCircle, RotateCcw, Send } from "lucide-react";
 import { LabMarkdown } from "@/components/LabMarkdown";
 import { REPO_LEARN_TUTOR_START } from "@/lib/repo-learn-constants";
 
@@ -140,7 +140,7 @@ export function LabTutor({
         onClick={start}
         disabled={!restored}
       >
-        <Sparkles size={12} /> Start live session
+        <MessageCircle size={12} /> Start live session
       </button>
     );
   }
@@ -149,8 +149,8 @@ export function LabTutor({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide" style={{ color: "var(--text-subtle)" }}>
-        <Sparkles size={11} /> Live session
+      <div className="flex items-center gap-2 text-[10px] font-medium tracking-tight" style={{ color: "var(--text-subtle)" }}>
+        <MessageCircle size={11} /> Live session
         <span className="ml-auto normal-case">
           <button
             type="button"
@@ -178,7 +178,7 @@ export function LabTutor({
               color: "var(--text)",
             }}
           >
-            <div className="text-[10px] uppercase tracking-wide mb-1" style={{ color: "var(--text-subtle)" }}>
+            <div className="text-[10px] font-medium tracking-tight mb-1" style={{ color: "var(--text-subtle)" }}>
               {m.role === "user" ? "You" : "Tutor"}
             </div>
             <LabMarkdown text={messageText(m.parts)} fileBase={repoPath ?? undefined} />

@@ -267,8 +267,25 @@ describe("weatherTheme", () => {
   it("calls a clear mid-teens day mild, not hot", () => {
     expect(weatherTheme(0, 16).vibe).toMatch(/mild/i);
   });
-  it("flags a hot but overcast day as muggy", () => {
-    expect(weatherTheme(3, 24).vibe).toMatch(/muggy|warm/i);
+  it("flags a hot but overcast day as warm, not muddy grey", () => {
+    const theme = weatherTheme(3, 24);
+    expect(theme.vibe).toMatch(/warm|gold|soft/i);
+    expect(theme.gradient).toMatch(/--warning/);
+    expect(theme.gradient).not.toMatch(/--text-subtle/);
+  });
+  it("keeps a 27° overcast day in the warm band", () => {
+    const theme = weatherTheme(3, 27);
+    expect(theme.gradient).toMatch(/--warning/);
+    expect(theme.vibe).toMatch(/hot|scorcher|warm/i);
+  });
+  it("uses cool neutrals for cool overcast", () => {
+    const theme = weatherTheme(3, 10);
+    expect(theme.gradient).toMatch(/--info|--text-subtle|--bg-overlay|--bg-elevated/);
+    expect(theme.gradient).not.toMatch(/--warning/);
+  });
+  it("keeps storms cool blue-gray, never accent", () => {
+    expect(weatherTheme(95, 18).gradient).toMatch(/--info/);
+    expect(weatherTheme(95, 18).gradient).not.toMatch(/--accent/);
   });
   it("turns moody for rain", () => {
     expect(weatherTheme(63, 11).vibe).toMatch(/brolly|wet/i);
@@ -278,6 +295,13 @@ describe("weatherTheme", () => {
   });
   it("always produces a gradient", () => {
     expect(weatherTheme(2, 10).gradient).toContain("linear-gradient");
+  });
+  it("exposes sky + band for per-day atmosphere hooks", () => {
+    const theme = weatherTheme(0, 22);
+    expect(theme.sky).toMatch(/--warning|--info|--success|#fff/);
+    expect(theme.band).toBe("warm");
+    expect(weatherTheme(3, 27).band).toBe("overcast-warm");
+    expect(weatherTheme(95, 12).band).toBe("storm");
   });
 });
 

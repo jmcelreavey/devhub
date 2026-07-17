@@ -69,7 +69,7 @@ function CalendarPicker({
               }}
             />
             <span
-              className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+              className="inline-block h-2.5 w-2.5 shrink-0 rounded-[var(--radius-sm)]"
               style={{ background: cal.backgroundColor ?? "var(--accent)" }}
               aria-hidden
             />
@@ -174,7 +174,7 @@ export default function CalendarPage() {
           </div>
           <div className="card-body" style={{ padding: "8px 12px" }}>
             {calError ? (
-              <FetchError message="Couldn't load calendars." onRetry={() => void mutateCalendars()} />
+              <FetchError message="Couldn't load calendars." onRetry={() => void mutateCalendars()} bare />
             ) : (
               <CalendarPicker
                 calendars={calendars}
@@ -273,7 +273,7 @@ export default function CalendarPage() {
                     {multiCalendar && e.calendarName ? (
                       <div className="text-xs flex items-center gap-1 mt-0.5" style={{ color: "var(--text-subtle)" }}>
                         <span
-                          className="inline-block h-2 w-2 rounded-full shrink-0"
+                          className="inline-block h-2 w-2 rounded-[var(--radius-sm)] shrink-0"
                           style={{ background: e.calendarColor ?? "var(--accent)" }}
                           aria-hidden
                         />

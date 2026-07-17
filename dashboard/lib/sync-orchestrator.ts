@@ -6,6 +6,8 @@
  * they don't touch tracked files.
  */
 import { githubCliErrorInfo } from "./gh-exec";
+import { detectGitHookFailure, type GitHookPhase } from "./git-hook-failure";
+import { withPersistedLog } from "./git-hook-failure-persist";
 import { runGitRepo } from "./git-repo-local";
 import { syncSkills, verifySync } from "./sync-skills";
 import { syncAgents } from "./sync-agents";
@@ -52,12 +54,46 @@ function runGit(repoRoot: string, args: string[]) {
   return runGitRepo(repoRoot, args);
 }
 
-function emitGitFailure(emit: (line: string) => void, prefix: string, result: ReturnType<typeof runGitRepo>): void {
+/** Cap hook/verify dumps so a failed push doesn't flood the run log. */
+const GIT_FAIL_TAIL_LINES = 40;
+
+function emitOutputTail(emit: (line: string) => void, text: string): void {
+  const lines = text
+    .replace(/\r\n/g, "\n")
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+  if (lines.length === 0) return;
+  const omitted = Math.max(0, lines.length - GIT_FAIL_TAIL_LINES);
+  if (omitted > 0) emit(`[… ${omitted} earlier line(s) omitted]`);
+  for (const line of lines.slice(omitted)) emit(line);
+}
+
+function emitGitFailure(
+  emit: (line: string) => void,
+  prefix: string,
+  result: ReturnType<typeof runGitRepo>,
+  repoRoot?: string,
+  phase: GitHookPhase = "push",
+): void {
   emit(prefix);
   const mapped = githubCliErrorInfo(new Error(result.stderr || result.stdout || prefix), prefix);
   if (mapped.message !== prefix) emit(mapped.message);
-  else if (result.stderr.trim()) emit(result.stderr.trim());
-  else if (result.stdout.trim()) emit(result.stdout.trim());
+  // Pre-push hooks (verify, leak scan) often write the real reason to stdout while
+  // git only puts "failed to push some refs" on stderr — surface both.
+  const out = result.stdout.trim();
+  const err = result.stderr.trim();
+  if (out) emitOutputTail(emit, out);
+  if (err && err !== out) emitOutputTail(emit, err);
+
+  if (repoRoot) {
+    const hook = detectGitHookFailure(result.stdout, result.stderr, phase);
+    if (hook) {
+      const persisted = withPersistedLog(repoRoot, hook);
+      emit(`HOOK_FAILED: ${persisted.hook ?? "git hook"} — see ${persisted.logPath}`);
+      if (persisted.summary) emit(`HOOK_SUMMARY: ${persisted.summary}`);
+    }
+  }
 }
 
 /** Push current HEAD to origin/<branch>; retry with --set-upstream on failure. */
@@ -73,7 +109,7 @@ function pushOriginBranch(
     p = runGit(repoRoot, ["push", "--set-upstream", "origin", branch]);
   }
   if (p.status !== 0) {
-    emitGitFailure(emit, "WARNING: Push failed — check remote connection and auth.", p);
+    emitGitFailure(emit, "WARNING: Push failed — check remote connection and auth.", p, repoRoot);
     return false;
   }
   return true;
@@ -130,13 +166,15 @@ export async function commitAndPushDirty(opts: CommitAndPushDirtyOptions): Promi
   emit(`Committing with message: ${commitMessage}`);
   const commit = runGit(repoRoot, ["commit", "-m", commitMessage]);
   if (commit.status !== 0) {
-    emit("ERROR: git commit failed.");
-    if (commit.stderr.trim()) emit(commit.stderr.trim());
+    emitGitFailure(emit, "ERROR: git commit failed.", commit, repoRoot, "commit");
     return 1;
   }
 
   if (!pushOriginBranch(emit, repoRoot, branch)) {
-    return 1;
+    // Exit 2 = commit landed, push did not. Callers can toast accurately and keep
+    // the unpushed indicator visible instead of looking like a clean success.
+    emit("ERROR: Committed locally but push failed — unpushed commits remain.");
+    return 2;
   }
 
   emit("Dirty working tree committed and pushed.");
@@ -192,13 +230,13 @@ export async function commitAndPushPaths(opts: CommitAndPushPathsOptions): Promi
   emit(`Committing scoped changes with message: ${commitMessage}`);
   const commit = runGit(repoRoot, ["commit", "-m", commitMessage]);
   if (commit.status !== 0) {
-    emit("ERROR: git commit failed.");
-    if (commit.stderr.trim()) emit(commit.stderr.trim());
+    emitGitFailure(emit, "ERROR: git commit failed.", commit, repoRoot, "commit");
     return 1;
   }
 
   if (!pushOriginBranch(emit, repoRoot, branch)) {
-    return 1;
+    emit("ERROR: Committed locally but push failed — unpushed commits remain.");
+    return 2;
   }
 
   emit("Scoped changes committed and pushed.");

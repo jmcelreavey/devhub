@@ -77,7 +77,7 @@ export function ChecklistRow({
         <GripVertical
           size={14}
           aria-hidden
-          className="opacity-0 group-hover:opacity-100"
+          className="reveal-on-hover"
           style={{ color: "var(--text-subtle)", cursor: "grab" }}
         />
       ) : null}
@@ -92,7 +92,7 @@ export function ChecklistRow({
         style={{
           borderColor: checked ? "var(--accent)" : "var(--border)",
           background: checked ? "var(--accent)" : "transparent",
-          color: checked ? "#fff" : "var(--text-subtle)",
+          color: checked ? "var(--accent-fg)" : "var(--text-subtle)",
         }}
         onClick={() => {
           if (!checked) {

@@ -101,6 +101,7 @@ must **not** be contributed to the public core (the public repo ships them empty
 | `notes/` | Notes, daily logs, learnings | `NOTES_DIR` |
 | `tasks/` | Daily task lists | `TASKS_DIR` |
 | `collections/` | Checklist collections | `COLLECTIONS_DIR` |
+| `upstarts/` | Per-repo Upstart scripts (`<repo>/upstart.sh`) | `UPSTARTS_DIR` |
 | `persona/identity.txt` | Your voice/tone | — |
 | `dashboard/.env.local` | Secrets/config | — (git-ignored) |
 

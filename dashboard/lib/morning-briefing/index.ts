@@ -17,7 +17,7 @@ export type {
 } from "./types";
 export { forecastDayLabel, briefingIsEmpty } from "./types";
 
-export type { WeatherIconName, WeatherTheme } from "./weather";
+export type { WeatherBand, WeatherIconName, WeatherTheme } from "./weather";
 export {
   describeWeatherCode,
   weatherIconName,

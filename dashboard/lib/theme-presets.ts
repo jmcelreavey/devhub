@@ -52,7 +52,7 @@ export const CORE_THEME_PRESETS = [
   {
     id: "catppuccin",
     label: "Catppuccin",
-    description: "Plum gray + mauve",
+    description: "Latte/mocha + sapphire",
     darkSwatch: "#1e1e2e",
     lightSwatch: "#eff1f5",
   },

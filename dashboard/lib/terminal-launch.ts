@@ -74,8 +74,9 @@ export function opencodeCliCommand(): string {
   );
 }
 
-export function repoUpstartCommand(): string {
-  return "bash .devhub/upstart.sh";
+/** Run a DevHub-managed upstart script (cwd should already be the target repo). */
+export function repoUpstartCommand(upstartPath: string): string {
+  return `bash ${shellQuote(upstartPath)}`;
 }
 
 function upstartContextSuffix(context?: string): string {
@@ -96,29 +97,41 @@ function withDevhubNotesEnv(run: string): string {
   return `REPO_ROOT=${shellQuote(repoRoot)} NOTES_DIR=${shellQuote(`${repoRoot}/notes`)} ${run}`;
 }
 
-export async function agentRepoUpstartCommand(repoName: string, context?: string): Promise<string> {
+export async function agentRepoUpstartCommand(
+  repoName: string,
+  upstartPath: string,
+  context?: string,
+): Promise<string> {
   const cli = await activeAgentCliSpec();
-  const prompt = `Use devhub-repo-upstart. Create .devhub/upstart.sh for ${repoName}. Must run nvm use if .nvmrc, refresh deps, and start dev env. Do not just print instructions. Exit; terminal runs it.${upstartContextSuffix(context)}`;
+  const prompt = `Use devhub-repo-upstart. Create ${upstartPath} for ${repoName} in the DevHub private store (not .devhub/ in the target repo). Must run nvm use if .nvmrc, refresh deps, and start dev env. Do not just print instructions. Exit; terminal runs the script with cwd=${repoName}.${upstartContextSuffix(context)}`;
   return guardedCliCommand(
     cli.binary,
-    `${cli.run(prompt)} && bash .devhub/upstart.sh`,
-    cli.missing("generate .devhub/upstart.sh (or create it manually)"),
+    `${cli.run(prompt)} && bash ${shellQuote(upstartPath)}`,
+    cli.missing("generate the DevHub upstart script (or create it manually under upstarts/)"),
   );
 }
 
-export async function agentRepoUpstartUpdateCommand(repoName: string, context: string): Promise<string> {
+export async function agentRepoUpstartUpdateCommand(
+  repoName: string,
+  upstartPath: string,
+  context: string,
+): Promise<string> {
   const cli = await activeAgentCliSpec();
-  const prompt = `Use devhub-repo-upstart. Update .devhub/upstart.sh for ${repoName}. Must refresh deps, prefer nvm use, start dev env, and preserve correct bits. Exit; terminal runs it.${upstartContextSuffix(context)}`;
+  const prompt = `Use devhub-repo-upstart. Update ${upstartPath} for ${repoName} in the DevHub private store (not .devhub/ in the target repo). Must refresh deps, prefer nvm use, start dev env, and preserve correct bits. Exit; terminal runs the script.${upstartContextSuffix(context)}`;
   return guardedCliCommand(
     cli.binary,
-    `${cli.run(prompt)} && bash .devhub/upstart.sh`,
-    cli.missing("update .devhub/upstart.sh (or edit it manually)"),
+    `${cli.run(prompt)} && bash ${shellQuote(upstartPath)}`,
+    cli.missing("update the DevHub upstart script (or edit it manually under upstarts/)"),
   );
 }
 
-export async function agentRepoUpstartDebugCommand(repoName: string, context?: string): Promise<string> {
+export async function agentRepoUpstartDebugCommand(
+  repoName: string,
+  upstartPath: string,
+  context?: string,
+): Promise<string> {
   const cli = await activeAgentCliSpec();
-  const prompt = `Use devhub-repo-upstart. Debug/update ${repoName} upstart. Inspect .devhub/upstart.sh, ask what failed, keep one-command startup.${upstartContextSuffix(context)}`;
+  const prompt = `Use devhub-repo-upstart. Debug/update ${repoName} upstart at ${upstartPath} (DevHub private store, not .devhub/ in the target repo). Ask what failed, keep one-command startup.${upstartContextSuffix(context)}`;
   return guardedCliCommand(
     cli.binary,
     cli.interactive(prompt),
@@ -177,6 +190,150 @@ export async function agentReviewCommand(prUrl: string, notePath?: string): Prom
     cli.binary,
     withDevhubNotesEnv(cli.run(parts.join(" "))),
     cli.missing("run PR reviews from the terminal"),
+  );
+}
+
+export interface StashConflictLaunchOptions {
+  repoName: string;
+  /** Branch switched to when the conflict came from checkout + stash pop. */
+  branch?: string;
+  conflictFiles?: string[];
+}
+
+/**
+ * Interactive agent session to resolve stash/checkout conflicts. Uses
+ * `interactive` (not one-shot) so the agent can ask when intent is ambiguous.
+ * Prompt stays short — PTY input is ~1024 bytes on macOS.
+ */
+export async function agentStashConflictCommand(opts: StashConflictLaunchOptions): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  const files = (opts.conflictFiles ?? []).slice(0, 8);
+  const filePart = files.length > 0 ? ` Conflicted files: ${files.join(", ")}.` : "";
+  const more =
+    (opts.conflictFiles?.length ?? 0) > files.length
+      ? ` (+${(opts.conflictFiles!.length - files.length)} more — check git status).`
+      : "";
+  const branchPart = opts.branch
+    ? ` after switching to ${opts.branch}`
+    : " after applying a stash";
+  const prompt = [
+    `Use the git-conflict-resolve skill.`,
+    `Resolve stash conflicts in ${opts.repoName}${branchPart}.${filePart}${more}`,
+    `Stage resolved files; do not commit unless asked.`,
+  ].join(" ");
+  return guardedCliCommand(
+    cli.binary,
+    cli.interactive(prompt),
+    cli.missing("resolve stash conflicts from the terminal"),
+  );
+}
+
+export interface GitHookFailureLaunchOptions {
+  repoName: string;
+  hook?: string;
+  phase: "commit" | "amend" | "push" | "other";
+  /** Repo-relative path written by the API (e.g. `.git/devhub-hook-failure.log`). */
+  logPath?: string;
+}
+
+/**
+ * Interactive agent session to fix a failing git hook. Short prompt for PTY
+ * ~1024 byte limits — full output lives in the log file when available.
+ */
+export async function agentGitHookFailureCommand(
+  opts: GitHookFailureLaunchOptions,
+): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  const hook = opts.hook ?? "git hook";
+  const logHint = opts.logPath
+    ? ` Failure output: ${opts.logPath}.`
+    : " Re-run the failing git command or hook to see the output.";
+  const prompt = [
+    `Use the git-hook-fix skill.`,
+    `Fix the failing ${hook} in ${opts.repoName} (blocked ${opts.phase}).${logHint}`,
+    `Get the hook to pass; do not skip hooks (--no-verify / DEVHUB_SKIP_VERIFY) unless asked.`,
+  ].join(" ");
+  return guardedCliCommand(
+    cli.binary,
+    cli.interactive(prompt),
+    cli.missing("fix failing git hooks from the terminal"),
+  );
+}
+
+/**
+ * One-shot: draft a conventional commit message from the staged diff and print it.
+ * Short prompt for PTY limits — agent inspects `git diff --cached` itself.
+ */
+export async function agentCommitMessageCommand(repoName: string): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  const prompt = [
+    `In ${repoName}, inspect git diff --cached and print one conventional commit message.`,
+    `Subject ≤72 chars, imperative, no quotes or fences. Do not commit.`,
+  ].join(" ");
+  return guardedCliCommand(
+    cli.binary,
+    cli.run(prompt),
+    cli.missing("draft commit messages from the terminal"),
+  );
+}
+
+/**
+ * One-shot: draft a short stash description from the working-tree diff and print it.
+ */
+export async function agentStashMessageCommand(repoName: string): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  const prompt = [
+    `In ${repoName}, inspect git status and git diff HEAD, then print one short stash description.`,
+    `One line ≤72 chars, plain language, no quotes or fences. Do not stash or commit.`,
+  ].join(" ");
+  return guardedCliCommand(
+    cli.binary,
+    cli.run(prompt),
+    cli.missing("draft stash messages from the terminal"),
+  );
+}
+
+export interface DiffSelectionLaunchOptions {
+  repoName: string;
+  filePath: string;
+  snippet: string;
+  lineHint?: string;
+  context?: string;
+  staged?: boolean;
+}
+
+/**
+ * Interactive agent session seeded with a diff selection + optional user context.
+ * Keeps the prompt short for macOS PTY ~1024 byte limits — huge selections point
+ * at the file instead of pasting the whole blob.
+ */
+export async function agentDiffSelectionCommand(
+  opts: DiffSelectionLaunchOptions,
+): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  const side = opts.staged ? "staged" : "unstaged";
+  const ctx = opts.context?.trim();
+  const ctxPart = ctx
+    ? ` User context: ${ctx.length > 280 ? `${ctx.slice(0, 280)}...` : ctx}`
+    : "";
+  const snippet = opts.snippet.trim();
+  const maxSnippet = 320;
+  const snippetPart =
+    snippet.length > maxSnippet
+      ? ` Selection is large (${snippet.length} chars, ${opts.lineHint ?? "see file"}) — open ${opts.filePath} and inspect the ${side} diff.`
+      : ` Selection (${opts.lineHint ?? "diff"}):\n${snippet}`;
+  const prompt = [
+    `In ${opts.repoName}, help with a ${side} diff selection in ${opts.filePath}.`,
+    snippetPart,
+    ctxPart,
+    " Ask if intent is unclear. Do not commit unless asked.",
+  ]
+    .filter(Boolean)
+    .join("");
+  return guardedCliCommand(
+    cli.binary,
+    cli.interactive(prompt),
+    cli.missing("discuss this diff selection from the terminal"),
   );
 }
 

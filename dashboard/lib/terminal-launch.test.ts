@@ -8,7 +8,11 @@ import {
   agentRepoDxAuditCommand,
   agentRepoUpstartCommand,
   agentRepoUpstartDebugCommand,
+  agentGitHookFailureCommand,
   agentReviewCommand,
+  agentStashConflictCommand,
+  agentCommitMessageCommand,
+  agentStashMessageCommand,
 } from "./terminal-launch";
 
 const ORIGINAL_ENV = { ...process.env };
@@ -96,23 +100,32 @@ describe("agent CLI switch (cursor)", () => {
   });
 
   it("chains upstart execution after the one-shot run for both CLIs", async () => {
+    const upstartPath = "/repo/devhub/upstarts/acme-app/upstart.sh";
     useConfig();
-    const viaOpencode = await agentRepoUpstartCommand("acme-app");
-    expect(viaOpencode).toContain("&& bash .devhub/upstart.sh");
+    const viaOpencode = await agentRepoUpstartCommand("acme-app", upstartPath);
+    expect(viaOpencode).toContain(`&& bash '${upstartPath}'`);
+    expect(viaOpencode).toContain(upstartPath);
+    expect(viaOpencode).not.toContain(".devhub/upstart.sh");
 
     useConfig({ cli: "cursor" });
-    const viaCursor = await agentRepoUpstartCommand("acme-app");
+    const viaCursor = await agentRepoUpstartCommand("acme-app", upstartPath);
     expect(viaCursor).toContain("cursor-agent -p");
-    expect(viaCursor).toContain("&& bash .devhub/upstart.sh");
+    expect(viaCursor).toContain(`&& bash '${upstartPath}'`);
+    expect(viaCursor).not.toContain(".devhub/upstart.sh");
   });
 
   it("uses an interactive session (no print mode) for upstart debugging", async () => {
     useConfig({ cli: "cursor" });
 
-    const command = await agentRepoUpstartDebugCommand("acme-app");
+    const command = await agentRepoUpstartDebugCommand(
+      "acme-app",
+      "/repo/devhub/upstarts/acme-app/upstart.sh",
+    );
 
     expect(command).toContain("cursor-agent '");
     expect(command).not.toContain("cursor-agent -p");
+    expect(command).toContain("/repo/devhub/upstarts/acme-app/upstart.sh");
+    expect(command).not.toContain(".devhub/upstart.sh");
   });
 
   it("prints an install hint when cursor-agent is missing", async () => {
@@ -121,5 +134,91 @@ describe("agent CLI switch (cursor)", () => {
     const command = await agentReviewCommand("https://github.com/acme/app/pull/1");
 
     expect(command).toContain("Cursor CLI not found");
+  });
+});
+
+describe("agentStashConflictCommand", () => {
+  it("launches an interactive opencode session with the conflict skill", async () => {
+    useConfig();
+    const command = await agentStashConflictCommand({
+      repoName: "acme-app",
+      branch: "feature/foo",
+      conflictFiles: ["src/a.ts", "src/b.ts"],
+    });
+
+    expect(command).toContain("opencode ");
+    expect(command).toContain("--prompt");
+    expect(command).toContain("git-conflict-resolve");
+    expect(command).toContain("acme-app");
+    expect(command).toContain("feature/foo");
+    expect(command).toContain("src/a.ts");
+    expect(command).not.toContain("opencode run");
+  });
+
+  it("uses interactive cursor-agent (no print mode)", async () => {
+    useConfig({ cli: "cursor" });
+    const command = await agentStashConflictCommand({
+      repoName: "acme-app",
+      conflictFiles: ["pkg/x.go"],
+    });
+
+    expect(command).toContain("cursor-agent '");
+    expect(command).not.toContain("cursor-agent -p");
+    expect(command).toContain("git-conflict-resolve");
+  });
+});
+
+describe("agentCommitMessageCommand", () => {
+  it("runs a one-shot commit-message prompt", async () => {
+    useConfig();
+    const command = await agentCommitMessageCommand("acme-app");
+    expect(command).toContain("opencode run");
+    expect(command).toContain("acme-app");
+    expect(command).toContain("diff --cached");
+    expect(command).toContain("Do not commit");
+  });
+});
+
+describe("agentStashMessageCommand", () => {
+  it("runs a one-shot stash-message prompt", async () => {
+    useConfig();
+    const command = await agentStashMessageCommand("acme-app");
+    expect(command).toContain("opencode run");
+    expect(command).toContain("acme-app");
+    expect(command).toContain("diff HEAD");
+    expect(command).toContain("Do not stash");
+  });
+});
+
+describe("agentGitHookFailureCommand", () => {
+  it("launches an interactive session with the hook-fix skill", async () => {
+    useConfig();
+    const command = await agentGitHookFailureCommand({
+      repoName: "devhub-private",
+      hook: "pre-push",
+      phase: "push",
+      logPath: ".git/devhub-hook-failure.log",
+    });
+
+    expect(command).toContain("opencode ");
+    expect(command).toContain("--prompt");
+    expect(command).toContain("git-hook-fix");
+    expect(command).toContain("pre-push");
+    expect(command).toContain("devhub-hook-failure.log");
+    expect(command).toContain("do not skip hooks");
+    expect(command).not.toContain("opencode run");
+  });
+
+  it("uses interactive cursor-agent (no print mode)", async () => {
+    useConfig({ cli: "cursor" });
+    const command = await agentGitHookFailureCommand({
+      repoName: "acme-app",
+      hook: "pre-commit",
+      phase: "commit",
+    });
+
+    expect(command).toContain("cursor-agent '");
+    expect(command).not.toContain("cursor-agent -p");
+    expect(command).toContain("git-hook-fix");
   });
 });

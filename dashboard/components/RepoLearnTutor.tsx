@@ -128,7 +128,7 @@ export function RepoLearnTutor({ repoName, aiConfigured }: RepoLearnTutorProps) 
                 color: message.role === "user" ? "var(--text)" : "var(--text-subtle)",
               }}
             >
-              <div className="mb-0.5 text-[10px] uppercase tracking-wide font-medium" style={{ color: "var(--text-subtle)" }}>
+              <div className="mb-0.5 text-[10px] font-medium tracking-tight" style={{ color: "var(--text-subtle)" }}>
                 {message.role === "user" ? "You" : "Tutor"}
               </div>
               <div className="whitespace-pre-wrap">

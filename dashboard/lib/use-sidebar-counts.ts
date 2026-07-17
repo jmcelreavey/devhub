@@ -1,5 +1,5 @@
 import { useLive } from "@/lib/use-fetch";
-import type { SidebarCounts } from "@/app/api/sidebar/counts/route";
+import type { SidebarCounts } from "@/lib/sidebar-counts-cache";
 import { READ_STATUS_KEYS, useMarkSeenOnVisit } from "@/lib/read-status";
 
 export type { SidebarCounts };

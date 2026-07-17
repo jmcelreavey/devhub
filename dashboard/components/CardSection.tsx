@@ -32,14 +32,14 @@ function SectionHelpModal({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "rgba(0,0,0,0.5)",
+        background: "var(--scrim)",
       }}
       onClick={onClose}
     >
       <div
         className="card"
         style={{
-          padding: 20,
+          padding: "var(--space-5)",
           maxWidth: 600,
           width: "90%",
           maxHeight: "80vh",
@@ -89,7 +89,7 @@ function SectionHelpModal({
  * and `.card-body` CSS classes instead of duplicating them as inline styles.
  *
  * Props:
- * - `title` — uppercase header label
+ * - `title` — section header label
  * - `icon` — leading icon node
  * - `rightElement` — optional status badge / action on the right side of the header
  * - `help` — optional help data to show an info button + modal

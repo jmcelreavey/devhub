@@ -90,7 +90,7 @@ export function DatadogTodayStrip({
         {recent.oncall.length > 0 && (
           <span
             aria-hidden
-            className="danger-pulse inline-block h-2 w-2 shrink-0 rounded-full"
+            className="danger-pulse inline-block h-2 w-2 shrink-0 rounded-[var(--radius-sm)]"
             style={{ background: "var(--danger)" }}
           />
         )}

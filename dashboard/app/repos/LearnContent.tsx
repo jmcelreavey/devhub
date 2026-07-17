@@ -10,7 +10,7 @@ import {
   FileDown,
   FileText,
   RefreshCw,
-  Sparkles,
+  ScrollText,
   TerminalSquare,
 } from "lucide-react";
 import { FetchError } from "@/components/FetchError";
@@ -49,10 +49,18 @@ export interface LearnRepo {
 /**
  * The learning experience body — detected facts, generated brief, Socratic
  * tutor, NotebookLM pack, and the repo-level Capability Radar. Shared by the
- * /repos side panel (LearnPanel) and the dedicated /repos/learn/[name] screen,
- * so the two can never drift.
+ * /repos side panel (LearnPanel) and the dedicated /repos/learn/[name] screen.
+ * Panel variant is a skim; page variant shows the full stack.
  */
-export function LearnContent({ repo, focusLab }: { repo: LearnRepo; focusLab?: string }) {
+export function LearnContent({
+  repo,
+  focusLab,
+  variant = "page",
+}: {
+  repo: LearnRepo;
+  focusLab?: string;
+  variant?: "panel" | "page";
+}) {
   const toast = useToast();
   const [copied, setCopied] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -161,7 +169,7 @@ export function LearnContent({ repo, focusLab }: { repo: LearnRepo; focusLab?: s
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
-                  <Sparkles size={14} aria-hidden /> Generated brief
+                  <ScrollText size={14} aria-hidden /> Generated brief
                 </div>
                 {artifacts && (
                   <p className="mt-1 text-xs" style={{ color: "var(--text-subtle)" }}>
@@ -212,54 +220,71 @@ export function LearnContent({ repo, focusLab }: { repo: LearnRepo; focusLab?: s
             )}
           </div>
 
-          <div className="card card-body">
-            <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
-              <BookOpen size={14} aria-hidden /> Quiz me
+          {variant === "panel" ? (
+            <div className="card card-body">
+              <p className="text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+                Quiz, NotebookLM pack, and capability labs live on the full learning screen.
+              </p>
+              <Link
+                href={`/repos/learn/${encodeURIComponent(repo.name)}`}
+                className="btn btn-primary mt-3 inline-flex"
+                style={{ fontSize: 12, padding: "6px 12px" }}
+              >
+                Open full learn
+              </Link>
             </div>
-            <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-              Socratic tutor - answer questions, get follow-ups until something you don&apos;t know gets explained.
-            </p>
-            <div className="mt-3">
-              <RepoLearnTutor repoName={repo.name} aiConfigured={data?.aiConfigured === true} />
-            </div>
-          </div>
+          ) : (
+            <>
+              <div className="card card-body">
+                <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
+                  <BookOpen size={14} aria-hidden /> Quiz me
+                </div>
+                <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+                  Socratic tutor - answer questions, get follow-ups until something you don&apos;t know gets explained.
+                </p>
+                <div className="mt-3">
+                  <RepoLearnTutor repoName={repo.name} aiConfigured={data?.aiConfigured === true} />
+                </div>
+              </div>
 
-          <div className="card card-body">
-            <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
-              <FileText size={14} aria-hidden /> NotebookLM source pack
-            </div>
-            <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-              Download a ZIP of curated Markdown sources. NotebookLM does not accept ZIP natively - use the NotebookLM Tools extension or unzip and upload files manually (free plan: 50 sources).
-            </p>
-            {artifacts?.packFiles && artifacts.packFiles.length > 0 && (
-              <ul className="mt-2 space-y-0.5 text-xs font-mono" style={{ color: "var(--text-subtle)" }}>
-                {artifacts.packFiles.map((file) => (
-                  <li key={file.path}>
-                    {file.path} ({formatBytes(file.sizeBytes)})
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="mt-3 flex flex-wrap gap-2">
-              <PanelAction
-                icon={<FileDown size={12} />}
-                copied={false}
-                label="Download ZIP"
-                onClick={() => void downloadPackZip()}
-                disabled={!artifacts?.packFiles.length}
-              />
-              {artifacts?.overviewMarkdown && (
-                <PanelAction
-                  icon={<ClipboardCopy size={12} />}
-                  copied={copied === "overview"}
-                  label="Copy overview"
-                  onClick={() => copyText("overview", artifacts.overviewMarkdown!)}
-                />
-              )}
-            </div>
-          </div>
+              <div className="card card-body">
+                <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
+                  <FileText size={14} aria-hidden /> NotebookLM source pack
+                </div>
+                <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+                  Download a ZIP of curated Markdown sources. NotebookLM does not accept ZIP natively - use the NotebookLM Tools extension or unzip and upload files manually (free plan: 50 sources).
+                </p>
+                {artifacts?.packFiles && artifacts.packFiles.length > 0 && (
+                  <ul className="mt-2 space-y-0.5 text-xs font-mono" style={{ color: "var(--text-subtle)" }}>
+                    {artifacts.packFiles.map((file) => (
+                      <li key={file.path}>
+                        {file.path} ({formatBytes(file.sizeBytes)})
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <PanelAction
+                    icon={<FileDown size={12} />}
+                    copied={false}
+                    label="Download ZIP"
+                    onClick={() => void downloadPackZip()}
+                    disabled={!artifacts?.packFiles.length}
+                  />
+                  {artifacts?.overviewMarkdown && (
+                    <PanelAction
+                      icon={<ClipboardCopy size={12} />}
+                      copied={copied === "overview"}
+                      label="Copy overview"
+                      onClick={() => copyText("overview", artifacts.overviewMarkdown!)}
+                    />
+                  )}
+                </div>
+              </div>
 
-          <RepoRadarSection repoName={repo.name} autoOpenSignal={focusLab} />
+              <RepoRadarSection repoName={repo.name} autoOpenSignal={focusLab} />
+            </>
+          )}
         </>
       )}
     </div>
@@ -270,7 +295,7 @@ function RepoLearnLoading({ repoName }: { repoName?: string }) {
   return (
     <div className="card card-body">
       <div className="flex items-start gap-3">
-        <div className="skeleton shrink-0" style={{ width: 36, height: 36, borderRadius: "999px" }} />
+        <div className="skeleton shrink-0" style={{ width: 36, height: 36, borderRadius: "var(--radius-sm)" }} />
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold" style={{ color: "var(--text)" }}>
             Building the repo learning pack{repoName ? ` for ${repoName}` : ""}

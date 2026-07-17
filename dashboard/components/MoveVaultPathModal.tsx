@@ -108,7 +108,7 @@ export function MoveVaultPathModal({
     <div
       className="modal-backdrop fixed inset-0 z-[60] flex items-center justify-center"
       onClick={onClose}
-      style={{ background: "rgba(0,0,0,0.4)" }}
+      style={{ background: "var(--scrim)" }}
       role="presentation"
     >
       <div

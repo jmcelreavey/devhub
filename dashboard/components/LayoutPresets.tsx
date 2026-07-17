@@ -127,8 +127,8 @@ export function LayoutPresetsButton() {
           {/* View mode - Calm Focus (design B) vs dashboard grid (A+B) */}
           <div style={{ padding: "4px 0", borderBottom: "1px solid var(--border-muted)" }}>
             <div
-              className="px-3 pb-1 pt-1.5 text-[10.5px] font-bold uppercase"
-              style={{ color: "var(--text-subtle)", letterSpacing: ".08em" }}
+              className="px-3 pb-1 pt-1.5 text-[10.5px] font-semibold"
+              style={{ color: "var(--text-subtle)", letterSpacing: "-0.01em" }}
             >
               View
             </div>

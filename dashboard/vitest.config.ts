@@ -20,6 +20,7 @@ export default defineConfig({
       "../shared/notes-assets/**/*.test.ts",
       "../shared/markdown-convert/**/*.test.ts",
       "../shared/appraisal/**/*.test.ts",
+      "../shared/meeting-note/**/*.test.ts",
       "../mcp-servers/devhub-server/src/**/*.test.ts",
     ],
     globals: false,

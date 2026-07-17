@@ -12,7 +12,6 @@ import {
   Loader2,
   MonitorDown,
   RotateCcw,
-  Sparkles,
 } from "lucide-react";
 
 type Step = SetupStepMeta;
@@ -1086,7 +1085,7 @@ export function DoneStep({ saveResult }: { saveResult: { ok: boolean; message: s
             marginBottom: "16px",
           }}
         >
-          <Sparkles size={28}  className="text-accent" />
+          <CheckCircle2 size={28} className="text-accent" />
         </div>
         <h2 style={{ fontSize: "22px", fontWeight: 700, color: "var(--text)", marginBottom: "8px" }}>
           You&apos;re all set!

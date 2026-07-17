@@ -29,6 +29,9 @@ export function isGitNetworkCommand(args: string[]): boolean {
   return cmd === "fetch" || cmd === "pull" || cmd === "push";
 }
 
+/** Default cap for fetch/pull/push so a hung credential helper or network never stalls the API forever. */
+export const GIT_NETWORK_TIMEOUT_MS = 300_000;
+
 function gitArgsForRepo(
   repoRoot: string,
   args: string[],
@@ -63,17 +66,30 @@ export async function runGitRepoAsync(
   opts?: { useGhCredentials?: boolean; timeout?: number },
 ): Promise<GitRepoRunResult> {
   const useGh = opts?.useGhCredentials ?? isGitNetworkCommand(args);
+  const timeout =
+    opts?.timeout ?? (isGitNetworkCommand(args) ? GIT_NETWORK_TIMEOUT_MS : undefined);
   try {
     const { stdout, stderr } = await execFileAsync("git", gitArgsForRepo(repoRoot, args, useGh), {
       env: gitEnv(),
-      timeout: opts?.timeout,
+      timeout,
     });
     return { stdout, stderr, status: 0 };
   } catch (err: unknown) {
-    const e = err as { stdout?: string; stderr?: string; code?: number | string };
+    const e = err as {
+      stdout?: string;
+      stderr?: string;
+      code?: number | string;
+      killed?: boolean;
+      signal?: NodeJS.Signals | string;
+    };
+    const timedOut =
+      typeof timeout === "number" && (e.killed || e.signal === "SIGTERM");
+    const cmd = args[0] ?? "git";
     return {
       stdout: e.stdout ?? "",
-      stderr: e.stderr ?? "",
+      stderr: timedOut
+        ? `git ${cmd} timed out after ${Math.round(timeout / 1000)}s — check network, auth, or a stuck hook.`
+        : (e.stderr ?? ""),
       status: typeof e.code === "number" ? e.code : 1,
     };
   }

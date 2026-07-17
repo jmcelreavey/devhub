@@ -109,7 +109,7 @@ function normalizeLanAddresses(lan: { addresses: unknown }): string[] {
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="text-[11px] font-semibold uppercase tracking-widest px-0.5" style={{ color: "var(--text-subtle)", letterSpacing: "0.12em" }}>
+    <div className="text-[11px] font-semibold px-0.5" style={{ color: "var(--text-subtle)", letterSpacing: "-0.01em" }}>
       {children}
     </div>
   );
@@ -124,7 +124,7 @@ function McpStateDot({ running, binaryMissing }: { running: boolean; binaryMissi
       : "var(--text-subtle)";
   return (
     <span
-      className="inline-block h-2 w-2 shrink-0 rounded-full ring-1 ring-black/20"
+      className="inline-block h-2 w-2 shrink-0 rounded-[var(--radius-sm)] ring-1 ring-black/20"
       style={{ background }}
       title={running ? "Process detected" : binaryMissing ? "Command binary missing" : "No matching process (normal when idle)"}
       aria-hidden
@@ -874,7 +874,7 @@ export default function StatusPage() {
 
         {/* Services + MCP + BI: shared row on large screens */}
         <SectionLabel>Services &amp; Integrations</SectionLabel>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:items-stretch">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,0.9fr)] lg:items-stretch">
         {(showChamber || showOpenCode) && (
         <div className="card min-w-0 flex flex-col">
           <div className="card-header">

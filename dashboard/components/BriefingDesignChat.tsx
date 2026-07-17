@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Bot, Send, Sparkles, User, RotateCcw } from "lucide-react";
+import { Bot, Send, Lightbulb, User, RotateCcw } from "lucide-react";
 import { ModalShell } from "@/components/ModalShell";
 import { useToast } from "@/lib/use-toast";
 import { readAppTheme } from "@/lib/briefing-theme";
@@ -125,7 +125,7 @@ export function BriefingDesignChat({ open, onClose, onCanvasUpdated, onSideEffec
               onClick={() => void submit(starter)}
               disabled={sending}
             >
-              <Sparkles size={11} aria-hidden /> {starter}
+              <Lightbulb size={11} aria-hidden /> {starter}
             </button>
           ))}
         </div>

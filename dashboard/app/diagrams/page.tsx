@@ -246,7 +246,7 @@ function DiagramsIndexInner() {
   const isEmpty = folders.length === 0 && files.length === 0;
   // Show actions on tap (mobile) and on hover (desktop).
   const actionBtn =
-    "hub-icon-btn opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity";
+    "hub-icon-btn reveal-on-hover transition-opacity";
 
   return (
     <div className="page-wrapper">
@@ -374,7 +374,7 @@ function DiagramsIndexInner() {
       )}
 
       {!loaded ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+        <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(148px,1fr))]">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="card p-3 flex flex-col gap-2">
               <div className="w-full aspect-square rounded-[var(--radius-sm)]" style={{ background: "var(--bg-elevated)" }} />
@@ -399,7 +399,7 @@ function DiagramsIndexInner() {
           subtitle="Create a diagram or folder to get started."
         />
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+        <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(148px,1fr))]">
           {folders.map((f) => (
             <div key={f.storagePath} className="card p-3 flex flex-col gap-2 group">
               <button

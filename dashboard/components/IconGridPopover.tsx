@@ -149,7 +149,7 @@ export function IconGridPopover<T extends string = string>({
                 maxWidth: "min(320px, calc(100vw - 24px))",
                 borderColor: "var(--border)",
                 background: "var(--bg-elevated)",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+                boxShadow: "var(--shadow-popover)",
               }}
             >
               <div

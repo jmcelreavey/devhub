@@ -120,7 +120,7 @@ function TreeNode({
           <button
             type="button"
             title={`New ${itemLabel} in ${entry.name}`}
-            className="shrink-0 rounded p-0.5 opacity-40 hover:opacity-100 group-hover:opacity-100"
+            className="shrink-0 rounded p-0.5 reveal-on-hover"
             style={{ color: "var(--accent)" }}
             onClick={(e) => {
               e.preventDefault();
@@ -137,7 +137,7 @@ function TreeNode({
             <button
               type="button"
               disabled={deleting}
-              className="shrink-0 rounded p-0.5 opacity-40 hover:opacity-100 group-hover:opacity-100 disabled:opacity-30 disabled:pointer-events-none"
+              className="shrink-0 rounded p-0.5 reveal-on-hover disabled:opacity-30 disabled:pointer-events-none"
               style={{ color: "var(--danger)" }}
               onClick={handleDeleteFolder}
             >
@@ -284,7 +284,7 @@ function TreeNode({
       <button
         type="button"
         title="Copy reference"
-        className="shrink-0 rounded p-0.5 opacity-40 hover:opacity-100 group-hover:opacity-100"
+        className="shrink-0 rounded p-0.5 reveal-on-hover"
         style={{ color: copied ? "var(--success)" : "var(--text-muted)" }}
         onClick={handleCopyRef}
       >
@@ -299,7 +299,7 @@ function TreeNode({
         <button
           type="button"
           disabled={deleting}
-          className="shrink-0 rounded p-0.5 opacity-40 hover:opacity-100 group-hover:opacity-100 disabled:opacity-30 disabled:pointer-events-none"
+          className="shrink-0 rounded p-0.5 reveal-on-hover disabled:opacity-30 disabled:pointer-events-none"
           style={{ color: "var(--danger)" }}
           onClick={handleDelete}
         >
@@ -325,7 +325,7 @@ function TreeDragHandle({
       type="button"
       {...dragHandleProps}
       title="Drag to reorder. Arrow keys also work."
-      className="shrink-0 rounded p-0.5 opacity-30 hover:opacity-100 group-hover:opacity-100 focus:opacity-100"
+      className="shrink-0 rounded p-0.5 reveal-on-hover focus:opacity-100"
       style={{ color: "var(--text-subtle)", cursor: "grab" }}
       aria-label={`Drag to reorder ${label}`}
       onClick={(e) => e.stopPropagation()}

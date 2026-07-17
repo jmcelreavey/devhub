@@ -4,6 +4,9 @@
 // unconfigured or a generation fails. Deliberately dependency-free vanilla JS,
 // built with DOM APIs (no innerHTML) so arbitrary feed text can't inject markup.
 //
+// QUARANTINE: colours must only reference --app-* tokens injected by the shell
+// bridge (lib/briefing-theme.ts). No freestyle rgba / purple blobs / hex fallbacks.
+//
 // NOTE: this is stored as a template literal, so the embedded script must avoid
 // backticks and ${...} — it uses single quotes and string concatenation.
 
@@ -19,44 +22,35 @@ export const DEFAULT_CANVAS_HTML = `<!doctype html>
   html, body { margin: 0; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    color: var(--app-text, #e7ecf3); background: var(--app-bg, #0a0e17); min-height: 100vh; -webkit-font-smoothing: antialiased;
+    color: var(--app-text); background: var(--app-bg); min-height: 100vh; -webkit-font-smoothing: antialiased;
   }
   a { color: inherit; }
-  .bg { position: fixed; inset: 0; z-index: -1; overflow: hidden; }
-  .blob { position: absolute; width: 55vw; height: 55vw; border-radius: 50%; filter: blur(90px); opacity: 0.22; animation: drift 24s ease-in-out infinite; }
-  .blob.a { background: #1d4ed8; top: -14vw; left: -8vw; }
-  .blob.b { background: #7c3aed; bottom: -16vw; right: -8vw; animation-delay: -8s; }
-  .blob.c { background: #0891b2; top: 28vh; right: 18vw; animation-delay: -15s; opacity: 0.3; }
-  @keyframes drift { 0%,100% { transform: translate(0,0) scale(1); } 33% { transform: translate(4vw,3vh) scale(1.1); } 66% { transform: translate(-3vw,-2vh) scale(0.95); } }
-  @media (prefers-reduced-motion: reduce) { .blob { animation: none; } .card { animation: none; } }
   .wrap { max-width: 1120px; margin: 0 auto; padding: 30px 22px 72px; }
   .top { margin-bottom: 20px; }
-  .hello { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
-  .sub { color: var(--app-subtle, #93a1b3); font-size: 13px; margin: 5px 0 0; }
-  .hero { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; background: var(--app-surface, rgba(255,255,255,0.045)); border: 1px solid var(--app-border, rgba(255,255,255,0.08)); border-radius: 18px; padding: 18px 22px; margin-bottom: 22px; backdrop-filter: blur(8px); }
-  .temp { font-size: 48px; font-weight: 700; line-height: 1; }
-  .hero-meta { color: var(--app-muted, #b7c2d0); font-size: 14px; max-width: 320px; }
-  .hero-loc { font-weight: 600; color: var(--app-text, #e7ecf3); }
+  .hello { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; margin: 0; overflow-wrap: anywhere; min-width: 0; }
+  .sub { color: var(--app-subtle); font-size: 13px; margin: 5px 0 0; }
+  .hero { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 12px; padding: 18px 22px; margin-bottom: 22px; }
+  .temp { font-size: 48px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  .hero-meta { color: var(--app-muted); font-size: 14px; max-width: 320px; }
+  .hero-loc { font-weight: 600; color: var(--app-text); }
   .forecast { display: flex; gap: 10px; margin-left: auto; flex-wrap: wrap; }
-  .fday { text-align: center; background: var(--app-elevated, rgba(255,255,255,0.05)); border-radius: 12px; padding: 8px 12px; min-width: 66px; }
-  .fday b { display: block; font-size: 11px; color: var(--app-subtle, #93a1b3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .fday { text-align: center; background: var(--app-elevated); border-radius: 10px; padding: 8px 12px; min-width: 66px; }
+  .fday b { display: block; font-size: 11px; color: var(--app-subtle); font-weight: 600; letter-spacing: -0.01em; }
   .fday span { font-size: 14px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; align-items: start; }
-  .card { background: var(--app-surface, rgba(255,255,255,0.035)); border: 1px solid var(--app-border, rgba(255,255,255,0.07)); border-radius: 16px; padding: 15px 16px 9px; animation: rise 0.5s ease both; }
-  @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-  .card-title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--app-accent, #8ea0ff); margin-bottom: 4px; }
-  .row { display: block; padding: 9px 0; border-top: 1px solid var(--app-border, rgba(255,255,255,0.06)); text-decoration: none; font-size: 14px; line-height: 1.4; }
+  .card { background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 12px; padding: 15px 16px 9px; }
+  .card-title { font-size: 12px; font-weight: 700; letter-spacing: -0.01em; color: var(--app-accent); margin-bottom: 4px; }
+  .row { display: block; padding: 9px 0; border-top: 1px solid var(--app-border); text-decoration: none; font-size: 14px; line-height: 1.4; }
   .row:first-of-type { border-top: 0; }
-  a.row:hover .row-title { color: var(--app-text, #fff); text-decoration: underline; }
-  .row-title { color: var(--app-text, #dfe6ef); display: block; }
-  .row-strong { color: var(--app-text, #fff); font-weight: 600; }
-  .meta { display: block; color: var(--app-subtle, #7f8da3); font-size: 12px; margin-top: 2px; }
-  .empty { color: var(--app-subtle, #7f8da3); font-size: 14px; padding: 40px 0; text-align: center; }
-  .foot { margin-top: 26px; color: var(--app-subtle, #66748a); font-size: 12px; text-align: center; }
+  a.row:hover .row-title { color: var(--app-text); text-decoration: underline; }
+  .row-title { color: var(--app-text); display: block; }
+  .row-strong { color: var(--app-text); font-weight: 600; }
+  .meta { display: block; color: var(--app-subtle); font-size: 12px; margin-top: 2px; }
+  .empty { color: var(--app-subtle); font-size: 14px; padding: 40px 0; text-align: left; }
+  .foot { margin-top: 26px; color: var(--app-subtle); font-size: 12px; text-align: left; }
 </style>
 </head>
 <body>
-  <div class="bg"><div class="blob a"></div><div class="blob b"></div><div class="blob c"></div></div>
   <div class="wrap">
     <div class="top" id="top"></div>
     <div id="hero"></div>

@@ -4,26 +4,28 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import {
   Bot,
   Brain,
+  ChevronDown,
   ClipboardCheck,
   Download,
   ExternalLink,
+  FolderOpen,
   GitBranch,
   MonitorPlay,
+  MoreHorizontal,
   Rocket,
   Search,
   TerminalSquare,
   Trash2,
 } from "lucide-react";
 import { HoverTip } from "@/components/HoverTip";
-import { LaunchMenu } from "@/components/LaunchMenu";
 import { usePrompt } from "@/components/ConfirmDialog";
-import { RepoBranchPanel } from "@/components/RepoBranchPanel";
-import { RepoGitActions } from "@/components/RepoGitActions";
+import { RepoGitWorkspace } from "@/components/repo-git/RepoGitWorkspace";
 import { claudeCliCommand, opencodeCliCommand, openTerminal } from "@/lib/terminal-launch";
 import type { GithubRepoInfo, RepoInfo } from "./types";
 
 interface RepoApps {
   gitkraken: boolean;
+  revealLabel?: string;
 }
 
 interface LocalRepoCardProps {
@@ -37,6 +39,7 @@ interface LocalRepoCardProps {
   onDxAudit: (repo: RepoInfo) => void;
   onUpstart: (repo: RepoInfo, debug?: boolean, context?: string) => void;
   onTerminal: (repo: RepoInfo) => void;
+  onRevealFolder: (name: string) => void;
   onGitKraken: (name: string) => void;
   onCursor: (name: string) => void;
   onClaudeDesktop: () => void | Promise<void>;
@@ -53,24 +56,89 @@ interface GithubRepoCardProps {
   onClone: (fullName: string) => void;
 }
 
-export function SearchCard({ query, onQueryChange }: { query: string; onQueryChange: (value: string) => void }) {
+export function SearchCard({
+  query,
+  onQueryChange,
+  localFilter,
+  onLocalFilterChange,
+  changedCount,
+  unpushedCount,
+}: {
+  query: string;
+  onQueryChange: (value: string) => void;
+  localFilter: "changed" | "unpushed" | null;
+  onLocalFilterChange: (value: "changed" | "unpushed" | null) => void;
+  changedCount: number;
+  unpushedCount: number;
+}) {
   return (
-    <div className="card mb-3" style={{ padding: 14 }}>
-      <label
-        htmlFor="repos-filter"
-        className="text-xs uppercase tracking-wide mb-2 flex items-center gap-2"
-        style={{ color: "var(--text-subtle)" }}
-      >
-        <Search size={12} aria-hidden /> Search local and GitHub repos
-      </label>
+    <div className="card mb-3 repos-toolbar" style={{ padding: 14 }}>
+      <div className="flex items-end justify-between gap-3 mb-2 flex-wrap">
+        <label
+          htmlFor="repos-filter"
+          className="text-xs font-medium tracking-tight flex items-center gap-2"
+          style={{ color: "var(--text-subtle)" }}
+        >
+          <Search size={12} aria-hidden /> Search
+        </label>
+        <div className="flex items-center gap-1.5 flex-wrap" role="group" aria-label="Filter local repos">
+          <FilterChip
+            label="Changed"
+            count={changedCount}
+            active={localFilter === "changed"}
+            tone="warning"
+            onClick={() => onLocalFilterChange(localFilter === "changed" ? null : "changed")}
+          />
+          <FilterChip
+            label="Unpushed"
+            count={unpushedCount}
+            active={localFilter === "unpushed"}
+            tone="accent"
+            onClick={() => onLocalFilterChange(localFilter === "unpushed" ? null : "unpushed")}
+          />
+        </div>
+      </div>
       <input
         id="repos-filter"
         className="input"
-        placeholder="Search by repo name, owner, or description..."
+        placeholder="Filter local… type to also search GitHub"
         value={query}
         onChange={(e) => onQueryChange(e.target.value)}
       />
     </div>
+  );
+}
+
+function FilterChip({
+  label,
+  count,
+  active,
+  tone,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  tone: "warning" | "accent";
+  onClick: () => void;
+}) {
+  const idleClass = tone === "warning" ? "badge-warning" : "badge-accent";
+  return (
+    <button
+      type="button"
+      className={`badge ${active ? "badge-accent" : count === 0 ? "badge-muted" : idleClass}`}
+      style={{
+        cursor: "pointer",
+        border: active ? "1px solid var(--accent)" : "1px solid transparent",
+        fontSize: 11,
+        padding: "3px 8px",
+      }}
+      aria-pressed={active}
+      onClick={onClick}
+    >
+      {label}
+      <span style={{ opacity: 0.85, marginLeft: 4 }}>{count}</span>
+    </button>
   );
 }
 
@@ -86,60 +154,10 @@ export function SectionHeader({
   return (
     <div className="flex items-end justify-between gap-3">
       <div>
-        <div className="text-xs uppercase tracking-wide" style={{ color: "var(--text-subtle)" }}>{label}</div>
+        <div className="text-xs font-medium tracking-tight" style={{ color: "var(--text-subtle)" }}>{label}</div>
         <div className="text-xs" style={{ color: "var(--text-muted)" }}>{description}</div>
       </div>
       <span className="badge badge-muted">{count}</span>
-    </div>
-  );
-}
-
-export function StatCard({
-  label,
-  value,
-  tone,
-  icon,
-  active = false,
-  onClick,
-}: {
-  label: string;
-  value: number;
-  tone: "muted" | "warning" | "accent" | "success";
-  icon: ReactNode;
-  active?: boolean;
-  onClick?: () => void;
-}) {
-  const badgeClass =
-    tone === "warning" ? "badge-warning" : tone === "accent" ? "badge-accent" : tone === "success" ? "badge-success" : "badge-muted";
-  const style = {
-    padding: "12px 14px",
-    width: "100%",
-    textAlign: "left",
-    borderColor: active ? "var(--accent)" : undefined,
-    cursor: onClick ? "pointer" : undefined,
-  } satisfies CSSProperties;
-  const content = (
-    <>
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-xs uppercase tracking-wide" style={{ color: "var(--text-subtle)" }}>{label}</div>
-        <span style={{ color: "var(--text-subtle)" }}>{icon}</span>
-      </div>
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <span className="text-xl font-semibold" style={{ color: "var(--text)" }}>{value}</span>
-        <span className={`badge ${active ? "badge-accent" : badgeClass}`}>{active ? "filtering" : value === 0 ? "quiet" : "needs eyes"}</span>
-      </div>
-    </>
-  );
-  if (onClick) {
-    return (
-      <button type="button" className="card" style={style} onClick={onClick} aria-pressed={active}>
-        {content}
-      </button>
-    );
-  }
-  return (
-    <div className="card" style={style}>
-      {content}
     </div>
   );
 }
@@ -163,6 +181,7 @@ export function LocalRepoCard({
   onDxAudit,
   onUpstart,
   onTerminal,
+  onRevealFolder,
   onGitKraken,
   onCursor,
   onClaudeDesktop,
@@ -170,19 +189,25 @@ export function LocalRepoCard({
   onRefreshLocal,
 }: LocalRepoCardProps) {
   const [upstartMenuOpen, setUpstartMenuOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const upstartMenuRef = useRef<HTMLDivElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const prompt = usePrompt();
-  const hasUnpushed = (repo.unpushedCount ?? 0) > 0;
-  const statusTone = repo.dirtyCount > 0 ? "var(--warning)" : hasUnpushed ? "var(--accent)" : "var(--success)";
 
   useEffect(() => {
-    if (!upstartMenuOpen) return;
+    if (!upstartMenuOpen && !moreOpen) return;
     const onPointerDown = (event: PointerEvent) => {
-      if (upstartMenuRef.current?.contains(event.target as Node)) return;
+      const target = event.target as Node;
+      if (upstartMenuRef.current?.contains(target)) return;
+      if (moreMenuRef.current?.contains(target)) return;
       setUpstartMenuOpen(false);
+      setMoreOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setUpstartMenuOpen(false);
+      if (event.key === "Escape") {
+        setUpstartMenuOpen(false);
+        setMoreOpen(false);
+      }
     };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -190,14 +215,16 @@ export function LocalRepoCard({
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [upstartMenuOpen]);
+  }, [upstartMenuOpen, moreOpen]);
+
+  const busy = opening !== null || removing !== null;
 
   return (
-    <div className="card" style={{ padding: 0, overflow: "visible", borderLeft: `3px solid ${statusTone}` }}>
+    <div className="card" style={{ padding: 0, overflow: "visible" }}>
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="font-semibold text-sm break-words leading-snug" style={{ color: "var(--text)" }}>
+            <div className="flex items-center gap-2 font-semibold text-sm break-words leading-snug" style={{ color: "var(--text)" }}>
               {repo.name}
             </div>
             {repo.branch && <MetaChip icon={<GitBranch size={11} />} label={repo.branch} />}
@@ -207,8 +234,8 @@ export function LocalRepoCard({
               <HoverTip
                 label={
                   repo.hasUpstart
-                    ? "Run .devhub/upstart.sh. Right-click for options."
-                    : "Ask OpenCode to create .devhub/upstart.sh and start this repo. Right-click for options."
+                    ? "Run DevHub upstart for this repo"
+                    : "Ask the agent to create a DevHub upstart and start this repo"
                 }
               >
                 <button
@@ -217,22 +244,30 @@ export function LocalRepoCard({
                     setUpstartMenuOpen(false);
                     onUpstart(repo);
                   }}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    setUpstartMenuOpen(true);
-                  }}
                   className="btn btn-primary"
-                  style={{ fontSize: "12px", padding: "4px 10px" }}
-                  aria-haspopup="menu"
-                  aria-expanded={upstartMenuOpen}
+                  style={{ fontSize: "12px", padding: "4px 10px", borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
                 >
                   <Rocket size={12} /> Upstart
                 </button>
               </HoverTip>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ fontSize: "12px", padding: "4px 6px", borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeft: "1px solid color-mix(in srgb, var(--bg) 25%, transparent)" }}
+                aria-label="Upstart options"
+                aria-haspopup="menu"
+                aria-expanded={upstartMenuOpen}
+                onClick={() => {
+                  setMoreOpen(false);
+                  setUpstartMenuOpen((open) => !open);
+                }}
+              >
+                <ChevronDown size={12} aria-hidden />
+              </button>
               {upstartMenuOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 top-full z-50 mt-2 w-48 rounded-md border p-1 shadow-xl"
+                  className="absolute right-0 top-full z-50 mt-2 w-52 rounded-md border p-1 shadow-xl"
                   style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
                 >
                   <button
@@ -281,128 +316,196 @@ export function LocalRepoCard({
                 </div>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => onLearn(repo)}
-              className="btn btn-ghost"
-              style={{ fontSize: "12px", padding: "4px 10px" }}
-            >
-              <Brain size={12} /> Learn
-            </button>
-            <HoverTip label="Ask OpenCode to run a developer-experience audit (dx-audit skill) and save the report to notes.">
+
+            <HoverTip label="Skim this repo — architecture, gotchas, how to run it">
               <button
                 type="button"
-                onClick={() => onDxAudit(repo)}
+                onClick={() => onLearn(repo)}
                 className="btn btn-ghost"
-                style={{ fontSize: "12px", padding: "4px 10px" }}
+                style={smallButtonStyle}
+                aria-label={`Learn ${repo.name}`}
               >
-                <ClipboardCheck size={12} /> DX Audit
+                <Brain size={12} />
+                Learn
               </button>
             </HoverTip>
+
+            {isDesktop && (
+              <button
+                type="button"
+                onClick={() => onCursor(repo.name)}
+                disabled={busy}
+                className="btn btn-ghost"
+                style={smallButtonStyle}
+              >
+                <MonitorPlay size={12} />
+                {opening === repo.name ? "Opening..." : "Cursor"}
+              </button>
+            )}
+
+            <div ref={moreMenuRef} className="relative inline-flex">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={smallButtonStyle}
+                aria-label={`More actions for ${repo.name}`}
+                aria-haspopup="menu"
+                aria-expanded={moreOpen}
+                onClick={() => {
+                  setUpstartMenuOpen(false);
+                  setMoreOpen((open) => !open);
+                }}
+              >
+                <MoreHorizontal size={14} aria-hidden />
+              </button>
+              {moreOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full z-50 mt-2 w-52 rounded-md border p-1 shadow-xl"
+                  style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
+                >
+                  <MoreItem
+                    icon={<ClipboardCheck size={13} />}
+                    label="DX Audit"
+                    onSelect={() => {
+                      setMoreOpen(false);
+                      onDxAudit(repo);
+                    }}
+                  />
+                  {githubUrl && (
+                    <a
+                      href={githubUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      role="menuitem"
+                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs no-underline hover:bg-[var(--bg-elevated)]"
+                      style={{ color: "var(--text)" }}
+                      onClick={() => setMoreOpen(false)}
+                    >
+                      <ExternalLink size={13} aria-hidden /> GitHub
+                    </a>
+                  )}
+                  {isDesktop && (
+                    <MoreItem
+                      icon={<TerminalSquare size={13} />}
+                      label="Terminal"
+                      onSelect={() => {
+                        setMoreOpen(false);
+                        onTerminal(repo);
+                      }}
+                    />
+                  )}
+                  <MoreItem
+                    icon={<FolderOpen size={13} />}
+                    label={apps?.revealLabel ?? "Show folder"}
+                    onSelect={() => {
+                      setMoreOpen(false);
+                      onRevealFolder(repo.name);
+                    }}
+                  />
+                  <MoreItem
+                    icon={<TerminalSquare size={13} />}
+                    label="OpenCode CLI"
+                    onSelect={() => {
+                      setMoreOpen(false);
+                      openTerminal({
+                        cwd: repo.path,
+                        label: `OpenCode · ${repo.name}`,
+                        command: opencodeCliCommand(),
+                      });
+                    }}
+                  />
+                  <MoreItem
+                    icon={<TerminalSquare size={13} />}
+                    label="Claude CLI"
+                    onSelect={() => {
+                      setMoreOpen(false);
+                      openTerminal({
+                        cwd: repo.path,
+                        label: `Claude · ${repo.name}`,
+                        command: claudeCliCommand(),
+                      });
+                    }}
+                  />
+                  <MoreItem
+                    icon={<Bot size={13} />}
+                    label="Claude app"
+                    onSelect={() => {
+                      setMoreOpen(false);
+                      void onClaudeDesktop();
+                    }}
+                  />
+                  {isDesktop && apps?.gitkraken && (
+                    <MoreItem
+                      icon={<GitBranch size={13} />}
+                      label="GitKraken"
+                      onSelect={() => {
+                        setMoreOpen(false);
+                        onGitKraken(repo.name);
+                      }}
+                    />
+                  )}
+                  <MoreItem
+                    icon={<Trash2 size={13} />}
+                    label={removing === repo.name ? "Removing..." : "Remove local"}
+                    danger
+                    disabled={busy}
+                    onSelect={() => {
+                      setMoreOpen(false);
+                      onRemove(repo.name);
+                    }}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </div>
+
         <div className="mt-2">
-          <RepoGitActions
+          <RepoGitWorkspace
             repoName={repo.name}
+            repoPath={repo.path}
             dirtyCount={repo.dirtyCount}
             unpushedCount={repo.unpushedCount ?? 0}
             onMutate={onRefreshLocal}
           />
         </div>
-        <div className="mt-2 truncate text-xs font-mono" style={{ color: "var(--text-subtle)" }} title={repo.path}>
-          {repo.path}
-        </div>
 
-        <div className="mt-3 flex items-center gap-1.5 flex-wrap">
-          {githubUrl && (
-            <a href={githubUrl} target="_blank" rel="noopener noreferrer" className="btn btn-ghost" style={smallButtonStyle}>
-              <ExternalLink size={12} /> GitHub
-            </a>
-          )}
-          <RepoBranchPanel repoName={repo.name} onMutate={onRefreshLocal} />
-          <LaunchMenu
-            label="AI"
-            icon={<Bot size={12} aria-hidden />}
-            buttonStyle={smallButtonStyle}
-            items={[
-              {
-                id: "opencode-cli",
-                label: "OpenCode CLI",
-                description: "Open OpenCode in this repo terminal.",
-                icon: <TerminalSquare size={13} />,
-                onSelect: () =>
-                  openTerminal({
-                    cwd: repo.path,
-                    label: `OpenCode · ${repo.name}`,
-                    command: opencodeCliCommand(),
-                  }),
-              },
-              {
-                id: "claude-cli",
-                label: "Claude CLI",
-                description: "Open Claude in this repo terminal.",
-                icon: <TerminalSquare size={13} />,
-                onSelect: () =>
-                  openTerminal({
-                    cwd: repo.path,
-                    label: `Claude · ${repo.name}`,
-                    command: claudeCliCommand(),
-                  }),
-              },
-              {
-                id: "claude-app",
-                label: "Claude app",
-                description: "Open Claude desktop/web for manual handoff.",
-                icon: <Bot size={13} />,
-                onSelect: onClaudeDesktop,
-              },
-            ]}
-          />
-          {isDesktop && (
-            <button type="button" onClick={() => onTerminal(repo)} className="btn btn-ghost" style={smallButtonStyle}>
-              <TerminalSquare size={12} /> Terminal
-            </button>
-          )}
-          {isDesktop && apps?.gitkraken && (
-            <button type="button" onClick={() => onGitKraken(repo.name)} className="btn btn-ghost" style={smallButtonStyle}>
-              <GitBranch size={12} /> Kraken
-            </button>
-          )}
-          {isDesktop && (
-            <button
-              type="button"
-              onClick={() => onCursor(repo.name)}
-              disabled={opening !== null || removing !== null}
-              className="btn btn-ghost"
-              style={smallButtonStyle}
-            >
-              <MonitorPlay size={12} />
-              {opening === repo.name ? "Opening..." : "Cursor"}
-            </button>
-          )}
-          <HoverTip
-            label={
-              removing === repo.name
-                ? "Removing..."
-                : removing !== null || opening !== null
-                  ? "Another repo operation is in progress."
-                  : "Delete local clone only"
-            }
-          >
-            <button
-              type="button"
-              className="btn btn-ghost"
-              style={{ ...smallButtonStyle, color: "var(--danger)" }}
-              disabled={removing !== null || opening !== null}
-              onClick={() => onRemove(repo.name)}
-            >
-              <Trash2 size={12} />
-              {removing === repo.name ? "Removing..." : "Remove"}
-            </button>
-          </HoverTip>
-        </div>
+        <details className="repos-card-more mt-2">
+          <summary className="repos-card-more-summary">
+            <span className="truncate font-mono" title={repo.path}>{repo.path}</span>
+          </summary>
+        </details>
       </div>
     </div>
+  );
+}
+
+function MoreItem({
+  icon,
+  label,
+  onSelect,
+  danger,
+  disabled,
+}: {
+  icon: ReactNode;
+  label: string;
+  onSelect: () => void;
+  danger?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      disabled={disabled}
+      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-[var(--bg-elevated)] disabled:opacity-50"
+      style={{ color: danger ? "var(--danger)" : "var(--text)" }}
+      onClick={onSelect}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 

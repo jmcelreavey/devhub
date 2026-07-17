@@ -29,6 +29,7 @@ export function JiraStatusPill({ ticketKey, status, onChanged }: JiraStatusPillP
       if (!res.ok) throw new Error("Transition failed");
       toast.success(`Updated ${ticketKey}`);
       void mutate("/api/jira/tickets");
+      void mutate("/api/sidebar/counts");
       onChanged?.();
     } catch {
       toast.error(`Couldn't transition ${ticketKey}`);

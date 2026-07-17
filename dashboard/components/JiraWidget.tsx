@@ -28,7 +28,7 @@ export function statusTone(status: string): SeverityTone {
   const s = status.toLowerCase();
   if (s.includes("done") || s.includes("closed") || s.includes("merged")) return "success";
   if (s.includes("block")) return "critical";
-  if (s.includes("qa")) return "violet";
+  if (s.includes("qa")) return "brand";
   if (s.includes("progress") || s.includes("dev")) return "info";
   if (s.includes("review") || s.includes("change")) return "warning";
   if (s.includes("todo") || s.includes("backlog") || s.includes("to do") || s.includes("open")) return "muted";
@@ -39,7 +39,7 @@ export function statusTone(status: string): SeverityTone {
 export function statusColor(status: string): string {
   const t = statusTone(status);
   const map: Record<SeverityTone, string> = {
-    success: "var(--success)", critical: "var(--danger)", violet: "var(--violet)",
+    success: "var(--success)", critical: "var(--danger)", violet: "var(--info)",
     info: "var(--info)", warning: "var(--warning)", muted: "var(--text-subtle)", brand: "var(--accent)",
   };
   return map[t];
@@ -86,7 +86,7 @@ export function JiraWidget({ collapsed = false, collapsedSummary, onToggle }: Ji
 
   if (isLoading) {
     return (
-      <div className="skeleton" style={{ height: 100, borderRadius: "var(--radius)", marginTop: 8 }} />
+      <div className="skeleton" style={{ height: 100, borderRadius: "var(--radius)" }} />
     );
   }
 
@@ -95,9 +95,7 @@ export function JiraWidget({ collapsed = false, collapsedSummary, onToggle }: Ji
       <div
         className="card"
         style={{
-          marginTop: 8,
           padding: "8px 12px",
-          borderLeft: "3px solid var(--danger)",
           fontSize: 12,
           color: "var(--text-muted)",
           display: "flex",
@@ -115,7 +113,7 @@ export function JiraWidget({ collapsed = false, collapsedSummary, onToggle }: Ji
   if (sortedTickets.length === 0) return null;
 
   return (
-    <div className="card" data-collapsed={collapsed ? "true" : undefined} style={{ marginTop: "8px" }}>
+    <div className="card" data-collapsed={collapsed ? "true" : undefined}>
       <div className="card-header today-grid-drag-handle">
         <span className="flex min-w-0 items-center gap-1.5">
           <Ticket size={12} aria-hidden /> My Tickets

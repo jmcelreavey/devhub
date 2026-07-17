@@ -66,13 +66,14 @@ export async function assembleBriefingContext(
 ): Promise<BriefingContext> {
   const date = opts.date ?? todayISO();
 
-  // Cached background research for declared interests (best-effort). Only runs
-  // for interests missing a fresh brief unless a full refresh was requested.
-  if (prefs.interests.length > 0) {
-    await runLast30DaysForInterests(prefs.interests, { onlyMissing: !opts.refresh }).catch(() => null);
-  }
+  // Run research in parallel with network sources. Awaiting it first used to
+  // delay Open-Meteo past its 8s timeout on cold mornings, then cache weather:null.
+  const researchRun =
+    prefs.interests.length > 0
+      ? runLast30DaysForInterests(prefs.interests, { onlyMissing: !opts.refresh }).catch(() => null)
+      : Promise.resolve(null);
 
-  const [weather, news, events, github, hackerNews, gaming, onThisDay, interests, feeds] = await Promise.all([
+  const sources = Promise.all([
     settle(fetchWeather(prefs.location), null as WeatherInfo | null),
     settle(fetchNews(prefs.newsFeeds, 24), [] as LinkItem[]),
     settle(fetchEvents(prefs, 24), [] as LinkItem[]),
@@ -83,6 +84,8 @@ export async function assembleBriefingContext(
     settle(fetchInterestSnippets(prefs.interests, prefs.newsRegion), [] as InterestSnippet[]),
     settle(fetchDynamicFeeds(10), [] as FeedResult[]),
   ]);
+  const [[weather, news, events, github, hackerNews, gaming, onThisDay, interests, feeds]] =
+    await Promise.all([sources, researchRun]);
 
   const research = loadResearchCards(prefs.interests);
   const generatedAt = new Date().toISOString();

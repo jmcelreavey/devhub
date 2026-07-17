@@ -97,7 +97,7 @@ export default function LearningsPage() {
                     {detailLoading ? (
                       <LoadingLine message="Loading…" />
                     ) : detailError ? (
-                      <FetchError message={detailError.message} onRetry={() => void mutateDetail()} />
+                      <FetchError message={detailError.message} onRetry={() => void mutateDetail()} bare />
                     ) : detail ? (
                       <>
                         <div className="flex justify-end mb-3">

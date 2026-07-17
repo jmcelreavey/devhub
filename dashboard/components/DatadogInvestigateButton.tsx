@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles } from "lucide-react";
+import { ScanSearch } from "lucide-react";
 import { useToast } from "@/lib/use-toast";
 import { requestOpenCodeSession } from "@/lib/opencode-session";
 import type { RecentEvent } from "@/lib/datadog-recent-events";
@@ -64,7 +64,7 @@ export function DatadogInvestigateButton({ scope, alert, label, compact }: Datad
       title="Investigate in OpenCode"
       aria-label={`Investigate ${alert?.title ?? scope} in OpenCode`}
     >
-      <Sparkles size={compact ? 11 : 12} aria-hidden />
+      <ScanSearch size={compact ? 11 : 12} aria-hidden />
       {!compact && <span className="ml-1">{busy ? "Starting…" : (label ?? "Investigate")}</span>}
     </button>
   );

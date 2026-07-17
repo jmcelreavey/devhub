@@ -255,7 +255,7 @@ export function FocusTimer() {
     createPortal(
       <div
         className="fixed inset-0 flex items-center justify-center"
-        style={{ zIndex: 9400, background: "rgba(0,0,0,0.4)" }}
+        style={{ zIndex: "var(--z-shield)", background: "var(--scrim)" }}
         onClick={closeCustomModal}
         role="presentation"
       >

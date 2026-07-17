@@ -405,7 +405,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         alignItems: "flex-start",
         justifyContent: "center",
         paddingTop: "12vh",
-        background: "rgba(0,0,0,0.5)",
+        background: "var(--scrim)",
       }}
       onClick={onClose}
     >
@@ -476,8 +476,6 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                 gap: 10,
                 background: idx === highlightIdx ? "var(--bg-elevated)" : "transparent",
                 border: "none",
-                borderLeft:
-                  idx === highlightIdx ? "2px solid var(--accent)" : "2px solid transparent",
                 color: "var(--text)",
                 fontSize: 13,
                 cursor: "pointer",

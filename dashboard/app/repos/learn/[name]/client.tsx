@@ -12,7 +12,7 @@ import type { ReposApiPayload } from "../../types";
 
 /**
  * Dedicated, full-page learning screen — the same LearnContent the /repos side
- * panel shows, with room to breathe. Reached via the panel's "Expand" button,
+ * panel skims, with room to breathe. Reached via the panel's "Expand" button,
  * the persistent learn dock, or directly at /repos/learn/<repo>.
  */
 export function LearnScreen({ name, focusLab }: { name: string; focusLab?: string }) {
@@ -44,7 +44,11 @@ export function LearnScreen({ name, focusLab }: { name: string; focusLab?: strin
             >
               <SquareArrowOutUpRight size={13} /> Cursor
             </button>
-            <Link href={`/repos?learn=${encodeURIComponent(name)}`} className="btn btn-ghost text-xs" title="Open as a side panel over /repos">
+            <Link
+              href={`/repos?learn=${encodeURIComponent(name)}`}
+              className="btn btn-ghost text-xs"
+              title="Open as a side panel on /repos (?learn= is synced)"
+            >
               <PanelRight size={13} /> As panel
             </Link>
           </span>
@@ -55,7 +59,7 @@ export function LearnScreen({ name, focusLab }: { name: string; focusLab?: strin
         {error ? (
           <FetchError message={error.message} onRetry={() => void mutate()} />
         ) : repo ? (
-          <LearnContent repo={repo} focusLab={focusLab} />
+          <LearnContent repo={repo} focusLab={focusLab} variant="page" />
         ) : !isLoading ? (
           <EmptyState
             icon={<GraduationCap size={32} />}

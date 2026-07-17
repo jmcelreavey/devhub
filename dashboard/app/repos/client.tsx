@@ -1,31 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowUpFromLine, RefreshCw } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { AlertCircle, RefreshCw } from "lucide-react";
 import { useLive } from "@/lib/use-fetch";
-import { useToast } from "@/lib/use-toast";
 import { FetchError } from "@/components/FetchError";
 import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
-import { useLaunchClaudeDesktop } from "@/lib/launch-claude";
-import { useConfirm, usePrompt } from "@/components/ConfirmDialog";
-import {
-  agentRepoDxAuditCommand,
-  agentRepoUpstartCommand,
-  agentRepoUpstartDebugCommand,
-  agentRepoUpstartUpdateCommand,
-  openTerminal,
-  repoUpstartCommand,
-} from "@/lib/terminal-launch";
 import {
   EmptyReposCard,
   GithubRepoCard,
   LocalRepoCard,
   SearchCard,
   SectionHeader,
-  StatCard,
 } from "./cards";
 import { LearnPanel } from "./LearnPanel";
 import { EvolutionStrip } from "./EvolutionStrip";
+import { useReposActions } from "./useReposActions";
 import type { GithubReposApiPayload, RepoInfo, ReposApiPayload } from "./types";
 
 function parseGithubFetchErrorMessage(error: unknown): string {
@@ -51,6 +41,11 @@ function githubUrl(remote: string | null) {
 }
 
 export default function ReposPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const learnParam = searchParams.get("learn");
+
   const {
     data,
     isLoading,
@@ -75,25 +70,18 @@ export default function ReposPage() {
   } = useLive<GithubReposApiPayload>(githubKey, { refreshInterval: 120_000 });
   const scanDirDisplay = data?.scanDirDisplay ?? "";
   const [localFilter, setLocalFilter] = useState<"changed" | "unpushed" | null>(null);
-  const [opening, setOpening] = useState<string | null>(null);
-  const [cloning, setCloning] = useState<string | null>(null);
-  const [removing, setRemoving] = useState<string | null>(null);
-  const [learningRepoName, setLearningRepoName] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return new URLSearchParams(window.location.search).get("learn");
-  });
-  const learningRepoNameRef = useRef<string | null>(learningRepoName);
-  const { data: apps } = useLive<{ gitkraken: boolean }>("/api/repos/apps", {
+  const learningRepoNameRef = useRef<string | null>(learnParam);
+  const { data: apps } = useLive<{ gitkraken: boolean; revealLabel?: string }>("/api/repos/apps", {
     refreshInterval: 0,
   });
   const [isDesktop] = useState(() => {
     if (typeof window === "undefined") return true;
     return window.matchMedia("(hover: hover) and (pointer: fine)").matches;
   });
-  const toast = useToast();
-  const launchClaudeDesktop = useLaunchClaudeDesktop();
-  const prompt = usePrompt();
-  const confirm = useConfirm();
+  const actions = useReposActions({
+    mutateLocal: () => mutateLocal(),
+    mutateGithub: () => mutateGithub(),
+  });
   const githubRepos = githubData?.repos ?? [];
   const normalizedLocalQuery = query.trim().toLowerCase();
   const filteredLocalRepos = repos.filter((repo) => {
@@ -102,15 +90,16 @@ export default function ReposPage() {
     if (localFilter === "unpushed") return (repo.unpushedCount ?? 0) > 0;
     return true;
   });
-  const learningRepo = learningRepoName
-    ? repos.find((repo) => repo.name === learningRepoName) ?? null
+  const learningRepo = learnParam
+    ? repos.find((repo) => repo.name === learnParam) ?? null
     : null;
   const changedRepos = repos.filter((repo) => repo.dirtyCount > 0).length;
   const unpushedRepos = repos.filter((repo) => (repo.unpushedCount ?? 0) > 0).length;
+  const showGithubColumn = !!githubSearchQuery;
 
   useEffect(() => {
-    learningRepoNameRef.current = learningRepoName;
-  }, [learningRepoName]);
+    learningRepoNameRef.current = learnParam;
+  }, [learnParam]);
 
   useEffect(() => {
     return () => {
@@ -133,129 +122,25 @@ export default function ReposPage() {
     return () => window.clearTimeout(handle);
   }, [query]);
 
-  async function openInCursor(name: string) {
-    setOpening(name);
-    try {
-      const res = await fetch(`/api/repos/${encodeURIComponent(name)}/open`, { method: "POST" });
-      if (!res.ok) throw new Error(await res.text());
-    } catch (e) {
-      console.error("open in cursor:", e);
-      toast.error(`Couldn't open ${name} in Cursor.`);
-    } finally {
-      setOpening(null);
-    }
-  }
-
-  function openInTerminal(repo: { name: string; path: string }) {
-    openTerminal({ cwd: repo.path, label: repo.name });
+  function setLearnParam(name: string | null) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (name) params.set("learn", name);
+    else params.delete("learn");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
 
   function openLearn(repo: RepoInfo) {
-    setLearningRepoName(repo.name);
+    setLearnParam(repo.name);
   }
 
-  async function openInGitKraken(name: string) {
-    try {
-      const res = await fetch(`/api/repos/${encodeURIComponent(name)}/open-gitkraken`, { method: "POST" });
-      if (!res.ok) throw new Error(await res.text());
-    } catch (e) {
-      console.error("open in gitkraken:", e);
-      toast.error(`Couldn't open ${name} in GitKraken.`);
-    }
+  function closeLearn() {
+    learningRepoNameRef.current = null;
+    setLearnParam(null);
   }
-
-  async function openUpstart(repo: RepoInfo, debug = false, context?: string) {
-    let trimmedContext = context?.trim();
-    if (!debug && !repo.hasUpstart && context === undefined) {
-      const entered = await prompt({
-        title: "Create and run upstart",
-        message: "Optional startup context for the agent. Leave blank to continue without it.",
-        input: { placeholder: "Context..." },
-        confirmLabel: "Run",
-      });
-      trimmedContext = entered?.trim() ?? "";
-    }
-    openTerminal({
-      cwd: repo.path,
-      label: `${debug ? "Debug upstart" : "Upstart"} · ${repo.name}`,
-      command: debug
-        ? await agentRepoUpstartDebugCommand(repo.name, trimmedContext)
-        : repo.hasUpstart && trimmedContext
-          ? await agentRepoUpstartUpdateCommand(repo.name, trimmedContext)
-        : repo.hasUpstart
-          ? repoUpstartCommand()
-          : await agentRepoUpstartCommand(repo.name, trimmedContext),
-    });
-  }
-
-  async function openDxAudit(repo: RepoInfo) {
-    const context = await prompt({
-      title: `DX audit · ${repo.name}`,
-      message:
-        "Optional live question for the audit (e.g. \"should we move to Expo Go?\"). Leave blank for a full sweep.",
-      input: { placeholder: "Question/context..." },
-      confirmLabel: "Run audit",
-    });
-    if (context === null) return;
-    openTerminal({
-      cwd: repo.path,
-      label: `DX audit · ${repo.name}`,
-      command: await agentRepoDxAuditCommand(repo.name, context.trim() || undefined),
-    });
-  }
-
-  async function cloneRepo(fullName: string) {
-    setCloning(fullName);
-    try {
-      const res = await fetch("/api/repos/clone", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      await Promise.all([mutateLocal(), mutateGithub()]);
-      toast.success(`Cloned ${fullName}`);
-    } catch (e) {
-      console.error("clone repo:", e);
-      toast.error(`Couldn't clone ${fullName}.`);
-    } finally {
-      setCloning(null);
-    }
-  }
-
-  async function removeRepo(name: string) {
-    const ok = await confirm({
-      title: `Remove local repo "${name}"?`,
-      message: "This will delete the local folder only.",
-      confirmLabel: "Remove",
-      variant: "danger",
-    });
-    if (!ok) return;
-    setRemoving(name);
-    try {
-      const res = await fetch(`/api/repos/${encodeURIComponent(name)}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await res.text());
-      await Promise.all([mutateLocal(), mutateGithub()]);
-      toast.success(`Removed ${name}`);
-    } catch (e) {
-      console.error("remove repo:", e);
-      toast.error(`Couldn't remove ${name}.`);
-    } finally {
-      setRemoving(null);
-    }
-  }
-
-  const panelAwarePageStyle =
-    learningRepo && isDesktop
-      ? {
-          maxWidth: "calc(100vw - 600px)",
-          marginLeft: 0,
-          marginRight: 0,
-        }
-      : undefined;
 
   return (
-    <div className="page-wrapper" style={panelAwarePageStyle}>
+    <div className="page-wrapper">
       <BootScreen state={boot} />
       <div className="page-header">
         <div>
@@ -283,7 +168,7 @@ export default function ReposPage() {
       <EvolutionStrip />
 
       {localError && (
-        <div className="card card-body mb-3" style={{ borderLeft: "3px solid var(--danger)" }}>
+        <div className="card card-body mb-3">
           <div className="flex items-center gap-2 text-sm" style={{ color: "var(--text-muted)" }}>
             <AlertCircle size={14} style={{ color: "var(--danger)" }} aria-hidden />
             Couldn&apos;t load local repos.
@@ -294,25 +179,6 @@ export default function ReposPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 mb-3">
-        <StatCard
-          label="Changed"
-          value={changedRepos}
-          tone={changedRepos ? "warning" : "muted"}
-          icon={<AlertCircle size={13} />}
-          active={localFilter === "changed"}
-          onClick={() => setLocalFilter((current) => current === "changed" ? null : "changed")}
-        />
-        <StatCard
-          label="Unpushed"
-          value={unpushedRepos}
-          tone={unpushedRepos ? "accent" : "muted"}
-          icon={<ArrowUpFromLine size={13} />}
-          active={localFilter === "unpushed"}
-          onClick={() => setLocalFilter((current) => current === "unpushed" ? null : "unpushed")}
-        />
-      </div>
-
       {isLoading && !data && (
         <div className="space-y-2 mb-2">
           {[1, 2, 3].map((i) => (
@@ -321,9 +187,16 @@ export default function ReposPage() {
         </div>
       )}
 
-      <SearchCard query={query} onQueryChange={setQuery} />
+      <SearchCard
+        query={query}
+        onQueryChange={setQuery}
+        localFilter={localFilter}
+        onLocalFilterChange={setLocalFilter}
+        changedCount={changedRepos}
+        unpushedCount={unpushedRepos}
+      />
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className={showGithubColumn ? "grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_420px]" : undefined}>
         <section className="space-y-2">
           <SectionHeader
             label="Local"
@@ -333,7 +206,9 @@ export default function ReposPage() {
                 ? "Showing repos with local changes."
                 : localFilter === "unpushed"
                   ? "Showing repos with unpushed commits."
-                  : "Repos already cloned next to this DevHub checkout."
+                  : showGithubColumn
+                    ? "Repos already cloned next to this DevHub checkout."
+                    : "Local clones. Type above to also search GitHub."
             }
           />
 
@@ -344,16 +219,17 @@ export default function ReposPage() {
               githubUrl={githubUrl(repo.remote)}
               apps={apps}
               isDesktop={isDesktop}
-              opening={opening}
-              removing={removing}
+              opening={actions.opening}
+              removing={actions.removing}
               onLearn={openLearn}
-              onDxAudit={openDxAudit}
-              onUpstart={openUpstart}
-              onTerminal={openInTerminal}
-              onGitKraken={openInGitKraken}
-              onCursor={openInCursor}
-              onClaudeDesktop={launchClaudeDesktop}
-              onRemove={removeRepo}
+              onDxAudit={actions.openDxAudit}
+              onUpstart={actions.openUpstart}
+              onTerminal={actions.openInTerminal}
+              onRevealFolder={(name) => actions.openInFolder(name, apps?.revealLabel ?? "folder")}
+              onGitKraken={actions.openInGitKraken}
+              onCursor={actions.openInCursor}
+              onClaudeDesktop={actions.launchClaudeDesktop}
+              onRemove={actions.removeRepo}
               onRefreshLocal={() => mutateLocal()}
             />
           ))}
@@ -373,53 +249,61 @@ export default function ReposPage() {
           )}
         </section>
 
-        <aside className="space-y-2">
-          <SectionHeader
-            label="GitHub"
-            count={githubSearchQuery ? (isGithubValidating && !githubData ? "..." : githubRepos.length) : "search"}
-            description="Search accessible repos, then clone or open them."
-          />
-
-          {githubError && (
-            <FetchError message={parseGithubFetchErrorMessage(githubError)} onRetry={() => mutateGithub()} />
-          )}
-          {githubSearchQuery && isGithubValidating && !githubData && (
-            <EmptyReposCard>
-              Searching GitHub repos...
-            </EmptyReposCard>
-          )}
-
-          {githubSearchQuery && githubRepos.map((repo) => (
-            <GithubRepoCard
-              key={repo.fullName}
-              repo={repo}
-              isDesktop={isDesktop}
-              opening={opening}
-              cloning={cloning}
-              onCursor={openInCursor}
-              onClone={cloneRepo}
+        {showGithubColumn && (
+          <aside className="space-y-2">
+            <SectionHeader
+              label="GitHub"
+              count={isGithubValidating && !githubData ? "..." : githubRepos.length}
+              description="Search accessible repos, then clone or open them."
             />
-          ))}
-          {!githubSearchQuery && (
-            <EmptyReposCard>
-              Type in the search box to query GitHub. Local repos filter instantly.
-            </EmptyReposCard>
-          )}
-          {githubSearchQuery && !isGithubValidating && !githubError && githubRepos.length === 0 && (
-            <EmptyReposCard>
-              No GitHub repos matching &quot;{githubSearchQuery}&quot;.
-            </EmptyReposCard>
-          )}
-        </aside>
+
+            {githubError && (
+              <FetchError message={parseGithubFetchErrorMessage(githubError)} onRetry={() => mutateGithub()} />
+            )}
+            {isGithubValidating && !githubData && (
+              <EmptyReposCard>
+                Searching GitHub repos...
+              </EmptyReposCard>
+            )}
+
+            {githubRepos.map((repo) => (
+              <GithubRepoCard
+                key={repo.fullName}
+                repo={repo}
+                isDesktop={isDesktop}
+                opening={actions.opening}
+                cloning={actions.cloning}
+                onCursor={actions.openInCursor}
+                onClone={actions.cloneRepo}
+              />
+            ))}
+            {!isGithubValidating && !githubError && githubRepos.length === 0 && (
+              <EmptyReposCard>
+                No GitHub repos matching &quot;{githubSearchQuery}&quot;.
+              </EmptyReposCard>
+            )}
+          </aside>
+        )}
       </div>
+
+      {learnParam && !learningRepo && !isLoading && data && (
+        <EmptyReposCard>
+          No local repo named &quot;{learnParam}&quot; to learn. Clone it first, or clear the learn query.
+        </EmptyReposCard>
+      )}
 
       <LearnPanel
         key={learningRepo?.name ?? "closed"}
         repo={learningRepo}
-        onClose={() => {
-          setLearningRepoName(null);
-          learningRepoNameRef.current = null;
+        onHide={() => {
+          if (learningRepo) {
+            window.dispatchEvent(
+              new CustomEvent("devhub:repo-learn-hidden", { detail: { repoName: learningRepo.name } }),
+            );
+          }
+          closeLearn();
         }}
+        onClose={closeLearn}
       />
     </div>
   );

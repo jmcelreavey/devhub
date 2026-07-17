@@ -75,9 +75,9 @@ export function CollapsibleSidebar() {
       style={{
         width,
         minWidth: width,
-        background: "var(--bg-sidebar, #0a0d12)",
+        background: "var(--bg-sidebar)",
         borderRight: "1px solid var(--border-muted)",
-        transition: "width 200ms ease, min-width 200ms ease",
+        /* Snap width — Hallmark: no animated layout width */
       }}
     >
       {/* Brand */}
@@ -114,14 +114,9 @@ export function CollapsibleSidebar() {
         style={{ borderTop: "1px solid var(--border-muted)" }}
       >
         <button
+          type="button"
           onClick={toggle}
-          className="flex items-center justify-center py-2 w-full px-2"
-          style={{
-            color: "var(--text-subtle)",
-            background: "transparent",
-            cursor: "pointer",
-            border: "none",
-          }}
+          className="sidebar-collapse-btn"
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >

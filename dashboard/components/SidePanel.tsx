@@ -62,7 +62,7 @@ export function SidePanel({
 
       const shield = document.createElement("div");
       shield.style.cssText =
-        "position:fixed;inset:0;z-index:9999;cursor:col-resize;";
+        "position:fixed;inset:0;z-index:var(--z-shield);cursor:col-resize;";
       document.body.appendChild(shield);
 
       let nextWidth = startWidth;
@@ -106,7 +106,7 @@ export function SidePanel({
         borderTopRightRadius: 12,
         display: "flex",
         flexDirection: "column",
-        boxShadow: "0 -4px 24px rgba(0,0,0,0.25)",
+        boxShadow: "var(--shadow-panel)",
       }
     : {
         position: "fixed",
@@ -119,7 +119,7 @@ export function SidePanel({
         borderLeft: "1px solid var(--border)",
         display: "flex",
         flexDirection: "column",
-        boxShadow: "-4px 0 24px rgba(0,0,0,0.25)",
+        boxShadow: "var(--shadow-panel-side)",
       };
 
   return (

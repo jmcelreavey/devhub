@@ -57,7 +57,6 @@ export function CalendarWidget({ collapsed = false, collapsedSummary, onToggle }
         className="card"
         style={{
           padding: "8px 12px",
-          borderLeft: "3px solid var(--danger)",
           fontSize: 12,
           color: "var(--text-muted)",
           display: "flex",
@@ -83,13 +82,13 @@ export function CalendarWidget({ collapsed = false, collapsedSummary, onToggle }
     <div
       className="card today-grid-drag-handle"
       data-collapsed={collapsed ? "true" : undefined}
-      style={{ padding: "10px 14px", borderLeft: "3px solid var(--accent)" }}
+      style={{ padding: "10px 14px" }}
     >
       <div className="today-card-inline-head mb-2">
         <div className="flex min-w-0 items-center gap-2">
           <Calendar size={13} aria-hidden />
           <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
-            TODAY
+            Today
           </span>
           <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
             {events.length > 0
@@ -106,11 +105,13 @@ export function CalendarWidget({ collapsed = false, collapsedSummary, onToggle }
         <div className="flex items-center gap-2 text-sm mb-2">
           <span
             aria-hidden
-            className="inline-block w-2 h-2 rounded-full animate-pulse"
+            className="inline-block w-2 h-2 rounded-[var(--radius-sm)] animate-pulse"
             style={{ background: "var(--danger)" }}
           />
-          <span style={{ color: "var(--text)" }}>{now.title}</span>
-          <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
+          <span className="min-w-0 truncate" style={{ color: "var(--text)" }}>
+            {now.title}
+          </span>
+          <span className="text-xs shrink-0" style={{ color: "var(--text-subtle)" }}>
             until {formatTime(now.end)}
           </span>
           {now.conferenceUrl && (
@@ -119,10 +120,14 @@ export function CalendarWidget({ collapsed = false, collapsedSummary, onToggle }
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Join meeting"
+              className="shrink-0"
             >
               <Video size={11} style={{ color: "var(--accent)" }} aria-hidden />
             </a>
           )}
+          <span className="ml-auto shrink-0">
+            <CreateMeetingNoteButton event={now} compact />
+          </span>
         </div>
       )}
 
@@ -130,9 +135,11 @@ export function CalendarWidget({ collapsed = false, collapsedSummary, onToggle }
         <div className="flex items-center gap-2 text-sm mb-2">
           <Clock size={13} style={{ color: "var(--text-subtle)" }} aria-hidden />
           <span style={{ color: "var(--text-muted)" }}>Next:</span>
-          <span style={{ color: "var(--text)" }}>{next.title}</span>
+          <span className="min-w-0 truncate" style={{ color: "var(--text)" }}>
+            {next.title}
+          </span>
           <span
-            className="text-xs"
+            className="text-xs shrink-0"
             style={{ color: isImminent(next.start) ? "var(--warning)" : "var(--accent)" }}
           >
             in {timeUntil(next.start)}
@@ -142,12 +149,15 @@ export function CalendarWidget({ collapsed = false, collapsedSummary, onToggle }
               href={next.conferenceUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="urgency-pulse ml-auto inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
-              style={{ background: "var(--accent)", color: "var(--accent-fg, #121710)" }}
+              className="urgency-pulse inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium shrink-0"
+              style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
             >
               <Video size={11} aria-hidden /> Join
             </a>
           )}
+          <span className="ml-auto shrink-0">
+            <CreateMeetingNoteButton event={next} compact />
+          </span>
         </div>
       )}
 
@@ -182,7 +192,7 @@ export function CalendarWidget({ collapsed = false, collapsedSummary, onToggle }
                   <Video size={10} style={{ color: "var(--accent)" }} aria-hidden />
                 </a>
               )}
-              <span className="ml-auto opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+              <span className="ml-auto reveal-on-hover transition-opacity">
                 <CreateMeetingNoteButton event={e} compact />
               </span>
             </div>

@@ -8,7 +8,8 @@ const TONE_VARS: Record<SeverityTone, { fg: string; bg: string }> = {
   info:     { fg: "var(--info)",     bg: "var(--info-dim)" },
   success:  { fg: "var(--success)",  bg: "var(--success-dim)" },
   muted:    { fg: "var(--text-subtle)", bg: "var(--bg-elevated)" },
-  violet:   { fg: "var(--violet)",   bg: "var(--violet-dim)" },
+  /* Alias kept for callers — maps to info (purple retired from default set) */
+  violet:   { fg: "var(--info)",     bg: "var(--info-dim)" },
   brand:    { fg: "var(--accent)",   bg: "var(--accent-dim)" },
 };
 
@@ -29,7 +30,7 @@ export function SeverityDot({ tone, size = 6, style, className }: SeverityDotPro
         display: "inline-block",
         width: size,
         height: size,
-        borderRadius: 999,
+        borderRadius: "var(--radius-sm)",
         flexShrink: 0,
         background: fg,
         ...style,
@@ -55,7 +56,7 @@ export function SeverityPill({ tone, children, style, className }: SeverityPillP
         alignItems: "center",
         gap: 4,
         padding: "2px 8px",
-        borderRadius: 999,
+        borderRadius: "var(--radius-sm)",
         fontSize: 11,
         fontWeight: 500,
         lineHeight: 1.5,

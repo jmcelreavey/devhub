@@ -82,7 +82,6 @@ export function NotesChecklistsPanel({
       setNewName("");
       setShowCreate(false);
       setPage(1);
-      toast.success("Checklist created.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't create checklist.");
     }
@@ -101,7 +100,6 @@ export function NotesChecklistsPanel({
       const res = await fetch(`/api/collections/${master.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
       await mutate(masters.filter((m) => m.id !== master.id), { revalidate: true });
-      toast.success("Checklist deleted.");
     } catch {
       toast.error("Couldn't delete checklist.");
     }

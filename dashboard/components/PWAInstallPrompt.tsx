@@ -87,7 +87,7 @@ export function PWAInstallPrompt() {
         flexDirection: "column",
         gap: "8px",
         width: "min(92vw, 30rem)",
-        boxShadow: "0 4px 24px rgba(0,0,0,0.3)",
+        boxShadow: "var(--shadow-prompt)",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>

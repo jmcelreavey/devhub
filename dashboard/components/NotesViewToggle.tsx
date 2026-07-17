@@ -81,8 +81,8 @@ function TabButton({
         background: activeBg,
         boxShadow: active
           ? collapsed
-            ? "inset 0 0 0 1px color-mix(in oklab, var(--accent) 22%, transparent)"
-            : "0 1px 2px rgba(0,0,0,0.12)"
+            ? "var(--shadow-inset-accent)"
+            : "var(--shadow-raised)"
           : "none",
       }}
     >

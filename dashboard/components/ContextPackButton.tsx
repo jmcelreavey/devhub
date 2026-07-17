@@ -14,9 +14,7 @@ export function ContextPackButton() {
     if (loading) return;
     setLoading(true);
     try {
-      const ok = await copyContextPackToClipboard(toast, {
-        successMessage: "Context pack copied - paste into your AI session.",
-      });
+      const ok = await copyContextPackToClipboard(toast);
       if (ok) {
         setCopied(true);
         window.setTimeout(() => setCopied(false), 2000);

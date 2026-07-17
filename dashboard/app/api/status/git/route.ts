@@ -1,9 +1,17 @@
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { detectGitConflicts } from "@/lib/git-conflicts";
-import { getRepoRoot, getNotesDir, getCollectionsDir, getTasksDir, getDocsDir } from "@/lib/notes-dir";
+import {
+  getRepoRoot,
+  getNotesDir,
+  getCollectionsDir,
+  getTasksDir,
+  getDocsDir,
+  getUpstartsDir,
+} from "@/lib/notes-dir";
 import { runGitRepo, runGitRepoAsync } from "@/lib/git-repo-local";
 import { DIAGRAMS_DIR } from "@/lib/diagram-utils";
+import { isGitNoisePath } from "@/lib/repo-git-parsers";
 
 type ContentBucket = "notes" | "tasks" | "docs";
 
@@ -37,6 +45,7 @@ function buildContentBuckets(root: string): { bucket: ContentBucket; prefix: str
   add("notes", safeContentDir(getNotesDir), "notes");
   add("notes", safeContentDir(getCollectionsDir), "collections");
   add("tasks", safeContentDir(getTasksDir), "tasks");
+  add("tasks", safeContentDir(getUpstartsDir), "upstarts");
   add("docs", safeContentDir(getDocsDir), "docs");
   return buckets;
 }
@@ -56,7 +65,16 @@ export async function GET() {
       return NextResponse.json({ error: "Unexpected git output" }, { status: 500 });
     }
 
-    const dirtyLines = status.stdout.trim().split("\n").filter(Boolean);
+    const dirtyLines = status.stdout
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      // Match Git workspace badges: .DS_Store / __pycache__ don't count as dirty.
+      .filter((line) => {
+        let fp = line.slice(3);
+        if (fp.includes(" -> ")) fp = fp.split(" -> ").pop()!.trim();
+        return !isGitNoisePath(fp);
+      });
     const dirtyCount = dirtyLines.length;
     const contentBuckets = buildContentBuckets(root);
     const diagramsPrefix = `${DIAGRAMS_DIR}/`;
@@ -65,7 +83,8 @@ export async function GET() {
     let diagramsCount = 0;
     let docsCount = 0;
     for (const line of dirtyLines) {
-      const fp = line.slice(3);
+      let fp = line.slice(3);
+      if (fp.includes(" -> ")) fp = fp.split(" -> ").pop()!.trim();
       if (fp.startsWith(diagramsPrefix)) {
         diagramsCount++;
         continue;
@@ -77,8 +96,8 @@ export async function GET() {
       else docsCount++;
     }
     // Dirty files that are NOT syncable content (notes/tasks/diagrams/docs).
-    // The top bar treats content as a one-click sync; only these need the
-    // commit-&-push "dirty files" flow.
+    // The top bar treats content as a one-click sync; everything else opens
+    // the DevHub Git workspace (stage / diff / commit / conflicts).
     const otherDirtyCount = dirtyCount - (notesCount + tasksCount + diagramsCount + docsCount);
 
     // ahead/behind needs a network `git fetch`, but this endpoint is polled
@@ -132,7 +151,7 @@ export async function GET() {
       hints.push({
         severity: "warn",
         text: "Working tree has dirty files — pull / collect / commit / push are skipped until it is clean.",
-        fix: "Use Commit & sync on this page, the warning (triangle + count) button in the top bar, or Actions → Commit & Push Dirty Files. Then run Update & Sync.",
+        fix: "Open Git from the top-bar warning button (or /repos → Open Git on this checkout), stage and commit, then run Update & Sync.",
       });
     } else if (contentDirtyCount > 0) {
       // Content (notes/tasks/diagrams/docs) is not a generic "dirty file" — it
@@ -162,6 +181,8 @@ export async function GET() {
 
     return NextResponse.json({
       branch: branchName,
+      repoName: path.basename(root),
+      repoPath: root,
       dirtyCount,
       otherDirtyCount,
       contentDirtyCount,

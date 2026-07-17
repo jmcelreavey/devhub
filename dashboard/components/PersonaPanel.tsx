@@ -383,7 +383,7 @@ export function PersonaPanel() {
                         background: "var(--bg-elevated)",
                         color: "var(--text-subtle)",
                         fontWeight: 600,
-                        letterSpacing: "0.04em",
+                        letterSpacing: "-0.01em",
                       }}
                     >
                       {t.meta.layer}
@@ -398,10 +398,10 @@ export function PersonaPanel() {
                         background: "var(--accent-dim)",
                         color: "var(--accent)",
                         fontWeight: 600,
-                        letterSpacing: "0.04em",
+                        letterSpacing: "-0.01em",
                       }}
                     >
-                      SOURCE
+                      Source
                     </span>
                   )}
                   {t.tokenEstimate != null && t.tokenEstimate > 0 && (
@@ -482,7 +482,7 @@ export function PersonaPanel() {
                     </div>
                   )}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", gap: "8px", flexWrap: "wrap" }}>
-                    <code className="text-xs" style={{ color: "var(--text-subtle)", fontFamily: '"SFMono-Regular", Consolas, monospace' }}>
+                    <code className="text-xs" style={{ color: "var(--text-subtle)", fontFamily: "var(--font-mono)" }}>
                       {t.resolved}
                     </code>
                     <div style={{ display: "flex", gap: "4px" }}>
@@ -531,7 +531,7 @@ export function PersonaPanel() {
                         padding: "12px",
                         color: "var(--text)",
                         fontSize: "12px",
-                        fontFamily: '"SFMono-Regular", Consolas, monospace',
+                        fontFamily: "var(--font-mono)",
                         lineHeight: 1.5,
                         outline: "none",
                         resize: "vertical",
@@ -543,7 +543,7 @@ export function PersonaPanel() {
                       className="text-xs overflow-x-auto whitespace-pre-wrap"
                       style={{
                         color: "var(--text-muted)",
-                        fontFamily: '"SFMono-Regular", Consolas, monospace',
+                        fontFamily: "var(--font-mono)",
                         maxHeight: "420px",
                         overflowY: "auto",
                         lineHeight: 1.5,
@@ -619,7 +619,7 @@ export function PersonaPanel() {
                       className="mt-2 whitespace-pre-wrap"
                       style={{
                         color: "var(--text-muted)",
-                        fontFamily: '"SFMono-Regular", Consolas, monospace',
+                        fontFamily: "var(--font-mono)",
                         margin: 0,
                         maxHeight: "120px",
                         overflow: "auto",
@@ -645,7 +645,7 @@ export function PersonaPanel() {
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,0.45)",
+            background: "var(--scrim)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -751,7 +751,7 @@ export function PersonaPanel() {
                       style={{
                         background: "var(--bg)",
                         color: "var(--text-muted)",
-                        fontFamily: '"SFMono-Regular", Consolas, monospace',
+                        fontFamily: "var(--font-mono)",
                         maxHeight: "200px",
                         whiteSpace: "pre-wrap",
                       }}
@@ -766,7 +766,7 @@ export function PersonaPanel() {
                       style={{
                         background: "var(--bg)",
                         color: "var(--text-muted)",
-                        fontFamily: '"SFMono-Regular", Consolas, monospace',
+                        fontFamily: "var(--font-mono)",
                         maxHeight: "200px",
                         whiteSpace: "pre-wrap",
                       }}

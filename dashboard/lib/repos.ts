@@ -6,6 +6,8 @@ import { getHome, getRepoRoot } from "./notes-dir";
 import { execGhJsonLines, isGithubCliAuthenticated } from "./gh-exec";
 import { parseRepoFullNameFromRemote } from "./github-repo-url";
 import { gitUnpushedCount } from "./standup-git";
+import { countVisibleDirtyFromPorcelain } from "./repo-git-parsers";
+import { detectRepoUpstart, safeUpstartScriptPath } from "./repo-upstart";
 
 const execFileAsync = promisify(execFile);
 
@@ -24,12 +26,10 @@ export interface RepoInfo {
   remote: string | null;
   dirtyCount: number;
   unpushedCount: number;
-  /** Repo has a reusable DevHub startup script. */
+  /** DevHub private mirror has a reusable upstart script for this repo. */
   hasUpstart: boolean;
-}
-
-function detectUpstart(repoPath: string): boolean {
-  return fs.existsSync(path.join(repoPath, ".devhub", "upstart.sh"));
+  /** Absolute path to the DevHub-managed upstart script (may not exist yet). */
+  upstartPath: string;
 }
 
 export interface GithubRepoInfo {
@@ -76,7 +76,8 @@ async function getDirtyCount(repoPath: string): Promise<number> {
     const { stdout } = await execFileAsync("/usr/bin/git", [
       "-C", repoPath, "status", "--porcelain",
     ]);
-    return stdout.trim().split("\n").filter(Boolean).length;
+    // Match the Git workspace UI: .DS_Store / __pycache__ don't count as "changed".
+    return countVisibleDirtyFromPorcelain(stdout);
   } catch {
     return 0;
   }
@@ -136,7 +137,8 @@ export async function listRepos(): Promise<RepoInfo[]> {
           path: repoPath,
           branch: readHead(repoPath),
           remote: readRemote(repoPath),
-          hasUpstart: detectUpstart(repoPath),
+          hasUpstart: detectRepoUpstart(e.name, repoPath),
+          upstartPath: safeUpstartScriptPath(e.name),
           dirtyCount,
           unpushedCount,
         });

@@ -29,7 +29,7 @@ export function searchCategoryFromPath(path: string): SearchCategory {
   if (isDiagramStoragePath(path)) return { label: "Diagram", icon: PenTool, color: "var(--accent)" };
   if (path.includes("learnings")) return { label: "Learning", icon: FileText, color: "var(--success)" };
   if (path.includes("daily")) return { label: "Daily", icon: FileText, color: "var(--accent)" };
-  if (path.includes("sessions")) return { label: "Session", icon: FileText, color: "#bc8cff" };
+  if (path.includes("sessions")) return { label: "Session", icon: FileText, color: "var(--info)" };
   if (path.includes("inbox")) return { label: "Inbox", icon: FileText, color: "var(--text-muted)" };
   return { label: "Note", icon: FileText, color: "var(--text-subtle)" };
 }

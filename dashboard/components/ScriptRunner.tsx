@@ -227,10 +227,10 @@ export function ScriptRunner({ onDone }: { onDone?: () => void } = {}) {
                       background: "var(--bg-elevated)",
                       color: "var(--text-subtle)",
                       fontWeight: 600,
-                      letterSpacing: "0.04em",
+                      letterSpacing: "-0.01em",
                     }}
                   >
-                    READ-ONLY
+                    Read-only
                   </span>
                 )}
                 {isRunning && (
@@ -295,7 +295,7 @@ export function ScriptRunner({ onDone }: { onDone?: () => void } = {}) {
                 background: "var(--bg)",
                 padding: "4px 8px",
                 borderRadius: "4px",
-                fontFamily: '"SFMono-Regular", Consolas, monospace',
+                fontFamily: "var(--font-mono)",
               }}
             >
               $ {previewMeta.cmd}
@@ -362,7 +362,7 @@ export function ScriptRunner({ onDone }: { onDone?: () => void } = {}) {
               background: "var(--bg)",
               color: "var(--text-muted)",
               maxHeight: "320px",
-              fontFamily: '"SFMono-Regular", Consolas, monospace',
+              fontFamily: "var(--font-mono)",
             }}
           >
             {run.lines.map((line, i) => (

@@ -78,7 +78,7 @@ export function MobileNav() {
         <>
           <div
             className="modal-backdrop fixed inset-0 z-[9650]"
-            style={{ background: "rgba(0,0,0,0.6)" }}
+            style={{ background: "var(--scrim-strong)" }}
             onClick={() => setOpen(false)}
             aria-hidden
           />

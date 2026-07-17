@@ -71,7 +71,7 @@ export function TodayHero({
                 aria-valuenow={tasksDone}
                 aria-label="Tasks done today"
               >
-                <i style={{ width: `${Math.round((tasksDone / tasksTotal) * 100)}%` }} />
+                <i style={{ ["--progress" as string]: String(tasksDone / tasksTotal) }} />
               </span>
             </>
           )}

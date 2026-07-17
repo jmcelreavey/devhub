@@ -11,7 +11,7 @@ export function SyncHealthPanel() {
   const { data, error, isLoading, mutate } = useLive<SyncHealthSummary>("/api/sync-health");
 
   if (isLoading) return <LoadingLine message="Checking skill sync health…" />;
-  if (error) return <FetchError message={error.message} onRetry={() => void mutate()} />;
+  if (error) return <FetchError message={error.message} onRetry={() => void mutate()} bare />;
   if (!data) return null;
 
   const issueCount = data.missing.length + data.unreadable.length;
@@ -38,7 +38,14 @@ export function SyncHealthPanel() {
       </div>
 
       {!data.healthy && (
-        <div className="card p-3 text-xs space-y-1" style={{ color: "var(--text-muted)" }}>
+        <div
+          className="p-3 text-xs space-y-1 rounded-md"
+          style={{
+            color: "var(--text-muted)",
+            background: "var(--bg-elevated)",
+            border: "1px solid var(--border-muted)",
+          }}
+        >
           {data.missing.slice(0, 8).map((m) => (
             <div key={`${m.tool}-${m.name}`}><span style={{ color: "var(--warning)" }}>MISSING</span> [{m.tool}] {m.name}</div>
           ))}
@@ -47,8 +54,8 @@ export function SyncHealthPanel() {
 
       {!data.healthy && (
         <>
-          <SyncPreviewCard preview={data.skillPreview} loading={false} onRefresh={() => void mutate()} />
-          <SyncPreviewCard preview={data.agentPreview} loading={false} onRefresh={() => void mutate()} />
+          <SyncPreviewCard preview={data.skillPreview} loading={false} onRefresh={() => void mutate()} embedded />
+          <SyncPreviewCard preview={data.agentPreview} loading={false} onRefresh={() => void mutate()} embedded />
         </>
       )}
     </div>
