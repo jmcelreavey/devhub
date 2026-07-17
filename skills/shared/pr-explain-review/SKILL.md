@@ -1,12 +1,14 @@
 ---
 name: pr-explain-review
 description: >-
-  Explain and review a GitHub pull request in plain language. Explains what the
-  PR is for, how it's implemented, walks the code path from entry point to exit,
-  and reviews it for KISS, DRY, developer experience, and over-engineering
-  (ponytail laziness ladder). Use when the user gives a PR URL or number and
-  asks to "review this PR", "explain this PR", "walk me through this PR",
-  "what does this PR do", or invokes the dashboard "Review" button on the
+  Explain and review a GitHub pull request in plain language, with full
+  context: the PR conversation (comments, reviews, unresolved inline threads)
+  and the linked Jira ticket. Explains what the PR is for, how it's
+  implemented, walks the code path from entry point to exit, and reviews it
+  for KISS, DRY, developer experience, and over-engineering (ponytail
+  laziness ladder). Use when the user gives a PR URL or number and asks to
+  "review this PR", "explain this PR", "walk me through this PR", "what does
+  this PR do", or invokes the dashboard "Review" button on the
   Review-requested list. Streams to the terminal and, when a notes path is
   given, saves the write-up as a DevHub note. Never posts to GitHub unless
   explicitly asked.
@@ -48,14 +50,43 @@ before starting. `gh` must be authenticated (`gh auth status`).
 Pull everything from `gh` — fast, works from any directory:
 
 ```bash
-gh pr view  <url> --json title,body,author,baseRefName,headRefName,files,additions,deletions,state,url
+gh pr view  <url> --json title,body,author,baseRefName,headRefName,files,additions,deletions,state,url,comments,reviews
 gh pr diff  <url>
+# Inline review threads (file/line comments) — the part `pr view` doesn't return:
+gh api repos/OWNER/REPO/pulls/NUMBER/comments --paginate \
+  --jq '.[] | {path, line: (.line // .original_line), author: .user.login, in_reply_to: .in_reply_to_id, body}'
 ```
 
-That gives the title, description, linked issue/ticket, changed files, and the
-full diff. For most PRs this is enough — do not clone.
+That gives the title, description, changed files, the full diff, **and the
+conversation**: top-level comments, review verdicts with their bodies, and
+inline threads anchored to files/lines. For most PRs this is enough — do not clone.
 
-### 2. Decide if you need the whole repo
+### 2. Pull the linked ticket
+
+Find the ticket key — a Jira key (`ABC-123` pattern) in the PR title, branch
+name (`headRefName`), or body, or a linked GitHub issue (`#N` / `Fixes #N`).
+
+- **Jira key + DevHub MCP available:** call the `jira_ticket_get` tool with the
+  key. Use the ticket's summary, description, and acceptance criteria as the
+  source of intent — the review must answer "does this PR do what the ticket
+  asks?", not just "is this code fine?".
+- **GitHub issue:** `gh issue view N --json title,body,labels`.
+- **No key, or the tool isn't available:** say so in one line ("no linked
+  ticket found" / "Jira MCP unavailable") and continue from the PR body alone.
+  Never invent ticket text.
+
+### 3. Read the conversation before judging
+
+Before writing findings, digest the comments and reviews from step 1:
+
+- **Unresolved threads and requested changes** are review input — check whether
+  the diff actually addresses them, and flag any that are still open.
+- **Resolved/answered threads** are context — don't re-litigate a point a
+  previous reviewer already accepted, unless it's a correctness bug.
+- **Author replies** often explain non-obvious choices — fold that reasoning
+  into the explanation instead of guessing at intent.
+
+### 4. Decide if you need the whole repo
 
 Escalate to a local clone **only when the diff can't be understood on its own** —
 e.g. it touches many files, calls into code you can't see, or the
@@ -79,12 +110,12 @@ gh pr checkout NUMBER   # now explore the full codebase, not just the diff
 Read the surrounding files the diff plugs into — that's what makes the
 entry-to-exit walk real instead of inferred. Do not modify the branch.
 
-### 3. Explain (plain language)
+### 5. Explain (plain language)
 
 Write for a teammate skimming on their phone. Prose, not a file dump.
 
-- **What it's for** — one or two sentences. The problem, not the patch. Pull
-  the ticket/issue intent from the PR body if present; never invent ticket text.
+- **What it's for** — one or two sentences. The problem, not the patch. Lead
+  with the ticket's intent (step 2) when there is one; never invent ticket text.
 - **How it's implemented** — the approach in a few sentences: the key change,
   the pattern used, anything notable (new dependency, migration, config flag).
 - **Walk it entry → exit** — trace the actual path the change introduces or
@@ -94,14 +125,16 @@ Write for a teammate skimming on their phone. Prose, not a file dump.
   side effects, and error paths. This is the core of the explanation — make the
   reader able to find their way through the code unaided.
 
-### 4. Review
+### 6. Review
 
 Two clearly separated passes. Lead with what's broken, risky, or missing —
 save praise for code that earns it.
 
 **Pass A — Correctness & risk.** Bugs, broken edge cases, unhandled errors,
 security holes, data-loss paths, missing tests for non-trivial logic, breaking
-changes. Be specific: `file:Lxx — what's wrong and why`.
+changes. Be specific: `file:Lxx — what's wrong and why`. Include **ticket
+fit** — anything the ticket asks for that the diff doesn't deliver — and any
+**unresolved reviewer requests** from step 3 that remain unaddressed.
 
 **Pass B — Complexity (ponytail).** Hunt only for what to delete. One line per
 finding: location, what to cut, what replaces it.
@@ -125,7 +158,7 @@ self-check on non-trivial logic. Those earn their lines.
 **DX check.** Note naming, readability, surprising names, and anything that
 would make the next person decode at 3am — but keep it short.
 
-### 5. Verdict
+### 7. Verdict
 
 End with a one-line call and the complexity metric:
 
@@ -137,8 +170,12 @@ End with a one-line call and the complexity metric:
 ```
 <repo>#<number> — <title>
 
-What it's for: ...
+What it's for: ...        (ticket intent when linked)
 How it works: ...
+
+Ticket & conversation:    (omit when there's neither)
+  <KEY> — <one-line ticket summary; acceptance criteria met? yes/partial/no>
+  <n> comments, <m> reviews — unresolved: <thread or "none">
 
 Walkthrough:
   1. <entry: file:fn> → ...
@@ -191,7 +228,13 @@ not a second title. Then the metadata as a short bullet block.
 One or two sentences: what changes and whether it's safe to ship.
 
 ## What It's For
-The problem, in plain language.
+The problem, in plain language — grounded in the linked ticket when there is one.
+
+## Ticket & Conversation
+Only when a ticket or discussion exists. One short block: what the ticket asks
+for and whether this PR delivers it, then any unresolved review threads or
+requested changes (and whether the diff addresses them). Skip the section
+entirely when the PR has neither.
 
 ## Implementation Map
 The approach and the files it touches.
