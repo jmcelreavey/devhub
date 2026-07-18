@@ -234,7 +234,7 @@ Merge conflict recovery lives on Status through `ConflictResolverPanel`. It read
 
 | Tab | Purpose |
 | --- | ------- |
-| Changes | Stage/unstage (per file, hunk, or all), inline diff, discard, AI commit message, commit-only or commit-and-push |
+| Changes | Stage/unstage (per file, hunk, or all), inline diff, scoped discard (staged vs unstaged — discarding one side does not wipe the other), AI commit message, commit-only or commit-and-push |
 | Branches | Checkout, create, delete, pull, push (with pre-push hook failure handling) |
 | Stash | List, apply, pop, drop; stash conflicts open the terminal with a resolve command |
 | History | Commit graph, file history, show commit |
@@ -244,6 +244,12 @@ Merge conflict recovery lives on Status through `ConflictResolverPanel`. It read
 API routes are scoped under `/api/repos/<name>/git/…` (and branch push/pull under `/api/repos/<name>/branches`). See [API Routes](../reference/api-routes.md#repo-git-routes).
 
 **DevHub-only:** personal content paths (`notes/`, `tasks/`, `docs/`, `diagrams/`, etc.) are classified by `lib/content-sync-dirs.ts` and **hidden from the Changes list** in the DevHub repo — they sync via the top-bar cloud button, not the generic commit flow. Sibling repos show every file.
+
+| Problem | What to do |
+| ------- | ---------- |
+| `index.lock` / "could not write index" | Another git process may be running, or a prior command left `.git/index.lock`. DevHub never deletes the lock for you — confirm no git is active, remove the lock manually, retry. |
+| Pre-push verify failed | Read the hook output in **GitHookFailureDialog** or Status → failed sync logs. Fix lint/tests/build locally (`npm run verify`), or use **Copy Chamber prompt** for an agent handoff. Emergency bypass: `DEVHUB_SKIP_VERIFY=1 git push` (see [Scripts](../reference/scripts.md#git-hooks)). |
+| Wrong Node version in hook | The pre-push hook sources `nvm` when your shell's Node does not match `.nvmrc`. Run `nvm install` from repo root if verify fails under a system Node. |
 
 ## Safety Boundaries
 

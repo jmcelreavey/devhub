@@ -83,7 +83,7 @@ Maintenance actions run in-process via `dashboard/lib/scripts-runner.ts` (not sh
 | ----------------------- | ---------------------------- | ------- | ------------------------------------------------------------- |
 | `update_and_sync`       | Update & Sync                | yes     | Pull/rebase, sync skills+agents+persona, optional commit+push |
 | `commit_dirty_push`     | Commit & Push Dirty Files    | yes     | `commitMessage` required (max 180 chars)                      |
-| `sync_notes_tasks_push` | Sync content (Commit + Push) | yes     | `notes/`, `collections/`, `tasks/`, `docs/` only              |
+| `sync_notes_tasks_push` | Sync content (Commit + Push) | yes     | `notes/`, `collections/`, `tasks/`, `docs/`, `upstarts/` only |
 | `sync_notes_push`       | Sync Notes (Commit + Push)   | yes     | Legacy notes-only variant                                     |
 | `dry_run_scoped_sync`   | Dry Run Scoped Sync          | no      | Preview content sync without committing                       |
 | `push_unpushed_commits` | Push Unpushed Commits        | yes     | Push existing ahead commits only                              |
