@@ -78,6 +78,19 @@ Copy the commented block from `dashboard/.env.example` into `.env.local`, set `A
 
 Without a key, notes still work, Repo Learning still shows deterministic repo facts, and the morning briefing still loads with RSS/weather/event content. Notes AI menu actions, Repo Learning generated features, and briefing chat return HTTP 503 with a short configuration message. Briefing AI sections fall back to deterministic content instead of failing the whole page.
 
+## Last30Days research (optional)
+
+Briefing **interests** and on-demand **research tasks** can pull source-backed digests from the Last30Days skill when its Python script is installed. Without it, background research tasks fall back to an AI-written brief when `AI_API_KEY` is set.
+
+| Variable                   | Default          | Purpose                                                                 |
+| -------------------------- | ---------------- | ----------------------------------------------------------------------- |
+| `LAST30DAYS_MEMORY_DIR`    | `notes/research` | Where digests are saved. Repo-relative paths resolve from `dashboard/`. |
+| `LAST30DAYS_SCRIPT`        | auto-discovered  | Explicit path to `last30days.py`. When unset, DevHub checks `~/.claude/skills/last30days/`, `~/.config/opencode/skills/last30days/`, `~/.opencode/skills/last30days/`, `~/.codex/skills/last30days/`, and `~/.cursor/skills/last30days/`. |
+| `LAST30DAYS_SOURCES`       | —                | Comma-separated sources passed to the script as `--search` (e.g. `reddit,hn,github,polymarket,web`). |
+| `LAST30DAYS_MAX_AGE_HOURS` | `72`             | Skip re-running Last30Days for an interest when a matching file in the research dir is newer than this. |
+
+The Last30Days script reads its own provider keys from the environment (and from the 1Password `devhub` item when `op` is configured): `XAI_API_KEY`, `XQUIK_API_KEY`, `BRAVE_SEARCH_API_KEY`, `PERPLEXITY_API_KEY`, `OPENROUTER_API_KEY`, `SCRAPECREATORS_API_KEY`, `BLUESKY_APP_PASSWORD`, and similar. See the commented block in `dashboard/.env.example`.
+
 ## Skills (ai-tools merge)
 
 Used when syncing skills from an optional local `ai-tools` checkout. The checkout is a

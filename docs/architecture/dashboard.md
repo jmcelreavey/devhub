@@ -156,7 +156,7 @@ The morning briefing is a personal start-of-day digest, not a work standup. It a
 
 | Surface | Route | Behavior |
 | ------- | ----- | -------- |
-| Today widget | `GET /api/dashboard/morning-briefing` | Compact card in the Today grid (structured sections + rendered `text` summary). |
+| Today widget | `GET /api/dashboard/morning-briefing` | Compact card in the Today grid (structured sections + rendered `text` summary). Weather uses a dedicated React hero (`DashboardBriefingWeather`) — separate from the AI canvas HTML on `/briefing`. |
 | Briefing page | `/briefing` | Full-page **AI-authored canvas** in a same-origin iframe (`GET /api/briefing/canvas`). Reshape via **Design** chat; refresh data without losing layout. |
 | MCP | `briefing_get` | Returns the same rendered text through the dashboard-backed MCP tool. |
 
@@ -167,9 +167,13 @@ The full briefing page is no longer a fixed React layout. Instead:
 1. **Data assembly** — `lib/briefing/assemble.ts` builds a `BriefingContext` from prefs, feeds, calendar, and optional AI enrichment. Cached once per calendar day under `notes/.cache/briefing/`; `?refresh=1` bypasses the cache.
 2. **Canvas document** — A complete HTML/CSS/JS page persisted in `notes/.config/briefing-canvas.json` (`lib/briefing-canvas.ts`). The default ships in-repo; AI edits stick until you redesign.
 3. **Iframe shell** — `app/briefing/client.tsx` embeds `/api/briefing/canvas?theme=…` so arbitrary canvas CSS cannot touch app chrome. The canvas runs same-origin and reads injected `window.__BRIEFING__` (and may call `/api/briefing/data`).
-4. **Design chat** — `POST /api/briefing/design` plans and applies layout edits when `AI_API_KEY` is set. The response includes a deterministic status line (`✓ Done — the canvas has been redrawn…`) so it is obvious whether the iframe reloaded. **Fresh look** requests (new visual identity — anime, neon, retro terminal, etc.) regenerate the canvas from scratch instead of revising in place; content-only tweaks (move/hide a section) keep the current document. Custom aesthetics stick across later edits until you reset.
+4. **Design chat** — `POST /api/briefing/design` plans and applies layout edits when `AI_API_KEY` is set. The response includes a deterministic status line (`✓ Done — the canvas has been redrawn…`) so it is obvious whether the iframe reloaded. **Fresh look** requests (new visual identity — anime, neon, retro terminal, etc.) regenerate the canvas from scratch instead of revising in place; content-only tweaks (move/hide a section) keep the current document. Custom aesthetics stick across later edits until you ask to **reset**, which restores the shipped default canvas. Canvas generation distills anti-slop rules from `skills/shared/taste-skill` when that skill is installed (`lib/briefing-taste.ts`).
 5. **Share** — `POST /api/briefing/share` publishes the rendered canvas to a secret gist and returns a preview URL.
-6. **Research queue** — `GET/POST/PATCH/DELETE /api/briefing/tasks` backs the **Research** drawer for follow-up reading tasks tied to briefing interests.
+6. **Research** — Background digs on demand:
+   - **Interests** in briefing prefs trigger `runLast30DaysForInterests` during assembly (skips topics with a fresh file in the research dir unless `?refresh=1`).
+   - **Design chat** and `POST /api/briefing/tasks` queue one-off topics via `createResearchTask` — Last30Days when the script is installed, otherwise an AI-written brief when `AI_API_KEY` is set.
+   - Task state persists in `notes/.cache/briefing/tasks.json`; results land under `LAST30DAYS_MEMORY_DIR` (default `notes/research/`).
+   - **Library → Research** (`/research`) lists saved digests. **Re-scan** reloads the folder; new digs are started from Briefing, not the Research tab.
 7. **AI imagery** — When image generation is configured, the canvas can reference `GET /api/briefing/image?prompt=…&size=1536x1024` for same-origin PNG backgrounds and card art. Prompts are cached on disk per model/size; a 404 hides the image cleanly via `<img>` fallbacks.
 
 Theme is bridged from the app shell (`lib/briefing-theme.ts`) so a dark-mode canvas does not sit on a light chrome (and vice versa).
