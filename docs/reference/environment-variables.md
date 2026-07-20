@@ -31,6 +31,7 @@ Most values live in the dashboard's local environment file and can be edited fro
 | `GOOGLE_CLIENT_ID`     | OAuth client ID             |
 | `GOOGLE_CLIENT_SECRET` | OAuth client secret         |
 | `GOOGLE_REFRESH_TOKEN` | Refresh token after sign-in |
+| `GOOGLE_OAUTH_REDIRECT_URI` | Optional OAuth callback override. When unset, DevHub derives the redirect URI from the dashboard origin during sign-in and persists it to `.env.local`. |
 
 ## Jira
 
@@ -106,6 +107,12 @@ name collisions. See [Sync Engine](../architecture/sync-engine.md) and
 | `AI_TOOLS_BRANCH`          | repo default via `gh`  | Branch for upstream skills cache                        |
 
 Requires `gh auth login` when upstream refresh is enabled.
+
+## Capability Radar
+
+| Variable                   | Default | Purpose                                                                 |
+| -------------------------- | ------- | ----------------------------------------------------------------------- |
+| `CAPABILITY_AUTHOR_EMAILS` | —       | Comma-separated git author emails for personal exposure scoring. When unset, each scanned repo falls back to `git config user.email`. Multiple values are OR-matched in `git log --author`. |
 
 ### Plugins
 

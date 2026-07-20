@@ -252,7 +252,8 @@ API routes are scoped under `/api/repos/<name>/git/…` (and branch push/pull un
 | Problem | What to do |
 | ------- | ---------- |
 | `index.lock` / "could not write index" | Another git process may be running, or a prior command left `.git/index.lock`. DevHub never deletes the lock for you — confirm no git is active, remove the lock manually, retry. |
-| Pre-push verify failed | Read the hook output in **GitHookFailureDialog** or Status → failed sync logs. Fix lint/tests/build locally (`npm run verify`), or use **Copy Chamber prompt** for an agent handoff. Emergency bypass: `DEVHUB_SKIP_VERIFY=1 git push` (see [Scripts](../reference/scripts.md#git-hooks)). |
+| Pre-push verify failed | Read the hook output in **GitHookFailureDialog** or Status → failed sync logs. Full output is also written to `.git/devhub-hook-failure.log` in the repo. Fix lint/tests/build locally (`npm run verify`), or use **Copy Chamber prompt** / the `git-hook-fix` terminal handoff for an agent fix. Emergency bypass: `DEVHUB_SKIP_VERIFY=1 git push` (see [Scripts](../reference/scripts.md#git-hooks)). |
+| Stash apply left conflicts | The terminal drawer opens with the `git-conflict-resolve` skill preloaded. Resolve markers, then retry apply/pop from the Stash tab. |
 | Wrong Node version in hook | The pre-push hook sources `nvm` when your shell's Node does not match `.nvmrc`. Run `nvm install` from repo root if verify fails under a system Node. |
 
 ## Safety Boundaries

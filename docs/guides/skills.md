@@ -84,6 +84,18 @@ Preview response fields:
 
 Preview is read-only. It does not replace `dry_run_scoped_sync` (that action previews **content** git paths only). See [Sync Engine](../architecture/sync-engine.md#preview-without-applying).
 
+## Terminal handoff skills
+
+Some dashboard actions launch a one-shot agent in the terminal dock with a preloaded skill:
+
+| Skill | Triggered from | Purpose |
+| ----- | -------------- | ------- |
+| `pr-explain-review` | `/prs` **Review** button | Explain a GitHub PR and save a review note under `notes/pr-reviews/…`. See [GitHub integration](../integrations/github.md#row-actions). |
+| `git-hook-fix` | Repo Git **GitHookFailureDialog** | Diagnose and fix pre-commit/pre-push hook failures after a `422 hook_failed` response. |
+| `git-conflict-resolve` | Repo Git stash conflicts | Walk through resolving conflict markers after a failed stash apply/pop. |
+
+Configure the underlying CLI (`opencode` vs `cursor`) from **/setup → Agent CLI**. See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md#agent-cli-selection).
+
 ## MCP tab
 
 Sidebar **Agents** → tab **MCP** manages the MCP catalog:

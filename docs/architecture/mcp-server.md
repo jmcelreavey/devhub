@@ -16,8 +16,7 @@ The server has two tool tiers:
 | Tier              | Source Of Truth                                                               | Dashboard Required                | Tool Groups                                                                                                                      |
 | ----------------- | ----------------------------------------------------------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | Filesystem-backed | Local files under configured content dirs                                     | No                                | Notes, docs, tasks, diagrams, appraisal, DX audit                                                                                |
-| Dashboard-backed  | DevHub HTTP routes on `DEVHUB_BASE_URL`                                       | Yes                               | Status, briefing, calendar, work/PRs/Jira, assets, search, scripts, repos (list/open/clone/learn), capability, sessions, Datadog |
-| Hybrid            | Local `git` in a resolved repo path; dashboard HTTP only for name→path lookup | Yes (for `repos_list` resolution) | `repos_git_status`, `repos_git_commit`, `repos_git_push`                                                                         |
+| Dashboard-backed  | DevHub HTTP routes on `DEVHUB_BASE_URL`                                       | Yes                               | Status, briefing, calendar, work/PRs/Jira, assets, search, scripts, repos (list/open/reveal/clone/learn + full git workspace), capability, sessions, Datadog |
 | Script-backed     | Local shell scripts under `REPO_ROOT`                                         | No (runs detached)                | `repo_ship`, `repo_ship_status`                                                                                                  |
 
 Filesystem-backed tools call the vault/storage layer directly and work headless.
@@ -54,7 +53,7 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 
 | Group      | Tools                                                                                                                                                               |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Notes      | `notes_list`, `notes_read`, `notes_write`, `notes_write_asset`, `notes_append`, `notes_search`, `notes_delete`                                                      |
+| Notes      | `notes_list`, `notes_read`, `notes_write`, `notes_write_asset`, `notes_append`, `notes_search`, `notes_delete`, `notes_create_meeting` |
 | Docs       | `docs_list`, `docs_read`, `docs_write`, `docs_append`, `docs_search`, `docs_delete`                                                                                 |
 | Tasks      | `tasks_list`, `tasks_create`, `tasks_update`, `tasks_delete`, `tasks_history`                                                                                       |
 | Diagrams   | `diagrams_list`, `diagrams_read`, `diagrams_create`, `diagrams_update`, `diagrams_add_note`, `diagrams_delete`, `diagrams_rename`                                   |
@@ -69,15 +68,15 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 | Assets     | `assets_list`                                                                                                                                                       |
 | Search     | `search`                                                                                                                                                            |
 | Scripts    | `scripts_list`, `scripts_run`, `scripts_run_status`, `scripts_history`                                                                                              |
-| Repos      | `repos_list`, `repos_open`, `repos_clone`, `repo_learn`, `repos_git_status`, `repos_git_commit`, `repos_git_push`                                                   |
+| Repos      | `repos_list`, `repos_open`, `repos_reveal`, `repos_clone`, `repo_learn`, `repos_git_status`, `repos_git_stage`, `repos_git_discard`, `repos_git_stage_hunk`, `repos_git_diff`, `repos_git_stash`, `repos_git_branches`, `repos_git_branch`, `repos_git_commit`, `repos_git_push`, `repos_git_log`, `repos_git_show`, `repos_git_blame`, `repos_git_conflicts` |
 | Sessions   | `sessions_recap`                                                                                                                                                    |
 | Datadog    | `datadog_oncall`, `datadog_recent_alerts`, `datadog_investigate`                                                                                                    |
 
 BI-specific MCP tools are contributed by the private BI plugin as a separate server; they are not part of the core DevHub server.
 
-Dashboard-backed tools that mutate runtime or external state require `confirm: true` (for example `services_restart`, mutating `scripts_run` entries, `repos_git_commit`, `repos_git_push`, and `jira_ticket_transition`). Long-running actions return a `runId`; poll the matching status tool, such as `scripts_run_status`, until the run exits. MCP cannot stream the dashboard's live run log.
+Dashboard-backed tools that mutate runtime or external state require `confirm: true` (for example `services_restart`, mutating `scripts_run` entries, `repos_git_stage`, `repos_git_commit`, `repos_git_push`, `repos_git_branch`, and `jira_ticket_transition`). Long-running actions return a `runId`; poll the matching status tool, such as `scripts_run_status`, until the run exits. MCP cannot stream the dashboard's live run log.
 
-`repos_git_status`, `repos_git_commit`, and `repos_git_push` run `git` locally in the resolved repo path (by `name` from `repos_list` or an explicit `path`). They do not go through dashboard HTTP beyond path resolution.
+All `repos_git_*` tools proxy the Repo Git workspace HTTP routes (`/api/repos/<name>/git/*` and `/branches`) — they do not shell out to `git` directly from the MCP process. Start the dashboard before using them.
 
 Sensitive dashboard routes (currently `GET /api/opencode/recap`) use `requireDashboardAuth`. Set `DEVHUB_API_SECRET` in `dashboard/.env.local` and in the synced MCP env when LAN exposure or non-browser callers need access; `DashboardClient` sends `Origin` and `X-DevHub-Secret` automatically.
 
@@ -168,12 +167,15 @@ The dashboard route redacts secrets (tokens, env values, URL credentials) before
 
 ### Commit and push a sibling repo from an agent
 
-1. Start the dashboard with `npm run dev` so `repos_list` can resolve repo names to paths.
-2. `repos_git_status` with `name` (from `repos_list`) or an explicit `path` to inspect branch, dirty files, and ahead/behind counts.
-3. `repos_git_commit` with `message` and `confirm: true` to stage all changes and commit.
-4. `repos_git_push` with `confirm: true` to push (optional `remote`, `branch`).
+1. Start the dashboard with `npm run dev`.
+2. `repos_git_status` with `name` (from `repos_list`) to inspect branch, staged/unstaged files, conflicts, and ahead/behind counts.
+3. `repos_git_diff` to read unified diffs; `repos_git_stage` / `repos_git_discard` / `repos_git_stage_hunk` to shape the index (`confirm: true`).
+4. `repos_git_commit` with `message` and `confirm: true` to commit staged changes (optional `amend`).
+5. `repos_git_push` with `confirm: true` to push (optional `remote`, `branch`).
 
-These run local `git` in the resolved checkout. They are not dashboard script actions — they do not enforce the `main`/`master` branch guards used by scoped content sync.
+For branch checkout, pull, fetch, and undo, use `repos_git_branches` (read) and `repos_git_branch` (mutate). Stash, log, show, blame, and conflict resolution have matching `repos_git_*` tools that proxy the same routes as the Repo Git workspace UI.
+
+Hook failures return `422` with `{ code: "hook_failed", … }` and persist full output under `.git/devhub-hook-failure.log` in the target repo. The UI offers a terminal handoff via the `git-hook-fix` skill.
 
 ### Capture appraisal notes from an agent
 
@@ -208,7 +210,7 @@ See [Capability Radar plan](../capability-radar-plan.md) for the full feature ma
 
 ### Ship everything to main
 
-`repo_ship` wraps `scripts/devhub-ship.sh`. It previews the actual public patch by default; pass `confirm: true` to allow commits and pushes. A confirmed run imports newer public-core changes first, commits personal data separately from code, pushes the private mirror, ports only the leak-scanned generic catalog patch to public `main` (no PR), and pushes enabled plugin repos. Confirmed runs start **detached** because pre-push verification takes several minutes; poll `repo_ship_status` until the log shows `SHIP DONE` or `SHIP FAILED`.
+`repo_ship` wraps `scripts/devhub-ship.sh`. It previews the actual public patch by default; pass `confirm: true` to allow commits and pushes. Pass `includeUpstream: false` to skip public-core reconciliation and the upstream push (`--no-upstream`). A confirmed run imports newer public-core changes first, commits personal data separately from code, pushes the private mirror, ports only the leak-scanned generic catalog patch to public `main` (no PR), and pushes enabled plugin repos. Confirmed runs start **detached** because pre-push verification takes several minutes; poll `repo_ship_status` until the log shows `SHIP DONE` or `SHIP FAILED`.
 
 ## Plugin MCP Servers
 
