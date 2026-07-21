@@ -61,7 +61,7 @@ See [Datadog integration](../integrations/datadog.md) for on-call behavior and A
 
 ## Notes, Repo Learning, and Briefing AI (Optional)
 
-BlockNote AI in the notes editor, Repo Learning generated artifacts, and morning-briefing enrichment (dev tip, AI summary, interests, and the **Tune briefing** chat) work with any **OpenAI-compatible** chat-completions endpoint — [z.ai](https://z.ai) (the default), OpenAI, OpenRouter, Together, Groq, a local Ollama/LM Studio server, etc. Point `AI_BASE_URL` / `AI_MODEL` at your provider and set `AI_API_KEY`. Configure these in `dashboard/.env.local` only - not on `/setup`.
+BlockNote AI in the notes editor, Repo Learning generated artifacts, and morning-briefing AI features (design chat, interest snippets, research fallbacks) work with any **OpenAI-compatible** chat-completions endpoint — [z.ai](https://z.ai) (the default), OpenAI, OpenRouter, Together, Groq, a local Ollama/LM Studio server, etc. Point `AI_BASE_URL` / `AI_MODEL` at your provider and set `AI_API_KEY`. Configure these in `dashboard/.env.local` only - not on `/setup`.
 
 | Variable      | Required | Default                               | Purpose                                                 |
 | ------------- | -------- | ------------------------------------- | ------------------------------------------------------- |

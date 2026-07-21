@@ -7,7 +7,7 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 | Area         | Purpose                                                                      |
 | ------------ | ---------------------------------------------------------------------------- |
 | Today        | Daily workspace with tasks, notes, calendar, tickets, PRs, standup tools, and a morning briefing widget |
-| Briefing     | Full-page personal start-of-day digest (weather, news, events, dev tip, and more) |
+| Briefing     | Full-page personal start-of-day digest (weather, news, events, research, and more) |
 | Notes        | BlockNote editing, file tree, folder-scoped master checklists, optional OpenAI-compatible in-editor AI |
 | Docs         | In-app editing of repo `docs/` markdown (BlockNote with markdown round-trip), file tree, content sync |
 | Tasks        | Daily task management, drag reorder for open items, weekly review, and history |
@@ -180,26 +180,28 @@ Theme is bridged from the app shell (`lib/briefing-theme.ts`) so a dark-mode can
 
 ### Sections and preferences
 
-Preferences live in `notes/.config/briefing-prefs.json` and sync with the repo like other notes config. The **Tune briefing** chat (`POST /api/briefing/prefs/chat`) updates prefs conversationally when `AI_API_KEY` is set. Manual edits use `GET`/`PUT /api/briefing/prefs`. These prefs control **what data** the canvas receives, not the canvas layout itself.
+Preferences live in `notes/.config/briefing-prefs.json` and sync with the repo like other notes config. There is no dedicated prefs API — edit the JSON directly, or ask **Design** chat (`POST /api/briefing/design`) to patch fields (location, feeds, section toggles, interests). Prefs control **what data** the canvas receives, not the canvas layout itself.
 
 | Section | Default | Source |
 | ------- | ------- | ------ |
-| Weather | on | Open-Meteo forecast for the configured location |
-| Dev Tip | on | AI tip from your tech stack, or a deterministic fallback |
+| Weather | on | Open-Meteo forecast for `location` (`name`, `lat`, `lon`) in prefs |
 | News | on | RSS feeds from prefs |
-| Events | on | Local event search around configured areas |
-| Trending Repos | on | GitHub trending by language |
+| Events | on | Local event search around `eventSearchAreas` |
+| Trending Repos | on | GitHub trending by `repoLanguages` |
 | Hacker News | on | HN top stories |
 | Gaming | off | Gaming RSS feeds |
 | On This Day | on | Historical events |
 | Family Days Out | off | Nearby attractions when `hasKids` is enabled |
-| Interests | off | AI snippets for configured hobbies |
+| Background Research | on | Cached Last30Days briefs for configured interests |
+| Interests | off | AI snippets for configured hobbies (requires `AI_API_KEY`) |
 
-AI enrichment (dev tip, AI summary, interests) is additive: when `AI_API_KEY` is unset or a provider call fails, the briefing still loads with deterministic content. See [Environment Variables](../reference/environment-variables.md#notes-repo-learning-and-briefing-ai-optional).
+The Today widget weather hero (`DashboardBriefingWeather`) is separate from the `/briefing` canvas — it uses thermal/atmosphere bands derived from Open-Meteo codes and does not reload when you redesign the canvas.
+
+AI enrichment (interests, design chat, research fallbacks) is additive: when `AI_API_KEY` is unset or a provider call fails, the briefing still loads with deterministic content. See [Environment Variables](../reference/environment-variables.md#notes-repo-learning-and-briefing-ai-optional).
 
 ### Shared AI provider
 
-Notes in-editor AI, Repo Learning generation, briefing enrichment, and the **Tune briefing** chat all route through `dashboard/lib/ai-provider.ts`. That module reads `AI_API_KEY`, `AI_BASE_URL`, and `AI_MODEL` once and returns an OpenAI-compatible Vercel AI SDK model. GLM-specific `thinking` options are only sent when the configured base URL/model look like z.ai GLM — other providers get an empty options object so unknown fields are not rejected.
+Notes in-editor AI, Repo Learning generation, briefing design chat, and interest snippets all route through `dashboard/lib/ai-provider.ts`. That module reads `AI_API_KEY`, `AI_BASE_URL`, and `AI_MODEL` once and returns an OpenAI-compatible Vercel AI SDK model. GLM-specific `thinking` options are only sent when the configured base URL/model look like z.ai GLM — other providers get an empty options object so unknown fields are not rejected.
 
 ## Repo Status And Content Sync
 
@@ -218,6 +220,7 @@ The Status page (`/status`) aggregates Git, sync, services, and infra into one o
 | Section | What it shows | Primary actions |
 | ------- | ------------- | --------------- |
 | Health summary | Aggregates stopped peer services, non-content dirty paths, behind count, merge conflicts, missing MCP binaries, and last failed sync | Banner turns amber when any item is present |
+| Plugin materialization | `GET /api/status/materialized` — compares plugin-owned dashboard copies to plugin source | Amber banner when core copies diverge from the plugin checkout (edits there are lost on `sync_plugins` / `predev`) |
 | Repo | Branch, content vs other dirty counts, ahead/behind, last commit | **Sync** runs `update_and_sync` on a clean tree; **Commit & sync…** chains `commit_dirty_push` then `update_and_sync` when dirty |
 | Merge conflicts | Files with conflict markers under scoped content paths | Inline edit via `ConflictResolverPanel` |
 | Skill sync | `GET /api/sync-health` plus preview diffs when unhealthy | Links to Agents library; see [Skills guide](../guides/skills.md#sync-preview-before-sync) |

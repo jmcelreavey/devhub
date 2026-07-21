@@ -109,6 +109,22 @@ Workflow:
 Use overlays for optional UI hooks wired into core pages; use `paths` for whole pages,
 API routes, and libs that core does not own at all.
 
+### Materialization honesty
+
+`detectMaterializeDrift` (`dashboard/lib/plugins/materialize-honesty.ts`) compares each
+materialised dashboard copy to its plugin source. When hashes diverge, the Status page
+shows a **Plugin-owned files edited in core** banner (`GET /api/status/materialized`).
+
+| Drift reason | Meaning |
+| ------------ | ------- |
+| `diverged` | Core copy differs from the plugin file — your edit will be overwritten on the next `sync_plugins` / `predev` |
+| `missing-source` | A materialised file has no matching plugin source |
+| `core-only-copy` | A path is listed in `.git/info/exclude` but no longer contributed by any enabled plugin |
+
+Fix: edit the plugin checkout (e.g. `~/Developer/devhub-bi/dashboard/…`), then restart the
+dev server or run `sync_plugins`. Never edit materialised copies in the core tree — see
+AGENTS.md → Plugin Architecture.
+
 ## Tier 3 — branding (whitelabel)
 
 A plugin can **whitelabel** DevHub when it's enabled: contribute a theme palette + presets,
