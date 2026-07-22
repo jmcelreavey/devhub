@@ -168,14 +168,14 @@ The dashboard route redacts secrets (tokens, env values, URL credentials) before
 ### Commit and push a sibling repo from an agent
 
 1. Start the dashboard with `npm run dev`.
-2. `repos_git_status` with `name` (from `repos_list`) to inspect branch, staged/unstaged files, conflicts, and ahead/behind counts.
+2. `repos_git_status` with `name` (from `repos_list`) to inspect branch, staged/unstaged files, conflicts, and ahead/behind counts. When `name` is the **DevHub checkout**, files under syncable content paths (`notes/`, `tasks/`, `docs/`, `collections/`, `upstarts/`, `diagrams/`, plus env-resolved content dirs) are **omitted** from `files` — use `status_git` or `sync_notes_tasks_push` for those. The payload includes `contentSyncCount` (how many content files were hidden). Sibling repos return every file.
 3. `repos_git_diff` to read unified diffs; `repos_git_stage` / `repos_git_discard` / `repos_git_stage_hunk` to shape the index (`confirm: true`).
 4. `repos_git_commit` with `message` and `confirm: true` to commit staged changes (optional `amend`).
 5. `repos_git_push` with `confirm: true` to push (optional `remote`, `branch`).
 
 For branch checkout, pull, fetch, and undo, use `repos_git_branches` (read) and `repos_git_branch` (mutate). Stash, log, show, blame, and conflict resolution have matching `repos_git_*` tools that proxy the same routes as the Repo Git workspace UI.
 
-Hook failures return `422` with `{ code: "hook_failed", … }` and persist full output under `.git/devhub-hook-failure.log` in the target repo. The UI offers a terminal handoff via the `git-hook-fix` skill.
+Structured errors from the underlying routes: `409 index_lock` (another git process holds `.git/index.lock`), `409 stash_conflict` (unmerged paths after stash apply/pop), `422 hook_failed` (pre-commit/pre-push). Hook failures persist full output under `.git/devhub-hook-failure.log` in the target repo. The UI offers a terminal handoff via the `git-hook-fix` skill.
 
 ### Capture appraisal notes from an agent
 

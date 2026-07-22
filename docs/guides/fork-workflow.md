@@ -56,11 +56,17 @@ PR, so there's no dashboard button. Preview first, always:
 ```bash
 scripts/devhub-backport.sh <source-ref> [--base <ref>]            # preview (default)
 scripts/devhub-backport.sh <source-ref> [--base <ref>] --execute  # push branch + open PR
+scripts/devhub-backport.sh <source-ref> --patch-only              # stdout patch only (no branch switch)
 ```
 
 It branches off `upstream`, applies the feature's hunks (3-way, so public-side
 templatisation survives), runs the **leak scan on added lines**, and prints the diff stat.
-Confirm the file list is only your feature before `--execute`.
+Only **catalog allowlist** paths are eligible — personal data and root-level local skills are
+dropped before the patch is built. Confirm the file list is only your feature before `--execute`.
+
+`--patch-only` is what `devhub-ship.sh --dry-run` uses: it prints the actual public patch
+without touching branches. `--require-synced` refuses to run when `upstream` has moved since
+your last `devhub-update.sh` pull (ship enforces this before pushing public core).
 
 After the PR merges, your mirror already contains what you sent public, so **don't pull it
 back** — just advance the marker:
