@@ -160,7 +160,7 @@ Pair with [Standup](../guides/standup.md) for daily forward-looking summaries; R
 | Personal strip | `GET /api/radar/personal` | Parses `notes/radar/personal-radar.md` into adopt / trial / assess / hold items |
 | Scan action | `POST /api/capability/scan`, MCP `capability_scan` | Full scan; writes dated snapshot under `notes/.cache/capability/` |
 | Weekly digest | `POST /api/capability/digest`, job `capability_digest` | Generate or return digest markdown |
-| Build lab | `POST /api/capability/journey`, MCP `capability_get_lab` | Repo-grounded lab saved to `notes/learnings/labs/…` |
+| Build lab | Agent CLI + `capability-lab` skill (`GET /api/capability/journey/plan` → terminal handoff → `POST /api/capability/journey/adopt`) | Generation runs in the terminal; `POST /api/capability/journey` and MCP `capability_get_lab` only **fetch** an existing lab. Notes land under `notes/learnings/labs/…`. |
 
 ### Personal radar file
 

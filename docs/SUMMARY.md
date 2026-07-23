@@ -29,6 +29,7 @@
 
 - [Fork Workflow](guides/fork-workflow.md)
 - [Plugins](architecture/plugins.md)
+- [Capability Radar plan](capability-radar-plan.md)
 - [Creating a Plugin](guides/creating-plugins.md)
 - [Contributing](../CONTRIBUTING.md)
 

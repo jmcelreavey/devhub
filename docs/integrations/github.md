@@ -65,7 +65,7 @@ on every render.
 | PR list | Action | Result |
 | ------- | ------ | ------ |
 | Mine | **Copy request** | Copies a Slack-ready "ready for review" message. |
-| Review requested | **Review** | Opens the terminal drawer and runs `opencode run` with the `pr-explain-review` skill. |
+| Review requested | **Review** | Opens the terminal drawer and runs the configured **Agent CLI** (`opencode run` or `cursor-agent`; see `/setup → Agent CLI`) with the `pr-explain-review` skill. |
 | Recently reviewed | **Copy approved** / **Copy reviewed** | Copies follow-up Slack messages. |
 
 The **Review** action is intentionally local. It streams the explanation and review
@@ -94,11 +94,11 @@ for the note every few seconds; before a note exists, it renders nothing.
 
 ### Review Note Constraints
 
-- `opencode` must be installed on `PATH`; otherwise the terminal prints an install
-  hint instead of crashing the UI.
+- The selected Agent CLI (`opencode` or `cursor-agent`) must be on `PATH`; otherwise
+  the terminal prints an install hint instead of crashing the UI.
 - When `NEXT_PUBLIC_REPO_ROOT` is set, the launch command exports `REPO_ROOT`
-  and `NOTES_DIR` for the OpenCode run so the notes MCP writes into
-  `notes/pr-reviews/...`, even if OpenCode is reviewing a different repository.
+  and `NOTES_DIR` for the agent run so the notes MCP writes into
+  `notes/pr-reviews/...`, even if the review targets a different repository.
 - The review skill writes through `notes_write`. Do not create review-note files
   by hand; that bypasses the notes MCP conversion and is how this stuff ends up
   in the wrong directory. Charming, but wrong.
@@ -116,7 +116,7 @@ GitHub activity can contribute to standup markdown, especially merged PRs and re
 | PRs do not load | `gh auth status` succeeds. |
 | Repo is missing | It has a GitHub remote and is discoverable from DevHub's repo search scope. |
 | Archived repo PRs are missing | Expected: authored and review-requested rows from archived repos are hidden. |
-| **Review** prints an OpenCode error | `opencode` is installed and available on `PATH`. See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md). |
+| **Review** prints a CLI error | The selected Agent CLI (`opencode` or `cursor-agent`) is installed and on `PATH`. See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md#agent-cli-selection). |
 | **Notes** link never appears | The terminal review finished, the skill had notes MCP access, and it wrote to the exact `Notes MCP path` from the prompt. |
 | Review note landed in the wrong place | `NEXT_PUBLIC_REPO_ROOT` mirrors `REPO_ROOT` in `dashboard/.env.local`; restart DevHub so the terminal command can pin `NOTES_DIR`. |
 | Standup misses PRs | The PR was merged in the selected time window. |

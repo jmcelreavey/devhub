@@ -68,8 +68,15 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | `GET /api/radar/personal` | `/radar` personal strip | Parses `notes/radar/personal-radar.md` into adopt/trial/assess/hold items. Returns `{ path, exists, items, markdown }`. |
 | `POST /api/capability/scan` | `/radar` **Scan**, MCP `capability_scan` | Full scan; body may include `includeGithub`, `githubFilter`. Writes dated snapshot under `notes/.cache/capability/`. |
 | `POST /api/capability/digest` | `/radar` digest, MCP `capability_digest`, job `capability_digest` | Generate or return weekly digest markdown. |
-| `POST /api/capability/journey` | `/radar` **Build lab**, MCP `capability_get_lab` | Generate or fetch a repo-grounded lab; saves to `notes/learnings/labs/…`. |
+| `GET /api/capability/journey?repoName=` | `/radar` lab list | Lists built labs with `done` / `hasWorkspace` flags (optional repo filter). |
+| `POST /api/capability/journey` | `/radar` lab fetch, MCP `capability_get_lab` | **Fetch only** an existing lab (`{ signalId, repoName? }`). `404 { notBuilt: true }` when not built yet — generation runs via the configured agent CLI + `capability-lab` skill, not this route. |
+| `GET /api/capability/journey/plan` | Terminal **Build lab** handoff | Query: `signalId`, optional `repoName`. Plan payload for the `capability-lab` skill (target repo, evidence, workspace dir, notes path). |
+| `POST /api/capability/journey/adopt` | `capability-lab` skill | Called after the skill writes the lab note and workspace files; persists the lab record the UI reads. |
 | `POST /api/capability/journey/complete` | Lab **Mark done**, MCP `capability_complete_lab` | Marks lab complete and ticks linked follow-up task. |
+| `POST /api/capability/explain` | `/radar` delta **Why?** | Body: `{ deltaId, refresh? }`. AI explanation for a radar diff row (`AI_API_KEY`). |
+| `POST /api/capability/workspace/open` | Lab **Open workspace** | Body: `{ category }`. Opens the lab's server-resolved workspace path in Cursor (`503` when `cursor` is missing). |
+| `GET/POST /api/capability/journey/session` | Lab tutor drawer | `GET ?category=` returns saved tutor messages. `POST` persists `{ category, messages }` or `{ category, clear: true }`. |
+| `POST /api/capability/journey/tutor` | Lab Socratic tutor | Streaming chat (`repoName`, `signalId`, `messages`). Requires `AI_API_KEY`. |
 | `GET /api/research` | Library → **Research** (`/research`) | Returns `{ script, researchDir, files, cards }` — resolved Last30Days script path (or `null`), on-disk research directory, raw file metadata, and preview cards for saved digests. Re-scan is client-side (`mutate`); new digs are queued from Briefing (`POST /api/briefing/tasks` or Design chat), not this route. |
 | `GET /api/repos/<name>/branches` | Repos branch panel | Lists local and remote branches with ahead/behind counts for a sibling checkout. |
 | `GET /api/context-pack`, `GET /api/context-pack?format=markdown` | Command palette **Copy context pack for AI session** | Returns `{ openTasks, recentLearnings, dailyNotePreview, standupMarkdown, … }`. With `format=markdown`, also includes a pre-rendered `markdown` string for clipboard copy. Standup subsection is fetched internally from `/api/standup/markdown`. |
@@ -140,6 +147,7 @@ Sibling-repo git operations power `RepoGitWorkspace` on `/repos` and the DevHub 
 | `GET/PUT/PATCH/DELETE /api/agents/<name>` | Agents editor | `GET` returns `{ name, content, modified, readOnly }`. `PUT` replaces markdown. `PATCH` renames (`{ newName }`). `DELETE` removes core agents. |
 | `GET /api/agents/local` | Agents import UI | Scans local tool agent dirs for import candidates (`{ candidates }`). |
 | `GET /api/persona`, `GET /api/persona?id=<target>` | Agents → Persona tab | Without `id`: `{ targets[] }` with token estimates for source files. With `id`: `{ id, content, exists, modified }` for one persona target. |
+| `GET /api/persona/local` | Persona **Pull from tool** preview | Without query params: `{ tools, sources }`. With `?tool=&source=` (both required): `{ toolBlock, repoContent, … }` diff preview before `collect_local_persona`. |
 | `PUT /api/persona` | Persona inline editor | Body: `{ id, content }` — source targets only (`shared-persona`, `identity`, `deep-preferences`). Synced tool files are read-only here. |
 | `GET /api/setup/status` | Setup wizard, nav gates, Status service cards | Returns integration readiness booleans (`core`, `github`, `calendar`, `jira`, `datadog`, `bi`, `chamber`, `opencode`, `claude`), `allowLanNetwork`, `hasOpenchamberUiPassword`, and per-integration `*Vars` previews (saved key presence, not secrets). `datadogVars` includes work email and schedule ID for the setup form. `bi` is dependency-free presence detection (`AWS_PROFILE`, `BI_OPS_USER_EMAIL`, `CAPI_REPO_PATH`). |
 | `POST /api/setup/save` | Setup wizard | Persists integration and core settings to `dashboard/.env.local`. Same-origin only. |
