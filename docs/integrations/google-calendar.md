@@ -38,6 +38,18 @@ If you open DevHub from another device on your LAN, also add the LAN URL variant
 | Google client secret | Secret for the OAuth app                                          |
 | Refresh token        | Lets DevHub refresh calendar access without signing in every time |
 
+## API behavior
+
+Calendar reads go through local API routes (see [API Routes](../reference/api-routes.md)). All event routes fail soft on auth problems:
+
+| Route | Returns when token is missing/expired |
+| ----- | ------------------------------------- |
+| `GET /api/calendar` | `{ events: [], needsReauth: true }` |
+| `GET /api/calendar/week` | `{ days: {}, needsReauth: true }` |
+| `GET /api/calendar/calendars` | `{ configured: false, needsReauth: true }` |
+
+The UI shows a reconnect prompt instead of a hard error. OAuth starts at `GET /api/calendar/auth/start` (browser redirect) or via Setup; the callback is `GET /api/calendar/auth/callback`. Calendar selection persists through `POST /api/calendar/calendars` with `{ calendarIds }`.
+
 ## Troubleshooting
 
 | Problem                 | Check                                                    |

@@ -113,9 +113,21 @@ Daily tasks live in repo-root `tasks/YYYY-MM-DD.json` (one file per calendar day
 | -------- | ------ |
 | Rollover   | Open tasks from yesterday copy into today on first load; yesterday entries get `movedAt` / `movedToDate` |
 | Reorder    | Drag open tasks in the list (or use arrow keys on the drag handle). Only **open** tasks reorder; done, abandoned, and moved tasks keep their relative slots. Order is array position in the day's JSON file. |
-| API        | `PATCH /api/tasks` with `{ ids: string[], date?: string }` — must include every open task id exactly once |
+| API        | See table below |
 
 Completed and abandoned tasks stay in the file for history and standup; they are not included in reorder requests.
+
+| Method | Body | Purpose |
+| ------ | ---- | ------- |
+| `GET /api/tasks` | — | Runs rollover, returns `{ date, tasks[] }` for today |
+| `POST /api/tasks` | `{ text, date?, due? }` | Creates a task (`201`) |
+| `PATCH /api/tasks` | `{ ids[], date? }` | Reorders open tasks — every open id exactly once |
+| `PATCH /api/tasks` | `{ id, done }` | Toggle complete |
+| `PATCH /api/tasks` | `{ id, text?, due? }` | Edit text or due date |
+| `PATCH /api/tasks` | `{ id, status: "abandoned", abandonReason? }` | Abandon |
+| `PATCH /api/tasks` | `{ id, status: "active" }` | Reactivate abandoned task |
+| `PATCH /api/tasks` | `{ id, timer: "start" \| "stop", date? }` | Focus timer (see below) |
+| `DELETE /api/tasks` | `{ id, date? }` | Remove task from the day file |
 
 ### Add to Jira
 
@@ -149,6 +161,29 @@ The **Review** page (`/review`, desktop nav) is a retrospective view over the la
 **Slipped tasks** are detected when the same task text (normalized) appears as rolled over (`moved`) on three or more distinct days within the window (`SLIP_THRESHOLD = 3`). Rollover mints a new task id each day, so slip detection compares text across days rather than ids.
 
 Pair with [Standup](../guides/standup.md) for daily forward-looking summaries; Review is the backward-looking complement.
+
+## Agent CLI
+
+One-shot terminal handoffs — PR review, capability **Build lab**, DX audit, repo upstart — run through either **OpenCode** (`opencode run`) or the **Cursor CLI** (`cursor-agent -p … --force --model <model>`). The choice is global, not per feature.
+
+| Surface | Route / env | Behavior |
+| ------- | ----------- | -------- |
+| Setup | `/setup → Agent CLI` | Pick CLI and optional model overrides |
+| Skills | **Skills → Agent CLI** | Same settings as Setup |
+| API | `GET/PUT /api/agent-cli` | Read/save `DEVHUB_AGENT_CLI`, `DEVHUB_AGENT_OPENCODE_MODEL`, `DEVHUB_AGENT_CURSOR_MODEL` in `dashboard/.env.local` |
+| Setup poll | `GET /api/setup/status` → `agentVars` | `{ cli, opencodeModel, cursorModel, cursorAgentInstalled }` for nav gates and the Cursor option |
+
+OpenCode is the default (`DEVHUB_AGENT_CLI` omitted or `opencode`). Cursor appears only when `cursor-agent` resolves on `PATH`; `PUT` with `cli: "cursor"` returns `400` otherwise. Blank `opencodeModel` keeps the shared `opencode.json` default; Cursor defaults to `cursor-grok-4.5-high` when unset.
+
+Launch wiring lives in `dashboard/lib/terminal-launch.ts`. See [OpenCode and OpenChamber — Agent CLI selection](../guides/opencode-and-chamber.md#agent-cli-selection).
+
+## Pull Request Reviews
+
+**PRs** (`/prs`, gated on `github`) and the Today GitHub panel read `GET /api/github/prs` — authored PRs, review-requested PRs, and recently reviewed PRs (archived repos filtered from active queues).
+
+The **Review** row action does **not** call a review API. It opens the terminal drawer and runs the configured Agent CLI with the `pr-explain-review` skill. The skill pulls conversation, inline review threads, and the linked Jira/GitHub ticket, then saves a note at `pr-reviews/<owner-repo-slug>-<pr-number>` via notes MCP. The **Notes** link polls `GET /api/notes/pr-reviews/<slug>` every few seconds until the note exists.
+
+Full workflow, constraints, and troubleshooting: [GitHub integration](../integrations/github.md#row-actions).
 
 ## Capability Radar
 
@@ -186,7 +221,7 @@ The full briefing page is no longer a fixed React layout. Instead:
 2. **Canvas document** — A complete HTML/CSS/JS page persisted in `notes/.config/briefing-canvas.json` (`lib/briefing-canvas.ts`). The default ships in-repo; AI edits stick until you redesign.
 3. **Iframe shell** — `app/briefing/client.tsx` embeds `/api/briefing/canvas?theme=…` so arbitrary canvas CSS cannot touch app chrome. The canvas runs same-origin and reads injected `window.__BRIEFING__` (and may call `/api/briefing/data`).
 4. **Design chat** — `POST /api/briefing/design` plans and applies layout edits when `AI_API_KEY` is set. The response includes a deterministic status line (`✓ Done — the canvas has been redrawn…`) so it is obvious whether the iframe reloaded; prefs-only edits append **Preferences saved.** **Fresh look** requests (new visual identity — anime, neon, retro terminal, etc.) set `freshLook` and persist `customAesthetic: true` in `notes/.config/briefing-canvas.json`, which **replaces** the house palette rules in the generation prompt (not layered on top). The canvas regenerates from scratch instead of revising in place. Content-only tweaks (move/hide a section) keep the current document and house theme. Custom aesthetics stick across later edits until you ask to **reset**, which restores the shipped default canvas and clears `customAesthetic`. When `skills/shared/taste-skill` is installed, `lib/briefing-taste.ts` distills its anti-slop rules for the default (house) aesthetic; the skill itself targets landing pages, so only a compact subset is fed into briefing generation.
-5. **Share** — `POST /api/briefing/share` publishes the rendered canvas to a secret gist and returns a preview URL.
+5. **Share** — `GET/POST/DELETE /api/briefing/share` reads, publishes, or removes a secret gist snapshot of the rendered canvas.
 6. **Research** — Background digs on demand:
    - **Interests** in briefing prefs trigger `runLast30DaysForInterests` during assembly (skips topics with a fresh file in the research dir unless `?refresh=1`).
    - **Design chat** and `POST /api/briefing/tasks` queue one-off topics via `createResearchTask` — Last30Days when the script is installed, otherwise an AI-written brief when `AI_API_KEY` is set.
@@ -227,7 +262,8 @@ The dashboard keeps Git sync state visible without making every page own Git log
 
 - `ContentSyncIndicator` is mounted in the desktop and mobile top bars. It polls `GET /api/status/git` every 30 seconds and hides itself when the repo is clean and up to date.
 - The cloud button is for scoped content only: `notes/`, `collections/`, `tasks/`, `docs/`, and `upstarts/`. It runs the `sync_notes_tasks_push` action through `POST /api/scripts`. When content is clean but commits are unpushed, the cloud retries `push_unpushed_commits`.
-- The warning triangle opens the **Repo Git workspace** for non-content dirty files and merge conflicts, or runs `update_and_sync` when only upstream commits are waiting (clean tree). Pre-push hook failures surface a **GitHookFailureDialog** with log excerpts and a Chamber fix-it prompt.
+- The warning triangle opens the **Repo Git workspace** for non-content dirty files and merge conflicts, or runs `update_and_sync` when only **origin** commits are waiting (clean tree). Pre-push hook failures surface a **GitHookFailureDialog** with log excerpts and a Chamber fix-it prompt.
+- **Origin vs public core:** `update_and_sync` pulls/rebases from `origin` (your private mirror remote). Porting changes from the public template uses `pull_core` / `pull_core_preview` via `POST /api/scripts` → `scripts/devhub-update.sh`. **Backport** (`scripts/devhub-backport.sh`) is intentionally CLI/skill-only — there is no dashboard API. See [Fork workflow](../guides/fork-workflow.md) and [Scripts](../reference/scripts.md).
 - The Status page is the runbook surface. It shows repo branch, dirty content vs other dirty paths, ahead/behind counts, latest failed sync logs, conflict resolution, skill sync health, service status, MCP runtime status, and LAN access.
 - The MCP panel (`GET /api/status/mcp`) lists each server under `mcp/shared/` only — not plugin or personal catalog entries. It reports whether each server's launch command resolves and how many matching processes are running. Bare command names such as `npx`, `tsx`, or `uvx` count as present when they resolve on `PATH`; only absolute or relative command paths must exist on disk. Idle servers are normal — MCP clients start stdio servers on demand. Plugin and personal MCP servers sync to Cursor/Claude/etc. but do not appear here; troubleshoot those via the AI client's MCP logs and `npm install` inside the plugin's `mcp-servers/<name>/` package. **Catalog editing** (`/api/mcp*`) is separate from runtime status — use **Agents → MCP** to add or edit repo/personal entries.
 

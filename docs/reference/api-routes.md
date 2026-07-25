@@ -58,10 +58,16 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | `GET /api/briefing/data` | Briefing design UI | Returns live briefing context JSON for the canvas editor. |
 | `POST /api/briefing/design` | Briefing **Design** chat | Body: `{ message, history?, theme? }`. Plans and applies canvas layout edits when `AI_API_KEY` is set. Returns `{ ok, reply, canvasUpdated, addedFeeds?, tasks? }`. The planner may `reset` the default canvas, request a `freshLook` (new visual identity), add RSS feeds, patch briefing prefs, or queue `research` topics. `reply` includes a deterministic status line when the iframe reloads (`✓ Done — the canvas has been redrawn…`); when prefs change without a redraw, the suffix is **Preferences saved.** |
 | `GET /api/briefing/image` | Briefing canvas `<img>` / CSS | `?prompt=` (required), `?size=` (`1024x1024`, `1536x1024`, `1024x1536`). Returns cached PNG when image AI is configured; `404` otherwise. |
-| `GET/POST /api/briefing/share` | Briefing share links | Read or create secret gist links for the current canvas. |
+| `GET/POST/DELETE /api/briefing/share` | Briefing share links | Read, publish, or remove a secret gist snapshot of the current canvas. Same-origin on `POST`/`DELETE`. |
 | `GET/POST /api/briefing/tasks` | Briefing **Research** drawer | List or queue background research tasks. `POST` body `{ topic }` queues a Last30Days dig (or AI brief fallback). Task state in `notes/.cache/briefing/tasks.json`; results under `LAST30DAYS_MEMORY_DIR`. |
 | `GET /api/briefing/tasks/<id>` | Briefing **Research** drawer | Poll a single task. Returns `{ ok, task, markdown }` — `markdown` is populated when `task.status === "done"`. |
-| `GET /api/agent-cli`, `PUT /api/agent-cli` | Setup → Agent CLI, Skills → Agent CLI | `GET` returns `{ cli, opencodeModel, cursorModel, cursorAgentInstalled }`. `PUT` persists `DEVHUB_AGENT_*` keys to `.env.local`. Cursor option rejected when `cursor-agent` is not on `PATH`. |
+| `GET /api/agent-cli`, `PUT /api/agent-cli` | Setup → Agent CLI, Skills → Agent CLI | `GET` returns `{ cli, opencodeModel, cursorModel, cursorAgentInstalled }`. `PUT` persists `DEVHUB_AGENT_*` keys to `.env.local`. Cursor option rejected when `cursor-agent` is not on `PATH`. Also surfaced in `GET /api/setup/status` as `agentVars`. |
+| `GET /api/calendar` | Today widget, `/calendar` | Today's events. `{ events, cached, needsReauth? }` — `needsReauth: true` when the refresh token is missing or expired (empty events, no 500). |
+| `GET /api/calendar/week` | `/calendar` week grid | Seven-day event map `{ days, cached, needsReauth? }`. |
+| `GET/POST /api/calendar/calendars` | Calendar picker | `GET` lists Google calendars + `selectedIds`. `POST` `{ calendarIds }` saves selection (same-origin). |
+| `GET /api/calendar/auth` | Setup / reconnect probe | Returns OAuth start URL JSON when credentials exist (`{ url }`). |
+| `GET /api/calendar/auth/start` | Connect Google | Redirects browser to Google OAuth (or `/setup?calendar_error=…` when credentials missing). |
+| `GET /api/calendar/auth/callback` | OAuth redirect | Exchanges code, persists refresh token, redirects to `/setup` or `/calendar`. |
 | `GET /api/appraisal/year?year=` | `/appraisal` | Returns goals, themed entries, theme coverage, and an HR markdown export for `notes/appraisal/self/<year>.json`. `PATCH` updates goal status. |
 | `GET /api/appraisal/evidence?days=` | `/appraisal` evidence panel | Suggests recordable moments from recent PRs, Jira, and tasks. `days` is clamped 1–90 (UI presets: 7, 14, 30, 90). Optional `from` / `to` date bounds. |
 | `GET /api/capability/radar` | `/radar`, MCP `capability_radar` | Latest snapshot, diff (added/spread/removed), and knowledge-drift rows. |
@@ -146,10 +152,11 @@ Sibling-repo git operations power `RepoGitWorkspace` on `/repos` and the DevHub 
 | `GET /api/agents`, `POST /api/agents` | Agents → Agents tab | `GET` lists core + plugin agents (`{ name, description, readOnly }[]`). `POST` creates `agents/shared/<name>.md` (`{ name, description? }`). Same-origin on `POST`. Plugin agents are read-only (`403` on mutate). |
 | `GET/PUT/PATCH/DELETE /api/agents/<name>` | Agents editor | `GET` returns `{ name, content, modified, readOnly }`. `PUT` replaces markdown. `PATCH` renames (`{ newName }`). `DELETE` removes core agents. |
 | `GET /api/agents/local` | Agents import UI | Scans local tool agent dirs for import candidates (`{ candidates }`). |
+| `GET/DELETE /api/agents/local/<name>` | Local agent preview/remove | `GET` reads installed copy; `DELETE` removes local installations. |
 | `GET /api/persona`, `GET /api/persona?id=<target>` | Agents → Persona tab | Without `id`: `{ targets[] }` with token estimates for source files. With `id`: `{ id, content, exists, modified }` for one persona target. |
 | `GET /api/persona/local` | Persona **Pull from tool** preview | Without query params: `{ tools, sources }`. With `?tool=&source=` (both required): `{ toolBlock, repoContent, … }` diff preview before `collect_local_persona`. |
 | `PUT /api/persona` | Persona inline editor | Body: `{ id, content }` — source targets only (`shared-persona`, `identity`, `deep-preferences`). Synced tool files are read-only here. |
-| `GET /api/setup/status` | Setup wizard, nav gates, Status service cards | Returns integration readiness booleans (`core`, `github`, `calendar`, `jira`, `datadog`, `bi`, `chamber`, `opencode`, `claude`), `allowLanNetwork`, `hasOpenchamberUiPassword`, and per-integration `*Vars` previews (saved key presence, not secrets). `datadogVars` includes work email and schedule ID for the setup form. `bi` is dependency-free presence detection (`AWS_PROFILE`, `BI_OPS_USER_EMAIL`, `CAPI_REPO_PATH`). |
+| `GET /api/setup/status` | Setup wizard, nav gates, Status service cards | Returns integration readiness booleans (`core`, `github`, `calendar`, `jira`, `datadog`, `bi`, `chamber`, `opencode`, `claude`), `allowLanNetwork`, `hasOpenchamberUiPassword`, `agentVars` (`cli`, `opencodeModel`, `cursorModel`, `cursorAgentInstalled`), and per-integration `*Vars` previews (saved key presence, not secrets). `datadogVars` includes work email and schedule ID for the setup form. `bi` is dependency-free presence detection (`AWS_PROFILE`, `BI_OPS_USER_EMAIL`, `CAPI_REPO_PATH`). |
 | `POST /api/setup/save` | Setup wizard | Persists integration and core settings to `dashboard/.env.local`. Same-origin only. |
 | `POST /api/setup/validate-path` | Setup path fields | Body: `{ path, kind: "repoRoot" \| "notesDir" }`. Returns `{ ok, resolved, message, isGitRepo?, hasNotesIndex? }`. |
 | `POST /api/setup/check/datadog` | Setup Datadog **Test keys** | Validates API + application key pair against the Events API. Unsaved form values take precedence over saved env. |
@@ -160,7 +167,10 @@ Sibling-repo git operations power `RepoGitWorkspace` on `/repos` and the DevHub 
 | `POST /api/datadog/investigate` | Datadog **Investigate** button | Body: `{ scope?, title?, status?, tags?, timestampMs? }`. Spawns an OpenCode session with a structured prompt. `502` when OpenCode is unreachable. |
 | `GET /api/jira/ticket/<key>/transitions` | Task complete/abandon Jira prompt | Returns `{ key, transitions[] }` — available workflow transitions for the ticket. |
 | `POST /api/jira/ticket/<key>/transition` | Task complete/abandon Jira prompt | Body: `{ transitionId }`. Applies the workflow transition. Same-origin on POST. |
-| `PATCH /api/tasks` (timer) | Task list focus timer | Body: `{ id, timer: "start" \| "stop", date? }`. Starts or stops the focus timer on one task. Only one timer runs per day — starting a new timer stops any other running timer that day. Returns the updated task with `timerStartedAt` / `timeSpentMs`. |
+| `GET /api/tasks` | Today, Work → Tasks | Runs rollover, returns `{ date, tasks[] }`. |
+| `POST /api/tasks` | Task create | Body `{ text, date?, due? }` → `201` with the new task. |
+| `PATCH /api/tasks` | Task mutations | Branches: `{ ids[], date? }` reorder; `{ id, done }` toggle; `{ id, text?, due? }` edit; `{ id, status: "abandoned" }` / `{ status: "active" }`; `{ id, timer: "start" \| "stop", date? }` focus timer (only one running timer per day). |
+| `DELETE /api/tasks` | Task delete | Body `{ id, date? }`. Settles any running timer before removal. |
 | `GET /api/tasks/history` | Task history views | Default: `{ date, total, completed, abandoned, moved, modified }[]` per day file, newest first. `?date=YYYY-MM-DD`: `{ date, tasks }` for one day. `?includeTasks=1`: same summaries plus full `tasks[]` per day. |
 
 ## Content Sync Actions
