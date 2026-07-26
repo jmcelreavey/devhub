@@ -41,8 +41,11 @@ jobs:
       # throws on mount: the vitest environment is `node` and there are 2
       # component tests for 185 components. Nothing above this line renders a
       # page. These smoke journeys are the only thing that does.
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
+      # WebKit is here because the desktop app renders in the OS webview
+      # (WKWebView / WebKitGTK), not Blink. Chromium-only CI would let an
+      # engine-level regression ship straight into the installer.
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium webkit
         working-directory: dashboard
 
       - name: Smoke test the built app

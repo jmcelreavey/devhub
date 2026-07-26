@@ -10,7 +10,7 @@ These docs are written for day-to-day users and future contributors. They explai
 | ----------------------------------------------- | --------------------------------------------------- |
 | [Installation](getting-started/installation.md) | Installing dependencies and starting DevHub         |
 | [Setup](getting-started/setup.md)               | Configuring paths, network access, and integrations |
-| [Electron App](getting-started/electron-app.md) | Using the optional desktop launcher                 |
+| [Desktop App](getting-started/desktop-app.md) | Installing and using the desktop app                |
 
 ## Architecture
 
@@ -22,7 +22,7 @@ These docs are written for day-to-day users and future contributors. They explai
 | [MCP Server](architecture/mcp-server.md)             | How notes, tasks, and diagrams are exposed to AI tools                       |
 | [Notes System](architecture/notes-system.md)         | Note areas, master checklists, optional in-editor AI                         |
 | [Persona System](architecture/persona-system.md)     | How shared AI behavior is layered                                            |
-| [Electron Wrapper](architecture/electron-wrapper.md) | How the desktop app launches and manages DevHub                              |
+| [Desktop Shell](architecture/desktop-shell.md) | How the Tauri shell launches and supervises DevHub                          |
 
 ## Integrations
 
@@ -38,6 +38,7 @@ These docs are written for day-to-day users and future contributors. They explai
 | Page                                                 | Use It For                                                       |
 | ---------------------------------------------------- | --------------------------------------------------------------- |
 | [Fork Workflow](guides/fork-workflow.md)             | Pulling core updates and contributing features back upstream    |
+| [Desktop Development](guides/desktop-development.md) | Building, testing, signing and releasing the desktop app        |
 | [Plugins](architecture/plugins.md)                   | Adding private/company features without touching the public core |
 | [Creating a Plugin](guides/creating-plugins.md)      | Step-by-step plugin authoring                                   |
 | [Contributing](../CONTRIBUTING.md)                   | Repo topology, mirror setup, personal-data boundary, standards  |

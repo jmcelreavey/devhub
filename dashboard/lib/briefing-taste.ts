@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes/dir";
+import { getResourceRoot } from "@/lib/desktop/runtime-paths";
 
 function expandHome(p: string): string {
   return p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p;
@@ -18,7 +18,7 @@ function expandHome(p: string): string {
 /** Resolve the taste-skill SKILL.md if it's installed anywhere we know about. */
 export function resolveTasteSkill(): string | null {
   const candidates = [
-    path.join(getRepoRoot(), "skills", "shared", "taste-skill", "SKILL.md"),
+    path.join(getResourceRoot(), "skills", "shared", "taste-skill", "SKILL.md"),
     "~/.claude/skills/taste-skill/SKILL.md",
     "~/.config/opencode/skills/taste-skill/SKILL.md",
     "~/.opencode/skills/taste-skill/SKILL.md",

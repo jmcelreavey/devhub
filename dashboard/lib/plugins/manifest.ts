@@ -62,6 +62,8 @@ const brandingSchema = z
       })
       .strict()
       .optional(),
+    desktopIcon: z.string().min(1).optional(),
+    // Deprecated alias — see PluginBranding.electronIcon.
     electronIcon: z.string().min(1).optional(),
   })
   .strict();

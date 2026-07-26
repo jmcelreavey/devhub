@@ -110,7 +110,14 @@ export interface BrandingContribution {
     /** Theme id seeded as OpenChamber's default light theme. */
     defaultLightId?: string;
   };
-  /** Plugin-root-relative PNG (>=512px) used as the Electron app icon. */
+  /** Plugin-root-relative PNG (>=512px) used as the desktop app icon. */
+  desktopIcon?: string;
+  /**
+   * @deprecated Renamed to `desktopIcon` when the shell moved from Electron to
+   * Tauri. Still honoured because plugins are real external repos that cannot
+   * be updated atomically with core; `branding.ts` warns when it is used.
+   * Remove after one release.
+   */
   electronIcon?: string;
 }
 

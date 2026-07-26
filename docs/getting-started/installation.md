@@ -135,7 +135,7 @@ This runs the dashboard lint, typecheck, and test commands.
 | Problem                         | Fix                                                                                                   |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `safe-chain not installed`      | Run `npm install -g @aikidosec/safe-chain@1.1.10`, then `safe-chain setup`, and restart your terminal |
-| Port 1337 is already in use     | Stop the existing DevHub process or use the Electron app to restart it                                |
+| Port 1337 is already in use     | Stop whatever is listening. The desktop app will refuse to start and tell you, rather than killing it |
 | Optional integration is missing | Open `/setup` and add the relevant credentials                                                        |
 | Skills or MCP configs are stale | Run the sync actions from the dashboard                                                               |
 | MCP client cannot start `devhub` | Run `cd mcp-servers/devhub-server && npm install`, then re-run MCP sync                              |

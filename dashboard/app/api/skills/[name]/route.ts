@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes/dir";
+import { getResourceRoot } from "@/lib/desktop/runtime-paths";
 import { rewriteAiToolsSkillFrontmatterName } from "@/lib/ai/tools-skills";
 import { createSkillCatalogContext, resolveSkillInCatalog } from "@/lib/skill-catalog";
 import {
@@ -27,7 +27,7 @@ export async function GET(
   const { name } = await params;
   if (!SKILL_SLUG.test(name)) return invalidSlugResponse();
 
-  const repoRoot = getRepoRoot();
+  const repoRoot = getResourceRoot();
   const { entries } = createSkillCatalogContext(repoRoot);
   const skill = resolveSkillInCatalog(entries, name);
   if (!skill || !fs.existsSync(/*turbopackIgnore: true*/ skill.file)) {
@@ -54,7 +54,7 @@ export async function PUT(
   const { name } = await params;
   if (!SKILL_SLUG.test(name)) return invalidSlugResponse();
 
-  const repoRoot = getRepoRoot();
+  const repoRoot = getResourceRoot();
   const { entries } = createSkillCatalogContext(repoRoot);
   const resolved = resolveSkillInCatalog(entries, name);
   if (!resolved || !fs.existsSync(resolved.file)) {
@@ -80,7 +80,7 @@ export async function PATCH(
   const { name } = await params;
   if (!SKILL_SLUG.test(name)) return invalidSlugResponse();
 
-  const repoRoot = getRepoRoot();
+  const repoRoot = getResourceRoot();
   const { entries } = createSkillCatalogContext(repoRoot);
   const resolved = resolveSkillInCatalog(entries, name);
   if (!resolved || !fs.existsSync(resolved.dir)) {
@@ -121,7 +121,7 @@ export async function DELETE(
   const { name } = await params;
   if (!SKILL_SLUG.test(name)) return invalidSlugResponse();
 
-  const repoRoot = getRepoRoot();
+  const repoRoot = getResourceRoot();
   const { entries } = createSkillCatalogContext(repoRoot);
   const resolved = resolveSkillInCatalog(entries, name);
   if (!resolved || !fs.existsSync(resolved.dir)) {

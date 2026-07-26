@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes/dir";
+import { getResourceRoot } from "@/lib/desktop/runtime-paths";
 import { resolveAgentSources } from "@/lib/sync/agents";
 import { descriptionFromFrontmatter } from "@/lib/skills/shared";
 import { withErrorHandler } from "@/lib/api-utils";
@@ -18,7 +18,7 @@ const AGENT_SLUG = /^[a-z0-9][a-z0-9_-]{0,62}$/;
 export const GET = withErrorHandler(async () => {
   // Merge core agents/shared with plugin-contributed agents (core wins). Plugin agents
   // are read-only here — they're edited in their plugin repo.
-  const sources = resolveAgentSources(getRepoRoot(), os.homedir());
+  const sources = resolveAgentSources(getResourceRoot(), os.homedir());
   const agents: AgentInfo[] = [];
   for (const [name, src] of sources) {
     let description: string | null = null;
@@ -40,7 +40,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     return NextResponse.json({ error: "Invalid name - use lowercase letters, numbers, hyphen, underscore." }, { status: 400 });
   }
 
-  const agentsDir = path.join(getRepoRoot(), "agents", "shared");
+  const agentsDir = path.join(getResourceRoot(), "agents", "shared");
   const file = path.join(agentsDir, `${raw}.md`);
   const resolvedFile = path.resolve(file);
   if (path.dirname(resolvedFile) !== path.resolve(agentsDir)) {

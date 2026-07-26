@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes/dir";
+import { getResourceRoot } from "@/lib/desktop/runtime-paths";
 import { deletePersonalMcpServer, resolvePersonalMcpFile } from "@/lib/mcp/personal";
 import { sharedMcpDir } from "@/lib/sync/mcp";
 import type { McpCatalogScope } from "../route";
@@ -21,7 +21,7 @@ function resolveServerFile(name: string, scope: McpCatalogScope): { file: string
     if (!file) return null;
     return { file, dir: path.dirname(file) };
   }
-  const dir = sharedMcpDir(getRepoRoot());
+  const dir = sharedMcpDir(getResourceRoot());
   const file = path.join(dir, `${name}.json`);
   const resolved = path.resolve(file);
   if (path.dirname(resolved) !== path.resolve(dir)) return null;

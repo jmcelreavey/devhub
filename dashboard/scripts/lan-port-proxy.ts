@@ -65,11 +65,24 @@ async function main(): Promise<void> {
     throw new Error(`Refusing to expose LAN proxy on '${host}'`);
   }
 
+  /**
+   * The terminal port is deliberately absent.
+   *
+   * Port 1339 is an unauthenticated PTY — connecting to it gets you an
+   * interactive login shell as this user. Proxying that onto a LAN address
+   * hands a shell to everyone on the coffee shop Wi-Fi, and no amount of
+   * "it's my own network" makes that a reasonable default. LAN mode exists so
+   * you can read your dashboard from a phone; it was never worth a remote
+   * shell.
+   *
+   * The terminal dock connects to `window.location.hostname`, so over LAN it
+   * simply fails to connect rather than silently working. That is the correct
+   * outcome, and `lan-port-proxy.test.ts` asserts 1339 stays out of this list.
+   */
   const proxies: PortProxy[] = [
     { label: "dashboard", port: parsePort("PORT", 1337) },
     { label: "openchamber", port: parsePort("OPENCHAMBER_PORT", 1336) },
     { label: "opencode", port: parsePort("OPENCODE_PORT", 1338) },
-    { label: "terminal", port: parsePort("TERMINAL_PORT", 1339) },
   ];
 
   for (const proxy of proxies) startProxy(proxy, host);

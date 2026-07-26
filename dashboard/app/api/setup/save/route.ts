@@ -68,6 +68,15 @@ export async function POST(req: NextRequest) {
         );
       }
     }
+    if (core.reposDir !== undefined && core.reposDir.trim()) {
+      const err = validateDirectory(core.reposDir);
+      if (err) {
+        return NextResponse.json(
+          { ok: false, error: `Code folder: ${err}` },
+          { status: 400 },
+        );
+      }
+    }
   }
 
   if (bi?.capiRepoPath !== undefined && bi.capiRepoPath.trim()) {
@@ -96,6 +105,14 @@ export async function POST(req: NextRequest) {
       const v = core.notesDir.trim();
       if (v) overrides.set("NOTES_DIR", path.resolve(expandHome(v)));
       else overrides.delete("NOTES_DIR");
+      needsRestartNotice = true;
+    }
+    if (core.reposDir !== undefined) {
+      const v = core.reposDir.trim();
+      if (v) overrides.set("DEVHUB_REPOS_DIR", path.resolve(expandHome(v)));
+      else overrides.delete("DEVHUB_REPOS_DIR");
+      // Repo discovery reads this per request, so it takes effect immediately —
+      // but Next's server env snapshot does not, hence the restart notice.
       needsRestartNotice = true;
     }
   }
@@ -202,6 +219,9 @@ export async function POST(req: NextRequest) {
   const saved: string[] = [];
   if (core?.repoRoot && overrides.get("REPO_ROOT")) saved.push(`REPO_ROOT=${overrides.get("REPO_ROOT")}`);
   if (core?.notesDir && overrides.get("NOTES_DIR")) saved.push(`NOTES_DIR=${overrides.get("NOTES_DIR")}`);
+  if (core?.reposDir && overrides.get("DEVHUB_REPOS_DIR")) {
+    saved.push(`DEVHUB_REPOS_DIR=${overrides.get("DEVHUB_REPOS_DIR")}`);
+  }
   if (calendar?.clientId) saved.push(`GOOGLE_CLIENT_ID=${mask(calendar.clientId)}`);
   if (calendar?.clientSecret) saved.push(`GOOGLE_CLIENT_SECRET=${mask(calendar.clientSecret)}`);
   if (calendar?.refreshToken) saved.push(`GOOGLE_REFRESH_TOKEN=${mask(calendar.refreshToken)}`);

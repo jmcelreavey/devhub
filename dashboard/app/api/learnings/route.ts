@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes/dir";
+import { getNotesDir } from "@/lib/notes/dir";
 import { listLearningEntries, readLearningDetail } from "@/lib/learnings-index";
 
 export const dynamic = "force-dynamic";
 
 function learningsDir(): string {
-  return path.join(getRepoRoot(), "notes", "learnings");
+  return path.join(getNotesDir(), "learnings");
 }
 
 export function GET(req: NextRequest) {

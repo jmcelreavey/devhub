@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import AdmZip from "adm-zip";
-import { getRepoRoot } from "@/lib/notes/dir";
+import { getNotesDir } from "@/lib/notes/dir";
 import { safeReadJSON, writeAtomic } from "@/lib/atomic-write";
 
 export interface RepoLearnPackFile {
@@ -18,7 +18,7 @@ export interface RepoLearnCache {
 }
 
 function cacheFile(repoName: string): string {
-  return path.join(getRepoRoot(), "notes", ".cache", "repo-learn", `${repoName}.json`);
+  return path.join(getNotesDir(), ".cache", "repo-learn", `${repoName}.json`);
 }
 
 export function readRepoLearnCache(repoName: string, gitHead: string): RepoLearnCache | null {

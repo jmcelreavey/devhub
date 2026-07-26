@@ -11,7 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { generateText } from "ai";
-import { getRepoRoot } from "@/lib/notes/dir";
+import { getNotesDir, getRepoRoot } from "@/lib/notes/dir";
 import { writeAtomic, safeReadJSON, withMutex } from "@/lib/atomic-write";
 import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai/provider";
 import { isNotesAiConfigured } from "@/lib/notes-ai/config";
@@ -45,7 +45,7 @@ interface StoredTasks {
 }
 
 function tasksFile(): string {
-  return path.join(getRepoRoot(), "notes", ".cache", "briefing", "tasks.json");
+  return path.join(getNotesDir(), ".cache", "briefing", "tasks.json");
 }
 
 function readRaw(): ResearchTask[] {

@@ -14,7 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes/dir";
+import { getNotesDir } from "@/lib/notes/dir";
 import { safeReadJSON, writeAtomic } from "@/lib/atomic-write";
 import { textToBlocks } from "@/lib/markdown-convert";
 import { buildEvolutionHeadline } from "./headline";
@@ -109,7 +109,7 @@ function digestCacheFile(id: string): string {
   return path.join(digestsCacheDir(), `${id}.json`);
 }
 function digestLearningFile(id: string): string {
-  return path.join(getRepoRoot(), "notes", "learnings", "digests", `${id}.json`);
+  return path.join(getNotesDir(), "learnings", "digests", `${id}.json`);
 }
 
 export function listDigests(): CapabilityDigest[] {

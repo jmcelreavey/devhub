@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { assembleBriefingContext, type BriefingContext } from "@/lib/briefing/assemble";
 import { readBriefingPrefs } from "@/lib/briefing-prefs";
-import { getRepoRoot } from "@/lib/notes/dir";
+import { getNotesDir } from "@/lib/notes/dir";
 import { writeAtomic, safeReadJSON } from "@/lib/atomic-write";
 import { todayISO } from "@/lib/utils";
 import { fetchWeather } from "@/lib/morning-briefing-sources";
@@ -19,7 +19,7 @@ export { assembleBriefingContext } from "@/lib/briefing/assemble";
 const CONTEXT_VERSION = 1;
 
 function contextFile(date: string): string {
-  return path.join(getRepoRoot(), "notes", ".cache", "briefing", `context-v${CONTEXT_VERSION}-${date}.json`);
+  return path.join(getNotesDir(), ".cache", "briefing", `context-v${CONTEXT_VERSION}-${date}.json`);
 }
 
 async function writeContextCache(date: string, context: BriefingContext): Promise<void> {

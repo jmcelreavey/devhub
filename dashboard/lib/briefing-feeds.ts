@@ -8,7 +8,7 @@
 // the briefing.
 
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes/dir";
+import { getNotesDir } from "@/lib/notes/dir";
 import { writeAtomic, safeReadJSON, withMutex } from "@/lib/atomic-write";
 import { parseRssItems, decodeEntities, type LinkItem } from "@/lib/morning-briefing";
 
@@ -47,7 +47,7 @@ interface StoredFeeds {
 }
 
 function feedsFile(): string {
-  return path.join(getRepoRoot(), "notes", ".config", "briefing-feeds.json");
+  return path.join(getNotesDir(), ".config", "briefing-feeds.json");
 }
 
 export function readFeeds(): DynamicFeed[] {

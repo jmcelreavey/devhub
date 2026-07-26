@@ -36,7 +36,23 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
 
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  /**
+   * WebKit is not a nice-to-have here — it is the engine the shipped desktop
+   * app renders in. Tauri uses the OS webview (WKWebView on macOS,
+   * WebKitGTK on Linux), so a dashboard that only works in Chromium is a
+   * dashboard that does not work in the product we are about to ship.
+   *
+   * Playwright's WebKit is an *early signal*, not proof: it tracks upstream
+   * WebKit rather than the exact WKWebView on any given macOS build. A pass
+   * here means "no obvious engine-level breakage"; the Tauri harness is what
+   * actually proves WKWebView.
+   *
+   * Run one engine with `--project=chromium` / `--project=webkit`.
+   */
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    { name: "webkit", use: { ...devices["Desktop Safari"] } },
+  ],
 
   ...(useExternalServer
     ? {}

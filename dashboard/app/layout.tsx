@@ -21,6 +21,7 @@ import { KeyboardShortcuts } from "@/components/shell/KeyboardShortcuts";
 import { DashboardShell } from "@/components/shell/DashboardShell";
 import { TabTitle } from "@/components/shell/TabTitle";
 import { ToastProvider } from "@/components/shell/ToastProvider";
+import { UpdateBanner } from "@/components/desktop/UpdateBanner";
 import { ConfirmProvider } from "@/components/shell/ConfirmDialog";
 import { HubTopBar } from "@/components/shell/HubTopBar";
 import { NavProgress } from "@/components/shell/NavProgress";
@@ -116,8 +117,16 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           renders ~13 nav items before <main>, so without this a keyboard user
           tabs the whole sidebar on every page load. Visually hidden until
           focused (see .skip-link in globals.css).
+
+          tabIndex={0} is required, not decorative. WebKit omits links from the
+          tab order unless macOS "Full Keyboard Access" is on, so in Safari —
+          and in the WKWebView the desktop app renders in — pressing Tab skipped
+          straight past this and the skip link was unreachable by the exact
+          users it exists for. An explicit tabindex puts it back in the
+          sequential focus order on every engine. Caught by the WebKit
+          Playwright project; Chromium never showed it.
         */}
-        <a href="#main-content" className="skip-link">
+        <a href="#main-content" className="skip-link" tabIndex={0}>
           Skip to main content
         </a>
         <ServiceWorkerRegister />
@@ -142,6 +151,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
 
               {/* Desktop topbar - breadcrumbs + actions */}
               <HubTopBar />
+
+              {/* Renders nothing outside the packaged desktop app. Placed above
+                  <main> rather than inside it so it never scrolls away mid-download. */}
+              <UpdateBanner />
 
               <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto relative">
                   {children}

@@ -13,7 +13,7 @@
 # ride — that's what the two ':!' pathspecs at the end are for.
 PUBLIC_PATHS=(.gitattributes .githooks .github .gitignore .nvmrc AGENTS.md
               CONTRIBUTING.md LICENSE PLAN.md README.md ROADMAP.md package.json
-              agents/shared dashboard docs electron-wrapper mcp/shared mcp-servers
+              agents/shared dashboard desktop docs mcp/shared mcp-servers
               opencode/shared persona/deep-preferences.md persona/modes
               persona/shared-persona.md scripts shared skills/shared
               ':!dashboard/.env.local' ':!scripts/make-public-seed.sh')
