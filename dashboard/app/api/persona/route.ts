@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes/dir";
+import {
+  getIdentityFilePath,
+  getPackagedIdentityFilePath,
+  getResourceRoot,
+} from "@/lib/desktop/runtime-paths";
 import {
   IDENTITY_MARKER_END,
   IDENTITY_MARKER_START,
@@ -31,11 +35,38 @@ function expandHome(p: string): string {
   return p;
 }
 
+/**
+ * Where a persona file actually lives.
+ *
+ * Identity is the odd one out and deliberately so: it is the only persona
+ * source the user edits, so it has to be writable. In the installed app the
+ * rest of `persona/` ships inside a read-only bundle, and writing there would
+ * either fail or — worse, on a filesystem that allows it — be silently wiped
+ * by the next update. So identity resolves to app data, and everything else
+ * resolves to the packaged resource root.
+ *
+ * The packaged identity is still used as a *read* fallback (see
+ * `resolveTargetForRead`), which is what makes a fresh install show sensible
+ * default tone instead of an empty box.
+ */
 function resolveTarget(t: PersonaTarget): string {
   if (path.isAbsolute(t.filepath) || t.filepath.startsWith("~/")) {
     return expandHome(t.filepath);
   }
-  return path.join(getRepoRoot(), t.filepath);
+  if (t.id === "identity") return getIdentityFilePath();
+  return path.join(getResourceRoot(), t.filepath);
+}
+
+/** Read path: the user's identity if they have one, else the packaged default. */
+function resolveTargetForRead(t: PersonaTarget): string {
+  const primary = resolveTarget(t);
+  if (t.id !== "identity") return primary;
+  try {
+    if (fs.existsSync(primary)) return primary;
+  } catch {
+    /* fall through to the packaged copy */
+  }
+  return getPackagedIdentityFilePath();
 }
 
 function deepPreferencesTokenEstimate(repoRoot: string): number {
@@ -143,11 +174,11 @@ function excerpt(text: string | null, max = 280): string | null {
 
 export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
-  const repoRoot = getRepoRoot();
+  const repoRoot = getResourceRoot();
 
   if (!id) {
     const items = TARGETS.map((t) => {
-      const resolved = resolveTarget(t);
+      const resolved = resolveTargetForRead(t);
       let exists = false;
       let modified: number | null = null;
       let tokenEstimate: number | null = null;
@@ -211,7 +242,7 @@ export async function GET(req: NextRequest) {
 
   const target = TARGETS.find((t) => t.id === id);
   if (!target) return NextResponse.json({ error: "Unknown target" }, { status: 404 });
-  const resolved = resolveTarget(target);
+  const resolved = resolveTargetForRead(target);
   if (!fs.existsSync(resolved)) {
     return NextResponse.json({ id, content: "", exists: false });
   }

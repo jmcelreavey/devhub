@@ -95,6 +95,8 @@ export const DEPENDENCIES: DependencySpec[] = [
   {
     id: "node",
     label: "Node.js",
+    // Required in a checkout (you have to run the thing), not in the installed
+    // app, which ships its own runtime. `applyRuntimeRequirements` flips this.
     required: true,
     unlocks: "Running DevHub itself",
     bin: "node",
@@ -226,6 +228,54 @@ export function summariseDependencies(tools: DependencyStatus[]): DependencyRepo
   };
 }
 
-export function checkDependencies(specs: DependencySpec[] = DEPENDENCIES): DependencyReport {
-  return summariseDependencies(specs.map((s) => probeDependency(s)));
+export interface RuntimeRequirementContext {
+  /** Installed desktop app — Node is bundled, so the user needs none. */
+  desktop: boolean;
+  /**
+   * The user picked at least one goal that involves their code.
+   *
+   * Git is required for repositories, PRs, and Upstarts. It is not required to
+   * write a note. Telling a notes-and-tasks user their setup is incomplete
+   * because they lack a version control system is how a setup screen becomes a
+   * wall of red that reads as "this app is broken".
+   */
+  codeGoals: boolean;
+}
+
+/**
+ * Adjust which tools are *required* for this runtime and these goals.
+ *
+ * Requiredness is contextual, and the old flat list pretended it wasn't. The
+ * shipped app bundles its own Node runtime, so demanding a system Node from
+ * someone who downloaded an installer is both false and unfixable-looking.
+ *
+ * Note the bundled runtime runs *DevHub*, not the user's projects. Once a repo
+ * is selected, that repo's own runtime requirements are a separate question and
+ * are detected then — see the Upstart flow.
+ */
+export function applyRuntimeRequirements(
+  tools: DependencyStatus[],
+  ctx: RuntimeRequirementContext,
+): DependencyStatus[] {
+  return tools.map((tool) => {
+    if (tool.id === "node" && ctx.desktop) {
+      return {
+        ...tool,
+        required: false,
+        unlocks: "Running your own projects — DevHub itself uses its bundled runtime",
+      };
+    }
+    if (tool.id === "git") {
+      return { ...tool, required: ctx.codeGoals };
+    }
+    return tool;
+  });
+}
+
+export function checkDependencies(
+  specs: DependencySpec[] = DEPENDENCIES,
+  ctx?: RuntimeRequirementContext,
+): DependencyReport {
+  const probed = specs.map((s) => probeDependency(s));
+  return summariseDependencies(ctx ? applyRuntimeRequirements(probed, ctx) : probed);
 }

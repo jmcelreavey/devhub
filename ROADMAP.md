@@ -129,7 +129,23 @@ and renaming it across 41 sites would be churn rather than clarity.
 
 ---
 
-# Phase 2 — Tauri (3–6 weeks)
+# Phase 2 — Tauri — **DONE** (2026-07-26)
+
+Shipped. Electron has been removed; `desktop/` is the shell. See
+[`docs/architecture/desktop-shell.md`](docs/architecture/desktop-shell.md) for
+what was built and measured, and
+[`docs/guides/desktop-development.md`](docs/guides/desktop-development.md) for
+how to work on it.
+
+**The size estimate below was wrong and is kept for honesty.** The measured
+bundle is **243 MB**, against Electron's 266 MB — not ~15 MB. The reason is a
+deliberate choice: shipping a known Node runtime (113 MB) rather than forcing
+Next.js, `node-pty` and a real dependency graph through a single-executable
+packager. Reliability over a smaller number on a download page. Revisit only
+after GA, with measurements.
+
+What the estimate got right: real code-signing, notarisation and auto-update,
+and no bundled Chromium.
 
 ## 2.1 What actually changes
 
@@ -139,6 +155,10 @@ binary that owns the window and the sidecar.
 
 **Expected:** installer ~200 MB → ~15 MB; idle RAM roughly halved; real
 code-signing, notarisation and auto-update.
+
+**Measured:** 266 MB → 243 MB. Signing, notarisation and auto-update all
+delivered. The bundle-size expectation was not met and should not have been
+set without measuring the Node runtime first.
 
 ## 2.2 The one genuine architectural question
 
@@ -228,11 +248,11 @@ execution rather than research.
 
 ## What would make me stop and rethink
 
-- **The sidecar spike fails or gets ugly.** If supervising the Next server proves
-  fragile, staying on Electron and doing only Phase 1 still captures most of the
-  user-facing value.
-- **WebKit breaks BlockNote or tldraw badly.** Both are core. If the compatibility
-  pass finds serious breakage, Tauri's saving isn't worth a degraded editor.
+- ~~**The sidecar spike fails or gets ugly.**~~ It did not. The supervisor is
+  ~200 lines and shutdown is a process-group signal.
+- ~~**WebKit breaks BlockNote or tldraw badly.**~~ Neither broke. Both are
+  covered by WebKit journeys in CI. WebKit did find one real defect — the skip
+  link was unreachable by keyboard — which Chromium never showed.
 - **Google verification stalls.** Then 1.3 falls back to device-code or BYO
   credentials, and the wizard has to make that path as painless as possible instead.
 
@@ -263,7 +283,9 @@ likely to be complained about.
 ### The recommendation, and why
 
 1. **Do the onboarding work** (#2). It is the literal answer to the question asked.
-2. **Move Electron → Tauri** (#1) if bundle size and memory matter. Weeks, not months.
+2. ~~**Move Electron → Tauri** (#1)~~ — done. Weeks, as estimated. Bundle size
+   was the wrong reason to want it; process ownership, signing and safe
+   auto-update were the real wins.
 3. **Try one Rust sidecar** (#3) if you want to evaluate Rust on evidence.
 4. **Don't rewrite.** 9–18 months, no feature progress, and it addresses one and a
    half of the seven real friction points.

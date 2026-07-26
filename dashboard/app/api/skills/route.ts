@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes/dir";
+import { getResourceRoot } from "@/lib/desktop/runtime-paths";
 import { withErrorHandler } from "@/lib/api-utils";
 import { buildAiToolsMeta, createSkillCatalogContext, listSkillsFromCatalog } from "@/lib/skill-catalog";
 import { devhubSharedSkillsDir, SKILL_SLUG } from "@/lib/skills/shared";
 
 export const GET = withErrorHandler(async () => {
-  const repoRoot = getRepoRoot();
+  const repoRoot = getResourceRoot();
   const ctx = createSkillCatalogContext(repoRoot);
   return NextResponse.json({
     skills: listSkillsFromCatalog(ctx.entries),
@@ -27,7 +27,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       { status: 400 },
     );
   }
-  const repoRoot = getRepoRoot();
+  const repoRoot = getResourceRoot();
   const skillsDir = devhubSharedSkillsDir(repoRoot);
   const dir = path.join(skillsDir, raw);
   const resolvedDir = path.resolve(dir);

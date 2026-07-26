@@ -3,16 +3,16 @@
 import { GoalPicker } from "@/components/setup/GoalPicker";
 import type { GoalId } from "@/lib/setup/goals";
 import { GoogleSetupSteps } from "@/components/setup/GoogleSetupSteps";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { FieldError } from "@/components/ui/FieldError";
 import { FeatureCard, TipCard, type PathCheck, type SetupStatus, type SetupStepMeta } from "./shared";
 import { FormField } from "./FormField";
+import { desktopInfo } from "@/lib/desktop/bridge";
 import {
   CheckCircle2,
   Circle,
   ExternalLink,
-  Loader2,
   MonitorDown,
   RotateCcw,
 } from "lucide-react";
@@ -377,38 +377,70 @@ export function InfraStep({
 }
 
 
+export interface PathsForm {
+  repoRoot: string;
+  notesDir: string;
+  reposDir: string;
+}
+
+/**
+ * Choose where your code lives.
+ *
+ * This step used to be called "Core paths" and led with a field labelled
+ * "Repo root" whose own hint said "the folder that contains your
+ * repositories" — two different things under one name. It saved to
+ * `REPO_ROOT`, which is the DevHub checkout, so following the hint pointed
+ * DevHub at the wrong directory entirely.
+ *
+ * They are now separate. The code folder is the question a new user can
+ * actually answer, and it is the only one on this step by default. The DevHub
+ * checkout is an advanced setting that most installed users do not have and
+ * should never be asked about.
+ */
 export function PathsStep({
   form,
   setForm,
   checks,
   defaults,
   error,
+  desktop = false,
+  hasCheckout = true,
+  onBrowse,
 }: {
-  form: { repoRoot: string; notesDir: string };
-  setForm: (f: { repoRoot: string; notesDir: string }) => void;
-  checks: { repoRoot: PathCheck | null; notesDir: PathCheck | null };
-  defaults: { repoRoot: string; notesDir: string };
+  form: PathsForm;
+  setForm: (f: PathsForm) => void;
+  checks: { repoRoot: PathCheck | null; notesDir: PathCheck | null; reposDir: PathCheck | null };
+  defaults: PathsForm;
   error: string;
+  desktop?: boolean;
+  hasCheckout?: boolean;
+  onBrowse?: () => void;
 }) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const reposCheck = checks.reposDir;
+
   return (
     <div>
       <h2 style={{ fontSize: "20px", fontWeight: 700, color: "var(--text)", marginBottom: "4px" }}>
-        Core paths
+        Choose your code folder
       </h2>
       <p style={{ color: "var(--text-subtle)", fontSize: "13px", marginBottom: "20px", lineHeight: 1.5 }}>
-        DevHub infers these paths from your current checkout by default. Customize only if you want to override them.
+        The folder your projects live in. DevHub looks one level inside it for Git repositories —
+        it never writes anything there.
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         <PathField
-          label="Repo root"
-          value={form.repoRoot}
-          onChange={(v) => setForm({ ...form, repoRoot: v })}
-          placeholder={defaults.repoRoot}
-          check={checks.repoRoot}
-          onUseDefault={() => setForm({ ...form, repoRoot: defaults.repoRoot })}
-          hint="The folder that contains your repositories. Defaults to the directory above DevHub."
+          label="Code folder"
+          value={form.reposDir}
+          onChange={(v) => setForm({ ...form, reposDir: v })}
+          placeholder={defaults.reposDir}
+          check={reposCheck}
+          onUseDefault={() => setForm({ ...form, reposDir: defaults.reposDir })}
+          hint="For example ~/Developer or ~/code. Leave it empty if you're only here for notes and tasks."
+          onBrowse={onBrowse}
         />
+
         <PathField
           label="Notes directory"
           value={form.notesDir}
@@ -416,9 +448,53 @@ export function PathsStep({
           placeholder={defaults.notesDir}
           check={checks.notesDir}
           onUseDefault={() => setForm({ ...form, notesDir: defaults.notesDir })}
-          hint="Where DevHub stores notes and learnings. Defaults to notes/ inside this repo."
+          hint={
+            desktop
+              ? "Where DevHub stores your notes. Kept outside the app so updates never touch it."
+              : "Where DevHub stores notes and learnings. Defaults to notes/ inside this repo."
+          }
         />
       </div>
+
+      {/*
+        The checkout path is hidden behind a disclosure and only offered when
+        one plausibly exists. An installed app has no checkout, and presenting
+        an empty required-looking field for something the user cannot provide
+        is how a setup screen teaches people that it is broken.
+      */}
+      {(hasCheckout || !desktop) && (
+        <div style={{ marginTop: "20px" }}>
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((v) => !v)}
+            aria-expanded={showAdvanced}
+            style={{
+              fontSize: "12px",
+              color: "var(--text-muted)",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: 0,
+            }}
+          >
+            {showAdvanced ? "Hide" : "Show"} advanced settings
+          </button>
+
+          {showAdvanced && (
+            <div style={{ marginTop: "14px" }}>
+              <PathField
+                label="DevHub checkout (optional)"
+                value={form.repoRoot}
+                onChange={(v) => setForm({ ...form, repoRoot: v })}
+                placeholder={defaults.repoRoot}
+                check={checks.repoRoot}
+                onUseDefault={() => setForm({ ...form, repoRoot: defaults.repoRoot })}
+                hint="Only needed for syncing and shipping DevHub itself. Leave empty unless you have a Git clone of DevHub."
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {error && <FieldError>{error}</FieldError>}
     </div>
@@ -434,6 +510,7 @@ export function PathField({
   check,
   onUseDefault,
   hint,
+  onBrowse,
 }: {
   label: string;
   value: string;
@@ -442,6 +519,14 @@ export function PathField({
   check: PathCheck | null;
   onUseDefault: () => void;
   hint: string;
+  /**
+   * Native folder picker, when the shell provides one.
+   *
+   * Absent in browser mode, and the typed input stays either way — the picker
+   * is an affordance on top of the field, never a replacement for it. That
+   * keeps one code path working in both runtimes instead of two that diverge.
+   */
+  onBrowse?: () => void;
 }) {
   const status = check?.ok === true ? "ok" : check?.ok === false ? "err" : "idle";
   const statusColor =
@@ -477,31 +562,44 @@ export function PathField({
           </button>
         )}
       </div>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        spellCheck={false}
-        style={{
-          width: "100%",
-          padding: "8px 12px",
-          borderRadius: "8px",
-          border: `1px solid ${status === "err" ? "var(--danger)" : "var(--border)"}`,
-          background: "var(--bg-elevated)",
-          color: "var(--text)",
-          fontSize: "13px",
-          outline: "none",
-          boxSizing: "border-box",
-          fontFamily: "monospace",
-        }}
-        onFocus={(e) => {
-          if (status !== "err") e.currentTarget.style.borderColor = "var(--accent)";
-        }}
-        onBlur={(e) => {
-          e.currentTarget.style.borderColor = status === "err" ? "var(--danger)" : "var(--border)";
-        }}
-      />
+      <div style={{ display: "flex", gap: "8px", alignItems: "stretch" }}>
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          spellCheck={false}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            padding: "8px 12px",
+            borderRadius: "8px",
+            border: `1px solid ${status === "err" ? "var(--danger)" : "var(--border)"}`,
+            background: "var(--bg-elevated)",
+            color: "var(--text)",
+            fontSize: "13px",
+            outline: "none",
+            boxSizing: "border-box",
+            fontFamily: "monospace",
+          }}
+          onFocus={(e) => {
+            if (status !== "err") e.currentTarget.style.borderColor = "var(--accent)";
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = status === "err" ? "var(--danger)" : "var(--border)";
+          }}
+        />
+        {onBrowse && (
+          <button
+            type="button"
+            onClick={onBrowse}
+            className="btn"
+            style={{ flexShrink: 0, fontSize: "12px", whiteSpace: "nowrap" }}
+          >
+            Browse…
+          </button>
+        )}
+      </div>
       <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px", lineHeight: 1.4 }}>
         {hint}
       </p>
@@ -1124,134 +1222,77 @@ export function DoneStep({ saveResult }: { saveResult: { ok: boolean; message: s
 
 
 export function InstallAppCard() {
-  const [state, setState] = useState<"idle" | "building" | "done" | "error">("idle");
-  const [log, setLog] = useState("");
-  const [destPath, setDestPath] = useState<string | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const logRef = useRef<HTMLPreElement | null>(null);
+  const [info, setInfo] = useState<{ version: string; appData: string } | null>(null);
 
   useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
-  }, [log]);
-
-  const build = useCallback(async () => {
-    setState("building");
-    setLog("");
-    setDestPath(null);
-    setErrorMsg(null);
-    try {
-      const res = await fetch("/api/setup/install-app", { method: "POST" });
-      if (!res.ok || !res.body) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? `Request failed (${res.status})`);
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let outcome: "done" | "error" | null = null;
-      let buffer = "";
-      // Process complete lines only, so control markers can't split across chunks.
-      const flush = (final: boolean) => {
-        const parts = buffer.split("\n");
-        buffer = final ? "" : (parts.pop() ?? "");
-        for (const line of parts) {
-          const installed = line.match(/^\[devhub:installed\]\s*(.*)$/);
-          if (installed) {
-            outcome = "done";
-            setDestPath(installed[1].trim());
-            continue;
-          }
-          const errored = line.match(/^\[devhub:error\]\s*(.*)$/);
-          if (errored) {
-            outcome = "error";
-            setErrorMsg(errored[1].trim());
-            continue;
-          }
-          setLog((prev) => prev + line + "\n");
-        }
-      };
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        flush(false);
-      }
-      flush(true);
-      setState(outcome === "done" ? "done" : "error");
-      if (outcome === null) setErrorMsg("Build ended without a result.");
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : String(err));
-      setState("error");
-    }
+    void desktopInfo().then((i) => {
+      if (i) setInfo({ version: i.version, appData: i.appData });
+    });
   }, []);
 
-  const building = state === "building";
+  /**
+   * Status, not an action.
+   *
+   * This card used to offer "Install the desktop app", which built an Electron
+   * bundle from the user's checkout — asking somebody who is already using the
+   * app to build the app. Building an installer is a developer command
+   * (`npm run desktop:build`), not an onboarding step.
+   *
+   * So there are exactly two honest things to say here: which version you are
+   * running, or where to download one.
+   */
+  if (info) {
+    return (
+      <div
+        style={{
+          border: "1px solid var(--border)",
+          borderRadius: "10px",
+          padding: "14px 16px",
+          background: "var(--bg-elevated)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+          <MonitorDown size={15} className="text-success" />
+          <span style={{ fontSize: "13px", fontWeight: 600 }}>
+            Desktop app {info.version}
+          </span>
+        </div>
+        <p style={{ fontSize: "12px", color: "var(--text-subtle)", lineHeight: 1.5, margin: 0 }}>
+          Updates arrive in the app — you&rsquo;ll see a banner when one is ready, and you choose
+          when to restart. Your data lives in{" "}
+          <code style={{ fontSize: "11px" }}>{info.appData}</code> and is never replaced by an
+          update.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div
       style={{
-        padding: "12px 16px",
-        borderRadius: "8px",
         border: "1px solid var(--border)",
+        borderRadius: "10px",
+        padding: "14px 16px",
         background: "var(--bg-elevated)",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        <MonitorDown size={20} style={{ color: "var(--accent)", flexShrink: 0 }} />
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text)" }}>
-            DevHub Desktop App
-          </div>
-          <div style={{ fontSize: "12px", color: "var(--text-subtle)" }}>
-            Builds and installs the native launcher on this machine only. No sign-in, no sudo.
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => void build()}
-          disabled={building}
-          className="btn btn-primary shrink-0"
-        >
-          {building && <Loader2 size={14} className="animate-spin" />}
-          {building ? "Building…" : state === "done" ? "Rebuild" : "Build & Install"}
-        </button>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+        <MonitorDown size={15} />
+        <span style={{ fontSize: "13px", fontWeight: 600 }}>Prefer a desktop app?</span>
       </div>
-
-      {(building || state === "done" || state === "error") && log && (
-        <pre
-          ref={logRef}
-          style={{
-            marginTop: "12px",
-            maxHeight: "180px",
-            overflowY: "auto",
-            padding: "10px 12px",
-            borderRadius: "6px",
-            border: "1px solid var(--border)",
-            background: "var(--bg)",
-            color: "var(--text-subtle)",
-            fontSize: "11px",
-            lineHeight: 1.5,
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-          }}
-        >
-          {log}
-        </pre>
-      )}
-
-      {state === "done" && destPath && (
-        <div style={{ marginTop: "10px", display: "flex", alignItems: "center", gap: "8px" }}>
-          <CheckCircle2 size={14} style={{ color: "var(--success)", flexShrink: 0 }} />
-          <span style={{ fontSize: "12px", color: "var(--success)" }}>
-            Installed to <code style={{ fontSize: "11px" }}>{destPath}</code>
-          </span>
-        </div>
-      )}
-
-      {state === "error" && errorMsg && (
-        <div style={{ marginTop: "10px", fontSize: "12px", color: "var(--danger)" }}>
-          {errorMsg}
-        </div>
-      )}
+      <p style={{ fontSize: "12px", color: "var(--text-subtle)", lineHeight: 1.5, margin: "0 0 10px" }}>
+        DevHub ships as a signed desktop app that runs without a terminal, a checkout, or Node
+        installed. It keeps your notes and settings outside the app, so updates never touch them.
+      </p>
+      <a
+        className="btn"
+        href="https://github.com/jmcelreavey/devhub/releases/latest"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ fontSize: "12px" }}
+      >
+        Download <ExternalLink size={12} />
+      </a>
     </div>
   );
 }

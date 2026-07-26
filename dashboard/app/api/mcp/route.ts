@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes/dir";
+import { getResourceRoot } from "@/lib/desktop/runtime-paths";
 import { withErrorHandler } from "@/lib/api-utils";
 import {
   listPersonalMcpServerNames,
@@ -39,7 +39,7 @@ function toListItem(name: string, s: SharedMcpServer, scope: McpCatalogScope): S
 }
 
 export const GET = withErrorHandler(async () => {
-  const repoRoot = getRepoRoot();
+  const repoRoot = getResourceRoot();
   const home = os.homedir();
   const out: ServerListItem[] = [];
   const seen = new Set<string>();
@@ -84,14 +84,14 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   if (scope === "personal") {
     const home = os.homedir();
-    if (readPersonalMcpServer(home, raw) || readSharedMcpServer(getRepoRoot(), raw)) {
+    if (readPersonalMcpServer(home, raw) || readSharedMcpServer(getResourceRoot(), raw)) {
       return NextResponse.json({ error: "Server already exists" }, { status: 409 });
     }
     writePersonalMcpServer(home, raw, payload);
     return NextResponse.json({ ok: true, name: raw, scope: "personal" });
   }
 
-  const dir = sharedMcpDir(getRepoRoot());
+  const dir = sharedMcpDir(getResourceRoot());
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${raw}.json`);
   const resolved = path.resolve(file);

@@ -21,7 +21,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes/dir";
+import { getNotesDir } from "@/lib/notes/dir";
 import { getReposScanDir } from "@/lib/repos";
 import { safeReadJSON, writeAtomic } from "@/lib/atomic-write";
 import { blocksToText } from "@/lib/markdown-convert";
@@ -116,7 +116,7 @@ export function labCategory(repoName: string, signalId: string): string {
 }
 
 function labFile(category: string): string {
-  return path.join(getRepoRoot(), "notes", "learnings", `${category}.json`);
+  return path.join(getNotesDir(), "learnings", `${category}.json`);
 }
 
 // ---- lab record store (gitignored cache) ----

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes/dir";
+import { getResourceRoot } from "@/lib/desktop/runtime-paths";
 import { resolveAgentSources } from "@/lib/sync/agents";
 
 const AGENT_SLUG = /^[a-z0-9][a-z0-9_-]{0,62}$/;
@@ -11,7 +11,7 @@ const READ_ONLY_PLUGIN_AGENT_ERROR =
   "Plugin agents are read-only in DevHub — edit them in the plugin repo.";
 
 function resolveAgentFile(name: string): string | null {
-  const agentsDir = path.join(getRepoRoot(), "agents", "shared");
+  const agentsDir = path.join(getResourceRoot(), "agents", "shared");
   const file = path.join(agentsDir, `${name}.md`);
   const resolved = path.resolve(file);
   if (path.dirname(resolved) !== path.resolve(agentsDir)) return null;
@@ -20,7 +20,7 @@ function resolveAgentFile(name: string): string | null {
 
 /** Resolve an agent across core + plugin sources (for read). */
 function resolveAgentEntry(name: string): { file: string; readOnly: boolean } | null {
-  const src = resolveAgentSources(getRepoRoot(), os.homedir()).get(name);
+  const src = resolveAgentSources(getResourceRoot(), os.homedir()).get(name);
   if (!src) return null;
   return { file: src.file, readOnly: src.origin !== "core" };
 }
@@ -77,7 +77,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ na
     return NextResponse.json({ ok: true, name });
   }
 
-  const agentsDir = path.join(getRepoRoot(), "agents", "shared");
+  const agentsDir = path.join(getResourceRoot(), "agents", "shared");
   const newFile = path.join(agentsDir, `${raw}.md`);
   if (path.resolve(newFile) !== path.join(path.resolve(agentsDir), `${raw}.md`)) {
     return NextResponse.json({ error: "Invalid name" }, { status: 400 });

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import fs from "node:fs";
 import path from "node:path";
 import { readDashboardEnvLocalFile, resolveEnvValue } from "@/lib/dashboard-env-local";
+import { getReposDir, hasCheckout, isDesktopRuntime } from "@/lib/desktop/runtime-paths";
 import { resolveDatadogApplicationKey } from "@/lib/datadog/application-key";
 import { getResolvedGoogleCalendarEnv } from "@/lib/google-calendar";
 import { isGithubCliAuthenticated } from "@/lib/repos";
@@ -9,6 +11,25 @@ import { getPeerServiceGateStatus } from "@/lib/peer-service-availability";
 import { isCursorAgentInstalled, readAgentCliSettings } from "@/lib/agent/cli-env";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * How many direct children of the code folder are git repositories.
+ *
+ * Setup shows this as "Found 12 Git repositories" — a plain sentence that tells
+ * the user they picked the right folder far better than echoing a path back at
+ * them does. One level deep only: a recursive walk of somebody's home directory
+ * on a setup page load is not worth the number.
+ */
+function countGitRepos(dir: string): number {
+  try {
+    return fs
+      .readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && !e.name.startsWith("."))
+      .filter((e) => fs.existsSync(path.join(dir, e.name, ".git"))).length;
+  } catch {
+    return 0;
+  }
+}
 
 export async function GET() {
   const { overrides } = readDashboardEnvLocalFile();
@@ -38,9 +59,15 @@ export async function GET() {
     resolveEnvValue("JIRA_API_TOKEN", overrides)
   );
 
-  const effectiveRepoRoot = resolveEnvValue("REPO_ROOT", overrides) ?? defaultRepoRoot;
   const effectiveNotesDir = resolveEnvValue("NOTES_DIR", overrides) ?? defaultNotesDir;
-  const core = !!(effectiveRepoRoot && effectiveNotesDir);
+  /**
+   * The code folder. `getReposDir()` already applies the whole precedence
+   * chain (explicit → parent-of-checkout → ~/Developer), so status reports
+   * what discovery will actually scan rather than re-deriving it and drifting.
+   */
+  const effectiveReposDir = getReposDir();
+  const repoCount = countGitRepos(effectiveReposDir);
+  const core = !!(effectiveNotesDir && effectiveReposDir);
   const github = await isGithubCliAuthenticated();
   const datadogApiKey = !!resolveEnvValue("DATADOG_API_KEY", overrides);
   const datadogApplicationKey = !!resolveDatadogApplicationKey(overrides);
@@ -83,13 +110,27 @@ export async function GET() {
     allowLanNetwork,
     hasOpenchamberUiPassword,
     envPath: ".env.local",
+    /**
+     * Desktop mode changes what setup should *ask*, not just how it looks: no
+     * Node requirement (it is bundled), no "install the app" step, and the
+     * checkout path is hidden unless one genuinely exists.
+     */
+    desktop: isDesktopRuntime(),
+    hasCheckout: hasCheckout(),
     coreVars: {
       repoRoot: resolveEnvValue("REPO_ROOT", overrides) ?? "",
       notesDir: resolveEnvValue("NOTES_DIR", overrides) ?? "",
+      reposDir: resolveEnvValue("DEVHUB_REPOS_DIR", overrides) ?? "",
     },
     coreDefaults: {
       repoRoot: defaultRepoRoot,
       notesDir: defaultNotesDir,
+      reposDir: effectiveReposDir,
+    },
+    reposDirInfo: {
+      resolved: effectiveReposDir,
+      exists: fs.existsSync(effectiveReposDir),
+      repoCount,
     },
     calendarVars: {
       hasClientId: !!google.clientId,

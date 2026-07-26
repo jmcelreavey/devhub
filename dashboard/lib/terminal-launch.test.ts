@@ -99,18 +99,32 @@ describe("agent CLI switch (cursor)", () => {
     expect(command).toContain("REPO_ROOT='/repo/devhub' NOTES_DIR='/repo/devhub/notes' cursor-agent -p");
   });
 
-  it("chains upstart execution after the one-shot run for both CLIs", async () => {
+  it("generates the upstart WITHOUT running it, for both CLIs", async () => {
+    /**
+     * The inverse of the test that used to live here.
+     *
+     * This previously asserted the command ended `&& bash <script>` — an agent
+     * wrote a shell script and the terminal executed it in the same breath, in
+     * the user's repository, with their full environment. There was no moment
+     * at which the script existed and had not yet run, so nobody could review
+     * it even in principle.
+     *
+     * Execution now goes through /api/desktop/upstart, which refuses to
+     * produce a run command until the exact bytes have been approved (see
+     * lib/desktop/upstart-approval.ts). If someone re-chains execution here,
+     * this fails and they have to re-derive why it was split.
+     */
     const upstartPath = "/repo/devhub/upstarts/acme-app/upstart.sh";
     useConfig();
     const viaOpencode = await agentRepoUpstartCommand("acme-app", upstartPath);
-    expect(viaOpencode).toContain(`&& bash '${upstartPath}'`);
+    expect(viaOpencode).not.toContain("&& bash");
     expect(viaOpencode).toContain(upstartPath);
     expect(viaOpencode).not.toContain(".devhub/upstart.sh");
 
     useConfig({ cli: "cursor" });
     const viaCursor = await agentRepoUpstartCommand("acme-app", upstartPath);
     expect(viaCursor).toContain("cursor-agent -p");
-    expect(viaCursor).toContain(`&& bash '${upstartPath}'`);
+    expect(viaCursor).not.toContain("&& bash");
     expect(viaCursor).not.toContain(".devhub/upstart.sh");
   });
 

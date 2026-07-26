@@ -24,7 +24,7 @@ function mkBrandingPlugin(rootDir: string): RegisteredPlugin {
         fonts: "branding/fonts",
         logo: { src: "branding/logo.svg", label: "ACME" },
         openchamber: { themes: "branding/oc", defaultDarkId: "acme-dark", defaultLightId: "acme-light" },
-        electronIcon: "branding/icon.png",
+        desktopIcon: "branding/icon.png",
       },
     },
   };
@@ -113,7 +113,7 @@ describe("materializeBranding", () => {
 
     expect(fs.readFileSync(dashFile("app/plugin-branding.generated.css"), "utf8")).toContain("--accent:#f00");
     expect(fs.existsSync(dashFile("public/plugin-brand-logo.svg"))).toBe(true);
-    expect(fs.existsSync(dashFile("public/plugin-electron-icon.png"))).toBe(true);
+    expect(fs.existsSync(dashFile("public/plugin-desktop-icon.png"))).toBe(true);
     expect(fs.existsSync(dashFile("public/fonts-plugin/Acme.woff2"))).toBe(true);
 
     // OpenChamber themes copied + default seeded.
@@ -142,6 +142,6 @@ describe("materializeBranding", () => {
     expect(fs.readFileSync(dashFile("lib/plugin-branding.generated.ts"), "utf8")).toContain("PLUGIN_THEME_PRESETS: ThemePresetMeta[] = []");
     expect(fs.existsSync(dashFile("public/plugin-brand-logo.svg"))).toBe(false);
     expect(fs.existsSync(dashFile("public/fonts-plugin"))).toBe(false);
-    expect(fs.existsSync(dashFile("public/plugin-electron-icon.png"))).toBe(false);
+    expect(fs.existsSync(dashFile("public/plugin-desktop-icon.png"))).toBe(false);
   });
 });

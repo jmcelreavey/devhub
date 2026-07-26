@@ -12,7 +12,7 @@ It brings together a dashboard, shared agent configuration, persistent notes, ta
 | Notes storage | File-backed notes, tasks, learnings, and diagrams                     |
 | MCP server    | Lets AI tools use DevHub filesystem data and dashboard-backed workflows |
 | Sync engine   | Copies shared skills, persona, agents, and MCP configs to local tools |
-| Electron app  | Optional desktop launcher for the dashboard                           |
+| Desktop shell | Tauri app: owns the window, the process tree and updates (`desktop/`) |
 | Integrations  | Calendar, Jira, Datadog, GitHub, and internal ops helpers             |
 
 ## Mental Model

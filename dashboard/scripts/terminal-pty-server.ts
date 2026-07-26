@@ -16,9 +16,23 @@
  * server kills it, tells the client (control frame), and respawns in safe
  * mode automatically — nobody stares at a dead prompt.
  *
- * SECURITY NOTE: binds to localhost and runs an unauthenticated shell. That
- * is acceptable ONLY because DevHub runs exclusively on the user's own
- * machine, never hosted. Do not expose this port off-host.
+ * SECURITY: this hands out an interactive login shell, so "bound to localhost"
+ * is not on its own a control. Any process on the machine can reach loopback,
+ * and any web page the user visits can make a browser open a WebSocket to it.
+ *
+ * Two checks close that, and both are required in the desktop app:
+ *
+ * - **Exact origin.** The handshake's `Origin` must be the dashboard's own
+ *   origin, compared exactly. `SameSite` cookie rules are not reliably applied
+ *   to WebSocket handshakes, so the origin cannot be skipped.
+ * - **Bootstrap cookie.** The per-launch token the Tauri shell set. A page on
+ *   another origin cannot send it and script cannot read it.
+ *
+ * In checkout/dev mode there is no token, so only the origin check applies —
+ * the same posture as before, but no longer the *only* thing standing between
+ * a website and a shell in the shipped product.
+ *
+ * The port is never LAN-proxied. See `lan-port-proxy.ts`.
  */
 import os from "node:os";
 import fs from "node:fs";
@@ -29,6 +43,12 @@ import { WebSocketServer, type WebSocket, type RawData } from "ws";
 import type { IncomingMessage } from "node:http";
 import * as pty from "node-pty";
 import { terminalLogDir, terminalLogPath } from "../lib/terminal-log";
+import {
+  DESKTOP_COOKIE,
+  isAllowedTerminalOrigin,
+  isDesktopSession,
+  tokenMatches,
+} from "../lib/desktop/bootstrap-auth";
 
 const PORT = Number.parseInt(process.env.TERMINAL_PORT ?? "1339", 10);
 /** A shell that prints nothing for this long during startup is presumed hung. */
@@ -189,7 +209,58 @@ function requestedCwd(req: IncomingMessage): string | null {
   }
 }
 
-const wss = new WebSocketServer({ host: "127.0.0.1", port: PORT });
+/**
+ * Reject a handshake that cannot prove it came from the dashboard window.
+ *
+ * `verifyClient` runs before the socket is upgraded, so a rejected connection
+ * never reaches `pty.spawn` — the shell is not started and then killed, it is
+ * never started.
+ */
+function verifyTerminalClient(req: IncomingMessage): { ok: true } | { ok: false; reason: string } {
+  const dashboardPort = Number.parseInt(process.env.PORT ?? "1337", 10);
+  if (!isAllowedTerminalOrigin(req.headers.origin, dashboardPort)) {
+    return { ok: false, reason: `origin ${req.headers.origin ?? "(none)"}` };
+  }
+
+  // Desktop only: in a checkout there is no shell and therefore no token, and
+  // requiring one would break `npm run dev` for no gain.
+  if (isDesktopSession()) {
+    const cookies = parseCookieHeader(req.headers.cookie);
+    if (!tokenMatches(cookies.get(DESKTOP_COOKIE))) {
+      return { ok: false, reason: "missing or invalid desktop session cookie" };
+    }
+  }
+
+  return { ok: true };
+}
+
+/** Minimal cookie header parse — `ws` gives us the raw header, not a jar. */
+function parseCookieHeader(header: string | undefined): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!header) return out;
+  for (const part of header.split(";")) {
+    const idx = part.indexOf("=");
+    if (idx === -1) continue;
+    const key = part.slice(0, idx).trim();
+    const value = part.slice(idx + 1).trim();
+    if (key) out.set(key, decodeURIComponent(value));
+  }
+  return out;
+}
+
+const wss = new WebSocketServer({
+  host: "127.0.0.1",
+  port: PORT,
+  verifyClient: ({ req }, done) => {
+    const result = verifyTerminalClient(req);
+    if (result.ok) {
+      done(true);
+      return;
+    }
+    log(`rejected connection: ${result.reason}`);
+    done(false, 403, "Forbidden");
+  },
+});
 
 wss.on("listening", () => {
   initLogDir();

@@ -83,39 +83,32 @@ The `/setup` wizard reads and writes configuration through local API routes (sam
 | Route | Purpose |
 | ----- | ------- |
 | `GET /api/setup/status` | Drives nav item visibility, integration toggles, and peer-service gates. Returns booleans for each integration plus `*Vars` previews (key presence, not secret values). |
-| `POST /api/setup/save` | Persists core paths, network/LAN settings, and integration credentials to `dashboard/.env.local`. |
-| `POST /api/setup/validate-path` | Validates `repoRoot` or `notesDir` paths before save. |
+| `POST /api/setup/save` | Persists core paths, network/LAN settings, and integration credentials to `DEVHUB_ENV_FILE` (`dashboard/.env.local` in a checkout, `<app-data>/config/.env.local` when installed). |
+| `POST /api/setup/validate-path` | Validates `reposDir` (code folder), `notesDir`, or the optional `repoRoot` checkout before save. |
 | `POST /api/setup/check/datadog` | Tests Datadog API + application keys against the Events API. |
-| `POST /api/setup/install-app` | Builds and installs the Electron launcher; streams logs; `409` when a build is already running. |
 
 The Status page service cards (`chamber`, `opencode`) also read `chamber` / `opencode` from `GET /api/setup/status` — they render only when the corresponding peer is enabled.
 
 See [API Routes](../reference/api-routes.md) for response field details.
 
-## DevHub Desktop App (Build & Install)
+## DevHub Desktop App
 
-The **DevHub Desktop App** card on Setup builds and installs the local Electron launcher from your checkout — no sign-in, no sudo.
+The Setup completion screen shows desktop status rather than a build button.
 
-| Step | What happens |
-| ---- | ------------ |
-| Click **Build & Install** | `POST /api/setup/install-app` streams plain-text build logs |
-| First run | Installs `electron-wrapper` dependencies if `node_modules` is missing |
-| Build | Runs `npm run dist --prefix electron-wrapper` (can take several minutes) |
-| Install | macOS → `/Applications/DevHub.app`; Linux → `~/Applications/DevHub.AppImage` plus a `.desktop` launcher and hicolor icon |
+Running **in the desktop app**, it reports the installed version, where your
+data lives, and that updates arrive in-app. Running **in a browser**, it links
+to Releases.
 
-The response stream uses control markers on their own lines:
+Building an installer is a developer command, not an onboarding step:
 
-- `[devhub:installed] <path>` — success; path is where the artifact was placed
-- `[devhub:error] <message>` — failure (build, missing artifact, or install error)
+```bash
+npm run desktop:build     # build and ad-hoc sign
+npm run desktop:install   # replace /Applications/DevHub.app, with safety checks
+```
 
-`409` means another build is already in progress (only one `electron-builder` run at a time).
+The old `POST /api/setup/install-app` route built an Electron bundle from your
+checkout and has been removed — it asked somebody already using DevHub to build
+DevHub. See [Desktop Development](../guides/desktop-development.md) for the
+full build, sign and release pipeline, and [Desktop App](desktop-app.md) for the
+user-facing side.
 
-This path builds from **your local repo**. It is separate from [GitHub Releases auto-updates](electron-app.md#auto-updates), which update a previously packaged launcher binary. After Build & Install, the launcher still runs whatever dashboard code is in your checkout.
-
-**Troubleshooting**
-
-| Symptom | Likely cause |
-| ------- | ------------ |
-| Build succeeds but “no installable artifact” | Wrong platform output under `electron-wrapper/release/` (expect `mac-arm64/DevHub.app` or `*.AppImage`) |
-| Generic icon in WSLg Start Menu | Icon is registered by name (`Icon=devhub`); re-login or wait for the desktop DB to refresh |
-| Launcher can't find `npm` / `safe-chain` | GUI `PATH` differs from your shell — see [Electron App — Troubleshooting](electron-app.md#troubleshooting) |

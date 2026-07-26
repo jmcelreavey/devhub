@@ -13,6 +13,11 @@ venv/
 
 # Node
 node_modules/
+# The Linux container build swaps the host's modules aside under this name.
+# `node_modules/` does not match it, and a `git add -A` while a build was in
+# flight staged 43,000 files including a 116 MB native binary — which GitHub
+# rejected outright. Ignoring it is cheaper than remembering not to.
+node_modules.host/
 *.lock
 /package-lock.json
 

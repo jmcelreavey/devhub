@@ -5,6 +5,7 @@ import { filterStepsByGoals, parseGoals, SETUP_GOALS_KEY, type GoalId } from "@/
 import { useState, useEffect, useCallback, startTransition } from "react";
 import Link from "next/link";
 import { mutate as mutateSWR } from "swr";
+import { isDesktop, pickFolder } from "@/lib/desktop/bridge";
 import {
   SECRET_FIELD_MASK,
   type PathCheck,
@@ -17,6 +18,7 @@ import {
   GitHubStep,
   InfraStep,
   PathsStep,
+  type PathsForm,
   DatadogStep,
   CalendarStep,
   JiraStep,
@@ -128,10 +130,15 @@ const STEPS: Step[] = [
 export default function SetupPage() {
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
-  const [pathsForm, setPathsForm] = useState({ repoRoot: "", notesDir: "" });
-  const [pathChecks, setPathChecks] = useState<{ repoRoot: PathCheck | null; notesDir: PathCheck | null }>({
+  const [pathsForm, setPathsForm] = useState<PathsForm>({ repoRoot: "", notesDir: "", reposDir: "" });
+  const [pathChecks, setPathChecks] = useState<{
+    repoRoot: PathCheck | null;
+    notesDir: PathCheck | null;
+    reposDir: PathCheck | null;
+  }>({
     repoRoot: null,
     notesDir: null,
+    reposDir: null,
   });
   const [datadogForm, setDatadogForm] = useState({ apiKey: "", applicationKey: "", email: "", scheduleId: "" });
   const [calendarForm, setCalendarForm] = useState({ clientId: "", clientSecret: "" });
@@ -155,6 +162,22 @@ export default function SetupPage() {
     cursorModel: string;
   }>({ cli: "opencode", opencodeModel: "", cursorModel: "" });
 
+  /**
+   * Native folder picker, when there is one.
+   *
+   * `undefined` in browser mode rather than a no-op function: `PathsStep`
+   * renders the Browse button only when a handler exists, so a browser user
+   * never sees a button that does nothing. The typed input works in both.
+   */
+  const browseForCodeFolder = isDesktop()
+    ? async () => {
+        const picked = await pickFolder("Choose your code folder");
+        // null means the dialog was dismissed. Clearing the field on cancel
+        // would discard whatever the user had already typed.
+        if (picked) setPathsForm((f) => ({ ...f, reposDir: picked }));
+      }
+    : undefined;
+
   const loadSetupStatus = useCallback(async (): Promise<SetupStatus | null> => {
     try {
       const r = await fetch("/api/setup/status");
@@ -165,6 +188,10 @@ export default function SetupPage() {
       setPathsForm({
         repoRoot: data.coreVars.repoRoot || data.coreDefaults.repoRoot,
         notesDir: data.coreVars.notesDir || data.coreDefaults.notesDir,
+        // Not defaulted from coreDefaults: pre-filling a guessed path makes the
+        // user confirm a decision they never made. The default shows as
+        // placeholder text instead, so an untouched field saves nothing.
+        reposDir: data.coreVars.reposDir || "",
       });
       if (data.calendar) {
         setCalendarForm({
@@ -308,7 +335,7 @@ export default function SetupPage() {
   // Validate core paths whenever they change. Debounced so we don't hammer the
   // API while the user is still typing.
   useEffect(() => {
-    if (!pathsForm.repoRoot && !pathsForm.notesDir) return;
+    if (!pathsForm.repoRoot && !pathsForm.notesDir && !pathsForm.reposDir) return;
     const id = setTimeout(() => {
       fetch("/api/setup/validate-path", {
         method: "POST",
@@ -316,7 +343,7 @@ export default function SetupPage() {
         body: JSON.stringify(pathsForm),
       })
         .then((r) => r.json())
-        .then((data: { repoRoot: PathCheck | null; notesDir: PathCheck | null }) => {
+        .then((data: { repoRoot: PathCheck | null; notesDir: PathCheck | null; reposDir: PathCheck | null }) => {
           setPathChecks(data);
         })
         .catch(() => { /* ignore validation transport errors */ });
@@ -488,7 +515,11 @@ export default function SetupPage() {
       const body: Record<string, unknown> = {};
       const step = steps[currentStep];
       if (step.id === "paths") {
-        body.core = { repoRoot: pathsForm.repoRoot, notesDir: pathsForm.notesDir };
+        body.core = {
+          repoRoot: pathsForm.repoRoot,
+          notesDir: pathsForm.notesDir,
+          reposDir: pathsForm.reposDir,
+        };
       }
       if (step.id === "datadog") {
         const apiKey = datadogForm.apiKey.trim();
@@ -571,9 +602,17 @@ export default function SetupPage() {
 
   const step = steps[currentStep];
   const progress = ((currentStep + 1) / steps.length) * 100;
+  /*
+    An empty code folder is valid — someone here for notes and tasks has no
+    repositories, and blocking them on a path they do not have is how a setup
+    wizard becomes a wall. Only a path the user actually typed has to resolve.
+    The DevHub checkout is advanced and optional, so it never gates Next.
+  */
   const pathsValid =
     step.id !== "paths" ||
-    (!!pathChecks.repoRoot?.ok && !!pathChecks.notesDir?.ok);
+    ((!pathsForm.notesDir || !!pathChecks.notesDir?.ok) &&
+      (!pathsForm.reposDir || !!pathChecks.reposDir?.ok) &&
+      (!pathsForm.repoRoot || !!pathChecks.repoRoot?.ok));
 
   return (
     <div className="page-wrapper h-full min-h-0 overflow-y-auto">
@@ -698,6 +737,9 @@ export default function SetupPage() {
               checks={pathChecks}
               defaults={status.coreDefaults}
               error={error}
+              desktop={status.desktop ?? false}
+              hasCheckout={status.hasCheckout ?? true}
+              onBrowse={browseForCodeFolder}
             />
           )}
           {step.id === "github" && (

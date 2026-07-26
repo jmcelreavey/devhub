@@ -6,7 +6,7 @@
 
 - [Installation](getting-started/installation.md)
 - [Setup](getting-started/setup.md)
-- [Electron App](getting-started/electron-app.md)
+- [Desktop App](getting-started/desktop-app.md)
 
 ## Architecture
 
@@ -16,7 +16,7 @@
 - [MCP Server](architecture/mcp-server.md)
 - [Notes System](architecture/notes-system.md)
 - [Persona System](architecture/persona-system.md)
-- [Electron Wrapper](architecture/electron-wrapper.md)
+- [Desktop Shell](architecture/desktop-shell.md)
 
 ## Integrations
 
@@ -28,6 +28,7 @@
 ## Forking & Extending
 
 - [Fork Workflow](guides/fork-workflow.md)
+- [Desktop Development](guides/desktop-development.md)
 - [Plugins](architecture/plugins.md)
 - [Capability Radar plan](capability-radar-plan.md)
 - [Creating a Plugin](guides/creating-plugins.md)

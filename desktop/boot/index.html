@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DevHub</title>
+    <style>
+      /*
+       * The boot screen. It exists for the ~2 seconds before the dashboard
+       * loads, and for the case where the dashboard never does.
+       *
+       * Deliberately self-contained: no fonts, no images, no network. This is
+       * the screen that has to work when nothing else does, so it cannot
+       * depend on anything that could be the thing that failed.
+       */
+      :root {
+        --bg: #0d1117;
+        --surface: #161b22;
+        --border: #262d36;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --accent: #9ed84a;
+        --danger: #f47067;
+        color-scheme: dark;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.55 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      main {
+        height: 100%;
+        display: grid;
+        place-items: center;
+        padding: 32px;
+      }
+      .card { width: min(560px, 100%); }
+      h1 { font-size: 20px; margin: 0 0 6px; font-weight: 600; letter-spacing: -0.01em; }
+      p { margin: 0; color: var(--muted); }
+
+      .status { display: flex; align-items: center; gap: 12px; }
+
+      /*
+       * A determinate-looking bar for an indeterminate wait would be a lie.
+       * This is a slow sweep that says "working", stops the moment state
+       * changes, and holds still when the app is healthy — motion is
+       * information, so a healthy system does not animate.
+       */
+      .bar {
+        margin-top: 20px;
+        height: 3px;
+        border-radius: 999px;
+        background: var(--border);
+        overflow: hidden;
+      }
+      .bar span {
+        display: block;
+        height: 100%;
+        width: 35%;
+        border-radius: inherit;
+        background: var(--accent);
+        animation: sweep 1.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+      }
+      @keyframes sweep {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(340%); }
+      }
+      [data-state="failed"] .bar { display: none; }
+
+      .error {
+        margin-top: 20px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+        padding: 14px 16px;
+      }
+      .error h2 { margin: 0 0 6px; font-size: 14px; color: var(--danger); font-weight: 600; }
+      .error p { color: var(--text); }
+
+      pre {
+        margin: 12px 0 0;
+        max-height: 190px;
+        overflow: auto;
+        padding: 10px 12px;
+        border-radius: 6px;
+        background: #0b0f14;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+      button {
+        font: inherit;
+        padding: 7px 14px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+        cursor: pointer;
+        transition: border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      button:hover { border-color: var(--muted); }
+      button.primary { background: var(--accent); border-color: var(--accent); color: #10160a; font-weight: 600; }
+      button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+      /* The kill-switch and the OS preference both mean "stop moving things". */
+      @media (prefers-reduced-motion: reduce) {
+        .bar span { animation: none; width: 100%; opacity: 0.55; }
+        button { transition: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="card" id="card" data-state="preparing">
+        <div class="status">
+          <div>
+            <h1 id="title">Starting DevHub</h1>
+            <!--
+              aria-live so a screen reader hears each phase change. A silent
+              progress bar is invisible to the people who most need to be told
+              that something is still happening.
+            -->
+            <p id="detail" aria-live="polite">Preparing your workspace…</p>
+          </div>
+        </div>
+
+        <div class="bar" aria-hidden="true"><span></span></div>
+
+        <div class="error" id="error" hidden>
+          <h2>DevHub could not start</h2>
+          <p id="error-message"></p>
+          <pre id="error-logs" hidden></pre>
+          <div class="actions">
+            <button class="primary" id="retry" type="button">Try again</button>
+            <button id="logs" type="button">Open logs</button>
+            <button id="quit" type="button">Quit</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script type="module">
+      const { invoke } = window.__TAURI__.core;
+      const { listen } = window.__TAURI__.event;
+
+      const card = document.getElementById("card");
+      const title = document.getElementById("title");
+      const detail = document.getElementById("detail");
+      const errorBox = document.getElementById("error");
+      const errorMessage = document.getElementById("error-message");
+      const errorLogs = document.getElementById("error-logs");
+
+      /**
+       * Plain language for each phase. "Starting service: next" is a status
+       * line written for the person who wrote the code; these are for the
+       * person who double-clicked the icon.
+       */
+      const SERVICE_LABEL = {
+        next: "Starting the dashboard…",
+        terminal: "Starting the terminal…",
+      };
+
+      function render(state) {
+        card.dataset.state = state.state;
+
+        if (state.state === "failed") {
+          title.textContent = "DevHub could not start";
+          detail.textContent = "";
+          errorBox.hidden = false;
+          errorMessage.textContent = state.error ?? "Something went wrong during startup.";
+          if (Array.isArray(state.logs) && state.logs.length > 0) {
+            errorLogs.hidden = false;
+            errorLogs.textContent = state.logs.join("\n");
+          }
+          document.getElementById("retry").focus();
+          return;
+        }
+
+        errorBox.hidden = true;
+        if (state.state === "preparing") detail.textContent = "Preparing your workspace…";
+        else if (state.state === "starting") {
+          detail.textContent = SERVICE_LABEL[state.service] ?? "Starting services…";
+        } else if (state.state === "ready") detail.textContent = "Ready — opening…";
+        else if (state.state === "stopping") {
+          title.textContent = "Shutting down";
+          detail.textContent = "Closing DevHub's services…";
+        }
+      }
+
+      // Ask for the current state as well as subscribing: on a fast machine
+      // every event fires before this listener exists.
+      listen("devhub://boot", (event) => render(event.payload));
+      invoke("boot_state").then(render).catch(() => {});
+
+      document.getElementById("retry").addEventListener("click", async () => {
+        render({ state: "preparing" });
+        try {
+          await invoke("retry_start");
+        } catch (err) {
+          render({ state: "failed", error: String(err), logs: await invoke("recent_logs").catch(() => []) });
+        }
+      });
+
+      document.getElementById("logs").addEventListener("click", () => {
+        invoke("open_logs").catch(() => {});
+      });
+
+      document.getElementById("quit").addEventListener("click", () => {
+        window.__TAURI__.core.invoke("plugin:process|exit", { code: 0 }).catch(() => window.close());
+      });
+    </script>
+  </body>
+</html>

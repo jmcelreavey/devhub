@@ -13,6 +13,19 @@ interface CheckResult {
   message: string;
   isGitRepo?: boolean;
   hasNotesIndex?: boolean;
+  repoCount?: number;
+}
+
+/** Direct children that are git repositories. One level; see setup/status. */
+function countGitRepos(dir: string): number {
+  try {
+    return fs
+      .readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && !e.name.startsWith("."))
+      .filter((e) => fs.existsSync(path.join(dir, e.name, ".git"))).length;
+  } catch {
+    return 0;
+  }
 }
 
 function expandHome(p: string): string {
@@ -22,7 +35,7 @@ function expandHome(p: string): string {
   return p;
 }
 
-function check(rawPath: string, kind: "repoRoot" | "notesDir"): CheckResult {
+function check(rawPath: string, kind: "repoRoot" | "notesDir" | "reposDir"): CheckResult {
   if (!rawPath || !rawPath.trim()) {
     return { ok: false, resolved: "", message: "Path is required" };
   }
@@ -40,6 +53,22 @@ function check(rawPath: string, kind: "repoRoot" | "notesDir"): CheckResult {
   }
   if (!stat.isDirectory()) {
     return { ok: false, resolved, message: "Path is not a directory" };
+  }
+
+  if (kind === "reposDir") {
+    // An empty folder is a valid answer: someone here for notes and tasks has
+    // no repositories yet, and telling them their choice is wrong would be
+    // wrong. The count is information, not a gate.
+    const repoCount = countGitRepos(resolved);
+    return {
+      ok: true,
+      resolved,
+      repoCount,
+      message:
+        repoCount === 0
+          ? "No Git repositories here yet — that's fine, you can change this later"
+          : `Found ${repoCount} Git ${repoCount === 1 ? "repository" : "repositories"}`,
+    };
   }
 
   if (kind === "repoRoot") {
@@ -68,14 +97,16 @@ function check(rawPath: string, kind: "repoRoot" | "notesDir"): CheckResult {
 const ValidatePathSchema = z.object({
   repoRoot: z.string().optional(),
   notesDir: z.string().optional(),
+  reposDir: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
   const parsed = await parseBody(req, ValidatePathSchema);
   if (!parsed.ok) return parsed.response;
-  const { repoRoot, notesDir } = parsed.data;
+  const { repoRoot, notesDir, reposDir } = parsed.data;
   return NextResponse.json({
     repoRoot: repoRoot !== undefined ? check(repoRoot, "repoRoot") : null,
     notesDir: notesDir !== undefined ? check(notesDir, "notesDir") : null,
+    reposDir: reposDir !== undefined ? check(reposDir, "reposDir") : null,
   });
 }

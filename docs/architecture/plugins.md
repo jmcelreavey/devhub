@@ -18,7 +18,7 @@ one hard-coded upstream, any number of registered plugins merge alongside core, 
 | ---- | ----------- | ------ |
 | 1 — file-copy assets | `skills/`, `agents/`, `mcp/`, optional MCP packages | **implemented** |
 | 2 — dashboard module | pages, API routes, libs, components | **implemented** |
-| 3 — branding (whitelabel) | theme, fonts, logo, OpenChamber theme, Electron icon | **implemented** |
+| 3 — branding (whitelabel) | theme, fonts, logo, OpenChamber theme, desktop icon | **implemented** |
 
 Docs and persona-modes are not yet plugin-aware (different delivery mechanisms).
 
@@ -129,7 +129,7 @@ AGENTS.md → Plugin Architecture.
 
 A plugin can **whitelabel** DevHub when it's enabled: contribute a theme palette + presets,
 seed the default theme/mode, swap the UI font, the sidebar/boot logo, the OpenChamber
-theme, and the Electron app icon. Nothing here is plugin-specific in core — any plugin can
+theme, and the desktop app icon. Nothing here is plugin-specific in core — any plugin can
 do it by adding a `branding` block to its manifest:
 
 ```json
@@ -141,7 +141,7 @@ do it by adding a `branding` block to its manifest:
   "fonts": "branding/fonts",
   "logo": { "src": "branding/logo.svg", "label": "ACME" },
   "openchamber": { "themes": "branding/oc", "defaultDarkId": "acme-dark", "defaultLightId": "acme-light" },
-  "electronIcon": "branding/icon.png"
+  "desktopIcon": "branding/icon.png"
 }
 ```
 

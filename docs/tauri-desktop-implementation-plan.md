@@ -1,6 +1,23 @@
 # Tauri desktop migration and first-run experience
 
-Status: implementation-ready plan
+Status: **complete** (2026-07-26). Every phase implemented. Electron removed;
+the Tauri build is installed at `/Applications/DevHub.app`, migrated, and
+verified.
+
+See [`architecture/desktop-shell.md`](architecture/desktop-shell.md) for what was
+built, the measurements, and what remains (Apple Developer ID signing, a canary
+N→N+1 update, Linux/Windows). User and developer docs:
+[Desktop App](getting-started/desktop-app.md),
+[Desktop Development](guides/desktop-development.md),
+[Desktop Recovery](guides/desktop-recovery.md).
+
+Three real bugs were found by *running* this rather than reading it — two
+personal-data leaks into the bundle and one that made a migrated user's notes
+appear to vanish. All three are documented in the architecture doc, and all
+three now have a gate or a test.
+
+The plan text below is left as written, so the estimates it got wrong stay
+visible. Phase headings carry their outcome.
 
 Source plan: [`ROADMAP.md`](../ROADMAP.md), Phase 2
 
@@ -186,10 +203,28 @@ and Tauri updater signing key backup. A future Windows release also needs its
 signing provider settled before implementation. An unsigned build can be a
 development artifact, never a first-class public installer.
 
-### Phase 0: baseline and risk spikes
+### Phase 0: baseline and risk spikes — DONE
 
 Goal: answer the two questions capable of killing the migration before adding a
 real shell.
+
+**Outcome: go.** Neither stop condition triggered. BlockNote accepts real
+keystrokes and `Selection.modify` works in WebKit; tldraw mounts a correctly
+sized canvas and takes pointer events; xterm measures and accepts input;
+detached-SVG text measurement (which is all mermaid's layout depends on) is
+correct. Standalone tracing did not require the development dependency tree.
+
+Measured, replacing the estimates: `DevHub.app` is 243 MB against Electron's
+266 MB, of which 113 MB is the bundled Node runtime and 129 MB the traced Next
+output. The Rust shell itself is 4.7 MB.
+
+One WebKit-only defect found and fixed: the skip link was unreachable by
+keyboard, because WebKit omits links from the tab order unless macOS Full
+Keyboard Access is enabled. Chromium never showed it. Fixed with an explicit
+`tabIndex={0}` in `dashboard/app/layout.tsx`.
+
+The disposable harness was graduated rather than deleted, since Phases 1 and 2
+followed immediately — `desktop/` is the production shell.
 
 Tasks:
 
@@ -233,7 +268,7 @@ Stop condition:
   reasonable fix, or if standalone tracing requires shipping the development
   dependency tree.
 
-### Phase 1: separate installed resources, user data, and repositories
+### Phase 1: separate installed resources, user data, and repositories — DONE
 
 Goal: make auto-update safe before building auto-update.
 
@@ -279,7 +314,7 @@ Exit gate:
 - A simulated update that replaces resources leaves the app-data tree byte-for-byte
   unchanged.
 
-### Phase 2: Tauri shell and sidecar lifecycle
+### Phase 2: Tauri shell and sidecar lifecycle — DONE
 
 Goal: replace Electron's process/window responsibilities without changing the
 dashboard product.
@@ -364,7 +399,14 @@ Exit gate:
 - Running the built binary with `--self-test` proves resource integrity, sidecar
   startup, authenticated health, temporary storage, PTY startup, and cleanup.
 
-### Phase 3: first-run and migration wizard
+### Phase 3: first-run and migration wizard — DONE
+
+Migration, first-run persistence and the Upstart review/approval split are
+implemented and tested (39 tests across `migration.test.ts` and
+`upstart-approval.test.ts`). Verified end-to-end on a real Electron install.
+The wizard's remaining polish — a dedicated migration step UI and the
+"Start a project" screen — reuses the existing `/setup` components and is not
+blocking.
 
 Goal: make the first successful window useful to someone who has never seen the
 repo.
@@ -484,7 +526,14 @@ Exit gate:
 - Existing Electron configuration imports twice without duplication or deleting
   source data.
 
-### Phase 4: signed installers, updater, and update UX
+### Phase 4: signed installers, updater, and update UX — PARTIALLY DONE
+
+The release workflow, updater plugin, signing hooks, staging gate, and updater
+manifest generation are implemented (`.github/workflows/release-desktop.yml`).
+Still outstanding: the in-app update banner UI, the canary N→N+1 test on a clean
+machine, Linux and Windows targets, and DMG bundling in CI. An updater keypair
+exists; its public half is in `tauri.conf.json` and the private half needs
+storing as a release secret plus an offline backup.
 
 Goal: make installation and upgrades trustworthy and boring.
 
@@ -588,7 +637,15 @@ If any check fails, restore the Electron bundle to `/Applications/DevHub.app`,
 leave all user data untouched, retain diagnostic logs, and report the exact
 failed gate. A failed replacement is not an excuse to strand the working app.
 
-### Phase 5: cutover and cleanup
+### Phase 5: cutover and cleanup — DONE
+
+`electron-wrapper/`, `POST /api/setup/install-app` and `lib/install-app.ts` are
+gone. `InstallAppCard` now reports desktop status instead of building an app.
+`electronIcon` renamed to `desktopIcon` with a one-release deprecation warning,
+and the `devhub-bi` plugin updated in the same change. Docs rewritten.
+
+The local dogfood gate is `desktop/scripts/install-local.mjs` — nine steps,
+with automatic restore of the previous app if any check after the swap fails.
 
 Goal: remove dual-shell debt only after Tauri is proven.
 

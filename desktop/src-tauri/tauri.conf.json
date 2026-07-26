@@ -1,0 +1,65 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "DevHub",
+  "version": "2.0.0",
+  "identifier": "com.devhub.launcher",
+  "build": {
+    "frontendDist": "../boot"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": null,
+      "capabilities": [
+        "main"
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "dmg",
+      "app",
+      "appimage",
+      "deb"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns"
+    ],
+    "externalBin": [
+      "binaries/node"
+    ],
+    "resources": {
+      "../staging/server": "server",
+      "../staging/services": "services",
+      "../staging/resources": "resources"
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "$comment": [
+        "pubkey is the PUBLIC half of the updater keypair and belongs in the repo.",
+        "The private key lives only in the TAURI_SIGNING_PRIVATE_KEY release secret",
+        "and in an offline backup — losing it permanently strands every installed",
+        "client, because a new key cannot sign updates the old binaries will accept.",
+        "",
+        "Generate with: cargo tauri signer generate -w ~/.tauri/devhub-updater.key",
+        "Then paste the public key below and set the two release secrets."
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM4MzZFMzJBNjBFNTE5M0IKUldRN0dlVmdLdU0yeUF2YnNUZW5wWUN2M3k1MUdxZ25od3FxdFhuRXovaEpJbUVyODJ2ZExCclUK",
+      "endpoints": [
+        "https://github.com/jmcelreavey/devhub/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

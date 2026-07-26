@@ -1,7 +1,27 @@
 import path from "node:path";
 import { resolveContentDir as resolveSharedContentDir } from "../../../shared/vault/content-dirs.ts";
+import {
+  getAppDataDir,
+  getCheckoutRoot,
+  getResourceRoot,
+  isDesktopRuntime,
+} from "@/lib/desktop/runtime-paths";
 
+/**
+ * The historical do-everything root.
+ *
+ * Kept because ~60 call sites use it, but its meaning is now narrowed: it is
+ * the *content* base, i.e. the thing `NOTES_DIR` and friends default under. In
+ * a checkout that is the checkout, unchanged. In the installed app it is the
+ * writable app-data directory — never the read-only bundle, because callers
+ * that reach `path.join(getRepoRoot(), "notes")` are trying to write.
+ *
+ * For packaged assets use `getResourceRoot()`; for "do I have a real git
+ * checkout" use `getCheckoutRoot()`. Reaching for this function to answer
+ * either of those questions is the bug this split exists to prevent.
+ */
 export function getRepoRoot(): string {
+  if (isDesktopRuntime()) return getAppDataDir();
   const root = process.env.REPO_ROOT;
   if (!root) {
     // dashboard/lib/content/dirs.ts -> ../../.. -> repo root.
@@ -15,6 +35,8 @@ export function getRepoRoot(): string {
   return path.resolve(root);
 }
 
+export { getAppDataDir, getCheckoutRoot, getResourceRoot, isDesktopRuntime };
+
 export function getHome(): string {
   const home = process.env.HOME;
   if (!home) {
@@ -23,21 +45,26 @@ export function getHome(): string {
   return home;
 }
 
-function requireContentDir(envKey: string): string {
-  const dir = process.env[envKey];
-  if (!dir) {
-    throw new Error(`${envKey} environment variable is not set`);
-  }
-  return path.resolve(dir);
-}
-
-/** Env override, else `REPO_ROOT/<relativeSegment>`. */
+/** Env override, else `<content root>/<relativeSegment>`. */
 export function resolveContentDir(envKey: string, relativeSegment: string): string {
   return resolveSharedContentDir(envKey, getRepoRoot(), relativeSegment);
 }
 
+/**
+ * The notes vault.
+ *
+ * This used to throw when `NOTES_DIR` was unset while every sibling directory
+ * quietly defaulted — an inconsistency that only held up because `postinstall`
+ * writes `NOTES_DIR` into `.env.local`, so nothing ever hit the throw in
+ * practice. It became load-bearing once call sites that had been building
+ * `path.join(getRepoRoot(), "notes", …)` by hand were routed through here:
+ * paths that had always resolved started throwing.
+ *
+ * Defaulting to `<content root>/notes` is both the documented behaviour and
+ * exactly what those hand-built joins did.
+ */
 export function getNotesDir(): string {
-  return requireContentDir("NOTES_DIR");
+  return resolveContentDir("NOTES_DIR", "notes");
 }
 
 /** Repo documentation tree; defaults to `REPO_ROOT/docs` when `DOCS_DIR` is unset. */

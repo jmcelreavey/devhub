@@ -1,0 +1,240 @@
+name: Release desktop
+
+# Tag-driven, so a release is `git tag v2.1.0 && git push --tags` and nothing
+# else. `workflow_dispatch` builds the same artifacts without publishing, which
+# is what you want when validating a signing change — a dry run that produces a
+# real installer beats a release you have to delete.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (no leading v). Produces artifacts, publishes nothing."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  # verify runs tsc before build; skip Next's duplicate TS pass (see next.config.ts).
+  DEVHUB_SKIP_NEXT_TYPECHECK: "true"
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Not fail-fast: one platform's signing problem should not hide another
+      # platform's build problem. You want every failure in one run.
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            label: macOS (Apple Silicon)
+            target: aarch64-apple-darwin
+            args: "--target aarch64-apple-darwin"
+          - os: macos-15-intel
+            label: macOS (Intel)
+            target: x86_64-apple-darwin
+            args: "--target x86_64-apple-darwin"
+          - os: ubuntu-22.04
+            label: Linux (x64)
+            target: x86_64-unknown-linux-gnu
+            args: ""
+
+    # Job level, not step level, so `if:` conditions can read it. `secrets` is
+    # not a context that step conditions can see; `env` is, and a job-level
+    # `env:` is allowed to reference secrets. Getting this wrong is silent —
+    # the condition just evaluates false forever.
+    env:
+      HAS_APPLE_SIGNING: ${{ secrets.APPLE_SIGNING_IDENTITY != '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The leak scanner runs against the source tree first and the staged
+      # bundle later. Both, because they catch different things: this one sees
+      # internal names in code, the staging check sees what actually shipped.
+      - name: Scan for internal-name / secret leaks
+        run: bash scripts/scan-leaks.sh tree
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Setup safe-chain
+        run: |
+          npm i -g @aikidosec/safe-chain@1.1.10
+          safe-chain setup-ci
+
+      - name: Install dashboard dependencies
+        run: npm ci --prefix dashboard
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # Rust builds are slow and almost entirely cacheable. Keyed on the target
+      # so the two macOS architectures do not evict each other.
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+          key: ${{ matrix.target }}
+
+      # This list is not guesswork — it is what the Ubuntu 22.04 container in
+      # desktop/docker/linux-builder.Dockerfile actually needed to produce a
+      # working AppImage. `libayatana-appindicator3-dev` rather than the old
+      # `libappindicator3-dev`, which is a transitional package on 22.04.
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            patchelf \
+            desktop-file-utils \
+            file
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building $VERSION"
+
+      # One version source, written into Tauri and Cargo. The About dialog and
+      # /api/desktop/health read it at runtime, so they cannot drift.
+      - name: Inject version
+        run: node desktop/scripts/inject-version.mjs "${{ steps.version.outputs.version }}"
+
+      - name: Stage bundle
+        run: node desktop/scripts/stage-all.mjs
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+
+      # The gate. Runs before signing, because a signed leak cannot be recalled.
+      - name: Verify staged bundle
+        run: node desktop/scripts/verify-staging.mjs
+
+      - name: Rust checks
+        working-directory: desktop/src-tauri
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+
+      - name: Build, sign, and bundle
+        uses: tauri-apps/tauri-action@v0
+        env:
+          # Updater signing. Mandatory: Tauri will not install an unsigned
+          # update, and an update that installs without a signature check is
+          # a remote code execution channel, not a convenience.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # macOS Developer ID signing + notarisation. Absent on Linux, and
+          # absent locally — an unsigned build is a development artifact, never
+          # a public installer.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          projectPath: desktop
+          configPath: src-tauri/tauri.conf.json
+          args: ${{ matrix.args }}
+          # No releaseId here: the publish job below does it once, after every
+          # platform has passed its own self-test. Publishing per-matrix-leg
+          # would put a half-finished release in front of users.
+
+      # Proves the thing that was just built actually runs, on the machine that
+      # built it, against a temporary data directory. This is the check that
+      # catches a missing native module or a broken standalone trace *before*
+      # anyone downloads it. Cross-compiled artifacts skip it honestly rather
+      # than pretending to test on the wrong architecture.
+      - name: Self-test the built app
+        if: matrix.target != 'x86_64-apple-darwin' || runner.arch == 'X64'
+        shell: bash
+        run: node desktop/scripts/selftest.mjs --target "${{ matrix.target }}"
+
+      # Skips cleanly without a Developer ID, so an unsigned development build
+      # is not a red X. See the job-level env above for why this is not
+      # `secrets.APPLE_SIGNING_IDENTITY` directly.
+      - name: Verify macOS signature and notarisation
+        if: runner.os == 'macOS' && env.HAS_APPLE_SIGNING == 'true'
+        shell: bash
+        run: |
+          APP=$(find desktop/src-tauri/target -name "DevHub.app" -maxdepth 5 | head -1)
+          echo "Verifying $APP"
+          # --deep because the bundle nests a Node runtime and a native .node
+          # binding; an unsigned nested binary is a Gatekeeper failure that only
+          # appears on the user's machine.
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          spctl -a -vv -t exec "$APP"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: devhub-${{ matrix.target }}
+          if-no-files-found: error
+          path: |
+            desktop/src-tauri/target/**/release/bundle/dmg/*.dmg
+            desktop/src-tauri/target/**/release/bundle/macos/*.app.tar.gz
+            desktop/src-tauri/target/**/release/bundle/macos/*.app.tar.gz.sig
+            desktop/src-tauri/target/**/release/bundle/appimage/*.AppImage
+            desktop/src-tauri/target/**/release/bundle/appimage/*.AppImage.sig
+            desktop/src-tauri/target/**/release/bundle/deb/*.deb
+
+  publish:
+    name: Publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: dist
+
+      # latest.json is what installed clients poll. It is generated here rather
+      # than by hand because a hand-written one with a wrong signature or URL
+      # silently breaks updates for everyone already on the previous version —
+      # and they have no way to tell you.
+      - name: Build updater manifest
+        run: node desktop/scripts/build-updater-manifest.mjs dist "${GITHUB_REF_NAME#v}"
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.dmg
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.tar.gz
+            dist/*.sig
+            dist/latest.json

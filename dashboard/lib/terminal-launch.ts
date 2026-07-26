@@ -104,9 +104,15 @@ export async function agentRepoUpstartCommand(
 ): Promise<string> {
   const cli = await activeAgentCliSpec();
   const prompt = `Use devhub-repo-upstart. Create ${upstartPath} for ${repoName} in the DevHub private store (not .devhub/ in the target repo). Must run nvm use if .nvmrc, refresh deps, and start dev env. Do not just print instructions. Exit; terminal runs the script with cwd=${repoName}.${upstartContextSuffix(context)}`;
+  // Generation only. The `&& bash <script>` that used to be chained here meant
+  // an agent wrote a shell script and the terminal executed it in the same
+  // breath, in the user's repo, with their full environment — there was no
+  // moment at which the script existed and had not yet run. Execution now goes
+  // through /api/desktop/upstart, which refuses to produce a run command until
+  // the exact bytes have been reviewed and approved.
   return guardedCliCommand(
     cli.binary,
-    `${cli.run(prompt)} && bash ${shellQuote(upstartPath)}`,
+    cli.run(prompt),
     cli.missing("generate the DevHub upstart script (or create it manually under upstarts/)"),
   );
 }
@@ -118,9 +124,11 @@ export async function agentRepoUpstartUpdateCommand(
 ): Promise<string> {
   const cli = await activeAgentCliSpec();
   const prompt = `Use devhub-repo-upstart. Update ${upstartPath} for ${repoName} in the DevHub private store (not .devhub/ in the target repo). Must refresh deps, prefer nvm use, start dev env, and preserve correct bits. Exit; terminal runs the script.${upstartContextSuffix(context)}`;
+  // Update only — see agentRepoUpstartCommand. A regenerated script is a
+  // different script, so it goes back through review before it can run.
   return guardedCliCommand(
     cli.binary,
-    `${cli.run(prompt)} && bash ${shellQuote(upstartPath)}`,
+    cli.run(prompt),
     cli.missing("update the DevHub upstart script (or edit it manually under upstarts/)"),
   );
 }

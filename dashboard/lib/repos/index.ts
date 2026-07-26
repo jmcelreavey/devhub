@@ -3,6 +3,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { getHome, getRepoRoot } from "@/lib/notes/dir";
+import { getReposDir } from "@/lib/desktop/runtime-paths";
 import { execGhJsonLines, isGithubCliAuthenticated } from "@/lib/gh-exec";
 import { parseRepoFullNameFromRemote } from "@/lib/github/repo-url";
 import { gitUnpushedCount } from "@/lib/standup/git";
@@ -113,9 +114,17 @@ function resolveDirectChild(baseDir: string, childName: string): string {
   return resolved;
 }
 
-/** Directory that contains sibling git repos (parent of this devhub checkout). */
+/**
+ * The user's code folder — the directory scanned for repositories.
+ *
+ * This used to be "the parent of the DevHub checkout", which was never a
+ * decision, just a description of one machine's layout. It also meant the only
+ * way to point DevHub at your code was to move DevHub. `DEVHUB_REPOS_DIR` is
+ * the explicit setting; parent-of-checkout survives as the development
+ * fallback so existing checkouts behave exactly as before.
+ */
 export function getReposScanDir(): string {
-  return path.dirname(getRepoRoot());
+  return getReposDir();
 }
 
 /** HOME-relative display path when under $HOME, else absolute. */

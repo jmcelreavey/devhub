@@ -231,8 +231,14 @@ export const SetupSaveSchema = z.object({
     .optional(),
   core: z
     .object({
+      /**
+       * Optional DevHub git checkout. Advanced only — an installed app does not
+       * have one, and the setup form must not ask a normal user for it.
+       */
       repoRoot: z.string().max(4096).optional(),
       notesDir: z.string().max(4096).optional(),
+      /** The user's code folder — what "Repo root" used to be confused with. */
+      reposDir: z.string().max(4096).optional(),
     })
     .optional(),
   network: z

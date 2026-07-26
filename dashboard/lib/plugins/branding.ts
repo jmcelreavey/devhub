@@ -8,7 +8,7 @@
  *   - `dashboard/lib/plugin-branding.generated.ts`   — presets, default preset/mode, logo
  *   - `dashboard/public/fonts-plugin/*`              — copied font files
  *   - `dashboard/public/plugin-brand-logo.*`         — sidebar/boot logo
- *   - `dashboard/public/plugin-electron-icon.png`    — Electron app icon
+ *   - `dashboard/public/plugin-desktop-icon.png`     — desktop app icon
  *   - the user's OpenChamber data dir                — themes + seeded default (if installed)
  *
  * The two generated source files are committed as *empty baselines* so a fresh clone and
@@ -36,7 +36,7 @@ const GEN_CSS_REL = "app/plugin-branding.generated.css";
 const GEN_TS_REL = "lib/plugin-branding.generated.ts";
 const FONTS_DIR_REL = "public/fonts-plugin";
 const LOGO_STEM_REL = "public/plugin-brand-logo";
-const ELECTRON_ICON_REL = "public/plugin-electron-icon.png";
+const DESKTOP_ICON_REL = "public/plugin-desktop-icon.png";
 
 const EMPTY_CSS = `/* GENERATED - machine-local plugin branding palette + @font-face.
    Rewritten by lib/plugins/branding.ts (sync_plugins) from the active branding plugin,
@@ -132,7 +132,10 @@ function setSkipWorktree(repoRoot: string, rel: string, skip: boolean): void {
 /** Remove every asset the materialiser may have copied into `public/` (idempotent). */
 function removeCopiedAssets(dash: string): void {
   fs.rmSync(path.join(dash, FONTS_DIR_REL), { recursive: true, force: true });
-  fs.rmSync(path.join(dash, ELECTRON_ICON_REL), { force: true });
+  fs.rmSync(path.join(dash, DESKTOP_ICON_REL), { force: true });
+  // The pre-rename filename, so switching plugins (or downgrading) does not
+  // leave a stale icon behind that nothing owns any more.
+  fs.rmSync(path.join(dash, "public/plugin-electron-icon.png"), { force: true });
   const publicDir = path.join(dash, "public");
   if (fs.existsSync(publicDir)) {
     const stem = path.basename(LOGO_STEM_REL);
@@ -201,7 +204,18 @@ export function materializeBranding(opts: BrandingOptions): number {
   const presetsAbs = mustExist(b.presets, "presets");
   const fontsAbs = mustExist(b.fonts, "fonts");
   const logoAbs = b.logo ? mustExist(b.logo.src, "logo.src") : null;
-  const electronAbs = mustExist(b.electronIcon, "electronIcon");
+  // `desktopIcon` with a fallback to the old `electronIcon`. Plugins live in
+  // separate repos and cannot be updated in the same commit as core, so
+  // breaking the field name outright would break every plugin at once.
+  if (b.electronIcon && !b.desktopIcon) {
+    // A warning, not an error: failing the build would take every plugin down
+    // the moment core renamed a field it does not own.
+    process.stderr.write(
+      '[branding] branding.electronIcon is deprecated — rename it to "desktopIcon". ' +
+        "Still honoured for one release.\n",
+    );
+  }
+  const desktopAbs = mustExist(b.desktopIcon ?? b.electronIcon, b.desktopIcon ? "desktopIcon" : "electronIcon");
 
   let presets: PresetDescriptor[] = [];
   if (presetsAbs) {
@@ -248,10 +262,10 @@ export function materializeBranding(opts: BrandingOptions): number {
     logoLabel = b.logo.label ?? ""; // omit label → show the logo alone, no wordmark
   }
 
-  // --- Electron icon → public/plugin-electron-icon.png ---
-  if (electronAbs) {
-    const dest = path.join(dash, ELECTRON_ICON_REL);
-    fs.copyFileSync(electronAbs, dest);
+  // --- Desktop icon → public/plugin-desktop-icon.png ---
+  if (desktopAbs) {
+    const dest = path.join(dash, DESKTOP_ICON_REL);
+    fs.copyFileSync(desktopAbs, dest);
   }
 
   // --- CSS: relocate the plugin's palette + @font-face verbatim. ---

@@ -1,5 +1,5 @@
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes/dir";
+import { getNotesDir } from "@/lib/notes/dir";
 
 /**
  * Absolute path inside the (gitignored) Capability Radar cache under
@@ -7,7 +7,7 @@ import { getRepoRoot } from "@/lib/notes/dir";
  * `capabilityCacheDir("labs")` or `capabilityCacheDir("digests", `${id}.json`)`.
  */
 export function capabilityCacheDir(...segments: string[]): string {
-  return path.join(getRepoRoot(), "notes", ".cache", "capability", ...segments);
+  return path.join(getNotesDir(), ".cache", "capability", ...segments);
 }
 
 /** Make a string safe to use as a single filesystem path segment. */

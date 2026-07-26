@@ -39,7 +39,19 @@ function extraAllowedDevOriginsFromEnv(): string[] {
   return raw.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
+/**
+ * `output: "standalone"` is desktop-only, and deliberately opt-in.
+ *
+ * Standalone emits `.next/standalone/server.js` plus a traced `node_modules`
+ * subset — exactly what the Tauri sidecar needs to run without a checkout, npm,
+ * or a global Node. It is NOT enabled for normal `next build` because tracing
+ * changes what gets bundled and adds build time that browser-mode users never
+ * benefit from. `desktop/scripts/stage-dashboard.mjs` sets DEVHUB_DESKTOP_BUILD=1.
+ */
+const desktopBuild = process.env.DEVHUB_DESKTOP_BUILD === "1";
+
 const nextConfig: NextConfig = {
+  ...(desktopBuild ? ({ output: "standalone" } as const) : {}),
   /**
    * `npm run verify` runs `tsc --noEmit` before `next build`. Skipping Next's second
    * full-program typecheck avoids CI OOM (~2GB default heap) and saves minutes.

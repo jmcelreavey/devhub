@@ -13,7 +13,7 @@ import path from "node:path";
 import { generateText } from "ai";
 import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai/provider";
 import { isNotesAiConfigured } from "@/lib/notes-ai/config";
-import { getRepoRoot } from "@/lib/notes/dir";
+import { getNotesDir } from "@/lib/notes/dir";
 import { writeAtomic, safeReadJSON, withMutex } from "@/lib/atomic-write";
 import { BRIEFING_DATA_SHAPE, type BriefingContext } from "@/lib/briefing-context";
 import { DEFAULT_CANVAS_HTML } from "@/lib/briefing-canvas-default";
@@ -45,7 +45,7 @@ interface StoredCanvas {
 }
 
 function canvasFile(): string {
-  return path.join(getRepoRoot(), "notes", ".config", "briefing-canvas.json");
+  return path.join(getNotesDir(), ".config", "briefing-canvas.json");
 }
 
 const DEFAULT_DOC: CanvasDoc = {

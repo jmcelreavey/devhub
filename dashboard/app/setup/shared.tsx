@@ -11,8 +11,13 @@ export interface SetupStatus {
   allowLanNetwork: boolean;
   /** Whether OPENCHAMBER_UI_PASSWORD is already configured (value never echoed). */
   hasOpenchamberUiPassword?: boolean;
-  coreVars: { repoRoot: string; notesDir: string };
-  coreDefaults: { repoRoot: string; notesDir: string };
+  coreVars: { repoRoot: string; notesDir: string; reposDir: string };
+  coreDefaults: { repoRoot: string; notesDir: string; reposDir: string };
+  /** Running inside the packaged desktop app rather than a browser. */
+  desktop?: boolean;
+  /** A real DevHub git checkout exists — sync/ship/plugin actions can work. */
+  hasCheckout?: boolean;
+  reposDirInfo?: { resolved: string; exists: boolean; repoCount: number };
   githubVars: { authenticated: boolean };
   datadogVars: {
     hasApiKey: boolean;
@@ -41,6 +46,8 @@ export interface PathCheck {
   message: string;
   isGitRepo?: boolean;
   hasNotesIndex?: boolean;
+  /** Git repositories found directly inside a chosen code folder. */
+  repoCount?: number;
 }
 
 export interface SetupStepMeta {

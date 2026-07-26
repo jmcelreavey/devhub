@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes/dir";
+import { getNotesDir, getRepoRoot } from "@/lib/notes/dir";
 import type { ResearchCard, ResearchSignal } from "./morning-briefing";
 
 const DEFAULT_MAX_AGE_HOURS = 72;
@@ -11,7 +11,7 @@ const METRIC_RE = /\b\d[\d,.]*\s?(?:upvotes?|points?|comments?|likes?|views?|sta
 export function researchDir(): string {
   const configured = process.env.LAST30DAYS_MEMORY_DIR?.trim();
   if (configured) return path.isAbsolute(configured) ? configured : path.resolve(getRepoRoot(), "dashboard", configured);
-  return path.join(getRepoRoot(), "notes", "research");
+  return path.join(getNotesDir(), "research");
 }
 
 function maxAgeMs(): number {

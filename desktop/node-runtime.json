@@ -1,0 +1,39 @@
+{
+  "$comment": [
+    "The Node runtime shipped inside the desktop app.",
+    "",
+    "Pinned by version AND SHA-256. Verifying against nodejs.org's own",
+    "SHASUMS256.txt would only prove the download matched what that server",
+    "served us today, which is not the property we want when the result gets",
+    "code-signed and shipped to other people. These digests are committed, so a",
+    "changed artifact fails the build instead of quietly entering a release.",
+    "",
+    "Digests taken from https://nodejs.org/dist/v22.22.3/SHASUMS256.txt.",
+    "To bump: change the version, re-fetch that file, replace every digest, and",
+    "re-run the packaged --self-test on each target you advertise."
+  ],
+  "version": "22.22.3",
+  "baseUrl": "https://nodejs.org/dist",
+  "artifacts": {
+    "darwin-arm64": {
+      "file": "node-v22.22.3-darwin-arm64.tar.gz",
+      "sha256": "0da7ff74ef8611328c8212f17943368713a2ad953fb7d89a8c8a0eae87c23207",
+      "targetTriple": "aarch64-apple-darwin"
+    },
+    "darwin-x64": {
+      "file": "node-v22.22.3-darwin-x64.tar.gz",
+      "sha256": "45830ba752fa0d892c6dcd640946669801293cac820a33591ded40ac075198ec",
+      "targetTriple": "x86_64-apple-darwin"
+    },
+    "linux-x64": {
+      "file": "node-v22.22.3-linux-x64.tar.xz",
+      "sha256": "2e5d13569282d016861fae7c8f935e741693c269101a5bebcf761a5376d1f99f",
+      "targetTriple": "x86_64-unknown-linux-gnu"
+    },
+    "linux-arm64": {
+      "file": "node-v22.22.3-linux-arm64.tar.xz",
+      "sha256": "1c4a9933a5e45bc88f54f70b5f91232c127ec49f1a5989d23fb85824c7adf9b7",
+      "targetTriple": "aarch64-unknown-linux-gnu"
+    }
+  }
+}
