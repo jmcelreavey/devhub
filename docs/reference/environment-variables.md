@@ -59,6 +59,19 @@ Most values live in the dashboard's local environment file and can be edited fro
 
 See [Datadog integration](../integrations/datadog.md) for on-call behavior and API routes.
 
+`DATADOG_APPLICATION_KEY` is the canonical name; `DD_APPLICATION_KEY` and `DATADOG_APP_KEY` are accepted aliases in code.
+
+## Infrastructure / BI presence (optional)
+
+These vars gate the **Ops** tab and `GET /api/setup/status` → `bi`. They do not require the BI plugin to be installed — `lib/bi-presence.ts` detects generic AWS/CAPI signals. Rich ops data (`GET /api/bi`, `/ops`) comes from the `devhub-bi` plugin when materialized.
+
+| Variable          | Purpose                                                                 |
+| ----------------- | ----------------------------------------------------------------------- |
+| `AWS_PROFILE`     | Preferred AWS CLI profile for BI ops nav and plugin-backed infra views  |
+| `CAPI_REPO_PATH`  | Path to a local CAPI checkout; presence alone can enable the `bi` gate  |
+
+`BI_OPS_USER_EMAIL` (Datadog table above) also contributes to `bi` presence. When any of these (or a profile in `~/.aws/config`) is present, `bi: true` in setup status. Configure in `dashboard/.env.local` or via 1Password when `DEVHUB_OP_SYNC_LOCAL=1`.
+
 ## Notes, Repo Learning, and Briefing AI (Optional)
 
 BlockNote AI in the notes editor, Repo Learning generated artifacts, and morning-briefing AI features (design chat, interest snippets, research fallbacks) work with any **OpenAI-compatible** chat-completions endpoint — [z.ai](https://z.ai) (the default), OpenAI, OpenRouter, Together, Groq, a local Ollama/LM Studio server, etc. Point `AI_BASE_URL` / `AI_MODEL` at your provider and set `AI_API_KEY`. Configure these in `dashboard/.env.local` only - not on `/setup`.

@@ -304,7 +304,7 @@ Merge conflict recovery lives on Status through `ConflictResolverPanel`. It read
 
 API routes are scoped under `/api/repos/<name>/git/…` (and branch push/pull under `/api/repos/<name>/branches`). See [API Routes](../reference/api-routes.md#repo-git-routes).
 
-**DevHub-only:** personal content paths (`notes/`, `tasks/`, `collections/`, `upstarts/`, `docs/`, `diagrams/`, plus env-resolved content dirs) are classified by `lib/content-sync-dirs.ts` and **hidden from the Changes list** in the DevHub repo — they sync via the top-bar cloud button, not the generic commit flow. Sibling repos show every file.
+**DevHub-only:** personal content paths (`notes/`, `tasks/`, `collections/`, `upstarts/`, `docs/`, plus env-resolved content dirs) are classified by `lib/content-sync-dirs.ts` and **hidden from the Changes list** in the DevHub repo. Scoped sync (`sync_notes_tasks_push`) covers `notes/`, `collections/`, `tasks/`, `docs/`, and `upstarts/` — **not** `diagrams/`, which must be committed through the Repo Git workspace or a manual commit. Sibling repos show every file.
 
 | Problem | What to do |
 | ------- | ---------- |

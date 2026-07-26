@@ -68,12 +68,15 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | `GET /api/calendar/auth` | Setup / reconnect probe | Returns OAuth start URL JSON when credentials exist (`{ url }`). |
 | `GET /api/calendar/auth/start` | Connect Google | Redirects browser to Google OAuth (or `/setup?calendar_error=…` when credentials missing). |
 | `GET /api/calendar/auth/callback` | OAuth redirect | Exchanges code, persists refresh token, redirects to `/setup` or `/calendar`. |
-| `GET /api/appraisal/year?year=` | `/appraisal` | Returns goals, themed entries, theme coverage, and an HR markdown export for `notes/appraisal/self/<year>.json`. `PATCH` updates goal status. |
-| `GET /api/appraisal/evidence?days=` | `/appraisal` evidence panel | Suggests recordable moments from recent PRs, Jira, and tasks. `days` is clamped 1–90 (UI presets: 7, 14, 30, 90). Optional `from` / `to` date bounds. |
+| `GET /api/appraisal/year?year=` | `/appraisal` | Returns goals, themed entries, theme coverage, and an HR markdown export for `notes/appraisal/self/<year>.json`. |
+| `POST /api/appraisal/year` | `/appraisal` goal editor | Body: `{ title, detail?, status?, revision?, id?, year? }`. Creates or revises a goal — same write path as MCP `appraisal_set_goal`. |
+| `GET /api/appraisal/evidence?days=` | `/appraisal` evidence panel | Suggests recordable moments from recent PRs, Jira, and Datadog alerts. `days` is clamped 1–90 (UI presets: 7, 14, 30, 90). Optional `from` / `to` date bounds. |
+| `POST /api/appraisal/evidence` | `/appraisal` **Record** on a suggestion | Body: `{ title, theme, summary, references[], date?, kind?, subject? }`. Persists a cited artifact into the appraisal year note — same write path as MCP `appraisal_record`. |
 | `GET /api/capability/radar` | `/radar`, MCP `capability_radar` | Latest snapshot, diff (added/spread/removed), and knowledge-drift rows. |
 | `GET /api/radar/personal` | `/radar` personal strip | Parses `notes/radar/personal-radar.md` into adopt/trial/assess/hold items. Returns `{ path, exists, items, markdown }`. |
 | `POST /api/capability/scan` | `/radar` **Scan**, MCP `capability_scan` | Full scan; body may include `includeGithub`, `githubFilter`. Writes dated snapshot under `notes/.cache/capability/`. |
-| `POST /api/capability/digest` | `/radar` digest, MCP `capability_digest`, job `capability_digest` | Generate or return weekly digest markdown. |
+| `GET /api/capability/digest` | `/radar` digest history | Returns `{ latest, digests }` — latest digest markdown and prior filenames. |
+| `POST /api/capability/digest` | `/radar` digest, MCP `capability_digest`, job `capability_digest` | Generate a new weekly digest markdown. Body may include `includeGithub`, `githubFilter`. |
 | `GET /api/capability/journey?repoName=` | `/radar` lab list | Lists built labs with `done` / `hasWorkspace` flags (optional repo filter). |
 | `POST /api/capability/journey` | `/radar` lab fetch, MCP `capability_get_lab` | **Fetch only** an existing lab (`{ signalId, repoName? }`). `404 { notBuilt: true }` when not built yet — generation runs via the configured agent CLI + `capability-lab` skill, not this route. |
 | `GET /api/capability/journey/plan` | Terminal **Build lab** handoff | Query: `signalId`, optional `repoName`. Plan payload for the `capability-lab` skill (target repo, evidence, workspace dir, notes path). |
@@ -89,6 +92,7 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | `GET /api/standup/markdown` | Today standup preview, MCP `standup_markdown`, context pack | Query: `startDate?`, `endDate?` (default yesterday→today), `startTime?`, `endTime?` (default `00:00`–`23:59`), `excludeRepos?` (comma-separated repo names). Returns `{ markdown, meta }` with git commits across sibling repos, Jira activity, GitHub PR slices, and today's completed tasks. `meta` includes scan/failure counts for partial git/PR errors. |
 | `GET /api/jira/tickets` | Work Jira tab, `/tickets`, MCP `jira_tickets` | Returns `{ tickets, configured, cached? }`. Empty list with `configured: false` when Jira env is unset. Server cache ~2m. |
 | `GET /api/jira/ticket/<key>` | Task Jira badges, MCP `jira_ticket_get` | Returns `{ key, status, summary, issuetype }`. `400` when Jira is not configured; `404` when the ticket does not exist. |
+| `GET /api/jira/ticket/<key>/redirect` | Jira links in markdown | Browser redirect to `https://{JIRA_DOMAIN}/browse/{key}`. `501` when Jira is not configured. |
 | `GET /api/jira/meta` | Task **Add to Jira** modal | Query: `project` (defaults to `JIRA_DEFAULT_PROJECT` or `PTF`), optional `reference` (parent key — Team value is inherited from this ticket). Returns `{ configured, domain, me, projectKey, board, sprint, sprintFieldId, teamFieldId, teamValue, teamLabel }`. |
 | `POST /api/jira/issue` | Task **Add to Jira** modal | Body: `{ projectKey, summary, description?, parentKey?, issuetypeName?, assignToMe?, sprintId? }`. Resolves sprint/Team server-side from project board + parent. Returns `{ key, url }` (`201`). Same-origin on POST. |
 | `GET /api/repos` | Repos page (`/repos`) | Lists sibling git checkouts under `dirname(REPO_ROOT)` with branch, remote, dirty/unpushed counts, and `hasCompose`. Returns `{ repos, scanDirDisplay }` (tilde-formatted scan path). |
@@ -135,6 +139,9 @@ Sibling-repo git operations power `RepoGitWorkspace` on `/repos` and the DevHub 
 | `GET /api/jobs`, `POST /api/jobs` | Actions scheduled jobs | `GET` returns `{ jobs, scripts }` (allowlisted script catalog for the picker). `POST` creates a job (`name`, `script`, `cron`, `enabled?`). Same-origin on `POST`. Jobs run only while the dashboard process is alive. |
 | `GET/PATCH/DELETE /api/jobs/<id>`, `POST /api/jobs/<id>` | Actions scheduled jobs | `GET` reads one job. `PATCH` updates fields. `DELETE` removes it. `POST` triggers immediately (`202` with run info). Same-origin on mutating methods. |
 | `POST /api/actions/launch-claude` | Top bar, command palette | Launches Claude Desktop when installed; falls back to opening `https://claude.ai/new` in the browser. |
+| `POST /api/actions/launch-chamber` | Chamber tab, command palette | Opens OpenChamber Desktop pointing at the local DevHub server (port `1336` / shared OpenCode on `1338`). |
+| `POST /api/actions/launch-opencode` | OpenCode tab, command palette | Opens macOS OpenCode Desktop when installed under `/Applications`. |
+| `GET /api/tree` | Notes sidebar | Returns the notes vault file tree (`getVaultTree("notes")`). Docs tree is `GET /api/docs/tree`. |
 | `GET /api/scripts/history` | Status failed-sync panel, Actions | Returns the last 50 script runs from `~/.local/state/devhub/runs.jsonl`, newest first (`{ runId, script, startedAt, finishedAt?, exitCode? }[]`). Status surfaces the latest failed `commit_dirty_push` or `update_and_sync` run. |
 | `GET /api/scripts/runs/<runId>` | Status failed-sync panel, Actions | Returns `{ runId, script, startedAt, finishedAt?, exitCode?, lines[] }` for a completed or in-progress run. Older history entries may return `404` if output was not captured. |
 | `GET /api/scripts/stream/<runId>` | Actions live output | Server-sent events: `data: "<line>"` per log line; `event: done` with exit code when finished. Replays buffered lines then streams live output. |
