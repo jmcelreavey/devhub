@@ -8,7 +8,7 @@
 // the briefing.
 
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes/dir";
 import { writeAtomic, safeReadJSON, withMutex } from "@/lib/atomic-write";
 import { parseRssItems, decodeEntities, type LinkItem } from "@/lib/morning-briefing";
 

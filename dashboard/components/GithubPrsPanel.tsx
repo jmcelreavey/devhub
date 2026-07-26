@@ -3,14 +3,14 @@
 import type { AriaRole, ReactNode } from "react";
 import Link from "next/link";
 import { GitPullRequest } from "lucide-react";
-import { useLive } from "@/lib/use-fetch";
-import type { GithubPrsApiPayload, GithubPrRow, RecentlyReviewedPr } from "@/lib/github-prs";
+import { useLive } from "@/lib/hooks/use-fetch";
+import type { GithubPrsApiPayload, GithubPrRow, RecentlyReviewedPr } from "@/lib/github/prs";
 import { HUB_STRIP_ICON_PX, hubStripSetupLinkClassName, hubStripSetupLinkStyle } from "@/lib/hub-strip";
-import { HubSignalStrip, HubStripHeading, hubStripInlineCodeClassName } from "@/components/HubSignalStrip";
-import { TodayCollapseButton } from "@/components/TodayCollapseButton";
+import { HubSignalStrip, HubStripHeading, hubStripInlineCodeClassName } from "@/components/shell/HubSignalStrip";
+import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
 import { PrRowActions, type PrRowKind } from "@/components/PrRowActions";
 import { ConditionalList } from "@/components/ui/EmptyStateRow";
-import { useGridSize } from "@/lib/use-grid-size";
+import { useGridSize } from "@/lib/hooks/use-grid-size";
 
 const EMPTY_PR_ROWS: GithubPrRow[] = [];
 const EMPTY_RECENTLY_REVIEWED: RecentlyReviewedPr[] = [];
@@ -23,11 +23,10 @@ function PrRowLink({ row, kind }: { row: GithubPrRow; kind?: PrRowKind }) {
           href={row.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 no-underline"
-          style={{ color: "var(--text)" }}
+          className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 no-underline text-text"
         >
           <span className="break-words text-sm font-medium leading-snug">{row.title}</span>
-          <span className="font-mono text-[11px] leading-tight" style={{ color: "var(--text-muted)" }}>
+          <span className="font-mono text-[11px] leading-tight text-text-muted">
             {row.repo}#{row.number}
           </span>
         </a>
@@ -43,7 +42,7 @@ function SubList({ title, rows, kind }: { title: string; rows: GithubPrRow[]; ki
       items={rows}
       renderList={(items) => (
         <div className="min-w-0 space-y-1">
-          <h3 className="text-[11px] font-semibold tracking-tight" style={{ color: "var(--text-muted)" }}>
+          <h3 className="text-[11px] font-semibold tracking-tight text-text-muted">
             {title}
           </h3>
           <ul className="m-0 list-none space-y-0.5 p-0">
@@ -143,7 +142,7 @@ function GithubPrsStripShell({
           </span>
           <span className="flex min-w-0 items-center gap-2">
             {collapsed && collapsedSummary ? <span className="today-collapsed-summary">{collapsedSummary}</span> : null}
-            <Link href="/prs" className="text-xs today-grid-drag-cancel" style={{ color: "var(--accent)" }}>
+            <Link href="/prs" className="text-xs today-grid-drag-cancel text-accent">
               View all →
             </Link>
             <TodayCollapseButton collapsed={collapsed} label="GitHub PRs" onToggle={onToggle} />
@@ -174,7 +173,7 @@ function GithubPrsStripShell({
         </HubStripHeading>
         <span className="flex min-w-0 items-center gap-2">
           {collapsed && collapsedSummary ? <span className="today-collapsed-summary">{collapsedSummary}</span> : null}
-          <Link href="/prs" className="text-xs today-grid-drag-cancel" style={{ color: "var(--accent)" }}>
+          <Link href="/prs" className="text-xs today-grid-drag-cancel text-accent">
             View all →
           </Link>
         </span>
@@ -219,7 +218,7 @@ export function GithubPrsPanel({
     const body = <>Couldn&apos;t load GitHub PRs. {error instanceof Error ? error.message : String(error)}</>;
     if (variant === "embedded") {
       return (
-        <div className="min-w-0 py-2 text-xs" style={{ color: "var(--danger)" }} role="alert">
+        <div className="min-w-0 py-2 text-xs text-danger" role="alert">
           {body}
         </div>
       );
@@ -287,13 +286,13 @@ export function GithubPrsPanel({
 
   const compact1x1 = (
     <div className="px-3 py-2.5 space-y-1.5">
-      <div className="flex gap-3 text-[12px]" style={{ color: "var(--text-subtle)" }}>
+      <div className="flex gap-3 text-[12px] text-text-subtle">
         {authored.length > 0 && <span><span style={{ color: "var(--text)", fontWeight: 600 }}>{authored.length}</span> mine</span>}
         {reviews.length > 0 && <span><span style={{ color: "var(--text)", fontWeight: 600 }}>{reviews.length}</span> review</span>}
-        {recentlyReviewed.length > 0 && <span><span style={{ color: "var(--text-muted)" }}>{recentlyReviewed.length}</span> reviewed</span>}
+        {recentlyReviewed.length > 0 && <span><span className="text-text-muted">{recentlyReviewed.length}</span> reviewed</span>}
       </div>
       {authored[0] && (
-        <a href={authored[0].url} target="_blank" rel="noopener noreferrer" className="block truncate text-[12px] no-underline hover:underline" style={{ color: "var(--text)" }}>
+        <a href={authored[0].url} target="_blank" rel="noopener noreferrer" className="block truncate text-[12px] no-underline hover:underline text-text">
           {authored[0].title}
         </a>
       )}
@@ -306,22 +305,22 @@ export function GithubPrsPanel({
         <div className="px-3 py-2">
           <div className="text-[10px] font-medium tracking-tight mb-1" style={{ color: "var(--text-muted)", fontWeight: 600 }}>Mine</div>
           {authored.slice(0, 3).map((r) => (
-            <a key={r.url} href={r.url} target="_blank" rel="noopener noreferrer" className="block truncate text-[12px] py-0.5 no-underline hover:underline" style={{ color: "var(--text)" }}>
+            <a key={r.url} href={r.url} target="_blank" rel="noopener noreferrer" className="block truncate text-[12px] py-0.5 no-underline hover:underline text-text">
               {r.title}
             </a>
           ))}
-          {authored.length > 3 && <span className="text-[11px]" style={{ color: "var(--text-subtle)" }}>+{authored.length - 3} more</span>}
+          {authored.length > 3 && <span className="text-[11px] text-text-subtle">+{authored.length - 3} more</span>}
         </div>
       )}
       {reviews.length > 0 && (
         <div className="px-3 py-2">
           <div className="text-[10px] font-medium tracking-tight mb-1" style={{ color: "var(--text-muted)", fontWeight: 600 }}>Review</div>
           {reviews.slice(0, 3).map((r) => (
-            <a key={r.url} href={r.url} target="_blank" rel="noopener noreferrer" className="block truncate text-[12px] py-0.5 no-underline hover:underline" style={{ color: "var(--text)" }}>
+            <a key={r.url} href={r.url} target="_blank" rel="noopener noreferrer" className="block truncate text-[12px] py-0.5 no-underline hover:underline text-text">
               {r.title}
             </a>
           ))}
-          {reviews.length > 3 && <span className="text-[11px]" style={{ color: "var(--text-subtle)" }}>+{reviews.length - 3} more</span>}
+          {reviews.length > 3 && <span className="text-[11px] text-text-subtle">+{reviews.length - 3} more</span>}
         </div>
       )}
     </div>

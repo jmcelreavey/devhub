@@ -3,13 +3,13 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { ExternalLink, LineChart } from "lucide-react";
-import { useLive } from "@/lib/use-fetch";
-import type { DatadogLinksApiResponse } from "@/lib/datadog-links";
-import type { DatadogRecentAlertsResponse } from "@/lib/datadog-recent-events";
-import type { OncallStatus } from "@/lib/datadog-oncall";
+import { useLive } from "@/lib/hooks/use-fetch";
+import type { DatadogLinksApiResponse } from "@/lib/datadog/links";
+import type { DatadogRecentAlertsResponse } from "@/lib/datadog/recent-events";
+import type { OncallStatus } from "@/lib/datadog/oncall";
 import { HUB_STRIP_ICON_PX, hubStripSetupLinkStyle, hubStripSetupLinkClassName } from "@/lib/hub-strip";
-import { HubSignalStrip } from "@/components/HubSignalStrip";
-import { TodayCollapseButton } from "@/components/TodayCollapseButton";
+import { HubSignalStrip } from "@/components/shell/HubSignalStrip";
+import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
 import { DatadogInvestigateButton } from "@/components/DatadogInvestigateButton";
 
 /** `true` once Datadog is configured *and* this user is on call — Today only cares when it's your pager. */
@@ -94,11 +94,11 @@ export function DatadogTodayStrip({
             style={{ background: "var(--danger)" }}
           />
         )}
-        <span style={{ color: "var(--danger)" }}>{recent.oncall.length} on-call</span>
+        <span className="text-danger">{recent.oncall.length} on-call</span>
         {" · "}
         {recent.teamSlack.length} team-slack
         {latestOncall ? (
-          <span style={{ color: "var(--text-subtle)" }}> · latest: {latestOncall.title}</span>
+          <span className="text-text-subtle"> · latest: {latestOncall.title}</span>
         ) : null}
       </span>
     ) : recent && !recent.ok && recent.code === "needs_application_key" ? (
@@ -110,7 +110,7 @@ export function DatadogTodayStrip({
         for recent alerts
       </span>
     ) : recent && !recent.ok ? (
-      <span className="text-[11px]" style={{ color: "var(--danger)" }} title={recent.message}>
+      <span className="text-[11px] text-danger" title={recent.message}>
         Alerts unavailable
       </span>
     ) : (
@@ -175,7 +175,7 @@ export function DatadogTodayStrip({
 
   if (variant === "embedded") {
     return (
-      <div className="min-w-0 py-1 text-xs" style={{ color: "var(--text-muted)" }}>
+      <div className="min-w-0 py-1 text-xs text-text-muted">
         {inner}
       </div>
     );
@@ -211,8 +211,8 @@ export function DatadogTodayStrip({
       data-collapsed={collapsed ? "true" : undefined}
     >
       <div className="today-signal-head">
-        <span className="today-signal-title" style={{ color: "var(--text)" }}>
-          <LineChart size={HUB_STRIP_ICON_PX} style={{ color: "var(--accent)" }} aria-hidden />
+        <span className="today-signal-title text-text">
+          <LineChart size={HUB_STRIP_ICON_PX} className="text-accent" aria-hidden />
           Datadog · today
         </span>
         {(collapsed && collapsedSummary) && (

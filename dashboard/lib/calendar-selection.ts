@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { safeReadJSON, withMutex, writeAtomic } from "@/lib/atomic-write";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes/dir";
 
 interface CalendarSelectionFile {
   version: 1;

@@ -27,6 +27,7 @@ import type { BriefingPrefs } from "@/lib/briefing-prefs";
 import { loadResearchCards } from "@/lib/briefing-research";
 import { fetchDynamicFeeds, type FeedResult } from "@/lib/briefing-feeds";
 import { runLast30DaysForInterests } from "@/lib/last30days-runner";
+import { buildDayPlan, type DayPlan } from "@/lib/briefing/day-plan";
 import { todayISO } from "@/lib/utils";
 
 export interface BriefingContext {
@@ -44,6 +45,11 @@ export interface BriefingContext {
   interests: InterestSnippet[];
   research: ResearchCard[];
   feeds: FeedResult[];
+  /**
+   * Today's meeting load, free windows, fitting tasks and recent run failures.
+   * Optional so a cached context written before this field existed still parses.
+   */
+  dayPlan?: DayPlan;
   /** Plain-text one-liner, kept for the home-screen widget + focus view. */
   summary: string;
 }
@@ -88,6 +94,9 @@ export async function assembleBriefingContext(
     await Promise.all([sources, researchRun]);
 
   const research = loadResearchCards(prefs.interests);
+  // Local reads (calendar cache, tasks file, run log) — cheap next to the
+  // network fan-out above, and never allowed to fail the briefing.
+  const dayPlan = await buildDayPlan(date).catch(() => undefined);
   const generatedAt = new Date().toISOString();
 
   const forSummary: DailyBriefing = {
@@ -120,6 +129,7 @@ export async function assembleBriefingContext(
     interests,
     research,
     feeds,
+    dayPlan,
     summary: buildBriefingSummary(forSummary),
   };
 }

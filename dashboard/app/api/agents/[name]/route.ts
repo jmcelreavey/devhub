@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes-dir";
-import { resolveAgentSources } from "@/lib/sync-agents";
+import { getRepoRoot } from "@/lib/notes/dir";
+import { resolveAgentSources } from "@/lib/sync/agents";
 
 const AGENT_SLUG = /^[a-z0-9][a-z0-9_-]{0,62}$/;
 

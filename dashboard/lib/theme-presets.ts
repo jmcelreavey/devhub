@@ -19,42 +19,70 @@ export const THEME_MODE_KEY = "devhub:theme";
 export const THEME_PRESET_KEY = "devhub:theme-preset";
 export const THEME_EVENT = "devhub:theme-change";
 
-/** Core palettes shipped by DevHub. Plugins can append more via branding. */
+/**
+ * Core palettes shipped by DevHub. Plugins can append more via branding.
+ *
+ * These are deliberately spread across the hue wheel *and* across character —
+ * temperature, chroma and contrast — because the previous set was five
+ * variations on "desaturated dark neutral plus one accent", which made the
+ * picker pointless. Each one now owns a lane nothing else occupies:
+ *
+ *   graphite    neutral achromatic charcoal + acid lime   (the default; untouched)
+ *   forest      warm brown-charcoal + burnt amber         — the only warm theme
+ *   midnight    saturated oceanic navy + electric azure   — coldest, highest contrast
+ *   tokyo       purple-black + violet/magenta neon        — neon-noir
+ *   catppuccin  authentic Mocha/Latte mauve               — softest, lowest contrast
+ *
+ * Swatches must match the real `--bg` in globals.css; they are what the picker
+ * renders, so a drifted swatch is a picker that lies.
+ */
 export const CORE_THEME_PRESETS = [
   {
     id: "forest",
-    label: "Forest Fizz",
-    description: "Dark green + black",
-    darkSwatch: "#0a1611",
-    lightSwatch: "#eef8f2",
+    label: "Ember Dusk",
+    description: "Warm charcoal + burnt amber",
+    darkSwatch: "#14100c",
+    lightSwatch: "#fbf6f0",
+    darkAccent: "#ff8f3f",
+    lightAccent: "#b85c14",
   },
   {
     id: "midnight",
-    label: "Midnight Blue",
-    description: "Deep navy + electric blue",
-    darkSwatch: "#0d1524",
+    label: "Abyss",
+    description: "Deep ocean navy + electric azure",
+    darkSwatch: "#050a17",
     lightSwatch: "#eef4ff",
+    darkAccent: "#2f80ff",
+    lightAccent: "#1259d6",
   },
   {
     id: "graphite",
     label: "Graphite Neon",
     description: "Charcoal + lime",
-    darkSwatch: "#121417",
-    lightSwatch: "#f5f7f8",
+    // Both swatches had drifted from the stylesheet (#121417/#f5f7f8), so the
+    // picker previewed colours this theme never used. Caught by the test.
+    darkSwatch: "#111416",
+    lightSwatch: "#f7f8f9",
+    darkAccent: "#9ed84a",
+    lightAccent: "#5d9e10",
   },
   {
     id: "tokyo",
     label: "Tokyo Night",
-    description: "Indigo slate + cyan",
-    darkSwatch: "#1a1b26",
-    lightSwatch: "#f0f4ff",
+    description: "Purple-black + violet neon",
+    darkSwatch: "#15121f",
+    lightSwatch: "#faf6ff",
+    darkAccent: "#c084fc",
+    lightAccent: "#7c35d6",
   },
   {
     id: "catppuccin",
     label: "Catppuccin",
-    description: "Latte/mocha + sapphire",
+    description: "Mocha/Latte + mauve",
     darkSwatch: "#1e1e2e",
     lightSwatch: "#eff1f5",
+    darkAccent: "#cba6f7",
+    lightAccent: "#8839ef",
   },
 ] as const;
 
@@ -64,6 +92,16 @@ export type ThemePresetMeta = {
   description: string;
   darkSwatch: string;
   lightSwatch: string;
+  /**
+   * The accent each mode uses. Optional because plugin-contributed presets
+   * predate these fields; the picker falls back to a plain background chip.
+   *
+   * Worth having because every dark `--bg` is a near-black rectangle — showing
+   * only the background made all six swatches look identical, which is the
+   * exact complaint the palettes themselves were redesigned to fix.
+   */
+  darkAccent?: string;
+  lightAccent?: string;
 };
 
 /**

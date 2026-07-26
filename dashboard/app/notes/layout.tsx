@@ -3,9 +3,9 @@
 import { Suspense, useState, useEffect, useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { NewNotePathModal } from "@/components/NewNotePathModal";
-import { NotesChecklistsPanel } from "@/components/NotesChecklistsPanel";
-import { NotesFilesSidebar } from "@/components/NotesFilesSidebar";
-import { type NotesPanelView } from "@/components/NotesViewToggle";
+import { NotesChecklistsPanel } from "@/components/notes/NotesChecklistsPanel";
+import { NotesFilesSidebar } from "@/components/notes/NotesFilesSidebar";
+import { type NotesPanelView } from "@/components/notes/NotesViewToggle";
 import { isNotesChecklistsPanel } from "@/lib/checklists/notes-url";
 
 export default function NotesLayout({ children }: { children: React.ReactNode }) {

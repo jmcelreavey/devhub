@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes-dir";
-import { deletePersonalMcpServer, resolvePersonalMcpFile } from "@/lib/mcp-personal";
-import { sharedMcpDir } from "@/lib/sync-mcp";
+import { getRepoRoot } from "@/lib/notes/dir";
+import { deletePersonalMcpServer, resolvePersonalMcpFile } from "@/lib/mcp/personal";
+import { sharedMcpDir } from "@/lib/sync/mcp";
 import type { McpCatalogScope } from "../route";
 
 const SERVER_SLUG = /^[a-z0-9][a-z0-9._-]{0,62}$/i;

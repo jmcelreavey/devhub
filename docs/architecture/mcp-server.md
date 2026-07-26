@@ -206,7 +206,7 @@ Capability tools proxy dashboard routes under `/api/capability/*`. Start `npm ru
 4. `capability_get_lab` — fetch an existing lab by `signalId` (labs are built from the UI or terminal skill).
 5. `capability_complete_lab` — mark a lab done and tick its follow-up task.
 
-See [Capability Radar plan](../capability-radar-plan.md) for the full feature map.
+See the [Capability Radar plan](../archive/capability-radar-plan.md) for the original feature map (archived — it shipped as `dashboard/lib/capability/`).
 
 ### Ship everything to main
 

@@ -1,4 +1,4 @@
-import { VaultEditorPage } from "@/components/VaultEditorPage";
+import { VaultEditorPage } from "@/components/vault/VaultEditorPage";
 
 type PageProps = { params: Promise<{ path: string[] }> };
 

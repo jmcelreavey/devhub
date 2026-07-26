@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { withErrorHandler, parseBody, isSameOrigin } from "@/lib/api-utils";
+import { withErrorHandler, parseBody } from "@/lib/api-utils";
+import { BriefingTaskCreateSchema } from "@/lib/schemas";
 import { listTasks, createResearchTask } from "@/lib/briefing-tasks";
 
 export const dynamic = "force-dynamic";
@@ -12,9 +13,9 @@ export const GET = withErrorHandler(async () => {
 }, "briefing.tasks.list");
 
 export const POST = withErrorHandler(async (request: NextRequest) => {
-  if (!isSameOrigin(request)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const { topic } = await parseBody<{ topic?: string }>(request);
-  const task = await createResearchTask(String(topic ?? ""));
-  if (!task) return NextResponse.json({ ok: false, error: "A topic of at least 3 characters is required" }, { status: 400 });
+  const parsed = await parseBody(request, BriefingTaskCreateSchema);
+  if (!parsed.ok) return parsed.response;
+  const task = await createResearchTask(parsed.data.topic);
+  if (!task) return NextResponse.json({ ok: false, error: "Could not create the research task" }, { status: 400 });
   return NextResponse.json({ ok: true, task }, { headers: NO_STORE });
 }, "briefing.tasks.create");

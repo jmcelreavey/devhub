@@ -11,9 +11,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { generateText } from "ai";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes/dir";
 import { writeAtomic, safeReadJSON, withMutex } from "@/lib/atomic-write";
-import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai-provider";
+import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai/provider";
 import { isNotesAiConfigured } from "@/lib/notes-ai/config";
 import { runLast30DaysForInterests } from "@/lib/last30days-runner";
 import { loadResearchCards, researchDir } from "@/lib/briefing-research";

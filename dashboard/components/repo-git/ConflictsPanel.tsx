@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Bot, Check, RefreshCw } from "lucide-react";
-import { SkeletonRows } from "@/components/SkeletonRows";
-import { useToast } from "@/lib/use-toast";
+import { SkeletonRows } from "@/components/ui/SkeletonRows";
+import { useToast } from "@/lib/hooks/use-toast";
 import { agentStashConflictCommand, openTerminal } from "@/lib/terminal-launch";
 import { fetchGitJson, postGitAction, repoApi } from "./shared";
 
@@ -90,7 +90,7 @@ export function ConflictsPanel({
   if (conflicts.length === 0) {
     return (
       <div className="repo-git-empty">
-        <Check size={20} style={{ color: "var(--success)" }} />
+        <Check size={20} className="text-success" />
         <div>No unmerged conflicts in this repo.</div>
         <div style={{ color: "var(--text-subtle)", fontSize: 12 }}>
           When stash/checkout leave conflicts, edit them here or hand off to the agent.
@@ -102,7 +102,7 @@ export function ConflictsPanel({
   return (
     <div className="repo-git-conflicts">
       <div className="repo-git-changes-toolbar">
-        <span className="text-xs" style={{ color: "var(--danger)" }}>
+        <span className="text-xs text-danger">
           <AlertTriangle size={12} style={{ display: "inline", verticalAlign: "-2px" }} /> {conflicts.length} conflict
           {conflicts.length === 1 ? "" : "s"}
         </span>

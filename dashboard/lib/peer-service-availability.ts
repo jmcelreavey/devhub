@@ -3,8 +3,8 @@ import http from "node:http";
 import { spawnSync } from "node:child_process";
 import { DEV_SERVICES } from "./dev-services";
 import { findOpenChamberBin } from "./openchamber-command";
-import { resolveOpenCodeBinary, resolveOpenCodeBindHost } from "./opencode-command";
-import { findInstalledApp } from "./launch-desktop";
+import { resolveOpenCodeBinary, resolveOpenCodeBindHost } from "@/lib/opencode/command";
+import { findInstalledApp } from "@/lib/launch/desktop";
 
 function commandOnPath(cmd: string): boolean {
   const which = process.platform === "win32" ? "where" : "which";

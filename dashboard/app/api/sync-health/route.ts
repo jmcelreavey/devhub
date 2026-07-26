@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { withErrorHandler } from "@/lib/api-utils";
-import { getRepoRoot } from "@/lib/notes-dir";
-import { collectSyncHealth } from "@/lib/sync-health";
+import { getRepoRoot } from "@/lib/notes/dir";
+import { collectSyncHealth } from "@/lib/sync/health";
 
 export const dynamic = "force-dynamic";
 

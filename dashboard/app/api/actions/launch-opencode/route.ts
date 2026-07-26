@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { launchDesktopApp } from "@/lib/launch-desktop";
+import { launchDesktopApp } from "@/lib/launch/desktop";
 
 const CONFIG = {
   appName: "OpenCode",

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useLaunchClaudeDesktop } from "@/lib/launch-claude";
-import { useConfirm, usePrompt } from "@/components/ConfirmDialog";
+import { useLaunchClaudeDesktop } from "@/lib/launch/claude";
+import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
 import {
   agentRepoDxAuditCommand,
   agentRepoUpstartCommand,
@@ -11,7 +11,7 @@ import {
   openTerminal,
   repoUpstartCommand,
 } from "@/lib/terminal-launch";
-import { useToast } from "@/lib/use-toast";
+import { useToast } from "@/lib/hooks/use-toast";
 import type { RepoInfo } from "./types";
 
 /**

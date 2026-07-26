@@ -11,9 +11,9 @@
 
 import path from "node:path";
 import { generateText } from "ai";
-import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai-provider";
+import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai/provider";
 import { isNotesAiConfigured } from "@/lib/notes-ai/config";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes/dir";
 import { writeAtomic, safeReadJSON, withMutex } from "@/lib/atomic-write";
 import { BRIEFING_DATA_SHAPE, type BriefingContext } from "@/lib/briefing-context";
 import { DEFAULT_CANVAS_HTML } from "@/lib/briefing-canvas-default";

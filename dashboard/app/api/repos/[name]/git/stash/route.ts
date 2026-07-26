@@ -1,12 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { detectUnmergedFiles } from "@/lib/git-conflicts";
+import { detectUnmergedFiles } from "@/lib/git/conflicts";
 import {
   formatIndexLockError,
   looksLikeIndexLockError,
   prepareGitIndexWrite,
-} from "@/lib/git-index-lock";
-import { runGitRepoAsync } from "@/lib/git-repo-local";
-import { parseStashList, parseUnifiedDiff } from "@/lib/repo-git-parsers";
+} from "@/lib/git/index-lock";
+import { runGitRepoAsync } from "@/lib/git/repo-local";
+import { parseStashList, parseUnifiedDiff } from "@/lib/repos/git-parsers";
 import type { StashConflictPayload } from "@/app/repos/types";
 import { gitFail, withScannedRepo, type RepoParams } from "../_shared";
 

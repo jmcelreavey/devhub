@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { resolveOpenCodePort } from "@/lib/opencode-command";
+import { resolveOpenCodePort } from "@/lib/opencode/command";
 import {
   buildDatadogInvestigationPrompt,
   type DatadogInvestigationInput,
-} from "@/lib/datadog-investigation-prompt";
+} from "@/lib/datadog/investigation-prompt";
 import { withErrorHandler } from "@/lib/api-utils";
 
 export const dynamic = "force-dynamic";

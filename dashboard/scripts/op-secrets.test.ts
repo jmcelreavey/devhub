@@ -16,7 +16,7 @@ vi.mock("../lib/dashboard-env-local", () => ({
 vi.mock("./load-env-local-into-process", () => ({
   loadEnvLocalIntoProcessIfUnset: mockLoadEnv,
 }));
-vi.mock("../lib/sync-opencode-config", () => ({
+vi.mock("@/lib/sync/opencode-config", () => ({
   // NOTES_DIR is a local-only key — managed, but excluded from sync by default.
   getManagedSecretEnvNames: () => ["JIRA_API_TOKEN", "GOOGLE_CLIENT_SECRET", "NOTES_DIR"],
 }));

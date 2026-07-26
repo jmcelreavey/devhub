@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { listTaskDays } from "@/lib/tasks-storage";
-import { buildWeeklyReview } from "@/lib/tasks-weekly";
-import { localCalendarDateISO } from "@/lib/local-calendar-date";
+import { listTaskDays } from "@/lib/tasks/storage";
+import { buildWeeklyReview } from "@/lib/tasks/weekly";
+import { localCalendarDateISO } from "@/lib/local/calendar-date";
 import { withErrorHandler } from "@/lib/api-utils";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;

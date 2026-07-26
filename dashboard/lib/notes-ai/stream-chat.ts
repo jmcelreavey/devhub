@@ -1,7 +1,7 @@
 import { convertToModelMessages, streamText } from "ai";
 import { injectDocumentStateMessages, toolDefinitionsToToolSet } from "@blocknote/xl-ai/server";
 import { BLOCKNOTE_HTML_SYSTEM_PROMPT } from "@/lib/notes-ai/blocknote-html-system-prompt";
-import { getNotesAiModel } from "@/lib/ai-provider";
+import { getNotesAiModel } from "@/lib/ai/provider";
 
 export interface NotesAiChatBody {
   messages: Parameters<typeof injectDocumentStateMessages>[0];

@@ -49,3 +49,9 @@ next-env.d.ts
 /public/fonts-plugin/
 /public/plugin-brand-logo.*
 /public/plugin-electron-icon.png
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

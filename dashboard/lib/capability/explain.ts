@@ -11,7 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { generateText } from "ai";
-import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai-provider";
+import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai/provider";
 import { safeReadJSON, writeAtomic } from "@/lib/atomic-write";
 import { gitLog } from "./git";
 import { capabilityCacheDir, safeSegment } from "./paths";

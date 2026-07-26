@@ -3,7 +3,7 @@ import {
   AGENT_CLI_DEFAULTS,
   setAgentCliConfigCache,
   type AgentCliConfig,
-} from "./agent-cli-config";
+} from "@/lib/agent/cli-config";
 import {
   agentRepoDxAuditCommand,
   agentRepoUpstartCommand,

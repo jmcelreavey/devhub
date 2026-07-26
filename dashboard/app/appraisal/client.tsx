@@ -4,24 +4,24 @@ import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { Download, Link2, Plus, Target, Users } from "lucide-react";
 import { FetchError, PageHeader } from "@/components";
-import { ToggleGroup } from "@/components/ToggleGroup";
+import { ToggleGroup } from "@/components/ui/ToggleGroup";
 import {
   EvidenceSuggestionList,
   type EvidenceSaveResult,
   type EvidenceSuggestion,
-} from "@/components/EvidenceSuggestions";
-import { SimpleMarkdown } from "@/components/SimpleMarkdown";
-import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
+} from "@/components/capability/EvidenceSuggestions";
+import { SimpleMarkdown } from "@/components/ui/SimpleMarkdown";
+import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 import { setAppraisalGoal } from "@/lib/appraisal-record";
 import {
   EVIDENCE_RANGE_PRESETS,
   evidenceRangeLabel,
   type EvidenceRangeDays,
 } from "@/lib/appraisal-evidence-range";
-import { useEvidenceRangeDays } from "@/lib/use-evidence-range-days";
-import { useLive } from "@/lib/use-fetch";
+import { useEvidenceRangeDays } from "@/lib/hooks/use-evidence-range-days";
+import { useLive } from "@/lib/hooks/use-fetch";
 import { copyTextToClipboard } from "@/lib/clipboard";
-import { useToast } from "@/lib/use-toast";
+import { useToast } from "@/lib/hooks/use-toast";
 
 interface YearPayload {
   year: number;

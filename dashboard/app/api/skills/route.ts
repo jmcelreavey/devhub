@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes/dir";
 import { withErrorHandler } from "@/lib/api-utils";
 import { buildAiToolsMeta, createSkillCatalogContext, listSkillsFromCatalog } from "@/lib/skill-catalog";
-import { devhubSharedSkillsDir, SKILL_SLUG } from "@/lib/skills-shared";
+import { devhubSharedSkillsDir, SKILL_SLUG } from "@/lib/skills/shared";
 
 export const GET = withErrorHandler(async () => {
   const repoRoot = getRepoRoot();

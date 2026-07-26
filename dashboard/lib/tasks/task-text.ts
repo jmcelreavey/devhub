@@ -1,0 +1,108 @@
+/**
+ * Pure text handling for tasks: Jira key rewriting, markdown-link parsing,
+ * bare-URL detection, search matching.
+ *
+ * Extracted from `components/TaskList.tsx` (R11). All of it was pure string
+ * work living inside a 1,400-line client component, which meant none of it
+ * could be tested without mounting React — so none of it was tested, despite
+ * being the part most likely to be subtly wrong (regex, escaping, indices).
+ *
+ * No React import here on purpose; the rendering half lives in
+ * `components/tasks/TaskText.tsx`.
+ */
+import { todayISO } from "@/lib/utils";
+import type { Task } from "@/lib/tasks/types";
+
+export const MD_LINK_RE = /\[([^\]]+)\]\(([^)]+)\)/g;
+
+/** A bare URL, excluding one already inside a markdown link's parentheses. */
+export const BARE_URL_RE = /(?<!\(\s?)https?:\/\/[^\s)\]]+/;
+
+export function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Remove a Jira key from the task text once it's shown as a chip instead. */
+export function stripLinkedJiraKeyFromText(text: string, jiraKey: string): string {
+  const re = new RegExp(`\\b${escapeRegExp(jiraKey)}\\b`, "gi");
+  return text
+    .replace(re, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[-–—,:]\s*/, "")
+    .trim();
+}
+
+/**
+ * Point a task at a newly created Jira ticket: replace its current key with the
+ * new one (so the chip/status/link all track the new ticket), or prepend the
+ * new key when the task had none.
+ */
+export function rewriteTaskKey(text: string, oldKey: string | undefined, newKey: string): string {
+  if (oldKey) {
+    const re = new RegExp(`\\b${escapeRegExp(oldKey)}\\b`, "g");
+    if (re.test(text)) return text.replace(new RegExp(`\\b${escapeRegExp(oldKey)}\\b`, "g"), newKey);
+  }
+  return `${newKey} ${text}`.replace(/\s+/g, " ").trim();
+}
+
+export interface TextPart {
+  type: "text" | "link";
+  text: string;
+  url?: string;
+}
+
+export function parseMarkdownLinks(text: string): TextPart[] {
+  const parts: TextPart[] = [];
+  let lastIndex = 0;
+  for (const match of text.matchAll(MD_LINK_RE)) {
+    if (match.index! > lastIndex) {
+      parts.push({ type: "text", text: text.slice(lastIndex, match.index) });
+    }
+    parts.push({ type: "link", text: match[1], url: match[2] });
+    lastIndex = match.index! + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    parts.push({ type: "text", text: text.slice(lastIndex) });
+  }
+  return parts;
+}
+
+/**
+ * A URL typed on its own, so the UI can offer to turn it into a named link.
+ *
+ * `MD_LINK_RE` is a module-level /g regex, so `lastIndex` is shared state: miss
+ * a reset around `.test()` and consecutive calls alternate between matching and
+ * not. The original handled this correctly; the resets are hoisted here purely
+ * to make the requirement obvious, and there is now a test pinning it so a
+ * future "simplification" can't quietly reintroduce the hazard.
+ */
+export function detectBareUrl(text: string): string | null {
+  MD_LINK_RE.lastIndex = 0;
+  const hasMarkdownLink = MD_LINK_RE.test(text);
+  MD_LINK_RE.lastIndex = 0;
+  if (hasMarkdownLink) return null;
+  const match = text.match(BARE_URL_RE);
+  return match ? match[0] : null;
+}
+
+/** One quiet line for a cleared queue - date-seeded so it holds all day. */
+export const CLEARED_LINES = [
+  "Done for today. Touch grass.",
+  "Queue clear. Go build something.",
+  "Nothing owed. Savour it.",
+  "All clear - the rest of the day is yours.",
+] as const;
+
+export function clearedLineForToday(today = todayISO()): string {
+  const seed = today.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  return CLEARED_LINES[seed % CLEARED_LINES.length];
+}
+
+export function matchesTaskSearch(task: Task, query: string): boolean {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  return (
+    task.text.toLowerCase().includes(q) || (!!task.jiraKey && task.jiraKey.toLowerCase().includes(q))
+  );
+}

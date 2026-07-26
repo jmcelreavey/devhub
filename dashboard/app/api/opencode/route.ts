@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes/dir";
 import { withErrorHandler } from "@/lib/api-utils";
 import {
   listOpencodeSecretEnvNames,
   sharedOpencodeConfigPath,
-} from "@/lib/sync-opencode-config";
-import { findRawSecretPath } from "@/lib/opencode-secrets";
+} from "@/lib/sync/opencode-config";
+import { findRawSecretPath } from "@/lib/opencode/secrets";
 
 export const dynamic = "force-dynamic";
 

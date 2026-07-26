@@ -4,7 +4,7 @@ vi.mock("@/lib/notes-ai/config", () => ({
   isNotesAiConfigured: vi.fn(() => false),
 }));
 
-vi.mock("@/lib/ai-provider", () => ({
+vi.mock("@/lib/ai/provider", () => ({
   getNotesAiModel: vi.fn(() => null),
   getNotesAiCallOptions: vi.fn(() => ({})),
 }));

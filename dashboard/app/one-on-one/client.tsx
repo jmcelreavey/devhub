@@ -4,20 +4,20 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Copy, FilePlus2, Target, Users } from "lucide-react";
 import { PageHeader, SkeletonRows } from "@/components";
-import { ToggleGroup } from "@/components/ToggleGroup";
+import { ToggleGroup } from "@/components/ui/ToggleGroup";
 import {
   EvidenceSuggestionList,
   type EvidenceSuggestion,
-} from "@/components/EvidenceSuggestions";
+} from "@/components/capability/EvidenceSuggestions";
 import {
   EVIDENCE_RANGE_PRESETS,
   evidenceRangeLabel,
   type EvidenceRangeDays,
 } from "@/lib/appraisal-evidence-range";
-import { useEvidenceRangeDays } from "@/lib/use-evidence-range-days";
-import { useLive } from "@/lib/use-fetch";
+import { useEvidenceRangeDays } from "@/lib/hooks/use-evidence-range-days";
+import { useLive } from "@/lib/hooks/use-fetch";
 import { copyTextToClipboard } from "@/lib/clipboard";
-import { useToast } from "@/lib/use-toast";
+import { useToast } from "@/lib/hooks/use-toast";
 import { textToBlocks } from "@/lib/markdown-convert";
 import { insertUnderHeading } from "@/lib/one-on-one-template";
 
@@ -144,7 +144,7 @@ export default function OneOnOneClient() {
     <div className="page-wrapper">
       <PageHeader
         title="1:1 capture"
-        subtitle="Editable template + lookback candidates. Create note writes the vault; Save cites appraisal."
+        subtitle="An editable template, plus suggestions from recent work. Create note saves it to your notes; Save records it against your appraisal."
         actions={
           <div className="flex flex-wrap gap-2">
             <Link href="/appraisal" className="btn btn-ghost text-xs">
@@ -206,7 +206,7 @@ export default function OneOnOneClient() {
         </div>
         <div className="card-body space-y-2 text-xs text-text-subtle">
           {error ? (
-            <p style={{ color: "var(--danger)" }}>{error.message}</p>
+            <p className="text-danger">{error.message}</p>
           ) : (
             <EvidenceSuggestionList
               suggestions={suggestions}

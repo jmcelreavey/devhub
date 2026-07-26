@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { applyTransition } from "@/lib/jira-client";
-import { JiraTransitionSchema, formatZodError } from "@/lib/schemas";
+import { applyTransition } from "@/lib/jira/client";
+import { JiraTransitionSchema } from "@/lib/schemas";
 import { withErrorHandler, parseBody } from "@/lib/api-utils";
-import { invalidateJiraTicketsCache } from "@/lib/jira-tickets-cache";
+import { invalidateJiraTicketsCache } from "@/lib/jira/tickets-cache";
 import { invalidateSidebarCountsCache } from "@/lib/sidebar-counts-cache";
 
 /** Apply a workflow transition to a ticket (move it to a new state). */
@@ -12,11 +12,8 @@ export const POST = withErrorHandler(
     if (!process.env.JIRA_DOMAIN) {
       return NextResponse.json({ error: "Not configured" }, { status: 400 });
     }
-    const body = await parseBody<unknown>(req);
-    const parsed = JiraTransitionSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
-    }
+    const parsed = await parseBody(req, JiraTransitionSchema);
+    if (!parsed.ok) return parsed.response;
     await applyTransition(key, parsed.data.transitionId);
     invalidateJiraTicketsCache();
     invalidateSidebarCountsCache();

@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { z } from "zod";
+import { formatZodError } from "./schemas";
 
 type RouteHandler<Args extends unknown[]> = (...args: Args) => Promise<Response>;
 
@@ -17,8 +19,52 @@ export function withErrorHandler<Args extends unknown[]>(
   };
 }
 
-export async function parseBody<T>(req: Request): Promise<T> {
-  try { return await req.json() as T; } catch { return {} as T; }
+/**
+ * Read and validate a JSON request body.
+ *
+ * The previous signature was `parseBody<T>(req): Promise<T>` implemented as
+ * `await req.json() as T` — a type assertion over whatever the client sent. The
+ * compiler then cheerfully reported `body.fullName` as `string | undefined`
+ * when it was in fact an object, an array or null, and the first `.trim()`
+ * turned a should-be-400 into a 500. Worse for the handlers that pass the value
+ * on to a path join or a spawn argument.
+ *
+ * Taking the schema means the type flows *out* of the parse instead of being
+ * asserted onto it, and malformed input becomes a 400 describing what was
+ * wrong rather than an exception somewhere further down.
+ *
+ * Usage:
+ *
+ *   const parsed = await parseBody(req, z.object({ fullName: z.string().min(1) }));
+ *   if (!parsed.ok) return parsed.response;
+ *   parsed.data.fullName; // string
+ */
+export async function parseBody<S extends z.ZodType>(
+  req: Request,
+  schema: S,
+): Promise<{ ok: true; data: z.infer<S> } | { ok: false; response: NextResponse }> {
+  let raw: unknown;
+  try {
+    raw = await req.json();
+  } catch {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }),
+    };
+  }
+
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) {
+    // `formatZodError` keeps the 400 shape identical to the routes that were
+    // already validating by hand (`{ error: "field: message; ..." }`), so
+    // migrating a route doesn't change its contract with the client.
+    return {
+      ok: false,
+      response: NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 }),
+    };
+  }
+
+  return { ok: true, data: parsed.data };
 }
 
 /**

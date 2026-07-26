@@ -1,10 +1,10 @@
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { detectGitConflicts } from "@/lib/git-conflicts";
-import { getRepoRoot } from "@/lib/notes-dir";
-import { buildContentBuckets, matchContentBucket } from "@/lib/content-sync-dirs";
-import { runGitRepo, runGitRepoAsync } from "@/lib/git-repo-local";
-import { isGitNoisePath } from "@/lib/repo-git-parsers";
+import { detectGitConflicts } from "@/lib/git/conflicts";
+import { getRepoRoot } from "@/lib/notes/dir";
+import { buildContentBuckets, matchContentBucket } from "@/lib/content/sync-dirs";
+import { runGitRepo, runGitRepoAsync } from "@/lib/git/repo-local";
+import { isGitNoisePath } from "@/lib/repos/git-parsers";
 
 /** Throttle the network fetch — local counting stays per-request. */
 const FETCH_TTL_MS = 4 * 60 * 1000;

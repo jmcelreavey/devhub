@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getJiraMeta } from "@/lib/jira-client";
+import { getJiraMeta } from "@/lib/jira/client";
 import { withErrorHandler } from "@/lib/api-utils";
 
 const DEFAULT_PROJECT = process.env.JIRA_DEFAULT_PROJECT?.trim() || "PTF";

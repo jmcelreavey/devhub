@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getOpenCodeRecap, OpenCodeRecapError } from "@/lib/opencode-recap";
+import { getOpenCodeRecap, OpenCodeRecapError } from "@/lib/opencode/recap";
 
 export const dynamic = "force-dynamic";
 

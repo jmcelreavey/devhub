@@ -4,10 +4,10 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { ListTodo, Ticket, History } from "lucide-react";
-import { TaskList } from "@/components/TaskList";
-import { useLive } from "@/lib/use-fetch";
+import { TaskList } from "@/components/tasks/TaskList";
+import { useLive } from "@/lib/hooks/use-fetch";
 import type { SetupGateStatus } from "@/lib/nav";
-import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
+import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 
 const TicketsPage = dynamic(() => import("@/app/tickets/client"), { ssr: false });
 const TaskHistoryPage = dynamic(() => import("@/app/tasks/client"), { ssr: false });

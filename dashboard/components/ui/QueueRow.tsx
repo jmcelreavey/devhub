@@ -72,8 +72,7 @@ export function QueueRow({
         <div className="flex min-w-0 items-center gap-2">
           {monoKey && (
             <span
-              className="shrink-0 font-mono text-[11px]"
-              style={{ color: "var(--text-subtle)" }}
+              className="shrink-0 font-mono text-[11px] text-text-subtle"
             >
               {monoKey}
             </span>
@@ -83,27 +82,25 @@ export function QueueRow({
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="min-w-0 truncate text-[13px] font-medium no-underline hover:underline"
-              style={{ color: "var(--text)" }}
+              className="min-w-0 truncate text-[13px] font-medium no-underline hover:underline text-text"
             >
               {title}
             </a>
           ) : (
-            <span className="min-w-0 truncate text-[13px] font-medium" style={{ color: "var(--text)" }}>
+            <span className="min-w-0 truncate text-[13px] font-medium text-text">
               {title}
             </span>
           )}
           <span className="flex-1" />
           {statusPill ?? (statusLabel && (
             <span
-              className="shrink-0 font-mono text-[11px]"
-              style={{ color: "var(--text-subtle)" }}
+              className="shrink-0 font-mono text-[11px] text-text-subtle"
             >
               {statusLabel}
             </span>
           ))}
           {age && (
-            <span className="shrink-0 font-mono text-[11px]" style={{ color: "var(--text-subtle)" }}>
+            <span className="shrink-0 font-mono text-[11px] text-text-subtle">
               {age}
             </span>
           )}

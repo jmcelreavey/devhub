@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { addTask, toggleTask, deleteTask, updateTask, abandonTask, reactivateTask, reorderOpenTasks, rolloverTasks, startTaskTimer, stopTaskTimer } from "@/lib/tasks-storage";
+import { addTask, toggleTask, deleteTask, updateTask, abandonTask, reactivateTask, reorderOpenTasks, rolloverTasks, startTaskTimer, stopTaskTimer } from "@/lib/tasks/storage";
 import {
   TaskCreateSchema,
   TaskPatchSchema,

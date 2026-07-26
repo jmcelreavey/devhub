@@ -1,4 +1,4 @@
-import type { DevHubPartialBlock } from "@/lib/blocknote-schema";
+import type { DevHubPartialBlock } from "@/lib/blocknote/schema";
 
 /** Single empty paragraph — daily notes start blank until you write something. */
 export const EMPTY_NOTE_BLOCKS: DevHubPartialBlock[] = [

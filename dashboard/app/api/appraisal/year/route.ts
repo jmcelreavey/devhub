@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 import { withErrorHandler } from "@/lib/api-utils";
-import { getNotesDir } from "@/lib/content-dirs";
+import { getNotesDir } from "@/lib/content/dirs";
 import { blocksToText, textToBlocks } from "@/lib/markdown-convert";
 import {
   GOAL_STATUSES,

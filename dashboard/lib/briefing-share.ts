@@ -11,7 +11,7 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execGh } from "@/lib/gh-exec";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes/dir";
 import { writeAtomic, safeReadJSON, withMutex } from "@/lib/atomic-write";
 import { buildBriefingContext } from "@/lib/briefing-context";
 import { readCanvas, renderCanvasDocument } from "@/lib/briefing-canvas";

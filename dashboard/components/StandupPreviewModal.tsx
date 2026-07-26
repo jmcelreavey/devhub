@@ -4,8 +4,8 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Copy, FileText, X } from "lucide-react";
 import { copyTextToClipboard } from "@/lib/clipboard";
-import { useToast } from "@/lib/use-toast";
-import type { StandupResponse } from "@/lib/standup-params";
+import { useToast } from "@/lib/hooks/use-toast";
+import type { StandupResponse } from "@/lib/standup/params";
 
 export interface StandupPreviewModalProps {
   open: boolean;

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { resolveOpenCodePort } from "./opencode-command";
+import { resolveOpenCodePort } from "@/lib/opencode/command";
 import { scrubNpmEnv } from "./process-env";
 
 export function cleanOpenChamberEnv(): NodeJS.ProcessEnv {

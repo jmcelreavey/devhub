@@ -10,26 +10,27 @@ import "./globals.css";
 // Machine-local palette + @font-face for the active branding plugin (empty baseline
 // when none is enabled). Imported after globals so a plugin can override core tokens.
 import "./plugin-branding.generated.css";
-import { CollapsibleSidebar } from "@/components/CollapsibleSidebar";
-import { MobileShell } from "@/components/MobileShell";
-import { NotesOverlayProvider } from "@/components/NotesOverlayProvider";
-import { TerminalDock } from "@/components/TerminalDock";
-import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
-import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
-import { ThemeSystemSync } from "@/components/ThemeSystemSync";
-import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
-import { DashboardShell } from "@/components/DashboardShell";
-import { TabTitle } from "@/components/TabTitle";
-import { ToastProvider } from "@/components/ToastProvider";
-import { ConfirmProvider } from "@/components/ConfirmDialog";
-import { HubTopBar } from "@/components/HubTopBar";
-import { NavProgress } from "@/components/NavProgress";
-import { PersistentChamber } from "@/components/PersistentChamber";
-import { PersistentOpenCode } from "@/components/PersistentOpenCode";
-import { PersistentClaude } from "@/components/PersistentClaude";
-import { PersistentRepoLearnDock } from "@/components/PersistentRepoLearnDock";
-import { UiPrefsBootstrap } from "@/components/UiPrefsBootstrap";
-import { KonamiPong } from "@/components/KonamiPong";
+import { CollapsibleSidebar } from "@/components/shell/CollapsibleSidebar";
+import { MobileShell } from "@/components/shell/MobileShell";
+import { NotesOverlayProvider } from "@/components/notes/NotesOverlayProvider";
+import { TerminalDock } from "@/components/shell/TerminalDock";
+import { PWAInstallPrompt } from "@/components/shell/PWAInstallPrompt";
+import { ServiceWorkerRegister } from "@/components/shell/ServiceWorkerRegister";
+import { ThemeSystemSync } from "@/components/shell/ThemeSystemSync";
+import { KeyboardShortcuts } from "@/components/shell/KeyboardShortcuts";
+import { DashboardShell } from "@/components/shell/DashboardShell";
+import { TabTitle } from "@/components/shell/TabTitle";
+import { ToastProvider } from "@/components/shell/ToastProvider";
+import { ConfirmProvider } from "@/components/shell/ConfirmDialog";
+import { HubTopBar } from "@/components/shell/HubTopBar";
+import { NavProgress } from "@/components/shell/NavProgress";
+import { PersistentChamber } from "@/components/persistent/PersistentChamber";
+import { PersistentOpenCode } from "@/components/persistent/PersistentOpenCode";
+import { PersistentClaude } from "@/components/persistent/PersistentClaude";
+import { PersistentRepoLearnDock } from "@/components/persistent/PersistentRepoLearnDock";
+import { UiPrefsBootstrap } from "@/components/shell/UiPrefsBootstrap";
+import { KonamiGate } from "@/components/shell/KonamiGate";
+import { RouteUsageRecorder } from "@/components/shell/RouteUsageRecorder";
 
 /** Display face for headings — pairs with the system body stack (Hallmark 2+1). */
 const displayFont = Instrument_Sans({
@@ -110,7 +111,17 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         className="h-full flex overflow-y-hidden"
         style={{ background: "var(--bg)", color: "var(--text)" }}
       >
+        {/*
+          Skip link — must be the first focusable thing in the DOM. The sidebar
+          renders ~13 nav items before <main>, so without this a keyboard user
+          tabs the whole sidebar on every page load. Visually hidden until
+          focused (see .skip-link in globals.css).
+        */}
+        <a href="#main-content" className="skip-link">
+          Skip to main content
+        </a>
         <ServiceWorkerRegister />
+        <RouteUsageRecorder />
         <ThemeSystemSync />
         <ToastProvider>
           <ConfirmProvider>
@@ -132,7 +143,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               {/* Desktop topbar - breadcrumbs + actions */}
               <HubTopBar />
 
-              <main className="flex-1 overflow-y-auto relative">
+              <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto relative">
                   {children}
                   <PersistentChamber />
                   <PersistentOpenCode />
@@ -144,7 +155,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <NotesOverlayProvider />
             <TerminalDock />
             <PWAInstallPrompt />
-            <KonamiPong />
+            <KonamiGate />
           </ConfirmProvider>
         </ToastProvider>
       </body>

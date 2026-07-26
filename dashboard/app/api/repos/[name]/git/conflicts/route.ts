@@ -3,7 +3,7 @@ import {
   detectUnmergedFiles,
   readConflictFileContent,
   resolveConflictFile,
-} from "@/lib/git-conflicts";
+} from "@/lib/git/conflicts";
 import { withScannedRepo, type RepoParams } from "../_shared";
 
 export async function GET(_req: NextRequest, { params }: RepoParams) {

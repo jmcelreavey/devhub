@@ -1,5 +1,5 @@
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes/dir";
 
 /**
  * Absolute path inside the (gitignored) Capability Radar cache under

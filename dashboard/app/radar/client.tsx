@@ -24,13 +24,13 @@ import {
   useLab,
   useLabRecords,
   type LabRecordSummary,
-} from "@/components/LabInline";
+} from "@/components/capability/LabInline";
 import { openLabWorkspaceInCursor } from "@/lib/open-in-cursor-client";
-import { SimpleMarkdown } from "@/components/SimpleMarkdown";
-import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
+import { SimpleMarkdown } from "@/components/ui/SimpleMarkdown";
+import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 import { formatShortDate } from "@/lib/format-date";
-import { useLive } from "@/lib/use-fetch";
-import { useToast } from "@/lib/use-toast";
+import { useLive } from "@/lib/hooks/use-fetch";
+import { useToast } from "@/lib/hooks/use-toast";
 import { AREA_LABEL, AREA_ORDER } from "@/lib/capability/labels";
 import type {
   CapabilityDiff,

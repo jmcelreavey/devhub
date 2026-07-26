@@ -1,8 +1,8 @@
 import { Suspense } from "react";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes/dir";
 import { buildAiToolsMeta, listSkillsForApi } from "@/lib/skill-catalog";
-import type { SkillsListResponse } from "@/lib/skills-api-types";
-import { BootScreen } from "@/components/TodayBootScreen";
+import type { SkillsListResponse } from "@/lib/skills/api-types";
+import { BootScreen } from "@/components/today/TodayBootScreen";
 import Client from "./client";
 
 export default function SkillsPage() {

@@ -6,8 +6,8 @@ import { EmptyState, FetchError, PageHeader } from "@/components";
 import { LearnContent } from "../../LearnContent";
 import { openRepoInCursor } from "@/lib/open-in-cursor-client";
 import { openTerminal } from "@/lib/terminal-launch";
-import { useLive } from "@/lib/use-fetch";
-import { useToast } from "@/lib/use-toast";
+import { useLive } from "@/lib/hooks/use-fetch";
+import { useToast } from "@/lib/hooks/use-toast";
 import type { ReposApiPayload } from "../../types";
 
 /**

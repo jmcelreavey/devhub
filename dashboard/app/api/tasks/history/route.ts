@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTasks, listTaskDays, listTaskFiles } from "@/lib/tasks-storage";
+import { getTasks, listTaskDays, listTaskFiles } from "@/lib/tasks/storage";
 import { withErrorHandler } from "@/lib/api-utils";
 
 export const GET = withErrorHandler(async (req: Request) => {

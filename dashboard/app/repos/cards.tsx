@@ -17,8 +17,8 @@ import {
   TerminalSquare,
   Trash2,
 } from "lucide-react";
-import { HoverTip } from "@/components/HoverTip";
-import { usePrompt } from "@/components/ConfirmDialog";
+import { HoverTip } from "@/components/ui/HoverTip";
+import { usePrompt } from "@/components/shell/ConfirmDialog";
 import { RepoGitWorkspace } from "@/components/repo-git/RepoGitWorkspace";
 import { claudeCliCommand, opencodeCliCommand, openTerminal } from "@/lib/terminal-launch";
 import type { GithubRepoInfo, RepoInfo } from "./types";
@@ -72,16 +72,35 @@ export function SearchCard({
   unpushedCount: number;
 }) {
   return (
-    <div className="card mb-3 repos-toolbar" style={{ padding: 14 }}>
-      <div className="flex items-end justify-between gap-3 mb-2 flex-wrap">
-        <label
-          htmlFor="repos-filter"
-          className="text-xs font-medium tracking-tight flex items-center gap-2"
-          style={{ color: "var(--text-subtle)" }}
-        >
-          <Search size={12} aria-hidden /> Search
+    /*
+      One row, not two. The old layout put a "🔍 Search" label on its own line
+      directly above the input — with the magnifier it read as a second, empty
+      search field stacked on the real one. The placeholder already says what
+      the input does, so the label is now screen-reader only and the filter
+      chips share the input's row, which also buys back a row of vertical space
+      on a page that has to show 52 repos.
+    */
+    <div className="card mb-3 repos-toolbar" style={{ padding: 12 }}>
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor="repos-filter" className="sr-only">
+          Filter local repositories, or type to search GitHub
         </label>
-        <div className="flex items-center gap-1.5 flex-wrap" role="group" aria-label="Filter local repos">
+        <div className="relative min-w-[14rem] flex-1">
+          <Search
+            size={13}
+            aria-hidden
+            className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-text-subtle"
+          />
+          <input
+            id="repos-filter"
+            className="input w-full"
+            style={{ paddingLeft: 30 }}
+            placeholder="Filter local… type to also search GitHub"
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter local repos">
           <FilterChip
             label="Changed"
             count={changedCount}
@@ -98,13 +117,6 @@ export function SearchCard({
           />
         </div>
       </div>
-      <input
-        id="repos-filter"
-        className="input"
-        placeholder="Filter local… type to also search GitHub"
-        value={query}
-        onChange={(e) => onQueryChange(e.target.value)}
-      />
     </div>
   );
 }
@@ -154,8 +166,8 @@ export function SectionHeader({
   return (
     <div className="flex items-end justify-between gap-3">
       <div>
-        <div className="text-xs font-medium tracking-tight" style={{ color: "var(--text-subtle)" }}>{label}</div>
-        <div className="text-xs" style={{ color: "var(--text-muted)" }}>{description}</div>
+        <div className="text-xs font-medium tracking-tight text-text-subtle">{label}</div>
+        <div className="text-xs text-text-muted">{description}</div>
       </div>
       <span className="badge badge-muted">{count}</span>
     </div>
@@ -164,7 +176,7 @@ export function SectionHeader({
 
 export function EmptyReposCard({ children }: { children: ReactNode }) {
   return (
-    <div className="card card-body text-sm" style={{ color: "var(--text-muted)" }}>
+    <div className="card card-body text-sm text-text-muted">
       {children}
     </div>
   );
@@ -221,10 +233,10 @@ export function LocalRepoCard({
 
   return (
     <div className="card" style={{ padding: 0, overflow: "visible" }}>
-      <div className="p-4">
+      <div className="p-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 font-semibold text-sm break-words leading-snug" style={{ color: "var(--text)" }}>
+            <div className="flex items-center gap-2 font-semibold text-sm break-words leading-snug text-text">
               {repo.name}
             </div>
             {repo.branch && <MetaChip icon={<GitBranch size={11} />} label={repo.branch} />}
@@ -254,7 +266,7 @@ export function LocalRepoCard({
                 type="button"
                 className="btn btn-primary"
                 style={{ fontSize: "12px", padding: "4px 6px", borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeft: "1px solid color-mix(in srgb, var(--bg) 25%, transparent)" }}
-                aria-label="Upstart options"
+                aria-label="Start-up script options"
                 aria-haspopup="menu"
                 aria-expanded={upstartMenuOpen}
                 onClick={() => {
@@ -273,8 +285,7 @@ export function LocalRepoCard({
                   <button
                     type="button"
                     role="menuitem"
-                    className="w-full rounded px-2 py-1.5 text-left text-xs hover:bg-[var(--bg-elevated)]"
-                    style={{ color: "var(--text)" }}
+                    className="w-full rounded px-2 py-1.5 text-left text-xs hover:bg-[var(--bg-elevated)] text-text"
                     onClick={() => {
                       setUpstartMenuOpen(false);
                       onUpstart(repo, false, "");
@@ -285,8 +296,7 @@ export function LocalRepoCard({
                   <button
                     type="button"
                     role="menuitem"
-                    className="w-full rounded px-2 py-1.5 text-left text-xs hover:bg-[var(--bg-elevated)]"
-                    style={{ color: "var(--text)" }}
+                    className="w-full rounded px-2 py-1.5 text-left text-xs hover:bg-[var(--bg-elevated)] text-text"
                     onClick={async () => {
                       const context = await prompt({
                         title: repo.hasUpstart ? "Update and run upstart" : "Create and run upstart",
@@ -304,8 +314,7 @@ export function LocalRepoCard({
                   <button
                     type="button"
                     role="menuitem"
-                    className="w-full rounded px-2 py-1.5 text-left text-xs hover:bg-[var(--bg-elevated)]"
-                    style={{ color: "var(--text)" }}
+                    className="w-full rounded px-2 py-1.5 text-left text-xs hover:bg-[var(--bg-elevated)] text-text"
                     onClick={() => {
                       setUpstartMenuOpen(false);
                       onUpstart(repo, true);
@@ -378,8 +387,7 @@ export function LocalRepoCard({
                       target="_blank"
                       rel="noopener noreferrer"
                       role="menuitem"
-                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs no-underline hover:bg-[var(--bg-elevated)]"
-                      style={{ color: "var(--text)" }}
+                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs no-underline hover:bg-[var(--bg-elevated)] text-text"
                       onClick={() => setMoreOpen(false)}
                     >
                       <ExternalLink size={13} aria-hidden /> GitHub
@@ -461,7 +469,7 @@ export function LocalRepoCard({
           </div>
         </div>
 
-        <div className="mt-2">
+        <div className="mt-1.5">
           <RepoGitWorkspace
             repoName={repo.name}
             repoPath={repo.path}
@@ -471,11 +479,59 @@ export function LocalRepoCard({
           />
         </div>
 
-        <details className="repos-card-more mt-2">
-          <summary className="repos-card-more-summary">
-            <span className="truncate font-mono" title={repo.path}>{repo.path}</span>
-          </summary>
-        </details>
+        {/*
+          Health line. Only renders when something is actually wrong — a badge
+          reading "100 · healthy" on 40 of 52 cards would be pure noise and
+          would bury the handful that need attention. Silence means fine.
+        */}
+        {(() => {
+          if (!repo.health) return null;
+          /*
+            Only risks the card doesn't ALREADY show. Dirty and unpushed each
+            have their own chip in the row above, so rendering them here again
+            produced "42 unpushed" immediately followed by "42 unpushed
+            commits" — visible the moment this ran in a browser, invisible while
+            reading the code. What's left is the genuinely unsurfaced pair:
+            detached HEAD and no remote. Both rare, both worth knowing.
+
+            The score and the hygiene reasons ride along in the title so nothing
+            computed is thrown away.
+          */
+          const unchipped = repo.health.risks.filter((r) => !/unpushed|uncommitted/i.test(r));
+          if (unchipped.length === 0) return null;
+          return (
+            <div
+              className="mt-1.5 flex items-start gap-1.5 text-[11px] leading-snug"
+              title={`Health ${repo.health.score}/100 · ${repo.health.reasons.join(" · ")}`}
+            >
+              <span
+                aria-hidden
+                className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full"
+                style={{
+                  background: repo.health.level === "bad" ? "var(--danger)" : "var(--warning)",
+                }}
+              />
+              <span className="truncate" style={{ color: "var(--text-subtle)" }}>
+                {unchipped[0]}
+                {unchipped.length > 1 ? ` +${unchipped.length - 1} more` : ""}
+              </span>
+            </div>
+          );
+        })()}
+
+        {/*
+          Was a <details> containing only its <summary> — a disclosure triangle
+          with cursor:pointer that expanded to nothing, on all 52 cards. An
+          affordance that does nothing when clicked is worse than no affordance.
+          Now a plain line: same information, no false promise, one less row of
+          chrome per card.
+        */}
+        <div
+          className="repos-card-path mt-1.5 truncate font-mono"
+          title={repo.path}
+        >
+          {repo.path}
+        </div>
       </div>
     </div>
   );
@@ -521,7 +577,7 @@ export function GithubRepoCard({
     <div className="card" style={{ padding: "12px 14px" }}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="font-medium text-sm mb-0.5 break-words leading-snug" style={{ color: "var(--text)" }}>
+          <div className="font-medium text-sm mb-0.5 break-words leading-snug text-text">
             {repo.fullName}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -530,7 +586,7 @@ export function GithubRepoCard({
             {repo.localRepoName && <span className="badge badge-success" style={{ fontSize: "10px" }}>Local: {repo.localRepoName}</span>}
           </div>
           {repo.description && (
-            <div className="text-xs mt-1 break-words leading-snug" style={{ color: "var(--text-subtle)" }}>
+            <div className="text-xs mt-1 break-words leading-snug text-text-subtle">
               {repo.description}
             </div>
           )}
@@ -573,7 +629,7 @@ export function GithubRepoCard({
 
 function MetaChip({ icon, label }: { icon: ReactNode; label: string }) {
   return (
-    <span className="flex items-center gap-1 text-xs" style={{ color: "var(--text-subtle)" }}>
+    <span className="flex items-center gap-1 text-xs text-text-subtle">
       {icon}
       {label}
     </span>

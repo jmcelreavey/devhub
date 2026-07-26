@@ -2,16 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Edit3, Save, TerminalSquare, X } from "lucide-react";
-import { useToast } from "@/lib/use-toast";
-import { SyncButton } from "@/components/SyncButton";
-import { SkeletonRows } from "@/components/SkeletonRows";
+import { useToast } from "@/lib/hooks/use-toast";
+import { SyncButton } from "@/components/runs/SyncButton";
+import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import {
   DEFAULT_CURSOR_AGENT_MODEL,
   getAgentCliConfig,
   saveAgentCliConfig,
   type AgentCli,
   type AgentCliConfig,
-} from "@/lib/agent-cli-config";
+} from "@/lib/agent/cli-config";
 
 interface OpencodeConfigResponse {
   exists: boolean;
@@ -81,8 +81,8 @@ function AgentCliCard() {
   return (
     <div className="card mb-3" style={{ padding: "10px 14px" }}>
       <div className="flex items-center gap-2" style={{ marginBottom: "6px" }}>
-        <TerminalSquare size={14} style={{ color: "var(--accent)" }} aria-hidden />
-        <span className="font-medium text-sm" style={{ color: "var(--text)" }}>
+        <TerminalSquare size={14} className="text-accent" aria-hidden />
+        <span className="font-medium text-sm text-text">
           Agent CLI
         </span>
         {dirty && (
@@ -133,7 +133,7 @@ function AgentCliCard() {
               </label>
             )}
             {cli === "opencode" ? (
-              <label className="text-xs flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
+              <label className="text-xs flex items-center gap-1 text-text-muted">
                 Model
                 <input
                   type="text"
@@ -145,7 +145,7 @@ function AgentCliCard() {
                 />
               </label>
             ) : (
-              <label className="text-xs flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
+              <label className="text-xs flex items-center gap-1 text-text-muted">
                 Model
                 <input
                   type="text"
@@ -235,8 +235,8 @@ export function OpencodeConfigPanel() {
 
       <p className="text-xs" style={{ color: "var(--text-muted)", lineHeight: 1.5, marginBottom: "12px" }}>
         <code>opencode/shared/opencode.json</code> is the source of truth for OpenCode{" "}
-        <strong style={{ color: "var(--text)" }}>model, small_model, provider and theme</strong>. Click{" "}
-        <strong style={{ color: "var(--text)" }}>Sync OpenCode</strong> to write those keys into{" "}
+        <strong className="text-text">model, small_model, provider and theme</strong>. Click{" "}
+        <strong className="text-text">Sync OpenCode</strong> to write those keys into{" "}
         <code>~/.config/opencode/opencode.json</code> - the <code>mcp</code> block and anything OpenCode
         manages itself are left untouched, so its model catalogue keeps auto-updating. Provider API keys
         are stored as <code>{"{env:VAR}"}</code> placeholders (never raw secrets) and resolved from your
@@ -264,7 +264,7 @@ export function OpencodeConfigPanel() {
               <>No <code>{"{env:VAR}"}</code> secret references in the shared config.</>
             ) : unresolved.length ? (
               <>
-                <strong style={{ color: "var(--text)" }}>{unresolved.length} secret(s) unresolved:</strong>{" "}
+                <strong className="text-text">{unresolved.length} secret(s) unresolved:</strong>{" "}
                 <code>{unresolved.join(", ")}</code>. Add matching fields to your 1Password{" "}
                 <code>devhub</code> item (or <code>.env.local</code>), run <code>op signin</code>, then Sync.
                 Sync still writes everything else; unresolved keys stay as <code>{"{env:VAR}"}</code>.
@@ -303,7 +303,7 @@ export function OpencodeConfigPanel() {
             className="w-full flex items-center gap-2"
             style={{ padding: "8px 14px", borderBottom: "1px solid var(--border)" }}
           >
-            <span className="font-medium text-sm font-mono flex-1" style={{ color: "var(--text)" }}>
+            <span className="font-medium text-sm font-mono flex-1 text-text">
               opencode/shared/opencode.json
             </span>
             {data.exists &&
@@ -341,7 +341,7 @@ export function OpencodeConfigPanel() {
           </div>
           <div style={{ padding: "12px 14px" }}>
             {!data.exists ? (
-              <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
+              <p className="text-xs text-text-subtle">
                 No <code>opencode/shared/opencode.json</code> yet. Use{" "}
                 <strong>Collect from local</strong> to seed it from this machine&apos;s OpenCode config
                 (secrets are scrubbed automatically).

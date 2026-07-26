@@ -1,6 +1,5 @@
-import { BootScreen } from "@/components/TodayBootScreen";
+import { RouteLoading } from "@/components/ui/RouteLoading";
 
-/** Route-level loading: the branded boot overlay, not skeletons. */
 export default function Loading() {
-  return <BootScreen state="loading" />;
+  return <RouteLoading rows={8} variant="block" />;
 }

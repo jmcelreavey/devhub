@@ -1,6 +1,6 @@
 "use client";
 
-import { useLive } from "@/lib/use-fetch";
+import { useLive } from "@/lib/hooks/use-fetch";
 
 interface NotesAiStatus {
   configured: boolean;

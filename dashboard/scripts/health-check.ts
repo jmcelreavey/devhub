@@ -117,7 +117,7 @@ async function main() {
 
   // Docs (DOCS_DIR optional — defaults to REPO_ROOT/docs)
   {
-    const { getDocsDir } = await import("../lib/content-dirs");
+    const { getDocsDir } = await import("@/lib/content/dirs");
     const resolved = getDocsDir();
     if (!fs.existsSync(resolved)) {
       issues.push({

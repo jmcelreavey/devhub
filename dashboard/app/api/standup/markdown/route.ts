@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { readDashboardEnvLocalFile, resolveEnvValue } from "@/lib/dashboard-env-local";
-import { getMyAssignedTicketsTouchedInRange, type JiraStandupTicket } from "@/lib/jira-client";
-import { getTasks } from "@/lib/tasks-storage";
-import { buildStandupMarkdown } from "@/lib/standup-markdown";
+import { getMyAssignedTicketsTouchedInRange, type JiraStandupTicket } from "@/lib/jira/client";
+import { getTasks } from "@/lib/tasks/storage";
+import { buildStandupMarkdown } from "@/lib/standup/markdown";
 import {
   getGitUserEmail,
   gitFetch,
@@ -11,12 +11,12 @@ import {
   localDatetimeMillis,
   localYesterdayISO,
   millisToLocalGitDatetime,
-} from "@/lib/standup-git";
+} from "@/lib/standup/git";
 import {
   fetchAuthoredPrSlices,
   fetchMergedPrsReviewedOthersInRange,
   getGithubLogin,
-} from "@/lib/standup-github-merged";
+} from "@/lib/standup/github-merged";
 import { listRepos, type RepoInfo } from "@/lib/repos";
 import { withErrorHandler } from "@/lib/api-utils";
 import { pMapSettled } from "@/lib/p-limit";
@@ -28,7 +28,7 @@ import {
   MAX_PRS_CREATED,
   MERGED_PER_REPO,
   SUBPROCESS_CONCURRENCY,
-} from "@/lib/standup-config";
+} from "@/lib/standup/config";
 
 function isJiraConfigured(): boolean {
   const { overrides } = readDashboardEnvLocalFile();

@@ -77,3 +77,6 @@ notes/.cache/
 
 # DevHub local app state (machine-local)
 .devhub/
+
+# Ad-hoc review screenshots
+/.review-shots/

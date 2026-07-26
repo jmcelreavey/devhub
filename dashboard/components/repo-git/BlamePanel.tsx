@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
-import { SkeletonRows } from "@/components/SkeletonRows";
-import { useToast } from "@/lib/use-toast";
+import { SkeletonRows } from "@/components/ui/SkeletonRows";
+import { useToast } from "@/lib/hooks/use-toast";
 import { fetchGitJson, repoApi } from "./shared";
 
 interface BlameLine {
@@ -73,9 +73,9 @@ export function BlamePanel({ repoName }: { repoName: string }) {
         <div className="repo-git-blame-history">
           {history.slice(0, 8).map((h) => (
             <div key={h.shortHash} className="repo-git-blame-history-row">
-              <span className="font-mono" style={{ color: "var(--accent)" }}>{h.shortHash}</span>
+              <span className="font-mono text-accent">{h.shortHash}</span>
               <span className="truncate">{h.subject}</span>
-              <span style={{ color: "var(--text-subtle)" }}>{h.relativeDate}</span>
+              <span className="text-text-subtle">{h.relativeDate}</span>
             </div>
           ))}
         </div>

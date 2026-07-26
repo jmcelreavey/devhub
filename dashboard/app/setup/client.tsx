@@ -1,5 +1,7 @@
 "use client";
 
+import { DependencyChecklist } from "@/components/setup/DependencyChecklist";
+import { filterStepsByGoals, parseGoals, SETUP_GOALS_KEY, type GoalId } from "@/lib/setup/goals";
 import { useState, useEffect, useCallback, startTransition } from "react";
 import Link from "next/link";
 import { mutate as mutateSWR } from "swr";
@@ -35,6 +37,7 @@ import {
   Hand,
   TerminalSquare,
   TicketCheck,
+  Wrench,
 } from "lucide-react";
 
 type Step = SetupStepMeta;
@@ -45,6 +48,14 @@ const STEPS: Step[] = [
     title: "Welcome",
     icon: <Hand size={18} />,
     description: "Let's configure your DevHub integrations",
+    configured: true,
+    optional: false,
+  },
+  {
+    id: "tools",
+    title: "Tools",
+    icon: <Wrench size={18} />,
+    description: "What's installed on this machine, and what each one turns on",
     configured: true,
     optional: false,
   },
@@ -242,11 +253,36 @@ export default function SetupPage() {
               setError("Google sign-in did not finish. Try connecting again.");
               break;
             case "oauth_failed":
-              setError(
-                detail.includes("refresh token")
-                  ? `Google OAuth: ${detail}. Try disconnecting Calendar in Google Account permissions and reconnect.`
-                  : `Google OAuth failed: ${detail || "Try again."}`,
-              );
+              /*
+                Google's error codes are precise and completely opaque, and they
+                arrive at the END of a seven-step setup - the worst possible
+                moment to be told only "redirect_uri_mismatch". Each one below
+                has a single, specific cause and a single fix, so say that
+                instead of forwarding the raw string.
+              */
+              if (detail.includes("redirect_uri_mismatch")) {
+                setError(
+                  "Google rejected the redirect URI. Copy the exact URI from step 6 above into " +
+                    "Authorised redirect URIs on your OAuth client - it must match character for character.",
+                );
+              } else if (detail.includes("access_denied")) {
+                setError(
+                  "Google blocked the sign-in. While your app is in Testing, add your own Google " +
+                    "account under Audience → Test users (step 4), then try again.",
+                );
+              } else if (detail.includes("invalid_client")) {
+                setError(
+                  "Google didn't recognise the client ID or secret. Re-copy both from the Credentials " +
+                    "page - it's easy to paste the client ID twice.",
+                );
+              } else if (detail.includes("refresh token")) {
+                setError(
+                  `Google OAuth: ${detail}. Revoke DevHub's access in your Google Account permissions, then reconnect - ` +
+                    "Google only issues a refresh token on the first consent.",
+                );
+              } else {
+                setError(`Google OAuth failed: ${detail || "Try again."}`);
+              }
               break;
             default:
               try {
@@ -288,7 +324,26 @@ export default function SetupPage() {
     return () => clearTimeout(id);
   }, [pathsForm]);
 
-  const steps: Step[] = STEPS.map((s) => {
+  /*
+    Goals narrow which integration steps get offered. Read once on mount (the
+    page is client-side already) and only ever used to filter - the step rail
+    below still reaches everything, so a wrong answer costs nothing.
+  */
+  const [goals, setGoals] = useState<GoalId[]>(() => {
+    if (typeof window === "undefined") return [];
+    return parseGoals(window.localStorage.getItem(SETUP_GOALS_KEY));
+  });
+
+  const updateGoals = useCallback((next: GoalId[]) => {
+    setGoals(next);
+    try {
+      window.localStorage.setItem(SETUP_GOALS_KEY, JSON.stringify(next));
+    } catch {
+      /* private browsing - goals just won't persist */
+    }
+  }, []);
+
+  const steps: Step[] = filterStepsByGoals(STEPS, goals).map((s) => {
     if (s.id === "paths" && status) return { ...s, configured: status.core };
     if (s.id === "github" && status) return { ...s, configured: status.github };
     if (s.id === "datadog" && status) return { ...s, configured: status.datadog };
@@ -509,7 +564,7 @@ export default function SetupPage() {
   if (!status) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-sm" style={{ color: "var(--text-subtle)" }}>Loading...</div>
+        <div className="text-sm text-text-subtle">Loading...</div>
       </div>
     );
   }
@@ -618,7 +673,23 @@ export default function SetupPage() {
               chamberUiPassword={chamberUiPassword}
               onChamberUiPasswordChange={setChamberUiPassword}
               hasExistingPassword={status?.hasOpenchamberUiPassword === true}
+              goals={goals}
+              onGoalsChange={updateGoals}
             />
+          )}
+          {step.id === "tools" && (
+            <div className="flex flex-col gap-3">
+              <div>
+                <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
+                  Tools on this machine
+                </h2>
+                <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+                  DevHub drives command-line tools you already use. Missing an optional one just
+                  means that feature stays off - nothing breaks.
+                </p>
+              </div>
+              <DependencyChecklist />
+            </div>
           )}
           {step.id === "paths" && (
             <PathsStep

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { tutorMessageText } from "@/lib/repo-learn-tutor-utils";
+import { tutorMessageText } from "@/lib/repos/learn-tutor-utils";
 
 describe("tutor route helpers", () => {
   it("extracts text from string content", () => {

@@ -2,13 +2,13 @@
 
 import { useState, useMemo } from "react";
 import { Ticket, ExternalLink, RefreshCw } from "lucide-react";
-import { useLive } from "@/lib/use-fetch";
-import type { JiraTicket } from "@/lib/jira-client";
-import { useMarkTicketsSeen } from "@/lib/use-sidebar-counts";
-import { priorityIcon } from "@/components/JiraWidget";
-import { JiraStatusPill } from "@/components/JiraStatusPill";
+import { useLive } from "@/lib/hooks/use-fetch";
+import type { JiraTicket } from "@/lib/jira/client";
+import { useMarkTicketsSeen } from "@/lib/hooks/use-sidebar-counts";
+import { priorityIcon } from "@/components/jira/JiraWidget";
+import { JiraStatusPill } from "@/components/jira/JiraStatusPill";
 import { FetchError, EmptyState, SkeletonRows } from "@/components";
-import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
+import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 
 interface JiraResponse {
   tickets?: JiraTicket[];
@@ -42,22 +42,21 @@ function TicketCard({ ticket }: { ticket: JiraTicket }) {
               {ticket.key}
             </span>
             <JiraStatusPill ticketKey={ticket.key} status={ticket.status} />
-            <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
+            <span className="text-xs text-text-subtle">
               {ticket.issuetype}
             </span>
           </div>
-          <p className="text-sm" style={{ color: "var(--text)" }}>
+          <p className="text-sm text-text">
             {ticket.summary}
           </p>
-          <p className="text-xs mt-1" style={{ color: "var(--text-subtle)" }}>
+          <p className="text-xs mt-1 text-text-subtle">
             {ticket.project} ({ticket.projectKey}) · {ticket.priority}
           </p>
         </div>
         <a
           href={ticket.url}
           target="_blank"
-          rel="noopener noreferrer"
-          style={{ color: "var(--text-subtle)" }}
+          rel="noopener noreferrer" className="text-text-subtle"
           aria-label={`Open ${ticket.key} in Jira`}
         >
           <ExternalLink size={14} aria-hidden />

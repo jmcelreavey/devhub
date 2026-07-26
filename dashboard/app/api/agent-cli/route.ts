@@ -3,7 +3,7 @@ import {
   isCursorAgentInstalled,
   normalizeAgentCli,
   readAgentCliSettings,
-} from "@/lib/agent-cli-env";
+} from "@/lib/agent/cli-env";
 import {
   readDashboardEnvLocalFile,
   syncAgentProcessEnvFromOverrides,

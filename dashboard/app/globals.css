@@ -32,8 +32,14 @@
   --z-overlay: 200;
   --z-modal: 250;
   --z-toast: 300;
+  /* Persistent prompts (PWA install) — above toasts, which expire on their own,
+     because a prompt waits for a decision. */
+  --z-prompt: 320;
   --z-nav-progress: 400;
   --z-shield: 500;
+  /* Skip link sits above everything: it is the keyboard user's escape hatch and
+     must stay reachable even when a shield or modal is up. */
+  --z-skip-link: 600;
 
   --sidebar-w: 220px;
   --notestree-w: 200px;
@@ -71,9 +77,25 @@
     color-mix(in oklab, var(--accent) 22%, transparent);
 
   /* Named easings (token block only — call sites use var(--ease-*)) */
+  /* ─── Motion ───
+     One ease-out for almost everything, and a real overshoot for the handful of
+     moments that should feel physical — a check landing, a chevron flipping.
+     Until now --ease-spring was an alias of --ease-swift, so the 13 rules that
+     deliberately reached for "spring" quietly got the same ease-out as
+     everything else. --ease-spring-soft was a third alias, used zero times. */
   --ease-swift: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-spring: var(--ease-swift);
-  --ease-spring-soft: var(--ease-swift);
+  --ease-spring: cubic-bezier(0.34, 1.42, 0.64, 1);
+
+  /* Durations. docs/motion-and-delight-plan.md sets a 150–350ms policy, but
+     there were 31 distinct hardcoded values across 165 uses — not a policy
+     anyone can hit by hand. These match the existing clusters exactly, so
+     swapping a literal for its token never changes a timing. */
+  --dur-instant: 90ms;
+  --dur-quick: 120ms;
+  --dur-fast: 140ms;
+  --dur-base: 180ms;
+  --dur-slow: 280ms;
+  --dur-slower: 350ms;
 
   /* Semantic status colours (fixed — not theme-shifted) */
   --info: #6eb4eb;
@@ -87,95 +109,95 @@
 :root,
 :root[data-theme="dark"],
 :root[data-theme="dark"][data-theme-preset="forest"] {
-  --bg: #060e0a;
-  --bg-sidebar: #040b08;
-  --bg-surface: #0c1712;
-  --bg-elevated: #112019;
-  --bg-overlay: #163025;
-  --border: #1f3a2f;
-  --border-muted: #13251d;
-  --text: #deefe5;
-  --text-muted: #90b4a2;
-  --text-subtle: #6d8e7f;
-  --accent: #2db37b;
-  --accent-hover: #45ca93;
-  --accent-dim: rgba(45, 179, 123, 0.16);
-  --accent-fg: #ffffff;
-  --success: #49d28f;
-  --success-dim: rgba(73, 210, 143, 0.14);
-  --warning: #d2ad56;
-  --warning-dim: rgba(210, 173, 86, 0.16);
-  --danger: #e06d6d;
-  --danger-dim: rgba(224, 109, 109, 0.14);
+  --bg: #14100c;
+  --bg-sidebar: #0e0b08;
+  --bg-surface: #1d1813;
+  --bg-elevated: #26201a;
+  --bg-overlay: #332a21;
+  --border: #453729;
+  --border-muted: #2a221a;
+  --text: #f2e8dd;
+  --text-muted: #bda88f;
+  --text-subtle: #96826c;
+  --accent: #ff8f3f;
+  --accent-hover: #ffa863;
+  --accent-dim: rgba(255, 143, 63, 0.16);
+  --accent-fg: #1a1109;
+  --success: #8fbf52;
+  --success-dim: rgba(143, 191, 82, 0.14);
+  --warning: #f0c14b;
+  --warning-dim: rgba(240, 193, 75, 0.16);
+  --danger: #f2685c;
+  --danger-dim: rgba(242, 104, 92, 0.14);
 }
 :root[data-theme="light"],
 :root[data-theme="light"][data-theme-preset="forest"] {
-  --bg: #f4faf6;
-  --bg-sidebar: #e9f5ee;
+  --bg: #fbf6f0;
+  --bg-sidebar: #f4ece1;
   --bg-surface: #ffffff;
-  --bg-elevated: #edf7f1;
-  --bg-overlay: #def0e6;
-  --border: #c8dfd0;
-  --border-muted: #deede4;
-  --text: #11261d;
-  --text-muted: #3d5e4f;
-  --text-subtle: #5b7668;
-  --accent: #1f8f61;
-  --accent-hover: #17744e;
-  --accent-dim: rgba(31, 143, 97, 0.1);
+  --bg-elevated: #faf3ea;
+  --bg-overlay: #f0e4d5;
+  --border: #e0cdb6;
+  --border-muted: #eee0ce;
+  --text: #2b2018;
+  --text-muted: #6a5648;
+  --text-subtle: #857060;
+  --accent: #b85c14;
+  --accent-hover: #9a4b0e;
+  --accent-dim: rgba(184, 92, 20, 0.11);
   --accent-fg: #ffffff;
-  --success: #1a7f50;
-  --success-dim: rgba(26, 127, 80, 0.1);
-  --warning: #8a6f2f;
-  --warning-dim: rgba(138, 111, 47, 0.14);
-  --danger: #b34b4b;
-  --danger-dim: rgba(179, 75, 75, 0.1);
+  --success: #5c7a26;
+  --success-dim: rgba(92, 122, 38, 0.11);
+  --warning: #96701a;
+  --warning-dim: rgba(150, 112, 26, 0.14);
+  --danger: #bf4436;
+  --danger-dim: rgba(191, 68, 54, 0.1);
 }
 
-/* Midnight Blue */
+/* Abyss - deepest, coldest, highest contrast */
 :root[data-theme="dark"][data-theme-preset="midnight"] {
-  --bg: #0b1220;
-  --bg-sidebar: #090f1b;
-  --bg-surface: #121b2d;
-  --bg-elevated: #1a2538;
-  --bg-overlay: #22324a;
-  --border: #2a3f5f;
-  --border-muted: #1a2a43;
-  --text: #e6ecf8;
-  --text-muted: #9eaecb;
-  --text-subtle: #7685a3;
-  --accent: #4a8dff;
-  --accent-hover: #73a7ff;
-  --accent-dim: rgba(74, 141, 255, 0.15);
+  --bg: #050a17;
+  --bg-sidebar: #03060f;
+  --bg-surface: #0a1426;
+  --bg-elevated: #101e37;
+  --bg-overlay: #182b4d;
+  --border: #234070;
+  --border-muted: #142743;
+  --text: #e9f1ff;
+  --text-muted: #94aed6;
+  --text-subtle: #6a84ad;
+  --accent: #2f80ff;
+  --accent-hover: #5b9bff;
+  --accent-dim: rgba(47, 128, 255, 0.18);
   --accent-fg: #ffffff;
-  --success: #4ec9a5;
-  --success-dim: rgba(78, 201, 165, 0.13);
-  --warning: #e2b86b;
-  --warning-dim: rgba(226, 184, 107, 0.15);
-  --danger: #ef8080;
-  --danger-dim: rgba(239, 128, 128, 0.14);
+  --success: #2fd3aa;
+  --success-dim: rgba(47, 211, 170, 0.14);
+  --warning: #f2b74e;
+  --warning-dim: rgba(242, 183, 78, 0.16);
+  --danger: #ff6b7d;
+  --danger-dim: rgba(255, 107, 125, 0.14);
 }
 :root[data-theme="light"][data-theme-preset="midnight"] {
-  --bg: #f4f8ff;
-  --bg-sidebar: #eaf1ff;
+  --bg: #eef4ff;
+  --bg-sidebar: #e0eaff;
   --bg-surface: #ffffff;
-  --bg-elevated: #eef4ff;
-  --bg-overlay: #dfe9ff;
-  --border: #ccd9f5;
-  --border-muted: #dbe5fb;
-  --text: #17233b;
-  --text-muted: #4a5b7a;
-  --text-subtle: #5f7193;
-  --accent: #2d6ef2;
-  --accent-hover: #1f5dd8;
-  --accent-dim: rgba(45, 110, 242, 0.11);
+  --bg-elevated: #f1f6ff;
+  --bg-overlay: #d5e4ff;
+  --border: #b8ceef;
+  --border-muted: #d5e2f7;
+  --text: #0c1a33;
+  --text-muted: #3b5378;
+  --text-subtle: #566e96;
+  --accent: #1259d6;
+  --accent-hover: #0d45ad;
+  --accent-dim: rgba(18, 89, 214, 0.11);
   --accent-fg: #ffffff;
-  --success: #197a63;
-  --success-dim: rgba(25, 122, 99, 0.1);
-  --warning: #8c6623;
-  --warning-dim: rgba(140, 102, 35, 0.14);
-  --danger: #b84e58;
-  --danger-dim: rgba(184, 78, 88, 0.1);
+  --success: #0b7a62;
+  --success-dim: rgba(11, 122, 98, 0.1);
+  --warning: #8a6218;
+  --warning-dim: rgba(138, 98, 24, 0.14);
+  --danger: #c0392f;
+  --danger-dim: rgba(192, 57, 47, 0.1);
 }
 
 /* Graphite Neon */
@@ -224,89 +246,89 @@
   --danger-dim: rgba(186, 92, 92, 0.1);
 }
 
-/* Tokyo Night */
+/* Tokyo Night - neon-noir violet + magenta */
 :root[data-theme="dark"][data-theme-preset="tokyo"] {
-  --bg: #1a1b26;
-  --bg-sidebar: #151620;
-  --bg-surface: #222436;
-  --bg-elevated: #2a2e45;
-  --bg-overlay: #313857;
-  --border: #3b4261;
-  --border-muted: #2a314c;
-  --text: #c0caf5;
-  --text-muted: #9aa5ce;
-  --text-subtle: #7a88b6;
-  --accent: #7dcfff;
-  --accent-hover: #a6ddff;
-  --accent-dim: rgba(125, 207, 255, 0.14);
-  --accent-fg: #102234;
-  --success: #9ece6a;
-  --success-dim: rgba(158, 206, 106, 0.13);
-  --warning: #e0af68;
-  --warning-dim: rgba(224, 175, 104, 0.15);
-  --danger: #f7768e;
-  --danger-dim: rgba(247, 118, 142, 0.14);
+  --bg: #15121f;
+  --bg-sidebar: #0f0d17;
+  --bg-surface: #1e1a2c;
+  --bg-elevated: #282239;
+  --bg-overlay: #352c4c;
+  --border: #473a6b;
+  --border-muted: #2c2442;
+  --text: #ece5ff;
+  --text-muted: #ac9fd4;
+  --text-subtle: #8578a8;
+  --accent: #c084fc;
+  --accent-hover: #d4a6ff;
+  --accent-dim: rgba(192, 132, 252, 0.18);
+  --accent-fg: #17102a;
+  --success: #4fe0c4;
+  --success-dim: rgba(79, 224, 196, 0.14);
+  --warning: #ffb86c;
+  --warning-dim: rgba(255, 184, 108, 0.16);
+  --danger: #ff6ba6;
+  --danger-dim: rgba(255, 107, 166, 0.15);
 }
 :root[data-theme="light"][data-theme-preset="tokyo"] {
-  --bg: #eef3ff;
-  --bg-sidebar: #e4ebfd;
+  --bg: #faf6ff;
+  --bg-sidebar: #f2eaff;
   --bg-surface: #ffffff;
-  --bg-elevated: #edf2ff;
-  --bg-overlay: #dce6ff;
-  --border: #c8d7fa;
-  --border-muted: #d8e2fd;
-  --text: #1d2640;
-  --text-muted: #4d5f89;
-  --text-subtle: #5b6d99;
-  --accent: #2f7ecf;
-  --accent-hover: #286db5;
-  --accent-dim: rgba(47, 126, 207, 0.11);
+  --bg-elevated: #f7f1ff;
+  --bg-overlay: #e9dcff;
+  --border: #d8c6f5;
+  --border-muted: #e8ddfa;
+  --text: #221838;
+  --text-muted: #574a75;
+  --text-subtle: #6f6191;
+  --accent: #7c35d6;
+  --accent-hover: #6626b5;
+  --accent-dim: rgba(124, 53, 214, 0.11);
   --accent-fg: #ffffff;
-  --success: #3f8b3e;
-  --success-dim: rgba(63, 139, 62, 0.1);
-  --warning: #96672b;
-  --warning-dim: rgba(150, 103, 43, 0.14);
-  --danger: #b94f68;
-  --danger-dim: rgba(185, 79, 104, 0.1);
+  --success: #0e7a66;
+  --success-dim: rgba(14, 122, 102, 0.1);
+  --warning: #8f5a12;
+  --warning-dim: rgba(143, 90, 18, 0.14);
+  --danger: #c2306e;
+  --danger-dim: rgba(194, 48, 110, 0.1);
 }
 
-/* Catppuccin */
+/* Catppuccin - authentic Mocha / Latte, soft pastel mauve */
 :root[data-theme="dark"][data-theme-preset="catppuccin"] {
   --bg: #1e1e2e;
   --bg-sidebar: #181825;
-  --bg-surface: #24273a;
-  --bg-elevated: #2f334d;
-  --bg-overlay: #3a3f5f;
-  --border: #494d64;
-  --border-muted: #30364f;
+  --bg-surface: #262637;
+  --bg-elevated: #313244;
+  --bg-overlay: #45475a;
+  --border: #45475a;
+  --border-muted: #2c2c3e;
   --text: #cdd6f4;
   --text-muted: #a6adc8;
   --text-subtle: #7f849c;
-  --accent: #74c7ec;
-  --accent-hover: #89dceb;
-  --accent-dim: rgba(116, 199, 236, 0.15);
-  --accent-fg: #11111b;
+  --accent: #cba6f7;
+  --accent-hover: #dcc0ff;
+  --accent-dim: rgba(203, 166, 247, 0.16);
+  --accent-fg: #1e1e2e;
   --success: #a6e3a1;
-  --success-dim: rgba(166, 227, 161, 0.13);
+  --success-dim: rgba(166, 227, 161, 0.14);
   --warning: #f9e2af;
-  --warning-dim: rgba(249, 226, 175, 0.14);
+  --warning-dim: rgba(249, 226, 175, 0.15);
   --danger: #f38ba8;
-  --danger-dim: rgba(243, 139, 168, 0.14);
+  --danger-dim: rgba(243, 139, 168, 0.15);
 }
 :root[data-theme="light"][data-theme-preset="catppuccin"] {
   --bg: #eff1f5;
   --bg-sidebar: #e6e9ef;
   --bg-surface: #ffffff;
-  --bg-elevated: #e9edf4;
-  --bg-overlay: #dce2ec;
-  --border: #cdd4e2;
-  --border-muted: #dbe1eb;
+  --bg-elevated: #f2f4f8;
+  --bg-overlay: #dce0e8;
+  --border: #ccd0da;
+  --border-muted: #e0e3ea;
   --text: #4c4f69;
-  --text-muted: #696b81;
-  --text-subtle: #676b7e;
-  --accent: #209fb5;
-  --accent-hover: #1a8fa3;
-  --accent-dim: rgba(32, 159, 181, 0.11);
+  --text-muted: #6c6f85;
+  --text-subtle: #8c8fa1;
+  --accent: #8839ef;
+  --accent-hover: #7127c9;
+  --accent-dim: rgba(136, 57, 239, 0.1);
   --accent-fg: #ffffff;
   --success: #40a02b;
   --success-dim: rgba(64, 160, 43, 0.1);
@@ -356,12 +378,12 @@
   html.theme-transition *::before,
   html.theme-transition *::after {
     transition:
-      background-color 280ms var(--ease-swift),
-      border-color 280ms var(--ease-swift),
-      color 280ms var(--ease-swift),
-      fill 280ms var(--ease-swift),
-      stroke 280ms var(--ease-swift),
-      box-shadow 280ms var(--ease-swift) !important;
+      background-color var(--dur-slow) var(--ease-swift),
+      border-color var(--dur-slow) var(--ease-swift),
+      color var(--dur-slow) var(--ease-swift),
+      fill var(--dur-slow) var(--ease-swift),
+      stroke var(--dur-slow) var(--ease-swift),
+      box-shadow var(--dur-slow) var(--ease-swift) !important;
   }
 }
 
@@ -431,8 +453,8 @@ h3,
   font: inherit;
   line-height: 1.25;
   transition:
-    background 120ms var(--ease-swift),
-    color 120ms var(--ease-swift);
+    background var(--dur-quick) var(--ease-swift),
+    color var(--dur-quick) var(--ease-swift);
 }
 .jira-widget-key:hover {
   background: var(--accent-dim) !important;
@@ -483,7 +505,7 @@ h3,
 /* Hover-reveal actions: always visible on touch / coarse pointers */
 .reveal-on-hover {
   opacity: 1;
-  transition: opacity 120ms var(--ease-swift);
+  transition: opacity var(--dur-quick) var(--ease-swift);
 }
 @media (hover: hover) and (pointer: fine) {
   .reveal-on-hover {
@@ -549,10 +571,10 @@ h3,
   outline: 2px solid transparent;
   outline-offset: 2px;
   transition:
-    background 120ms var(--ease-swift),
-    color 120ms var(--ease-swift),
-    border-color 120ms var(--ease-swift),
-    opacity 120ms var(--ease-swift);
+    background var(--dur-quick) var(--ease-swift),
+    color var(--dur-quick) var(--ease-swift),
+    border-color var(--dur-quick) var(--ease-swift),
+    opacity var(--dur-quick) var(--ease-swift);
   border: 1px solid transparent;
   line-height: 1.4;
 }
@@ -620,7 +642,7 @@ h3,
   padding: 6px 10px;
   outline: 2px solid transparent;
   outline-offset: 2px;
-  transition: outline-color 120ms var(--ease-swift);
+  transition: outline-color var(--dur-quick) var(--ease-swift);
   width: 100%;
 }
 .input:focus,
@@ -792,7 +814,7 @@ h3,
   outline: 2px solid transparent;
   outline-offset: 2px;
   width: 100%;
-  transition: outline-color 120ms var(--ease-swift);
+  transition: outline-color var(--dur-quick) var(--ease-swift);
 }
 .editor-textarea:focus,
 .editor-textarea:focus-visible {
@@ -889,6 +911,60 @@ h3,
 button:focus-visible,
 a:focus-visible {
   outline-color: var(--accent);
+}
+
+/* ─── Route crossfade (View Transitions) — REMOVED ───
+   The ::view-transition rules that lived here are gone along with
+   experimental.viewTransition and <RouteTransition>. React 19.2.4 stable ships
+   no ViewTransition component, so the React half was a no-op, and Next's own
+   startViewTransition call threw "InvalidStateError: Transition was aborted
+   because of invalid state" every ~30s on both dev and prod. Cost with no
+   benefit. See REVIEW-LOG.md. Revisit if React ships ViewTransition in stable. */
+
+/* ─── Skip to main content ───
+   First focusable element in <body>. Off-screen until focused, then pinned
+   top-left above everything. Uses the same token palette as the toast so it
+   reads as chrome rather than page content. */
+.skip-link {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-skip-link);
+  padding: 10px 16px;
+  margin: 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.24);
+  transform: translateY(-150%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.skip-link:focus-visible,
+.skip-link:focus {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skip-link {
+    transition:
+      transform var(--dur-fast) ease-out,
+      opacity var(--dur-fast) ease-out;
+  }
+}
+
+/* <main> is focus-targeted by the skip link; never show a focus ring for it. */
+#main-content:focus {
+  outline: none;
 }
 
 /* ─── Visually-hidden label ─── */
@@ -1064,10 +1140,34 @@ a:focus-visible {
 .hub-hero-sub {
   display: flex;
   align-items: center;
-  gap: 10px;
+  /* Wrap the row, don't squeeze the items. Without this the flex line refused
+     to break, so at 390px "09:39 PM" and "0/4 tasks done" each folded onto two
+     lines inside their own span — a four-line meta row under the date. Items
+     now stay whole and move to the next line together. */
+  flex-wrap: wrap;
+  gap: 4px 10px;
   margin-top: 4px;
   font-size: 12px;
   color: var(--text-subtle);
+}
+
+.hub-hero-sub > * {
+  white-space: nowrap;
+}
+
+/* The progress bar is the one thing allowed to give up width when wrapping. */
+.hub-hero-sub .hub-hero-progress {
+  flex-shrink: 1;
+  min-width: 60px;
+}
+
+/* Once the row wraps, the "·" that separated the wrapped item is left dangling
+   at the end of the previous line. The gap already separates the items on a
+   narrow screen, so drop the dots there. */
+@media (max-width: 640px) {
+  .hub-hero-sub > span[aria-hidden="true"] {
+    display: none;
+  }
 }
 
 .hub-hero-sub .font-mono {
@@ -1132,8 +1232,8 @@ a:focus-visible {
   border-radius: var(--radius-lg);
   overflow: hidden;
   transition:
-    border-color 180ms var(--ease-swift),
-    background-color 180ms var(--ease-swift);
+    border-color var(--dur-base) var(--ease-swift),
+    background-color var(--dur-base) var(--ease-swift);
 }
 .hub-card:hover {
   border-color: var(--border);
@@ -1227,7 +1327,7 @@ a:focus-visible {
   letter-spacing: -3px;
   color: var(--text-subtle);
   opacity: 0;
-  transition: opacity 120ms var(--ease-swift);
+  transition: opacity var(--dur-quick) var(--ease-swift);
   pointer-events: none;
   user-select: none;
   line-height: 1;
@@ -1435,9 +1535,9 @@ a:focus-visible {
   font-size: 11px;
   cursor: pointer;
   transition:
-    background 140ms var(--ease-swift),
-    color 140ms var(--ease-swift),
-    border-color 140ms var(--ease-swift);
+    background var(--dur-fast) var(--ease-swift),
+    color var(--dur-fast) var(--ease-swift),
+    border-color var(--dur-fast) var(--ease-swift);
   font-family: var(--font-mono);
 }
 .focus-pill:hover {
@@ -1462,7 +1562,7 @@ a:focus-visible {
   padding: 4px;
   display: flex;
   flex-direction: column;
-  animation: plus-pop 140ms ease-out both;
+  animation: plus-pop var(--dur-fast) ease-out both;
 }
 .focus-preset {
   display: flex;
@@ -1475,7 +1575,7 @@ a:focus-visible {
   color: var(--text);
   font-size: 12px;
   cursor: pointer;
-  transition: background 120ms var(--ease-swift);
+  transition: background var(--dur-quick) var(--ease-swift);
   text-align: left;
   font-family: inherit;
 }
@@ -1775,7 +1875,7 @@ a:focus-visible {
   border-radius: var(--radius);
   background: color-mix(in oklab, var(--bg-surface) 92%, var(--bg-elevated) 8%);
   border: 1px solid color-mix(in oklab, var(--accent) 18%, var(--border));
-  transition: border-color 180ms var(--ease-swift);
+  transition: border-color var(--dur-base) var(--ease-swift);
 }
 .welcome-icon {
   flex-shrink: 0;
@@ -1818,9 +1918,9 @@ a:focus-visible {
   cursor: pointer;
   text-decoration: none;
   transition:
-    background 140ms var(--ease-swift),
-    color 140ms var(--ease-swift),
-    border-color 140ms var(--ease-swift);
+    background var(--dur-fast) var(--ease-swift),
+    color var(--dur-fast) var(--ease-swift),
+    border-color var(--dur-fast) var(--ease-swift);
 }
 .welcome-action:hover {
   background: var(--bg-overlay);
@@ -1925,10 +2025,10 @@ a:focus-visible {
   outline: 2px solid transparent;
   outline-offset: 2px;
   transition:
-    border-color 140ms var(--ease-swift),
-    background 140ms var(--ease-swift),
-    color 140ms var(--ease-swift),
-    outline-color 120ms var(--ease-swift);
+    border-color var(--dur-fast) var(--ease-swift),
+    background var(--dur-fast) var(--ease-swift),
+    color var(--dur-fast) var(--ease-swift),
+    outline-color var(--dur-quick) var(--ease-swift);
 }
 .hub-search:hover,
 .hub-search:focus-visible {
@@ -1981,10 +2081,10 @@ a:focus-visible {
   outline: 2px solid transparent;
   outline-offset: 2px;
   transition:
-    background 140ms var(--ease-swift),
-    color 140ms var(--ease-swift),
-    border-color 140ms var(--ease-swift),
-    outline-color 120ms var(--ease-swift);
+    background var(--dur-fast) var(--ease-swift),
+    color var(--dur-fast) var(--ease-swift),
+    border-color var(--dur-fast) var(--ease-swift),
+    outline-color var(--dur-quick) var(--ease-swift);
 }
 .hub-icon-btn:hover {
   background: var(--bg-elevated);
@@ -2036,7 +2136,7 @@ a:focus-visible {
   gap: 6px;
   z-index: 50;
   box-shadow: var(--shadow-popover);
-  animation: plus-pop 140ms var(--ease-swift) both;
+  animation: plus-pop var(--dur-fast) var(--ease-swift) both;
 }
 
 /* Brand dot — sidebar/topbar logo. Background follows the live accent. */
@@ -2123,7 +2223,7 @@ a:focus-visible {
 @media (prefers-reduced-motion: no-preference) {
   .nav-rail {
     transform-origin: center;
-    animation: nav-rail-in 280ms var(--ease-spring);
+    animation: nav-rail-in var(--dur-slow) var(--ease-spring);
   }
 }
 
@@ -2136,9 +2236,9 @@ a:focus-visible {
   background: transparent;
   box-shadow: none;
   transition:
-    background 140ms var(--ease-swift),
-    color 140ms var(--ease-swift),
-    box-shadow 140ms var(--ease-swift);
+    background var(--dur-fast) var(--ease-swift),
+    color var(--dur-fast) var(--ease-swift),
+    box-shadow var(--dur-fast) var(--ease-swift);
 }
 .nav-item {
   padding: 6px 10px;
@@ -2195,8 +2295,8 @@ a:focus-visible {
   background: transparent;
   color: var(--text-subtle);
   transition:
-    background 140ms var(--ease-swift),
-    color 140ms var(--ease-swift);
+    background var(--dur-fast) var(--ease-swift),
+    color var(--dur-fast) var(--ease-swift);
 }
 @media (hover: hover) {
   .sidebar-collapse-btn:hover {
@@ -2221,8 +2321,8 @@ a:focus-visible {
   color: var(--text-muted);
   background: transparent;
   transition:
-    background 140ms var(--ease-swift),
-    color 140ms var(--ease-swift);
+    background var(--dur-fast) var(--ease-swift),
+    color var(--dur-fast) var(--ease-swift);
 }
 .conflict-path-row[data-active] {
   color: var(--text);
@@ -2334,8 +2434,8 @@ body[data-motion="off"] .task-timer-dot {
   pointer-events: none;
   transform: translateX(6px);
   transition:
-    opacity 140ms var(--ease-swift),
-    transform 180ms var(--ease-swift);
+    opacity var(--dur-fast) var(--ease-swift),
+    transform var(--dur-base) var(--ease-swift);
 }
 
 .task-row:hover .task-row-actions,
@@ -2657,7 +2757,7 @@ nextjs-portal {
 /* ───────────────────────────────────────────────────────────
    2026-06 UX pass (DevHub UX Explorations handoff)
    Motion principle: motion is information — healthy systems hold
-   still. 150–350ms, one easing curve, no infinite loops on healthy
+   still. 150–var(--dur-slower), one easing curve, no infinite loops on healthy
    state. See docs/codebase-review-2026-06-09.md.
    ─────────────────────────────────────────────────────────── */
 
@@ -2805,7 +2905,7 @@ body[data-density="compact"] .card {
 }
 @media (prefers-reduced-motion: no-preference) {
   .today-grid-slot > * {
-    animation: hub-enter 350ms var(--ease-swift) backwards;
+    animation: hub-enter var(--dur-slower) var(--ease-swift) backwards;
   }
 }
 
@@ -2845,7 +2945,7 @@ body[data-density="compact"] .card {
 
 /* ── Briefing settle: generated lines rise in after the shimmer ── */
 .briefing-settle {
-  animation: hub-enter 350ms var(--ease-swift);
+  animation: hub-enter var(--dur-slower) var(--ease-swift);
   animation-fill-mode: none;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -3047,7 +3147,7 @@ body[data-density="compact"] .card {
 .briefing-link {
   color: var(--text);
   text-decoration: none;
-  transition: color 120ms var(--ease-swift);
+  transition: color var(--dur-quick) var(--ease-swift);
 }
 .briefing-link:hover {
   color: var(--accent);
@@ -3245,8 +3345,8 @@ body[data-density="compact"] .card {
     inset 0 1px 0 color-mix(in oklab, #fff 16%, transparent),
     var(--shadow-raised);
   transition:
-    border-color 180ms var(--ease-swift),
-    transform 180ms var(--ease-swift);
+    border-color var(--dur-base) var(--ease-swift),
+    transform var(--dur-base) var(--ease-swift);
 }
 /* Condition-tinted sky light — atmosphere, not glass. */
 .briefing-wx-card::before {
@@ -3409,8 +3509,8 @@ body[data-motion="off"] .briefing-wx-card {
   color: var(--text-subtle);
   cursor: pointer;
   transition:
-    background 120ms var(--ease-swift),
-    color 120ms var(--ease-swift);
+    background var(--dur-quick) var(--ease-swift),
+    color var(--dur-quick) var(--ease-swift);
   background: transparent;
   border: none;
 }
@@ -3441,10 +3541,10 @@ body[data-motion="off"] .briefing-wx-card {
   cursor: pointer;
   border: none;
   background: transparent;
-  transition: color 120ms var(--ease-swift);
+  transition: color var(--dur-quick) var(--ease-swift);
 }
 .briefing-edit-chip button:hover {
-  color: var(--danger, #e53e3e);
+  color: var(--danger);
 }
 .briefing-edit-chip-input {
   font-size: 11px !important;
@@ -3462,8 +3562,8 @@ body[data-motion="off"] .briefing-wx-card {
   background: var(--bg-surface);
   cursor: pointer;
   transition:
-    border-color 120ms var(--ease-swift),
-    background 120ms var(--ease-swift);
+    border-color var(--dur-quick) var(--ease-swift),
+    background var(--dur-quick) var(--ease-swift);
   user-select: none;
 }
 .briefing-edit-toggle[data-checked] {
@@ -3523,9 +3623,9 @@ body[data-motion="off"] .briefing-wx-card {
   padding: 5px 9px;
   cursor: pointer;
   transition:
-    border-color 120ms var(--ease-swift),
-    color 120ms var(--ease-swift),
-    background 120ms var(--ease-swift);
+    border-color var(--dur-quick) var(--ease-swift),
+    color var(--dur-quick) var(--ease-swift),
+    background var(--dur-quick) var(--ease-swift);
 }
 .briefing-chat-starter:hover {
   border-color: var(--accent);
@@ -3697,7 +3797,7 @@ body[data-motion="off"] .briefing-wx-card {
 }
 @media (prefers-reduced-motion: no-preference) {
   .palette-overlay {
-    animation: palette-backdrop-in 120ms ease-out;
+    animation: palette-backdrop-in var(--dur-quick) ease-out;
   }
   .palette-panel {
     animation: palette-panel-in 260ms var(--ease-spring);
@@ -3707,11 +3807,11 @@ body[data-motion="off"] .briefing-wx-card {
 /* ── Press feedback on buttons: opacity + light scale on press ── */
 .btn {
   transition:
-    background 120ms var(--ease-swift),
-    color 120ms var(--ease-swift),
-    border-color 120ms var(--ease-swift),
-    opacity 120ms var(--ease-swift),
-    scale 120ms var(--ease-swift);
+    background var(--dur-quick) var(--ease-swift),
+    color var(--dur-quick) var(--ease-swift),
+    border-color var(--dur-quick) var(--ease-swift),
+    opacity var(--dur-quick) var(--ease-swift),
+    scale var(--dur-quick) var(--ease-swift);
 }
 @media (hover: hover) {
   .btn-primary:not(:disabled):hover {
@@ -3730,7 +3830,7 @@ body[data-motion="off"] .briefing-wx-card {
   .today-grid-slot > .card {
     transition:
       border-color 150ms var(--ease-swift),
-      background-color 180ms var(--ease-swift);
+      background-color var(--dur-base) var(--ease-swift);
   }
 }
 
@@ -3744,7 +3844,7 @@ body[data-motion="off"] .briefing-wx-card {
   .task-check-pulse path {
     stroke-dasharray: 70;
     stroke-dashoffset: 70;
-    animation: check-draw 280ms ease-out forwards;
+    animation: check-draw var(--dur-slow) ease-out forwards;
   }
 }
 
@@ -3757,9 +3857,9 @@ body[data-motion="off"] .briefing-wx-card {
 /* ── Icon buttons: settle on hover/press, no bounce-scale ── */
 .hub-icon-btn {
   transition:
-    background 140ms var(--ease-swift),
-    color 140ms var(--ease-swift),
-    border-color 140ms var(--ease-swift);
+    background var(--dur-fast) var(--ease-swift),
+    color var(--dur-fast) var(--ease-swift),
+    border-color var(--dur-fast) var(--ease-swift);
 }
 .hub-icon-btn:active {
   opacity: 0.85;
@@ -3767,8 +3867,8 @@ body[data-motion="off"] .briefing-wx-card {
 .toast-dismiss,
 .toast-action {
   transition:
-    background 140ms var(--ease-swift),
-    color 140ms var(--ease-swift);
+    background var(--dur-fast) var(--ease-swift),
+    color var(--dur-fast) var(--ease-swift);
 }
 .toast-dismiss:active,
 .toast-action:active {
@@ -3866,7 +3966,7 @@ body[data-motion="off"] .briefing-wx-card {
     animation: sheet-up-in 320ms var(--ease-swift);
   }
   .mobile-drawer-enter {
-    animation: drawer-left-in 280ms var(--ease-swift);
+    animation: drawer-left-in var(--dur-slow) var(--ease-swift);
   }
 }
 
@@ -3878,7 +3978,7 @@ body[data-motion="off"] .briefing-wx-card {
   /* :not(.skeleton) — shimmer loops own `animation` on .skeleton; the
      stagger entrance must not stomp it. Wrap shimmers to stagger them. */
   .stagger-children > :not(.skeleton) {
-    animation: hub-enter 280ms var(--ease-swift) backwards;
+    animation: hub-enter var(--dur-slow) var(--ease-swift) backwards;
   }
   .stagger-children > :nth-child(1) {
     animation-delay: 0ms;
@@ -3890,16 +3990,16 @@ body[data-motion="off"] .briefing-wx-card {
     animation-delay: 60ms;
   }
   .stagger-children > :nth-child(4) {
-    animation-delay: 90ms;
+    animation-delay: var(--dur-instant);
   }
   .stagger-children > :nth-child(5) {
-    animation-delay: 120ms;
+    animation-delay: var(--dur-quick);
   }
   .stagger-children > :nth-child(6) {
     animation-delay: 150ms;
   }
   .stagger-children > :nth-child(7) {
-    animation-delay: 180ms;
+    animation-delay: var(--dur-base);
   }
   .stagger-children > :nth-child(8) {
     animation-delay: 210ms;
@@ -4305,7 +4405,7 @@ body[data-motion="off"] .briefing-wx-card {
   padding: 2px 6px;
   outline: none;
   cursor: pointer;
-  transition: border-color 140ms var(--ease-swift);
+  transition: border-color var(--dur-fast) var(--ease-swift);
 }
 .terminal-mode-select:hover,
 .terminal-mode-select:focus-visible {
@@ -4368,9 +4468,9 @@ body[data-motion="off"] .briefing-wx-card {
   cursor: pointer;
   white-space: nowrap;
   transition:
-    background 120ms var(--ease-swift),
-    color 120ms var(--ease-swift),
-    border-color 120ms var(--ease-swift);
+    background var(--dur-quick) var(--ease-swift),
+    color var(--dur-quick) var(--ease-swift),
+    border-color var(--dur-quick) var(--ease-swift);
 }
 .terminal-dock-tab:hover {
   background: var(--bg-overlay);
@@ -4430,7 +4530,7 @@ body[data-motion="off"] .briefing-wx-card {
   line-height: 1;
 }
 .terminal-dock-btn[data-armed] {
-  color: var(--danger, #f2555a);
+  color: var(--danger);
 }
 .terminal-toggle-btn {
   position: relative;
@@ -4492,9 +4592,9 @@ body[data-motion="off"] .briefing-wx-card {
   cursor: pointer;
   text-decoration: none;
   transition:
-    border-color 140ms var(--ease-swift),
-    background 140ms var(--ease-swift),
-    color 140ms var(--ease-swift),
+    border-color var(--dur-fast) var(--ease-swift),
+    background var(--dur-fast) var(--ease-swift),
+    color var(--dur-fast) var(--ease-swift),
     translate 220ms var(--ease-spring);
 }
 @media (hover: hover) {
@@ -4629,7 +4729,7 @@ body[data-motion="off"] .briefing-wx-card {
 .task-toggle svg {
   transition:
     scale 200ms var(--ease-spring),
-    color 140ms var(--ease-swift);
+    color var(--dur-fast) var(--ease-swift);
 }
 @media (hover: hover) {
   .task-toggle:hover svg {
@@ -4650,7 +4750,7 @@ body[data-motion="off"] .briefing-wx-card {
 @media (prefers-reduced-motion: no-preference) {
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]) {
-    transition: scale 90ms var(--ease-swift);
+    transition: scale var(--dur-instant) var(--ease-swift);
   }
   button:not(:disabled):active,
   [role="button"]:not([aria-disabled="true"]):active,
@@ -4816,7 +4916,7 @@ main,
 
 /* Interactive rows: one hover signal — border only. */
 .radar-card {
-  transition: border-color 140ms var(--ease-swift);
+  transition: border-color var(--dur-fast) var(--ease-swift);
 }
 .radar-card:hover {
   border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
@@ -4841,41 +4941,16 @@ main,
 
 /* /repos evolution strip: the arrow beckons on hover. */
 .evolution-strip {
-  transition: border-color 140ms var(--ease-swift);
+  transition: border-color var(--dur-fast) var(--ease-swift);
 }
 .evolution-strip:hover {
   border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
 }
 
 /* Repos — progressive disclosure on cards + learn panel chrome */
-.repos-card-more {
-  border-top: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
-  padding-top: 8px;
-}
-.repos-card-more-summary {
-  list-style: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.repos-card-path {
   font-size: 11px;
   color: var(--text-subtle);
-  user-select: none;
-}
-.repos-card-more-summary::-webkit-details-marker {
-  display: none;
-}
-.repos-card-more-summary::before {
-  content: "▸";
-  font-size: 10px;
-  opacity: 0.7;
-  transition: transform 150ms var(--ease-swift);
-}
-.repos-card-more[open] > .repos-card-more-summary::before {
-  transform: rotate(90deg);
-}
-.repos-card-more-summary:hover {
-  color: var(--text-muted);
 }
 .repos-learn-chrome {
   display: flex;
@@ -4914,14 +4989,8 @@ main,
   gap: 2px;
 }
 @media (prefers-reduced-motion: reduce) {
-  .repos-card-more-summary::before {
-    transition: none;
   }
-}
-body[data-motion="off"] .repos-card-more-summary::before {
-  transition: none;
-}
-.evolution-arrow {
+body[data-motion="off"] .evolution-arrow {
   display: inline-block;
 }
 
@@ -4936,7 +5005,7 @@ body[data-motion="off"] .repos-card-more-summary::before {
     animation: radar-scanline-slide 1.1s var(--ease-swift) infinite;
   }
   .radar-chevron {
-    transition: transform 180ms var(--ease-swift);
+    transition: transform var(--dur-base) var(--ease-swift);
   }
   .evolution-arrow {
     transition: transform 160ms var(--ease-swift);
@@ -4952,7 +5021,7 @@ body[data-motion="off"] .repos-card-more-summary::before {
     animation: fadeSlideIn 240ms var(--ease-swift) both;
   }
   .lab-evidence-link {
-    transition: color 140ms var(--ease-swift);
+    transition: color var(--dur-fast) var(--ease-swift);
   }
   .lab-done-pop {
     animation: check-pulse 0.32s var(--ease-swift);
@@ -5495,7 +5564,7 @@ body[data-motion="off"] .repos-card-more-summary::before {
   flex-direction: column;
 }
 .repo-git-pane-enter {
-  animation: hub-enter 180ms var(--ease-swift);
+  animation: hub-enter var(--dur-base) var(--ease-swift);
   flex: 1;
   min-height: 0;
   display: flex;
@@ -5682,7 +5751,7 @@ body[data-motion="off"] .repos-card-more-summary::before {
   gap: 2px;
   padding-right: 4px;
   opacity: 0.55;
-  transition: opacity 140ms var(--ease-swift);
+  transition: opacity var(--dur-fast) var(--ease-swift);
 }
 .repo-git-file-row:hover .repo-git-file-actions,
 .repo-git-file-row[data-active] .repo-git-file-actions,
@@ -5819,8 +5888,8 @@ body[data-motion="off"] .repos-card-more-summary::before {
   cursor: pointer;
   opacity: 0.72;
   transition:
-    opacity 140ms var(--ease-swift),
-    background 140ms var(--ease-swift);
+    opacity var(--dur-fast) var(--ease-swift),
+    background var(--dur-fast) var(--ease-swift);
 }
 .repo-git-diff-hunk:hover .repo-git-hunk-btn,
 .repo-git-hunk-btn:focus-visible {
@@ -5845,7 +5914,7 @@ body[data-motion="off"] .repos-card-more-summary::before {
   border-radius: var(--radius-sm, 6px);
   background: var(--bg-elevated);
   box-shadow: 0 8px 24px color-mix(in oklab, #000 28%, transparent);
-  animation: hub-enter 140ms var(--ease-swift);
+  animation: hub-enter var(--dur-fast) var(--ease-swift);
 }
 .repo-git-diff-add {
   background: color-mix(in oklab, var(--success) 12%, transparent);

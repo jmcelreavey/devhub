@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes/dir";
 import { withErrorHandler } from "@/lib/api-utils";
-import { listPersonaSources, listPersonaTools, readPersonaBlock } from "@/lib/collect-persona";
+import { listPersonaSources, listPersonaTools, readPersonaBlock } from "@/lib/collect/persona";
 
 export const dynamic = "force-dynamic";
 

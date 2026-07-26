@@ -3,12 +3,12 @@ import { NextResponse } from "next/server";
 import { withErrorHandler } from "@/lib/api-utils";
 import { NOTES_AI_NOT_CONFIGURED } from "@/lib/notes-ai/constants";
 import { isNotesAiConfigured } from "@/lib/notes-ai/config";
-import { buildTutorSystemPrompt } from "@/lib/repo-learn-ai";
-import { REPO_LEARN_TUTOR_START } from "@/lib/repo-learn-constants";
-import { resolveRepoPath } from "@/lib/repo-learn-resolve";
-import { getRepoContextForTutor } from "@/lib/repo-learn-tutor-context";
-import { tutorMessageText } from "@/lib/repo-learn-tutor-utils";
-import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai-provider";
+import { buildTutorSystemPrompt } from "@/lib/repos/learn-ai";
+import { REPO_LEARN_TUTOR_START } from "@/lib/repos/learn-constants";
+import { resolveRepoPath } from "@/lib/repos/learn-resolve";
+import { getRepoContextForTutor } from "@/lib/repos/learn-tutor-context";
+import { tutorMessageText } from "@/lib/repos/learn-tutor-utils";
+import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai/provider";
 import { readLatestSnapshot } from "@/lib/capability/snapshots";
 import { labCategory, readLabRecord } from "@/lib/capability/journey";
 

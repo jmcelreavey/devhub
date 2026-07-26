@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useClientMounted } from "@/lib/use-client-mounted";
-import { useLive } from "@/lib/use-fetch";
+import { useClientMounted } from "@/lib/hooks/use-client-mounted";
+import { useLive } from "@/lib/hooks/use-fetch";
 import { Volume2, VolumeX } from "lucide-react";
 
 interface ServicesStatus {

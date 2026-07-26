@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { VaultIndexPage } from "@/components/VaultIndexPage";
+import { VaultIndexPage } from "@/components/vault/VaultIndexPage";
 import { getVaultTree } from "@/lib/vault/create-vault-routes";
-import { filterNotesSidebarTree } from "@/lib/notes-tree-sidebar-filter";
+import { filterNotesSidebarTree } from "@/lib/notes/tree-sidebar-filter";
 import { buildVaultIndexSummary } from "@/lib/vault/vault-index-summary";
 import { VAULT_PUBLIC } from "@/lib/vault/vault-public";
 
@@ -21,7 +21,7 @@ export default async function NotesIndexPage() {
       footerHint={
         <>
           Or open{" "}
-          <Link href="/notes?panel=checklists" style={{ color: "var(--accent)" }}>
+          <Link href="/notes?panel=checklists" className="text-accent">
             Checklists
           </Link>{" "}
           to manage master lists.

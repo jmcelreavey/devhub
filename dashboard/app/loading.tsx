@@ -1,4 +1,4 @@
-import { BootScreen } from "@/components/TodayBootScreen";
+import { BootScreen } from "@/components/today/TodayBootScreen";
 
 /** Route-level loading: the branded boot overlay, not skeletons. */
 export default function Loading() {

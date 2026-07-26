@@ -3,10 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Globe, Copy, Trash2, ExternalLink, RefreshCw, AlertTriangle, Loader2 } from "lucide-react";
-import { useLive } from "@/lib/use-fetch";
-import { useToast } from "@/lib/use-toast";
+import { useLive } from "@/lib/hooks/use-fetch";
+import { useToast } from "@/lib/hooks/use-toast";
 import { copyTextToClipboard } from "@/lib/clipboard";
-import { useConfirm } from "@/components/ConfirmDialog";
+import { useConfirm } from "@/components/shell/ConfirmDialog";
 import { getVaultClient } from "@/lib/vault/vault-client";
 import { shareExpiresAt, type ShareRecord, type ShareStatus } from "@/lib/share/share-public";
 
@@ -124,13 +124,13 @@ export default function SharedClient() {
         </div>
       </div>
 
-      <p className="text-xs mb-4" style={{ color: "var(--text-subtle)" }}>
+      <p className="text-xs mb-4 text-text-subtle">
         Notes and docs published as secret GitHub Gists. Anyone with the link can read them until you remove
         them here or from the note.
       </p>
 
       {shares.length === 0 ? (
-        <div className="card card-body text-sm" style={{ color: "var(--text-muted)" }}>
+        <div className="card card-body text-sm text-text-muted">
           Nothing is live. Open a note or doc and hit <strong>Share</strong> to publish it.
         </div>
       ) : (
@@ -154,16 +154,16 @@ export default function SharedClient() {
                 <Link href={noteHref(share)} className="text-sm font-medium hover:underline no-underline">
                   {share.title}
                 </Link>
-                <div className="text-xs truncate" style={{ color: "var(--text-subtle)" }}>
+                <div className="text-xs truncate text-text-subtle">
                   {share.vault} · {share.path}
                 </div>
               </div>
               {share.missing ? (
-                <span className="badge text-xs shrink-0" style={{ color: "var(--danger)" }}>
+                <span className="badge text-xs shrink-0 text-danger">
                   Source deleted
                 </span>
               ) : share.stale ? (
-                <span className="badge text-xs shrink-0" style={{ color: "var(--warning)" }}>
+                <span className="badge text-xs shrink-0 text-warning">
                   Stale
                 </span>
               ) : null}
@@ -178,8 +178,7 @@ export default function SharedClient() {
                   type="button"
                   disabled={busyKey === share.key}
                   onClick={() => pushUpdate(share)}
-                  className="btn btn-ghost text-xs flex items-center gap-1 shrink-0"
-                  style={{ color: "var(--warning)" }}
+                  className="btn btn-ghost text-xs flex items-center gap-1 shrink-0 text-warning"
                   title="Push current content to the live link"
                 >
                   {busyKey === share.key ? (

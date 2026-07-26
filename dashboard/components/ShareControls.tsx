@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { Share2, Globe, Loader2, Copy, X, RefreshCw, AlertTriangle } from "lucide-react";
-import { useLive } from "@/lib/use-fetch";
-import { useToast } from "@/lib/use-toast";
+import { useLive } from "@/lib/hooks/use-fetch";
+import { useToast } from "@/lib/hooks/use-toast";
 import { copyTextToClipboard } from "@/lib/clipboard";
-import { HoverTip } from "@/components/HoverTip";
+import { HoverTip } from "@/components/ui/HoverTip";
 import { shareKey, type ShareStatus, type VaultId } from "@/lib/share/share-public";
 
 interface Props {
@@ -84,8 +84,7 @@ export function ShareControls({ vaultId, path }: Props) {
     <div className="flex items-center gap-1 shrink-0">
       {live.missing ? (
         <span
-          className="btn btn-ghost text-xs flex items-center gap-1 cursor-default"
-          style={{ color: "var(--danger)" }}
+          className="btn btn-ghost text-xs flex items-center gap-1 cursor-default text-danger"
           title="The source note no longer exists. Remove this dead link."
         >
           <AlertTriangle size={14} aria-hidden />
@@ -110,8 +109,7 @@ export function ShareControls({ vaultId, path }: Props) {
           type="button"
           disabled={busy}
           onClick={publish}
-          className="btn btn-ghost text-xs flex items-center gap-1"
-          style={{ color: "var(--warning)" }}
+          className="btn btn-ghost text-xs flex items-center gap-1 text-warning"
           title="Push the current content to the live link"
         >
           {busy ? (

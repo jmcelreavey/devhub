@@ -1,6 +1,6 @@
 "use client";
 
-import { laneColor, type GraphLaneCommit } from "@/lib/repo-git-graph";
+import { laneColor, type GraphLaneCommit } from "@/lib/repos/git-graph";
 
 interface CommitGraphProps {
   commits: GraphLaneCommit[];

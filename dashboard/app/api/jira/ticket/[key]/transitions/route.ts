@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTransitions } from "@/lib/jira-client";
+import { getTransitions } from "@/lib/jira/client";
 import { withErrorHandler } from "@/lib/api-utils";
 
 /** Available workflow transitions for a ticket (for the complete/abandon prompt). */

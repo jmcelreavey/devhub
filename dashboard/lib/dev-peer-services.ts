@@ -6,7 +6,7 @@ import {
   resolveOpenCodeBinary,
   resolveOpenCodeBindHost,
   resolveOpenCodePort,
-} from "./opencode-command";
+} from "@/lib/opencode/command";
 import { canBindPort, canConnect, waitForPortListening } from "./port-probe";
 
 export type PeerLog = (msg: string) => void;

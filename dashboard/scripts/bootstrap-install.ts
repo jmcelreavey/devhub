@@ -8,9 +8,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 import process from "node:process";
-import { syncSkills } from "../lib/sync-skills";
-import { syncPersona } from "../lib/sync-persona";
-import { syncMcpServers } from "../lib/sync-mcp";
+import { syncSkills } from "@/lib/sync/skills";
+import { syncPersona } from "@/lib/sync/persona";
+import { syncMcpServers } from "@/lib/sync/mcp";
 import { pluginMcpServerDirs } from "../lib/plugin-mcp-deps";
 import { validateRepo } from "../lib/validate";
 

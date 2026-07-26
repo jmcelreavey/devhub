@@ -36,3 +36,22 @@ jobs:
 
       - name: Run verify
         run: npm run verify --prefix dashboard
+
+      # `verify` (lint + tsc + vitest + build) can go green on a dashboard that
+      # throws on mount: the vitest environment is `node` and there are 2
+      # component tests for 185 components. Nothing above this line renders a
+      # page. These smoke journeys are the only thing that does.
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+        working-directory: dashboard
+
+      - name: Smoke test the built app
+        run: npm run test:e2e --prefix dashboard
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: dashboard/playwright-report/
+          retention-days: 7

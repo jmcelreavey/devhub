@@ -4,7 +4,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { patchDashboardEnvLocalFile } from "../lib/dashboard-env-local";
 import { augmentedPathEnv } from "../lib/process-env";
-import { getManagedSecretEnvNames } from "../lib/sync-opencode-config";
+import { getManagedSecretEnvNames } from "@/lib/sync/opencode-config";
 import { loadEnvLocalIntoProcessIfUnset } from "./load-env-local-into-process";
 
 const execFile = promisify(_execFile);

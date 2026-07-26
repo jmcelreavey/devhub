@@ -1,4 +1,4 @@
-import type { GithubPrRow } from "@/lib/github-prs";
+import type { GithubPrRow } from "@/lib/github/prs";
 
 function slugifyPrPart(value: string): string {
   return value

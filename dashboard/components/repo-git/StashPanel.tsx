@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Download, Trash2 } from "lucide-react";
-import { SkeletonRows } from "@/components/SkeletonRows";
-import { useConfirm, usePrompt } from "@/components/ConfirmDialog";
-import { useToast } from "@/lib/use-toast";
+import { SkeletonRows } from "@/components/ui/SkeletonRows";
+import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
+import { useToast } from "@/lib/hooks/use-toast";
 import { agentStashMessageCommand, openTerminal } from "@/lib/terminal-launch";
-import type { DiffLine } from "@/lib/repo-git-parsers";
+import type { DiffLine } from "@/lib/repos/git-parsers";
 import { GitDiffView } from "./GitDiffView";
 import {
   fetchGitJson,
@@ -182,7 +182,7 @@ export function StashPanel({
           <Download size={11} /> Stash working tree
         </button>
         <div className="repo-git-spacer" />
-        <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
+        <span className="text-xs text-text-subtle">
           {stashes.length} stash{stashes.length === 1 ? "" : "es"}
         </span>
       </div>
@@ -194,7 +194,7 @@ export function StashPanel({
             stashes.map((s) => (
               <div key={s.ref} className="repo-git-stash-row" data-active={selected === s.ref || undefined}>
                 <button type="button" className="repo-git-stash-main" onClick={() => setSelected(s.ref)}>
-                  <span className="font-mono" style={{ color: "var(--accent)" }}>{s.ref}</span>
+                  <span className="font-mono text-accent">{s.ref}</span>
                   <span className="truncate" title={s.message}>{s.message}</span>
                   {s.branch && <span className="repo-git-ref-chip">{s.branch}</span>}
                 </button>
@@ -215,7 +215,7 @@ export function StashPanel({
         </div>
         <div className="repo-git-diff-pane">
           <div className="repo-git-diff-head">
-            {selected ? <span className="font-mono">{selected}</span> : <span style={{ color: "var(--text-subtle)" }}>Select a stash to preview</span>}
+            {selected ? <span className="font-mono">{selected}</span> : <span className="text-text-subtle">Select a stash to preview</span>}
           </div>
           <div key={selected ?? "none"} className="repo-git-diff-body">
             {diffLoading ? (

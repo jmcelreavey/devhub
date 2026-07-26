@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes/dir";
 import { listLearningEntries, readLearningDetail } from "@/lib/learnings-index";
 
 export const dynamic = "force-dynamic";

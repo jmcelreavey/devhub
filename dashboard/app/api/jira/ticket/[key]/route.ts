@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTicket } from "@/lib/jira-client";
+import { getTicket } from "@/lib/jira/client";
 
 export async function GET(
   _req: Request,

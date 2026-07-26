@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { isTaskOpen, rolloverTasks } from "@/lib/tasks-storage";
-import { getMyTickets } from "@/lib/jira-client";
-import { fetchMyGithubPrs } from "@/lib/github-prs";
+import { isTaskOpen, rolloverTasks } from "@/lib/tasks/storage";
+import { getMyTickets } from "@/lib/jira/client";
+import { fetchMyGithubPrs } from "@/lib/github/prs";
 import { buildPrActivitySignature, buildTicketActivitySignature } from "@/lib/activity-signatures";
 import { countStaleShares } from "@/lib/share/share-content";
 import {

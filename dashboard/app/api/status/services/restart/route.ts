@@ -6,8 +6,10 @@ import {
   getOpenCodeEnv,
   resolveOpenCodeBindHost,
   resolveOpenCodePort,
-} from "@/lib/opencode-command";
+} from "@/lib/opencode/command";
 import { DEV_SERVICES } from "@/lib/dev-services";
+import { z } from "zod";
+import { parseBody } from "@/lib/api-utils";
 
 const CHAMBER_PORT = Number.parseInt(process.env.OPENCHAMBER_PORT ?? "1336", 10);
 
@@ -80,12 +82,19 @@ async function restartOpenCode(): Promise<NextResponse> {
   return NextResponse.json({ ok: true, restarted: true });
 }
 
+/** `unit` is the legacy field name; both are accepted so old callers keep working. */
+const RestartSchema = z.object({
+  service: z.string().optional(),
+  unit: z.string().optional(),
+});
+
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => ({}));
-  const service = body?.service ?? body?.unit;
+  const parsed = await parseBody(req, RestartSchema);
+  if (!parsed.ok) return parsed.response;
+  const service = parsed.data.service ?? parsed.data.unit;
 
   const known = DEV_SERVICES.map((s) => s.id);
-  if (!known.includes(service)) {
+  if (!service || !known.includes(service)) {
     return NextResponse.json(
       { error: "Unknown service", known },
       { status: 400 },

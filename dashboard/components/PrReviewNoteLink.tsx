@@ -3,14 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { FileText } from "lucide-react";
-import type { GithubPrRow } from "@/lib/github-prs";
+import type { GithubPrRow } from "@/lib/github/prs";
 import {
   PR_REVIEW_NOTE_WATCH_EVENT,
   prReviewNoteApiHref,
   prReviewNoteHref,
   prReviewNotePath,
 } from "@/lib/pr-review-notes";
-import { notifyNotesTreeChanged } from "@/lib/notes-path";
+import { notifyNotesTreeChanged } from "@/lib/notes/path";
 import { PR_ACTION_BASE, PR_ACTION_SIZE, type PrActionSize } from "@/components/pr-row-action-style";
 
 /**

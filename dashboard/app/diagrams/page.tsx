@@ -13,11 +13,11 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useToast } from "@/lib/use-toast";
-import { useConfirm } from "@/components/ConfirmDialog";
-import { EmptyState } from "@/components/EmptyState";
+import { useToast } from "@/lib/hooks/use-toast";
+import { useConfirm } from "@/components/shell/ConfirmDialog";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { InlineNoteRename } from "@/components/InlineNoteRename";
-import { MoveDiagramModal, type MoveDiagramTarget } from "@/components/MoveDiagramModal";
+import { MoveDiagramModal, type MoveDiagramTarget } from "@/components/diagrams/MoveDiagramModal";
 import {
   collectDiagramFolderRelPaths,
   createEmptyDiagram,
@@ -42,12 +42,12 @@ import {
   moveDiagramEntry,
   renameDiagramFolder,
 } from "@/lib/diagram-folder-actions";
-import { renameNoteFile } from "@/lib/notes-path";
-import { broadcastNoteAutosaveInvalidation } from "@/lib/note-autosave-invalidation";
-import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
+import { renameNoteFile } from "@/lib/notes/path";
+import { broadcastNoteAutosaveInvalidation } from "@/lib/notes/autosave-invalidation";
+import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 
 const TldrawThumbnail = dynamic(
-  () => import("@/components/TldrawThumbnail").then((mod) => mod.TldrawThumbnail),
+  () => import("@/components/diagrams/TldrawThumbnail").then((mod) => mod.TldrawThumbnail),
   { ssr: false, loading: () => <div className="w-full aspect-square rounded-[var(--radius-sm)]" style={{ background: "var(--bg-elevated)" }} /> },
 );
 
@@ -64,7 +64,7 @@ function DiagramThumbnail({ data }: { data: unknown }) {
       className="w-full aspect-square rounded flex items-center justify-center"
       style={{ background: "var(--bg)" }}
     >
-      <PenTool size={24} style={{ color: "var(--text-subtle)" }} />
+      <PenTool size={24} className="text-text-subtle" />
     </div>
   );
 }
@@ -259,17 +259,16 @@ function DiagramsIndexInner() {
             return (
               <span key={c.relPath || "__root__"} className="flex items-center gap-1 min-w-0">
                 {i > 0 && (
-                  <ChevronRight size={14} style={{ color: "var(--text-subtle)" }} aria-hidden />
+                  <ChevronRight size={14} className="text-text-subtle" aria-hidden />
                 )}
                 {isLast ? (
-                  <span className="page-title truncate" style={{ color: "var(--text)" }}>
+                  <span className="page-title truncate text-text">
                     {c.name}
                   </span>
                 ) : (
                   <Link
                     href={diagramFolderHref(c.relPath)}
-                    className="text-sm truncate hover:underline"
-                    style={{ color: "var(--text-muted)" }}
+                    className="text-sm truncate hover:underline text-text-muted"
                   >
                     {c.name}
                   </Link>
@@ -307,7 +306,7 @@ function DiagramsIndexInner() {
 
       {creatingFolder && (
         <div className="card p-4 mb-4 flex items-center gap-2">
-          <Folder size={14} style={{ color: "var(--text-subtle)" }} aria-hidden />
+          <Folder size={14} className="text-text-subtle" aria-hidden />
           <input
             ref={folderInputRef}
             value={newFolderName}
@@ -341,7 +340,7 @@ function DiagramsIndexInner() {
 
       {creating && (
         <div className="card p-4 mb-4 flex items-center gap-2">
-          <PenTool size={14} style={{ color: "var(--text-subtle)" }} aria-hidden />
+          <PenTool size={14} className="text-text-subtle" aria-hidden />
           <input
             ref={createInputRef}
             value={newName}
@@ -410,7 +409,7 @@ function DiagramsIndexInner() {
                 title={`Open ${f.name}`}
                 aria-label={`Open folder ${f.name}`}
               >
-                <Folder size={36} style={{ color: "var(--text-subtle)" }} aria-hidden />
+                <Folder size={36} className="text-text-subtle" aria-hidden />
               </button>
               <div className="flex items-center gap-1">
                 <InlineNoteRename
@@ -419,8 +418,7 @@ function DiagramsIndexInner() {
                   active={false}
                   onRenamed={() => void reload()}
                   renameFile={renameDiagramFolder}
-                  className="text-xs font-medium truncate flex-1"
-                  style={{ color: "var(--text)" }}
+                  className="text-xs font-medium truncate flex-1 text-text"
                   inputClassName="min-w-0 flex-1 bg-transparent border-none outline-none text-xs"
                   title="Double-click to rename"
                 />
@@ -458,8 +456,7 @@ function DiagramsIndexInner() {
                   active={false}
                   onRenamed={() => void reload()}
                   renameFile={renameNoteFile}
-                  className="text-xs font-medium truncate flex-1"
-                  style={{ color: "var(--text)" }}
+                  className="text-xs font-medium truncate flex-1 text-text"
                   inputClassName="min-w-0 flex-1 bg-transparent border-none outline-none text-xs"
                   title="Double-click to rename"
                 />

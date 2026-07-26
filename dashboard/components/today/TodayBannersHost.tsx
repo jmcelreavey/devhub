@@ -1,7 +1,7 @@
 "use client";
 
-import { CapabilityDriftNudges } from "@/components/CapabilityDriftNudges";
-import { DigestBanners } from "@/components/DigestBanners";
+import { CapabilityDriftNudges } from "@/components/capability/CapabilityDriftNudges";
+import { DigestBanners } from "@/components/briefing/DigestBanners";
 
 /** Top-of-Today strip: digests and capability drift. */
 export function TodayBannersHost() {

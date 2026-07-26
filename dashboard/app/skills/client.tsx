@@ -3,22 +3,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
-import { useConfirm } from "@/components/ConfirmDialog";
+import { useConfirm } from "@/components/shell/ConfirmDialog";
 import { ManagedCatalogList } from "@/components/ManagedCatalogList";
 import { McpPanel } from "@/components/McpPanel";
 import { OpencodeConfigPanel } from "@/components/OpencodeConfigPanel";
 import { PersonaPanel } from "@/components/PersonaPanel";
-import { SyncButton } from "@/components/SyncButton";
-import { SyncPreviewCard } from "@/components/SyncPreviewCard";
+import { SyncButton } from "@/components/runs/SyncButton";
+import { SyncPreviewCard } from "@/components/runs/SyncPreviewCard";
 import { AgentLocalFilterBar, SkillSourceFilterBar, SkillUpstreamBanner } from "@/components/SkillCatalogPanels";
 import { AsyncListSection, EmptyState } from "@/components";
-import { fetchSkillsCatalog, refreshAiToolsCheckout } from "@/lib/skills-client-api";
+import { fetchSkillsCatalog, refreshAiToolsCheckout } from "@/lib/skills/client-api";
 import {
   fetchAllLocalCandidates,
   fetchManagedRowContent,
   filterManagedRows,
   managedRowsForKind,
-} from "@/lib/managed-catalog-client";
+} from "@/lib/managed/catalog-client";
 import {
   catalogApiBase,
   catalogDisplayPrefix,
@@ -27,22 +27,22 @@ import {
   sharedCatalogPathLabel,
   type AgentSourceFilter,
   type ManagedKind,
-} from "@/lib/managed-catalog-kind";
-import { managedCatalogListLoading } from "@/lib/managed-catalog-loading";
+} from "@/lib/managed/catalog-kind";
+import { managedCatalogListLoading } from "@/lib/managed/catalog-loading";
 import {
   countAgentManagedRows,
   countManagedRowsBySkillSource,
   type AgentListItem,
   type ManagedCatalogRow,
-} from "@/lib/managed-catalog-rows";
-import type { LocalSkillImportCandidate } from "@/lib/local-skills-types";
-import { pruneNameCount, uniquePruneNames } from "@/lib/sync-preview-utils";
+} from "@/lib/managed/catalog-rows";
+import type { LocalSkillImportCandidate } from "@/lib/local/skills-types";
+import { pruneNameCount, uniquePruneNames } from "@/lib/sync/preview-utils";
 import {
   type AiToolsMeta,
   type SkillListItem,
   type SkillSourceFilter,
   type SkillsListResponse,
-} from "@/lib/skills-api-types";
+} from "@/lib/skills/api-types";
 import {
   AGENTS_SYNC_EXCLUDE_CHANGED_EVENT,
   AGENTS_SYNC_EXCLUDE_STORAGE_KEY,
@@ -52,11 +52,11 @@ import {
   SKILLS_SYNC_EXCLUDE_STORAGE_KEY,
   writeExcludedAgentIdsToStorage,
   writeExcludedSkillIdsToStorage,
-} from "@/lib/skills-sync-exclude-storage";
-import type { SyncPreviewResult } from "@/lib/sync-preview-types";
-import { useClientMounted } from "@/lib/use-client-mounted";
-import { useToast } from "@/lib/use-toast";
-import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
+} from "@/lib/skills/sync-exclude-storage";
+import type { SyncPreviewResult } from "@/lib/sync/preview-types";
+import { useClientMounted } from "@/lib/hooks/use-client-mounted";
+import { useToast } from "@/lib/hooks/use-toast";
+import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 
 type Tab = "skills" | "agents" | "persona" | "mcp" | "opencode";
 
@@ -575,7 +575,7 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
             style={{ color: "var(--text-muted)", lineHeight: 1.5, marginBottom: "12px", paddingLeft: "18px" }}
           >
             <li>
-              <strong style={{ color: "var(--text)" }}>Catalog</strong> -{" "}
+              <strong className="text-text">Catalog</strong> -{" "}
               {visibleKind === "skill" ? (
                 <>
                   <code>skills/shared/</code> plus read-only <code>ai-tools</code> upstream.
@@ -586,7 +586,7 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
               Rows with <strong>Add to catalog</strong> exist only on your machine; import them to share via git.
             </li>
             <li>
-              <strong style={{ color: "var(--text)" }}>Local tools</strong> - sync pushes the catalog to install dirs.
+              <strong className="text-text">Local tools</strong> - sync pushes the catalog to install dirs.
               Prune removes extras not in the catalog. Use the eye icon to exclude catalog entries from sync/prune.
             </li>
           </ul>
@@ -600,16 +600,16 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
           )}
 
           <div className="mb-3">
-            <div className="text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+            <div className="text-xs font-semibold mb-1 text-text">
               Push to local tools
             </div>
-            <div className="text-xs mb-2" style={{ color: "var(--text-subtle)" }}>
+            <div className="text-xs mb-2 text-text-subtle">
               Catalog → local tool dirs. Existing matching names are overwritten from the catalog.
             </div>
             <label className="flex items-start gap-2 text-xs mb-2 cursor-pointer" style={{ color: "var(--text-muted)", lineHeight: 1.45 }}>
               <input type="checkbox" className="mt-0.5" checked={visibleKind === "skill" ? syncPruneSkills : syncPruneAgents} onChange={(e) => visibleKind === "skill" ? setSyncPruneSkills(e.target.checked) : setSyncPruneAgents(e.target.checked)} />
               <span>
-                <strong style={{ color: "var(--text)" }}>Prune extras</strong> during sync. Off by default; when enabled,
+                <strong className="text-text">Prune extras</strong> during sync. Off by default; when enabled,
                 tool-dir entries not in the catalog are removed.
               </span>
             </label>
@@ -696,7 +696,7 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
 
           {showNew && (
             <div className="card mb-3" style={{ padding: "12px 14px", borderColor: "var(--accent)", borderWidth: "1px" }}>
-              <div className="text-xs font-semibold mb-2" style={{ color: "var(--text)" }}>New shared {visibleKind}</div>
+              <div className="text-xs font-semibold mb-2 text-text">New shared {visibleKind}</div>
               <div className="flex flex-col gap-2">
                 <input className="input font-mono text-xs" placeholder={`${visibleKind}-id`} value={newName} onChange={(e) => setNewName(e.target.value)} spellCheck={false} />
                 <input className="input text-xs" placeholder="Short description (optional)" value={newDesc} onChange={(e) => setNewDesc(e.target.value)} />

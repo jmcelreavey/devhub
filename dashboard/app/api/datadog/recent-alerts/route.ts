@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { loadRecentAlerts } from "@/lib/datadog-recent-server";
-import type { DatadogRecentAlertsResponse } from "@/lib/datadog-recent-events";
+import { loadRecentAlerts } from "@/lib/datadog/recent-server";
+import type { DatadogRecentAlertsResponse } from "@/lib/datadog/recent-events";
 
 export const dynamic = "force-dynamic";
 

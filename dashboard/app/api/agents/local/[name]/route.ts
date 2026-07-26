@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { withErrorHandler } from "@/lib/api-utils";
-import { readLocalAgentContent } from "@/lib/local-catalog-content";
-import { deleteLocalAgentInstallations } from "@/lib/local-catalog-delete";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { readLocalAgentContent } from "@/lib/local/catalog-content";
+import { deleteLocalAgentInstallations } from "@/lib/local/catalog-delete";
+import { getRepoRoot } from "@/lib/notes/dir";
 
 export const dynamic = "force-dynamic";
 

@@ -6,25 +6,25 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { getRepoRoot, getHome } from "./notes-dir";
-import { syncSkills, verifySync } from "./sync-skills";
-import { syncAgents } from "./sync-agents";
-import { syncPersona } from "./sync-persona";
-import { collectSkills } from "./collect-skills";
-import { collectAgents } from "./collect-agents";
-import { syncMcpServers } from "./sync-mcp";
-import { collectMcpServers } from "./collect-mcp";
-import { syncOpencodeConfig } from "./sync-opencode-config";
-import { collectOpencodeConfig } from "./collect-opencode-config";
-import { collectPersona, type PersonaSource } from "./collect-persona";
-import { CONTENT_SYNC_PATHS } from "./content-sync-paths";
+import { getRepoRoot, getHome } from "@/lib/notes/dir";
+import { syncSkills, verifySync } from "@/lib/sync/skills";
+import { syncAgents } from "@/lib/sync/agents";
+import { syncPersona } from "@/lib/sync/persona";
+import { collectSkills } from "@/lib/collect/skills";
+import { collectAgents } from "@/lib/collect/agents";
+import { syncMcpServers } from "@/lib/sync/mcp";
+import { collectMcpServers } from "@/lib/collect/mcp";
+import { syncOpencodeConfig } from "@/lib/sync/opencode-config";
+import { collectOpencodeConfig } from "@/lib/collect/opencode-config";
+import { collectPersona, type PersonaSource } from "@/lib/collect/persona";
+import { CONTENT_SYNC_PATHS } from "@/lib/content/sync-paths";
 import {
   commitAndPushDirty,
   commitAndPushPaths,
   dryRunScopedSync,
   pushUnpushedCommits,
   updateAndSync,
-} from "./sync-orchestrator";
+} from "@/lib/sync/orchestrator";
 import { validateRepo } from "./validate";
 import { pullCore } from "./pull-core";
 import { runDigest } from "./capability/digest";

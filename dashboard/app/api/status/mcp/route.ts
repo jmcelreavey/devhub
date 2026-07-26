@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes/dir";
 import {
   listSharedMcpServerNames,
   readSharedMcpServer,
   substituteRepoRoot,
-} from "@/lib/sync-mcp";
+} from "@/lib/sync/mcp";
 
 export const dynamic = "force-dynamic";
 

@@ -7,7 +7,7 @@ import {
   toNotesApiPath,
   DIAGRAMS_DIR,
 } from "@/lib/diagram-utils";
-import { broadcastNoteAutosaveInvalidation } from "@/lib/note-autosave-invalidation";
+import { broadcastNoteAutosaveInvalidation } from "@/lib/notes/autosave-invalidation";
 
 /**
  * Diagrams live inside the notes vault (under `diagrams/`), so folder

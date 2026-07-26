@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { runGitRepoAsync } from "@/lib/git-repo-local";
-import { parseBlamePorcelain, parseFileHistory } from "@/lib/repo-git-parsers";
+import { runGitRepoAsync } from "@/lib/git/repo-local";
+import { parseBlamePorcelain, parseFileHistory } from "@/lib/repos/git-parsers";
 import { gitFail, withScannedRepo, type RepoParams } from "../_shared";
 
 export async function GET(req: NextRequest, { params }: RepoParams) {

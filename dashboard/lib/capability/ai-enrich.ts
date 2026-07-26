@@ -1,5 +1,5 @@
 import { generateText } from "ai";
-import { getNotesAiCallOptions, getNotesAiModel } from "@/lib/ai-provider";
+import { getNotesAiCallOptions, getNotesAiModel } from "@/lib/ai/provider";
 import type { ScanFile } from "./detectors";
 import type { DetectedSignal, SignalArea, SignalKind } from "./types";
 

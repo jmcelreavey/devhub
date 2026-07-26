@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { createRequire } from "node:module";
 
 /** Repo root — used for production file tracing only (not Turbopack dev root). */
 const repoRoot = path.join(__dirname, "..");
@@ -14,12 +15,22 @@ const repoRoot = path.join(__dirname, "..");
  * the UI sits in loading forever. Wildcards use Next’s dot-segment rules; see
  * https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
  */
+/**
+ * RFC1918 reserves 172.16.0.0/12 — that is 172.16.* through 172.31.*, NOT all of
+ * 172.*. The old `172.*.*.*` entry allowed ~15 extra /16s of public address space
+ * for no benefit. Next's matcher has no CIDR support, so the range is enumerated.
+ */
+const RFC1918_172: readonly string[] = Array.from(
+  { length: 16 },
+  (_, i) => `172.${16 + i}.*.*`,
+);
+
 const DEFAULT_ALLOWED_DEV_ORIGINS: readonly string[] = [
   "192.168.*.*",
   "10.*.*.*",
-  "172.*.*.*",
-  "100.*.*.*",
-  "*.local",
+  ...RFC1918_172,
+  "100.*.*.*", // CGNAT — Tailscale
+  "*.local", // mDNS
 ];
 
 function extraAllowedDevOriginsFromEnv(): string[] {
@@ -47,6 +58,30 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: repoRoot,
   /** Empty turbopack block keeps Next 16 happy with the webpack config below. Do NOT set turbopack.root
    *  to repoRoot — Turbopack would watch notes/, docs/, tasks/, etc. and can fork workers until RAM is gone. */
+  /**
+   * React Compiler — auto-memoisation for the whole tree.
+   *
+   * Kept on evidence, not faith. Measured on /repos (52 cards re-rendering on
+   * every filter keystroke), summing the *synchronous* work of each update:
+   *
+   *   off: 32.1 / 32.9 / 34.4 ms      on: 28.3 / 26.6 / 26.4 ms
+   *
+   * ~18% less render work, non-overlapping across three runs each, and the
+   * worst single update drops from 8.8ms to 6.8ms. Costs ~20s of build time.
+   *
+   * An earlier attempt concluded the opposite, because that benchmark waited on
+   * requestAnimationFrame between updates and so measured frame scheduling
+   * (14 updates x 2 frames ~= 224ms) rather than React. If you re-evaluate this,
+   * measure the synchronous span around the dispatch — see PF3.
+   */
+  reactCompiler: true,
+  // experimental.viewTransition: REMOVED — see the Traps section in
+  // CONTRIBUTING.md. It made Next call
+  // document.startViewTransition on navigation, which threw
+  // "InvalidStateError: Transition was aborted because of invalid state" on both
+  // dev and prod and replayed the boot screen mid-session. React 19.2.4 stable
+  // exports no ViewTransition component, so the React half was a no-op anyway.
+
   turbopack: {},
   // Don't watch notes/ — large dir unrelated to app code (webpack / `next dev --webpack`)
   webpack: (config, { isServer, dev }) => {
@@ -107,4 +142,27 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+/**
+ * Bundle analysis, opt-in via `ANALYZE=1 npm run build`.
+ *
+ * `@next/bundle-analyzer` is an optional devDependency and is only `require`d
+ * when ANALYZE is set, so a normal install/build never needs it present. If it
+ * is missing we warn and continue rather than failing the build.
+ */
+function withOptionalAnalyzer(config: NextConfig): NextConfig {
+  if (process.env.ANALYZE !== "1" && process.env.ANALYZE !== "true") return config;
+  try {
+    type AnalyzerFactory = (opts: { enabled: boolean }) => (c: NextConfig) => NextConfig;
+    const load = createRequire(__filename);
+    const withBundleAnalyzer = (load("@next/bundle-analyzer") as AnalyzerFactory)({ enabled: true });
+    return withBundleAnalyzer(config);
+  } catch {
+    console.warn(
+      "[next.config] ANALYZE is set but @next/bundle-analyzer is not installed.\n" +
+        "             Run: npm i -D @next/bundle-analyzer",
+    );
+    return config;
+  }
+}
+
+export default withOptionalAnalyzer(nextConfig);

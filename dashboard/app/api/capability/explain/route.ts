@@ -1,3 +1,5 @@
+import { parseBody } from "@/lib/api-utils";
+import { z } from "zod";
 import { NextRequest, NextResponse } from "next/server";
 import { diffSnapshots } from "@/lib/capability/diff";
 import { explainDelta } from "@/lib/capability/explain";
@@ -7,15 +9,16 @@ import type { DiffEntry } from "@/lib/capability/types";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
+const ExplainSchema = z.object({
+  deltaId: z.string().trim().min(1, "deltaId required"),
+  refresh: z.boolean().optional(),
+});
+
 export async function POST(req: NextRequest) {
-  let body: { deltaId?: string; refresh?: boolean } = {};
-  try {
-    body = (await req.json()) as typeof body;
-  } catch {
-    return NextResponse.json({ error: "Invalid body" }, { status: 400 });
-  }
-  const deltaId = body.deltaId?.trim();
-  if (!deltaId) return NextResponse.json({ error: "deltaId required" }, { status: 400 });
+  const parsed = await parseBody(req, ExplainSchema);
+  if (!parsed.ok) return parsed.response;
+  const { deltaId } = parsed.data;
+  const body = parsed.data;
 
   const snapshot = readLatestSnapshot();
   if (!snapshot) return NextResponse.json({ error: "No snapshot yet — run a scan first." }, { status: 404 });

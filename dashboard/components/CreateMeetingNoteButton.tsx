@@ -7,7 +7,7 @@ import type { CalendarEvent } from "@/lib/google-calendar";
 import { buildMeetingNoteMarkdown, meetingNotePath } from "@/lib/meeting-note";
 import { textToBlocks } from "@/lib/markdown-convert";
 import { getVaultClient } from "@/lib/vault/vault-client";
-import { useToast } from "@/lib/use-toast";
+import { useToast } from "@/lib/hooks/use-toast";
 
 interface CreateMeetingNoteButtonProps {
   event: CalendarEvent;

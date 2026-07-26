@@ -4,11 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { BookOpen, ChevronDown, ChevronUp, Clock, FileText, Tag } from "lucide-react";
 import { EmptyState, FetchError, ListFetchStates, LoadingLine, PageHeader, SearchInput } from "@/components";
-import { SimpleMarkdown } from "@/components/SimpleMarkdown";
+import { SimpleMarkdown } from "@/components/ui/SimpleMarkdown";
 import { formatShortDate } from "@/lib/format-date";
 import type { LearningDetail, LearningEntry } from "@/lib/learnings-types";
-import { useLive } from "@/lib/use-fetch";
-import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
+import { useLive } from "@/lib/hooks/use-fetch";
+import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 
 export default function LearningsPage() {
   const { data, isLoading, error, mutate } = useLive<{ entries: LearningEntry[] }>("/api/learnings");
@@ -42,7 +42,7 @@ export default function LearningsPage() {
         subtitle={
           <>
             Distilled knowledge - <code className="text-[11px]">notes/learnings/</code>.{" "}
-            <Link href="/notes" className="underline" style={{ color: "var(--accent)" }}>Browse in Notes</Link>
+            <Link href="/notes" className="underline text-accent">Browse in Notes</Link>
           </>
         }
         badge={<span className="badge badge-muted">{entries.length}</span>}
@@ -74,22 +74,22 @@ export default function LearningsPage() {
                   className="w-full text-left flex items-center gap-3 p-4 bg-transparent border-0 cursor-pointer text-inherit"
                 >
                   <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: "var(--accent-dim)" }}>
-                    <Tag size={16} style={{ color: "var(--accent)" }} />
+                    <Tag size={16} className="text-accent" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium mb-0.5" style={{ color: "var(--text)" }}>{entry.title}</div>
+                    <div className="text-sm font-medium mb-0.5 text-text">{entry.title}</div>
                     {entry.category.includes("/") && (
-                      <div className="text-[11px] mb-0.5" style={{ color: "var(--accent)" }}>{entry.category}</div>
+                      <div className="text-[11px] mb-0.5 text-accent">{entry.category}</div>
                     )}
-                    <div className="flex items-center gap-3 text-xs" style={{ color: "var(--text-subtle)" }}>
+                    <div className="flex items-center gap-3 text-xs text-text-subtle">
                       <span className="flex items-center gap-1"><FileText size={10} />{entry.lineCount} lines</span>
                       <span className="flex items-center gap-1"><Clock size={10} />{formatShortDate(entry.modified)}</span>
                     </div>
-                    <div className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                    <div className="mt-1 line-clamp-2 text-xs text-text-muted">
                       <SimpleMarkdown text={entry.preview} compact />
                     </div>
                   </div>
-                  {isOpen ? <ChevronUp size={14} style={{ color: "var(--text-subtle)" }} /> : <ChevronDown size={14} style={{ color: "var(--text-subtle)" }} />}
+                  {isOpen ? <ChevronUp size={14} className="text-text-subtle" /> : <ChevronDown size={14} className="text-text-subtle" />}
                 </button>
 
                 {isOpen && (
@@ -108,7 +108,7 @@ export default function LearningsPage() {
                         <SimpleMarkdown text={detail.content} />
                       </>
                     ) : (
-                      <p className="text-xs" style={{ color: "var(--text-subtle)" }}>Failed to load content.</p>
+                      <p className="text-xs text-text-subtle">Failed to load content.</p>
                     )}
                   </div>
                 )}

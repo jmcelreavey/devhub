@@ -1,8 +1,11 @@
 "use client";
 
+import { GoalPicker } from "@/components/setup/GoalPicker";
+import type { GoalId } from "@/lib/setup/goals";
+import { GoogleSetupSteps } from "@/components/setup/GoogleSetupSteps";
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { FieldError } from "@/components/FieldError";
+import { FieldError } from "@/components/ui/FieldError";
 import { FeatureCard, TipCard, type PathCheck, type SetupStatus, type SetupStepMeta } from "./shared";
 import { FormField } from "./FormField";
 import {
@@ -33,21 +36,35 @@ export function WelcomeStep({
   chamberUiPassword,
   onChamberUiPasswordChange,
   hasExistingPassword,
+  goals,
+  onGoalsChange,
 }: {
   allowLan: boolean;
   onAllowLanChange: (v: boolean) => void;
   chamberUiPassword: string;
   onChamberUiPasswordChange: (v: string) => void;
   hasExistingPassword: boolean;
+  goals: GoalId[];
+  onGoalsChange: (next: GoalId[]) => void;
 }) {
   return (
     <div>
       <h2 style={{ fontSize: "22px", fontWeight: 700, color: "var(--text)", marginBottom: "8px" }}>
         Welcome to DevHub
       </h2>
-      <p style={{ color: "var(--text-subtle)", fontSize: "14px", lineHeight: 1.6, marginBottom: "24px" }}>
-        Your personal developer dashboard. Let&apos;s connect your tools to get the most out of it.
+      <p style={{ color: "var(--text-subtle)", fontSize: "14px", lineHeight: 1.6, marginBottom: "16px" }}>
+        Your personal developer dashboard. Tell us what you want it for and we&apos;ll only ask
+        about the parts you need.
       </p>
+
+      {/*
+        Asked first because it decides how long the rest of setup is. Someone
+        who wants notes and tasks was previously walked through Datadog, Jira
+        and cloud infrastructure before reaching anything they cared about.
+      */}
+      <div style={{ marginBottom: "24px" }}>
+        <GoalPicker selected={goals} onChange={onGoalsChange} />
+      </div>
       <label
         style={{
           display: "flex",
@@ -759,48 +776,14 @@ export function CalendarStep({
       <h2 style={{ fontSize: "20px", fontWeight: 700, color: "var(--text)", marginBottom: "4px" }}>
         Google Calendar
       </h2>
-      <p style={{ color: "var(--text-subtle)", fontSize: "13px", marginBottom: "12px", lineHeight: 1.55 }}>
-        Connect read-only access to your primary calendar for the dashboard. In{" "}
-        <a
-          href="https://console.cloud.google.com/apis/library"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ color: "var(--accent)", textDecoration: "underline" }}
-        >
-          APIs and Services → Library
-          <ExternalLink size={10} style={{ display: "inline", marginLeft: "2px", verticalAlign: "middle" }} />
-        </a>
-        , enable <strong>Google Calendar API</strong> for the project. Configure the{" "}
-        <a
-          href="https://console.cloud.google.com/apis/credentials/consent"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ color: "var(--accent)", textDecoration: "underline" }}
-        >
-          OAuth consent screen
-          <ExternalLink size={10} style={{ display: "inline", marginLeft: "2px", verticalAlign: "middle" }} />
-        </a>
-        . DevHub requests scope{" "}
-        <code style={{ fontSize: "11px", wordBreak: "break-all" }}>
-          https://www.googleapis.com/auth/calendar.readonly
-        </code>
-        . If the app is in <strong>Testing</strong>, add your Google account under test users. Then create credentials in{" "}
-        <a
-          href="https://console.cloud.google.com/apis/credentials"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ color: "var(--accent)", textDecoration: "underline" }}
-        >
-          Credentials
-          <ExternalLink size={10} style={{ display: "inline", marginLeft: "2px", verticalAlign: "middle" }} />
-        </a>
-        : type <strong>Web application</strong>, and under <strong>Authorized redirect URIs</strong> add the full URL
-        for this DevHub host, for example{" "}
-        <code style={{ fontSize: "11px", wordBreak: "break-all" }}>http://localhost:1337/api/calendar/auth/callback</code>{" "}
-        (match scheme, host, and port to where you open the app). Paste the Web client <strong>Client ID</strong> and{" "}
-        <strong>Client secret</strong> below, then use Sign in with Google; the refresh token is stored for you in{" "}
-        <code style={{ fontSize: "11px" }}>.env.local</code>.
+      <p style={{ color: "var(--text-subtle)", fontSize: "13px", marginBottom: "14px", lineHeight: 1.55 }}>
+        DevHub reads your calendar so the briefing knows what your day looks like. It only ever
+        asks for read-only access, and everything stays on this machine.
       </p>
+
+      <div style={{ marginBottom: "18px" }}>
+        <GoogleSetupSteps />
+      </div>
 
       {banner ? (
         <div

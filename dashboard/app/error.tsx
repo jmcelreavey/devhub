@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { AlertTriangle, RotateCw } from "lucide-react";
-import { CopyButton } from "@/components/CopyButton";
+import { CopyButton } from "@/components/ui/CopyButton";
 
 export default function GlobalError({
   error,
@@ -21,7 +21,7 @@ export default function GlobalError({
     <div className="page-wrapper">
       <div className="card" style={{ padding: 20 }}>
         <div className="flex items-center gap-2 mb-3">
-          <AlertTriangle size={18} style={{ color: "var(--danger)" }} aria-hidden />
+          <AlertTriangle size={18} className="text-danger" aria-hidden />
           <h1 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Something went wrong</h1>
         </div>
         <p style={{ color: "var(--text-muted)", fontSize: 13 }}>

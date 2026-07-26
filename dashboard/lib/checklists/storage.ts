@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { getCollectionsDir, getRepoRoot } from "../notes-dir";
+import { getCollectionsDir, getRepoRoot } from "@/lib/notes/dir";
 import { safeReadJSON, withMutex, writeAtomic } from "../atomic-write";
 import { masterScopeConflictLabel, normalizeScopePath } from "./paths";
 import { MASTER_LIST_SCHEMA_VERSION, type MasterList, type MasterListItem } from "./types";

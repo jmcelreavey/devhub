@@ -18,6 +18,16 @@ import { requireDashboardAuth } from "@/lib/api-utils";
  * Callers this intentionally blocks: origin-less POSTs (e.g. bare curl or a
  * random LAN process). Send an `Origin: http://<host>` header or the
  * `X-DevHub-Secret` header if you need scripted access.
+ *
+ * THIS IS THE ONLY PLACE THE RULE LIVES. Individual routes used to repeat an
+ * `isSameOrigin(req)` check of their own; those were removed because they were
+ * both redundant and *weaker* — `isSameOrigin` is the loose variant that
+ * returns true when Origin is absent, so reading one of those routes implied a
+ * guarantee this proxy does not need to rely on. Don't reintroduce them.
+ *
+ * Note the scope: mutating methods only. A GET that needs an origin check must
+ * still do it itself (see app/api/briefing/image/route.ts, the one remaining
+ * in-route caller).
  */
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 

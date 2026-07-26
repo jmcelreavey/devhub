@@ -21,11 +21,11 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes/dir";
 import { getReposScanDir } from "@/lib/repos";
 import { safeReadJSON, writeAtomic } from "@/lib/atomic-write";
 import { blocksToText } from "@/lib/markdown-convert";
-import { addTask, getTasks, toggleTask } from "@/lib/tasks-storage";
+import { addTask, getTasks, toggleTask } from "@/lib/tasks/storage";
 import { todayISO } from "@/lib/utils";
 import { gitLog } from "./git";
 import { capabilityCacheDir, safeSegment } from "./paths";

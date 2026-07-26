@@ -99,19 +99,13 @@ if [[ "$REQUIRE_SYNCED" == "1" ]]; then
 fi
 
 # --- public catalog boundary ---
-# Only catalog-owned shared assets are public. In particular, skills outside
-# skills/shared are local tool installs and must never hitch a ride to core.
-PUBLIC_PATHS=(.gitattributes .githooks .github .gitignore .nvmrc AGENTS.md
-              CONTRIBUTING.md LICENSE PLAN.md README.md package.json
-              agents/shared dashboard docs electron-wrapper mcp/shared mcp-servers
-              opencode/shared persona/deep-preferences.md persona/modes
-              persona/shared-persona.md scripts shared skills/shared
-              ':!dashboard/.env.local' ':!scripts/make-public-seed.sh')
+# PUBLIC_PATHS / PERSONAL_PATHS live in one place so this script and
+# devhub-backport-status.sh can't drift apart about what "public" means.
+# shellcheck source=lib/public-paths.sh
+source "$REPO_ROOT/scripts/lib/public-paths.sh"
 
 # Personal paths that were touched but will be dropped (informational).
-DROPPED="$(git diff --name-only "$BASE_REF" "$SOURCE_REF" -- notes tasks collections upstarts \
-            dashboard/.env.local persona/identity.txt TEMPLATE_AND_PLUGIN_PLAN.md \
-            scripts/make-public-seed.sh 2>/dev/null || true)"
+DROPPED="$(git diff --name-only "$BASE_REF" "$SOURCE_REF" -- "${PERSONAL_PATHS[@]}" 2>/dev/null || true)"
 [[ -n "$DROPPED" ]] && { log "Dropping personal/strategy paths from the PR:"; echo "$DROPPED" | sed 's/^/  - /'; }
 LOCAL_SKILLS="$(git diff --name-only "$BASE_REF" "$SOURCE_REF" -- skills ':(exclude)skills/shared' 2>/dev/null \
   | awk -F/ 'NF > 1 { print $1 "/" $2 }' | sort -u || true)"

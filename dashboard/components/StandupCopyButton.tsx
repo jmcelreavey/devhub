@@ -4,17 +4,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Eye, FileText, Settings2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useToast } from "@/lib/use-toast";
-import { saveStandupAsDailyNote, type StandupTimeParams } from "@/lib/standup-daily-note";
-import { HubSignalStrip } from "@/components/HubSignalStrip";
-import { localCalendarDateISO, previousWorkingDayISO } from "@/lib/local-calendar-date";
+import { useToast } from "@/lib/hooks/use-toast";
+import { saveStandupAsDailyNote, type StandupTimeParams } from "@/lib/standup/daily-note";
+import { HubSignalStrip } from "@/components/shell/HubSignalStrip";
+import { localCalendarDateISO, previousWorkingDayISO } from "@/lib/local/calendar-date";
 import {
   STANDUP_STORAGE_KEYS,
   fetchStandup,
   readExcludedRepos,
   type StandupResponse,
   writeExcludedRepos,
-} from "@/lib/standup-params";
+} from "@/lib/standup/params";
 import { StandupPreviewModal } from "@/components/StandupPreviewModal";
 
 const DEFAULT_START_TIME = "00:00";
@@ -390,7 +390,7 @@ export function StandupCopyButton({ variant = "strip" }: StandupCopyButtonProps)
             {previewBtn}
             {settingsBtn}
           </div>
-          <span className="min-w-0 text-left leading-snug" style={{ color: "var(--text-muted)" }}>
+          <span className="min-w-0 text-left leading-snug text-text-muted">
             {hintCopy}
           </span>
         </div>
@@ -421,7 +421,7 @@ export function StandupCopyButton({ variant = "strip" }: StandupCopyButtonProps)
           {previewBtn}
           {settingsBtn}
         </div>
-        <span className="min-w-0 flex-1 text-left leading-snug" style={{ color: "var(--text-muted)" }}>
+        <span className="min-w-0 flex-1 text-left leading-snug text-text-muted">
           {hintCopy}
         </span>
       </HubSignalStrip>

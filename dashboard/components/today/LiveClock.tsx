@@ -1,39 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSecondTick } from "@/lib/tickers";
 import { formatClock } from "./hero-helpers";
 
 /**
- * Self-ticking seconds clock. Isolated so its 1s interval re-renders only
- * this span — previously the whole Today page re-rendered every second.
- * Pauses while the tab is hidden.
+ * Wall clock. Renders only this span each tick, and now shares one interval
+ * with every other second-resolution readout in the app (lib/tickers.ts)
+ * instead of owning a `setInterval` of its own. Still stops while the tab is
+ * hidden — that behaviour moved into the shared ticker.
+ *
+ * It displays hours and minutes, so a minute ticker looks tempting. Don't: the
+ * shared minute interval starts whenever its first subscriber mounts, not on
+ * the minute boundary, so the clock would sit on the wrong minute for up to
+ * 59s after each rollover. Ticking per second and re-rendering one span is the
+ * cheaper mistake.
  */
 export function LiveClock() {
-  const [clock, setClock] = useState<string>(() => formatClock(new Date()));
-  useEffect(() => {
-    let id: ReturnType<typeof setInterval> | null = null;
-    const tick = () => setClock(formatClock(new Date()));
-    const start = () => {
-      if (id) return;
-      tick();
-      id = setInterval(tick, 1000);
-    };
-    const stop = () => {
-      if (id) {
-        clearInterval(id);
-        id = null;
-      }
-    };
-    const onVisibility = () => (document.hidden ? stop() : start());
-    start();
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      stop();
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, []);
+  // 0 only during SSR, where `suppressHydrationWarning` covers the mismatch;
+  // on the client the ticker seeds itself on first read.
+  const now = useSecondTick();
+  const clock = formatClock(new Date(now));
+
   return (
-    <span className="font-mono text-[13px]" aria-label={`Current time ${clock}`} suppressHydrationWarning>
+    <span
+      className="font-mono text-[13px]"
+      aria-label={`Current time ${clock}`}
+      suppressHydrationWarning
+    >
       {clock}
     </span>
   );

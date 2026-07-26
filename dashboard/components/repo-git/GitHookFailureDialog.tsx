@@ -5,9 +5,9 @@ import { Bot, Copy, X } from "lucide-react";
 import {
   hookFailureTitle,
   type GitHookFailurePayload,
-} from "@/lib/git-hook-failure";
+} from "@/lib/git/hook-failure";
 import { agentGitHookFailureCommand, openTerminal } from "@/lib/terminal-launch";
-import { useToast } from "@/lib/use-toast";
+import { useToast } from "@/lib/hooks/use-toast";
 
 interface GitHookFailureDialogProps {
   failure: GitHookFailurePayload | null;

@@ -10,7 +10,7 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { getDocsDir } from "../lib/content-dirs";
+import { getDocsDir } from "@/lib/content/dirs";
 import { checkOnePasswordStatus } from "./op-secrets";
 
 interface Finding {

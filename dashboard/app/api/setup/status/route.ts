@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import path from "node:path";
 import { readDashboardEnvLocalFile, resolveEnvValue } from "@/lib/dashboard-env-local";
-import { resolveDatadogApplicationKey } from "@/lib/datadog-application-key";
+import { resolveDatadogApplicationKey } from "@/lib/datadog/application-key";
 import { getResolvedGoogleCalendarEnv } from "@/lib/google-calendar";
 import { isGithubCliAuthenticated } from "@/lib/repos";
 import { detectBiPresence } from "@/lib/bi-presence";
 import { getPeerServiceGateStatus } from "@/lib/peer-service-availability";
-import { isCursorAgentInstalled, readAgentCliSettings } from "@/lib/agent-cli-env";
+import { isCursorAgentInstalled, readAgentCliSettings } from "@/lib/agent/cli-env";
 
 export const dynamic = "force-dynamic";
 

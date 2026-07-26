@@ -10,7 +10,7 @@
  */
 import process from "node:process";
 import { loadEnvWithOnePasswordFallback } from "./op-secrets";
-import { ensureOpenCodeCurrent } from "../lib/opencode-update";
+import { ensureOpenCodeCurrent } from "@/lib/opencode/update";
 
 function log(msg: string): void {
   process.stdout.write(`[peers] ${msg}\n`);

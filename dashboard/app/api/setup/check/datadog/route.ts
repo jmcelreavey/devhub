@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { readDashboardEnvLocalFile, resolveEnvValue } from "@/lib/dashboard-env-local";
-import { resolveDatadogApplicationKey } from "@/lib/datadog-application-key";
-import { datadogApiHost } from "@/lib/datadog-links";
-import { isSameOrigin, parseBody } from "@/lib/api-utils";
+import { resolveDatadogApplicationKey } from "@/lib/datadog/application-key";
+import { datadogApiHost } from "@/lib/datadog/links";
+import { parseBody } from "@/lib/api-utils";
+import { DatadogCheckSchema } from "@/lib/schemas";
 
 export const dynamic = "force-dynamic";
 
@@ -103,16 +104,13 @@ export async function GET() {
  * secrets are omitted), and those fall back to the saved env.
  */
 export async function POST(req: NextRequest) {
-  if (!isSameOrigin(req)) {
-    return NextResponse.json({ ok: false, code: "forbidden", message: "Forbidden" }, { status: 403 });
-  }
-
-  const body = await parseBody<{ apiKey?: unknown; applicationKey?: unknown }>(req);
+  const parsed = await parseBody(req, DatadogCheckSchema);
+  if (!parsed.ok) return parsed.response;
 
   return NextResponse.json(
     await runDatadogCheck({
-      apiKey: typeof body.apiKey === "string" ? body.apiKey : undefined,
-      applicationKey: typeof body.applicationKey === "string" ? body.applicationKey : undefined,
+      apiKey: parsed.data.apiKey,
+      applicationKey: parsed.data.applicationKey,
     }),
   );
 }

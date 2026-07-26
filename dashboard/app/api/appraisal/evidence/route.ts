@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 import { withErrorHandler } from "@/lib/api-utils";
-import { getNotesDir } from "@/lib/content-dirs";
-import { getMyTickets } from "@/lib/jira-client";
-import { fetchMyGithubPrs } from "@/lib/github-prs";
-import type { DatadogRecentAlertsResponse } from "@/lib/datadog-recent-events";
+import { getNotesDir } from "@/lib/content/dirs";
+import { getMyTickets } from "@/lib/jira/client";
+import { fetchMyGithubPrs } from "@/lib/github/prs";
+import type { DatadogRecentAlertsResponse } from "@/lib/datadog/recent-events";
 import { blocksToText, textToBlocks } from "@/lib/markdown-convert";
 import { clampEvidenceDays } from "@/lib/appraisal-evidence-range";
 import {

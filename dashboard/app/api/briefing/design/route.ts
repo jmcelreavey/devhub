@@ -1,8 +1,9 @@
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { withErrorHandler, parseBody, isSameOrigin } from "@/lib/api-utils";
-import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai-provider";
+import { withErrorHandler, parseBody } from "@/lib/api-utils";
+import { BriefingDesignSchema } from "@/lib/schemas";
+import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai/provider";
 import { isNotesAiConfigured } from "@/lib/notes-ai/config";
 import { buildBriefingContext, contextForPrompt, type BriefingContext } from "@/lib/briefing-context";
 import { readCanvas, saveCanvas, resetCanvas, generateCanvasHtml } from "@/lib/briefing-canvas";
@@ -14,19 +15,13 @@ import {
   normalisePrefsUpdate,
   type BriefingPrefs,
 } from "@/lib/briefing-prefs";
-import { normalizeTheme, type CanvasTheme } from "@/lib/briefing-theme";
+import { normalizeTheme } from "@/lib/briefing-theme";
 
 export const dynamic = "force-dynamic";
 
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
-}
-
-interface DesignRequest {
-  message?: string;
-  history?: ChatMessage[];
-  theme?: CanvasTheme | null;
 }
 
 interface DesignPlan {
@@ -156,11 +151,11 @@ function mergePrefs(current: BriefingPrefs, patch: Partial<BriefingPrefs>): Brie
 }
 
 export const POST = withErrorHandler(async (request: NextRequest) => {
-  if (!isSameOrigin(request)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await parseBody<DesignRequest>(request);
-  const message = body.message?.trim();
-  if (!message) return NextResponse.json({ ok: false, error: "Message is required" }, { status: 400 });
+  const parsed = await parseBody(request, BriefingDesignSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
+  const message = body.message.trim();
   const theme = normalizeTheme(body.theme);
 
   let ctx = await buildBriefingContext();

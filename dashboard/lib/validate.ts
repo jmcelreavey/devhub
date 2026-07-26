@@ -8,9 +8,9 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { agentFrontmatterMalformed, agentHasLegacyFrontmatter } from "./agent-sync-format";
-import { findRawSecretPath } from "./opencode-secrets";
-import { devhubSharedSkillsDir, listSkillDirNames, SKILL_MD } from "./skills-shared";
+import { agentFrontmatterMalformed, agentHasLegacyFrontmatter } from "@/lib/agent/sync-format";
+import { findRawSecretPath } from "@/lib/opencode/secrets";
+import { devhubSharedSkillsDir, listSkillDirNames, SKILL_MD } from "@/lib/skills/shared";
 
 export interface ValidateOptions {
   emit: (line: string) => void;

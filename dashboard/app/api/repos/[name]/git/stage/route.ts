@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { discardGitPaths, type DiscardScope } from "@/lib/git-discard";
-import { stageDiffHunk } from "@/lib/git-patch-stage";
-import { runGitRepoAsync } from "@/lib/git-repo-local";
+import { discardGitPaths, type DiscardScope } from "@/lib/git/discard";
+import { stageDiffHunk } from "@/lib/git/patch-stage";
+import { runGitRepoAsync } from "@/lib/git/repo-local";
 import { gitFail, withScannedRepo, type RepoParams } from "../_shared";
 
 export async function POST(req: NextRequest, { params }: RepoParams) {

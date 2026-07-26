@@ -5,7 +5,7 @@ export {
 } from "../../../shared/vault/vault-path.ts";
 
 import type { VaultPathHelpers } from "../../../shared/vault/vault-path.ts";
-import { broadcastNoteAutosaveInvalidation } from "@/lib/note-autosave-invalidation";
+import { broadcastNoteAutosaveInvalidation } from "@/lib/notes/autosave-invalidation";
 
 export function extendVaultPathHelpers(
   helpers: VaultPathHelpers,

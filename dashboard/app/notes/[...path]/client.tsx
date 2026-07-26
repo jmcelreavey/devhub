@@ -1,6 +1,6 @@
 "use client";
 
-import { VaultEditorPage } from "@/components/VaultEditorPage";
+import { VaultEditorPage } from "@/components/vault/VaultEditorPage";
 
 export default function NotePage({
   path,

@@ -2,8 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { blocksToText } from "./markdown-convert";
 import { listLearningEntries } from "./learnings-index";
-import { getRepoRoot, getNotesDir } from "./notes-dir";
-import { getTasks, isTaskOpen, type Task } from "./tasks-storage";
+import { getRepoRoot, getNotesDir } from "@/lib/notes/dir";
+import { getTasks, isTaskOpen, type Task } from "@/lib/tasks/storage";
 import { dailyNotePath, todayISO } from "./utils";
 
 export interface ContextPackLearning {

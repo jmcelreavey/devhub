@@ -3,11 +3,11 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
 import { FetchError, SkeletonRows } from "@/components";
-import { useLive } from "@/lib/use-fetch";
-import { localCalendarDateISO } from "@/lib/local-calendar-date";
+import { useLive } from "@/lib/hooks/use-fetch";
+import { localCalendarDateISO } from "@/lib/local/calendar-date";
 import { jiraBrowseUrl } from "@/lib/utils";
-import type { WeeklyReview } from "@/lib/tasks-weekly";
-import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
+import type { WeeklyReview } from "@/lib/tasks/weekly";
+import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 
 function shiftISODate(iso: string, deltaDays: number): string {
   const d = new Date(`${iso}T00:00:00`);
@@ -54,7 +54,7 @@ export default function ReviewPage() {
           <div className="page-title" style={{ fontFamily: "var(--font-display)" }}>
             Weekly review
           </div>
-          <div className="text-xs mt-1" style={{ color: "var(--text-subtle)" }}>
+          <div className="text-xs mt-1 text-text-subtle">
             {data ? `${shortDate(data.start)} – ${shortDate(data.end)}` : "Last 7 days"}
           </div>
         </div>
@@ -101,13 +101,13 @@ export default function ReviewPage() {
                 <div className="text-2xl font-mono tabular-nums" style={{ color: s.color }}>
                   {data.totals[s.key]}
                 </div>
-                <div className="text-xs" style={{ color: "var(--text-subtle)" }}>{s.label}</div>
+                <div className="text-xs text-text-subtle">{s.label}</div>
               </div>
             ))}
           </div>
 
           <div className="mb-4 py-1">
-            <div className="text-xs font-medium mb-3" style={{ color: "var(--text-muted)" }}>
+            <div className="text-xs font-medium mb-3 text-text-muted">
               Throughput
             </div>
             <div className="space-y-2">
@@ -136,11 +136,11 @@ export default function ReviewPage() {
           </div>
 
           <div className="card card-body">
-            <div className="text-xs font-medium mb-3" style={{ color: "var(--text-muted)" }}>
-              What slipped <span style={{ color: "var(--text-subtle)" }}>· rolled over 3+ days</span>
+            <div className="text-xs font-medium mb-3 text-text-muted">
+              What slipped <span className="text-text-subtle">· rolled over 3+ days</span>
             </div>
             {data.slipped.length === 0 ? (
-              <p className="text-sm" style={{ color: "var(--text-subtle)" }}>
+              <p className="text-sm text-text-subtle">
                 Nothing chronically slipping this week. Nice.
               </p>
             ) : (
@@ -160,7 +160,7 @@ export default function ReviewPage() {
                         <ExternalLink size={10} aria-hidden />
                       </a>
                     )}
-                    <span className="text-sm min-w-0 break-words" style={{ color: "var(--text)" }}>
+                    <span className="text-sm min-w-0 break-words text-text">
                       {s.text}
                     </span>
                   </div>

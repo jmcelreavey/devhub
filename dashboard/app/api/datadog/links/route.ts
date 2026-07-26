@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { readDashboardEnvLocalFile, resolveEnvValue } from "@/lib/dashboard-env-local";
-import { resolveDatadogDeepLinks } from "@/lib/datadog-links";
+import { resolveDatadogDeepLinks } from "@/lib/datadog/links";
 
 export const dynamic = "force-dynamic";
 

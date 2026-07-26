@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { GraduationCap, Maximize2, Minimize2, X } from "lucide-react";
-import { SidePanel } from "@/components/SidePanel";
-import { HoverTip } from "@/components/HoverTip";
+import { SidePanel } from "@/components/shell/SidePanel";
+import { HoverTip } from "@/components/ui/HoverTip";
 import { LearnContent } from "./LearnContent";
 import type { RepoInfo } from "./types";
 

@@ -3,10 +3,10 @@
 import { useCallback, type ReactNode } from "react";
 import Link from "next/link";
 import { ExternalLink, LineChart, RefreshCw } from "lucide-react";
-import { useLive } from "@/lib/use-fetch";
-import type { DatadogLinksApiResponse } from "@/lib/datadog-links";
-import type { DatadogRecentAlertsResponse, RecentEvent } from "@/lib/datadog-recent-events";
-import type { OncallStatus } from "@/lib/datadog-oncall";
+import { useLive } from "@/lib/hooks/use-fetch";
+import type { DatadogLinksApiResponse } from "@/lib/datadog/links";
+import type { DatadogRecentAlertsResponse, RecentEvent } from "@/lib/datadog/recent-events";
+import type { OncallStatus } from "@/lib/datadog/oncall";
 import { formatTime } from "@/lib/utils";
 import { DatadogInvestigateButton } from "@/components/DatadogInvestigateButton";
 

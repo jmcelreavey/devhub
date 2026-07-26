@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { normalizeAgentCli } from "@/lib/agent-cli-env";
+import { normalizeAgentCli } from "@/lib/agent/cli-env";
 import {
   readDashboardEnvLocalFile,
   syncAgentProcessEnvFromOverrides,
@@ -13,6 +13,8 @@ import {
   syncJiraProcessEnvFromOverrides,
   writeDashboardEnvLocalFile,
 } from "@/lib/dashboard-env-local";
+import { parseBody } from "@/lib/api-utils";
+import { SetupSaveSchema } from "@/lib/schemas";
 
 export const dynamic = "force-dynamic";
 
@@ -42,16 +44,9 @@ function validateDirectory(p: string): string | null {
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { calendar, jira, datadog, core, network, bi, agent } = body as {
-    calendar?: { clientId?: string; clientSecret?: string; refreshToken?: string };
-    jira?: { domain: string; email: string; apiToken: string };
-    datadog?: { apiKey?: string; applicationKey?: string; email?: string; scheduleId?: string } | null;
-    core?: { repoRoot?: string; notesDir?: string };
-    network?: { allowLan: boolean; openchamberUiPassword?: string };
-    bi?: { capiRepoPath?: string };
-    agent?: { cli?: string; opencodeModel?: string; cursorModel?: string };
-  };
+  const parsed = await parseBody(req, SetupSaveSchema);
+  if (!parsed.ok) return parsed.response;
+  const { calendar, jira, datadog, core, network, bi, agent } = parsed.data;
 
   // Validate core paths up-front so we don't half-write the env file.
   if (core) {

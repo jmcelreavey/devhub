@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { z } from "zod";
 import { withErrorHandler, parseBody } from "@/lib/api-utils";
+import { ShareCreateSchema } from "@/lib/schemas";
 import { mapGithubCliError } from "@/lib/gh-exec";
 import { parseVaultId } from "@/lib/vault/vault-registry";
 import { createGist, deleteGist, updateGist } from "@/lib/share/gist";
@@ -13,20 +13,13 @@ import {
 } from "@/lib/share/share-store";
 import { shareKey, type ShareRecord } from "@/lib/share/share-public";
 
-const BodySchema = z.object({
-  vault: z.string(),
-  path: z.string().min(1),
-});
-
 export const GET = withErrorHandler(async () => {
   return NextResponse.json({ shares: listShareStatuses() });
 }, "share.get");
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
-  const parsed = BodySchema.safeParse(await parseBody(req));
-  if (!parsed.success) {
-    return NextResponse.json({ error: "vault and path are required" }, { status: 400 });
-  }
+  const parsed = await parseBody(req, ShareCreateSchema);
+  if (!parsed.ok) return parsed.response;
   const vault = parseVaultId(parsed.data.vault);
   const sharePath = parsed.data.path;
   const source = readShareSource(vault, sharePath);
@@ -74,10 +67,8 @@ export const DELETE = withErrorHandler(async (req: NextRequest) => {
       await Promise.allSettled(removed.map((s) => deleteGist(s.gistId)));
       return NextResponse.json({ ok: true, removed: removed.length });
     }
-    const parsed = BodySchema.safeParse(await parseBody(req));
-    if (!parsed.success) {
-      return NextResponse.json({ error: "vault and path are required" }, { status: 400 });
-    }
+    const parsed = await parseBody(req, ShareCreateSchema);
+    if (!parsed.ok) return parsed.response;
     const vault = parseVaultId(parsed.data.vault);
     const removed = await removeShare(vault, parsed.data.path);
     if (!removed) {

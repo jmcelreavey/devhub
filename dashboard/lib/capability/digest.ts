@@ -14,7 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes/dir";
 import { safeReadJSON, writeAtomic } from "@/lib/atomic-write";
 import { textToBlocks } from "@/lib/markdown-convert";
 import { buildEvolutionHeadline } from "./headline";

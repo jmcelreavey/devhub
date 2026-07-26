@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, RefreshCw } from "lucide-react";
-import { useLive } from "@/lib/use-fetch";
-import { FetchError } from "@/components/FetchError";
-import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
+import { useLive } from "@/lib/hooks/use-fetch";
+import { FetchError } from "@/components/ui/FetchError";
+import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 import {
   EmptyReposCard,
   GithubRepoCard,
@@ -169,8 +169,8 @@ export default function ReposPage() {
 
       {localError && (
         <div className="card card-body mb-3">
-          <div className="flex items-center gap-2 text-sm" style={{ color: "var(--text-muted)" }}>
-            <AlertCircle size={14} style={{ color: "var(--danger)" }} aria-hidden />
+          <div className="flex items-center gap-2 text-sm text-text-muted">
+            <AlertCircle size={14} className="text-danger" aria-hidden />
             Couldn&apos;t load local repos.
             <button type="button" className="btn btn-ghost ml-auto" onClick={() => mutateLocal()}>
               Retry

@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, Download, Loader2, RefreshCw } from "lucide-react";
-import type { LocalMcpImportCandidate } from "@/lib/local-mcp-types";
+import type { LocalMcpImportCandidate } from "@/lib/local/mcp-types";
 import { revalidateScriptsHistory } from "@/lib/scripts-history-swr";
-import { useToast } from "@/lib/use-toast";
+import { useToast } from "@/lib/hooks/use-toast";
 import { waitForScriptRun } from "@/lib/wait-for-script-run";
 
 type McpImportTarget = "repo" | "personal";
@@ -116,7 +116,7 @@ export function LocalMcpImportPanel({ onImported }: Props) {
         aria-expanded={open}
       >
         <div>
-          <div className="text-xs font-semibold" style={{ color: "var(--text)" }}>
+          <div className="text-xs font-semibold text-text">
             Import from local tools
           </div>
           <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)", lineHeight: 1.4 }}>
@@ -136,8 +136,8 @@ export function LocalMcpImportPanel({ onImported }: Props) {
 
       {open && (
         <div className="mt-3 space-y-3" style={{ borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
-          <div className="flex flex-wrap items-center gap-3 text-xs" style={{ color: "var(--text-muted)" }}>
-            <span className="font-medium" style={{ color: "var(--text)" }}>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-text-muted">
+            <span className="font-medium text-text">
               Save to:
             </span>
             <label className="flex items-center gap-1.5 cursor-pointer">
@@ -185,7 +185,7 @@ export function LocalMcpImportPanel({ onImported }: Props) {
           </div>
 
           {importable.length === 0 && !loading && (
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            <p className="text-xs text-text-muted">
               No importable MCP servers found (everything is already in your catalog, or shapes are unsupported).
             </p>
           )}
@@ -212,7 +212,7 @@ export function LocalMcpImportPanel({ onImported }: Props) {
                     onChange={() => !disabled && toggle(c.name)}
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="font-mono font-medium" style={{ color: "var(--text)" }}>
+                    <span className="font-mono font-medium text-text">
                       {c.name}
                     </span>
                     <span className="block" style={{ color: "var(--text-subtle)", fontSize: "10px" }}>
@@ -226,7 +226,7 @@ export function LocalMcpImportPanel({ onImported }: Props) {
 
           {unsupported.length > 0 && (
             <div className="text-xs" style={{ color: "var(--text-subtle)", lineHeight: 1.4 }}>
-              <div className="font-medium mb-1" style={{ color: "var(--text-muted)" }}>
+              <div className="font-medium mb-1 text-text-muted">
                 Unsupported shape:
               </div>
               <ul className="space-y-0.5">

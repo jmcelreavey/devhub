@@ -1,13 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { runGitRepo, runGitRepoAsync } from "@/lib/git-repo-local";
-import { detectUnmergedFiles } from "@/lib/git-conflicts";
+import { runGitRepo, runGitRepoAsync } from "@/lib/git/repo-local";
+import { detectUnmergedFiles } from "@/lib/git/conflicts";
 import {
   formatIndexLockError,
   looksLikeIndexLockError,
   prepareGitIndexWrite,
-} from "@/lib/git-index-lock";
-import { detectGitHookFailure, type GitHookPhase } from "@/lib/git-hook-failure";
-import { withPersistedLog } from "@/lib/git-hook-failure-persist";
+} from "@/lib/git/index-lock";
+import { detectGitHookFailure, type GitHookPhase } from "@/lib/git/hook-failure";
+import { withPersistedLog } from "@/lib/git/hook-failure-persist";
 import { resolveScannedRepo } from "@/lib/scanned-repo";
 import type { StashConflictPayload } from "@/app/repos/types";
 import { parseChangedFiles, parseLeftRightCount, parseUnpushedCommits } from "./parsers";

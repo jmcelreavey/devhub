@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withErrorHandler } from "@/lib/api-utils";
 import { buildContextPack, formatContextPackMarkdown } from "@/lib/context-pack";
-import { buildStandupQuery } from "@/lib/standup-params";
+import { buildStandupQuery } from "@/lib/standup/params";
 
 export const dynamic = "force-dynamic";
 

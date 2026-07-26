@@ -2,10 +2,10 @@
 
 import { FlaskConical, RefreshCw } from "lucide-react";
 import { FetchError, PageHeader } from "@/components";
-import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
-import { SimpleMarkdown } from "@/components/SimpleMarkdown";
-import { useLive } from "@/lib/use-fetch";
-import { useToast } from "@/lib/use-toast";
+import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
+import { SimpleMarkdown } from "@/components/ui/SimpleMarkdown";
+import { useLive } from "@/lib/hooks/use-fetch";
+import { useToast } from "@/lib/hooks/use-toast";
 import { useState } from "react";
 
 interface ResearchCard {

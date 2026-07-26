@@ -7,7 +7,7 @@
 // helpers produce small text bits (dev tip, one-line summary, interest snippets).
 
 import { generateText } from "ai";
-import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai-provider";
+import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai/provider";
 import { isNotesAiConfigured } from "@/lib/notes-ai/config";
 import { pickDevTip, type DailyBriefing, type DevTip, type InterestSnippet } from "./morning-briefing";
 

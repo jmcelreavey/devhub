@@ -2,23 +2,24 @@
 
 import { useEffect, useState, useCallback, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
-import { RefreshCw, Server, Link2, RotateCw, GitBranch, ArrowUp, ArrowDown, Play, AlertTriangle, Check, Wifi, QrCode, Cloud, ExternalLink } from "lucide-react";
+import { RefreshCw, Server, Link2, RotateCw, GitBranch, ArrowUp, ArrowDown, Play, AlertTriangle, Check, Wifi, QrCode, Cloud, ExternalLink, History } from "lucide-react";
 import QRCode from "qrcode";
-import { CommitMessageModal, defaultCommitCheckpointMessage } from "@/components/CommitMessageModal";
+import { CommitMessageModal, defaultCommitCheckpointMessage } from "@/components/runs/CommitMessageModal";
 import { getNow, subscribeMinute } from "@/lib/minute-tick";
 import { revalidateScriptsHistory } from "@/lib/scripts-history-swr";
 import { waitForScriptRun } from "@/lib/wait-for-script-run";
 import { formatRelativePastAge } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/clipboard";
-import { ConflictResolverPanel } from "@/components/ConflictResolverPanel";
-import { SyncHealthPanel } from "@/components/SyncHealthPanel";
-import { MaterializeHonestyBanner } from "@/components/MaterializeHonestyBanner";
-import { StatusDot } from "@/components/StatusDot";
-import { CopyButton } from "@/components/CopyButton";
-import { HoverTip } from "@/components/HoverTip";
-import { useLive } from "@/lib/use-fetch";
+import { ConflictResolverPanel } from "@/components/runs/ConflictResolverPanel";
+import { SyncHealthPanel } from "@/components/runs/SyncHealthPanel";
+import { RecentRunsPanel } from "@/components/runs/RecentRunsPanel";
+import { MaterializeHonestyBanner } from "@/components/runs/MaterializeHonestyBanner";
+import { StatusDot } from "@/components/ui/StatusDot";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { HoverTip } from "@/components/ui/HoverTip";
+import { useLive } from "@/lib/hooks/use-fetch";
 import type { SetupGateStatus } from "@/lib/nav";
-import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
+import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 
 interface ServiceInfo {
   name: string;
@@ -141,11 +142,11 @@ function ServiceCard({ info, onRestart, restarting }: {
     <div className="flex items-center justify-between gap-2 py-2">
       <div className="flex min-w-0 items-center gap-2.5">
         <StatusDot ok={info.active} />
-        <span className="truncate text-sm font-medium" style={{ color: "var(--text)" }}>{info.name}</span>
+        <span className="truncate text-sm font-medium text-text">{info.name}</span>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {info.uptime && (
-          <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
+          <span className="text-xs text-text-subtle">
             since {info.uptime}
           </span>
         )}
@@ -215,8 +216,7 @@ function InfraCard() {
         <span className="flex items-center gap-1.5"><Cloud size={12} />Infra</span>
         <Link
           href="/ops"
-          className="inline-flex items-center gap-1 text-[11px]"
-          style={{ color: "var(--text-muted)" }}
+          className="inline-flex items-center gap-1 text-[11px] text-text-muted"
           title="Open Ops page"
         >
           Ops <ExternalLink size={10} aria-hidden />
@@ -224,36 +224,36 @@ function InfraCard() {
       </div>
       <div className="card-body flex-1" style={{ padding: "8px 16px" }}>
         {!loaded ? (
-          <p className="text-xs py-2" style={{ color: "var(--text-subtle)" }}>Loading…</p>
+          <p className="text-xs py-2 text-text-subtle">Loading…</p>
         ) : (
           <div className="flex flex-col gap-1.5 py-1">
             <div className="flex items-center justify-between gap-2 text-sm">
               <span className="flex items-center gap-2">
                 <StatusDot ok={authed} />
-                <span style={{ color: "var(--text)" }}>AWS</span>
+                <span className="text-text">AWS</span>
               </span>
               {profile ? (
                 <span className="flex items-center gap-2">
-                  <code className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>{profile}</code>
+                  <code className="font-mono text-xs text-text-muted">{profile}</code>
                   <span className={`badge ${authed ? "badge-success" : "badge-muted"}`}>
                     {authed ? "signed in" : "expired"}
                   </span>
                 </span>
               ) : (
-                <span className="text-xs" style={{ color: "var(--text-subtle)" }}>not set</span>
+                <span className="text-xs text-text-subtle">not set</span>
               )}
             </div>
             <div className="flex items-center justify-between gap-2 text-sm">
               <span className="flex items-center gap-2">
                 <StatusDot ok={Boolean(ctx)} />
-                <span style={{ color: "var(--text)" }}>kubectl</span>
+                <span className="text-text">kubectl</span>
               </span>
               {ctx ? (
                 <code className="font-mono text-[11px] truncate" style={{ color: "var(--text-muted)", maxWidth: 180 }} title={ctx}>
                   {ctx}
                 </code>
               ) : (
-                <span className="text-xs" style={{ color: "var(--text-subtle)" }}>no context</span>
+                <span className="text-xs text-text-subtle">no context</span>
               )}
             </div>
           </div>
@@ -582,7 +582,7 @@ export default function StatusPage() {
                   className="absolute right-0 z-50 mt-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3 shadow-xl"
                   role="tooltip"
                 >
-                  <p className="mb-1.5 text-center text-[10px] font-medium" style={{ color: "var(--text-muted)" }}>
+                  <p className="mb-1.5 text-center text-[10px] font-medium text-text-muted">
                     Scan to open on phone
                   </p>
                   {/* eslint-disable-next-line @next/next/no-img-element -- data URL generated client-side, cannot use next/image */}
@@ -593,7 +593,7 @@ export default function StatusPage() {
                     width={180}
                     height={180}
                   />
-                  <p className="mt-1.5 truncate text-center text-[10px] font-mono tabular-nums" style={{ color: "var(--text-subtle)" }}>
+                  <p className="mt-1.5 truncate text-center text-[10px] font-mono tabular-nums text-text-subtle">
                     {lanAddresses[0]}
                   </p>
                 </div>
@@ -658,13 +658,13 @@ export default function StatusPage() {
         >
           {allGreen ? (
             <>
-              <Check size={13} style={{ color: "var(--success)" }} aria-hidden />
-              <span style={{ color: "var(--success)" }}>All green</span>
+              <Check size={13} className="text-success" aria-hidden />
+              <span className="text-success">All green</span>
             </>
           ) : (
             <>
-              <AlertTriangle size={13} style={{ color: "var(--warning)" }} aria-hidden />
-              <span style={{ color: "var(--text-muted)" }}>{healthItems.join(" · ")}</span>
+              <AlertTriangle size={13} className="text-warning" aria-hidden />
+              <span className="text-text-muted">{healthItems.join(" · ")}</span>
             </>
           )}
         </div>
@@ -680,10 +680,10 @@ export default function StatusPage() {
             <div className="card-body flex flex-1 flex-col gap-3">
               <div className="grid grid-cols-1 gap-x-5 gap-y-2.5 sm:grid-cols-2">
                 <div className="flex min-h-[1.75rem] items-center justify-between gap-3 border-b border-[var(--border-muted)] pb-2 sm:border-b-0 sm:pb-0">
-                  <span className="text-[13px] font-medium tracking-tight" style={{ color: "var(--text-muted)" }}>
+                  <span className="text-[13px] font-medium tracking-tight text-text-muted">
                     Branch
                   </span>
-                  <span className="truncate font-mono text-xs tabular-nums" style={{ color: "var(--text)" }} title={git.branch}>
+                  <span className="truncate font-mono text-xs tabular-nums text-text" title={git.branch}>
                     {git.branch}
                   </span>
                 </div>
@@ -691,7 +691,7 @@ export default function StatusPage() {
                   className="flex min-h-[1.75rem] items-center justify-between gap-3 border-b border-[var(--border-muted)] pb-2 sm:border-b-0 sm:pb-0"
                   title="Dirty files needing commit & push. Notes/tasks/diagrams are tracked separately as syncable content."
                 >
-                  <span className="text-[13px] font-medium tracking-tight" style={{ color: "var(--text-muted)" }}>
+                  <span className="text-[13px] font-medium tracking-tight text-text-muted">
                     Dirty paths
                   </span>
                   <span className="flex items-center gap-1.5 text-sm">
@@ -702,7 +702,7 @@ export default function StatusPage() {
                       {otherDirty}
                     </span>
                     {contentDirty > 0 && (
-                      <span className="tabular-nums text-[11px]" style={{ color: "var(--accent)" }}>
+                      <span className="tabular-nums text-[11px] text-accent">
                         +{contentDirty} content
                       </span>
                     )}
@@ -712,24 +712,24 @@ export default function StatusPage() {
                   className="flex min-h-[1.75rem] items-center justify-between gap-3 border-b border-[var(--border-muted)] pb-2 sm:border-b-0 sm:pb-0"
                   title="Compared to your upstream branch (usually origin/main). ↑ = local commits not pushed yet. ↓ = remote commits not pulled yet."
                 >
-                  <span className="text-[13px] font-medium tracking-tight" style={{ color: "var(--text-muted)" }}>
+                  <span className="text-[13px] font-medium tracking-tight text-text-muted">
                     vs upstream
                   </span>
                   <span className="flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-xs">
                     {git.ahead > 0 && (
-                      <span className="inline-flex items-center gap-0.5 whitespace-nowrap" style={{ color: "var(--accent)" }} title="Unpushed local commits">
+                      <span className="inline-flex items-center gap-0.5 whitespace-nowrap text-accent" title="Unpushed local commits">
                         <ArrowUp size={10} aria-hidden />
                         {git.ahead} to push
                       </span>
                     )}
                     {git.behind > 0 && (
-                      <span className="inline-flex items-center gap-0.5 whitespace-nowrap" style={{ color: "var(--warning)" }} title="Commits on remote you do not have locally">
+                      <span className="inline-flex items-center gap-0.5 whitespace-nowrap text-warning" title="Commits on remote you do not have locally">
                         <ArrowDown size={10} aria-hidden />
                         {git.behind} behind
                       </span>
                     )}
                     {git.ahead === 0 && git.behind === 0 && (
-                      <span className="whitespace-nowrap" style={{ color: "var(--success)" }}>
+                      <span className="whitespace-nowrap text-success">
                         up to date
                       </span>
                     )}
@@ -737,12 +737,11 @@ export default function StatusPage() {
                 </div>
                 {git.lastCommit && (
                   <div className="flex min-h-[1.75rem] items-start justify-between gap-3 sm:col-span-2">
-                    <span className="shrink-0 pt-0.5 text-[13px] font-medium tracking-tight" style={{ color: "var(--text-muted)" }}>
+                    <span className="shrink-0 pt-0.5 text-[13px] font-medium tracking-tight text-text-muted">
                       Last commit
                     </span>
                     <span
-                      className="text-right font-mono text-[11px] leading-snug break-all"
-                      style={{ color: "var(--text-subtle)" }}
+                      className="text-right font-mono text-[11px] leading-snug break-all text-text-subtle"
                       title={new Date(git.lastCommit.authoredAt * 1000).toLocaleString()}
                     >
                       <span className="text-[var(--text-muted)]">{git.lastCommit.hash}</span>
@@ -760,7 +759,7 @@ export default function StatusPage() {
                   className="flex flex-col gap-2 rounded-md border border-[var(--border)] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
                   style={{ background: "var(--warning-dim)" }}
                 >
-                  <p className="text-xs leading-snug" style={{ color: "var(--text)" }}>
+                  <p className="text-xs leading-snug text-text">
                     {otherDirty > 0
                       ? "Automated sync is paused until these changes are committed (or discarded)."
                       : "Notes, tasks, and diagrams have unsynced changes - sync them (cloud button in the top bar) before automated sync resumes."}
@@ -775,10 +774,10 @@ export default function StatusPage() {
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="space-y-1">
-                      <p className="text-xs font-semibold" style={{ color: "var(--text)" }}>
+                      <p className="text-xs font-semibold text-text">
                         Last sync/commit action failed ({latestFailedSyncRun.entry.script}).
                       </p>
-                      <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                      <p className="text-[11px] text-text-muted">
                         Run <span className="font-mono">{latestFailedSyncRun.entry.runId}</span> exited with code{" "}
                         {latestFailedSyncRun.entry.exitCode ?? latestFailedSyncRun.log.exitCode ?? "1"}.
                       </p>
@@ -824,12 +823,11 @@ export default function StatusPage() {
                   open={extraHints.some((h) => h.severity === "error")}
                 >
                   <summary
-                    className="cursor-pointer list-none px-3 py-2 font-semibold outline-none marker:content-none [&::-webkit-details-marker]:hidden"
-                    style={{ color: "var(--text-muted)" }}
+                    className="cursor-pointer list-none px-3 py-2 font-semibold outline-none marker:content-none [&::-webkit-details-marker]:hidden text-text-muted"
                   >
                     <span className="inline-flex w-full items-center justify-between gap-2">
-                      <span style={{ color: "var(--text)" }}>Git notices</span>
-                      <span className="text-[11px] font-normal tabular-nums" style={{ color: "var(--text-subtle)" }}>
+                      <span className="text-text">Git notices</span>
+                      <span className="text-[11px] font-normal tabular-nums text-text-subtle">
                         {extraHints.length} item{extraHints.length === 1 ? "" : "s"} · expand for details
                       </span>
                     </span>
@@ -839,14 +837,14 @@ export default function StatusPage() {
                       <div key={i} className="space-y-1.5">
                         <p style={{ color: h.severity === "error" ? "var(--danger)" : "var(--warning)" }}>{h.text}</p>
                         {h.fix && (
-                          <p className="leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                          <p className="leading-relaxed text-text-muted">
                             {h.fix}
                           </p>
                         )}
                       </div>
                     ))}
-                    <p className="border-t border-[var(--border-muted)] pt-2 text-[11px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-                      After you resolve blockers, use <strong className="font-medium" style={{ color: "var(--text-muted)" }}>Sync</strong> on this page or run <strong className="font-medium" style={{ color: "var(--text-muted)" }}>Update &amp; Sync</strong> from Actions - live output matches what you see there.
+                    <p className="border-t border-[var(--border-muted)] pt-2 text-[11px] leading-relaxed text-text-subtle">
+                      After you resolve blockers, use <strong className="font-medium text-text-muted">Sync</strong> on this page or run <strong className="font-medium text-text-muted">Update &amp; Sync</strong> from Actions - live output matches what you see there.
                     </p>
                   </div>
                 </details>
@@ -870,6 +868,12 @@ export default function StatusPage() {
         <div className="card min-w-0 flex flex-col">
           <div className="card-header"><span className="flex items-center gap-1.5"><Cloud size={12} />Sync health &amp; diff</span></div>
           <div className="card-body"><SyncHealthPanel /></div>
+        </div>
+
+        <SectionLabel>Recent runs</SectionLabel>
+        <div className="card min-w-0 flex flex-col">
+          <div className="card-header"><span className="flex items-center gap-1.5"><History size={12} />Run history</span></div>
+          <div className="card-body"><RecentRunsPanel /></div>
         </div>
 
         {/* Services + MCP + BI: shared row on large screens */}
@@ -901,7 +905,7 @@ export default function StatusPage() {
                 )}
               </>
             ) : (
-              <p className="text-xs py-2" style={{ color: "var(--text-subtle)" }}>Loading…</p>
+              <p className="text-xs py-2 text-text-subtle">Loading…</p>
             )}
           </div>
         </div>
@@ -916,7 +920,7 @@ export default function StatusPage() {
             style={{ padding: "8px 16px" }}
           >
             {mcpRuntime.length === 0 ? (
-              <p className="text-xs py-2" style={{ color: "var(--text-subtle)" }}>
+              <p className="text-xs py-2 text-text-subtle">
                 No servers under <code>mcp/shared/</code>.
               </p>
             ) : (
@@ -933,7 +937,7 @@ export default function StatusPage() {
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <McpStateDot running={isRunning} binaryMissing={binaryMissing} />
-                      <span className="font-medium font-mono min-w-0 truncate" style={{ color: "var(--text)" }} title={binaryMissing ? `binary missing: ${srv.command}` : srv.name}>{srv.name}</span>
+                      <span className="font-medium font-mono min-w-0 truncate text-text" title={binaryMissing ? `binary missing: ${srv.command}` : srv.name}>{srv.name}</span>
                     </div>
                     <span className={`badge shrink-0 ${badgeClass}`} title={isRunning && srv.pids.length ? `pids: ${srv.pids.join(", ")}` : binaryMissing ? `command: ${srv.command}` : "no matching processes"}>
                       {badgeText}

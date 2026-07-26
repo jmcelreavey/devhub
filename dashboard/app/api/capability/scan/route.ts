@@ -1,22 +1,31 @@
+import { z } from "zod";
 import { NextRequest, NextResponse } from "next/server";
-import { runScan, type ScanOptions } from "@/lib/capability/scan";
+import { runScan } from "@/lib/capability/scan";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+const ScanSchema = z.object({
+  includeGithub: z.boolean().optional(),
+  githubLimit: z.number().int().positive().optional(),
+  githubFilter: z.string().optional(),
+});
+
 export async function POST(req: NextRequest) {
-  let body: Partial<ScanOptions> = {};
-  try {
-    body = (await req.json()) as Partial<ScanOptions>;
-  } catch {
-    // empty body → local-only scan
+  // An absent or empty body is meaningful here: it means a local-only scan.
+  // `.catch(() => ({}))` preserves that while still rejecting malformed shapes.
+  const raw = await req.json().catch(() => ({}));
+  const parsed = ScanSchema.safeParse(raw);
+  if (!parsed.success) {
+    return NextResponse.json({ error: z.prettifyError(parsed.error) }, { status: 400 });
   }
+  const body = parsed.data;
 
   try {
     const result = await runScan({
       includeGithub: body.includeGithub === true,
-      githubLimit: typeof body.githubLimit === "number" ? body.githubLimit : undefined,
-      githubFilter: typeof body.githubFilter === "string" ? body.githubFilter : undefined,
+      githubLimit: body.githubLimit,
+      githubFilter: body.githubFilter,
     });
     return NextResponse.json(result);
   } catch (err) {

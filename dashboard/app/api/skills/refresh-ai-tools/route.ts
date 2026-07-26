@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { withErrorHandler } from "@/lib/api-utils";
-import { isAiToolsSyncEnabled, refreshAiToolsForApi, resolveAiToolsRoot } from "@/lib/ai-tools-skills";
+import { isAiToolsSyncEnabled, refreshAiToolsForApi, resolveAiToolsRoot } from "@/lib/ai/tools-skills";
 
 export const POST = withErrorHandler(async () => {
   if (!isAiToolsSyncEnabled()) {

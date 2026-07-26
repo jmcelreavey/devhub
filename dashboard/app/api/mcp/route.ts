@@ -2,19 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes/dir";
 import { withErrorHandler } from "@/lib/api-utils";
 import {
   listPersonalMcpServerNames,
   readPersonalMcpServer,
   writePersonalMcpServer,
-} from "@/lib/mcp-personal";
+} from "@/lib/mcp/personal";
 import {
   listSharedMcpServerNames,
   readSharedMcpServer,
   sharedMcpDir,
   type SharedMcpServer,
-} from "@/lib/sync-mcp";
+} from "@/lib/sync/mcp";
 
 export const dynamic = "force-dynamic";
 

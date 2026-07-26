@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import {
   parseHookFailurePayload,
   type GitHookFailurePayload,
-} from "@/lib/git-hook-failure";
+} from "@/lib/git/hook-failure";
 import type { StashConflictPayload } from "@/app/repos/types";
 
 /* ─── Shared types ─── */

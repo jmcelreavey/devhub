@@ -5,11 +5,11 @@ vi.mock("@/lib/scanned-repo", () => ({
   resolveScannedRepo: vi.fn(() => "/tmp/test-repo"),
 }));
 
-vi.mock("@/lib/git-repo-local", () => ({
+vi.mock("@/lib/git/repo-local", () => ({
   runGitRepoAsync: vi.fn(),
 }));
 
-import { runGitRepoAsync } from "@/lib/git-repo-local";
+import { runGitRepoAsync } from "@/lib/git/repo-local";
 import { GET } from "./route";
 
 describe("GET /api/repos/[name]/git/show", () => {

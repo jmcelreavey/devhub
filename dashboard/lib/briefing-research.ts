@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes/dir";
 import type { ResearchCard, ResearchSignal } from "./morning-briefing";
 
 const DEFAULT_MAX_AGE_HOURS = 72;

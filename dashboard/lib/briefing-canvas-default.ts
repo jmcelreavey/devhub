@@ -37,7 +37,13 @@ export const DEFAULT_CANVAS_HTML = `<!doctype html>
   .fday { text-align: center; background: var(--app-elevated); border-radius: 10px; padding: 8px 12px; min-width: 66px; }
   .fday b { display: block; font-size: 11px; color: var(--app-subtle); font-weight: 600; letter-spacing: -0.01em; }
   .fday span { font-size: 14px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; align-items: start; }
+  /* Masonry columns rather than a grid: the sections have wildly different
+     item counts (events vs news vs gaming), and align-items:start on a grid
+     left the block ending ragged — three columns stopping at three
+     different heights. Columns flow the cards to even out instead.
+     break-inside on the card stops a card splitting across a column. */
+  .grid { columns: 300px auto; column-gap: 16px; }
+  .grid > * { break-inside: avoid; margin-bottom: 16px; }
   .card { background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 12px; padding: 15px 16px 9px; }
   .card-title { font-size: 12px; font-weight: 700; letter-spacing: -0.01em; color: var(--app-accent); margin-bottom: 4px; }
   .row { display: block; padding: 9px 0; border-top: 1px solid var(--app-border); text-decoration: none; font-size: 14px; line-height: 1.4; }

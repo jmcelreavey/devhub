@@ -128,3 +128,125 @@ export function formatZodError(err: z.ZodError): string {
     .map((i) => `${i.path.length ? i.path.join(".") + ": " : ""}${i.message}`)
     .join("; ");
 }
+
+// ─── Briefing ───
+
+const ChatMessageSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string().max(20_000),
+});
+
+export const CanvasThemeSchema = z.object({
+  mode: z.enum(["dark", "light"]),
+  bg: z.string(),
+  surface: z.string(),
+  elevated: z.string(),
+  text: z.string(),
+  muted: z.string(),
+  subtle: z.string(),
+  border: z.string(),
+  accent: z.string(),
+  accentFg: z.string(),
+});
+
+/**
+ * `theme` stays loose on purpose: the route runs it through `normalizeTheme`,
+ * which is the real authority on partial/legacy shapes. Validating it strictly
+ * here would reject payloads the app itself still sends.
+ */
+export const BriefingDesignSchema = z.object({
+  message: z.string().min(1, "message is required").max(10_000),
+  history: z.array(ChatMessageSchema).max(100).optional(),
+  theme: z.unknown().optional(),
+});
+
+export const BriefingShareSchema = z.object({
+  theme: z.unknown().optional(),
+});
+
+export const BriefingTaskCreateSchema = z.object({
+  topic: z.string().min(3, "A topic of at least 3 characters is required").max(300),
+});
+
+// ─── Repos ───
+
+/**
+ * `owner/repo` as GitHub itself allows: alphanumerics, dot, dash, underscore.
+ * `lib/repos.ts` sanitises again before touching the filesystem — this is the
+ * outer gate, not the only one.
+ */
+export const RepoCloneSchema = z.object({
+  fullName: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/, "fullName must look like owner/repo"),
+});
+
+// ─── Setup ───
+
+export const DatadogCheckSchema = z.object({
+  apiKey: z.string().max(200).optional(),
+  applicationKey: z.string().max(200).optional(),
+});
+
+// ─── Share ───
+
+export const ShareCreateSchema = z.object({
+  vault: z.string(),
+  path: z.string().min(1),
+});
+
+/**
+ * `/api/setup/save` writes dashboard/.env.local — the highest-consequence body
+ * in the app, since it is what toggles LAN exposure and rewrites integration
+ * secrets. Every group is optional (the UI saves one section at a time) but
+ * each field is pinned to a string so a nested object can't reach the env
+ * writer. Directory paths get a further existence check in the handler.
+ */
+export const SetupSaveSchema = z.object({
+  calendar: z
+    .object({
+      clientId: z.string().max(500).optional(),
+      clientSecret: z.string().max(500).optional(),
+      refreshToken: z.string().max(2000).optional(),
+    })
+    .optional(),
+  jira: z
+    .object({
+      domain: z.string().max(300),
+      email: z.string().max(300),
+      apiToken: z.string().max(500),
+    })
+    .optional(),
+  datadog: z
+    .union([
+      z.object({
+        apiKey: z.string().max(200).optional(),
+        applicationKey: z.string().max(200).optional(),
+        email: z.string().max(300).optional(),
+        scheduleId: z.string().max(200).optional(),
+      }),
+      z.null(),
+    ])
+    .optional(),
+  core: z
+    .object({
+      repoRoot: z.string().max(4096).optional(),
+      notesDir: z.string().max(4096).optional(),
+    })
+    .optional(),
+  network: z
+    .object({
+      allowLan: z.boolean(),
+      openchamberUiPassword: z.string().max(500).optional(),
+    })
+    .optional(),
+  bi: z.object({ capiRepoPath: z.string().max(4096).optional() }).optional(),
+  agent: z
+    .object({
+      cli: z.string().max(100).optional(),
+      opencodeModel: z.string().max(200).optional(),
+      cursorModel: z.string().max(200).optional(),
+    })
+    .optional(),
+});

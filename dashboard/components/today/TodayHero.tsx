@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowLeft, ListTodo, Plus } from "lucide-react";
-import { LayoutPresetsButton } from "@/components/LayoutPresets";
+import { LayoutPresetsButton } from "@/components/shell/LayoutPresets";
 import { LiveClock } from "./LiveClock";
 import { greetingForHour, nowNextEvent, type HeroEvent } from "./hero-helpers";
 

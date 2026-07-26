@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
-import { getHome } from "@/lib/notes-dir";
+import { getHome } from "@/lib/notes/dir";
 
 interface RunEntry {
   runId: string;

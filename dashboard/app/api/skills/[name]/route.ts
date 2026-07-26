@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes-dir";
-import { rewriteAiToolsSkillFrontmatterName } from "@/lib/ai-tools-skills";
+import { getRepoRoot } from "@/lib/notes/dir";
+import { rewriteAiToolsSkillFrontmatterName } from "@/lib/ai/tools-skills";
 import { createSkillCatalogContext, resolveSkillInCatalog } from "@/lib/skill-catalog";
 import {
   devhubSharedSkillsDir,
   READ_ONLY_UPSTREAM_SKILL_ERROR,
   SKILL_SLUG,
-} from "@/lib/skills-shared";
+} from "@/lib/skills/shared";
 
 export const dynamic = "force-dynamic";
 

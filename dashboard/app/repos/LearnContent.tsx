@@ -13,15 +13,15 @@ import {
   ScrollText,
   TerminalSquare,
 } from "lucide-react";
-import { FetchError } from "@/components/FetchError";
-import { RepoLearnTutor } from "@/components/RepoLearnTutor";
+import { FetchError } from "@/components/ui/FetchError";
+import { RepoLearnTutor } from "@/components/repos/RepoLearnTutor";
 import { RepoRadarSection } from "./RepoRadarSection";
-import { LabMarkdown } from "@/components/LabMarkdown";
-import { REPO_LEARN_NOT_CONFIGURED_MSG, repoLearnApiPath } from "@/lib/repo-learn-constants";
+import { LabMarkdown } from "@/components/capability/LabMarkdown";
+import { REPO_LEARN_NOT_CONFIGURED_MSG, repoLearnApiPath } from "@/lib/repos/learn-constants";
 import { openTerminal, opencodeCliCommand } from "@/lib/terminal-launch";
 import { copyTextToClipboard } from "@/lib/clipboard";
-import { useLive } from "@/lib/use-fetch";
-import { useToast } from "@/lib/use-toast";
+import { useLive } from "@/lib/hooks/use-fetch";
+import { useToast } from "@/lib/hooks/use-toast";
 import type { RepoLearnApiPayload } from "./types";
 
 export function parseFetchErrorMessage(error: unknown): string {
@@ -140,10 +140,10 @@ export function LearnContent({
             <div className="card card-body flex gap-2 items-start" style={{ borderColor: "var(--warning)" }}>
               <AlertCircle size={14} style={{ color: "var(--warning)", marginTop: 2 }} aria-hidden />
               <div>
-                <div className="text-xs font-medium" style={{ color: "var(--text)" }}>AI not configured</div>
-                <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+                <div className="text-xs font-medium text-text">AI not configured</div>
+                <p className="mt-1 text-xs leading-relaxed text-text-subtle">
                   {REPO_LEARN_NOT_CONFIGURED_MSG} Repo facts below are still available.{" "}
-                  <Link href="/setup" className="underline underline-offset-2" style={{ color: "var(--accent)" }}>
+                  <Link href="/setup" className="underline underline-offset-2 text-accent">
                     Open Setup
                   </Link>
                 </p>
@@ -152,8 +152,8 @@ export function LearnContent({
           )}
 
           <div className="card card-body">
-            <div className="text-xs font-medium mb-2" style={{ color: "var(--text-muted)" }}>Detected facts</div>
-            <p className="text-xs leading-relaxed mb-2" style={{ color: "var(--text-subtle)" }}>{context.headline}</p>
+            <div className="text-xs font-medium mb-2 text-text-muted">Detected facts</div>
+            <p className="text-xs leading-relaxed mb-2 text-text-subtle">{context.headline}</p>
             <div className="flex flex-wrap gap-1.5">
               {context.primaryStack.map((item) => (
                 <FactChip key={item} label={item} />
@@ -168,11 +168,11 @@ export function LearnContent({
           <div className="card card-body">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
+                <div className="flex items-center gap-2 text-sm font-semibold text-text">
                   <ScrollText size={14} aria-hidden /> Generated brief
                 </div>
                 {artifacts && (
-                  <p className="mt-1 text-xs" style={{ color: "var(--text-subtle)" }}>
+                  <p className="mt-1 text-xs text-text-subtle">
                     {artifacts.cached ? "Cached" : "Fresh"} · {new Date(artifacts.generatedAt).toLocaleString()}
                   </p>
                 )}
@@ -188,7 +188,7 @@ export function LearnContent({
               </button>
             </div>
             {aiError && (
-              <p className="mt-2 text-xs" style={{ color: "var(--danger)" }}>{data?.message}</p>
+              <p className="mt-2 text-xs text-danger">{data?.message}</p>
             )}
             {artifacts?.briefMarkdown ? (
               <div className="mt-3 rounded p-3" style={{ background: "var(--bg-elevated)" }}>
@@ -200,7 +200,7 @@ export function LearnContent({
             ) : briefLoading ? (
               <BriefLoading />
             ) : aiBlocked ? (
-              <p className="mt-2 text-xs" style={{ color: "var(--text-subtle)" }}>Brief requires an AI provider.</p>
+              <p className="mt-2 text-xs text-text-subtle">Brief requires an AI provider.</p>
             ) : null}
             {artifacts?.briefMarkdown && (
               <div className="mt-3 flex flex-wrap gap-2">
@@ -222,7 +222,7 @@ export function LearnContent({
 
           {variant === "panel" ? (
             <div className="card card-body">
-              <p className="text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+              <p className="text-xs leading-relaxed text-text-subtle">
                 Quiz, NotebookLM pack, and capability labs live on the full learning screen.
               </p>
               <Link
@@ -236,10 +236,10 @@ export function LearnContent({
           ) : (
             <>
               <div className="card card-body">
-                <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
+                <div className="flex items-center gap-2 text-sm font-semibold text-text">
                   <BookOpen size={14} aria-hidden /> Quiz me
                 </div>
-                <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+                <p className="mt-1 text-xs leading-relaxed text-text-subtle">
                   Socratic tutor - answer questions, get follow-ups until something you don&apos;t know gets explained.
                 </p>
                 <div className="mt-3">
@@ -248,14 +248,14 @@ export function LearnContent({
               </div>
 
               <div className="card card-body">
-                <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
+                <div className="flex items-center gap-2 text-sm font-semibold text-text">
                   <FileText size={14} aria-hidden /> NotebookLM source pack
                 </div>
-                <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+                <p className="mt-1 text-xs leading-relaxed text-text-subtle">
                   Download a ZIP of curated Markdown sources. NotebookLM does not accept ZIP natively - use the NotebookLM Tools extension or unzip and upload files manually (free plan: 50 sources).
                 </p>
                 {artifacts?.packFiles && artifacts.packFiles.length > 0 && (
-                  <ul className="mt-2 space-y-0.5 text-xs font-mono" style={{ color: "var(--text-subtle)" }}>
+                  <ul className="mt-2 space-y-0.5 text-xs font-mono text-text-subtle">
                     {artifacts.packFiles.map((file) => (
                       <li key={file.path}>
                         {file.path} ({formatBytes(file.sizeBytes)})
@@ -297,10 +297,10 @@ function RepoLearnLoading({ repoName }: { repoName?: string }) {
       <div className="flex items-start gap-3">
         <div className="skeleton shrink-0" style={{ width: 36, height: 36, borderRadius: "var(--radius-sm)" }} />
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+          <div className="text-sm font-semibold text-text">
             Building the repo learning pack{repoName ? ` for ${repoName}` : ""}
           </div>
-          <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+          <p className="mt-1 text-xs leading-relaxed text-text-subtle">
             This scans the repo, summarizes the shape of the codebase, then asks AI for the brief and NotebookLM source pack. It can take a bit. Hide the panel if you want to keep moving around.
           </p>
           <div className="mt-4 space-y-2">
@@ -317,7 +317,7 @@ function RepoLearnLoading({ repoName }: { repoName?: string }) {
 function LoadingStep({ label, width }: { label: string; width: string }) {
   return (
     <div>
-      <div className="mb-1 text-[11px]" style={{ color: "var(--text-subtle)" }}>{label}</div>
+      <div className="mb-1 text-[11px] text-text-subtle">{label}</div>
       <div className="skeleton" style={{ height: 8, width, borderRadius: 999 }} />
     </div>
   );
@@ -326,7 +326,7 @@ function LoadingStep({ label, width }: { label: string; width: string }) {
 function BriefLoading() {
   return (
     <div className="mt-3 rounded p-3" style={{ background: "var(--bg-elevated)" }}>
-      <div className="mb-2 text-xs font-medium" style={{ color: "var(--text-subtle)" }}>Generating the brief...</div>
+      <div className="mb-2 text-xs font-medium text-text-subtle">Generating the brief...</div>
       <div className="space-y-1.5">
         <div className="skeleton" style={{ height: 10, width: "100%" }} />
         <div className="skeleton" style={{ height: 10, width: "92%" }} />
@@ -381,7 +381,7 @@ function PanelAction({
       disabled={disabled}
       onClick={onClick}
     >
-      {copied ? <Check size={12} style={{ color: "var(--success)" }} /> : icon}
+      {copied ? <Check size={12} className="text-success" /> : icon}
       {copied ? "Copied" : label}
     </button>
   );

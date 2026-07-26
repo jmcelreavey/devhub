@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, Wand2, FlaskConical, ExternalLink, Loader2, Share2 } from "lucide-react";
-import { BriefingDesignChat } from "@/components/BriefingDesignChat";
-import { BriefingResearch } from "@/components/BriefingResearch";
+import { BriefingDesignChat } from "@/components/briefing/BriefingDesignChat";
+import { BriefingResearch } from "@/components/briefing/BriefingResearch";
 import { readAppTheme, encodeTheme } from "@/lib/briefing-theme";
-import { useToast } from "@/lib/use-toast";
+import { useToast } from "@/lib/hooks/use-toast";
 
 // The /briefing page is now a thin shell around a bespoke, AI-authored canvas.
 // The canvas (full HTML/CSS/JS) is served same-origin from /api/briefing/canvas

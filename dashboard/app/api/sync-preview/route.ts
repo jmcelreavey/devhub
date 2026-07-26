@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withErrorHandler } from "@/lib/api-utils";
-import { getRepoRoot } from "@/lib/notes-dir";
-import { buildSyncPreview } from "@/lib/sync-preview";
-import type { SyncPreviewKind } from "@/lib/sync-preview-types";
+import { getRepoRoot } from "@/lib/notes/dir";
+import { buildSyncPreview } from "@/lib/sync/preview";
+import type { SyncPreviewKind } from "@/lib/sync/preview-types";
 
 const SLUG = /^[a-z0-9][a-z0-9_-]{0,62}$/;
 

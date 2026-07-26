@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { SkeletonRows } from "@/components/SkeletonRows";
+import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import {
   Bot,
   ChevronDown,
@@ -17,9 +17,9 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { HoverTip } from "@/components/HoverTip";
+import { HoverTip } from "@/components/ui/HoverTip";
 import { ManagedRowBadges } from "@/components/SkillCatalogPanels";
-import { runCollectImport } from "@/lib/collect-import-client";
+import { runCollectImport } from "@/lib/collect/import-client";
 import {
   catalogDisplayPrefix,
   collectImportBodyKey,
@@ -27,7 +27,7 @@ import {
   contentFileLabel,
   itemKey,
   type ManagedKind,
-} from "@/lib/managed-catalog-kind";
+} from "@/lib/managed/catalog-kind";
 import {
   canAddToCatalog,
   canDeleteRow,
@@ -35,8 +35,8 @@ import {
   isCatalogReadOnly,
   participatesInSync,
   type ManagedCatalogRow,
-} from "@/lib/managed-catalog-rows";
-import { useToast } from "@/lib/use-toast";
+} from "@/lib/managed/catalog-rows";
+import { useToast } from "@/lib/hooks/use-toast";
 
 export interface ManagedCatalogListProps {
   kind: ManagedKind;
@@ -161,7 +161,7 @@ export function ManagedCatalogList(props: ManagedCatalogListProps) {
           className="flex flex-wrap items-center gap-2 mb-2"
           style={{ padding: "8px 10px", background: "var(--bg-elevated)", borderRadius: "6px" }}
         >
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <span className="text-xs text-text-muted">
             {countImportableRows(rows)} can be added to catalog
           </span>
           <button type="button" className="btn btn-ghost text-xs" onClick={selectAllImportable} disabled={bulkRunning}>
@@ -243,7 +243,7 @@ export function ManagedCatalogList(props: ManagedCatalogListProps) {
                       autoFocus
                     />
                   ) : (
-                    <span className="font-medium text-sm" style={{ color: "var(--text)" }}>
+                    <span className="font-medium text-sm text-text">
                       {displayPrefix}
                       {name}
                     </span>
@@ -400,7 +400,7 @@ export function ManagedCatalogList(props: ManagedCatalogListProps) {
               {isOpen && (
                 <div style={{ borderTop: "1px solid var(--border)", padding: "12px 14px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                    <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                    <span className="text-xs font-medium text-text-muted">
                       {contentFileLabel(kind, name)}
                       {row.kind === "local-only" ? " (local)" : ""}
                     </span>
@@ -436,11 +436,11 @@ export function ManagedCatalogList(props: ManagedCatalogListProps) {
                           <Edit3 size={10} /> Edit
                         </button>
                       ) : row.kind === "catalog" && readOnly ? (
-                        <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
+                        <span className="text-xs text-text-subtle">
                           Read-only (edit in ai-tools repo)
                         </span>
                       ) : (
-                        <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
+                        <span className="text-xs text-text-subtle">
                           Read-only - add to catalog to edit in repo
                         </span>
                       )}

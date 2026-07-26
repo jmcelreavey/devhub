@@ -1,4 +1,4 @@
-import { VaultIndexPage } from "@/components/VaultIndexPage";
+import { VaultIndexPage } from "@/components/vault/VaultIndexPage";
 import { getVaultTree } from "@/lib/vault/create-vault-routes";
 import { buildVaultIndexSummary } from "@/lib/vault/vault-index-summary";
 import { VAULT_PUBLIC } from "@/lib/vault/vault-public";

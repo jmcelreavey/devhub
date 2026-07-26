@@ -3,9 +3,9 @@
 import { useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { EmptyState, FetchError, LoadingLine, PageHeader, SearchInput } from "@/components";
-import { SearchResultList } from "@/components/SearchResultList";
+import { SearchResultList } from "@/components/ui/SearchResultList";
 import type { SearchMode } from "@/lib/search-ui";
-import { useDebouncedSearch } from "@/lib/use-debounced-search";
+import { useDebouncedSearch } from "@/lib/hooks/use-debounced-search";
 
 const MODE_OPTIONS: { id: Exclude<SearchMode, "auto">; label: string; hint: string }[] = [
   { id: "exact", label: "Exact", hint: "Substring match in note text" },
@@ -74,7 +74,7 @@ export default function SearchPage() {
         </div>
 
         {mode === "semantic" ? (
-          <p className="text-[11px] leading-snug" style={{ color: "var(--text-subtle)" }}>
+          <p className="text-[11px] leading-snug text-text-subtle">
             Semantic mode ranks related notes by term relevance - useful when you remember the topic, not the exact phrase.
           </p>
         ) : null}
@@ -93,7 +93,7 @@ export default function SearchPage() {
 
       {showResults ? (
         <>
-          <p className="text-xs mb-3" style={{ color: "var(--text-subtle)" }}>
+          <p className="text-xs mb-3 text-text-subtle">
             {results.total} result{results.total !== 1 ? "s" : ""} in {results.files.length} file{results.files.length !== 1 ? "s" : ""}
             {results.mode === "semantic" ? " · ranked" : ""}
           </p>
@@ -104,8 +104,8 @@ export default function SearchPage() {
       {!query && !results && !isSearching ? (
         <EmptyState
           icon={<Search size={36} />}
-          title="Search your vault"
-          subtitle="Find tasks, learnings, daily notes, and diagrams. Use ranked mode for fuzzy topic matches (lexical TF-IDF, not embeddings)."
+          title="Search everything"
+          subtitle="Find tasks, learnings, daily notes and diagrams. Ranked mode matches on topic rather than exact words - it scores by word overlap, so it won't find synonyms."
         />
       ) : null}
     </div>

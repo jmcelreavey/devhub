@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Client from "./client";
-import { BootScreen } from "@/components/TodayBootScreen";
+import { BootScreen } from "@/components/today/TodayBootScreen";
 
 export default function Page() {
   return (

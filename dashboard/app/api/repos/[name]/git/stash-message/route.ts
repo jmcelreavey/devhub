@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { generateText } from "ai";
-import { getNotesAiCallOptions, getNotesAiModel } from "@/lib/ai-provider";
-import { runGitRepoAsync } from "@/lib/git-repo-local";
+import { getNotesAiCallOptions, getNotesAiModel } from "@/lib/ai/provider";
+import { runGitRepoAsync } from "@/lib/git/repo-local";
 import { gitFail, withScannedRepo, type RepoParams } from "../_shared";
 
 const MAX_DIFF_CHARS = 12_000;

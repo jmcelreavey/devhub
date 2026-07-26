@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isSameOrigin } from "@/lib/api-utils";
 import { invalidateCalendarCaches } from "@/lib/calendar-cache";
 import { writeCalendarSelection } from "@/lib/calendar-selection";
+import { z } from "zod";
+import { parseBody } from "@/lib/api-utils";
 import {
   isGoogleCalendarAuthError,
   isGoogleCalendarConfigured,
@@ -33,34 +34,27 @@ export async function GET() {
   }
 }
 
-interface SaveBody {
-  calendarIds?: string[];
-}
+
+const SaveCalendarsSchema = z.object({
+  calendarIds: z.array(z.string()),
+});
 
 export async function POST(req: NextRequest) {
-  if (!isSameOrigin(req)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
   if (!isGoogleCalendarConfigured()) {
     return NextResponse.json({ error: "Calendar not configured" }, { status: 400 });
   }
 
-  let body: SaveBody;
-  try {
-    body = (await req.json()) as SaveBody;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
-
-  if (!Array.isArray(body.calendarIds)) {
-    return NextResponse.json({ error: "calendarIds must be an array" }, { status: 400 });
-  }
+  const parsed = await parseBody(req, SaveCalendarsSchema);
+  if (!parsed.ok) return parsed.response;
 
   try {
     const calendars = await listCalendars();
     const known = new Set(calendars.map((c) => c.id));
+    // Schema guarantees an array of strings; this still filters to calendars
+    // that actually exist, which is an authorisation check rather than a shape
+    // check and so stays here.
     const selectedIds = await writeCalendarSelection(
-      body.calendarIds.filter((id) => typeof id === "string" && known.has(id)),
+      parsed.data.calendarIds.filter((id) => known.has(id)),
     );
     invalidateCalendarCaches();
     return NextResponse.json({ ok: true, selectedIds });

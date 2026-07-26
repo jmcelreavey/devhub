@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { X } from "lucide-react";
 import { getVaultClient } from "@/lib/vault/vault-client";
 import type { VaultId } from "@/lib/vault/vault-client";
-import { broadcastNoteAutosaveInvalidation } from "@/lib/note-autosave-invalidation";
+import { broadcastNoteAutosaveInvalidation } from "@/lib/notes/autosave-invalidation";
 
 interface FolderOption {
   path: string;
@@ -120,16 +120,16 @@ export function MoveVaultPathModal({
         aria-labelledby="move-vault-modal-title"
       >
         <div className="flex items-center justify-between mb-3">
-          <h3 id="move-vault-modal-title" className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+          <h3 id="move-vault-modal-title" className="text-sm font-semibold text-text">
             {title}
           </h3>
           <button type="button" onClick={onClose} aria-label="Close">
-            <X size={14} style={{ color: "var(--text-muted)" }} aria-hidden />
+            <X size={14} className="text-text-muted" aria-hidden />
           </button>
         </div>
 
         <div className="mb-2">
-          <label className="text-xs block mb-1" style={{ color: "var(--text-subtle)" }}>
+          <label className="text-xs block mb-1 text-text-subtle">
             Destination folder
           </label>
           <select
@@ -149,7 +149,7 @@ export function MoveVaultPathModal({
         </div>
 
         <div className="mb-2">
-          <label className="text-xs block mb-1" style={{ color: "var(--text-subtle)" }}>
+          <label className="text-xs block mb-1 text-text-subtle">
             Name
           </label>
           <input
@@ -165,12 +165,12 @@ export function MoveVaultPathModal({
           />
         </div>
 
-        <p className="text-xs mb-3" style={{ color: "var(--text-subtle)" }}>
-          New path: <code style={{ color: "var(--accent)" }}>{newPath || "(empty)"}</code>
+        <p className="text-xs mb-3 text-text-subtle">
+          New path: <code className="text-accent">{newPath || "(empty)"}</code>
         </p>
 
         {error ? (
-          <p className="text-xs mb-2" style={{ color: "var(--danger)" }}>
+          <p className="text-xs mb-2 text-danger">
             {error}
           </p>
         ) : null}

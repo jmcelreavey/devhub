@@ -6,7 +6,7 @@
 // components can import them without pulling in node:fs.
 
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes/dir";
 import { writeAtomic, safeReadJSON, withMutex } from "@/lib/atomic-write";
 import {
   BRIEFING_SECTIONS,

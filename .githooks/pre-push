@@ -57,4 +57,16 @@ if ! npm run --silent verify; then
     exit 1
 fi
 
+# Backport drift — a warning, never a blocker. The mirror silently running
+# ahead of public core is how backports get conflict-prone; being told at push
+# time is the cheapest possible reminder.
+if [[ -x "$REPO_ROOT/scripts/devhub-backport-status.sh" ]]; then
+    if ! bash "$REPO_ROOT/scripts/devhub-backport-status.sh" >/dev/null 2>&1; then
+        echo ""
+        bash "$REPO_ROOT/scripts/devhub-backport-status.sh" 2>/dev/null || true
+        echo ""
+        echo "[pre-push] ^ backport reminder only — your push is going ahead."
+    fi
+fi
+
 echo "[pre-push] All checks passed."

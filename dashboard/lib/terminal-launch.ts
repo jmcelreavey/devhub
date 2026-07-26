@@ -1,6 +1,6 @@
 "use client";
 
-import { getAgentCliConfig, type AgentCliConfig } from "./agent-cli-config";
+import { getAgentCliConfig, type AgentCliConfig } from "@/lib/agent/cli-config";
 
 export interface TerminalLaunchOptions {
   cwd?: string;

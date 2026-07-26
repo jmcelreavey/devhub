@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { SkeletonRows } from "@/components/SkeletonRows";
+import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import {
   Link2,
   ChevronDown,
@@ -15,17 +15,17 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-import { useToast } from "@/lib/use-toast";
-import { useConfirm } from "@/components/ConfirmDialog";
-import { SyncButton } from "@/components/SyncButton";
+import { useToast } from "@/lib/hooks/use-toast";
+import { useConfirm } from "@/components/shell/ConfirmDialog";
+import { SyncButton } from "@/components/runs/SyncButton";
 import { LocalMcpImportPanel } from "@/components/LocalMcpImportPanel";
-import { HoverTip } from "@/components/HoverTip";
+import { HoverTip } from "@/components/ui/HoverTip";
 import {
   MCP_SYNC_EXCLUDE_CHANGED_EVENT,
   MCP_SYNC_EXCLUDE_STORAGE_KEY,
   readExcludedMcpIdsFromStorage,
   writeExcludedMcpIdsToStorage,
-} from "@/lib/mcp-sync-exclude-storage";
+} from "@/lib/mcp/sync-exclude-storage";
 
 type McpCatalogScope = "repo" | "personal";
 
@@ -291,15 +291,15 @@ export function McpPanel() {
         className="text-xs"
         style={{ color: "var(--text-muted)", lineHeight: 1.5, marginBottom: "12px" }}
       >
-        <strong style={{ color: "var(--text)" }}>Repo</strong> servers live in <code>mcp/shared/</code> (git).
-        <strong style={{ color: "var(--text)" }}> Personal</strong> servers live in{" "}
+        <strong className="text-text">Repo</strong> servers live in <code>mcp/shared/</code> (git).
+        <strong className="text-text"> Personal</strong> servers live in{" "}
         <code>~/.config/devhub/mcp-personal/</code> (machine-only - sync to every tool, never committed).
-        Click <strong style={{ color: "var(--text)" }}>Sync all tools</strong> to push repo + personal catalogs to{" "}
+        Click <strong className="text-text">Sync all tools</strong> to push repo + personal catalogs to{" "}
         <code>~/.claude.json</code>, <code>~/.codex/mcp.json</code>,{" "}
         <code>~/.cursor/mcp.json</code>, and the <code>mcp</code> block in{" "}
         <code>~/.config/opencode/opencode.json</code>. Prune is off by default (same as Skills/Agents); enable it
         to remove recognized MCP servers in those configs that are no longer in the repo unless they are
-        eye-ignored. Use <strong style={{ color: "var(--text)" }}>Import from local tools</strong> first if you
+        eye-ignored. Use <strong className="text-text">Import from local tools</strong> first if you
         want to keep a tool-only server such as agentmemory or a remote HTTP entry in the shared config.
         The eye toggle marks a server as ignored: not written, not pruned. Stored in your browser as{" "}
         <code className="font-mono">{`localStorage["${MCP_SYNC_EXCLUDE_STORAGE_KEY}"]`}</code>.
@@ -318,7 +318,7 @@ export function McpPanel() {
           onChange={(e) => setSyncPrune(e.target.checked)}
         />
         <span>
-          <strong style={{ color: "var(--text)" }}>Prune</strong> tool MCP configs: delete recognized MCP
+          <strong className="text-text">Prune</strong> tool MCP configs: delete recognized MCP
           entries from tool configs that are no longer in <code className="font-mono">mcp/shared/</code>{" "}
           (and not eye-ignored). Import local-only remote / HTTP entries first if you want to keep them.
         </span>
@@ -358,7 +358,7 @@ export function McpPanel() {
           className="card mb-3"
           style={{ padding: "12px 14px", borderColor: "var(--accent)", borderWidth: "1px" }}
         >
-          <div className="text-xs font-semibold mb-2" style={{ color: "var(--text)" }}>
+          <div className="text-xs font-semibold mb-2 text-text">
             New MCP server
           </div>
           <div className="flex flex-col gap-2">
@@ -380,7 +380,7 @@ export function McpPanel() {
               onChange={(e) => setNewCommand(e.target.value)}
               spellCheck={false}
             />
-            <div className="flex gap-3 text-xs" style={{ color: "var(--text-muted)" }}>
+            <div className="flex gap-3 text-xs text-text-muted">
               <label className="flex items-center gap-1.5 cursor-pointer">
                 <input
                   type="radio"
@@ -460,7 +460,7 @@ export function McpPanel() {
                     />
                   ) : (
                     <>
-                      <span className="font-medium text-sm font-mono" style={{ color: "var(--text)" }}>
+                      <span className="font-medium text-sm font-mono text-text">
                         {server.name}
                       </span>
                       {server.scope === "personal" && (
@@ -475,8 +475,7 @@ export function McpPanel() {
                   )}
                   {!isRenaming && server.description && (
                     <span
-                      className="text-xs truncate"
-                      style={{ color: "var(--text-subtle)" }}
+                      className="text-xs truncate text-text-subtle"
                       title={server.description}
                     >
                       - {server.description}
@@ -572,7 +571,7 @@ export function McpPanel() {
                       marginBottom: "8px",
                     }}
                   >
-                    <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                    <span className="text-xs font-medium text-text-muted">
                       {catalogPathLabel(server.scope)}
                       {server.name}.json
                     </span>
@@ -627,7 +626,7 @@ export function McpPanel() {
                   </div>
 
                   {loadingContent === key ? (
-                    <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
+                    <p className="text-xs text-text-subtle">
                       Loading...
                     </p>
                   ) : isEditing ? (
@@ -673,7 +672,7 @@ export function McpPanel() {
       </div>
 
       {!loading && filtered.length === 0 && (
-        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+        <p className="text-sm text-text-muted">
           {query ? `No servers matching "${query}".` : "No MCP servers yet. Import agentmemory as personal, or add notes to the repo."}
         </p>
       )}

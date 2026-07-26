@@ -3,10 +3,10 @@
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FileText, ListTodo, MoreHorizontal, Trash2 } from "lucide-react";
-import { TaskList } from "@/components/TaskList";
-import { TodayCollapseButton } from "@/components/TodayCollapseButton";
+import { TaskList } from "@/components/tasks/TaskList";
+import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
 import { StandupCopyButton } from "@/components/StandupCopyButton";
-import type { DevHubPartialBlock } from "@/lib/blocknote-schema";
+import type { DevHubPartialBlock } from "@/lib/blocknote/schema";
 import { SaveStatusPill } from "./SaveStatusPill";
 import { TabButton } from "./TabButton";
 

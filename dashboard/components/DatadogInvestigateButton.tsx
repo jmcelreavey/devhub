@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ScanSearch } from "lucide-react";
-import { useToast } from "@/lib/use-toast";
-import { requestOpenCodeSession } from "@/lib/opencode-session";
-import type { RecentEvent } from "@/lib/datadog-recent-events";
+import { useToast } from "@/lib/hooks/use-toast";
+import { requestOpenCodeSession } from "@/lib/opencode/session";
+import type { RecentEvent } from "@/lib/datadog/recent-events";
 
 interface DatadogInvestigateButtonProps {
   scope: "oncall" | "team" | "general";

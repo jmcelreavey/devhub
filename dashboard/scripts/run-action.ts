@@ -11,13 +11,13 @@
  *
  * Common flags: --dry-run
  */
-import { getRepoRoot } from "../lib/content-dirs";
+import { getRepoRoot } from "@/lib/content/dirs";
 import { validateRepo } from "../lib/validate";
-import { updateAndSync } from "../lib/sync-orchestrator";
-import { syncSkills } from "../lib/sync-skills";
-import { syncAgents } from "../lib/sync-agents";
-import { syncMcpServers } from "../lib/sync-mcp";
-import { syncPersona } from "../lib/sync-persona";
+import { updateAndSync } from "@/lib/sync/orchestrator";
+import { syncSkills } from "@/lib/sync/skills";
+import { syncAgents } from "@/lib/sync/agents";
+import { syncMcpServers } from "@/lib/sync/mcp";
+import { syncPersona } from "@/lib/sync/persona";
 import { materializePlugins } from "../lib/plugins/materialize";
 import { materializeBranding } from "../lib/plugins/branding";
 import { materializePluginNav } from "../lib/plugins/nav-materialize";

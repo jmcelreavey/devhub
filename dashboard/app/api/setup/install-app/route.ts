@@ -1,7 +1,6 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { isSameOrigin } from "@/lib/api-utils";
 import { augmentedPathEnv } from "@/lib/process-env";
 import {
   placeArtifact,
@@ -37,10 +36,7 @@ function runStreamed(
   });
 }
 
-export async function POST(req: NextRequest) {
-  if (!isSameOrigin(req)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+export async function POST() {
   if (building) {
     return NextResponse.json({ error: "A build is already in progress." }, { status: 409 });
   }

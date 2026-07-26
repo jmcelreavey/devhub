@@ -1,3 +1,8 @@
+/**
+ * Client-side view of a repo. Structurally a subset of the server's
+ * `lib/repos.RepoInfo`; kept separate so client bundles don't reach into a
+ * module that imports node:fs.
+ */
 export interface RepoInfo {
   name: string;
   path: string;
@@ -8,6 +13,14 @@ export interface RepoInfo {
   hasUpstart?: boolean;
   /** Absolute path to the DevHub-managed upstart script (may not exist yet). */
   upstartPath?: string;
+  /** Optional: absent on payloads cached before repo health existed. */
+  health?: {
+    score: number;
+    level: "good" | "warn" | "bad";
+    reasons: string[];
+    /** Data-loss reasons only — what the card actually renders. */
+    risks: string[];
+  };
 }
 
 export interface ReposApiPayload {
@@ -67,7 +80,7 @@ export interface StashConflictPayload {
 }
 
 /** HTTP 422 body when a git hook blocks commit/push/amend. */
-export type { GitHookFailurePayload } from "@/lib/git-hook-failure";
+export type { GitHookFailurePayload } from "@/lib/git/hook-failure";
 
 export interface RepoSnippet {
   relativePath: string;

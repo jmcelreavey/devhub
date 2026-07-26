@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Bot, Minus, Plus } from "lucide-react";
-import type { DiffLine } from "@/lib/repo-git-parsers";
+import type { DiffLine } from "@/lib/repos/git-parsers";
 
 export interface DiffHunkAction {
   hunkIndex: number;

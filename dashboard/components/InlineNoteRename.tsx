@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
-import { renameNoteFile } from "@/lib/notes-path";
-import { useToast } from "@/lib/use-toast";
+import { renameNoteFile } from "@/lib/notes/path";
+import { useToast } from "@/lib/hooks/use-toast";
 
 export function InlineNoteRename({
   noteSlug,

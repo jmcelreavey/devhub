@@ -3,12 +3,12 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { GitPullRequest, RefreshCw } from "lucide-react";
-import { useLive } from "@/lib/use-fetch";
-import type { GithubPrsApiPayload, GithubPrRow, RecentlyReviewedPr } from "@/lib/github-prs";
-import { useMarkPrsSeen } from "@/lib/use-sidebar-counts";
+import { useLive } from "@/lib/hooks/use-fetch";
+import type { GithubPrsApiPayload, GithubPrRow, RecentlyReviewedPr } from "@/lib/github/prs";
+import { useMarkPrsSeen } from "@/lib/hooks/use-sidebar-counts";
 import { PrRowActions } from "@/components/PrRowActions";
 import { FetchError, EmptyState, SkeletonRows } from "@/components";
-import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
+import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 
 type PrTab = "authored" | "reviews" | "recent";
 
@@ -23,11 +23,10 @@ function PrTitleCard({ row, children }: { row: GithubPrRow; children: ReactNode 
         href={row.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="flex min-w-0 flex-1 flex-col gap-0.5 no-underline"
-        style={{ color: "var(--text)" }}
+        className="flex min-w-0 flex-1 flex-col gap-0.5 no-underline text-text"
       >
         <span className="text-sm font-medium leading-snug break-words">{row.title}</span>
-        <span className="font-mono text-[11px]" style={{ color: "var(--text-muted)" }}>
+        <span className="font-mono text-[11px] text-text-muted">
           {row.repo}#{row.number}
         </span>
       </a>

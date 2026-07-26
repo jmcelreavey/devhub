@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Check, CornerDownLeft, Download, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
-import { SkeletonRows } from "@/components/SkeletonRows";
-import { useConfirm, usePrompt } from "@/components/ConfirmDialog";
-import { useToast } from "@/lib/use-toast";
+import { SkeletonRows } from "@/components/ui/SkeletonRows";
+import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
+import { useToast } from "@/lib/hooks/use-toast";
 import {
   fetchGitJson,
   postGitAction,
@@ -160,8 +160,8 @@ export function BranchesPanel({
           <Plus size={11} /> New branch
         </button>
         <div className="repo-git-spacer" />
-        <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
-          on <span style={{ color: "var(--accent)" }}>{data?.currentBranch}</span>
+        <span className="text-xs text-text-subtle">
+          on <span className="text-accent">{data?.currentBranch}</span>
           {hasUpstream && (ahead > 0 || behind > 0) && (
             <span style={{ marginLeft: 6 }}>
               {ahead > 0 ? `↑${ahead}` : null}
@@ -180,7 +180,7 @@ export function BranchesPanel({
               disabled={b.current || acting !== null}
               onClick={() => void act("checkout", { branch: b.name })}
             >
-              {b.current ? <Check size={12} style={{ color: "var(--accent)" }} /> : <CornerDownLeft size={12} style={{ color: "var(--text-subtle)" }} />}
+              {b.current ? <Check size={12} className="text-accent" /> : <CornerDownLeft size={12} className="text-text-subtle" />}
               <span style={{ fontWeight: b.current ? 600 : 400 }}>{b.name}</span>
               {b.current && <span className="repo-git-ref-chip">current</span>}
             </button>

@@ -1,17 +1,17 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useClientMounted } from "@/lib/use-client-mounted";
+import { useClientMounted } from "@/lib/hooks/use-client-mounted";
 import {
   SKILL_SOURCE_FILTER_OPTIONS,
   type AiToolsMeta,
   type SkillListItem,
   type SkillSourceFilter,
-} from "@/lib/skills-api-types";
+} from "@/lib/skills/api-types";
 import {
   localCatalogStatusLabel,
   type ManagedCatalogRow,
-} from "@/lib/managed-catalog-rows";
+} from "@/lib/managed/catalog-rows";
 
 export function SkillUpstreamBanner(props: {
   aiTools: AiToolsMeta | null;

@@ -1,4 +1,4 @@
-import { getDocsDir, getNotesDir } from "@/lib/content-dirs";
+import { getDocsDir, getNotesDir } from "@/lib/content/dirs";
 import { NotesStorage } from "@/lib/storage";
 import { jsonVaultCodec, markdownVaultCodec } from "@/lib/vault/vault-codec";
 import type { VaultPathHelpers } from "@/lib/vault/vault-path";

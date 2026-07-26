@@ -3,13 +3,13 @@
 import type { ComponentType, MouseEvent } from "react";
 import { CircleCheck, MessageSquare, ScanSearch } from "lucide-react";
 import type { LucideProps } from "lucide-react";
-import type { GithubPrRow } from "@/lib/github-prs";
+import type { GithubPrRow } from "@/lib/github/prs";
 import { buildSlackMessage, copyWithToast } from "@/lib/pr-slack";
 import { agentReviewCommand, openTerminal } from "@/lib/terminal-launch";
 import { notifyPrReviewNoteWatch, prReviewNotePath } from "@/lib/pr-review-notes";
 import { PrReviewNoteLink } from "@/components/PrReviewNoteLink";
 import { PR_ACTION_BASE, PR_ACTION_SIZE, type PrActionSize } from "@/components/pr-row-action-style";
-import { useToast } from "@/lib/use-toast";
+import { useToast } from "@/lib/hooks/use-toast";
 
 /**
  * One shared action row for a PR, used by both the dashboard panel and the

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { GitHookFailurePayload } from "@/lib/git-hook-failure";
-import type { DiffLine } from "@/lib/repo-git-parsers";
+import type { GitHookFailurePayload } from "@/lib/git/hook-failure";
+import type { DiffLine } from "@/lib/repos/git-parsers";
 import { GitDiffView } from "./GitDiffView";
 import { GitHookFailureDialog } from "./GitHookFailureDialog";
 import { RepoGitWorkspace } from "./RepoGitWorkspace";

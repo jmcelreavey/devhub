@@ -1,5 +1,5 @@
 import { generateText } from "ai";
-import { getNotesAiModel } from "@/lib/ai-provider";
+import { getNotesAiModel } from "@/lib/ai/provider";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { enrichSignalsWithAi } from "./ai-enrich";
 import type { ScanFile } from "./detectors";
@@ -9,7 +9,7 @@ vi.mock("ai", () => ({
   generateText: vi.fn(),
 }));
 
-vi.mock("@/lib/ai-provider", () => ({
+vi.mock("@/lib/ai/provider", () => ({
   getNotesAiModel: vi.fn(),
   getNotesAiCallOptions: vi.fn(() => ({})),
 }));

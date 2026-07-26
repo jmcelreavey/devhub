@@ -17,10 +17,10 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useConfirm } from "@/components/ConfirmDialog";
-import { useToast } from "@/lib/use-toast";
+import { useConfirm } from "@/components/shell/ConfirmDialog";
+import { useToast } from "@/lib/hooks/use-toast";
 import { agentStashConflictCommand, openTerminal } from "@/lib/terminal-launch";
-import type { GitHookFailurePayload } from "@/lib/git-hook-failure";
+import type { GitHookFailurePayload } from "@/lib/git/hook-failure";
 import type { StashConflictPayload } from "@/app/repos/types";
 import { BlamePanel } from "./BlamePanel";
 import { BranchesPanel } from "./BranchesPanel";

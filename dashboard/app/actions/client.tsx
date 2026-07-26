@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ScriptRunner } from "@/components/ScriptRunner";
-import { JobsManager } from "@/components/JobsManager";
-import { RunLogModal } from "@/components/RunLogModal";
+import { ScriptRunner } from "@/components/runs/ScriptRunner";
+import { JobsManager } from "@/components/runs/JobsManager";
+import { RunLogModal } from "@/components/runs/RunLogModal";
 import { Clock, CheckCircle, XCircle } from "lucide-react";
 
 interface RunEntry {
@@ -31,13 +31,13 @@ function RunHistoryItem({ entry, onOpenLog }: { entry: RunEntry; onOpenLog: () =
     >
       <div className="flex items-start gap-2 min-w-0 flex-1">
         {ok ? (
-          <CheckCircle size={12} className="shrink-0 mt-0.5" style={{ color: "var(--success)" }} />
+          <CheckCircle size={12} className="shrink-0 mt-0.5 text-success" />
         ) : (
-          <XCircle size={12} className="shrink-0 mt-0.5" style={{ color: "var(--danger)" }} />
+          <XCircle size={12} className="shrink-0 mt-0.5 text-danger" />
         )}
-        <span className="font-mono break-all leading-snug" style={{ color: "var(--text)" }}>{entry.script}</span>
+        <span className="font-mono break-all leading-snug text-text">{entry.script}</span>
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-0.5 sm:flex-row sm:items-center sm:gap-3" style={{ color: "var(--text-subtle)" }}>
+      <div className="flex shrink-0 flex-col items-end gap-0.5 sm:flex-row sm:items-center sm:gap-3 text-text-subtle">
         {duration !== null && <span>{duration}s</span>}
         <span>{started.toLocaleDateString()} {started.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
       </div>
@@ -60,9 +60,9 @@ export default function ActionsPage() {
   return (
     <div className="page-wrapper">
       <h1 className="page-title mb-1">Actions</h1>
-      <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
+      <p className="text-xs mb-4 text-text-muted">
         Run DevHub actions (TypeScript) with live output. One action at a time. For git blockers and hints, see{" "}
-        <a href="/status" className="underline" style={{ color: "var(--accent)" }}>Status</a>.
+        <a href="/status" className="underline text-accent">Status</a>.
       </p>
       <ScriptRunner onDone={() => setRefreshed((n) => n + 1)} />
 
@@ -71,10 +71,10 @@ export default function ActionsPage() {
       {history.length > 0 && (
         <div className="mt-6">
           <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5 text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+            <div className="flex items-center gap-1.5 text-xs font-medium text-text-muted">
               <Clock size={12} /> Run History
             </div>
-            <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
+            <span className="text-xs text-text-subtle">
               Last {history.length} runs
             </span>
           </div>

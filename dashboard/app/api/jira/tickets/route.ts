@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { getMyTickets } from "@/lib/jira-client";
+import { getMyTickets } from "@/lib/jira/client";
 import {
   getJiraTicketsCache,
   setJiraTicketsCache,
   JIRA_TICKETS_TTL_MS,
-} from "@/lib/jira-tickets-cache";
+} from "@/lib/jira/tickets-cache";
 
 export async function GET() {
   if (!process.env.JIRA_DOMAIN) {

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readLabRecord } from "@/lib/capability/journey";
 import { openPathInCursor } from "@/lib/cursor-open";
+import { z } from "zod";
+import { parseBody } from "@/lib/api-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -9,15 +11,14 @@ export const dynamic = "force-dynamic";
  * lab record (server-side), never from the client, so this can't be used to
  * open arbitrary paths.
  */
+const OpenWorkspaceSchema = z.object({
+  category: z.string().trim().min(1, "category required"),
+});
+
 export async function POST(req: NextRequest) {
-  let body: { category?: string } = {};
-  try {
-    body = (await req.json()) as typeof body;
-  } catch {
-    return NextResponse.json({ error: "Invalid body" }, { status: 400 });
-  }
-  const category = body.category?.trim();
-  if (!category) return NextResponse.json({ error: "category required" }, { status: 400 });
+  const parsed = await parseBody(req, OpenWorkspaceSchema);
+  if (!parsed.ok) return parsed.response;
+  const category = parsed.data.category;
 
   const record = readLabRecord(category);
   if (!record?.workspacePath) {

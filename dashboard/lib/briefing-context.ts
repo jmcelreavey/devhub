@@ -6,11 +6,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { assembleBriefingContext, type BriefingContext } from "@/lib/briefing/assemble";
 import { readBriefingPrefs } from "@/lib/briefing-prefs";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes/dir";
 import { writeAtomic, safeReadJSON } from "@/lib/atomic-write";
 import { todayISO } from "@/lib/utils";
 import { fetchWeather } from "@/lib/morning-briefing-sources";
 import { buildBriefingSummary, type DailyBriefing } from "@/lib/morning-briefing";
+import { formatMinutes, formatClock } from "@/lib/briefing/day-plan";
 
 export type { BriefingContext } from "@/lib/briefing/assemble";
 export { assembleBriefingContext } from "@/lib/briefing/assemble";
@@ -123,6 +124,30 @@ export function contextForPrompt(ctx: BriefingContext): Record<string, unknown> 
       signals: c.signals.slice(0, 4),
     })),
     feeds: ctx.feeds.map((f) => ({ id: f.id, label: f.label, items: f.items.slice(0, 8) })),
+    // Pre-formatted alongside the raw numbers: the canvas author shouldn't be
+    // doing minute arithmetic in a template, and "3h 20m" is what it would
+    // write anyway. Numbers stay so it can compare and rank.
+    dayPlan: ctx.dayPlan
+      ? {
+          meetingCount: ctx.dayPlan.meetingCount,
+          meetingMinutes: ctx.dayPlan.meetingMinutes,
+          meetingTime: formatMinutes(ctx.dayPlan.meetingMinutes),
+          allDay: ctx.dayPlan.allDayTitles,
+          freeTime: formatMinutes(ctx.dayPlan.freeMinutes),
+          longestFree: formatMinutes(ctx.dayPlan.longestFreeMin),
+          freeWindows: ctx.dayPlan.freeWindows
+            .slice(0, 4)
+            .map((w) => `${formatClock(w.startMin)}-${formatClock(w.endMin)}`),
+          openTaskCount: ctx.dayPlan.openTasks.length,
+          openTasks: ctx.dayPlan.openTasks.slice(0, 8).map((t) => t.text),
+          tasksThatFit: ctx.dayPlan.tasksThatFit,
+          recentFailures: ctx.dayPlan.recentFailures.map((f) => ({
+            script: f.script,
+            exitCode: f.exitCode,
+            when: new Date(f.startedAt).toISOString(),
+          })),
+        }
+      : null,
   };
 }
 
@@ -146,6 +171,19 @@ export const BRIEFING_DATA_SHAPE = `window.__BRIEFING__ = {
   interests:   [{ interest, text, links: [{title,url}] }],
   research:    [{ interest, title, summary, updatedAt, sourcePath, signals: [{title,url?,source?,metric?}] }],
   feeds:       [{ id, label, kind, url, items: [{ title, url, source?, meta? }] }],
+  dayPlan: null | {              // today's calendar load vs. what's left. null when unavailable.
+    meetingCount: number,        // timed meetings (all-day entries excluded)
+    meetingMinutes: number,      // overlaps counted once
+    meetingTime: string,         // pre-formatted, e.g. "3h 20m"
+    allDay: string[],            // holidays / OOO
+    freeTime: string,            // total unbooked time in working hours
+    longestFree: string,         // biggest single stretch - the only one deep work fits
+    freeWindows: string[],       // e.g. ["09:00-11:30", "14:00-17:30"], longest first
+    openTaskCount: number,
+    openTasks: string[],
+    tasksThatFit: number,        // how many plausibly fit the gaps, not how many exist
+    recentFailures: [{ script, exitCode?, when }]   // background runs that failed
+  },
   summary: string
 };
 // Same-origin: the canvas may also call fetch('/api/briefing/data?refresh=1')

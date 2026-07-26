@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 import { withErrorHandler } from "@/lib/api-utils";
-import { getNotesDir } from "@/lib/content-dirs";
+import { getNotesDir } from "@/lib/content/dirs";
 
 export type RadarRing = "adopt" | "trial" | "assess" | "hold";
 

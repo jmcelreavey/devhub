@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Layers, RefreshCw, RotateCcw, Search, Upload } from "lucide-react";
-import { SkeletonRows } from "@/components/SkeletonRows";
-import { useConfirm } from "@/components/ConfirmDialog";
-import { useToast } from "@/lib/use-toast";
-import type { DiffLine } from "@/lib/repo-git-parsers";
-import type { GraphLaneCommit } from "@/lib/repo-git-graph";
+import { SkeletonRows } from "@/components/ui/SkeletonRows";
+import { useConfirm } from "@/components/shell/ConfirmDialog";
+import { useToast } from "@/lib/hooks/use-toast";
+import type { DiffLine } from "@/lib/repos/git-parsers";
+import type { GraphLaneCommit } from "@/lib/repos/git-graph";
 import { CommitGraph } from "./CommitGraph";
 import { GitDiffView } from "./GitDiffView";
 import {
@@ -362,7 +362,7 @@ export function HistoryPanel({
                     </span>
                   )}
                   {detailForSelection.parents[0] && (
-                    <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
+                    <span className="text-xs text-text-subtle">
                       parent {detailForSelection.parents[0].slice(0, 7)}
                     </span>
                   )}
@@ -374,11 +374,11 @@ export function HistoryPanel({
                 <div className="repo-git-commit-byline">
                   <span>{detailForSelection.author}</span>
                   {detailForSelection.authorEmail ? (
-                    <span style={{ color: "var(--text-subtle)" }}>
+                    <span className="text-text-subtle">
                       &lt;{detailForSelection.authorEmail}&gt;
                     </span>
                   ) : null}
-                  <span style={{ color: "var(--text-subtle)" }}>
+                  <span className="text-text-subtle">
                     {detailForSelection.relativeDate}
                     {detailForSelection.date
                       ? ` · ${detailForSelection.date.slice(0, 19).replace("T", " ")}`
@@ -446,7 +446,7 @@ export function HistoryPanel({
                         {activeFile}
                       </span>
                     ) : (
-                      <span style={{ color: "var(--text-subtle)" }}>Select a file</span>
+                      <span className="text-text-subtle">Select a file</span>
                     )}
                   </div>
                   <div className="repo-git-diff-body repo-git-diff-body-static">

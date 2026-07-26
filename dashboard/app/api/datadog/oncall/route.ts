@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { loadOncallStatus } from "@/lib/datadog-oncall-server";
+import { loadOncallStatus } from "@/lib/datadog/oncall-server";
 
 export const dynamic = "force-dynamic";
 

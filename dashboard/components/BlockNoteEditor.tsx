@@ -15,20 +15,20 @@ import { BlockNoteView } from "@blocknote/mantine";
 import { TextSelection } from "prosemirror-state";
 import { AIMenuController, AIToolbarButton } from "@blocknote/xl-ai";
 import "@blocknote/xl-ai/style.css";
-import type { DevHubPartialBlock } from "@/lib/blocknote-schema";
-import { devhubBlockNoteSchema } from "@/lib/blocknote-schema";
-import { blocknoteDashboardTheme } from "@/lib/blocknote-dashboard-theme";
-import { filterDevHubSlashMenuItems } from "@/lib/blocknote-slash-menu";
+import type { DevHubPartialBlock } from "@/lib/blocknote/schema";
+import { devhubBlockNoteSchema } from "@/lib/blocknote/schema";
+import { blocknoteDashboardTheme } from "@/lib/blocknote/dashboard-theme";
+import { filterDevHubSlashMenuItems } from "@/lib/blocknote/slash-menu";
 import { blocknoteNotesAiEditorOptions } from "@/lib/notes-ai/editor-options";
 import { useNotesAiConfigured } from "@/lib/notes-ai/use-notes-ai-configured";
 import { ChecklistIcon } from "@/lib/checklists/icons";
-import { collectCheckboxBlocks } from "@/lib/note-task-sync";
+import { collectCheckboxBlocks } from "@/lib/notes/task-sync";
 import { copyTextToClipboard } from "@/lib/clipboard";
-import { NoteEditorProvider } from "@/lib/note-editor-context";
+import { NoteEditorProvider } from "@/lib/notes/editor-context";
 import {
   getLinkHrefFromEvent,
   handleBlockNoteLinkClick,
-} from "@/lib/blocknote-link-navigation";
+} from "@/lib/blocknote/link-navigation";
 import type { VaultId } from "@/lib/vault/vault-public";
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/core/style.css";
@@ -627,10 +627,10 @@ function BlockNoteEditorReady({
           }}
         >
           <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 font-medium" style={{ color: "var(--text)" }}>
+            <div className="flex items-center gap-2 font-medium text-text">
               <Search size={14} aria-hidden />
               {utilityMode === "replace" ? "Find and replace" : "Find"}
-              <span className="font-normal" style={{ color: "var(--text-subtle)" }}>
+              <span className="font-normal text-text-subtle">
                 {findQuery ? `${matchCount ? clampedActiveMatchIndex + 1 : 0}/${matchCount}` : "0 matches"}
               </span>
             </div>
@@ -754,7 +754,7 @@ function BlockNoteEditorReady({
               Text
             </button>
             {utilityStatus ? (
-              <span className="ml-auto" style={{ color: "var(--text-subtle)" }} aria-live="polite">
+              <span className="ml-auto text-text-subtle" aria-live="polite">
                 {utilityStatus}
               </span>
             ) : null}

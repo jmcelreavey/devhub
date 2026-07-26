@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { z } from "zod";
+import { parseBody } from "@/lib/api-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -63,10 +65,17 @@ function check(rawPath: string, kind: "repoRoot" | "notesDir"): CheckResult {
   };
 }
 
+const ValidatePathSchema = z.object({
+  repoRoot: z.string().optional(),
+  notesDir: z.string().optional(),
+});
+
 export async function POST(req: NextRequest) {
-  const body = (await req.json()) as { repoRoot?: string; notesDir?: string };
+  const parsed = await parseBody(req, ValidatePathSchema);
+  if (!parsed.ok) return parsed.response;
+  const { repoRoot, notesDir } = parsed.data;
   return NextResponse.json({
-    repoRoot: body.repoRoot !== undefined ? check(body.repoRoot, "repoRoot") : null,
-    notesDir: body.notesDir !== undefined ? check(body.notesDir, "notesDir") : null,
+    repoRoot: repoRoot !== undefined ? check(repoRoot, "repoRoot") : null,
+    notesDir: notesDir !== undefined ? check(notesDir, "notesDir") : null,
   });
 }

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getHome } from "@/lib/content-dirs";
+import { getHome } from "@/lib/content/dirs";
 import { safeReadJSON, withMutex, writeAtomic } from "@/lib/atomic-write";
 import { type ShareRecord, type VaultId, shareKey } from "@/lib/share/share-public";
 

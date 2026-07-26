@@ -1,4 +1,4 @@
-import { searchNotes, type SearchResult as SharedSearchResult } from "@/lib/notes-search";
+import { searchNotes, type SearchResult as SharedSearchResult } from "@/lib/notes/search";
 import { readNoteAssetBytes, writeNoteAssetBytes } from "@/lib/notes-assets";
 import type { VaultCodec } from "@/lib/vault/vault-codec";
 import {

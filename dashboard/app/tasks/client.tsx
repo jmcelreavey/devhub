@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
-import { TaskItem } from "@/components/TaskList";
+import { TaskItem } from "@/components/tasks/TaskList";
 import { FetchError, SkeletonRows } from "@/components";
 import { paletteCommandScore } from "@/lib/command-palette-score";
-import { useToast } from "@/lib/use-toast";
-import { useLive } from "@/lib/use-fetch";
-import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
+import { useToast } from "@/lib/hooks/use-toast";
+import { useLive } from "@/lib/hooks/use-fetch";
+import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 
 const PAGE_SIZE = 50;
 const FILTERS = ["all", "open", "done", "abandoned", "moved"] as const;
@@ -141,11 +141,11 @@ function TaskRow({
     <div className="card group" style={{ padding: "8px 10px" }}>
       <div className="mb-1 flex flex-wrap items-center gap-2 px-2">
         <span className={statusBadgeClass(status)}>{status}</span>
-        <span className="text-xs" style={{ color: "var(--text-subtle)" }}>{record.dayLabel}</span>
-        {task.due ? <span className="text-xs" style={{ color: "var(--text-muted)" }}>Due {task.due}</span> : null}
+        <span className="text-xs text-text-subtle">{record.dayLabel}</span>
+        {task.due ? <span className="text-xs text-text-muted">Due {task.due}</span> : null}
       </div>
         {status === "moved" && task.movedToDate ? (
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <span className="text-xs text-text-muted">
             Continued on {formatMovedToDate(task.movedToDate)}
           </span>
         ) : null}
@@ -276,7 +276,7 @@ export default function TasksPage() {
       <div className="page-header">
         <div>
           <div className="page-title">Tasks</div>
-          <div className="text-xs flex flex-wrap gap-x-3" style={{ color: "var(--text-subtle)" }}>
+          <div className="text-xs flex flex-wrap gap-x-3 text-text-subtle">
             <span>{counts.all} total</span>
             <span>{counts.open} open</span>
             <span>{counts.done} done</span>
@@ -307,8 +307,7 @@ export default function TasksPage() {
             setQuery(e.target.value);
             setPage(1);
           }}
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-          style={{ color: "var(--text)" }}
+          className="min-w-0 flex-1 bg-transparent text-sm outline-none text-text"
         />
         {query ? (
           <button
@@ -353,7 +352,7 @@ export default function TasksPage() {
       {isLoading && !data && <SkeletonRows count={5} height={40} variant="list" />}
 
       {!isLoading && !error && records.length === 0 && (
-        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+        <p className="text-sm text-text-muted">
           {query ? "No matching tasks found." : "No tasks yet."}
         </p>
       )}
@@ -361,7 +360,7 @@ export default function TasksPage() {
       {records.length > 0 ? (
         <>
           <div className="mb-3 flex items-center justify-between gap-3">
-            <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
+            <span className="text-xs text-text-subtle">
               Showing {rangeStart}-{rangeEnd} of {records.length}
             </span>
             <div className="flex items-center gap-2">
@@ -374,7 +373,7 @@ export default function TasksPage() {
               >
                 <ChevronLeft size={12} aria-hidden /> Prev
               </button>
-              <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
+              <span className="text-xs text-text-subtle">
                 Page {safePage} of {totalPages}
               </span>
               <button

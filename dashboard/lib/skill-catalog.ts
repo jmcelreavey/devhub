@@ -9,19 +9,19 @@ import {
   isAiToolsAvailable,
   isAiToolsSyncEnabled,
   resolveAiToolsRoot,
-} from "./ai-tools-skills";
+} from "@/lib/ai/tools-skills";
 import { pluginAssetDirs } from "./plugins/registry";
-import type { AiToolsMeta, SkillListItem, SkillOrigin } from "./skills-api-types";
-import { isReadOnlySkillOrigin } from "./skills-api-types";
+import type { AiToolsMeta, SkillListItem, SkillOrigin } from "@/lib/skills/api-types";
+import { isReadOnlySkillOrigin } from "@/lib/skills/api-types";
 import {
   devhubSharedSkillsDir,
   listSkillDirNames,
   readSkillDescription,
   resolveSkillDirUnder,
   skillMdPath,
-} from "./skills-shared";
+} from "@/lib/skills/shared";
 
-export type { SkillOrigin, SkillListItem } from "./skills-api-types";
+export type { SkillOrigin, SkillListItem } from "@/lib/skills/api-types";
 
 export interface SkillCatalogEntry {
   name: string;

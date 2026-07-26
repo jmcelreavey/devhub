@@ -5,12 +5,12 @@ vi.mock("@/lib/scanned-repo", () => ({
   resolveScannedRepo: vi.fn(() => "/tmp/test-repo"),
 }));
 
-vi.mock("@/lib/git-repo-local", () => ({
+vi.mock("@/lib/git/repo-local", () => ({
   runGitRepo: vi.fn(),
   runGitRepoAsync: vi.fn(),
 }));
 
-import { runGitRepoAsync } from "@/lib/git-repo-local";
+import { runGitRepoAsync } from "@/lib/git/repo-local";
 import { POST } from "./route";
 import { parseChangedFiles, parseLeftRightCount, parseUnpushedCommits } from "./parsers";
 

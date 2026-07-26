@@ -4,20 +4,20 @@ import { useCallback, useEffect, useState, type HTMLAttributes } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Check, ClipboardCopy, GripVertical, Plus, Trash2 } from "lucide-react";
-import { useToast } from "@/lib/use-toast";
+import { useToast } from "@/lib/hooks/use-toast";
 import { copyTextToClipboard } from "@/lib/clipboard";
-import { HoverTip } from "@/components/HoverTip";
-import { useConfirm } from "@/components/ConfirmDialog";
+import { HoverTip } from "@/components/ui/HoverTip";
+import { useConfirm } from "@/components/shell/ConfirmDialog";
 import { InlineNoteRename } from "@/components/InlineNoteRename";
 import { SortableList, SortableDragProvider } from "@/components/ui/SortableList";
-import { filterNotesSidebarTree } from "@/lib/notes-tree-sidebar-filter";
+import { filterNotesSidebarTree } from "@/lib/notes/tree-sidebar-filter";
 import { getVaultClient, type VaultClientConfig } from "@/lib/vault/vault-client";
 import type { VaultId } from "@/lib/vault/vault-client";
 import type { TreeEntry } from "@/lib/vault/vault-storage";
 import {
   broadcastNoteAutosaveInvalidation,
   collectTreeNoteSlugs,
-} from "@/lib/note-autosave-invalidation";
+} from "@/lib/notes/autosave-invalidation";
 
 function TreeNode({
   entry,
@@ -111,8 +111,7 @@ function TreeNode({
           <button
             type="button"
             onClick={() => setOpen(!open)}
-            className="flex min-w-0 flex-1 items-center gap-1.5 rounded px-2 py-1 text-left text-xs"
-            style={{ color: "var(--text-muted)" }}
+            className="flex min-w-0 flex-1 items-center gap-1.5 rounded px-2 py-1 text-left text-xs text-text-muted"
           >
             <span>{open ? "▾" : "▸"}</span>
             <span className="truncate">{entry.name}</span>
@@ -120,8 +119,7 @@ function TreeNode({
           <button
             type="button"
             title={`New ${itemLabel} in ${entry.name}`}
-            className="shrink-0 rounded p-0.5 reveal-on-hover"
-            style={{ color: "var(--accent)" }}
+            className="shrink-0 rounded p-0.5 reveal-on-hover text-accent"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -137,8 +135,7 @@ function TreeNode({
             <button
               type="button"
               disabled={deleting}
-              className="shrink-0 rounded p-0.5 reveal-on-hover disabled:opacity-30 disabled:pointer-events-none"
-              style={{ color: "var(--danger)" }}
+              className="shrink-0 rounded p-0.5 reveal-on-hover disabled:opacity-30 disabled:pointer-events-none text-danger"
               onClick={handleDeleteFolder}
             >
               <Trash2 size={12} strokeWidth={2.5} aria-hidden />
@@ -190,7 +187,7 @@ function TreeNode({
 
   const inner = (
     <>
-      <span style={{ color: "var(--text-subtle)" }}>·</span>
+      <span className="text-text-subtle">·</span>
       <InlineNoteRename
         noteSlug={slug}
         displayName={label}
@@ -299,8 +296,7 @@ function TreeNode({
         <button
           type="button"
           disabled={deleting}
-          className="shrink-0 rounded p-0.5 reveal-on-hover disabled:opacity-30 disabled:pointer-events-none"
-          style={{ color: "var(--danger)" }}
+          className="shrink-0 rounded p-0.5 reveal-on-hover disabled:opacity-30 disabled:pointer-events-none text-danger"
           onClick={handleDelete}
         >
           <Trash2 size={12} strokeWidth={2.5} aria-hidden />
@@ -561,7 +557,7 @@ export function FileTree({
         />
       </SortableDragProvider>
       {visible.length === 0 && search && (
-        <div className="px-3 py-4 text-xs" style={{ color: "var(--text-subtle)" }}>
+        <div className="px-3 py-4 text-xs text-text-subtle">
           No {vault.itemLabelPlural} match &ldquo;{search}&rdquo;
         </div>
       )}

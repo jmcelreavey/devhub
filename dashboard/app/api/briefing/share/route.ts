@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { withErrorHandler, parseBody, isSameOrigin } from "@/lib/api-utils";
+import { withErrorHandler, parseBody } from "@/lib/api-utils";
+import { BriefingShareSchema } from "@/lib/schemas";
 import { mapGithubCliError } from "@/lib/gh-exec";
 import { publishShare, unpublishShare, readShare } from "@/lib/briefing-share";
-import { normalizeTheme, type CanvasTheme } from "@/lib/briefing-theme";
+import { normalizeTheme } from "@/lib/briefing-theme";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +15,10 @@ export const GET = withErrorHandler(async () => {
 
 // Publish (or refresh) a shareable snapshot of the current canvas as a secret gist.
 export const POST = withErrorHandler(async (req: NextRequest) => {
-  if (!isSameOrigin(req)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const body = await parseBody<{ theme?: CanvasTheme | null }>(req);
+  const parsed = await parseBody(req, BriefingShareSchema);
+  if (!parsed.ok) return parsed.response;
   try {
-    const share = await publishShare(normalizeTheme(body.theme));
+    const share = await publishShare(normalizeTheme(parsed.data.theme));
     return NextResponse.json({ ok: true, share }, { headers: NO_STORE });
   } catch (err) {
     const { status, error } = mapGithubCliError(err, "Failed to publish briefing");
@@ -25,8 +26,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 }, "briefing.share.post");
 
-export const DELETE = withErrorHandler(async (req: NextRequest) => {
-  if (!isSameOrigin(req)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+export const DELETE = withErrorHandler(async () => {
   try {
     const removed = await unpublishShare();
     return NextResponse.json({ ok: true, removed }, { headers: NO_STORE });

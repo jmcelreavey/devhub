@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { createIssue, getJiraMeta, getTicket } from "@/lib/jira-client";
-import { issueTypeForParent } from "@/lib/jira-issue-type";
-import { JiraCreateIssueSchema, formatZodError } from "@/lib/schemas";
+import { createIssue, getJiraMeta, getTicket } from "@/lib/jira/client";
+import { issueTypeForParent } from "@/lib/jira/issue-type";
+import { JiraCreateIssueSchema } from "@/lib/schemas";
 import { withErrorHandler, parseBody } from "@/lib/api-utils";
-import { invalidateJiraTicketsCache } from "@/lib/jira-tickets-cache";
+import { invalidateJiraTicketsCache } from "@/lib/jira/tickets-cache";
 import { invalidateSidebarCountsCache } from "@/lib/sidebar-counts-cache";
 
 /**
@@ -16,11 +16,8 @@ export const POST = withErrorHandler(async (req: Request) => {
     return NextResponse.json({ error: "Jira is not configured." }, { status: 400 });
   }
 
-  const body = await parseBody<unknown>(req);
-  const parsed = JiraCreateIssueSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
-  }
+  const parsed = await parseBody(req, JiraCreateIssueSchema);
+  if (!parsed.ok) return parsed.response;
   const input = parsed.data;
 
   // Resolve sprint/team field ids + Team value server-side, inheriting Team

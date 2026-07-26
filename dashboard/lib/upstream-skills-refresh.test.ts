@@ -13,8 +13,8 @@ vi.mock("./gh-exec", async (importOriginal) => {
   };
 });
 
-vi.mock("./git-repo-local", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./git-repo-local")>();
+vi.mock("@/lib/git/repo-local", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/git/repo-local")>();
   return {
     ...actual,
     readOriginRemoteUrl: vi.fn(),
@@ -30,7 +30,7 @@ import {
   gitFetchOriginBranch,
   gitShortRef,
   readOriginRemoteUrl,
-} from "./git-repo-local";
+} from "@/lib/git/repo-local";
 import { refreshUpstreamSkills } from "./upstream-skills-refresh";
 import { readUpstreamSkillsManifest } from "./upstream-skills-cache";
 

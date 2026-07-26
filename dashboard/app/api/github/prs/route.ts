@@ -5,9 +5,9 @@ import {
   isRepoArchived,
   type GithubPrsApiPayload,
   type GithubPrRow,
-} from "@/lib/github-prs";
+} from "@/lib/github/prs";
 import { isGithubCliAuthenticated, mapGithubCliError } from "@/lib/gh-exec";
-import { getGithubLogin } from "@/lib/standup-github-merged";
+import { getGithubLogin } from "@/lib/standup/github-merged";
 
 export const dynamic = "force-dynamic";
 

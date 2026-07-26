@@ -1,18 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cloneGithubRepo } from "@/lib/repos";
 import { parseBody } from "@/lib/api-utils";
-
-interface CloneBody {
-  fullName?: string;
-}
+import { RepoCloneSchema } from "@/lib/schemas";
 
 export async function POST(req: NextRequest) {
-  const body = await parseBody<CloneBody>(req);
-  const fullName = body.fullName?.trim();
+  const parsed = await parseBody(req, RepoCloneSchema);
+  if (!parsed.ok) return parsed.response;
+  const fullName = parsed.data.fullName;
 
-  if (!fullName) {
-    return NextResponse.json({ error: "GitHub fullName is required" }, { status: 400 });
-  }
   try {
     const cloned = await cloneGithubRepo(fullName);
     return NextResponse.json({ ok: true, repo: cloned });

@@ -1,12 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { runGitRepoAsync } from "@/lib/git-repo-local";
-import { detectUnmergedFiles } from "@/lib/git-conflicts";
+import { runGitRepoAsync } from "@/lib/git/repo-local";
+import { detectUnmergedFiles } from "@/lib/git/conflicts";
 import {
   buildContentBuckets,
   isDevhubRepoRoot,
   matchContentBucket,
-} from "@/lib/content-sync-dirs";
-import { fileStatusGlyph, parsePorcelainStatus } from "@/lib/repo-git-parsers";
+} from "@/lib/content/sync-dirs";
+import { fileStatusGlyph, parsePorcelainStatus } from "@/lib/repos/git-parsers";
 import { gitFail, withScannedRepo, type RepoParams } from "../_shared";
 
 export async function GET(_req: NextRequest, { params }: RepoParams) {

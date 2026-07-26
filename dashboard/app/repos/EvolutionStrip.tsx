@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { TrendingUp } from "lucide-react";
-import { useLive } from "@/lib/use-fetch";
+import { useLive } from "@/lib/hooks/use-fetch";
 import { buildEvolutionHeadline } from "@/lib/capability/headline";
 import type { CapabilityDiff } from "@/lib/capability/types";
 
@@ -34,12 +34,12 @@ export function EvolutionStrip() {
       className="card card-body mb-3 flex items-center gap-3 no-underline evolution-strip"
       style={{ textDecoration: "none" }}
     >
-      <TrendingUp size={15} style={{ color: "var(--accent)" }} className="shrink-0" aria-hidden />
-      <div className="flex-1 min-w-0 text-sm truncate" style={{ color: "var(--text)" }}>
-        <span style={{ color: "var(--text-subtle)" }}>This week: </span>
+      <TrendingUp size={15} className="shrink-0 text-accent" aria-hidden />
+      <div className="flex-1 min-w-0 text-sm truncate text-text">
+        <span className="text-text-subtle">This week: </span>
         {headline}
       </div>
-      <span className="text-xs shrink-0" style={{ color: "var(--accent)" }}>
+      <span className="text-xs shrink-0 text-accent">
         Open Radar <span className="evolution-arrow">→</span>
       </span>
     </Link>

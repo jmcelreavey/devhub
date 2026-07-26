@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import type { RepoContext } from "@/lib/repo-context";
-import { loadRepoLearn } from "@/lib/repo-learn-service";
-import { resolveRepoPath } from "@/lib/repo-learn-resolve";
+import type { RepoContext } from "@/lib/repos/context";
+import { loadRepoLearn } from "@/lib/repos/learn-service";
+import { resolveRepoPath } from "@/lib/repos/learn-resolve";
 import type { RepoContextPayload, RepoLearnApiPayload } from "@/app/repos/types";
 
 type Params = { params: Promise<{ name: string }> };

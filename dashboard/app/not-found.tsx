@@ -9,7 +9,7 @@ export default function NotFound() {
   return (
     <div className="page-wrapper" style={{ minHeight: "60vh", paddingTop: "var(--space-10)" }}>
       <div className="max-w-md">
-        <span className="empty-pop" style={{ color: "var(--text-subtle)" }} aria-hidden>
+        <span className="empty-pop text-text-subtle" aria-hidden>
           <Compass size={28} />
         </span>
         <h1

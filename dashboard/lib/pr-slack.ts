@@ -1,6 +1,6 @@
 import type { MouseEvent } from "react";
-import type { GithubPrRow } from "./github-prs";
-import type { useToast } from "./use-toast";
+import type { GithubPrRow } from "@/lib/github/prs";
+import type { useToast } from "@/lib/hooks/use-toast";
 import { JIRA_KEY_RE } from "./utils";
 import { copyTextToClipboard } from "./clipboard";
 

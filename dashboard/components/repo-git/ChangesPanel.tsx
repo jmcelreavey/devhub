@@ -14,15 +14,15 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { SkeletonRows } from "@/components/SkeletonRows";
-import { useConfirm, usePrompt } from "@/components/ConfirmDialog";
-import { useToast } from "@/lib/use-toast";
+import { SkeletonRows } from "@/components/ui/SkeletonRows";
+import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
+import { useToast } from "@/lib/hooks/use-toast";
 import {
   agentCommitMessageCommand,
   agentDiffSelectionCommand,
   openTerminal,
 } from "@/lib/terminal-launch";
-import { isGitNoisePath, looksLikeDirectoryPath, type DiffLine } from "@/lib/repo-git-parsers";
+import { isGitNoisePath, looksLikeDirectoryPath, type DiffLine } from "@/lib/repos/git-parsers";
 import { GitDiffView } from "./GitDiffView";
 import {
   fetchGitJson,
@@ -467,7 +467,7 @@ export function ChangesPanel({
 
       {cleanTree || noiseOnly ? (
         <div className="repo-git-empty">
-          <Check size={18} style={{ color: "var(--success)" }} />
+          <Check size={18} className="text-success" />
           <div>Working tree clean</div>
           <div style={{ color: "var(--text-subtle)", fontSize: 11 }}>
             {noiseOnly
@@ -624,7 +624,7 @@ export function ChangesPanel({
                 {selected.path}
               </span>
             ) : (
-              <span style={{ color: "var(--text-subtle)" }}>Select a file to inspect the diff</span>
+              <span className="text-text-subtle">Select a file to inspect the diff</span>
             )}
           </div>
           <div

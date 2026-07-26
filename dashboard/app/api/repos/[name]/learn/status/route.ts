@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import path from "node:path";
-import { getGitHead } from "@/lib/repo-context";
-import { readRepoLearnCache } from "@/lib/repo-learn-cache";
-import { resolveRepoPath } from "@/lib/repo-learn-resolve";
+import { getGitHead } from "@/lib/repos/context";
+import { readRepoLearnCache } from "@/lib/repos/learn-cache";
+import { resolveRepoPath } from "@/lib/repos/learn-resolve";
 
 type Params = { params: Promise<{ name: string }> };
 

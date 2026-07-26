@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, Edit3, Save, X, FileText, RefreshCw, Download } from "lucide-react";
-import { useToast } from "@/lib/use-toast";
+import { useToast } from "@/lib/hooks/use-toast";
 import { revalidateScriptsHistory } from "@/lib/scripts-history-swr";
 import { waitForScriptRun } from "@/lib/wait-for-script-run";
 import { formatRelativePastAge } from "@/lib/utils";
-import { SyncButton } from "@/components/SyncButton";
-import { SkeletonRows } from "@/components/SkeletonRows";
+import { SyncButton } from "@/components/runs/SyncButton";
+import { SkeletonRows } from "@/components/ui/SkeletonRows";
 
 interface PersonaSourceMeta {
   layer: string;
@@ -325,11 +325,11 @@ export function PersonaPanel() {
         className="text-xs"
         style={{ color: "var(--text-muted)", lineHeight: 1.5 }}
       >
-        Three layers: <strong style={{ color: "var(--text)" }}>L0 identity</strong> (tone, every message),{" "}
-        <strong style={{ color: "var(--text)" }}>L1 shared persona</strong> (standards, every session),{" "}
-        <strong style={{ color: "var(--text)" }}>L2 deep preferences</strong> (modes on demand via the{" "}
+        Three layers: <strong className="text-text">L0 identity</strong> (tone, every message),{" "}
+        <strong className="text-text">L1 shared persona</strong> (standards, every session),{" "}
+        <strong className="text-text">L2 deep preferences</strong> (modes on demand via the{" "}
         <code className="font-mono">deep-preferences</code> skill). Edit sources below, then{" "}
-        <strong style={{ color: "var(--text)" }}>Sync to all tools</strong> to update Claude, Codex, OpenCode,
+        <strong className="text-text">Sync to all tools</strong> to update Claude, Codex, OpenCode,
         Cursor, and repo <code className="font-mono">AGENTS.md</code>. L2 is not synced.
       </div>
 
@@ -371,7 +371,7 @@ export function PersonaPanel() {
                   aria-expanded={isOpen}
                 >
                   <FileText size={12} style={{ color: t.kind === "source" ? "var(--accent)" : "var(--text-subtle)", flexShrink: 0 }} aria-hidden />
-                  <span className="font-medium text-sm" style={{ color: "var(--text)" }}>
+                  <span className="font-medium text-sm text-text">
                     {t.label}
                   </span>
                   {t.meta && (
@@ -405,7 +405,7 @@ export function PersonaPanel() {
                     </span>
                   )}
                   {t.tokenEstimate != null && t.tokenEstimate > 0 && (
-                    <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
+                    <span className="text-xs text-text-subtle">
                       ~{t.tokenEstimate} tok
                     </span>
                   )}
@@ -424,7 +424,7 @@ export function PersonaPanel() {
                     </span>
                   )}
                 </button>
-                <span className="text-xs hidden sm:inline" style={{ color: "var(--text-subtle)" }}>
+                <span className="text-xs hidden sm:inline text-text-subtle">
                   {t.exists ? relTime(t.modified) : ""}
                 </span>
                 <button
@@ -462,13 +462,13 @@ export function PersonaPanel() {
                       }}
                     >
                       <div>
-                        <strong style={{ color: "var(--text)" }}>Loads:</strong> {t.meta.loadLabel}
+                        <strong className="text-text">Loads:</strong> {t.meta.loadLabel}
                       </div>
                       <div>
-                        <strong style={{ color: "var(--text)" }}>Sync:</strong> {t.meta.syncLabel}
+                        <strong className="text-text">Sync:</strong> {t.meta.syncLabel}
                       </div>
                       <div>
-                        <strong style={{ color: "var(--text)" }}>Budget:</strong> {t.meta.tokenHint}
+                        <strong className="text-text">Budget:</strong> {t.meta.tokenHint}
                         {t.tokenEstimate != null && t.tokenEstimate > 0
                           ? ` (measured ~${t.tokenEstimate})`
                           : ""}
@@ -580,10 +580,10 @@ export function PersonaPanel() {
           onClick={() => setSyncedOpen((o) => !o)}
           aria-expanded={syncedOpen}
         >
-          <span className="font-medium text-sm" style={{ color: "var(--text)" }}>
+          <span className="font-medium text-sm text-text">
             Synced output (read-only preview)
           </span>
-          <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
+          <span className="text-xs text-text-subtle">
             {synced.filter((s) => s.exists).length}/{synced.length} present
           </span>
           <span style={{ marginLeft: "auto", color: "var(--text-subtle)" }}>
@@ -607,7 +607,7 @@ export function PersonaPanel() {
                     border: "1px solid var(--border-muted)",
                   }}
                 >
-                  <div className="font-medium mb-1" style={{ color: "var(--text)" }}>
+                  <div className="font-medium mb-1 text-text">
                     {s.label}
                     {!s.exists && (
                       <span style={{ color: "var(--text-subtle)", fontWeight: 400 }}> - not found</span>
@@ -649,7 +649,7 @@ export function PersonaPanel() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            zIndex: 50,
+            zIndex: "var(--z-dropdown)",
             padding: "24px",
           }}
         >
@@ -665,7 +665,7 @@ export function PersonaPanel() {
             }}
           >
             <div className="flex items-center justify-between mb-3">
-              <div className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+              <div className="text-sm font-semibold text-text">
                 Pull persona from a tool
               </div>
               <button
@@ -685,7 +685,7 @@ export function PersonaPanel() {
             </p>
 
             <div className="flex gap-2 flex-wrap mb-3">
-              <label className="text-xs flex flex-col gap-1" style={{ color: "var(--text-muted)" }}>
+              <label className="text-xs flex flex-col gap-1 text-text-muted">
                 Tool
                 <select
                   className="input text-xs"
@@ -700,7 +700,7 @@ export function PersonaPanel() {
                   ))}
                 </select>
               </label>
-              <label className="text-xs flex flex-col gap-1" style={{ color: "var(--text-muted)" }}>
+              <label className="text-xs flex flex-col gap-1 text-text-muted">
                 Source
                 <select
                   className="input text-xs"
@@ -718,11 +718,11 @@ export function PersonaPanel() {
             </div>
 
             {pullLoading && (
-              <p className="text-xs" style={{ color: "var(--text-subtle)" }}>Loading…</p>
+              <p className="text-xs text-text-subtle">Loading…</p>
             )}
             {!pullLoading && pullBlock && (
               <div className="space-y-2">
-                <div className="text-xs" style={{ color: "var(--text-muted)" }}>
+                <div className="text-xs text-text-muted">
                   <div>
                     Tool file: <code className="font-mono">{pullBlock.toolFile}</code>
                   </div>
@@ -743,7 +743,7 @@ export function PersonaPanel() {
 
                 {pullBlock.toolBlock !== null && (
                   <>
-                    <div className="text-xs font-medium" style={{ color: "var(--text)" }}>
+                    <div className="text-xs font-medium text-text">
                       Tool content (will be written to source):
                     </div>
                     <pre
@@ -758,7 +758,7 @@ export function PersonaPanel() {
                     >
                       {pullBlock.toolBlock}
                     </pre>
-                    <div className="text-xs font-medium" style={{ color: "var(--text)" }}>
+                    <div className="text-xs font-medium text-text">
                       Current source content:
                     </div>
                     <pre

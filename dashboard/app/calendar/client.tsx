@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { Calendar, ChevronDown, ChevronUp, MapPin, RefreshCw, Settings2, Video } from "lucide-react";
-import { useLive } from "@/lib/use-fetch";
+import { useLive } from "@/lib/hooks/use-fetch";
 import type { CalendarEvent, GoogleCalendarInfo } from "@/lib/google-calendar";
 import { CreateMeetingNoteButton } from "@/components/CreateMeetingNoteButton";
 import { formatTime, todayISO } from "@/lib/utils";
 import { EmptyState, FetchError, PageHeader, SkeletonRows } from "@/components";
-import { BootScreen, useBootGate } from "@/components/TodayBootScreen";
+import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 
 function isToday(dateStr: string): boolean {
   return dateStr === todayISO();
@@ -42,7 +42,7 @@ function CalendarPicker({
 }) {
   if (calendars.length === 0) {
     return (
-      <p className="text-xs py-2" style={{ color: "var(--text-subtle)" }}>
+      <p className="text-xs py-2 text-text-subtle">
         No calendars found for this account.
       </p>
     );
@@ -73,7 +73,7 @@ function CalendarPicker({
               style={{ background: cal.backgroundColor ?? "var(--accent)" }}
               aria-hidden
             />
-            <span className="min-w-0 flex-1 truncate" style={{ color: "var(--text)" }}>
+            <span className="min-w-0 flex-1 truncate text-text">
               {cal.summary}
             </span>
             {cal.primary ? (
@@ -170,7 +170,7 @@ export default function CalendarPage() {
         <div className="card mb-4">
           <div className="card-header">
             <span>Visible calendars</span>
-            {saving ? <span className="text-xs" style={{ color: "var(--text-subtle)" }}>Saving…</span> : null}
+            {saving ? <span className="text-xs text-text-subtle">Saving…</span> : null}
           </div>
           <div className="card-body" style={{ padding: "8px 12px" }}>
             {calError ? (
@@ -184,11 +184,11 @@ export default function CalendarPage() {
               />
             )}
             {saveError ? (
-              <p className="text-xs mt-2" style={{ color: "var(--danger)" }}>
+              <p className="text-xs mt-2 text-danger">
                 {saveError}
               </p>
             ) : null}
-            <p className="text-xs mt-3" style={{ color: "var(--text-subtle)" }}>
+            <p className="text-xs mt-3 text-text-subtle">
               Defaults to calendars checked in Google Calendar until you change this list.
             </p>
           </div>
@@ -242,7 +242,7 @@ export default function CalendarPage() {
             </div>
             <div className="card-body" style={{ padding: "8px 16px" }}>
               {days[dateStr].length === 0 && (
-                <p className="text-xs py-2" style={{ color: "var(--text-subtle)" }}>
+                <p className="text-xs py-2 text-text-subtle">
                   Nothing scheduled.
                 </p>
               )}
@@ -262,16 +262,16 @@ export default function CalendarPage() {
                       <>
                         {formatTime(e.start)}
                         <br />
-                        <span style={{ color: "var(--text-subtle)" }}>{formatTime(e.end)}</span>
+                        <span className="text-text-subtle">{formatTime(e.end)}</span>
                       </>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium break-words leading-snug" style={{ color: "var(--text)" }}>
+                    <div className="font-medium break-words leading-snug text-text">
                       {e.title}
                     </div>
                     {multiCalendar && e.calendarName ? (
-                      <div className="text-xs flex items-center gap-1 mt-0.5" style={{ color: "var(--text-subtle)" }}>
+                      <div className="text-xs flex items-center gap-1 mt-0.5 text-text-subtle">
                         <span
                           className="inline-block h-2 w-2 rounded-[var(--radius-sm)] shrink-0"
                           style={{ background: e.calendarColor ?? "var(--accent)" }}
@@ -282,8 +282,7 @@ export default function CalendarPage() {
                     ) : null}
                     {e.location && (
                       <div
-                        className="text-xs flex items-center gap-1 mt-0.5"
-                        style={{ color: "var(--text-subtle)" }}
+                        className="text-xs flex items-center gap-1 mt-0.5 text-text-subtle"
                       >
                         <MapPin size={10} aria-hidden /> {e.location}
                       </div>

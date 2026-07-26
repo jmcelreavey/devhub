@@ -14,7 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { CronExpressionParser } from "cron-parser";
-import { getHome } from "./notes-dir";
+import { getHome } from "@/lib/notes/dir";
 import {
   getAllowedScripts,
   startRun,

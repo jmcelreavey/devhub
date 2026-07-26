@@ -5,14 +5,14 @@ import {
   gitFetchOriginBranch,
   gitShortRef,
   readOriginRemoteUrl,
-} from "./git-repo-local";
+} from "@/lib/git/repo-local";
 import {
   execGh,
   GH_AUTH_REQUIRED_MESSAGE,
   githubCliErrorInfo,
   isGithubCliAuthenticated,
 } from "./gh-exec";
-import { parseRepoFullNameFromRemote } from "./github-repo-url";
+import { parseRepoFullNameFromRemote } from "@/lib/github/repo-url";
 import {
   skillsCacheDir,
   skillsCacheExtractRoot,

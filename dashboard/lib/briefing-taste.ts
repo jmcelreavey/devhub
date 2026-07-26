@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/notes-dir";
+import { getRepoRoot } from "@/lib/notes/dir";
 
 function expandHome(p: string): string {
   return p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p;
@@ -77,6 +77,7 @@ const UNIVERSAL_RULES = [
   "- Long lists of headlines/links (news, Hacker News, events) are NOT skinny vertical cards. Render them as readable rows or a 2-3 column list where each title sits comfortably on 1-2 lines. Prefer compact rows separated by hairlines over boxed cards when there is no real hierarchy.",
   "- One corner-radius scale and one shadow style for the whole page. Cards only when elevation communicates real hierarchy; otherwise group with spacing and hairlines.",
   "- Deliberate, consistent spacing on a scale. No floating elements with awkward gaps. No section header with a tiny paragraph or label floating alone in the top-right corner — put labels under/next to the heading with real alignment, or drop them.",
+  "- Balance column HEIGHTS, not just widths. Sections with different item counts side by side in a grid with align-items:start leave the block ending ragged — three columns stopping at three different heights with dead space under the short one. Either even out the item counts, or flow the cards with CSS columns (columns: 300px auto; with break-inside: avoid on each card) so they fill naturally.",
   "- Fully responsive: every multi-column block collapses cleanly to one column under ~600px.",
   "",
   "Motion & a11y:",
@@ -87,6 +88,14 @@ const UNIVERSAL_RULES = [
   "- Never invent facts, names, numbers, logos or placeholder content. No 'Jane Doe', no 'Acme', no fake stats. If a data field is empty, omit that whole section.",
   "- Format values for humans: turn ISO timestamps (sunrise/sunset/meta) into short local times like 05:04, never show a raw 2026-07-09T05:04 string. Do not print the same metadata twice in one row (e.g. source shown on both sides).",
   "- No filler marketing verbs (elevate, seamless, unleash, next-gen). No section-number eyebrows (01 / INDEX), no scroll cues, no decorative status dots on every row, no fake screenshots or version stamps.",
+  "",
+  "The day plan (dayPlan) - be prescriptive, not descriptive:",
+  "- When dayPlan exists, lead the working part of the page with it. It is the only section that tells the reader what to DO today; everything else is reading material.",
+  "- State the load and the consequence together: '3h 20m of meetings - two of your six tasks realistically fit'. Use dayPlan.tasksThatFit for that count, NEVER openTaskCount. The whole point is that fewer fit than exist.",
+  "- Name the longest free window as where the hard task goes. A task cannot span a meeting, so longestFree matters more than freeTime.",
+  "- If tasksThatFit is 0, say the day is booked out and pick nothing. Do not pad the list to look useful.",
+  "- If recentFailures is non-empty, surface it near the top with the script name and when: a background job that failed overnight is the single most actionable thing on the page. Omit the section entirely when empty.",
+  "- If dayPlan is null the calendar is unavailable; omit the whole section rather than guessing at a schedule.",
   "",
   "Punctuation (non-negotiable):",
   "- ZERO em-dashes (—) and zero en-dashes (–) anywhere the user can see them: headlines, labels, body, captions, buttons. Use a normal hyphen (-) or restructure the sentence. Ration the middle-dot (·) to at most one per metadata line.",

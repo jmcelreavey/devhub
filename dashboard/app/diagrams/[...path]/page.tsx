@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, ChevronRight, PenTool, Trash2, Download } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { Editor } from "tldraw";
-import { useToast } from "@/lib/use-toast";
+import { useToast } from "@/lib/hooks/use-toast";
 import { InlineNoteRename } from "@/components/InlineNoteRename";
 import {
   diagramBreadcrumbs,
@@ -17,13 +17,13 @@ import {
   toDiagramStoragePath,
   toNotesApiPath,
 } from "@/lib/diagram-utils";
-import { renameNoteFile } from "@/lib/notes-path";
+import { renameNoteFile } from "@/lib/notes/path";
 import { exportDiagramImage } from "@/lib/tldraw-export";
-import { broadcastNoteAutosaveInvalidation } from "@/lib/note-autosave-invalidation";
+import { broadcastNoteAutosaveInvalidation } from "@/lib/notes/autosave-invalidation";
 
 const TldrawCanvas = dynamic(
   () =>
-    import("@/components/TldrawCanvas").then((mod) => ({
+    import("@/components/diagrams/TldrawCanvas").then((mod) => ({
       default: mod.TldrawCanvas,
     })),
   { ssr: false },
@@ -90,8 +90,7 @@ export default function DiagramEditorPage() {
   if (loading) {
     return (
       <div
-        className="flex items-center justify-center h-full"
-        style={{ color: "var(--text-subtle)" }}
+        className="flex items-center justify-center h-full text-text-subtle"
       >
         <span className="text-sm">Loading diagram…</span>
       </div>
@@ -101,14 +100,13 @@ export default function DiagramEditorPage() {
   if (notFound) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3">
-        <PenTool size={32} style={{ color: "var(--text-subtle)" }} />
-        <p className="text-sm" style={{ color: "var(--text-subtle)" }}>
+        <PenTool size={32} className="text-text-subtle" />
+        <p className="text-sm text-text-subtle">
           Diagram not found.
         </p>
         <Link
           href="/diagrams"
-          className="text-xs px-3 py-1.5 rounded-md"
-          style={{ color: "var(--accent)" }}
+          className="text-xs px-3 py-1.5 rounded-md text-accent"
         >
           Back to diagrams
         </Link>
@@ -135,9 +133,9 @@ export default function DiagramEditorPage() {
           className="rounded p-1 hover:bg-[var(--bg-elevated)]"
           title="Back to folder"
         >
-          <ArrowLeft size={14} style={{ color: "var(--text-muted)" }} />
+          <ArrowLeft size={14} className="text-text-muted" />
         </Link>
-        <PenTool size={14} style={{ color: "var(--text-subtle)" }} aria-hidden />
+        <PenTool size={14} className="text-text-subtle" aria-hidden />
         <nav
           className="hidden sm:flex items-center gap-1 min-w-0 shrink"
           aria-label="Breadcrumb"
@@ -146,12 +144,11 @@ export default function DiagramEditorPage() {
             <span key={c.relPath || "__root__"} className="flex items-center gap-1 min-w-0">
               <Link
                 href={diagramFolderHref(c.relPath)}
-                className="text-sm truncate hover:underline"
-                style={{ color: "var(--text-muted)" }}
+                className="text-sm truncate hover:underline text-text-muted"
               >
                 {c.name}
               </Link>
-              <ChevronRight size={12} style={{ color: "var(--text-subtle)" }} aria-hidden />
+              <ChevronRight size={12} className="text-text-subtle" aria-hidden />
             </span>
           ))}
         </nav>
@@ -161,8 +158,7 @@ export default function DiagramEditorPage() {
           active={false}
           onRenamed={(newSlug) => router.replace(toDiagramRoutePath(newSlug))}
           renameFile={renameNoteFile}
-          className="text-sm font-medium truncate flex-1"
-          style={{ color: "var(--text)" }}
+          className="text-sm font-medium truncate flex-1 text-text"
           inputClassName="min-w-0 flex-1 bg-transparent border-none outline-none text-sm font-medium"
           title="Double-click to rename"
         />
@@ -192,8 +188,7 @@ export default function DiagramEditorPage() {
           aria-label="Delete diagram"
         >
           <Trash2
-            size={14}
-            style={{ color: "var(--danger)" }}
+            size={14} className="text-danger"
             aria-hidden
           />
         </button>

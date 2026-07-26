@@ -44,7 +44,11 @@ const LOG_TTL_MS = 3 * 24 * 60 * 60 * 1_000;
 function initLogDir(): void {
   const dir = terminalLogDir();
   try {
-    fs.mkdirSync(dir, { recursive: true });
+    // 0700 — the default lives under os.tmpdir(), which is world-readable on
+    // Linux. Session transcripts are plaintext, so the directory shouldn't be
+    // listable by other users even though the files are 0600.
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    fs.chmodSync(dir, 0o700); // mkdirSync's mode is ignored when the dir exists
     const now = Date.now();
     for (const name of fs.readdirSync(dir)) {
       if (!name.endsWith(".log")) continue;
@@ -213,7 +217,11 @@ wss.on("connection", (socket: WebSocket, req: IncomingMessage) => {
   let logStream: fs.WriteStream | null = null;
   if (logFile) {
     try {
-      logStream = fs.createWriteStream(logFile, { flags: "a" });
+      // 0600: these logs are a verbatim transcript of an interactive shell, so
+      // anything you paste — tokens, `op read` output, kubectl secrets — lands
+      // here in plaintext for the LOG_TTL_MS window. Owner-only is the least we
+      // can do; the retention window is the thing to shorten if that bothers you.
+      logStream = fs.createWriteStream(logFile, { flags: "a", mode: 0o600 });
       logStream.on("error", (err) => {
         log(`log write error (${sessionId}): ${err.message}`);
         logStream = null;

@@ -2,7 +2,7 @@
 
 import { Suspense, useState, useEffect } from "react";
 import { NewVaultPathModal } from "@/components/NewVaultPathModal";
-import { VaultFilesSidebar } from "@/components/VaultFilesSidebar";
+import { VaultFilesSidebar } from "@/components/vault/VaultFilesSidebar";
 
 export default function DocsLayout({ children }: { children: React.ReactNode }) {
   return (
