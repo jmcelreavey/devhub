@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { isDesktop, logDesktopEvent, openInBrowser } from "@/lib/desktop/bridge";
 
 /**
  * Thin top-of-page bar that crawls to ~70% on link click and snaps to 100%
@@ -36,7 +37,21 @@ export function NavProgress() {
       if (!a) return;
       const href = a.getAttribute("href");
       if (!href) return;
-      if (a.target === "_blank") return;
+      const destination = new URL(a.href);
+      const opensExternally =
+        a.target === "_blank" ||
+        ((destination.protocol === "http:" || destination.protocol === "https:") &&
+          destination.origin !== window.location.origin);
+      if (opensExternally && isDesktop()) {
+        e.preventDefault();
+        void logDesktopEvent(
+          "nav:external-intercept",
+          "Intercepted external navigation for system browser",
+          destination.host,
+        );
+        void openInBrowser(destination.toString());
+        return;
+      }
       if (href.startsWith("http") || href.startsWith("#") || href.startsWith("mailto:")) return;
       if (href === pathname) return;
       setPhase("loading");

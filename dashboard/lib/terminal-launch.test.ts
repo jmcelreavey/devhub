@@ -9,6 +9,7 @@ import {
   agentRepoUpstartCommand,
   agentRepoUpstartDebugCommand,
   agentGitHookFailureCommand,
+  agentGitSyncConflictCommand,
   agentReviewCommand,
   agentStashConflictCommand,
   agentCommitMessageCommand,
@@ -57,9 +58,9 @@ describe("agentReviewCommand (opencode)", () => {
   });
 
   it("passes an OpenCode model override when configured, omits the flag when blank", async () => {
-    useConfig({ opencodeModel: "cursor-acp/grok-4.3" });
+    useConfig({ opencodeModel: "cursor-acp/cursor-grok-4.5-high" });
     const withModel = await agentReviewCommand("https://github.com/acme/app/pull/1");
-    expect(withModel).toContain("opencode run --model 'cursor-acp/grok-4.3'");
+    expect(withModel).toContain("opencode run --model 'cursor-acp/cursor-grok-4.5-high'");
 
     useConfig({ opencodeModel: "" });
     const withoutModel = await agentReviewCommand("https://github.com/acme/app/pull/1");
@@ -180,6 +181,14 @@ describe("agentStashConflictCommand", () => {
     expect(command).not.toContain("cursor-agent -p");
     expect(command).toContain("git-conflict-resolve");
   });
+});
+
+it("hands a conflicted main sync to AI through push and verification", async () => {
+  useConfig();
+  const command = await agentGitSyncConflictCommand({ repoName: "acme", branch: "feature/foo", syncTarget: "origin/main", stashed: true });
+  expect(command).toContain("origin/main");
+  expect(command).toContain("push the current branch");
+  expect(command).toContain("auto-stash");
 });
 
 describe("agentCommitMessageCommand", () => {

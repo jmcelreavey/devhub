@@ -24,7 +24,8 @@ export const POST = withErrorHandler(async (req: Request) => {
   // from the parent ticket when one is chosen.
   const meta = await getJiraMeta(input.projectKey, input.parentKey ?? undefined);
   const parentTicket = input.parentKey ? await getTicket(input.parentKey).catch(() => null) : null;
-  const issuetypeName = input.issuetypeName || (input.parentKey ? issueTypeForParent(parentTicket?.issuetype) : "Task");
+  if (input.parentKey && !parentTicket) return NextResponse.json({ error: `Parent ${input.parentKey} was not found in Jira.` }, { status: 400 });
+  const issuetypeName = input.parentKey ? issueTypeForParent(parentTicket?.issuetype) : "Task";
 
   const created = await createIssue({
     projectKey: input.projectKey,

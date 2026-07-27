@@ -16,19 +16,15 @@ export async function GET(
     const ticket = await getTicket(key);
     if (!ticket) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    let grandparent: { key: string; summary: string } | null = null;
-    if (ticket.parent) {
-      const gp = await getTicket(ticket.parent.key).catch(() => null);
-      if (gp?.parent) grandparent = gp.parent;
-    }
+    const parentDetail = ticket.parent ? await getTicket(ticket.parent.key).catch(() => null) : null;
 
     return NextResponse.json({
       key: ticket.key,
       status: ticket.status,
       summary: ticket.summary,
       issuetype: ticket.issuetype,
-      parent: ticket.parent,
-      grandparent,
+      parent: ticket.parent ? { ...ticket.parent, issuetype: parentDetail?.issuetype } : null,
+      grandparent: parentDetail?.parent ?? null,
     });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

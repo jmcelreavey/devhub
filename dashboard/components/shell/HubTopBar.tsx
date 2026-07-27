@@ -9,6 +9,7 @@ import { SectionTabs } from "@/components/shell/SectionTabs";
 import { AccentPicker } from "@/components/shell/AccentPicker";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { FocusTimer } from "@/components/tasks/FocusTimer";
+import { HoverTip } from "@/components/ui/HoverTip";
 import { QuickActions } from "@/components/shell/QuickActions";
 import { ContentSyncIndicator } from "@/components/runs/ContentSyncIndicator";
 import { AgentSoundtrack } from "@/components/AgentSoundtrack";
@@ -192,15 +193,15 @@ export function HubTopBar() {
             />
           )}
           <AccentPicker />
-          <Link
-            href="/setup"
-            className="hub-icon-btn"
-            data-tooltip="Setup & integrations"
-            data-tooltip-pos="bottom-end"
-            aria-label="Setup and integrations"
-          >
-            <Settings size={14} aria-hidden />
-          </Link>
+          <HoverTip label="Setup & integrations" pos="bottom-end">
+            <Link
+              href="/setup"
+              className="hub-icon-btn"
+              aria-label="Setup and integrations"
+            >
+              <Settings size={14} aria-hidden />
+            </Link>
+          </HoverTip>
         </span>
       </div>
     </header>

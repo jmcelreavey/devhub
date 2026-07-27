@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowLeft, ListTodo, Plus } from "lucide-react";
 import { LayoutPresetsButton } from "@/components/shell/LayoutPresets";
+import { HoverTip } from "@/components/ui/HoverTip";
 import { LiveClock } from "./LiveClock";
 import { greetingForHour, nowNextEvent, type HeroEvent } from "./hero-helpers";
 
@@ -114,15 +115,15 @@ export function TodayHero({
         )}
       </div>
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          className="btn btn-ghost text-xs"
-          onClick={() => window.dispatchEvent(new CustomEvent("devhub:capture-open"))}
-          data-tooltip="Quick capture (⌘⇧C)"
-          data-tooltip-pos="bottom-end"
-        >
-          <Plus size={13} aria-hidden /> Capture
-        </button>
+        <HoverTip label="Quick capture (⌘⇧C)" pos="bottom-end">
+          <button
+            type="button"
+            className="btn btn-ghost text-xs"
+            onClick={() => window.dispatchEvent(new CustomEvent("devhub:capture-open"))}
+          >
+            <Plus size={13} aria-hidden /> Capture
+          </button>
+        </HoverTip>
         <LayoutPresetsButton />
       </div>
     </div>

@@ -7,7 +7,7 @@ export type ToastVariant = "success" | "error" | "info";
 
 export interface ToastOptions {
   duration?: number;
-  action?: { label: string; onClick: () => void };
+  action?: { label: string; onClick: () => void | Promise<void> };
 }
 
 export interface Toast {
@@ -15,7 +15,7 @@ export interface Toast {
   message: string;
   variant: ToastVariant;
   duration: number;
-  action?: { label: string; onClick: () => void };
+  action?: { label: string; onClick: () => void | Promise<void> };
 }
 
 interface ToastContextValue {
@@ -87,6 +87,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    const showExternalOpenFailure = () => {
+      push("error", "Couldn't open this link in your browser. Restart DevHub and try again.");
+    };
+    window.addEventListener("devhub:external-open-failed", showExternalOpenFailure);
+    return () => window.removeEventListener("devhub:external-open-failed", showExternalOpenFailure);
+  }, [push]);
+
   const value = useMemo(() => ({ push, dismiss }), [push, dismiss]);
 
   return (
@@ -125,7 +133,7 @@ function ToastItem({
           type="button"
           className="toast-action"
           onClick={() => {
-            toast.action!.onClick();
+            void toast.action!.onClick();
             onDismiss();
           }}
         >

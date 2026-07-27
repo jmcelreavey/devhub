@@ -29,6 +29,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { NavItem } from "@/lib/nav";
+import { HoverTip } from "@/components/ui/HoverTip";
 
 const ICONS: Record<string, LucideIcon> = {
   today: CalendarDays,
@@ -79,29 +80,30 @@ export function NavLink({ item, onClick, collapsed, count = 0, unseen = false }:
 
   if (collapsed) {
     return (
-      <Link
-        href={item.href}
-        onClick={onClick}
-        className="nav-item-collapsed relative flex items-center justify-center mx-1 my-0.5"
-        data-active={active || undefined}
-        data-tooltip={item.label}
-      >
-        <Icon size={15} strokeWidth={active ? 2 : 1.7} />
-        {unseen && (
-          <span
-            aria-hidden
-            style={{
-              position: "absolute",
-              top: 5,
-              right: 5,
-              width: 5,
-              height: 5,
-              borderRadius: "50%",
-              background: UNSEEN_COLOR,
-            }}
-          />
-        )}
-      </Link>
+      <HoverTip label={item.label}>
+        <Link
+          href={item.href}
+          onClick={onClick}
+          data-active={active || undefined}
+          className="nav-item-collapsed relative flex items-center justify-center mx-1 my-0.5"
+        >
+          <Icon size={15} strokeWidth={active ? 2 : 1.7} />
+          {unseen && (
+            <span
+              aria-hidden
+              style={{
+                position: "absolute",
+                top: 5,
+                right: 5,
+                width: 5,
+                height: 5,
+                borderRadius: "50%",
+                background: UNSEEN_COLOR,
+              }}
+            />
+          )}
+        </Link>
+      </HoverTip>
     );
   }
 

@@ -19,13 +19,15 @@ function parseStashConflict(body: string): StashConflictPayload | null {
     if (json.code !== "stash_conflict") return null;
     return {
       code: "stash_conflict",
-      action: json.action === "stash-apply" ? "stash-apply" : "checkout",
+      action: json.action === "stash-apply" ? "stash-apply" : json.action === "sync-main" ? "sync-main" : "checkout",
       branch: typeof json.branch === "string" ? json.branch : undefined,
       switched: Boolean(json.switched),
       conflictFiles: Array.isArray(json.conflictFiles)
         ? json.conflictFiles.filter((f): f is string => typeof f === "string")
         : [],
       error: typeof json.error === "string" ? json.error : "Stash apply left conflicts",
+      syncTarget: typeof json.syncTarget === "string" ? json.syncTarget : undefined,
+      stashed: Boolean(json.stashed),
     };
   } catch {
     return null;

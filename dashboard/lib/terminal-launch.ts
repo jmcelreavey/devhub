@@ -236,6 +236,19 @@ export async function agentStashConflictCommand(opts: StashConflictLaunchOptions
   );
 }
 
+export async function agentGitSyncConflictCommand(opts: StashConflictLaunchOptions & { syncTarget: string; stashed?: boolean }): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  const files = (opts.conflictFiles ?? []).slice(0, 8);
+  const prompt = [
+    "Use the git-conflict-resolve skill.",
+    `Finish syncing ${opts.branch ?? "the current branch"} with ${opts.syncTarget} in ${opts.repoName}.`,
+    files.length ? `Conflicted files: ${files.join(", ")}.` : "Check git status for conflicts.",
+    "Resolve and stage conflicts, complete the merge, push the current branch, and verify it is no longer behind main.",
+    opts.stashed ? "Preserve and restore the DevHub auto-stash; do not lose user work." : "",
+  ].filter(Boolean).join(" ");
+  return guardedCliCommand(cli.binary, cli.interactive(prompt), cli.missing("finish a conflicted branch sync"));
+}
+
 export interface GitHookFailureLaunchOptions {
   repoName: string;
   hook?: string;

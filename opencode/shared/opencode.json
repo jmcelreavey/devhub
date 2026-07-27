@@ -363,17 +363,11 @@
         "gemini-3.5-flash": {
           "name": "Gemini 3.5 Flash"
         },
-        "grok-4.3": {
-          "name": "Grok 4.3 1M"
+        "cursor-grok-4.5-high": {
+          "name": "Grok 4.5 High"
         },
-        "kimi-k2.5": {
-          "name": "Kimi K2.5",
-          "cost": {
-            "input": 0.6,
-            "output": 3,
-            "cache_read": 0.1,
-            "cache_write": 0.6
-          }
+        "kimi-k2.7-code": {
+          "name": "Kimi K2.7 Code"
         },
         "glm-5.2-high": {
           "name": "GLM 5.2"

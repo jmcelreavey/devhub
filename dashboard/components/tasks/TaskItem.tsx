@@ -20,6 +20,7 @@ import { HoverTip } from "@/components/ui/HoverTip";
 import { SeverityPill } from "@/components/ui/Severity";
 import { useSecondTick } from "@/lib/tickers";
 import { formatDuration, jiraBrowseUrl } from "@/lib/utils";
+import { openInBrowser } from "@/lib/desktop/bridge";
 
 interface JiraStatus {
   name: string;
@@ -296,9 +297,17 @@ export function TaskItem({
             )}
             {!isAbandoned && task.jiraKey && (
               <TaskActionTip label={`Open ${task.jiraKey} in Jira`}>
-                <a href={jiraBrowseUrl(task.jiraKey)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} aria-label={`Open ${task.jiraKey} in Jira`} className="task-icon-action">
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void openInBrowser(jiraBrowseUrl(task.jiraKey!));
+                  }}
+                  aria-label={`Open ${task.jiraKey} in Jira`}
+                  className="task-icon-action"
+                >
                   <ExternalLink size={12} aria-hidden />
-                </a>
+                </button>
               </TaskActionTip>
             )}
             {!isInactive && (

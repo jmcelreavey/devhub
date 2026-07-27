@@ -153,11 +153,10 @@ function installedNode() {
 }
 
 function findBuiltApp() {
-  for (const profile of ["release", "debug"]) {
-    const app = path.join(tauriDir, "target", profile, "bundle", "macos", "DevHub.app");
-    if (fs.existsSync(app)) return app;
-  }
-  return null;
+  const candidates = ["release", "debug"]
+    .map((profile) => path.join(tauriDir, "target", profile, "bundle", "macos", "DevHub.app"))
+    .filter((app) => fs.existsSync(app));
+  return candidates.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0] ?? null;
 }
 
 function bundleInfo(app) {

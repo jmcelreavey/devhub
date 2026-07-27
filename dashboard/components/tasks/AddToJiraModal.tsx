@@ -8,7 +8,8 @@ import { RichTextField } from "@/components/ui/RichTextField";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
 import { JIRA_KEY_RE } from "@/lib/utils";
-import { issueTypeForParent } from "@/lib/jira/issue-type";
+import { creationParentForLinkedIssue, issueTypeForParent } from "@/lib/jira/issue-type";
+import { openInBrowser } from "@/lib/desktop/bridge";
 import type { JiraMeta } from "@/lib/jira/client";
 import type { Task } from "@/components/tasks/TaskList";
 
@@ -64,25 +65,25 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
   const parentLookupKey = resolvedParentKey?.trim().toUpperCase() ?? null;
   const parentKeyValid = !parentLookupKey || JIRA_KEY_RE.test(parentLookupKey);
 
-  const metaParams = new URLSearchParams({ project: projectKey });
-  if (resolvedParentKey) metaParams.set("reference", resolvedParentKey);
-  const { data: meta, isLoading: metaLoading } = useLive<JiraMeta>(
-    open ? `/api/jira/meta?${metaParams.toString()}` : null,
-    { refreshInterval: 0 },
-  );
-
   // Look up the chosen parent's title (and its parent) before creating.
   const { data: parent, isLoading: parentLoading } = useLive<{
     key: string;
     summary?: string;
     issuetype?: string;
-    grandparent?: { key: string; summary: string } | null;
+    parent?: { key: string; summary?: string; issuetype?: string } | null;
+    grandparent?: { key: string; summary?: string } | null;
   }>(open && parentLookupKey && parentKeyValid ? `/api/jira/ticket/${parentLookupKey}` : null, {
     refreshInterval: 0,
   });
 
+  const creationParent = parent ? (parentMode === "linked" ? creationParentForLinkedIssue(parent) : parent) : null;
+  const creationParentKey = resolvedParentKey ? creationParent?.key ?? resolvedParentKey : null;
+  const metaParams = new URLSearchParams({ project: projectKey });
+  if (creationParentKey) metaParams.set("reference", creationParentKey);
+  const { data: meta, isLoading: metaLoading } = useLive<JiraMeta>(open ? `/api/jira/meta?${metaParams.toString()}` : null, { refreshInterval: 0 });
+
   const willRemoveLink = !!linkedKey && parentMode !== "linked";
-  const issueTypeName = resolvedParentKey ? issueTypeForParent(parent?.issuetype) : "Task";
+  const issueTypeName = creationParentKey ? issueTypeForParent(creationParent?.issuetype) : "Task";
   const parentMissing = !!resolvedParentKey && !parentLoading && !parent?.key;
   const descriptionValid = description.trim().length > 0;
 
@@ -119,8 +120,7 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
           projectKey,
           summary: trimmedSummary,
           description: trimmedDescription,
-          parentKey: resolvedParentKey,
-          issuetypeName: issueTypeName,
+          parentKey: creationParentKey,
           assignToMe: true,
           sprintId: includeSprint ? meta?.sprint?.id ?? null : null,
         }),
@@ -134,7 +134,7 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
         duration: 12000,
         action: {
           label: "Open in Jira",
-          onClick: () => window.open(created.url, "_blank", "noopener,noreferrer"),
+          onClick: () => void openInBrowser(created.url),
         },
       });
       onCreated(created.key, created.url);
@@ -156,8 +156,7 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
     parentMissing,
     projectKey,
     description,
-    resolvedParentKey,
-    issueTypeName,
+    creationParentKey,
     includeSprint,
     meta,
     onCreated,
@@ -297,13 +296,13 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
             <MetaRow
               label="Parent"
               value={
-                resolvedParentKey ? (
+                creationParentKey ? (
                   <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
-                    <span className="font-mono">{resolvedParentKey}</span>
+                    <span className="font-mono">{creationParentKey}</span>
                     {parentLoading ? (
                       <Loader2 size={11} className="animate-spin text-text-subtle" />
-                    ) : parent?.summary ? (
-                      <span className="text-text-subtle">· {parent.summary}</span>
+                    ) : creationParent?.summary ? (
+                      <span className="text-text-subtle">· {creationParent.summary}</span>
                     ) : (
                       <span style={{ color: "var(--warning, #d9a514)" }}>· not found</span>
                     )}
@@ -313,7 +312,7 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
                 )
               }
             />
-            {parent?.grandparent && (
+            {parentMode !== "linked" && parent?.grandparent && (
               <MetaRow
                 label="Parent's parent"
                 value={

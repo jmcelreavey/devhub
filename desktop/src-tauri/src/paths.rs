@@ -109,6 +109,10 @@ pub fn sidecar_env(
     set("DEVHUB_RESOURCE_ROOT", path_string(&paths.resource_root));
     set("DEVHUB_SERVER_DIR", path_string(&paths.server_dir));
     set("DEVHUB_ENV_FILE", path_string(&paths.env_file()));
+    set(
+        "DEVHUB_OP_CACHE_DIR",
+        path_string(&paths.app_data.join("config")),
+    );
 
     // Defaults only — see the note above. DEVHUB_ENV_FILE overrides these.
     set("NOTES_DIR", path_string(&paths.app_data.join("notes")));

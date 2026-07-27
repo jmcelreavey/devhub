@@ -1,18 +1,19 @@
 "use client";
 
 import { FolderOpen } from "lucide-react";
+import { HoverTip } from "@/components/ui/HoverTip";
 
 export function NotesBrowseButton() {
   return (
-    <button
-      type="button"
-      className="hub-icon-btn"
-      onClick={() => window.dispatchEvent(new Event("devhub:notes-toggle"))}
-      data-tooltip="Notes (⌘⇧O)"
-      data-tooltip-pos="bottom-end"
-      aria-label="Open notes side panel"
-    >
-      <FolderOpen size={14} aria-hidden />
-    </button>
+    <HoverTip label="Notes (⌘⇧O)" pos="bottom-end">
+      <button
+        type="button"
+        className="hub-icon-btn"
+        onClick={() => window.dispatchEvent(new Event("devhub:notes-toggle"))}
+        aria-label="Open notes side panel"
+      >
+        <FolderOpen size={14} aria-hidden />
+      </button>
+    </HoverTip>
   );
 }

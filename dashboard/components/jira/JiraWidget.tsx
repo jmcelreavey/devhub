@@ -11,7 +11,9 @@ import { type SeverityTone } from "@/components/ui/Severity";
 import { JiraStatusPill } from "@/components/jira/JiraStatusPill";
 import { useGridSize } from "@/lib/hooks/use-grid-size";
 import { copyTextToClipboard } from "@/lib/clipboard";
+import { openInBrowser } from "@/lib/desktop/bridge";
 import { QueueRow } from "@/components/ui/QueueRow";
+import { HoverTip } from "@/components/ui/HoverTip";
 
 interface JiraResponse {
   tickets?: JiraTicket[];
@@ -169,17 +171,17 @@ export function JiraWidget({ collapsed = false, collapsedSummary, onToggle }: Ji
                     borderTop: i === 0 ? "none" : "1px solid var(--border-muted)",
                   }}
                 >
-                  <button
-                    type="button"
-                    className="jira-widget-key font-mono text-xs shrink-0 px-1.5 py-0.5 rounded mt-0.5"
-                    style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
-                    onClick={() => void copyKey(t.key)}
-                    data-tooltip={`Copy ${t.key}`}
-                    data-tooltip-pos="top"
-                    aria-label={`Copy issue key ${t.key}`}
-                  >
-                    {t.key}
-                  </button>
+                  <HoverTip label={`Copy ${t.key}`} pos="top" className="mt-0.5">
+                    <button
+                      type="button"
+                      className="jira-widget-key font-mono text-xs shrink-0 px-1.5 py-0.5 rounded"
+                      style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
+                      onClick={() => void copyKey(t.key)}
+                      aria-label={`Copy issue key ${t.key}`}
+                    >
+                      {t.key}
+                    </button>
+                  </HoverTip>
                   <span
                     className="flex-1 min-w-[8rem] break-words leading-snug text-text"
                     title={t.summary}
@@ -194,17 +196,16 @@ export function JiraWidget({ collapsed = false, collapsedSummary, onToggle }: Ji
                     >
                       {formatUpdatedShort(t.updatedAt)}
                     </span>
-                    <a
- className="shrink-0 rounded p-1 transition-colors jira-widget-open mt-0.5 text-text-subtle"                      href={t.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`Open ${t.key} in Jira`}
-                     
-                      data-tooltip={`Open ${t.key} in Jira`}
-                      data-tooltip-pos="top-end"
-                    >
-                      <ExternalLink size={11} aria-hidden />
-                    </a>
+                    <HoverTip label={`Open ${t.key} in Jira`} pos="top-end" className="mt-0.5">
+                      <button
+                        type="button"
+                        className="shrink-0 rounded p-1 transition-colors jira-widget-open text-text-subtle"
+                        onClick={() => void openInBrowser(t.url)}
+                        aria-label={`Open ${t.key} in Jira`}
+                      >
+                        <ExternalLink size={11} aria-hidden />
+                      </button>
+                    </HoverTip>
                   </span>
                 </div>
               ))}

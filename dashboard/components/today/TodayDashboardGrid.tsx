@@ -333,6 +333,8 @@ function TodayDashboardGridBody({
 
   const sizeMap = useMemo(() => deriveSizeMap(layouts, width), [layouts, width]);
 
+  useEffect(() => () => document.body.removeAttribute("data-grid-resizing"), []);
+
   return (
     <GridSizeContext.Provider value={sizeMap}>
     <ResponsiveGridLayout
@@ -347,6 +349,8 @@ function TodayDashboardGridBody({
       autoSize
       compactor={verticalCompactor}
       onLayoutChange={onLayoutChange}
+      onResizeStart={() => document.body.setAttribute("data-grid-resizing", "true")}
+      onResizeStop={() => document.body.removeAttribute("data-grid-resizing")}
       dragConfig={{
         enabled: true,
         handle: ".today-grid-drag-handle",

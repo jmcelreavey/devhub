@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, ClipboardCopy, Plus, RotateCw, TerminalSquare, X } from "lucide-react";
+import { HoverTip } from "@/components/ui/HoverTip";
 import "@xterm/xterm/css/xterm.css";
 
 const TERMINAL_PORT = process.env.NEXT_PUBLIC_TERMINAL_PORT ?? "1339";
@@ -438,60 +439,60 @@ export function TerminalDock() {
               </button>
             </span>
           ))}
-          <button
-            type="button"
-            className="hub-icon-btn terminal-dock-btn"
-            onClick={() => addTab()}
-            aria-label="New terminal"
-            data-tooltip="New terminal"
-            data-tooltip-pos="top"
-          >
-            <Plus size={13} aria-hidden />
-            <span className="hub-btn-label">New</span>
-          </button>
+          <HoverTip label="New terminal" pos="top">
+            <button
+              type="button"
+              className="hub-icon-btn terminal-dock-btn"
+              onClick={() => addTab()}
+              aria-label="New terminal"
+            >
+              <Plus size={13} aria-hidden />
+              <span className="hub-btn-label">New</span>
+            </button>
+          </HoverTip>
         </div>
         <div className="terminal-dock-actions">
           {active?.cwd && (
             <span className="terminal-dock-cwd">{active.cwd.replace(/^\/Users\/[^/]+/, "~")}</span>
           )}
           {active && (
-            <button
-              type="button"
-              className="hub-icon-btn terminal-dock-btn"
-              onClick={copyActive}
-              aria-label={copied ? "Copied" : "Copy all terminal output"}
-              data-tooltip={copied ? "Copied!" : "Copy all output"}
-              data-tooltip-pos="top-end"
-            >
-              {copied ? <Check size={12} aria-hidden /> : <ClipboardCopy size={12} aria-hidden />}
-              <span className="hub-btn-label">{copied ? "Copied" : "Copy"}</span>
-            </button>
+            <HoverTip label={copied ? "Copied!" : "Copy all output"} pos="top-end">
+              <button
+                type="button"
+                className="hub-icon-btn terminal-dock-btn"
+                onClick={copyActive}
+                aria-label={copied ? "Copied" : "Copy all terminal output"}
+              >
+                {copied ? <Check size={12} aria-hidden /> : <ClipboardCopy size={12} aria-hidden />}
+                <span className="hub-btn-label">{copied ? "Copied" : "Copy"}</span>
+              </button>
+            </HoverTip>
           )}
           {active && (
+            <HoverTip label={restartArmed ? "Click again to confirm" : "Restart session"} pos="top-end">
+              <button
+                type="button"
+                className="hub-icon-btn terminal-dock-btn"
+                data-armed={restartArmed || undefined}
+                onClick={() => handleRestart(active.id)}
+                aria-label={restartArmed ? "Click again to confirm restart" : "Restart session"}
+              >
+                <RotateCw size={12} aria-hidden />
+                <span className="hub-btn-label">{restartArmed ? "Confirm?" : "Restart"}</span>
+              </button>
+            </HoverTip>
+          )}
+          <HoverTip label="Hide (⌃`)" pos="top-end">
             <button
               type="button"
               className="hub-icon-btn terminal-dock-btn"
-              data-armed={restartArmed || undefined}
-              onClick={() => handleRestart(active.id)}
-              aria-label={restartArmed ? "Click again to confirm restart" : "Restart session"}
-              data-tooltip={restartArmed ? "Click again to confirm" : "Restart session"}
-              data-tooltip-pos="top-end"
+              onClick={() => setOpen(false)}
+              aria-label="Hide terminal (sessions keep running)"
             >
-              <RotateCw size={12} aria-hidden />
-              <span className="hub-btn-label">{restartArmed ? "Confirm?" : "Restart"}</span>
+              <ChevronDown size={14} aria-hidden />
+              <span className="hub-btn-label">Hide</span>
             </button>
-          )}
-          <button
-            type="button"
-            className="hub-icon-btn terminal-dock-btn"
-            onClick={() => setOpen(false)}
-            aria-label="Hide terminal (sessions keep running)"
-            data-tooltip="Hide (⌃`)"
-            data-tooltip-pos="top-end"
-          >
-            <ChevronDown size={14} aria-hidden />
-            <span className="hub-btn-label">Hide</span>
-          </button>
+          </HoverTip>
         </div>
       </div>
       <div className="terminal-dock-body">
@@ -534,23 +535,23 @@ export function TerminalDockButton() {
   }, []);
 
   return (
-    <button
-      type="button"
-      className="hub-icon-btn terminal-toggle-btn"
-      onClick={() => window.dispatchEvent(new CustomEvent("devhub:terminal-toggle"))}
-      data-tooltip={terminalLabel}
-      data-tooltip-pos="bottom-end"
-      aria-label={terminalLabel}
-    >
-      <TerminalSquare size={14} aria-hidden />
-      {activeCount > 0 && (
-        <span
-          className="terminal-toggle-count"
-          aria-hidden="true"
-        >
-          {activeCount}
-        </span>
-      )}
-    </button>
+    <HoverTip label={terminalLabel} pos="bottom-end">
+      <button
+        type="button"
+        className="hub-icon-btn terminal-toggle-btn"
+        onClick={() => window.dispatchEvent(new CustomEvent("devhub:terminal-toggle"))}
+        aria-label={terminalLabel}
+      >
+        <TerminalSquare size={14} aria-hidden />
+        {activeCount > 0 && (
+          <span
+            className="terminal-toggle-count"
+            aria-hidden="true"
+          >
+            {activeCount}
+          </span>
+        )}
+      </button>
+    </HoverTip>
   );
 }

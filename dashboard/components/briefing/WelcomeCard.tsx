@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Calendar, LayoutDashboard, Plus, GitBranch, Activity, X } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
+import { HoverTip } from "@/components/ui/HoverTip";
 
 interface SetupStatus {
   github?: boolean;
@@ -86,19 +87,19 @@ export function WelcomeCard({ visible, collapsed, onToggle }: WelcomeCardProps) 
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <TodayCollapseButton collapsed={collapsed} label="Welcome" onToggle={onToggle} />
-            <button
-              type="button"
-              className="today-collapse-toggle today-grid-drag-cancel"
-              aria-label="Dismiss welcome card permanently"
-              data-tooltip="Don't show again"
-              data-tooltip-pos="bottom-end"
-              onClick={() => {
-                dismissWelcomeCardForever();
-                setDismissed(true);
-              }}
-            >
-              <X size={12} aria-hidden />
-            </button>
+            <HoverTip label="Don't show again" pos="bottom-end">
+              <button
+                type="button"
+                className="today-collapse-toggle today-grid-drag-cancel"
+                aria-label="Dismiss welcome card permanently"
+                onClick={() => {
+                  dismissWelcomeCardForever();
+                  setDismissed(true);
+                }}
+              >
+                <X size={12} aria-hidden />
+              </button>
+            </HoverTip>
           </div>
         </div>
         {!collapsed ? (

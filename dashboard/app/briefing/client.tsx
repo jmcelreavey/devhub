@@ -6,6 +6,7 @@ import { BriefingDesignChat } from "@/components/briefing/BriefingDesignChat";
 import { BriefingResearch } from "@/components/briefing/BriefingResearch";
 import { readAppTheme, encodeTheme } from "@/lib/briefing-theme";
 import { useToast } from "@/lib/hooks/use-toast";
+import { openInBrowser } from "@/lib/desktop/bridge";
 
 // The /briefing page is now a thin shell around a bespoke, AI-authored canvas.
 // The canvas (full HTML/CSS/JS) is served same-origin from /api/briefing/canvas
@@ -88,7 +89,7 @@ export default function Client() {
       } catch {
         toastSuccess("Briefing shared");
       }
-      window.open(url, "_blank", "noopener,noreferrer");
+      void openInBrowser(url);
     } catch (err) {
       toastError(err instanceof Error ? err.message : "Could not publish share");
     } finally {
@@ -128,7 +129,7 @@ export default function Client() {
           <button
             type="button"
             className="btn btn-ghost briefing-toolbar-btn"
-            onClick={() => window.open(buildSrc(), "_blank", "noopener,noreferrer")}
+            onClick={() => void openInBrowser(buildSrc())}
             title="Open the canvas in a new tab"
           >
             <ExternalLink size={13} aria-hidden /> Open

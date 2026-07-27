@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { SeverityPill } from "@/components/ui/Severity";
 import { statusTone } from "@/components/jira/JiraWidget";
 import { JiraTransitionModal } from "@/components/jira/JiraTransitionModal";
+import { HoverTip } from "@/components/ui/HoverTip";
 import { useToast } from "@/lib/hooks/use-toast";
 import { mutate } from "swr";
 
@@ -38,16 +39,16 @@ export function JiraStatusPill({ ticketKey, status, onChanged }: JiraStatusPillP
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label={`Change status from ${status}`}
-        data-tooltip="Change Jira status"
-        data-tooltip-pos="top-end"
-        style={{ border: "none", background: "none", padding: 0, cursor: "pointer", borderRadius: 999 }}
-      >
-        <SeverityPill tone={statusTone(status)}>{status}</SeverityPill>
-      </button>
+      <HoverTip label="Change Jira status" pos="top-end">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label={`Change status from ${status}`}
+          style={{ border: "none", background: "none", padding: 0, cursor: "pointer", borderRadius: 999 }}
+        >
+          <SeverityPill tone={statusTone(status)}>{status}</SeverityPill>
+        </button>
+      </HoverTip>
       <JiraTransitionModal
         open={open}
         jiraKey={ticketKey}

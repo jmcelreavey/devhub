@@ -28,6 +28,7 @@ import { flattenTreeFiles } from "@/lib/tree-utils";
 import { clearFocusSession, readFocusSession, writeFocusSession } from "@/lib/focus-session-storage";
 import { clearRouteUsage, summariseRouteUsage } from "@/lib/route-usage";
 import { copyTextToClipboard } from "@/lib/clipboard";
+import { openInBrowser } from "@/lib/desktop/bridge";
 
 type CommandKind = "nav" | "note" | "task" | "ticket" | "action" | "diagram" | "content";
 
@@ -259,7 +260,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       detail: t.key,
       hint: t.status,
       perform: () => {
-        window.open(t.url, "_blank", "noopener,noreferrer");
+        void openInBrowser(t.url);
       },
     }));
 

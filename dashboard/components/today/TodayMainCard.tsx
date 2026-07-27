@@ -1,7 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { FileText, ListTodo, MoreHorizontal, Trash2 } from "lucide-react";
 import { TaskList } from "@/components/tasks/TaskList";
 import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
@@ -56,23 +57,35 @@ export function TodayMainCard({
   onNoteChange: (blocks: DevHubPartialBlock[]) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>();
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const updateMenuPosition = useCallback(() => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) setMenuStyle({ top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) });
+  }, []);
 
   useEffect(() => {
     if (!menuOpen) return;
     const onDown = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+      const target = e.target as Node;
+      if (!menuRef.current?.contains(target) && !triggerRef.current?.contains(target)) setMenuOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setMenuOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
     };
-  }, [menuOpen]);
+  }, [menuOpen, updateMenuPosition]);
 
   return (
     <section
@@ -106,36 +119,38 @@ export function TodayMainCard({
               /{tasksTotal} done
             </span>
           )}
-          <div className="relative today-grid-drag-cancel" ref={menuRef}>
+          <div className="relative today-grid-drag-cancel">
             <button
+              ref={triggerRef}
               type="button"
               className="today-collapse-toggle"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               aria-label="More actions"
-              onClick={() => setMenuOpen((o) => !o)}
+              onClick={() => { updateMenuPosition(); setMenuOpen((o) => !o); }}
             >
               <MoreHorizontal size={13} aria-hidden />
             </button>
-            <div
-              role="menu"
-              aria-label="Card actions"
-              className="today-actions-menu pop-soft"
-              style={{ display: menuOpen ? undefined : "none" }}
-              onClick={() => setMenuOpen(false)}
-            >
+            {menuOpen && menuStyle && typeof document !== "undefined" ? createPortal(
+              <div ref={menuRef} role="menu" aria-label="Card actions" className="today-actions-menu pop-soft" data-portal style={menuStyle}>
               <StandupCopyButton variant="compact" />
               {tab === "notes" && !mainCollapsed && (
                 <button
                   type="button"
-                  className="btn btn-ghost justify-start px-2.5 py-1 text-xs"
+                  className="launch-menu-item"
+                  role="menuitem"
                   onClick={onClearNote}
                   title="Clear today's note"
                 >
-                  <Trash2 size={12} aria-hidden /> Clear note
+                  <span className="launch-menu-icon">
+                    <Trash2 size={12} aria-hidden />
+                  </span>
+                  <span className="launch-menu-copy">
+                    <span className="launch-menu-label">Clear note</span>
+                  </span>
                 </button>
               )}
-            </div>
+              </div>, document.body) : null}
           </div>
           <TodayCollapseButton
             collapsed={mainCollapsed}

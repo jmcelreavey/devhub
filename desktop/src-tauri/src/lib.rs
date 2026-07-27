@@ -19,14 +19,18 @@ mod selftest;
 mod sidecar;
 mod updater;
 
+use std::io::{Read, Write};
+use std::net::{TcpStream, ToSocketAddrs};
 use std::path::PathBuf;
+use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use rand::Rng;
 use serde::Serialize;
 use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 use logging::DesktopLog;
 use paths::{default_app_data, RuntimePaths};
@@ -34,6 +38,8 @@ use sidecar::{BootState, Sidecar};
 
 const DEFAULT_PORT: u16 = 1337;
 const DEFAULT_TERMINAL_PORT: u16 = 1339;
+const DEV_SERVER_START_TIMEOUT: Duration = Duration::from_secs(90);
+const DEV_SERVER_STOP_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// A fresh 256-bit token per launch.
 ///
@@ -48,6 +54,7 @@ pub fn new_bootstrap_token() -> String {
 
 pub(crate) struct AppState {
     sidecar: Arc<Sidecar>,
+    dev_server: Arc<Mutex<Option<Child>>>,
     paths: RuntimePaths,
     pub(crate) log: DesktopLog,
     boot: Mutex<BootState>,
@@ -177,7 +184,6 @@ fn open_logs(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result
 /// the webview cannot name a directory and have it selected.
 #[tauri::command]
 async fn pick_folder(app: tauri::AppHandle, title: Option<String>) -> Option<String> {
-    use tauri_plugin_dialog::DialogExt;
     let (tx, rx) = std::sync::mpsc::channel();
     app.dialog()
         .file()
@@ -198,6 +204,61 @@ fn desktop_info(state: tauri::State<'_, AppState>) -> serde_json::Value {
         "resourceRoot": state.paths.resource_root.to_string_lossy(),
         "logPath": state.log.path().to_string_lossy(),
     })
+}
+
+/// Persist a small, structured breadcrumb from the dashboard webview.
+///
+/// The remote dashboard is allowed to report only known bridge phases. It
+/// cannot choose a log path, and the payload is scrubbed before it reaches disk.
+#[tauri::command]
+fn renderer_log(
+    phase: String,
+    message: String,
+    host: Option<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let phase = match phase.as_str() {
+        "bridge:open" | "bridge:tauri-detect" | "bridge:invoke" | "nav:external-intercept" => phase,
+        _ => return Err("Unknown renderer log phase".into()),
+    };
+    let host = host.as_deref().map(sanitize_log_host);
+    let message = sanitize_renderer_message(&message);
+    let detail = host
+        .filter(|host| !host.is_empty())
+        .map(|host| format!("[host={host}] {message}"))
+        .unwrap_or(message);
+    state.log.write_line(&format!("renderer:{phase}"), &detail);
+    Ok(())
+}
+
+fn sanitize_log_host(host: &str) -> String {
+    host.chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':' | '[' | ']'))
+        .take(255)
+        .collect()
+}
+
+fn sanitize_renderer_message(message: &str) -> String {
+    let mut clean = message
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(500)
+        .collect::<String>();
+    let lower = clean.to_ascii_lowercase();
+    for marker in [
+        "token=",
+        "secret=",
+        "password=",
+        "authorization=",
+        "api_key=",
+    ] {
+        if let Some(index) = lower.find(marker) {
+            clean.truncate(index + marker.len());
+            clean.push_str("[redacted]");
+            break;
+        }
+    }
+    clean
 }
 
 /// Restart the sidecar after a failure.
@@ -267,6 +328,617 @@ fn dev_server_url_for(app: Option<&tauri::AppHandle>) -> Option<String> {
     }
 }
 
+fn dev_server_responds(url: &str) -> Result<(), String> {
+    let parsed = url
+        .parse::<tauri::Url>()
+        .map_err(|err| format!("Bad dev server URL: {err}"))?;
+    if parsed.scheme() != "http" {
+        return Err("Dev server attach currently requires an http URL".into());
+    }
+    let host = parsed.host_str().ok_or("Dev server URL has no host")?;
+    let port = parsed
+        .port_or_known_default()
+        .ok_or("Dev server URL has no port")?;
+    let addresses = (host, port)
+        .to_socket_addrs()
+        .map_err(|err| err.to_string())?;
+    let mut stream = addresses
+        .filter_map(|address| TcpStream::connect_timeout(&address, Duration::from_secs(2)).ok())
+        .next()
+        .ok_or_else(|| format!("No dev server is responding at {url}. Start `npm run dev` in the DevHub checkout, then Retry."))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(3)))
+        .map_err(|err| err.to_string())?;
+    write!(
+        stream,
+        "GET /api/desktop/health HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n"
+    )
+    .map_err(|err| err.to_string())?;
+    let mut response = [0_u8; 4096];
+    let size = stream.read(&mut response).map_err(|_| {
+        format!("The dev server at {url} did not return a health response. Start `npm run dev`, then Retry.")
+    })?;
+    let response = String::from_utf8_lossy(&response[..size]);
+    if !response.starts_with("HTTP/") {
+        return Err(format!("The process at {url} is not an HTTP server."));
+    }
+    if !response.starts_with("HTTP/1.1 200") && !response.starts_with("HTTP/1.0 200") {
+        return Err(format!(
+            "The server at {url} did not pass DevHub's health check ({}). Start `npm run dev` in this checkout, then Retry.",
+            response.lines().next().unwrap_or("no HTTP status")
+        ));
+    }
+    let body = response
+        .split_once("\r\n\r\n")
+        .map(|(_, body)| body)
+        .unwrap_or_default();
+    let is_devhub = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|value| value.get("devhub").and_then(|value| value.as_bool()))
+        == Some(true);
+    if !is_devhub {
+        return Err(format!(
+            "The server at {url} returned 200 but is not DevHub. Start `npm run dev` in this checkout, then Retry."
+        ));
+    }
+    Ok(())
+}
+
+fn dev_server_endpoint(url: &str) -> Result<(String, u16), String> {
+    let parsed = url
+        .parse::<tauri::Url>()
+        .map_err(|err| format!("Bad dev server URL: {err}"))?;
+    if parsed.scheme() != "http" {
+        return Err("Dev server attach currently requires an http URL".into());
+    }
+    let host = parsed
+        .host_str()
+        .ok_or("Dev server URL has no host")?
+        .to_string();
+    let port = parsed
+        .port_or_known_default()
+        .ok_or("Dev server URL has no port")?;
+    Ok((host, port))
+}
+
+fn dev_server_repo_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let configured = std::env::var_os("DEVHUB_REPO_ROOT")
+        .map(PathBuf::from)
+        .or_else(|| {
+            app.try_state::<AppState>()
+                .map(|state| state.paths.app_data.join("repo-path.txt"))
+                .and_then(|path| std::fs::read_to_string(path).ok())
+                .map(|path| PathBuf::from(path.trim()))
+        })
+        .ok_or_else(|| {
+            "Cannot find the DevHub checkout. Set DEVHUB_REPO_ROOT or restore ~/Library/Application Support/DevHub/repo-path.txt."
+                .to_string()
+        })?;
+
+    if configured.join("package.json").is_file() && configured.join("dashboard").is_dir() {
+        Ok(configured)
+    } else {
+        Err(format!(
+            "DevHub checkout is missing or incomplete: {}",
+            configured.display()
+        ))
+    }
+}
+
+fn dev_server_path() -> std::ffi::OsString {
+    let mut entries = vec![
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/usr/bin"),
+    ];
+    if let Some(home) = std::env::var_os("HOME") {
+        let home = PathBuf::from(home);
+        entries.push(home.join(".volta").join("bin"));
+        entries.push(home.join(".npm-global").join("bin"));
+    }
+    entries.extend(
+        std::env::var_os("PATH")
+            .map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
+            .unwrap_or_default(),
+    );
+    std::env::join_paths(entries).unwrap_or_else(|_| "/usr/bin:/bin".into())
+}
+
+fn npm_command(path: &std::ffi::OsStr) -> Result<PathBuf, String> {
+    if let Some(configured) = std::env::var_os("DEVHUB_NPM_PATH") {
+        let configured = PathBuf::from(configured);
+        if configured.is_file() {
+            return Ok(configured);
+        }
+        return Err(format!(
+            "DEVHUB_NPM_PATH does not point to an npm executable: {}",
+            configured.display()
+        ));
+    }
+
+    for directory in std::env::split_paths(path) {
+        let npm = directory.join(if cfg!(windows) { "npm.cmd" } else { "npm" });
+        if npm.is_file() {
+            return Ok(npm);
+        }
+    }
+    Err("Could not find npm. Set DEVHUB_NPM_PATH to its full path, then Retry.".to_string())
+}
+
+fn start_dev_server(app: &tauri::AppHandle, url: &str) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let repo_root = dev_server_repo_root(app)?;
+    let path = dev_server_path();
+    let npm = npm_command(&path)?;
+
+    state.log.write_line(
+        "shell:attach",
+        &format!(
+            "[attach] starting `{}` run dev in {}",
+            npm.display(),
+            repo_root.display()
+        ),
+    );
+    let mut command = Command::new(npm);
+    command
+        .arg("run")
+        .arg("dev")
+        .current_dir(&repo_root)
+        .env("PATH", &path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        unsafe {
+            command.pre_exec(|| {
+                if libc_setsid() == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
+
+    let mut child = command.spawn().map_err(|err| {
+        format!(
+            "Could not start `npm run dev` in {}: {err}",
+            repo_root.display()
+        )
+    })?;
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let stdout_log = state.log.clone();
+    let stderr_log = state.log.clone();
+
+    if let Some(stdout) = stdout {
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            for line in std::io::BufReader::new(stdout)
+                .lines()
+                .map_while(Result::ok)
+            {
+                stdout_log.write_line("sidecar:dev:stdout", &line);
+            }
+        });
+    }
+    if let Some(stderr) = stderr {
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            for line in std::io::BufReader::new(stderr)
+                .lines()
+                .map_while(Result::ok)
+            {
+                stderr_log.write_line("sidecar:dev:stderr", &line);
+            }
+        });
+    }
+    *state.dev_server.lock().unwrap() = Some(child);
+    state.log.write_line(
+        "shell:attach",
+        &format!("[attach] waiting for health at {url}/api/desktop/health"),
+    );
+    Ok(())
+}
+
+fn stop_dev_server(app: &tauri::AppHandle) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let mut child = match state.dev_server.lock() {
+        Ok(child) => child,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    let Some(mut child) = child.take() else {
+        return;
+    };
+    let pid = child.id();
+    state.log.write_line(
+        "shell:attach",
+        &format!("[attach] stopping dev server group {pid}"),
+    );
+
+    #[cfg(unix)]
+    unsafe {
+        libc_killpg(pid as i32, 15);
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = child.kill();
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        if matches!(child.try_wait(), Ok(Some(_))) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    #[cfg(unix)]
+    unsafe {
+        libc_killpg(pid as i32, 9);
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+fn command_output(command: &str, args: &[String]) -> Result<String, String> {
+    Command::new(command)
+        .args(args)
+        .output()
+        .map_err(|err| format!("Could not run {command}: {err}"))
+        .and_then(|output| {
+            if output.status.success() {
+                Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+            } else {
+                Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+            }
+        })
+}
+
+fn listener_pids(port: u16) -> Result<Vec<u32>, String> {
+    let output = command_output(
+        "/usr/sbin/lsof",
+        &[
+            "-nP".into(),
+            format!("-iTCP:{port}"),
+            "-sTCP:LISTEN".into(),
+            "-t".into(),
+        ],
+    )?;
+    Ok(output
+        .lines()
+        .filter_map(|line| line.trim().parse::<u32>().ok())
+        .collect())
+}
+
+fn process_cwd(pid: u32) -> Option<PathBuf> {
+    let output = command_output(
+        "/usr/sbin/lsof",
+        &[
+            "-a".into(),
+            "-p".into(),
+            pid.to_string(),
+            "-d".into(),
+            "cwd".into(),
+            "-Fn".into(),
+        ],
+    )
+    .ok()?;
+    output
+        .lines()
+        .find_map(|line| line.strip_prefix('n'))
+        .map(PathBuf::from)
+}
+
+fn process_command(pid: u32) -> Option<String> {
+    command_output(
+        "/bin/ps",
+        &[
+            "-ww".into(),
+            "-p".into(),
+            pid.to_string(),
+            "-o".into(),
+            "command=".into(),
+        ],
+    )
+    .ok()
+    .map(|output| output.trim().to_string())
+}
+
+fn process_parent(pid: u32) -> Option<u32> {
+    command_output(
+        "/bin/ps",
+        &["-p".into(), pid.to_string(), "-o".into(), "ppid=".into()],
+    )
+    .ok()?
+    .trim()
+    .parse()
+    .ok()
+}
+
+/// The only foreign listeners we may stop are DevHub's checkout services.
+///
+/// A port number is not ownership. The listener must have the configured
+/// checkout's dashboard directory as its cwd *and* match one of the scripts
+/// `npm run dev` launches. That excludes unrelated local servers which merely
+/// happen to use our conventional ports.
+fn is_checkout_dev_listener(pid: u32, repo_root: &std::path::Path) -> bool {
+    let dashboard = repo_root.join("dashboard").canonicalize().ok();
+    let cwd = process_cwd(pid).and_then(|cwd| cwd.canonicalize().ok());
+    if dashboard != cwd {
+        return false;
+    }
+    let Some(command) = process_command(pid) else {
+        return false;
+    };
+    command.contains("next-server")
+        || command.contains("scripts/lan-port-proxy.ts")
+        || command.contains("scripts/terminal-pty-server.ts")
+}
+
+/// A healthy DevHub is still not necessarily *this checkout*. Attach must not
+/// quietly reuse an old worktree merely because it also happens to use 1337.
+fn verify_checkout_dev_server(app: &tauri::AppHandle, url: &str) -> Result<(), String> {
+    let (host, port) = dev_server_endpoint(url)?;
+    if !matches!(host.as_str(), "localhost" | "127.0.0.1" | "::1" | "[::1]") {
+        return Ok(());
+    }
+
+    let repo_root = dev_server_repo_root(app)?;
+    let listener_is_checkout = listener_pids(port)?
+        .into_iter()
+        .any(|pid| is_checkout_dev_listener(pid, &repo_root));
+    if listener_is_checkout {
+        return Ok(());
+    }
+
+    Err(format!(
+        "Port {port} is serving DevHub, but not from this checkout ({}). Stop that server or update the recorded checkout before attaching.",
+        repo_root.display()
+    ))
+}
+
+fn dev_command_ancestor(pid: u32) -> Option<u32> {
+    let mut current = pid;
+    for _ in 0..16 {
+        let command = process_command(current)?;
+        if command.contains("npm") && command.contains("run dev") {
+            return Some(current);
+        }
+        let parent = process_parent(current)?;
+        if parent <= 1 || parent == current {
+            return None;
+        }
+        current = parent;
+    }
+    None
+}
+
+fn signal_process(pid: u32, signal: i32) {
+    #[cfg(unix)]
+    unsafe {
+        libc_kill(pid as i32, signal);
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (pid, signal);
+    }
+}
+
+fn wait_for_ports_to_clear(ports: &[u16], timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if ports.iter().all(|port| !sidecar::port_in_use(*port)) {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(150));
+    }
+    ports.iter().all(|port| !sidecar::port_in_use(*port))
+}
+
+/// Stop the checkout server before returning to the packaged server.
+///
+/// The app-owned child has a private process group and is stopped through its
+/// handle. A developer-started server has no such handle, so we inspect its
+/// listeners first and signal only verified DevHub processes. We never signal a
+/// process group here: when npm was launched from a terminal, that group also
+/// contains the user's shell.
+fn stop_attached_dev_server(app: &tauri::AppHandle) -> Result<(), String> {
+    set_boot(
+        app,
+        BootState::Starting {
+            service: "stopping-dev-server".into(),
+        },
+    );
+    let state = app.state::<AppState>();
+    state
+        .log
+        .write_line("shell:switch", "[switch] phase=stopping-development-server");
+    stop_dev_server(app);
+
+    let ports = [DEFAULT_PORT, DEFAULT_TERMINAL_PORT];
+    if wait_for_ports_to_clear(&ports, Duration::from_secs(2)) {
+        return Ok(());
+    }
+
+    let repo_root = dev_server_repo_root(app)?;
+    let mut listeners = Vec::new();
+    for port in ports {
+        if !sidecar::port_in_use(port) {
+            continue;
+        }
+        for pid in listener_pids(port)? {
+            if !is_checkout_dev_listener(pid, &repo_root) {
+                return Err(format!(
+                    "Port {port} is held by process {pid}, which is not a verified DevHub checkout server. DevHub left it alone."
+                ));
+            }
+            listeners.push(pid);
+        }
+    }
+    listeners.sort_unstable();
+    listeners.dedup();
+    if listeners.is_empty() {
+        return Err(
+            "DevHub's ports are still occupied, but no listener could be identified.".into(),
+        );
+    }
+
+    let mut dev_commands = listeners
+        .iter()
+        .filter_map(|pid| dev_command_ancestor(*pid))
+        .collect::<Vec<_>>();
+    dev_commands.sort_unstable();
+    dev_commands.dedup();
+    for pid in dev_commands {
+        state.log.write_line(
+            "shell:switch",
+            &format!("[switch] stopping verified `npm run dev` process {pid}"),
+        );
+        signal_process(pid, 15);
+    }
+    if wait_for_ports_to_clear(&ports, Duration::from_secs(5)) {
+        return Ok(());
+    }
+
+    // npm does not always forward SIGTERM across every concurrently child.
+    // These PIDs have already passed the repo+cowd+command fingerprint above,
+    // so this remains narrower than killing "whatever owns 1337".
+    for pid in &listeners {
+        state.log.write_line(
+            "shell:switch",
+            &format!("[switch] stopping verified checkout listener {pid}"),
+        );
+        signal_process(*pid, 15);
+    }
+    if wait_for_ports_to_clear(&ports, Duration::from_secs(3)) {
+        return Ok(());
+    }
+
+    for pid in listeners {
+        state.log.write_line(
+            "shell:switch",
+            &format!("[switch] verified listener {pid} ignored SIGTERM; sending SIGKILL"),
+        );
+        signal_process(pid, 9);
+    }
+    if wait_for_ports_to_clear(&ports, Duration::from_secs(2)) {
+        return Ok(());
+    }
+
+    Err(format!(
+        "DevHub's development server did not release ports 1337/1339 within {}s. Check the logs, then Retry.",
+        DEV_SERVER_STOP_TIMEOUT.as_secs()
+    ))
+}
+
+fn wait_for_dev_server(app: &tauri::AppHandle, url: &str) -> Result<(), String> {
+    let deadline = Instant::now() + DEV_SERVER_START_TIMEOUT;
+    while Instant::now() < deadline {
+        if dev_server_responds(url).is_ok() {
+            if let Some(state) = app.try_state::<AppState>() {
+                state
+                    .log
+                    .write_line("shell:attach", "[attach] dev server is healthy");
+            }
+            return Ok(());
+        }
+        if let Some(state) = app.try_state::<AppState>() {
+            if let Ok(mut child) = state.dev_server.lock() {
+                if let Some(child) = child.as_mut() {
+                    if let Ok(Some(status)) = child.try_wait() {
+                        return Err(format!("`npm run dev` exited during startup ({status})."));
+                    }
+                }
+            }
+        }
+        std::thread::sleep(Duration::from_millis(300));
+    }
+    Err(format!(
+        "`npm run dev` did not become healthy within {}s. Check the log tail below.",
+        DEV_SERVER_START_TIMEOUT.as_secs()
+    ))
+}
+
+/// Navigate through a fresh network-first page before opening Attach mode.
+///
+/// This clears the packaged service worker, which shares localhost:1337 with
+/// development and would otherwise cache stable webpack asset URLs forever.
+fn attach_dev_bootstrap_url(url: &str) -> Result<tauri::Url, String> {
+    let mut parsed = url
+        .parse::<tauri::Url>()
+        .map_err(|err| format!("Bad dev server URL: {err}"))?;
+    parsed.set_path("/attach-dev.html");
+    parsed.set_query(None);
+    Ok(parsed)
+}
+
+fn navigate_to_dev_server(app: &tauri::AppHandle, url: String) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    match attach_dev_bootstrap_url(&url) {
+        Ok(attach_url) => {
+            if let Err(err) = window.navigate(attach_url) {
+                fail(
+                    app,
+                    &format!("Could not open the development server: {err}"),
+                );
+            } else {
+                if let Some(state) = app.try_state::<AppState>() {
+                    state
+                        .log
+                        .write_line("shell:attach", "[attach] navigation started");
+                }
+                set_boot(app, BootState::Ready { url });
+                show_main_window(app);
+            }
+        }
+        Err(err) => fail(app, &err),
+    }
+}
+
+fn attach_dev_server(app: &tauri::AppHandle, url: String) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    state.log.write_line(
+        "shell:attach",
+        &format!("[attach] checking {url}/api/desktop/health"),
+    );
+    set_boot(
+        app,
+        BootState::Starting {
+            service: "dev-server".into(),
+        },
+    );
+    match dev_server_responds(&url) {
+        Ok(()) => {
+            verify_checkout_dev_server(app, &url)?;
+            navigate_to_dev_server(app, url);
+            Ok(())
+        }
+        Err(health_error) => {
+            let (host, port) = dev_server_endpoint(&url)?;
+            if !matches!(host.as_str(), "localhost" | "127.0.0.1" | "::1" | "[::1]") {
+                return Err(health_error);
+            }
+            if sidecar::port_in_use(port) {
+                return Err(format!(
+                    "Port {port} is already in use, but it did not pass DevHub's health check. DevHub will not start a second server over it; stop or fix that process, then Retry."
+                ));
+            }
+            start_dev_server(app, &url)?;
+            let handle = app.clone();
+            std::thread::spawn(move || match wait_for_dev_server(&handle, &url) {
+                Ok(()) => navigate_to_dev_server(&handle, url),
+                Err(err) => fail(&handle, &err),
+            });
+            Ok(())
+        }
+    }
+}
+
 fn dev_server_url() -> Option<String> {
     std::env::var("DEVHUB_DEV_SERVER_URL")
         .ok()
@@ -279,25 +951,18 @@ fn start_sidecar(app: &tauri::AppHandle) -> Result<(), String> {
     let sidecar = state.sidecar.clone();
     let paths = state.paths.clone();
 
-    set_boot(app, BootState::Preparing);
+    set_boot(
+        app,
+        BootState::Starting {
+            service: "packaged-server".into(),
+        },
+    );
 
     if let Some(url) = dev_server_url_for(Some(app)) {
-        state
-            .log
-            .write_line("shell", &format!("attaching to dev server at {url}"));
-        let handle = app.clone();
-        std::thread::spawn(move || {
-            if let Some(window) = handle.get_webview_window("main") {
-                match url.parse() {
-                    Ok(parsed) => {
-                        let _ = window.navigate(parsed);
-                        set_boot(&handle, BootState::Ready { url });
-                        show_main_window(&handle);
-                    }
-                    Err(err) => fail(&handle, &format!("Bad DEVHUB_DEV_SERVER_URL: {err}")),
-                }
-            }
-        });
+        if let Err(err) = attach_dev_server(app, url) {
+            fail(app, &err);
+            return Err(err);
+        }
         return Ok(());
     }
 
@@ -359,7 +1024,7 @@ fn fail(app: &tauri::AppHandle, message: &str) {
         .map(|s| s.log.tail(20))
         .unwrap_or_default();
     if let Some(state) = app.try_state::<AppState>() {
-        state.log.write_line("shell", message);
+        state.log.write_line("shell:failure", message);
     }
     set_boot(
         app,
@@ -572,6 +1237,7 @@ pub fn run() {
             open_logs,
             pick_folder,
             desktop_info,
+            renderer_log,
             retry_start,
             updater::current_version,
             updater::check_update,
@@ -605,8 +1271,8 @@ pub fn run() {
 
             let log = DesktopLog::open(&paths.log_dir());
             log.write_line(
-                "shell",
-                &format!("DevHub {} starting", env!("CARGO_PKG_VERSION")),
+                "shell:startup",
+                &format!("[startup] DevHub {} starting", env!("CARGO_PKG_VERSION")),
             );
 
             let port = std::env::var("DEVHUB_PORT")
@@ -627,6 +1293,7 @@ pub fn run() {
 
             app.manage(AppState {
                 sidecar,
+                dev_server: Arc::new(Mutex::new(None)),
                 paths,
                 log,
                 boot: Mutex::new(BootState::Preparing),
@@ -726,38 +1393,61 @@ pub fn run() {
                 let _ = app.emit("devhub://check-updates", ());
             }
             /*
-             * Toggle between the packaged server and a dev server you are
-             * running yourself.
+             * Toggle between the packaged server and a checkout server.
              *
-             * Writing a file and restarting rather than switching in place:
-             * the sidecar owns ports and a process group, and swapping which
-             * server backs a live window mid-session is a class of state bug
-             * nobody wants to debug. A restart is two seconds and is
-             * unambiguous.
+             * Writing the preference then restarting gives the new server a
+             * fresh browser session and keeps sidecar ownership unambiguous.
+             * The stop work happens before the restart so the replacement
+             * never races a listener that was supposed to be gone.
              */
             "toggle-dev-server" => {
                 if let Some(file) = dev_server_pref_file(app) {
                     let currently_attached = dev_server_url_for(Some(app)).is_some();
                     if currently_attached {
+                        if let Err(err) = stop_attached_dev_server(app) {
+                            if let Some(state) = app.try_state::<AppState>() {
+                                state.log.write_line(
+                                    "shell:switch",
+                                    &format!("[switch] packaged transition blocked: {err}"),
+                                );
+                            }
+                            app.dialog()
+                                .message(format!(
+                                    "DevHub could not safely stop the development server.\n\n{err}"
+                                ))
+                                .title("Could not switch to packaged server")
+                                .kind(MessageDialogKind::Warning)
+                                .show(|_| {});
+                            return;
+                        }
                         let _ = std::fs::remove_file(&file);
                     } else {
                         if let Some(parent) = file.parent() {
                             let _ = std::fs::create_dir_all(parent);
                         }
-                        // The dev server runs on the same port the packaged one
-                        // would, so the two are mutually exclusive by design —
-                        // start `npm run dev` first, then attach.
+                        // The dev server uses the packaged server's ports, so
+                        // stop the packaged sidecar before restarting. Startup
+                        // will reuse a healthy checkout server or launch one.
                         let _ = std::fs::write(&file, "http://localhost:1337");
                     }
                     if let Some(state) = app.try_state::<AppState>() {
                         state.log.write_line(
-                            "shell",
+                            "shell:switch",
                             if currently_attached {
-                                "switching back to the packaged server"
+                                "[switch] phase=starting-packaged-server"
                             } else {
-                                "attaching to http://localhost:1337 on next launch"
+                                "[switch] phase=starting-development-server"
                             },
                         );
+                    }
+                    // Tauri's restart can launch the replacement before the
+                    // old process reaches its exit handler. Stop only our
+                    // packaged child synchronously so it cannot briefly keep
+                    // 1337/1339 and make the replacement fail at boot.
+                    if !currently_attached {
+                        if let Some(state) = app.try_state::<AppState>() {
+                            state.sidecar.stop();
+                        }
                     }
                     app.restart();
                 }
@@ -773,6 +1463,7 @@ pub fn run() {
                 if let Some(state) = window.app_handle().try_state::<AppState>() {
                     state.sidecar.stop();
                 }
+                stop_dev_server(window.app_handle());
             }
         })
         .build(tauri::generate_context!())
@@ -782,8 +1473,19 @@ pub fn run() {
                 if let Some(state) = app.try_state::<AppState>() {
                     state.sidecar.stop();
                 }
+                stop_dev_server(app);
             }
         });
+}
+
+#[cfg(unix)]
+extern "C" {
+    #[link_name = "setsid"]
+    fn libc_setsid() -> i32;
+    #[link_name = "kill"]
+    fn libc_kill(pid: i32, signal: i32) -> i32;
+    #[link_name = "killpg"]
+    fn libc_killpg(pgrp: i32, sig: i32) -> i32;
 }
 
 #[cfg(test)]
@@ -859,5 +1561,72 @@ mod tests {
         assert_eq!(a.len(), 64, "expected 32 bytes of hex");
         assert_ne!(a, b, "each launch must get a fresh token");
         assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn attach_requires_a_healthy_http_server() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 1024];
+            let size = stream.read(&mut request).unwrap();
+            let request = String::from_utf8_lossy(&request[..size]);
+            assert!(request.starts_with("GET /api/desktop/health HTTP/1.1"));
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 15\r\n\r\n{\"devhub\":true}")
+                .unwrap();
+        });
+
+        assert!(dev_server_responds(&format!("http://127.0.0.1:{port}")).is_ok());
+    }
+
+    #[test]
+    fn attach_rejects_an_unhealthy_or_non_devhub_http_server() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 1024];
+            let _ = stream.read(&mut request).unwrap();
+            stream
+                .write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n")
+                .unwrap();
+        });
+
+        assert!(dev_server_responds(&format!("http://127.0.0.1:{port}")).is_err());
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 1024];
+            let _ = stream.read(&mut request).unwrap();
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}")
+                .unwrap();
+        });
+
+        assert!(dev_server_responds(&format!("http://127.0.0.1:{port}")).is_err());
+    }
+
+    #[test]
+    fn attach_parses_the_configured_dev_server_endpoint() {
+        assert_eq!(
+            dev_server_endpoint("http://localhost:1337").unwrap(),
+            ("localhost".into(), 1337)
+        );
+        assert!(dev_server_endpoint("https://localhost:1337").is_err());
+        assert!(dev_server_endpoint("not a URL").is_err());
+    }
+
+    #[test]
+    fn attach_bootstrap_page_keeps_the_dev_server_origin() {
+        assert_eq!(
+            attach_dev_bootstrap_url("http://localhost:1337/worktree?stale=1")
+                .unwrap()
+                .as_str(),
+            "http://localhost:1337/attach-dev.html"
+        );
     }
 }

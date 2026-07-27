@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, CornerDownLeft, Download, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Check, CornerDownLeft, Download, GitMerge, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
 import { useToast } from "@/lib/hooks/use-toast";
@@ -20,6 +20,7 @@ const ACTION_SUCCESS_LABELS: Record<string, (branch?: unknown) => string> = {
   fetch: () => "Fetched",
   pull: () => "Pulled",
   push: () => "Pushed",
+  "sync-main": () => "Synced with main",
 };
 
 export function BranchesPanel({
@@ -126,6 +127,7 @@ export function BranchesPanel({
         ? "Nothing to pull — local is ahead of upstream"
         : "Already up to date"
       : `Pull ${behind} commit${behind === 1 ? "" : "s"} from ${data?.upstream} (fast-forward only)`;
+  const behindMain = data?.behindMain ?? 0;
 
   return (
     <div className="repo-git-branches">
@@ -159,6 +161,12 @@ export function BranchesPanel({
         <button type="button" className="btn btn-ghost" disabled={acting !== null} onClick={() => void createBranch()}>
           <Plus size={11} /> New branch
         </button>
+        {behindMain > 0 && (
+          <button type="button" className="btn btn-ghost" disabled={acting !== null} title={`Stash local work, merge ${data?.mainBranch}, push, and restore the stash`} onClick={() => void act("sync-main")}>
+            {acting === "sync-main" ? <RefreshCw size={11} className="animate-spin" /> : <GitMerge size={11} />}
+            Sync {behindMain}
+          </button>
+        )}
         <div className="repo-git-spacer" />
         <span className="text-xs text-text-subtle">
           on <span className="text-accent">{data?.currentBranch}</span>
@@ -169,6 +177,7 @@ export function BranchesPanel({
               {behind > 0 ? `↓${behind}` : null}
             </span>
           )}
+          {data?.mainBranch && <span style={{ marginLeft: 6 }}>{behindMain > 0 ? `${behindMain} behind main` : "aligned with main"}</span>}
         </span>
       </div>
       <div className="repo-git-branch-list">

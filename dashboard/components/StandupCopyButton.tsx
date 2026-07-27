@@ -347,20 +347,50 @@ export function StandupCopyButton({ variant = "strip" }: StandupCopyButtonProps)
   if (variant === "compact") {
     return (
       <>
-        <div className="inline-flex shrink-0 items-center gap-0.5 today-grid-drag-cancel">
+        <div className="flex flex-col items-stretch today-grid-drag-cancel">
           <button
             type="button"
-            className="btn btn-ghost inline-flex shrink-0 items-center gap-1.5"
-            style={{ fontSize: 12, padding: "4px 8px", minHeight: 28 }}
+            role="menuitem"
+            className="launch-menu-item"
             onClick={() => void onSaveNote()}
             disabled={busy}
             aria-busy={busy}
           >
-            <FileText size={13} aria-hidden />
-            {busy ? "Building" : "Save standup note"}
+            <span className="launch-menu-icon">
+              <FileText size={13} aria-hidden />
+            </span>
+            <span className="launch-menu-copy">
+              <span className="launch-menu-label">{busy ? "Building" : "Save standup note"}</span>
+            </span>
           </button>
-          {previewBtn}
-          {settingsBtn}
+          <button
+            type="button"
+            role="menuitem"
+            className="launch-menu-item"
+            onClick={() => void onPreview()}
+          >
+            <span className="launch-menu-icon">
+              <Eye size={13} aria-hidden />
+            </span>
+            <span className="launch-menu-copy">
+              <span className="launch-menu-label">Preview standup</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="launch-menu-item"
+            onClick={toggleConfig}
+            aria-haspopup="dialog"
+            aria-expanded={configOpen}
+          >
+            <span className="launch-menu-icon">
+              <Settings2 size={13} aria-hidden />
+            </span>
+            <span className="launch-menu-copy">
+              <span className="launch-menu-label">Standup settings</span>
+            </span>
+          </button>
         </div>
         {configPanel}
         {previewModal}

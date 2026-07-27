@@ -15,39 +15,67 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 
 /// Rotate at 2 MiB, keep one previous file. Enough to diagnose a failed start,
 /// small enough that nobody notices it.
 const MAX_BYTES: u64 = 2 * 1024 * 1024;
 
 #[derive(Clone)]
-pub struct DesktopLog {
+struct LogFile {
     path: PathBuf,
     file: Arc<Mutex<Option<File>>>,
+}
+
+#[derive(Clone)]
+pub struct DesktopLog {
+    shell: LogFile,
+    sidecar: LogFile,
+    renderer: LogFile,
 }
 
 impl DesktopLog {
     pub fn open(log_dir: &Path) -> Self {
         let _ = fs::create_dir_all(log_dir);
-        let path = log_dir.join("desktop.log");
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .ok();
+        let open_file = |name: &str| {
+            let path = log_dir.join(name);
+            let file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+                .ok();
+            LogFile {
+                path,
+                file: Arc::new(Mutex::new(file)),
+            }
+        };
         Self {
-            path,
-            file: Arc::new(Mutex::new(file)),
+            shell: open_file("shell.log"),
+            sidecar: open_file("sidecar.log"),
+            renderer: open_file("renderer.log"),
         }
     }
 
+    /// The shell log remains the primary log for callers which can expose one
+    /// path, while the log directory contains the sidecar's noisier transcript.
     pub fn path(&self) -> &Path {
-        &self.path
+        &self.shell.path
     }
 
     pub fn write_line(&self, source: &str, line: &str) {
-        let stamped = format!("[{}] {}\n", source, line.trim_end());
-        let mut guard = match self.file.lock() {
+        let target = if source.starts_with("sidecar") {
+            &self.sidecar
+        } else if source.starts_with("renderer") {
+            &self.renderer
+        } else {
+            &self.shell
+        };
+        let timestamp_ms = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        let stamped = format!("[unix_ms={timestamp_ms}][{source}] {}\n", line.trim_end());
+        let mut guard = match target.file.lock() {
             Ok(g) => g,
             // A poisoned mutex means another thread panicked mid-write. Losing
             // a log line is strictly better than panicking the logger and
@@ -59,20 +87,20 @@ impl DesktopLog {
             let _ = file.flush();
             if file.stream_position().unwrap_or(0) > MAX_BYTES {
                 drop(guard);
-                self.rotate();
+                Self::rotate(target);
             }
         }
     }
 
-    fn rotate(&self) {
-        let previous = self.path.with_extension("log.1");
-        let _ = fs::rename(&self.path, &previous);
+    fn rotate(target: &LogFile) {
+        let previous = target.path.with_extension("log.1");
+        let _ = fs::rename(&target.path, &previous);
         let reopened = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(&self.path)
+            .open(&target.path)
             .ok();
-        if let Ok(mut guard) = self.file.lock() {
+        if let Ok(mut guard) = target.file.lock() {
             *guard = reopened;
         }
     }
@@ -83,18 +111,21 @@ impl DesktopLog {
     /// interesting failure is the one where the shell restarted and the
     /// in-memory buffer is empty.
     pub fn tail(&self, n: usize) -> Vec<String> {
-        let Ok(mut file) = File::open(&self.path) else {
-            return Vec::new();
-        };
-        // Cap the read: a 2 MiB file scanned line by line to show 40 lines is
-        // wasteful, and the tail is all anyone reads.
-        let len = file.metadata().map(|m| m.len()).unwrap_or(0);
-        let window = 64 * 1024;
-        if len > window {
-            let _ = file.seek(SeekFrom::Start(len - window));
+        let mut lines = Vec::new();
+        for target in [&self.shell, &self.sidecar, &self.renderer] {
+            let Ok(mut file) = File::open(&target.path) else {
+                continue;
+            };
+            // Cap the read: a 2 MiB file scanned line by line to show 40 lines
+            // is wasteful, and the tail is all anyone reads.
+            let len = file.metadata().map(|m| m.len()).unwrap_or(0);
+            let window = 64 * 1024;
+            if len > window {
+                let _ = file.seek(SeekFrom::Start(len - window));
+            }
+            lines.extend(BufReader::new(file).lines().map_while(Result::ok));
         }
-        let reader = BufReader::new(file);
-        let mut lines: Vec<String> = reader.lines().map_while(Result::ok).collect();
+        lines.sort();
         if lines.len() > n {
             lines = lines.split_off(lines.len() - n);
         }
@@ -124,8 +155,18 @@ mod tests {
         // The failure UI calls this before anything has necessarily written.
         let tmp = tempfile::tempdir().unwrap();
         let log = DesktopLog {
-            path: tmp.path().join("nope.log"),
-            file: Arc::new(Mutex::new(None)),
+            shell: LogFile {
+                path: tmp.path().join("nope-shell.log"),
+                file: Arc::new(Mutex::new(None)),
+            },
+            sidecar: LogFile {
+                path: tmp.path().join("nope-sidecar.log"),
+                file: Arc::new(Mutex::new(None)),
+            },
+            renderer: LogFile {
+                path: tmp.path().join("nope-renderer.log"),
+                file: Arc::new(Mutex::new(None)),
+            },
         };
         assert!(log.tail(10).is_empty());
     }
@@ -147,5 +188,24 @@ mod tests {
             log.path().with_extension("log.1").exists(),
             "expected a rotated file"
         );
+    }
+
+    #[test]
+    fn sidecar_output_gets_its_own_log() {
+        let tmp = tempfile::tempdir().unwrap();
+        let log = DesktopLog::open(tmp.path());
+        log.write_line("shell", "shell event");
+        log.write_line("sidecar:stderr", "server event");
+
+        assert!(fs::read_to_string(tmp.path().join("shell.log"))
+            .unwrap()
+            .contains("[unix_ms="));
+        assert!(fs::read_to_string(tmp.path().join("sidecar.log"))
+            .unwrap()
+            .contains("server event"));
+        log.write_line("renderer:bridge:open", "browser event");
+        assert!(fs::read_to_string(tmp.path().join("renderer.log"))
+            .unwrap()
+            .contains("browser event"));
     }
 }

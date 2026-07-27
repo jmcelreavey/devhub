@@ -16,6 +16,7 @@ export interface LinkNavigationContext {
 export interface BlockNoteLinkClickHandlers {
   push: (path: string) => void;
   openExternal: (href: string) => void;
+  openNewTab: (href: string) => void;
 }
 
 const EXTERNAL_HREF = /^(https?:|mailto:|tel:)/i;
@@ -115,7 +116,7 @@ export function handleBlockNoteLinkClick(
   }
 
   if (shouldOpenInNewTab(event)) {
-    window.open(appPath, "_blank", "noopener,noreferrer");
+    handlers.openNewTab(appPath);
     return;
   }
 

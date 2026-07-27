@@ -190,7 +190,7 @@ impl Sidecar {
         if let Some(stderr) = stderr {
             std::thread::spawn(move || {
                 for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-                    log_err.write_line("sidecar", &line);
+                    log_err.write_line("sidecar:stderr", &line);
                 }
             });
         }
@@ -198,7 +198,7 @@ impl Sidecar {
         if let Some(stdout) = stdout {
             std::thread::spawn(move || {
                 for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-                    log_out.write_line("sidecar", &line);
+                    log_out.write_line("sidecar:stdout", &line);
                     // The supervisor emits one JSON object per line for state.
                     // Everything else is Next's own output and is log-only.
                     if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {

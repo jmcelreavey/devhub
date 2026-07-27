@@ -30,7 +30,7 @@ function stashConflictResponse(
   action: StashConflictPayload["action"],
   repoRoot: string,
   gitError: string,
-  extras: { branch?: string; switched: boolean },
+  extras: { branch?: string; switched: boolean; syncTarget?: string; stashed?: boolean },
 ): NextResponse {
   const conflictFiles = detectUnmergedFiles(repoRoot).map((f) => f.path);
   const payload: StashConflictPayload = {
@@ -40,6 +40,8 @@ function stashConflictResponse(
     switched: extras.switched,
     conflictFiles,
     error: gitError || "Stash apply left conflicts",
+    syncTarget: extras.syncTarget,
+    stashed: extras.stashed,
   };
   return NextResponse.json(payload, { status: 409 });
 }
@@ -53,6 +55,16 @@ async function resolveUpstream(repoRoot: string): Promise<string | null> {
   ]);
   const ref = upstream.stdout.trim();
   return upstream.status === 0 && ref ? ref : null;
+}
+
+async function resolveDefaultRemoteBranch(repoRoot: string): Promise<string | null> {
+  const symbolic = await runGitRepoAsync(repoRoot, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]);
+  const ref = symbolic.stdout.trim();
+  if (symbolic.status === 0 && ref.startsWith("origin/")) return ref;
+  for (const candidate of ["origin/main", "origin/master"]) {
+    if ((await runGitRepoAsync(repoRoot, ["rev-parse", "--verify", "--quiet", candidate])).status === 0) return candidate;
+  }
+  return null;
 }
 
 function unpushedLogArgs(upstream: string | null): string[] {
@@ -98,13 +110,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Unknown repo" }, { status: 404 });
   }
 
-  const [branchResult, stashResult, statusResult, upstream] = await Promise.all([
+  const [branchResult, stashResult, statusResult, upstream, mainBranch] = await Promise.all([
     runGitRepoAsync(rp, ["branch", "--list", "--format=%(refname:short)"]),
     runGitRepoAsync(rp, ["stash", "list"]),
     runGitRepoAsync(rp, ["status", "--porcelain"]),
     resolveUpstream(rp),
+    resolveDefaultRemoteBranch(rp),
   ]);
-  const [unpushedResult, aheadBehindResult] = await Promise.all([
+  const [unpushedResult, aheadBehindResult, mainAheadBehindResult] = await Promise.all([
     runGitRepoAsync(rp, [
       "log",
       ...unpushedLogArgs(upstream),
@@ -113,6 +126,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
     ]),
     upstream
       ? runGitRepoAsync(rp, ["rev-list", "--left-right", "--count", `${upstream}...HEAD`])
+      : Promise.resolve({ status: 1, stdout: "", stderr: "" }),
+    mainBranch
+      ? runGitRepoAsync(rp, ["rev-list", "--left-right", "--count", `${mainBranch}...HEAD`])
       : Promise.resolve({ status: 1, stdout: "", stderr: "" }),
   ]);
 
@@ -146,6 +162,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   } else if (!upstream) {
     ahead = parseUnpushedCommits(unpushedResult.stdout || "").length;
   }
+  const mainCounts = mainAheadBehindResult.status === 0 ? parseLeftRightCount(mainAheadBehindResult.stdout) : { left: 0, right: 0 };
 
   return NextResponse.json({
     branches: branchList,
@@ -157,6 +174,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
     hasChanges,
     changedFiles: parseChangedFiles(statusResult.stdout || ""),
     unpushedCommits: parseUnpushedCommits(unpushedResult.stdout || ""),
+    mainBranch,
+    aheadMain: mainCounts.right,
+    behindMain: mainCounts.left,
   });
 }
 
@@ -393,6 +413,59 @@ export async function POST(req: NextRequest, { params }: Params) {
         alreadyUpToDate: /already up to date/i.test(msg),
         message: msg || undefined,
       });
+    }
+
+    case "sync-main": {
+      const current = await runGitRepoAsync(rp, ["rev-parse", "--abbrev-ref", "HEAD"]);
+      const currentBranch = current.stdout.trim();
+      if (current.status !== 0 || !currentBranch || currentBranch === "HEAD") return NextResponse.json({ error: "Cannot sync a detached HEAD." }, { status: 400 });
+      const mainBranch = await resolveDefaultRemoteBranch(rp);
+      if (!mainBranch) return NextResponse.json({ error: "Could not find origin/main or origin/master." }, { status: 400 });
+
+      const status = await runGitRepoAsync(rp, ["status", "--porcelain"]);
+      const stashed = status.stdout.trim().length > 0;
+      if (stashed) {
+        const prep = prepareGitIndexWrite(rp);
+        if (!prep.ok) return indexLockResponse(rp, prep.error);
+        const stash = await runGitRepoAsync(rp, ["stash", "push", "--include-untracked", "-m", `DevHub auto-stash before syncing ${currentBranch} with ${mainBranch}`]);
+        if (stash.status !== 0) return NextResponse.json({ error: stash.stderr.trim() || stash.stdout.trim() || "Stash failed" }, { status: 500 });
+      }
+
+      const remoteBranch = mainBranch.slice("origin/".length);
+      const fetch = await runGitRepoAsync(rp, ["fetch", "origin", remoteBranch, "--prune"], { timeout: 120_000 });
+      if (fetch.status !== 0) {
+        if (stashed) {
+          const pop = await runGitRepoAsync(rp, ["stash", "pop", "stash@{0}"]);
+          if (pop.status !== 0) return stashConflictResponse("sync-main", rp, pop.stderr.trim() || pop.stdout.trim(), { branch: currentBranch, switched: false, syncTarget: mainBranch, stashed: true });
+        }
+        return NextResponse.json({ error: fetch.stderr.trim() || fetch.stdout.trim() || "Fetch failed" }, { status: 500 });
+      }
+
+      const merge = await runGitRepoAsync(rp, ["merge", "--no-edit", mainBranch], { timeout: 120_000 });
+      if (merge.status !== 0) {
+        const error = merge.stderr.trim() || merge.stdout.trim() || `Merge ${mainBranch} failed`;
+        if (detectUnmergedFiles(rp).length || looksLikeStashConflict(merge.stderr, merge.stdout)) {
+          return stashConflictResponse("sync-main", rp, error, { branch: currentBranch, switched: false, syncTarget: mainBranch, stashed });
+        }
+        await runGitRepoAsync(rp, ["merge", "--abort"]);
+        if (stashed) {
+          const pop = await runGitRepoAsync(rp, ["stash", "pop", "stash@{0}"]);
+          if (pop.status !== 0) return stashConflictResponse("sync-main", rp, pop.stderr.trim() || pop.stdout.trim(), { branch: currentBranch, switched: false, syncTarget: mainBranch, stashed: true });
+        }
+        return NextResponse.json({ error }, { status: 500 });
+      }
+
+      const push = await runGitRepoAsync(rp, (await resolveUpstream(rp)) ? ["push"] : ["push", "-u", "origin", currentBranch], { timeout: 300_000 });
+      if (stashed) {
+        const pop = await runGitRepoAsync(rp, ["stash", "pop", "stash@{0}"]);
+        if (pop.status !== 0) return stashConflictResponse("sync-main", rp, pop.stderr.trim() || pop.stdout.trim(), { branch: currentBranch, switched: false, syncTarget: mainBranch, stashed: true });
+      }
+      if (push.status !== 0) {
+        const hook = hookFailureResponse(rp, push.stdout, push.stderr, "push");
+        if (hook) return hook;
+        return NextResponse.json({ error: push.stderr.trim() || push.stdout.trim() || "Push failed" }, { status: 500 });
+      }
+      return NextResponse.json({ ok: true, mainBranch, currentBranch, stashed });
     }
 
     case "create-branch": {

@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import { useToast } from "@/lib/hooks/use-toast";
+import { openInBrowser } from "@/lib/desktop/bridge";
 
 /** Generic hook for launching a native desktop app via a POST endpoint. */
 export function useDesktopLauncher({ endpoint, appName }: { endpoint: string; appName: string }) {
@@ -13,7 +14,7 @@ export function useDesktopLauncher({ endpoint, appName }: { endpoint: string; ap
       if (!res.ok) {
         if (res.status === 404 && body?.releasesUrl) {
           toast.error(`${appName} Desktop is not installed.`);
-          window.open(body.releasesUrl as string, "_blank", "noopener,noreferrer");
+          void openInBrowser(body.releasesUrl as string);
           return;
         }
         toast.error((body?.error as string) ?? `Failed to launch ${appName} Desktop`);
@@ -21,7 +22,7 @@ export function useDesktopLauncher({ endpoint, appName }: { endpoint: string; ap
       }
 
       if (body?.openUrl) {
-        window.open(body.openUrl as string, "_blank", "noopener,noreferrer");
+        void openInBrowser(body.openUrl as string);
         toast.success(`Opening ${appName}…`);
         return;
       }

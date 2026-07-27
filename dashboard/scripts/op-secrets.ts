@@ -41,7 +41,7 @@ function syncLocalKeysEnabled(): boolean {
 }
 
 function markerPath(envDir: string): string {
-  return path.join(envDir, ".env.op-synced");
+  return path.join(process.env.DEVHUB_OP_CACHE_DIR || envDir, ".env.op-synced");
 }
 
 function isSynced(envDir: string): boolean {
@@ -52,7 +52,9 @@ function isSynced(envDir: string): boolean {
 
 function writeMarker(envDir: string): void {
   if (process.env.DEVHUB_OP_CACHE === "0") return;
-  fs.writeFileSync(markerPath(envDir), new Date().toISOString() + "\n", "utf-8");
+  const marker = markerPath(envDir);
+  fs.mkdirSync(path.dirname(marker), { recursive: true });
+  fs.writeFileSync(marker, new Date().toISOString() + "\n", "utf-8");
 }
 
 function repoRootFor(envDir: string): string {

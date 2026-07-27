@@ -6,6 +6,7 @@ import { FetchError, SkeletonRows } from "@/components";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { localCalendarDateISO } from "@/lib/local/calendar-date";
 import { jiraBrowseUrl } from "@/lib/utils";
+import { openInBrowser } from "@/lib/desktop/bridge";
 import type { WeeklyReview } from "@/lib/tasks/weekly";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 
@@ -149,16 +150,15 @@ export default function ReviewPage() {
                   <div key={i} className="flex items-center gap-2">
                     <span className="badge badge-muted shrink-0">{s.movedCount}d</span>
                     {s.jiraKey && (
-                      <a
-                        href={jiraBrowseUrl(s.jiraKey)}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => void openInBrowser(jiraBrowseUrl(s.jiraKey!))}
                         className="shrink-0 font-mono text-xs px-1.5 py-0.5 rounded inline-flex items-center gap-1"
                         style={{ background: "var(--accent-dim)", color: "var(--accent)" }}
                       >
                         {s.jiraKey}
                         <ExternalLink size={10} aria-hidden />
-                      </a>
+                      </button>
                     )}
                     <span className="text-sm min-w-0 break-words text-text">
                       {s.text}

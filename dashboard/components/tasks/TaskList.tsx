@@ -15,6 +15,7 @@ import { useLive } from "@/lib/hooks/use-fetch";
 import { AddToJiraModal } from "@/components/tasks/AddToJiraModal";
 import { JiraTransitionModal } from "@/components/jira/JiraTransitionModal";
 import { SortableList } from "@/components/ui/SortableList";
+import { HoverTip } from "@/components/ui/HoverTip";
 import { useGridSize } from "@/lib/hooks/use-grid-size";
 import { todayISO } from "@/lib/utils";
 
@@ -695,17 +696,17 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
             }
           }}
         />
-        <button
-          type="button"
-          className="btn btn-ghost task-add-btn"
-          onClick={addTask}
-          disabled={!newText.trim()}
-          data-tooltip="Add task"
-          data-tooltip-pos="top-end"
-          aria-label="Add task"
-        >
-          <Plus size={14} aria-hidden />
-        </button>
+        <HoverTip label="Add task" pos="top-end">
+          <button
+            type="button"
+            className="btn btn-ghost task-add-btn"
+            onClick={addTask}
+            disabled={!newText.trim()}
+            aria-label="Add task"
+          >
+            <Plus size={14} aria-hidden />
+          </button>
+        </HoverTip>
       </div>
 
       {detectedUrl && (

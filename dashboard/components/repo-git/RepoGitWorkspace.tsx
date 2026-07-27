@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { useConfirm } from "@/components/shell/ConfirmDialog";
 import { useToast } from "@/lib/hooks/use-toast";
-import { agentStashConflictCommand, openTerminal } from "@/lib/terminal-launch";
+import { agentGitSyncConflictCommand, agentStashConflictCommand, openTerminal } from "@/lib/terminal-launch";
 import type { GitHookFailurePayload } from "@/lib/git/hook-failure";
 import type { StashConflictPayload } from "@/app/repos/types";
 import { BlamePanel } from "./BlamePanel";
@@ -218,6 +218,7 @@ export function RepoGitWorkspace({
   );
 
   async function offerAiConflict(conflict: StashConflictPayload) {
+    const syncingMain = conflict.action === "sync-main";
     const ok = await confirm({
       title: conflict.branch ? `Switched to ${conflict.branch}, stash conflicts` : "Stash left conflicts",
       message: [
@@ -238,11 +239,9 @@ export function RepoGitWorkspace({
     openTerminal({
       cwd: repoPath,
       label: `resolve conflicts · ${repoName}`,
-      command: await agentStashConflictCommand({
-        repoName,
-        branch: conflict.branch,
-        conflictFiles: conflict.conflictFiles,
-      }),
+      command: syncingMain
+        ? await agentGitSyncConflictCommand({ repoName, branch: conflict.branch, conflictFiles: conflict.conflictFiles, syncTarget: conflict.syncTarget ?? "origin/main", stashed: conflict.stashed })
+        : await agentStashConflictCommand({ repoName, branch: conflict.branch, conflictFiles: conflict.conflictFiles }),
     });
     toast.info("Resolving conflicts in the terminal.");
   }

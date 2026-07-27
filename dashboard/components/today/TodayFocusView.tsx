@@ -23,6 +23,7 @@ import { TaskList } from "@/components/tasks/TaskList";
 import { JiraKeyChip } from "@/components/jira/JiraKeyChip";
 import { JiraStatusPill } from "@/components/jira/JiraStatusPill";
 import { LayoutPresetsButton } from "@/components/shell/LayoutPresets";
+import { HoverTip } from "@/components/ui/HoverTip";
 import { TodayBootScreen, useTodayBoot } from "@/components/today/TodayBootScreen";
 import { readFocusSession, writeFocusSession } from "@/lib/focus-session-storage";
 import { todayISO, yesterdayISO, dailyNotePath, formatDayLabel, formatTime } from "@/lib/utils";
@@ -359,16 +360,16 @@ export function TodayFocusView() {
             })()}
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="btn btn-ghost"
-              style={{ fontSize: 12 }}
-              onClick={() => window.dispatchEvent(new CustomEvent("devhub:capture-open"))}
-              data-tooltip="Quick capture (⌘⇧C)"
-              data-tooltip-pos="bottom-end"
-            >
-              <Plus size={13} aria-hidden /> Capture
-            </button>
+            <HoverTip label="Quick capture (⌘⇧C)" pos="bottom-end">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ fontSize: 12 }}
+                onClick={() => window.dispatchEvent(new CustomEvent("devhub:capture-open"))}
+              >
+                <Plus size={13} aria-hidden /> Capture
+              </button>
+            </HoverTip>
             <LayoutPresetsButton />
           </div>
         </div>

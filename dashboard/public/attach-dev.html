@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Preparing DevHub development server</title>
+  </head>
+  <body>
+    <script>
+      /*
+       * Attach and Packaged mode share localhost:1337, so WKWebView also shares
+       * their service-worker scope. The packaged worker cache-firsts immutable
+       * production assets; development webpack assets are not immutable.
+       *
+       * This page is a navigation (network-first in the worker), so it reaches
+       * fresh code even when a previous development session cached an asset.
+       */
+      void (async () => {
+        const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
+        await Promise.all(registrations.map((registration) => registration.unregister()));
+        const cacheNames = await caches?.keys?.() ?? [];
+        await Promise.all(
+          cacheNames
+            .filter((name) => name.startsWith("devhub-"))
+            .map((name) => caches.delete(name)),
+        );
+        window.location.replace("/");
+      })().catch(() => window.location.replace("/"));
+    </script>
+  </body>
+</html>

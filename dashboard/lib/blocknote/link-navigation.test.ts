@@ -51,28 +51,32 @@ describe("blocknote-link-navigation", () => {
   it("opens external links in a new tab", () => {
     const push = vi.fn();
     const openExternal = vi.fn();
+    const openNewTab = vi.fn();
     const event = { preventDefault: vi.fn(), metaKey: false, ctrlKey: false, shiftKey: false } as unknown as MouseEvent;
 
     handleBlockNoteLinkClick(
       event,
       "https://github.com/example-org/repo/pull/437",
       notesContext,
-      { push, openExternal },
+      { push, openExternal, openNewTab },
     );
 
     expect(openExternal).toHaveBeenCalledWith("https://github.com/example-org/repo/pull/437");
+    expect(openNewTab).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
   });
 
   it("routes internal links through the app router", () => {
     const push = vi.fn();
     const openExternal = vi.fn();
+    const openNewTab = vi.fn();
     const event = { preventDefault: vi.fn(), metaKey: false, ctrlKey: false, shiftKey: false } as unknown as MouseEvent;
 
-    handleBlockNoteLinkClick(event, "/docs/SUMMARY", notesContext, { push, openExternal });
+    handleBlockNoteLinkClick(event, "/docs/SUMMARY", notesContext, { push, openExternal, openNewTab });
 
     expect(push).toHaveBeenCalledWith("/docs/SUMMARY");
     expect(openExternal).not.toHaveBeenCalled();
+    expect(openNewTab).not.toHaveBeenCalled();
   });
 
   it("respects modifier keys for internal links", () => {
@@ -82,5 +86,17 @@ describe("blocknote-link-navigation", () => {
     expect(
       shouldOpenInNewTab({ metaKey: false, ctrlKey: true, shiftKey: false } as MouseEvent),
     ).toBe(true);
+  });
+
+  it("opens modified internal links through the opener callback", () => {
+    const push = vi.fn();
+    const openExternal = vi.fn();
+    const openNewTab = vi.fn();
+    const event = { preventDefault: vi.fn(), metaKey: true, ctrlKey: false, shiftKey: false } as unknown as MouseEvent;
+
+    handleBlockNoteLinkClick(event, "/docs/SUMMARY", notesContext, { push, openExternal, openNewTab });
+
+    expect(openNewTab).toHaveBeenCalledWith("/docs/SUMMARY");
+    expect(push).not.toHaveBeenCalled();
   });
 });

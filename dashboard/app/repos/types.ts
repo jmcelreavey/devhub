@@ -72,11 +72,13 @@ export interface BranchesApiPayload {
 /** HTTP 409 body when stash pop/apply leaves conflicts. */
 export interface StashConflictPayload {
   code: "stash_conflict";
-  action: "checkout" | "stash-apply";
+  action: "checkout" | "stash-apply" | "sync-main";
   branch?: string;
   switched: boolean;
   conflictFiles: string[];
   error: string;
+  syncTarget?: string;
+  stashed?: boolean;
 }
 
 /** HTTP 422 body when a git hook blocks commit/push/amend. */

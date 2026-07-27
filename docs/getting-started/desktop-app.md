@@ -128,7 +128,8 @@ running. Use the window that is already open.
 
 **The window shows a startup error.** Click **Open logs**. The last twenty lines
 are also shown in the window itself. Logs are at
-`~/Library/Application Support/DevHub/logs/desktop.log`.
+`~/Library/Application Support/DevHub/logs/`; grab `shell.log`, `sidecar.log`,
+and `renderer.log` when reporting the failure.
 
 **The terminal will not connect.** The terminal is deliberately unavailable when
 you open DevHub from another device over your network — it hands out a real

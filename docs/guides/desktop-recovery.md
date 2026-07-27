@@ -17,10 +17,12 @@ last twenty log lines, and three buttons: **Try again**, **Open logs**, **Quit**
 Full logs:
 
 ```
-~/Library/Application Support/DevHub/logs/desktop.log
+~/Library/Application Support/DevHub/logs/
 ```
 
-Rotated at 2 MB, one previous file kept as `desktop.log.1`.
+Grab `shell.log` (desktop), `sidecar.log` (server/service output), and
+`renderer.log` (dashboard-to-Tauri bridge events such as external-link opens).
+Each rotates at 2 MB and keeps one previous `.log.1` file.
 
 ## The port is in use
 

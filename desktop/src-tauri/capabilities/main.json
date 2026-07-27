@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Minimal surface for the main window. The dashboard is a remote localhost page, so anything granted here is granted to a web origin.",
+  "description": "Minimal surface for the local boot page. The dashboard's remote loopback origins receive their own explicitly scoped capability below.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -9,7 +9,13 @@
     "core:window:allow-set-focus",
     "core:event:allow-listen",
     "dialog:allow-open",
-    "opener:allow-open-url",
+    "opener:default",
     "updater:default"
-  ]
+  ],
+  "remote": {
+    "urls": [
+      "http://localhost:1337/*",
+      "http://127.0.0.1:1337/*"
+    ]
+  }
 }

@@ -1133,7 +1133,7 @@ export function AgentCliStep({
             label="OpenCode model override (optional)"
             value={opencodeModel}
             onChange={onOpencodeModelChange}
-            placeholder="provider/model, e.g. cursor-acp/grok-4.3 — blank uses opencode.json"
+            placeholder="provider/model, e.g. cursor-acp/cursor-grok-4.5-high — blank uses opencode.json"
             hint="Passed as opencode run --model. Leave blank to keep the shared opencode.json default."
           />
         ) : (
@@ -1296,4 +1296,3 @@ export function InstallAppCard() {
     </div>
   );
 }
-

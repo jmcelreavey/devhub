@@ -29,6 +29,7 @@ import {
   getLinkHrefFromEvent,
   handleBlockNoteLinkClick,
 } from "@/lib/blocknote/link-navigation";
+import { openInBrowser } from "@/lib/desktop/bridge";
 import type { VaultId } from "@/lib/vault/vault-public";
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/core/style.css";
@@ -376,6 +377,7 @@ function BlockNoteEditorReady({
     linkClickHandlerRef.current = (event: MouseEvent) => {
       const href = getLinkHrefFromEvent(event);
       if (!href) return;
+      if (event.defaultPrevented) return;
       const { vaultId: activeVaultId, contentSlug: activeSlug, pathname: activePathname } =
         linkContextRef.current;
       handleBlockNoteLinkClick(
@@ -388,8 +390,8 @@ function BlockNoteEditorReady({
         },
         {
           push: router.push,
-          openExternal: (externalHref) =>
-            window.open(externalHref, "_blank", "noopener,noreferrer"),
+          openExternal: (externalHref) => void openInBrowser(externalHref),
+          openNewTab: (appPath) => void openInBrowser(appPath),
         },
       );
     };

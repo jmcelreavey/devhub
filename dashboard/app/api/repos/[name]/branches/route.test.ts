@@ -125,4 +125,25 @@ describe("POST /api/repos/[name]/branches", () => {
       { timeout: 120_000 },
     );
   });
+
+  it("stashes dirty work, syncs with main, pushes, then restores the stash", async () => {
+    vi.mocked(runGitRepoAsync).mockImplementation(async (_repoRoot, args) => {
+      const command = args.join(" ");
+      const outputs: Record<string, string> = {
+        "rev-parse --abbrev-ref HEAD": "feature/foo\n",
+        "symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+        "status --porcelain": " M src/a.ts\n",
+        "rev-parse --abbrev-ref --symbolic-full-name @{u}": "origin/feature/foo\n",
+      };
+      if (command in outputs) return { status: 0, stdout: outputs[command]!, stderr: "" };
+      if (["stash", "fetch", "merge", "push"].includes(args[0]!)) return { status: 0, stdout: "ok\n", stderr: "" };
+      throw new Error(`Unexpected git command: ${command}`);
+    });
+
+    const response = await POST(request({ action: "sync-main" }), params);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ ok: true, mainBranch: "origin/main", stashed: true });
+    expect(runGitRepoAsync).toHaveBeenCalledWith("/tmp/test-repo", ["stash", "pop", "stash@{0}"]);
+  });
 });

@@ -162,7 +162,7 @@ function AgentCliCard() {
             {cli === "opencode" ? (
               <>
                 Model uses <code>provider/model</code> form (e.g.{" "}
-                <code>cursor-acp/grok-4.3</code>); blank uses the shared{" "}
+                <code>cursor-acp/cursor-grok-4.5-high</code>); blank uses the shared{" "}
                 <code>opencode.json</code> default below.
               </>
             ) : (

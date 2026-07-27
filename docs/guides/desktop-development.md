@@ -16,24 +16,73 @@ and `npm install` having been run in `dashboard/`.
 
 ## Running against your checkout
 
-The Electron launcher had an in-app dev toggle. The replacement is an
-environment variable, because the installed app deliberately runs its own
-packaged server:
+The installed app can attach to a checkout dev server from **View → Attach to
+Dev Server…**. It checks `http://localhost:1337/api/desktop/health` first; if
+no process is listening, it starts `npm run dev` from the checkout recorded in
+`~/Library/Application Support/DevHub/repo-path.txt`, waits up to 90 seconds
+for health, then attaches. The app restarts against that server and keeps the
+choice until **View → Use Packaged Server** is selected. Switching either way
+is automatic: Attach stops the packaged sidecar before starting development;
+Use Packaged Server stops a shell-managed development process, or a verified
+DevHub checkout listener (matching the checkout's `dashboard/` cwd and known
+Next/DevHub script), then waits for ports 1337 and 1339 before restarting.
+Unknown listeners are left alone and produce a clear failure instead of killing
+some unrelated server because it had the bad luck to choose the same port.
 
 ```bash
-npm run dev                                   # terminal 1: your checkout, as always
 DEVHUB_DEV_SERVER_URL=http://127.0.0.1:1337 \
   /Applications/DevHub.app/Contents/MacOS/devhub-desktop
 ```
 
 The shell skips the packaged sidecar entirely and loads your dev server, so you
-get hot reload *inside the real window* — which is the only way to work on the
+get hot reload _inside the real window_ — which is the only way to work on the
 boot page, the folder picker, or the update banner.
+
+Attach first opens a small checkout-owned page that unregisters DevHub's
+service worker and deletes its `devhub-*` caches before loading the app. This
+matters because Packaged and Attach share `localhost:1337`: production static
+assets are immutable and cacheable, but webpack development asset URLs are not.
+Without this handoff, a cached stylesheet could make Attach show an older
+working tree.
 
 There is no bootstrap token in attach mode, so the bridge routes report browser
 mode and the terminal falls back to origin checking. That is the same posture
 `npm run dev` already has in a browser tab, which is why it does not weaken
 anything.
+
+Dashboard TypeScript, CSS, and `public/` assets hot reload in attach mode; no
+desktop rebuild is needed. Rust shell, menu, boot-page, bundled Node/runtime,
+or macOS icon/splash changes require `npm run desktop:build` followed by
+`npm run desktop:install`.
+
+## Collecting desktop logs
+
+Use **View → Show Logs** in the desktop app, or open:
+
+```text
+~/Library/Application Support/DevHub/logs/
+```
+
+The directory contains bounded, rotating logs (the previous 2 MiB file ends in
+`.log.1`):
+
+- `shell.log` — desktop startup, window, and menu events.
+- `sidecar.log` — packaged dashboard/service output, or output from a dev
+  server the shell started while attaching.
+- `renderer.log` — dashboard-to-Tauri bridge events, including external-link
+  interception and `openInBrowser` detection, invocation, and failures.
+
+`renderer.log` is written only when the dashboard is inside the Tauri webview.
+In **Attach to Dev Server** mode it still captures bridge events, but if you
+started `npm run dev` yourself, its server output remains in that terminal
+rather than `sidecar.log`. A normal browser tab has no Tauri bridge, so it
+cannot write `renderer.log`.
+
+After an external link or toast CTA fails, reproduce it once, then attach
+`renderer.log`, `shell.log`, and `sidecar.log` (plus matching `.log.1` files if
+the failure was not recent). The renderer log records timestamps, bridge phase,
+URL host, and a scrubbed error message; it deliberately does not record URL
+paths, query strings, or credentials.
 
 ## The loop
 
@@ -126,7 +175,7 @@ The shipped binary can verify itself:
 
 It uses a **temporary** app-data directory and kernel-assigned ports, so it
 never reads or touches real user data. It checks staged resources, the bundled
-runtime, sidecar startup, authenticated health, that an *unauthenticated*
+runtime, sidecar startup, authenticated health, that an _unauthenticated_
 request is rejected, a storage round-trip, the PTY listening, and that nothing
 is left holding a port afterwards.
 
@@ -147,15 +196,15 @@ self-test, signature verification, and `latest.json` generation.
 
 ### Secrets
 
-| Secret                               | Purpose                                     |
-| ------------------------------------ | ------------------------------------------- |
-| `TAURI_SIGNING_PRIVATE_KEY`          | Signs updates. **Back this up offline.**     |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Password for the above                       |
-| `APPLE_CERTIFICATE`                  | Developer ID cert, base64 `.p12`             |
-| `APPLE_CERTIFICATE_PASSWORD`         | Password for the `.p12`                      |
-| `APPLE_SIGNING_IDENTITY`             | `Developer ID Application: Name (TEAMID)`    |
-| `APPLE_ID` / `APPLE_PASSWORD`        | Apple ID + app-specific password             |
-| `APPLE_TEAM_ID`                      | Team identifier                              |
+| Secret                               | Purpose                                   |
+| ------------------------------------ | ----------------------------------------- |
+| `TAURI_SIGNING_PRIVATE_KEY`          | Signs updates. **Back this up offline.**  |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Password for the above                    |
+| `APPLE_CERTIFICATE`                  | Developer ID cert, base64 `.p12`          |
+| `APPLE_CERTIFICATE_PASSWORD`         | Password for the `.p12`                   |
+| `APPLE_SIGNING_IDENTITY`             | `Developer ID Application: Name (TEAMID)` |
+| `APPLE_ID` / `APPLE_PASSWORD`        | Apple ID + app-specific password          |
+| `APPLE_TEAM_ID`                      | Team identifier                           |
 
 The Apple secrets are optional — without them the build still succeeds and
 skips signing and notarisation. The result is ad-hoc signed and needs
@@ -203,16 +252,17 @@ Practical consequences when adding a feature:
 
 - **Do not add a command that takes an arbitrary path or command string.** The
   existing commands are narrow on purpose: `open_logs` opens one known
-  directory; `pick_folder` returns a path *the user chose in an OS dialog*.
+  directory; `pick_folder` returns a path _the user chose in an OS dialog_.
 - **New desktop bridge routes must check `isAuthenticatedDesktopRequest`.**
-- **The terminal WebSocket requires a ticket *and* exact origin.** Not the
+- **The terminal WebSocket requires a ticket _and_ exact origin.** Not the
   bootstrap cookie — WKWebView does not attach it to a `ws://` handshake on a
   different port, and assuming it did shipped a completely broken terminal. The
   dashboard fetches a short-lived ticket over same-origin HTTP (where the cookie
   works) and passes it on the WebSocket URL. Origin checks must compare exactly:
   `http://127.0.0.1.evil.com` starts with `http://127.0.0.1`.
 - **Never LAN-proxy port 1339.** It is an unauthenticated PTY.
-- **Never kill a process by port.**
+- **Never kill a process merely because it owns a port.** Mode switching may
+  stop only a listener verified as this checkout's DevHub development server.
 
 ## Testing
 
