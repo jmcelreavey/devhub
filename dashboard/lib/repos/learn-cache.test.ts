@@ -1,19 +1,20 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { readRepoLearnCache, buildPackZip } from "@/lib/repos/learn-cache";
+import { useTempContentRoot, type ContentRoot } from "@/lib/testing/content-root";
 
-let tmpRoot: string | null = null;
+let content: ContentRoot | null = null;
 
 afterEach(() => {
-  if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true });
-  tmpRoot = null;
+  content?.cleanup();
+  content = null;
 });
 
 describe("repo-learn-cache", () => {
   it("invalidates when gitHead changes", async () => {
-    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "repo-learn-cache-"));
+    content = useTempContentRoot("repo-learn-cache-");
+    const tmpRoot = content.root;
     const notesDir = path.join(tmpRoot, "notes", ".cache", "repo-learn");
     fs.mkdirSync(notesDir, { recursive: true });
     const cachePath = path.join(notesDir, "demo.json");
@@ -28,15 +29,8 @@ describe("repo-learn-cache", () => {
 
     fs.writeFileSync(cachePath, JSON.stringify(entry));
 
-    const originalRoot = process.env.REPO_ROOT;
-    process.env.REPO_ROOT = tmpRoot;
-    try {
-      expect(readRepoLearnCache("demo", "abc123")?.briefMarkdown).toBe("# Brief");
-      expect(readRepoLearnCache("demo", "def456")).toBeNull();
-    } finally {
-      if (originalRoot === undefined) delete process.env.REPO_ROOT;
-      else process.env.REPO_ROOT = originalRoot;
-    }
+    expect(readRepoLearnCache("demo", "abc123")?.briefMarkdown).toBe("# Brief");
+    expect(readRepoLearnCache("demo", "def456")).toBeNull();
   });
 
   it("builds a zip buffer from pack files", () => {

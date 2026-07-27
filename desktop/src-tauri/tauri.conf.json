@@ -29,13 +29,11 @@
       "icons/128x128@2x.png",
       "icons/icon.icns"
     ],
-    "externalBin": [
-      "binaries/node"
-    ],
     "resources": {
       "../staging/server": "server",
       "../staging/services": "services",
-      "../staging/resources": "resources"
+      "../staging/resources": "resources",
+      "../src-tauri/binaries": "runtime"
     },
     "macOS": {
       "minimumSystemVersion": "11.0"
@@ -47,7 +45,7 @@
       "$comment": [
         "pubkey is the PUBLIC half of the updater keypair and belongs in the repo.",
         "The private key lives only in the TAURI_SIGNING_PRIVATE_KEY release secret",
-        "and in an offline backup — losing it permanently strands every installed",
+        "and in an offline backup \u2014 losing it permanently strands every installed",
         "client, because a new key cannot sign updates the old binaries will accept.",
         "",
         "Generate with: cargo tauri signer generate -w ~/.tauri/devhub-updater.key",

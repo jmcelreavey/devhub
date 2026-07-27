@@ -74,17 +74,47 @@ fn resolve_paths(app: &tauri::AppHandle) -> Result<RuntimePaths, String> {
         .home_dir()
         .map_err(|e| format!("No home directory: {e}"))?;
 
-    let node_bin = resource_dir.join(node_binary_name());
-    let node_bin = if node_bin.exists() {
-        node_bin
-    } else {
-        // Tauri places external binaries next to the executable in a bundle.
-        std::env::current_exe()
-            .ok()
-            .and_then(|exe| exe.parent().map(|p| p.join(node_binary_name())))
-            .filter(|p| p.exists())
-            .unwrap_or(node_bin)
-    };
+    /*
+     * The bundled Node runtime, shipped as a *resource* rather than via Tauri's
+     * `externalBin`.
+     *
+     * `externalBin` places the binary in `Contents/MacOS/`, and macOS treats
+     * everything there as an executable belonging to the app. The result was a
+     * second "node" icon appearing in the Dock and bouncing whenever the
+     * sidecar started — a background process the user could not click, quit, or
+     * make sense of. Resources get no such treatment.
+     *
+     * The candidates below cover the bundle layout, the older `externalBin`
+     * layout (so an app installed before this change still starts), and the
+     * development staging directory.
+     */
+    let triple_suffixed = format!("{}-{}", node_binary_name(), std::env::consts::ARCH);
+    let mut candidates = vec![
+        resource_dir.join("runtime").join(node_binary_name()),
+        resource_dir.join("runtime").join(&triple_suffixed),
+        resource_dir.join(node_binary_name()),
+    ];
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join(node_binary_name()));
+        }
+    }
+    // The staged runtime keeps its Rust target-triple suffix; match by prefix
+    // rather than hardcoding a triple that changes per architecture.
+    if let Ok(entries) = std::fs::read_dir(resource_dir.join("runtime")) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with("node-") {
+                candidates.push(entry.path());
+            }
+        }
+    }
+    let node_bin = candidates
+        .iter()
+        .find(|p| p.exists())
+        .cloned()
+        .unwrap_or_else(|| resource_dir.join("runtime").join(node_binary_name()));
 
     Ok(RuntimePaths {
         app_data: std::env::var_os("DEVHUB_APP_DATA")
@@ -192,12 +222,84 @@ fn set_boot(app: &tauri::AppHandle, next: BootState) {
     let _ = app.emit("devhub://boot", BootPayload { state: next });
 }
 
+/**
+ * Attach to a dashboard you are already running, instead of starting one.
+ *
+ * The Electron launcher could run the dashboard from your checkout in dev mode;
+ * removing it took that away, and `npm run dev` in a browser tab is not the
+ * same thing when you are working on something that only exists in the desktop
+ * shell — the boot page, the folder picker, the update banner.
+ *
+ * With `DEVHUB_DEV_SERVER_URL` set, the shell skips the packaged sidecar
+ * entirely and loads that URL. There is no bootstrap token in this mode, so the
+ * bridge routes report browser mode and the terminal falls back to origin
+ * checking — which is exactly the posture `npm run dev` already has, and is why
+ * this does not weaken anything. It is a developer affordance, not a
+ * configuration a shipped app ever reaches.
+ *
+ *   DEVHUB_DEV_SERVER_URL=http://127.0.0.1:1337 open -a DevHub
+ */
+fn dev_server_pref_file(app: &tauri::AppHandle) -> Option<PathBuf> {
+    app.try_state::<AppState>()
+        .map(|s| s.paths.app_data.join("config").join("dev-server.txt"))
+}
+
+/// The dev server to attach to, from the environment or the saved preference.
+///
+/// Two sources because they answer different needs. The environment variable is
+/// for a one-off launch from a terminal; the saved preference is for the menu
+/// item, because "run the app from a shell with an env var set" is not a usable
+/// answer for someone who just wants the old dev toggle back.
+fn dev_server_url_for(app: Option<&tauri::AppHandle>) -> Option<String> {
+    if let Ok(env) = std::env::var("DEVHUB_DEV_SERVER_URL") {
+        let trimmed = env.trim().to_string();
+        if !trimmed.is_empty() {
+            return Some(trimmed);
+        }
+    }
+    let file = app.and_then(dev_server_pref_file)?;
+    let saved = std::fs::read_to_string(file).ok()?;
+    let trimmed = saved.trim().to_string();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
+}
+
+fn dev_server_url() -> Option<String> {
+    std::env::var("DEVHUB_DEV_SERVER_URL")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
 fn start_sidecar(app: &tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     let sidecar = state.sidecar.clone();
     let paths = state.paths.clone();
 
     set_boot(app, BootState::Preparing);
+
+    if let Some(url) = dev_server_url_for(Some(app)) {
+        state
+            .log
+            .write_line("shell", &format!("attaching to dev server at {url}"));
+        let handle = app.clone();
+        std::thread::spawn(move || {
+            if let Some(window) = handle.get_webview_window("main") {
+                match url.parse() {
+                    Ok(parsed) => {
+                        let _ = window.navigate(parsed);
+                        set_boot(&handle, BootState::Ready { url });
+                        show_main_window(&handle);
+                    }
+                    Err(err) => fail(&handle, &format!("Bad DEVHUB_DEV_SERVER_URL: {err}")),
+                }
+            }
+        });
+        return Ok(());
+    }
 
     if let Err(err) = paths.ensure_app_data() {
         let message = format!("Could not create the DevHub data folder: {err}");
@@ -318,6 +420,21 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         None::<&str>,
     )?;
     let show_logs = MenuItem::with_id(app, "show-logs", "Show Logs", true, None::<&str>)?;
+    // The replacement for the Electron launcher's dev toggle. Attaching points
+    // the window at a dev server you are already running instead of the
+    // packaged one; the choice persists so a relaunch keeps it.
+    let attached = dev_server_url_for(Some(app)).is_some();
+    let dev_server = MenuItem::with_id(
+        app,
+        "toggle-dev-server",
+        if attached {
+            "Use Packaged Server"
+        } else {
+            "Attach to Dev Server…"
+        },
+        true,
+        None::<&str>,
+    )?;
     let reload = MenuItem::with_id(app, "reload", "Reload", true, Some("CmdOrCtrl+R"))?;
 
     let app_menu = Submenu::with_items(
@@ -353,7 +470,7 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     // Service restart controls deliberately live in the dashboard's own
     // Status page, not here. A desktop-only menu that grows a parallel set of
     // product actions is how two divergent UIs happen.
-    let view_menu = Submenu::with_items(app, "View", true, &[&reload, &show_logs])?;
+    let view_menu = Submenu::with_items(app, "View", true, &[&reload, &show_logs, &dev_server])?;
 
     let window_menu = Submenu::with_items(
         app,
@@ -368,13 +485,39 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     Menu::with_items(app, &[&app_menu, &edit_menu, &view_menu, &window_menu])
 }
 
-/// Is this URL the dashboard we started?
+/// Is this a loopback host, checked exactly?
 ///
-/// Exact host and port. Not "starts with localhost": `http://127.0.0.1.evil.com`
-/// starts with `http://127.0.0.1` and is a different origin entirely.
-fn is_dashboard_url(url: &tauri::Url, port: u16) -> bool {
-    let host_ok = matches!(url.host_str(), Some("127.0.0.1") | Some("localhost"));
-    host_ok && url.port().unwrap_or(80) == port && matches!(url.scheme(), "http")
+/// Not "starts with localhost": `http://127.0.0.1.evil.com` starts with
+/// `http://127.0.0.1` and is an ordinary internet domain.
+fn is_loopback_host(url: &tauri::Url) -> bool {
+    matches!(
+        url.host_str(),
+        Some("127.0.0.1") | Some("localhost") | Some("[::1]") | Some("::1")
+    )
+}
+
+/// May this URL load inside the app window?
+///
+/// The guard's job is to stop the *window* being navigated somewhere hostile —
+/// an OAuth callback, a doc link, a phishing page. It was never meant to stop
+/// the dashboard embedding its own services, and originally it did exactly
+/// that: `on_navigation` fires for subframes as well as top-level navigation,
+/// so allowing only port 1337 blocked the OpenChamber and OpenCode iframes and
+/// the browser view. All three rendered as blank white panes.
+///
+/// Every loopback port here belongs to DevHub — the dashboard, OpenChamber,
+/// OpenCode, the PTY. Widening to loopback rather than enumerating ports keeps
+/// this correct if a service moves, and gives up nothing that matters: a remote
+/// page cannot make the webview navigate to loopback, and anything not on
+/// loopback still goes to the system browser.
+fn may_load_in_window(url: &tauri::Url, dashboard_port: u16) -> bool {
+    let _ = dashboard_port; // kept for call-site clarity; loopback is the rule
+    match url.scheme() {
+        "http" | "https" => is_loopback_host(url),
+        // Tauri's own schemes, plus the boot page and in-page documents.
+        "tauri" | "asset" | "ipc" | "about" | "blob" | "data" => true,
+        _ => false,
+    }
 }
 
 pub fn run() {
@@ -389,12 +532,20 @@ pub fn run() {
             .unwrap_or_else(|| PathBuf::from("."));
         let node_bin = std::env::var_os("DEVHUB_SELFTEST_NODE")
             .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                std::env::current_exe()
-                    .ok()
-                    .and_then(|exe| exe.parent().map(|p| p.join(node_binary_name())))
-                    .unwrap_or_else(|| PathBuf::from("node"))
-            });
+            .filter(|p| p.exists())
+            .or_else(|| {
+                // The runtime lives in Resources/runtime, not MacOS — see
+                // resolve_paths() for why it moved.
+                let runtime = resource_dir.join("runtime");
+                std::fs::read_dir(&runtime).ok().and_then(|entries| {
+                    entries.flatten().map(|e| e.path()).find(|p| {
+                        p.file_name()
+                            .map(|n| n.to_string_lossy().starts_with("node"))
+                            .unwrap_or(false)
+                    })
+                })
+            })
+            .unwrap_or_else(|| PathBuf::from("node"));
         let report = selftest::run(resource_dir, node_bin);
         report.print();
         std::process::exit(if report.passed() { 0 } else { 1 });
@@ -504,7 +655,12 @@ pub fn run() {
             // This has to be set on the *builder*: a window that can be
             // navigated for even one frame before the guard attaches is a
             // window with a race in it.
-            let nav_port = port;
+            // In attach mode the dashboard is on whatever port the dev server
+            // uses, so the guard has to allow that instead of the packaged one.
+            let nav_port = dev_server_url()
+                .and_then(|u| u.parse::<tauri::Url>().ok())
+                .and_then(|u| u.port())
+                .unwrap_or(port);
             let _window =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                     .title("DevHub")
@@ -517,9 +673,12 @@ pub fn run() {
                     // reads as a glitch rather than a launch.
                     .background_color(tauri::window::Color(0x0d, 0x11, 0x17, 0xff))
                     .on_navigation(move |url| {
-                        if is_dashboard_url(url, nav_port) || url.scheme() == "tauri" {
+                        if may_load_in_window(url, nav_port) {
                             return true;
                         }
+                        // Anything else is off-machine: hand it to the system
+                        // browser rather than replacing the app with a page the
+                        // user cannot navigate back from.
                         if matches!(url.scheme(), "http" | "https") {
                             let _ = tauri_plugin_opener::open_url(url, None::<&str>);
                         }
@@ -566,6 +725,43 @@ pub fn run() {
             "check-updates" => {
                 let _ = app.emit("devhub://check-updates", ());
             }
+            /*
+             * Toggle between the packaged server and a dev server you are
+             * running yourself.
+             *
+             * Writing a file and restarting rather than switching in place:
+             * the sidecar owns ports and a process group, and swapping which
+             * server backs a live window mid-session is a class of state bug
+             * nobody wants to debug. A restart is two seconds and is
+             * unambiguous.
+             */
+            "toggle-dev-server" => {
+                if let Some(file) = dev_server_pref_file(app) {
+                    let currently_attached = dev_server_url_for(Some(app)).is_some();
+                    if currently_attached {
+                        let _ = std::fs::remove_file(&file);
+                    } else {
+                        if let Some(parent) = file.parent() {
+                            let _ = std::fs::create_dir_all(parent);
+                        }
+                        // The dev server runs on the same port the packaged one
+                        // would, so the two are mutually exclusive by design —
+                        // start `npm run dev` first, then attach.
+                        let _ = std::fs::write(&file, "http://localhost:1337");
+                    }
+                    if let Some(state) = app.try_state::<AppState>() {
+                        state.log.write_line(
+                            "shell",
+                            if currently_attached {
+                                "switching back to the packaged server"
+                            } else {
+                                "attaching to http://localhost:1337 on next launch"
+                            },
+                        );
+                    }
+                    app.restart();
+                }
+            }
             _ => {}
         })
         .on_window_event(|window, event| {
@@ -598,6 +794,13 @@ mod tests {
         s.parse().unwrap()
     }
 
+    /// The narrow "is this exactly the dashboard" rule. Only the tests need it
+    /// now that the window guard allows any loopback service, but it still
+    /// documents the distinction worth keeping in mind.
+    fn is_dashboard_url(url: &tauri::Url, port: u16) -> bool {
+        is_loopback_host(url) && url.port().unwrap_or(80) == port && matches!(url.scheme(), "http")
+    }
+
     #[test]
     fn only_the_exact_dashboard_origin_is_allowed_in_the_window() {
         assert!(is_dashboard_url(&url("http://127.0.0.1:1337/"), 1337));
@@ -613,6 +816,40 @@ mod tests {
         ));
         assert!(!is_dashboard_url(&url("https://github.com/"), 1337));
         assert!(!is_dashboard_url(&url("file:///etc/passwd"), 1337));
+    }
+
+    #[test]
+    fn our_own_loopback_services_may_load_in_the_window() {
+        // The regression this exists for: iframes to OpenChamber (1336),
+        // OpenCode (1338) and the browser view were blocked, so all three
+        // rendered as blank white panes.
+        for port in [1336, 1337, 1338, 1339, 62537] {
+            assert!(
+                may_load_in_window(&url(&format!("http://localhost:{port}/")), 1337),
+                "loopback:{port} should be allowed in the window"
+            );
+            assert!(may_load_in_window(
+                &url(&format!("http://127.0.0.1:{port}/")),
+                1337
+            ));
+        }
+    }
+
+    #[test]
+    fn nothing_off_machine_may_load_in_the_window() {
+        // Widening to loopback must not have widened it to the internet.
+        for hostile in [
+            "https://github.com/",
+            "http://evil.example/",
+            "http://127.0.0.1.evil.com/",
+            "http://localhost.evil.com:1337/",
+            "file:///etc/passwd",
+        ] {
+            assert!(
+                !may_load_in_window(&url(hostile), 1337),
+                "{hostile} must not load in the app window"
+            );
+        }
     }
 
     #[test]

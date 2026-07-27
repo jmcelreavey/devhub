@@ -109,6 +109,21 @@ export async function stageNodeRuntime({ platform = os.platform(), arch = os.arc
   const ext = platform === "win32" ? ".exe" : "";
   const dest = path.join(binariesDir, `node-${artifact.targetTriple}${ext}`);
   fs.mkdirSync(binariesDir, { recursive: true });
+
+  /*
+   * Exactly one runtime in the bundle.
+   *
+   * This directory ships wholesale as a resource, so a leftover from a
+   * different target rides along: after one Linux container build, the macOS
+   * app contained a 116 MB `node-aarch64-unknown-linux-gnu` it could never
+   * execute, nearly doubling the download for nothing.
+   */
+  for (const existing of fs.readdirSync(binariesDir)) {
+    if (existing.startsWith("node-") && existing !== path.basename(dest)) {
+      fs.rmSync(path.join(binariesDir, existing), { force: true });
+      log(`removed stale runtime for another target: ${existing}`);
+    }
+  }
   fs.copyFileSync(nodeBin, dest);
   fs.chmodSync(dest, 0o755);
   fs.rmSync(extractDir, { recursive: true, force: true });

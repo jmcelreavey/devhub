@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
+
+import { useTempContentRoot, type ContentRoot } from "@/lib/testing/content-root";
 
 vi.mock("@/lib/briefing/assemble", () => ({
   assembleBriefingContext: vi.fn(),
@@ -78,20 +79,17 @@ const sampleWeather: WeatherInfo = {
 
 describe("buildBriefingContext", () => {
   let tmpRoot: string;
-  let prevRepoRoot: string | undefined;
+  let content: ContentRoot;
 
   beforeEach(() => {
-    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "briefing-context-"));
-    prevRepoRoot = process.env.REPO_ROOT;
-    process.env.REPO_ROOT = tmpRoot;
+    content = useTempContentRoot("briefing-context-");
+    tmpRoot = content.root;
     assembleMock.mockReset();
     fetchWeatherMock.mockReset();
   });
 
   afterEach(() => {
-    if (prevRepoRoot === undefined) delete process.env.REPO_ROOT;
-    else process.env.REPO_ROOT = prevRepoRoot;
-    fs.rmSync(tmpRoot, { recursive: true, force: true });
+    content.cleanup();
   });
 
   it("soft-fills weather when the day cache was poisoned with null", async () => {

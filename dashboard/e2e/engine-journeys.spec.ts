@@ -75,12 +75,25 @@ interface TreeNode {
  * in the user's vault to check a canvas renders is a bad trade.
  *
  * So the path comes from the API and the navigation is direct.
+ *
+ * `/api/tree` takes no parameters and always returns the *notes* vault; the
+ * diagrams index fetches exactly that and filters to the `diagrams/` subtree.
+ * This used to request `/api/tree?vault=diagrams`, which looked scoped and was
+ * not — the ignored query string left it picking the first `.json` anywhere in
+ * notes, which is typically an archived attachment, not a diagram. The editor
+ * then looked for `diagrams/<that path>`, got a 404, rendered its not-found
+ * state, and the test failed on "tldraw should mount a canvas" while tldraw was
+ * in fact fine. Descending into the real subtree is the fix.
  */
 async function openFirstDiagram(page: Page): Promise<boolean> {
-  const response = await page.request.get("/api/tree?vault=diagrams").catch(() => null);
+  const response = await page.request.get("/api/tree").catch(() => null);
   if (!response?.ok()) return false;
 
   const tree = (await response.json()) as TreeNode[];
+  const roots = Array.isArray(tree) ? tree : [];
+  const diagrams = roots.find((node) => node.type === "dir" && node.name === "diagrams");
+  if (!diagrams?.children) return false;
+
   const firstFile = (nodes: TreeNode[]): string | null => {
     for (const node of nodes) {
       if (node.type === "file" && node.name.endsWith(".json")) return node.path;
@@ -90,12 +103,17 @@ async function openFirstDiagram(page: Page): Promise<boolean> {
     return null;
   };
 
-  const found = firstFile(Array.isArray(tree) ? tree : []);
+  const found = firstFile(diagrams.children);
   if (!found) return false;
 
-  // `diagrams/Folder/Name.json` → `/diagrams/Folder/Name`
-  const route = `/diagrams/${found.replace(/^diagrams\//, "").replace(/\.json$/, "")}`;
-  await page.goto(route.split("/").map(encodeURIComponent).join("/").replace("%2F", "/"));
+  // `diagrams/Folder/Name.json` → `/diagrams/Folder/Name`, each segment encoded
+  // (real diagram names contain spaces and `&`).
+  const segments = found
+    .replace(/^diagrams\//, "")
+    .replace(/\.json$/, "")
+    .split("/")
+    .map(encodeURIComponent);
+  await page.goto(`/diagrams/${segments.join("/")}`);
   await hydrated(page);
   return true;
 }

@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   MIGRATION_SCHEMA_VERSION,
   detectElectronInstall,
+  electronUserDataDirs,
   planMigration,
   readMigrationRecord,
   runMigration,
@@ -22,9 +23,21 @@ let home: string;
 let appData: string;
 let checkout: string;
 
+/**
+ * Where Electron *would* have kept its data on the machine running the test.
+ *
+ * Hardcoding the macOS path here made the whole suite pass locally and fail on
+ * the Linux CI runner: the fixture wrote to `~/Library/...` while the detector
+ * looked in `~/.config/...`, so it correctly found nothing. Asking the code
+ * under test keeps the fixture honest on every platform.
+ */
+function userDataDirFor(h: string): string {
+  return electronUserDataDirs(h)[0];
+}
+
 /** A believable Electron install: user data, a checkout, notes, config. */
 function buildElectronInstall(opts: { withRemote?: boolean } = {}) {
-  const userData = path.join(home, "Library", "Application Support", "DevHub");
+  const userData = userDataDirFor(home);
   fs.mkdirSync(userData, { recursive: true });
 
   checkout = path.join(tmp, "devhub-checkout");
@@ -91,8 +104,21 @@ describe("detection", () => {
     expect(detectElectronInstall(home)).toBeNull();
   });
 
+  it("looks where this platform's Electron actually kept its data", () => {
+    const dirs = electronUserDataDirs(path.join("/tmp", "someone"));
+    expect(dirs.length).toBeGreaterThan(0);
+    if (process.platform === "darwin") {
+      expect(dirs).toEqual([path.join("/tmp", "someone", "Library", "Application Support", "DevHub")]);
+    } else if (process.platform !== "win32") {
+      expect(dirs).toEqual([
+        path.join("/tmp", "someone", ".config", "DevHub"),
+        path.join("/tmp", "someone", ".config", "devhub"),
+      ]);
+    }
+  });
+
   it("ignores a recorded checkout that no longer exists", () => {
-    const userData = path.join(home, "Library", "Application Support", "DevHub");
+    const userData = userDataDirFor(home);
     fs.mkdirSync(userData, { recursive: true });
     fs.writeFileSync(path.join(userData, "repo-path.txt"), "/gone/missing");
     const install = detectElectronInstall(home);

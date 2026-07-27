@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { invalidateCalendarCaches } from "@/lib/calendar-cache";
 import { writeCalendarSelection } from "@/lib/calendar-selection";
 import { z } from "zod";
-import { parseBody } from "@/lib/api-utils";
+import { notConfigured, parseBody } from "@/lib/api-utils";
 import {
   isGoogleCalendarAuthError,
   isGoogleCalendarConfigured,
@@ -41,7 +41,7 @@ const SaveCalendarsSchema = z.object({
 
 export async function POST(req: NextRequest) {
   if (!isGoogleCalendarConfigured()) {
-    return NextResponse.json({ error: "Calendar not configured" }, { status: 400 });
+    return notConfigured("Calendar");
   }
 
   const parsed = await parseBody(req, SaveCalendarsSchema);

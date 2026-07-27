@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getTicket } from "@/lib/jira/client";
+import { notConfigured } from "@/lib/api-utils";
 
 export async function GET(
   _req: Request,
@@ -8,7 +9,7 @@ export async function GET(
   const { key } = await params;
 
   if (!process.env.JIRA_DOMAIN) {
-    return NextResponse.json({ error: "Not configured" }, { status: 400 });
+    return notConfigured("Jira");
   }
 
   try {

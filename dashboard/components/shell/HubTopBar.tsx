@@ -17,6 +17,7 @@ import { useLaunchClaudeDesktop } from "@/lib/launch/claude";
 import { useLaunchChamberDesktop } from "@/lib/launch/chamber";
 import { useLaunchOpenCodeDesktop } from "@/lib/launch/opencode";
 import { claudeCliCommand, openTerminal, opencodeCliCommand } from "@/lib/terminal-launch";
+import { openInBrowser } from "@/lib/desktop/bridge";
 
 interface Crumb {
   label: string;
@@ -75,7 +76,7 @@ export function HubTopBar() {
           label: "Browser view",
           description: "Open the embedded Chamber page in a new tab.",
           icon: <ExternalLink size={13} />,
-          onSelect: () => window.open("/chamber", "_blank", "noopener,noreferrer"),
+          onSelect: () => void openInBrowser("/chamber"),
         },
         {
           id: "chamber-desktop",
@@ -100,7 +101,7 @@ export function HubTopBar() {
           label: "Browser view",
           description: "Open the embedded OpenCode page in a new tab.",
           icon: <ExternalLink size={13} />,
-          onSelect: () => window.open("/opencode", "_blank", "noopener,noreferrer"),
+          onSelect: () => void openInBrowser("/opencode"),
         },
         {
           id: "opencode-desktop",

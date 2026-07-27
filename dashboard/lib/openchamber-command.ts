@@ -168,11 +168,78 @@ export function findOpenChamberBin(): string | null {
   return cachedOpenChamberBin;
 }
 
-/** Resolve how to invoke OpenChamber. Runs the CLI `.js` with DevHub's own node
- * so it never depends on a `node` being on PATH for the shebang. */
-export function resolveOpenChamberCommand(): { cmd: string; argsPrefix: string[]; source: string } {
+/**
+ * Find the daemon entrypoint that `openchamber serve` would spawn.
+ *
+ * `serve` is a wrapper: it spawns `server/index.js` under Bun, then waits for a
+ * ready signal. On this machine that signal never arrives and `serve` fails with
+ * "OpenChamber daemon did not report ready within 30s" — while running
+ * `bun server/index.js` directly starts cleanly, binds its port, and serves.
+ *
+ * So we skip the wrapper. Its only job is spawn-and-wait, and DevHub already
+ * polls the health endpoint itself, so nothing is lost by doing the spawn
+ * directly and everything is gained by not depending on a handshake that is
+ * observably broken.
+ */
+function findOpenChamberServerEntry(bin: string): string | null {
+  let real = bin;
+  try {
+    real = fs.realpathSync(bin);
+  } catch {
+    /* use the bin path as-is */
+  }
+  // .../@openchamber/web/bin/cli.js → .../@openchamber/web/server/index.js
+  const packageRoot = path.resolve(path.dirname(real), "..");
+  const entry = path.join(packageRoot, "server", "index.js");
+  return fs.existsSync(entry) ? entry : null;
+}
+
+/** Bun, which the OpenChamber daemon requires. Node cannot run it. */
+function findBun(): string | null {
+  for (const candidate of [
+    "/opt/homebrew/bin/bun",
+    "/usr/local/bin/bun",
+    path.join(process.env.HOME ?? "", ".bun", "bin", "bun"),
+  ]) {
+    if (candidate && fs.existsSync(candidate)) return candidate;
+  }
+  const res = spawnSync("/usr/bin/which", ["bun"], { encoding: "utf8" });
+  const found = res.stdout?.trim();
+  return found && fs.existsSync(found) ? found : null;
+}
+
+/**
+ * Resolve how to invoke OpenChamber.
+ *
+ * Preference order:
+ *
+ * 1. **The daemon directly, under Bun.** Bypasses the broken `serve` handshake
+ *    described above. This is what actually works.
+ * 2. The CLI `.js` under DevHub's own node — the previous behaviour, kept as a
+ *    fallback for installs where the server entry has moved or Bun is absent,
+ *    so a layout change upstream degrades rather than breaks.
+ * 3. The bare binary.
+ */
+export function resolveOpenChamberCommand(): {
+  cmd: string;
+  argsPrefix: string[];
+  source: string;
+  /** True when we spawn the long-lived daemon ourselves instead of `serve`. */
+  bypassesServe?: boolean;
+} {
   const bin = findOpenChamberBin();
   if (!bin) return { cmd: "openchamber", argsPrefix: [], source: "PATH lookup" };
+
+  const entry = findOpenChamberServerEntry(bin);
+  const bun = findBun();
+  if (entry && bun) {
+    return {
+      cmd: bun,
+      argsPrefix: [entry],
+      source: "bun server/index.js (bypassing serve)",
+      bypassesServe: true,
+    };
+  }
 
   let real = bin;
   try {

@@ -39,8 +39,18 @@ const IGNORED_CONSOLE = [
   /net::ERR_/, // offline third parties (avatars, feeds)
 ];
 
-function collectErrors(page: Page): string[] {
+/**
+ * Chromium logs "Failed to load resource: … 400 (Bad Request)" with no URL, so a
+ * failure here used to say only that *something* on the page 4xx'd. Recording
+ * every non-2xx response lets the assertion name the endpoint.
+ */
+function collectErrors(page: Page): { errors: string[]; badResponses: string[] } {
   const errors: string[] = [];
+  const badResponses: string[] = [];
+  page.on("response", (res) => {
+    if (res.status() < 400) return;
+    badResponses.push(`${res.status()} ${new URL(res.url()).pathname}`);
+  });
   page.on("console", (msg: ConsoleMessage) => {
     if (msg.type() !== "error") return;
     const text = msg.text();
@@ -48,13 +58,13 @@ function collectErrors(page: Page): string[] {
     errors.push(text);
   });
   page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
-  return errors;
+  return { errors, badResponses };
 }
 
 test.describe("routes render", () => {
   for (const route of ROUTES) {
     test(`${route} renders without console errors`, async ({ page }) => {
-      const errors = collectErrors(page);
+      const { errors, badResponses } = collectErrors(page);
 
       const response = await page.goto(route, { waitUntil: "domcontentloaded" });
       expect(response?.status(), `${route} should return 2xx`).toBeLessThan(400);
@@ -62,11 +72,22 @@ test.describe("routes render", () => {
       // The shell is the contract: if <main> is there, the layout mounted and
       // hydration didn't blow up.
       await expect(page.locator("#main-content")).toBeAttached();
-      await page.waitForLoadState("networkidle").catch(() => {
+      // The timeout is the point, not a safety net. `waitForLoadState` defaults
+      // to *no* timeout, so on a route that polls — /status refreshes services
+      // forever — it never settles, the catch below never runs, and the test
+      // dies on the 45s suite timeout with no useful message. Bounding it turns
+      // "never idle" into the outcome the comment always claimed: wait a bit for
+      // late fetches, then get on with the assertions.
+      await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {
         /* long-polling routes never go idle; the assertions above are enough */
       });
 
-      expect(errors, `console errors on ${route}`).toEqual([]);
+      expect(
+        errors,
+        `console errors on ${route}${
+          badResponses.length ? ` (non-2xx: ${[...new Set(badResponses)].join(", ")})` : ""
+        }`,
+      ).toEqual([]);
     });
   }
 });

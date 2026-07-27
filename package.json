@@ -2,7 +2,7 @@
   "name": "devhub",
   "private": true,
   "engines": {
-    "node": ">=20"
+    "node": ">=20.12"
   },
   "description": "Run npm install and npm run dev from the repo root; delegates to dashboard/.",
   "scripts": {

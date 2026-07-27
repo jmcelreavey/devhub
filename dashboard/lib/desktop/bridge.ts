@@ -67,6 +67,33 @@ export async function pickFolder(title?: string): Promise<string | null> {
   }
 }
 
+/**
+ * Open a URL in the user's real browser.
+ *
+ * `window.open(url, "_blank")` does nothing in the desktop app — Tauri blocks
+ * new windows, silently. Every "Browser view" and "Open in new tab" control in
+ * the app was therefore dead on click. This routes through the shell's opener
+ * instead, and falls back to `window.open` in an actual browser where that
+ * works fine.
+ *
+ * Relative URLs are resolved against the current origin first, because the
+ * shell needs an absolute URL and the call sites naturally write "/chamber".
+ */
+export async function openInBrowser(url: string): Promise<void> {
+  const absolute = new URL(url, window.location.href).toString();
+  const api = tauri();
+  if (!api) {
+    window.open(absolute, "_blank", "noopener,noreferrer");
+    return;
+  }
+  try {
+    await api.core.invoke("plugin:opener|open_url", { url: absolute });
+  } catch {
+    // Last resort; harmless if it also does nothing.
+    window.open(absolute, "_blank", "noopener,noreferrer");
+  }
+}
+
 /** Open the log folder in the OS file manager. No-op in a browser. */
 export async function openLogs(): Promise<void> {
   const api = tauri();

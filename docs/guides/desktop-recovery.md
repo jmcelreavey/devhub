@@ -96,10 +96,14 @@ intended, not a bug to route around — there is deliberately no "install anyway
 **Over the network:** expected. Port 1339 is an unauthenticated PTY and is
 never exposed to your LAN. Use the terminal on the machine running DevHub.
 
-**Locally:** check the log for `rejected connection`. The handshake requires
-both the desktop session cookie and an exact-origin match. If you reached the
-dashboard by an address other than `127.0.0.1:1337` or `localhost:1337`, the
-origin check fails by design.
+**Locally:** check the log for `rejected connection`. The handshake requires a
+short-lived ticket and an exact-origin match. If you reached the dashboard by an
+address other than `127.0.0.1:1337` or `localhost:1337`, the origin check fails
+by design.
+
+`missing or expired terminal ticket` after the app has been open a long time is
+usually a stale page — reload the window (View → Reload) so it fetches a fresh
+ticket.
 
 ## Processes left behind
 

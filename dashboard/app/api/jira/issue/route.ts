@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createIssue, getJiraMeta, getTicket } from "@/lib/jira/client";
 import { issueTypeForParent } from "@/lib/jira/issue-type";
 import { JiraCreateIssueSchema } from "@/lib/schemas";
-import { withErrorHandler, parseBody } from "@/lib/api-utils";
+import { withErrorHandler, parseBody, notConfigured } from "@/lib/api-utils";
 import { invalidateJiraTicketsCache } from "@/lib/jira/tickets-cache";
 import { invalidateSidebarCountsCache } from "@/lib/sidebar-counts-cache";
 
@@ -13,7 +13,7 @@ import { invalidateSidebarCountsCache } from "@/lib/sidebar-counts-cache";
  */
 export const POST = withErrorHandler(async (req: Request) => {
   if (!process.env.JIRA_DOMAIN) {
-    return NextResponse.json({ error: "Jira is not configured." }, { status: 400 });
+    return notConfigured("Jira");
   }
 
   const parsed = await parseBody(req, JiraCreateIssueSchema);

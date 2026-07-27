@@ -18,6 +18,12 @@ export interface OpenCodePeerHandle {
 
 export interface ChamberPeerHandle {
   reusedExisting: boolean;
+  /**
+   * The daemon process, when DevHub spawned it directly rather than through
+   * `openchamber serve`. Absent when `serve` forked its own daemon (nothing to
+   * hold) or when an existing instance was reused.
+   */
+  child?: ChildProcess;
 }
 
 function probeHost(bindHost: string): string {
@@ -165,6 +171,42 @@ export async function startChamberPeer(log: PeerLog): Promise<ChamberPeerHandle>
 
     if (!(await canBindPort(port, host))) {
       log(`port ${port} busy but not accepting connections — retrying (${attempt}/${maxAttempts})`);
+      await sleep(1000);
+      continue;
+    }
+
+    const resolved = resolveOpenChamberCommand();
+
+    if (resolved.bypassesServe) {
+      /*
+       * We are the daemon's parent now, so this process stays alive rather
+       * than forking and exiting. Waiting for it to exit — which is what the
+       * `serve` path does below — would hang forever.
+       *
+       * Readiness comes from the port, not from the process, which is a
+       * stronger signal anyway: `serve` returns 0 even when the daemon it
+       * forked has already crashed.
+       */
+      log(`using ${resolved.source}: ${resolved.cmd} ${resolved.argsPrefix.join(" ")}`);
+      const child = spawn(
+        resolved.cmd,
+        [...resolved.argsPrefix, "--port", String(port), "--host", host],
+        { stdio: "inherit", env: cleanOpenChamberEnv() },
+      );
+      child.on("error", (err) => log(`OpenChamber daemon failed to spawn: ${err.message}`));
+
+      // Generous: the daemon starts an OpenCode instance of its own before it
+      // binds, and 30s was exactly the timeout that made `serve` give up.
+      if (await waitForPortListening(port, 60_000, probe)) {
+        log(`OpenChamber daemon is running on port ${port}`);
+        return { reusedExisting: false, child };
+      }
+      log(`OpenChamber daemon did not bind port ${port} within 60s — retrying (${attempt}/${maxAttempts})`);
+      try {
+        child.kill();
+      } catch {
+        /* already gone */
+      }
       await sleep(1000);
       continue;
     }
