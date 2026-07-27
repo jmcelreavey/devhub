@@ -202,12 +202,27 @@ test.describe("terminal (xterm.js)", () => {
     await page.goto("/");
     await hydrated(page);
 
-    await page.evaluate(() => {
-      window.dispatchEvent(new CustomEvent("devhub:terminal-open", { detail: {} }));
-    });
-
     const dock = page.getByRole("complementary", { name: "Terminal" });
-    await expect(dock).toBeVisible({ timeout: 20_000 });
+
+    /**
+     * Re-fire until it lands, rather than dispatch once and wait.
+     *
+     * `devhub:terminal-open` is a plain window event: TerminalDock subscribes
+     * in an effect, and an event dispatched before that effect runs is not
+     * queued, it is simply gone — so a single dispatch is a race against
+     * hydration that no amount of waiting afterwards can win. `hydrated()`
+     * checks a *different* component, which is why this passed on Chromium and
+     * failed intermittently on WebKit: same race, different hydration order.
+     *
+     * Each attempt opens the dock and adds a tab, so extra attempts are
+     * harmless — the assertions below all read the first one.
+     */
+    await expect(async () => {
+      await page.evaluate(() => {
+        window.dispatchEvent(new CustomEvent("devhub:terminal-open", { detail: {} }));
+      });
+      await expect(dock).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
 
     const screen = dock.locator(".xterm-screen, .xterm").first();
     await expect(screen).toBeVisible({ timeout: 20_000 });
