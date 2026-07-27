@@ -44,10 +44,9 @@ import type { IncomingMessage } from "node:http";
 import * as pty from "node-pty";
 import { terminalLogDir, terminalLogPath } from "../lib/terminal-log";
 import {
-  DESKTOP_COOKIE,
   isAllowedTerminalOrigin,
   isDesktopSession,
-  tokenMatches,
+  isValidTerminalTicket,
 } from "../lib/desktop/bootstrap-auth";
 
 const PORT = Number.parseInt(process.env.TERMINAL_PORT ?? "1339", 10);
@@ -224,28 +223,25 @@ function verifyTerminalClient(req: IncomingMessage): { ok: true } | { ok: false;
 
   // Desktop only: in a checkout there is no shell and therefore no token, and
   // requiring one would break `npm run dev` for no gain.
+  //
+  // A ticket, not the cookie. WKWebView does not attach the bootstrap cookie to
+  // a `ws://` handshake on a different port, so the original cookie check
+  // rejected every connection in the shipped app — the terminal simply did not
+  // work. The dashboard fetches a ticket over same-origin HTTP, where the
+  // cookie does work, and passes it here.
   if (isDesktopSession()) {
-    const cookies = parseCookieHeader(req.headers.cookie);
-    if (!tokenMatches(cookies.get(DESKTOP_COOKIE))) {
-      return { ok: false, reason: "missing or invalid desktop session cookie" };
+    let ticket: string | null = null;
+    try {
+      ticket = new URL(req.url ?? "/", "http://localhost").searchParams.get("ticket");
+    } catch {
+      /* unparseable URL — treated as no ticket */
+    }
+    if (!isValidTerminalTicket(ticket)) {
+      return { ok: false, reason: "missing or expired terminal ticket" };
     }
   }
 
   return { ok: true };
-}
-
-/** Minimal cookie header parse — `ws` gives us the raw header, not a jar. */
-function parseCookieHeader(header: string | undefined): Map<string, string> {
-  const out = new Map<string, string>();
-  if (!header) return out;
-  for (const part of header.split(";")) {
-    const idx = part.indexOf("=");
-    if (idx === -1) continue;
-    const key = part.slice(0, idx).trim();
-    const value = part.slice(idx + 1).trim();
-    if (key) out.set(key, decodeURIComponent(value));
-  }
-  return out;
 }
 
 const wss = new WebSocketServer({

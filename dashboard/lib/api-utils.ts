@@ -20,6 +20,28 @@ export function withErrorHandler<Args extends unknown[]>(
 }
 
 /**
+ * "This integration has no credentials on this machine."
+ *
+ * These routes used to answer 400, which says the *caller* sent something
+ * malformed. Nothing is wrong with the request — the server simply cannot serve
+ * it, which is what 503 means. The distinction is not academic: a client cannot
+ * tell a missing API token from a bad ticket key if both are 400, and neither
+ * can a log. It also stopped CI being green: a fresh checkout has no
+ * `.env.local`, so the Today page's Jira lookups 400'd on every run, and the
+ * smoke test that asserts "no console errors" only tolerates the status codes
+ * that mean "not your fault".
+ *
+ * `Retry-After` is deliberately omitted: retrying will not help until somebody
+ * configures the integration.
+ */
+export function notConfigured(what: string): NextResponse {
+  return NextResponse.json(
+    { error: `${what} is not configured.`, code: "not_configured" },
+    { status: 503 },
+  );
+}
+
+/**
  * Read and validate a JSON request body.
  *
  * The previous signature was `parseBody<T>(req): Promise<T>` implemented as

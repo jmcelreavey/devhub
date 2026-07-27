@@ -104,9 +104,70 @@ function loadEnvFile(envFile) {
   return loaded;
 }
 
+/**
+ * Repair the GUI `PATH`.
+ *
+ * A process launched from Finder inherits a minimal `PATH` — typically just
+ * `/usr/bin:/bin:/usr/sbin:/sbin`. It does not include Homebrew, nvm, or the
+ * user-local bins where `openchamber`, `opencode`, `gh` and agent CLIs actually
+ * live. The Electron launcher repaired this explicitly; the first desktop
+ * builds did not, and the symptom was peer services exiting with code 1 while
+ * the binaries sat installed and working in a normal terminal.
+ *
+ * Deliberately additive and deliberately last: the user's own `PATH` entries
+ * keep priority, and these are appended as fallbacks rather than shadowing
+ * anything they have configured.
+ */
+function repairedPath() {
+  const home = process.env.HOME ?? "";
+  const nodeDir = path.dirname(process.execPath);
+  const extras = [
+    nodeDir,
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/opt/local/bin",
+    "/usr/bin",
+    "/bin",
+    "/usr/sbin",
+    "/sbin",
+  ];
+  if (home) {
+    extras.push(
+      path.join(home, ".opencode", "bin"),
+      path.join(home, ".npm", "bin"),
+      path.join(home, ".local", "bin"),
+      path.join(home, "bin"),
+      path.join(home, ".cargo", "bin"),
+      path.join(home, ".bun", "bin"),
+    );
+    // nvm installs each Node version under its own directory, and whichever is
+    // current owns the globally-installed CLIs. Add every version rather than
+    // guessing which one — a missing entry is a CLI the user "has" but the app
+    // cannot see.
+    const nvm = path.join(home, ".nvm", "versions", "node");
+    try {
+      for (const version of fs.readdirSync(nvm)) {
+        extras.push(path.join(nvm, version, "bin"));
+      }
+    } catch {
+      /* no nvm on this machine */
+    }
+  }
+
+  const current = (process.env.PATH ?? "").split(path.delimiter).filter(Boolean);
+  const seen = new Set(current);
+  for (const dir of extras) {
+    if (!seen.has(dir)) {
+      current.push(dir);
+      seen.add(dir);
+    }
+  }
+  return current.join(path.delimiter);
+}
+
 /** Resolve once, hand to every child. No child re-reads the config file. */
 function managedEnv() {
-  return { ...process.env };
+  return { ...process.env, PATH: repairedPath() };
 }
 
 function waitForPort(port, host, timeoutMs) {
@@ -224,6 +285,38 @@ async function main() {
       void shutdown(1);
     }
   });
+
+  /**
+   * Peer services: OpenChamber (1336) and OpenCode (1338).
+   *
+   * Started here because the packaged app has no `concurrently` to do it. They
+   * were missing from the first desktop builds entirely, which left the
+   * Chamber and OpenCode pages permanently blank — the ports were simply never
+   * listening.
+   *
+   * Deliberately not fatal. Both shell out to binaries the user may not have
+   * installed, and "OpenCode is not installed" is a normal state for most
+   * people, not a reason to refuse to start the dashboard.
+   */
+  const peersEntry = path.join(here, "start-peer-services.mjs");
+  if (fs.existsSync(peersEntry)) {
+    emit({ state: "starting", service: "peers" });
+    const peers = track(
+      spawn(process.execPath, [peersEntry], {
+        cwd: serverDir,
+        env,
+        stdio: ["ignore", "inherit", "inherit"],
+      }),
+      "peers",
+    );
+    peers.on("exit", (code) => {
+      if (!stopping && code !== 0) {
+        log(`peer services exited (code ${code}) — OpenChamber/OpenCode unavailable`);
+      }
+    });
+  } else {
+    log(`no peer services staged at ${peersEntry}`);
+  }
 
   const ptyEntry = path.join(here, "terminal-pty-server.cjs");
   if (fs.existsSync(ptyEntry)) {

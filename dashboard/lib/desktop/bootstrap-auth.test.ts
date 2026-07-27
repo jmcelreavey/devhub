@@ -1,10 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DESKTOP_COOKIE,
   DESKTOP_TOKEN_HEADER,
   isAllowedTerminalOrigin,
   isAuthenticatedDesktopRequest,
   isDesktopSession,
+  isValidTerminalTicket,
+  issueTerminalTicket,
   tokenMatches,
 } from "./bootstrap-auth";
 
@@ -135,5 +137,67 @@ describe("terminal origin", () => {
   it("rejects a LAN origin even on the right port", () => {
     // LAN mode must never reach the terminal; it is not proxied for this reason.
     expect(isAllowedTerminalOrigin("http://192.168.1.20:1337", 1337)).toBe(false);
+  });
+});
+
+describe("terminal ticket", () => {
+  /**
+   * The cookie could not be the credential here: WKWebView does not attach it
+   * to a `ws://` handshake on a different port, which broke the terminal in the
+   * shipped app. These guard the replacement, which is what now stands between
+   * a web page and an interactive shell.
+   */
+
+  it("issues a ticket that validates", () => {
+    const ticket = issueTerminalTicket();
+    expect(ticket).toBeTruthy();
+    expect(isValidTerminalTicket(ticket)).toBe(true);
+  });
+
+  it("is not the bootstrap token", () => {
+    // Leaking a ticket — from a URL, a log — must not leak the credential that
+    // guards every other bridge route.
+    expect(issueTerminalTicket()).not.toBe(TOKEN);
+  });
+
+  it("rejects a forged ticket", () => {
+    expect(isValidTerminalTicket("f".repeat(64))).toBe(false);
+    expect(isValidTerminalTicket("")).toBe(false);
+    expect(isValidTerminalTicket(null)).toBe(false);
+    expect(isValidTerminalTicket(undefined)).toBe(false);
+  });
+
+  it("rejects a ticket minted under a different token", () => {
+    // A previous launch's ticket, or another instance's. Each launch gets a
+    // fresh token, so tickets must not survive across them.
+    const other = issueTerminalTicket();
+    process.env.DEVHUB_BOOTSTRAP_TOKEN = "b".repeat(64);
+    expect(isValidTerminalTicket(other)).toBe(false);
+  });
+
+  it("expires", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-07-26T12:00:00Z"));
+      const ticket = issueTerminalTicket();
+      expect(isValidTerminalTicket(ticket)).toBe(true);
+
+      // One window later it is still accepted — a connection starting as the
+      // window rolls over must not fail at random.
+      vi.setSystemTime(new Date("2026-07-26T12:00:31Z"));
+      expect(isValidTerminalTicket(ticket)).toBe(true);
+
+      // Well past, it is not.
+      vi.setSystemTime(new Date("2026-07-26T12:05:00Z"));
+      expect(isValidTerminalTicket(ticket)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("issues nothing in browser mode", () => {
+    delete process.env.DEVHUB_BOOTSTRAP_TOKEN;
+    expect(issueTerminalTicket()).toBeNull();
+    expect(isValidTerminalTicket("anything")).toBe(false);
   });
 });

@@ -49,10 +49,21 @@ export function contentPxToGridHeight(contentPx: number, rowHeight: number, marg
 
 /**
  * Apply measured heights (grid rows) and vertically compact each breakpoint.
+ *
+ * `ignoreMinH` is for collapsing. `minH` exists to stop somebody dragging a
+ * card with real content down to a useless sliver — it is a floor on *content*,
+ * and a collapsed card has none. Without the escape hatch the two cards with
+ * `minH: 6` (the briefing and the tasks/notes card) refused to collapse below
+ * six rows while everything else went to three, so minimising left the grid
+ * visibly ragged.
+ *
+ * The original `minH` is untouched in the layout, so expanding restores the
+ * floor along with the height.
  */
 export function applyHeightPatchAndCompact(
   layouts: ResponsiveLayouts<TodayGridBreakpoint>,
   patch: Partial<Record<TodayGridSlotId, number>>,
+  ignoreMinH?: ReadonlySet<TodayGridSlotId>,
 ): ResponsiveLayouts<TodayGridBreakpoint> {
   if (Object.keys(patch).length === 0) return layouts;
   const bps = Object.keys(TODAY_GRID_BREAKPOINTS) as TodayGridBreakpoint[];
@@ -65,7 +76,7 @@ export function applyHeightPatchAndCompact(
       const slot = item.i as TodayGridSlotId;
       const nh = patch[slot];
       if (nh == null) return item;
-      const minH = item.minH ?? 1;
+      const minH = ignoreMinH?.has(slot) ? 1 : (item.minH ?? 1);
       const maxH = item.maxH ?? Infinity;
       const h = Math.min(maxH, Math.max(minH, nh));
       return { ...item, h };

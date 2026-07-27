@@ -23,6 +23,24 @@ fi
 
 cd /work
 
+# Recover from a previous run that was killed.
+#
+# The swap below is protected by an EXIT trap, but a trap cannot run if the
+# container is SIGKILLed — `docker kill`, Docker Desktop quitting, the OOM
+# killer. When that happened the host was left with Linux binaries in
+# `dashboard/node_modules` and its real modules stranded in
+# `node_modules.host`, which then broke the host's own tooling: the next
+# `git push` ran the pre-push leak scan over `node_modules.host` and failed on
+# a base64 blob inside undici.
+#
+# So recovery happens on the way in, where it is guaranteed to run, rather than
+# relying only on the way out.
+if [ -d dashboard/node_modules.host ]; then
+  echo "[linux] recovering from an interrupted previous run"
+  rm -rf dashboard/node_modules
+  mv dashboard/node_modules.host dashboard/node_modules
+fi
+
 # Swap in the Linux modules for the duration of the build, then put the
 # macOS ones back. The host tree must be exactly as we found it.
 MOVED=0
@@ -38,7 +56,9 @@ restore() {
     mv dashboard/node_modules.host dashboard/node_modules
   fi
 }
-trap restore EXIT
+# INT/TERM as well as EXIT: a plain `docker stop` sends SIGTERM, which is
+# recoverable. Only SIGKILL is not, and that is what the check above covers.
+trap restore EXIT INT TERM
 
 echo "[linux] staging"
 node desktop/scripts/stage-all.mjs

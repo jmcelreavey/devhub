@@ -11,6 +11,33 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { tauriDir } from "./staging-paths.mjs";
 
+/**
+ * Find the bundled Node runtime.
+ *
+ * It moved from `Contents/MacOS/` to `Contents/Resources/runtime/` because
+ * macOS gave anything in `MacOS/` a Dock icon — the sidecar showed up as a
+ * bouncing "node" the user could not interact with. Both locations are
+ * checked so an app installed before that change still self-tests.
+ */
+function findNode(root) {
+  const candidates = [
+    path.join(root, "Contents", "Resources", "runtime"),
+    path.join(root, "Contents", "MacOS"),
+    path.join(root, "runtime"),
+    root,
+  ];
+  for (const dir of candidates) {
+    if (!fs.existsSync(dir)) continue;
+    const exact = path.join(dir, "node");
+    if (fs.existsSync(exact)) return exact;
+    const suffixed = fs
+      .readdirSync(dir)
+      .find((f) => f.startsWith("node-") && !f.endsWith(".sig"));
+    if (suffixed) return path.join(dir, suffixed);
+  }
+  return path.join(root, "Contents", "Resources", "runtime", "node");
+}
+
 const targetArg = process.argv.indexOf("--target");
 const target = targetArg !== -1 ? process.argv[targetArg + 1] : null;
 
@@ -38,13 +65,13 @@ function findBundle() {
       return {
         bin,
         resources: path.join(app, "Contents", "Resources"),
-        node: path.join(macos, "node"),
+        node: findNode(app),
       };
     }
     // Linux / raw binary: resources sit beside the executable.
     const bin = path.join(dir, "devhub-desktop");
     if (fs.existsSync(bin)) {
-      return { bin, resources: dir, node: path.join(dir, "node") };
+      return { bin, resources: dir, node: findNode(dir) };
     }
   }
   return null;

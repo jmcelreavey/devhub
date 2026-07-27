@@ -10,6 +10,7 @@ import {
   type ResponsiveLayouts,
 } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
+import type { LayoutItem } from "react-grid-layout";
 import "react-resizable/css/styles.css";
 import { ResizeHandle } from "@/components/shell/ResizeHandle";
 import {
@@ -71,10 +72,86 @@ interface TodayDashboardGridBodyProps {
   ready: boolean;
 }
 
+/**
+ * The content's *natural* height, with the grid's imposed height removed.
+ *
+ * The obvious version of this — read `scrollHeight` and be done — is circular
+ * and was the actual bug behind "collapsing hides the text but the card stays
+ * the same size". `.react-resizable` is `height: 100%` and react-grid-layout
+ * sets the slot's height explicitly, so a child that wants 80px inside a
+ * 300px slot reports 300. The measurement can only ever return what the layout
+ * already decided, so a collapsed card never shrinks.
+ *
+ * Worse, it drifts: each pass adds the `+ 8` padding to a value that already
+ * included it, so every collapse/expand cycle made the card slightly taller.
+ * That was the second symptom, and it is the giveaway that the measurement was
+ * reading its own output.
+ *
+ * So the constraint is lifted for the duration of the read. Setting `height`
+ * to `auto` and touching `scrollHeight` forces a synchronous reflow, which is
+ * the cost of getting a real answer; it happens only when a card is collapsed
+ * or expanded, not on every render.
+ */
 function measureSlotContentPx(slot: HTMLDivElement): number {
   const target = slot.firstElementChild instanceof HTMLElement ? slot.firstElementChild : slot;
-  return Math.ceil(Math.max(target.scrollHeight, target.getBoundingClientRect().height));
+
+  const previousHeight = target.style.height;
+  const previousMinHeight = target.style.minHeight;
+  const previousFlex = target.style.flex;
+  target.style.height = "auto";
+  target.style.minHeight = "0";
+  target.style.flex = "none";
+
+  // Reading scrollHeight flushes layout, so the value below reflects the
+  // unconstrained box rather than the one we just replaced.
+  const natural = Math.ceil(
+    Math.max(target.scrollHeight, target.getBoundingClientRect().height),
+  );
+
+  target.style.height = previousHeight;
+  target.style.minHeight = previousMinHeight;
+  target.style.flex = previousFlex;
+
+  return natural;
 }
+
+/**
+ * Run after the browser has actually laid out, not merely after the next frame.
+ *
+ * A single `requestAnimationFrame` fires *before* WebKit has finished reflow
+ * for the DOM change React just committed, so `scrollHeight` still reports the
+ * previous size. In the desktop app — which renders in WKWebView — that made
+ * collapsing a card leave the grid slot at its full height: the content hid,
+ * the card did not shrink. Expanding then measured a half-settled layout and
+ * came back slightly taller each time.
+ *
+ * Two frames is the standard idiom for "after style and layout have been
+ * recalculated". Chromium tolerated one, which is why this only showed up
+ * after the move off Electron.
+ */
+function afterLayout(fn: () => void): () => void {
+  let inner = 0;
+  const outer = requestAnimationFrame(() => {
+    inner = requestAnimationFrame(fn);
+  });
+  return () => {
+    cancelAnimationFrame(outer);
+    if (inner) cancelAnimationFrame(inner);
+  };
+}
+
+/**
+ * Grid rows a collapsed card occupies.
+ *
+ * A fixed value, not a measurement. Measuring gave every collapsed card a
+ * different height depending on how much summary text it happened to show,
+ * which looks like a bug even though each individual number was "correct".
+ * Minimised things should line up.
+ *
+ * 3 rows x 20px + margins ≈ the card header, which is exactly what remains
+ * visible when a card is collapsed.
+ */
+const COLLAPSED_GRID_HEIGHT = 3;
 
 function querySlotElement(id: TodayGridSlotId): HTMLDivElement | null {
   if (typeof document === "undefined") return null;
@@ -101,6 +178,16 @@ function TodayDashboardGridBody({
   const slotRefs = useRef<Partial<Record<TodayGridSlotId, HTMLDivElement | null>>>({});
   const contentAutoLayoutDoneRef = useRef(false);
   const previousCollapsedRef = useRef<ReadonlySet<TodayGridSlotId> | null>(null);
+  /**
+   * The height each card had before it was collapsed.
+   *
+   * Expanding used to re-measure the natural content height, which is not the
+   * same thing as "the size it was". If the user had resized a card, or the
+   * content had since changed, it came back a different size and left a hole in
+   * the grid. Remembering is both simpler and what people actually expect from
+   * a minimise control.
+   */
+  const heightBeforeCollapseRef = useRef<Partial<Record<TodayGridSlotId, number>>>({});
   const settledRef = useRef(false);
 
   const setSlotRef = useCallback((id: TodayGridSlotId) => (el: HTMLDivElement | null) => {
@@ -136,7 +223,7 @@ function TodayDashboardGridBody({
     }
     contentAutoLayoutDoneRef.current = true;
 
-    const raf = requestAnimationFrame(() => {
+    const cancel = afterLayout(() => {
       const marginY = TODAY_GRID_MARGIN[1];
       const rh = TODAY_GRID_ROW_HEIGHT;
       const patch: Partial<Record<TodayGridSlotId, number>> = {};
@@ -156,7 +243,7 @@ function TodayDashboardGridBody({
         return next;
       });
     });
-    return () => cancelAnimationFrame(raf);
+    return cancel;
   }, [visibleKey, visible]);
 
   const onLayoutChange = useCallback((_layout: Layout, all: ResponsiveLayouts<TodayGridBreakpoint>) => {
@@ -166,13 +253,32 @@ function TodayDashboardGridBody({
     }
   }, []);
 
+  /**
+   * The height a slot currently has in the live layout.
+   *
+   * Read from the layout rather than the DOM: the layout is the thing we are
+   * about to write back to, and a slot that has just been resized by the user
+   * has its new height here before the DOM settles.
+   */
+  const currentHeightFor = useCallback(
+    (id: TodayGridSlotId): number | null => {
+      for (const items of Object.values(layouts)) {
+        const found = (items as readonly LayoutItem[] | undefined)?.find((it) => it.i === id);
+        if (found) return found.h;
+      }
+      return null;
+    },
+    [layouts],
+  );
+
   useLayoutEffect(() => {
     const previous = previousCollapsedRef.current;
     previousCollapsedRef.current = new Set(collapsedSlots);
 
-    const raf = requestAnimationFrame(() => {
+    const cancel = afterLayout(() => {
       const marginY = TODAY_GRID_MARGIN[1];
       const patch: Partial<Record<TodayGridSlotId, number>> = {};
+      const collapsing = new Set<TodayGridSlotId>();
       for (const id of TODAY_GRID_SLOT_ORDER) {
         if (!visible.has(id)) continue;
         const isCollapsed = collapsedSlots.has(id);
@@ -180,20 +286,47 @@ function TodayDashboardGridBody({
         if (!changed) continue;
         const el = slotRefs.current[id] ?? querySlotElement(id);
         if (!el) continue;
+
+        if (isCollapsed) {
+          // Remember the size to come back to, then shrink to the header.
+          const current = currentHeightFor(id);
+          if (current != null) heightBeforeCollapseRef.current[id] = current;
+          patch[id] = COLLAPSED_GRID_HEIGHT;
+          // The briefing and tasks cards declare minH: 6, which would otherwise
+          // hold them at six rows while every other card collapses to three.
+          collapsing.add(id);
+          continue;
+        }
+
+        /*
+         * Expanding: restore the remembered height rather than re-measuring.
+         *
+         * Re-measuring produced two visible faults — cards came back a
+         * different size than they were, and collapsed cards ended up at
+         * assorted heights depending on how much summary text each one showed.
+         * Neither is what a minimise control should do.
+         */
+        const remembered = heightBeforeCollapseRef.current[id];
+        if (remembered != null) {
+          patch[id] = remembered;
+          delete heightBeforeCollapseRef.current[id];
+          continue;
+        }
+        // No memory (collapsed before this session): fall back to measuring.
         const px = measureSlotContentPx(el);
         patch[id] = contentPxToGridHeight(px + 8, TODAY_GRID_ROW_HEIGHT, marginY);
       }
       if (Object.keys(patch).length === 0) return;
       setLayouts((prev) => {
-        const next = applyHeightPatchAndCompact(prev, patch);
+        const next = applyHeightPatchAndCompact(prev, patch, collapsing);
         if (settledRef.current) {
           writeTodayGridLayoutsToStorage(preserveHiddenTodayGridLayouts(next, readTodayGridLayoutsFromStorage()));
         }
         return next;
       });
     });
-    return () => cancelAnimationFrame(raf);
-  }, [collapsedKey, collapsedSlots, visible]);
+    return cancel;
+  }, [collapsedKey, collapsedSlots, visible, currentHeightFor]);
 
   const rowHeight = TODAY_GRID_ROW_HEIGHT;
   const margin = TODAY_GRID_MARGIN;

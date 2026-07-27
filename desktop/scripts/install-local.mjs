@@ -140,6 +140,18 @@ function contentPaths() {
   return paths;
 }
 
+/** The bundled runtime inside the installed app. See selftest.mjs#findNode. */
+function installedNode() {
+  const runtime = path.join(INSTALL_PATH, "Contents", "Resources", "runtime");
+  if (fs.existsSync(runtime)) {
+    const exact = path.join(runtime, "node");
+    if (fs.existsSync(exact)) return exact;
+    const suffixed = fs.readdirSync(runtime).find((f) => f.startsWith("node-"));
+    if (suffixed) return path.join(runtime, suffixed);
+  }
+  return path.join(INSTALL_PATH, "Contents", "MacOS", "node");
+}
+
 function findBuiltApp() {
   for (const profile of ["release", "debug"]) {
     const app = path.join(tauriDir, "target", profile, "bundle", "macos", "DevHub.app");
@@ -295,7 +307,7 @@ const installedSelfTest = spawnSync(
     env: {
       ...process.env,
       DEVHUB_SELFTEST_RESOURCES: path.join(INSTALL_PATH, "Contents", "Resources"),
-      DEVHUB_SELFTEST_NODE: path.join(INSTALL_PATH, "Contents", "MacOS", "node"),
+      DEVHUB_SELFTEST_NODE: installedNode(),
     },
   },
 );

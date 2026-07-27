@@ -125,6 +125,27 @@ export function TerminalSession({ cwd, command, active, onStatus, onReader }: Se
       const proto = window.location.protocol === "https:" ? "wss" : "ws";
       const params = new URLSearchParams({ shell: "login" });
       if (cwd) params.set("cwd", cwd);
+
+      /**
+       * In the desktop app the PTY requires a ticket, not the bootstrap cookie.
+       * WKWebView does not attach that cookie to a `ws://` handshake on a
+       * different port, so a cookie-based check rejected every connection and
+       * the terminal was simply broken in the shipped app.
+       *
+       * The ticket is fetched over same-origin HTTP, where the cookie does
+       * work. In browser mode the route reports `desktop: false` and returns
+       * no ticket, so `npm run dev` is unaffected.
+       */
+      let ticket: string | null = null;
+      try {
+        const res = await fetch("/api/desktop/terminal-ticket", { credentials: "same-origin" });
+        if (res.ok) ticket = ((await res.json()) as { ticket: string | null }).ticket;
+      } catch {
+        /* browser mode, or the route is unavailable — origin checking applies */
+      }
+      if (disposed) return;
+      if (ticket) params.set("ticket", ticket);
+
       const socket = new WebSocket(
         `${proto}://${window.location.hostname}:${TERMINAL_PORT}/?${params}`,
       );

@@ -78,7 +78,9 @@ fn updater_for(app: &AppHandle) -> Result<tauri_plugin_updater::Updater, String>
     let mut builder = app.updater_builder();
 
     if let Ok(endpoint) = std::env::var("DEVHUB_UPDATE_ENDPOINT") {
-        let url = endpoint.parse().map_err(|e| format!("Bad DEVHUB_UPDATE_ENDPOINT: {e}"))?;
+        let url = endpoint
+            .parse()
+            .map_err(|e| format!("Bad DEVHUB_UPDATE_ENDPOINT: {e}"))?;
         builder = builder.endpoints(vec![url]).map_err(|e| e.to_string())?;
         if let Some(state) = app.try_state::<crate::AppState>() {
             state
@@ -239,7 +241,10 @@ pub async fn run_canary(app: AppHandle) -> i32 {
         eprintln!("FAIL  no update offered — check the manifest version is higher");
         return 1;
     }
-    println!("PASS  update offered: {}", info.version.clone().unwrap_or_default());
+    println!(
+        "PASS  update offered: {}",
+        info.version.clone().unwrap_or_default()
+    );
 
     match install_update(app.clone()).await {
         Ok(()) => {

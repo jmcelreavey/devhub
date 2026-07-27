@@ -112,7 +112,14 @@ LOCAL_SKILLS="$(git diff --name-only "$BASE_REF" "$SOURCE_REF" -- skills ':(excl
 [[ -n "$LOCAL_SKILLS" ]] && { log "Dropping non-catalog skills from the PR:"; echo "$LOCAL_SKILLS" | sed 's/^/  - /'; }
 
 # The feature's patch (hunks only), constrained to the public catalog.
-PATCH="$(git diff "$BASE_REF" "$SOURCE_REF" -- "${PUBLIC_PATHS[@]}")"
+#
+# --binary is required, not optional. Without it `git diff` emits
+# "Binary files ... differ" with no content and no full index line, and the
+# apply below fails with "cannot apply binary patch without full index line".
+# That silently made any feature containing an image, icon or font
+# un-backportable — found when the desktop app's icons blocked the first
+# attempt to port it upstream.
+PATCH="$(git diff --binary "$BASE_REF" "$SOURCE_REF" -- "${PUBLIC_PATHS[@]}")"
 if [[ -z "$PATCH" ]]; then
   log "No public-catalog changes to backport after exclusions."
   [[ "$PATCH_ONLY" == "1" ]] && exit 3

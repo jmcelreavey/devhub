@@ -252,6 +252,36 @@ async function stageServices() {
   });
   log("bundled terminal-pty-server.cjs");
 
+  /**
+   * The peer services — OpenChamber (1336) and OpenCode (1338).
+   *
+   * Originally omitted, which meant the installed app served a dashboard whose
+   * Chamber and OpenCode pages were permanently empty: the ports were never
+   * listening because nothing started them. The dev script ran them through
+   * `concurrently`; the packaged app has to start them itself.
+   *
+   * Bundled with the same externals as the PTY server. Both peers are optional
+   * at runtime — they shell out to binaries the user may not have — so the
+   * supervisor treats a failure to start as a warning, not a fatal error.
+   */
+  await esbuild.build({
+    entryPoints: [path.join(dashboardDir, "scripts", "start-peer-services.ts")],
+    outfile: path.join(servicesDir, "start-peer-services.mjs"),
+    bundle: true,
+    platform: "node",
+    target: "node22",
+    // ESM, unlike the PTY server. The source uses `import.meta.url`, and
+    // esbuild's CJS output turns that into `undefined` rather than failing the
+    // build — so the bundle compiled cleanly and then died at startup with
+    // "path argument must be of type string. Received undefined". Nothing about
+    // that error points at the output format, which is why it is spelled out
+    // here. The PTY server stays CJS because node-pty is a CJS native addon.
+    format: "esm",
+    external: ["node-pty"],
+    logLevel: "warning",
+  });
+  log("bundled start-peer-services.mjs");
+
   stageNodePty();
 
   fs.copyFileSync(

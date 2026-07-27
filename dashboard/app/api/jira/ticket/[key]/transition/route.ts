@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { applyTransition } from "@/lib/jira/client";
 import { JiraTransitionSchema } from "@/lib/schemas";
-import { withErrorHandler, parseBody } from "@/lib/api-utils";
+import { withErrorHandler, parseBody, notConfigured } from "@/lib/api-utils";
 import { invalidateJiraTicketsCache } from "@/lib/jira/tickets-cache";
 import { invalidateSidebarCountsCache } from "@/lib/sidebar-counts-cache";
 
@@ -10,7 +10,7 @@ export const POST = withErrorHandler(
   async (req: Request, { params }: { params: Promise<{ key: string }> }) => {
     const { key } = await params;
     if (!process.env.JIRA_DOMAIN) {
-      return NextResponse.json({ error: "Not configured" }, { status: 400 });
+      return notConfigured("Jira");
     }
     const parsed = await parseBody(req, JiraTransitionSchema);
     if (!parsed.ok) return parsed.response;

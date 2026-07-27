@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyHeightPatchAndCompact,
   mergeTodayGridLayouts,
   preserveHiddenTodayGridLayouts,
   TODAY_GRID_DEFAULT_LAYOUTS,
@@ -52,5 +53,39 @@ describe("categorizeGridSize", () => {
     expect(categorizeGridSize(12, 3)).toBe("1x1");
     expect(categorizeGridSize(12, 6)).toBe("3x2");
     expect(categorizeGridSize(12, 5)).toBe("3x1");
+  });
+});
+
+describe("collapsing past minH", () => {
+  /**
+   * The briefing and tasks cards declare `minH: 6`; everything else declares 2.
+   * Clamping to `minH` on collapse left those two stuck at six rows while the
+   * rest went to three, so a minimised dashboard looked ragged. `minH` is a
+   * floor on *content*, and a collapsed card has none.
+   */
+  it("holds a card at minH by default", () => {
+    const layouts = { lg: [{ i: "briefing", x: 0, y: 0, w: 8, h: 7, minH: 6 }] } as never;
+    const out = applyHeightPatchAndCompact(layouts, { briefing: 3 } as never);
+    expect((out as never as Record<string, { h: number }[]>).lg[0].h).toBe(6);
+  });
+
+  it("lets a collapsing card go below minH", () => {
+    const layouts = { lg: [{ i: "briefing", x: 0, y: 0, w: 8, h: 7, minH: 6 }] } as never;
+    const out = applyHeightPatchAndCompact(
+      layouts,
+      { briefing: 3 } as never,
+      new Set(["briefing"]) as never,
+    );
+    expect((out as never as Record<string, { h: number }[]>).lg[0].h).toBe(3);
+  });
+
+  it("leaves minH itself intact, so expanding restores the floor", () => {
+    const layouts = { lg: [{ i: "briefing", x: 0, y: 0, w: 8, h: 7, minH: 6 }] } as never;
+    const out = applyHeightPatchAndCompact(
+      layouts,
+      { briefing: 3 } as never,
+      new Set(["briefing"]) as never,
+    );
+    expect((out as never as Record<string, { minH?: number }[]>).lg[0].minH).toBe(6);
   });
 });

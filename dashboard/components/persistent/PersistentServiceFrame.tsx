@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { usePathname } from "next/navigation";
-import { AlertTriangle, ExternalLink, RotateCw } from "lucide-react";
+import { AlertTriangle, RotateCw } from "lucide-react";
 
 interface ServiceStatus {
   name: string;
@@ -20,8 +20,6 @@ interface Props {
   port: string;
   /** iframe title attribute. */
   title: string;
-  /** When true, shows an "Open in new tab" escape-hatch link above the iframe. */
-  showExternalLink?: boolean;
   /** Optional path (e.g. `/session/abc`) appended to the service origin for deep-linking. */
   srcPath?: string | null;
 }
@@ -43,7 +41,6 @@ export function PersistentServiceFrame({
   serviceName,
   port,
   title,
-  showExternalLink = false,
   srcPath,
 }: Props) {
   const pathname = usePathname();
@@ -81,7 +78,6 @@ export function PersistentServiceFrame({
         serviceName={serviceName}
         port={port}
         title={title}
-        showExternalLink={showExternalLink}
         srcPath={srcPath}
       />
     </div>
@@ -93,14 +89,12 @@ function ServiceIframe({
   serviceName,
   port,
   title,
-  showExternalLink,
   srcPath,
 }: {
   serviceId: string;
   serviceName: string;
   port: string;
   title: string;
-  showExternalLink: boolean;
   srcPath?: string | null;
 }) {
   const baseUrl = useServiceBaseUrl(port);
@@ -173,22 +167,16 @@ function ServiceIframe({
 
   return (
     <>
-      {showExternalLink && (
-        <div
-          className="flex items-center justify-end px-3 py-1 shrink-0"
-          style={{ background: "var(--bg-sidebar)", borderBottom: "1px solid var(--border-muted)" }}
-        >
-          <a
-            href={baseUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-xs text-text-subtle"
-          >
-            <ExternalLink size={10} />
-            Open in new tab
-          </a>
-        </div>
-      )}
+      {/*
+        "Open in new tab" used to live here — an escape hatch for a
+        frame-restricted iframe. It never worked in the desktop app: Tauri
+        blocks `target="_blank"` outright, so clicking it did nothing at all,
+        silently. A dead control is worse than no control.
+
+        The browser view in the same dropdown covers the real need, and now
+        routes through the shell's opener rather than `window.open`, which was
+        blocked the same way.
+      */}
       <iframe
         src={iframeSrc}
         className="w-full border-0"

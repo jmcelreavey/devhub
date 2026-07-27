@@ -78,11 +78,73 @@ export function desktopCookieOptions() {
 }
 
 /**
+ * Short-lived ticket for the terminal WebSocket.
+ *
+ * The cookie cannot be the credential here, and finding that out cost a broken
+ * terminal in the shipped app: WKWebView does not attach the bootstrap cookie
+ * to a `ws://` handshake on a different port, so every connection was rejected
+ * with "missing or invalid desktop session cookie". Cookies are host-scoped in
+ * the spec, but WebSocket handshake cookie attachment is not something to rely
+ * on across engines.
+ *
+ * So the browser presents something it can actually hold. The dashboard fetches
+ * a ticket over same-origin HTTP (where the cookie *does* work), then passes it
+ * on the WebSocket URL.
+ *
+ * The ticket is an HMAC of a coarse time window keyed by the bootstrap token.
+ * That shape is deliberate:
+ *
+ * - The PTY server is a **separate process** from Next, so anything requiring
+ *   shared in-memory state would need a store, a socket, or a file — three more
+ *   things to get wrong. Both processes already have the token, so both can
+ *   compute the same value with no coordination at all.
+ * - It **expires**. A ticket in a URL can end up in a log; one that stops
+ *   working within a minute is a much smaller problem than a bearer token that
+ *   does not.
+ * - It is **not** the token. Leaking a ticket does not leak the credential that
+ *   guards every other bridge route.
+ */
+const TICKET_WINDOW_MS = 30_000;
+
+function ticketFor(windowIndex: number, token: string): string {
+  return crypto
+    .createHmac("sha256", token)
+    .update(`devhub-terminal:${windowIndex}`)
+    .digest("hex");
+}
+
+/** Mint a ticket for the current window. Requires an authenticated caller. */
+export function issueTerminalTicket(): string | null {
+  const token = desktopToken();
+  if (!token) return null;
+  return ticketFor(Math.floor(Date.now() / TICKET_WINDOW_MS), token);
+}
+
+/**
+ * Accept the current or previous window, so a connection that starts just as
+ * the window rolls over is not rejected for being a fraction of a second late.
+ * Worst-case validity is two windows; that is the cost of not failing at
+ * random.
+ */
+export function isValidTerminalTicket(candidate: string | null | undefined): boolean {
+  const token = desktopToken();
+  if (!token || !candidate) return false;
+  const now = Math.floor(Date.now() / TICKET_WINDOW_MS);
+  for (const index of [now, now - 1]) {
+    const expected = ticketFor(index, token);
+    const a = Buffer.from(candidate);
+    const b = Buffer.from(expected);
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) return true;
+  }
+  return false;
+}
+
+/**
  * Exact-origin check for the terminal WebSocket.
  *
- * The PTY hands out an interactive shell. A cookie alone is not enough there:
- * `SameSite` is not applied to WebSocket handshakes by every engine, so the
- * origin is validated too, and it is compared exactly rather than by prefix.
+ * Still required alongside the ticket. The ticket proves the caller talked to
+ * the dashboard; the origin proves the request came from the dashboard's own
+ * page rather than from another local page that managed to obtain one.
  */
 export function isAllowedTerminalOrigin(origin: string | null | undefined, port: number): boolean {
   if (!origin) return false;

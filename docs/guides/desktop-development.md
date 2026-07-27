@@ -14,6 +14,27 @@ Tells you what is missing and the command to fix it. In short: Rust
 (`cargo install tauri-cli --version "^2" --locked`), Xcode command line tools,
 and `npm install` having been run in `dashboard/`.
 
+## Running against your checkout
+
+The Electron launcher had an in-app dev toggle. The replacement is an
+environment variable, because the installed app deliberately runs its own
+packaged server:
+
+```bash
+npm run dev                                   # terminal 1: your checkout, as always
+DEVHUB_DEV_SERVER_URL=http://127.0.0.1:1337 \
+  /Applications/DevHub.app/Contents/MacOS/devhub-desktop
+```
+
+The shell skips the packaged sidecar entirely and loads your dev server, so you
+get hot reload *inside the real window* — which is the only way to work on the
+boot page, the folder picker, or the update banner.
+
+There is no bootstrap token in attach mode, so the bridge routes report browser
+mode and the terminal falls back to origin checking. That is the same posture
+`npm run dev` already has in a browser tab, which is why it does not weaken
+anything.
+
 ## The loop
 
 ```bash
@@ -184,9 +205,12 @@ Practical consequences when adding a feature:
   existing commands are narrow on purpose: `open_logs` opens one known
   directory; `pick_folder` returns a path *the user chose in an OS dialog*.
 - **New desktop bridge routes must check `isAuthenticatedDesktopRequest`.**
-- **The terminal WebSocket requires cookie *and* exact origin.** `SameSite` is
-  not reliably applied to WebSocket handshakes, and origin checks must compare
-  exactly — `http://127.0.0.1.evil.com` starts with `http://127.0.0.1`.
+- **The terminal WebSocket requires a ticket *and* exact origin.** Not the
+  bootstrap cookie — WKWebView does not attach it to a `ws://` handshake on a
+  different port, and assuming it did shipped a completely broken terminal. The
+  dashboard fetches a short-lived ticket over same-origin HTTP (where the cookie
+  works) and passes it on the WebSocket URL. Origin checks must compare exactly:
+  `http://127.0.0.1.evil.com` starts with `http://127.0.0.1`.
 - **Never LAN-proxy port 1339.** It is an unauthenticated PTY.
 - **Never kill a process by port.**
 

@@ -289,14 +289,29 @@ impl Sidecar {
         let _ = child.wait();
     }
 
+    /// The dashboard URL the *window* loads.
+    ///
+    /// `localhost`, not `127.0.0.1`, and that is load-bearing rather than
+    /// cosmetic. WebKit stores a cookie set for the IP literal but will not
+    /// send it back on a same-origin `fetch`, so every cookie-authenticated
+    /// route 401s. It shipped a completely broken terminal: the client could
+    /// not obtain a ticket, so the PTY rejected every connection.
+    ///
+    /// Verified rather than assumed — the same page against `localhost:1337`
+    /// gets 200 where `127.0.0.1:1337` gets 401, with the cookie present in the
+    /// jar in both cases.
+    ///
+    /// The server still *binds* 127.0.0.1; only the name the webview uses
+    /// changes. Health checks below keep using the literal because they talk
+    /// raw TCP and have no cookies to lose.
     pub fn url(&self) -> String {
-        format!("http://127.0.0.1:{}", self.port)
+        format!("http://localhost:{}", self.port)
     }
 
     /// The one-shot bootstrap URL that exchanges the token for a cookie.
     pub fn bootstrap_url(&self) -> String {
         format!(
-            "http://127.0.0.1:{}/api/desktop/bootstrap?token={}",
+            "http://localhost:{}/api/desktop/bootstrap?token={}",
             self.port, self.token
         )
     }

@@ -9,7 +9,8 @@ const PORT = process.env.NEXT_PUBLIC_OPENCODE_PORT ?? "1338";
 /**
  * Keeps the OpenCode iframe alive across client-side route changes.
  * Lazy-mounts on first visit to /opencode, persists with display:none elsewhere.
- * Shows an "Open in new tab" link as fallback if the iframe is frame-restricted.
+ * The old "Open in new tab" fallback is gone — Tauri blocks target="_blank",
+ * so it silently did nothing in the desktop app. Browser view covers it.
  *
  * Listens for session-open requests (e.g. the Datadog "Investigate" button) and
  * deep-links the iframe to `/session/{id}` so the freshly-created session is the
@@ -27,7 +28,6 @@ export function PersistentOpenCode() {
       serviceName="OpenCode"
       port={PORT}
       title="OpenCode"
-      showExternalLink
       srcPath={sessionId ? `/session/${encodeURIComponent(sessionId)}` : null}
     />
   );
