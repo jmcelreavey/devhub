@@ -9,7 +9,7 @@ Status: **complete**. Phases 0–5 done; Electron removed 2026-07-26.
 
 Outstanding: Apple Developer ID signing (builds are ad-hoc signed, so other
 machines need right-click → Open), the canary N→N+1 update test on a clean
-machine, and Linux/Windows targets.
+machine, and Windows targets.
 
 ## What Rust owns, and what it doesn't
 
@@ -102,7 +102,9 @@ does any web page that can be made to fetch it.
    and digests, no personal-data directories, generic packaged identity, no
    credential-shaped files, no build-machine content in prerendered output.
 5. `cargo fmt --check`, `clippy -D warnings`, `cargo test`.
-6. `tauri-action` builds, signs, notarises, and produces updater artifacts.
+6. `tauri-action` builds, signs, notarises (macOS when Apple secrets are set),
+   and produces updater artifacts. Linux builds set `APPIMAGE_EXTRACT_AND_RUN=1`
+   and `NO_STRIP=1` so AppImage packaging works on GitHub runners.
 7. The built app runs its own `--self-test`.
 8. `codesign --verify --deep --strict` and `spctl` on macOS.
 9. `build-updater-manifest.mjs` generates `latest.json`, refusing to publish a
@@ -223,6 +225,9 @@ including that the config file cannot mint itself a bootstrap token.
 - **Canary N→N+1 update** on a clean machine or VM. The updater is wired,
   signed and its manifest generator refuses unsigned platform entries, but an
   actual version-to-version update has not been performed end to end.
-- **Linux and Windows.** Linux needs a matrix leg and a self-test run on that
-  architecture. Windows is deferred until Upstart execution has a native
-  contract — the product runs `upstart.sh` through Bash today.
+- **Linux CI.** `release-desktop.yml` now builds on `ubuntu-22.04` (AppImage +
+  `.deb`) with self-test on the runner. Staging strips foreign native binaries
+  (wrong OS or musl-linked ELF on glibc) so `linuxdeploy` does not fail
+  opaquely. End-user Linux install docs are still macOS-first.
+- **Windows.** Deferred until Upstart execution has a native contract — the
+  product runs `upstart.sh` through Bash today.

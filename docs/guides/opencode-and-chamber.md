@@ -176,5 +176,5 @@ The **Status** page probes OpenChamber and OpenCode ports via `/api/status/servi
 ## Related Docs
 
 - [Sync Engine](../architecture/sync-engine.md) — sync vs collect for shared assets
-- [Electron App](../getting-started/electron-app.md) — desktop launcher for all three ports
+- [Desktop App](../getting-started/desktop-app.md) — desktop app for all three ports
 - [Theming](theming.md) — OpenChamber theme install during postinstall

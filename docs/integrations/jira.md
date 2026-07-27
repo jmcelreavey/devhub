@@ -65,3 +65,9 @@ The prompt is optional — you can dismiss it without changing Jira. Agents can 
 | Tickets are missing             | Jira credentials and domain are correct           |
 | Links go to the wrong Jira site | Public Jira domain setting matches your workspace |
 | API errors                      | The token has not expired or been revoked         |
+| `503` on ticket routes          | Jira is not configured — complete `/setup` or expect empty badges on a fresh checkout |
+
+Mutating Jira routes (`POST /api/jira/issue`, transitions) and per-ticket reads
+return **503** with `code: "not_configured"` when credentials are absent. The
+ticket list route (`GET /api/jira/tickets`) instead returns
+`{ tickets: [], configured: false }` with HTTP 200.

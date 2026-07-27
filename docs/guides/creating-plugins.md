@@ -185,7 +185,7 @@ If the `command` isn't on `PATH`, `npm install` fails with your `install` hint. 
 
 ## 5c. (Optional) Whitelabel DevHub (tier-3 branding)
 
-Ship a theme, font, logo, OpenChamber theme and Electron icon that switch on when your
+Ship a theme, font, logo, OpenChamber theme and desktop app icon that switch on when your
 plugin is enabled. Lay the assets out under `branding/` in your plugin root:
 
 ```
@@ -196,7 +196,7 @@ my-plugin/
     fonts/             # *.woff2/*.woff — reference as url("/fonts-plugin/<file>") in theme.css
     logo.svg           # square brand mark (sidebar chip / boot screen)
     oc/                # OpenChamber theme JSONs (metadata.id + metadata.variant)
-    icon.png           # >=512px Electron app icon
+    icon.png           # >=512px desktop app icon
 ```
 
 Then declare a `branding` block in `devhub-plugin.json`:
@@ -210,9 +210,12 @@ Then declare a `branding` block in `devhub-plugin.json`:
   "fonts": "branding/fonts",
   "logo": { "src": "branding/logo.svg", "label": "ACME" },
   "openchamber": { "themes": "branding/oc", "defaultDarkId": "<id>-dark", "defaultLightId": "<id>-light" },
-  "electronIcon": "branding/icon.png"
+  "desktopIcon": "branding/icon.png"
 }
 ```
+
+`desktopIcon` replaces the deprecated `electronIcon` field; the materialiser accepts
+either for one release cycle.
 
 Every field is optional — contribute only a palette, or only a logo, if that's all you
 need. Your `theme.css` must define the palette variables for **both** `data-theme="dark"`

@@ -21,7 +21,7 @@ When you pin **dark** or **light**, the resolved palette stays fixed until you c
 
 ## Plugin whitelabel (tier 3)
 
-An enabled plugin can contribute branding: custom presets, default mode, fonts, logo, OpenChamber themes, and an Electron icon. The branding materialiser writes generated files locally (`plugin-branding.generated.*`) that `theme-presets.ts` and the layout consume.
+An enabled plugin can contribute branding: custom presets, default mode, fonts, logo, OpenChamber themes, and a desktop app icon. The branding materialiser writes generated files locally (`plugin-branding.generated.*`) that `theme-presets.ts` and the layout consume.
 
 - Plugin presets appear in the same accent picker as core presets.
 - `defaultMode` can seed **system**, **dark**, or **light** for fresh installs; user overrides still win.
