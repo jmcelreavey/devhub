@@ -43,7 +43,10 @@ jobs:
           - os: ubuntu-22.04
             label: Linux (x64)
             target: x86_64-unknown-linux-gnu
-            args: ""
+            # --verbose because Tauri reports AppImage failures as the bare
+            # string "failed to run linuxdeploy" and swallows linuxdeploy's own
+            # stderr. Without it a failure here is undiagnosable from the log.
+            args: "--verbose"
 
     # Job level, not step level, so `if:` conditions can read it. `secrets` is
     # not a context that step conditions can see; `env` is, and a job-level
@@ -188,6 +191,18 @@ jobs:
           # a remote code execution channel, not a convenience.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # AppImage packaging on a GitHub runner, both of which are required:
+          #
+          # linuxdeploy ships as an AppImage and mounts itself with FUSE, which
+          # the runner does not provide — APPIMAGE_EXTRACT_AND_RUN makes it
+          # unpack to a temp dir instead.
+          #
+          # NO_STRIP because linuxdeploy's bundled `strip` is older than the
+          # binaries it is handed and errors out on the debug sections Rust
+          # emits. Nothing downstream needs a stripped AppImage; the .sig is
+          # computed after packaging either way.
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          NO_STRIP: "true"
         with:
           projectPath: desktop
           configPath: src-tauri/tauri.conf.json
