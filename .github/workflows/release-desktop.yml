@@ -139,6 +139,47 @@ jobs:
           cargo clippy --all-targets -- -D warnings
           cargo test
 
+      # macOS Developer ID signing + notarisation, exported only when there is
+      # actually a certificate to use.
+      #
+      # These cannot live in the build step's `env:` block. Tauri's bundler
+      # branches on whether `APPLE_CERTIFICATE` is *defined*, not whether it has
+      # a value, and a workflow-level `${{ secrets.X }}` for an unset secret
+      # defines the variable as an empty string. So on a repo with no Apple
+      # secrets the bundler dutifully ran `security import` with nothing and
+      # failed the whole build: "SecKeychainItemImport: One or more parameters
+      # passed to a function were not valid."
+      #
+      # Writing to $GITHUB_ENV is the one mechanism that can leave a variable
+      # genuinely undefined. Values go through the heredoc form because a
+      # base64 certificate is multi-line.
+      - name: Export Apple signing credentials
+        if: runner.os == 'macOS' && env.HAS_APPLE_SIGNING == 'true'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          for key in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD \
+                     APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            value="${!key}"
+            [ -n "$value" ] || continue
+            printf '%s<<__DEVHUB_EOF__\n%s\n__DEVHUB_EOF__\n' "$key" "$value" >> "$GITHUB_ENV"
+          done
+          echo "Apple signing credentials exported."
+
+      - name: Note that this build is unsigned
+        if: runner.os == 'macOS' && env.HAS_APPLE_SIGNING != 'true'
+        run: |
+          echo "::warning::No Apple Developer ID secrets on this repository — \
+          building an UNSIGNED macOS bundle. Gatekeeper will quarantine it on \
+          any machine that did not build it. Set APPLE_SIGNING_IDENTITY and \
+          friends before publishing to anyone else."
+
       - name: Build, sign, and bundle
         uses: tauri-apps/tauri-action@v0
         env:
@@ -147,15 +188,6 @@ jobs:
           # a remote code execution channel, not a convenience.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # macOS Developer ID signing + notarisation. Absent on Linux, and
-          # absent locally — an unsigned build is a development artifact, never
-          # a public installer.
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           projectPath: desktop
           configPath: src-tauri/tauri.conf.json
