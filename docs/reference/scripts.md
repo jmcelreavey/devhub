@@ -1,3 +1,13 @@
+---
+title: Scripts
+description: Root convenience scripts and dashboard lifecycle scripts, and what each one does.
+order: 3
+icon: SquareTerminal
+tags: [reference]
+related:
+  - guides/opencode-and-chamber
+---
+
 # Scripts
 
 DevHub scripts are split between root-level convenience scripts and dashboard lifecycle scripts.

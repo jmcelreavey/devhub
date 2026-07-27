@@ -1,3 +1,14 @@
+---
+title: Environment variables
+description: "Every variable DevHub reads: paths, ports, integrations and secrets."
+order: 2
+icon: KeyRound
+tags: [reference]
+related:
+  - getting-started/setup
+  - reference/scripts
+---
+
 # Environment Variables
 
 DevHub uses local environment variables for paths, ports, integrations, and secrets.
@@ -20,7 +31,7 @@ Most values live in the dashboard's local environment file and can be edited fro
 | `DEVHUB_BASE_URL`              | Dashboard URL used by dashboard-backed MCP tools. Defaults to `http://localhost:1337`                                  |
 | `DEVHUB_API_SECRET`            | Optional shared secret for sensitive dashboard routes (e.g. OpenCode recap). When set, callers must send `X-DevHub-Secret`; when unset, those routes require a strict same-origin `Origin` header (browser-only). Set the same value in the MCP server's env when using `sessions_recap`. Generate with `openssl rand -hex 32`. |
 | `DEVHUB_LAN_PROXY_HOST`        | Optional LAN proxy host. Use `auto` to detect a physical LAN IPv4 and exclude Tailscale CGNAT (`100.64.0.0/10`)        |
-| `DEVHUB_ALLOWED_DEV_ORIGINS`   | Comma-separated extra `allowedDevOrigins` for `npm run dev` (Next.js 16+). Default allowlist covers common private LAN ranges (`192.168.*.*`, `10.*.*.*`, etc.). Add custom host patterns when opening the dashboard from a phone/tablet at `http://<lan-ip>:1337` and the UI never finishes loading — see [Setup — LAN access](getting-started/setup.md#localhost-vs-lan-access). |
+| `DEVHUB_ALLOWED_DEV_ORIGINS`   | Comma-separated extra `allowedDevOrigins` for `npm run dev` (Next.js 16+). Default allowlist covers common private LAN ranges (`192.168.*.*`, `10.*.*.*`, etc.). Add custom host patterns when opening the dashboard from a phone/tablet at `http://<lan-ip>:1337` and the UI never finishes loading — see [Setup — LAN access](../getting-started/setup.md#localhost-vs-lan-access). |
 | `OPENCHAMBER_HOST`             | OpenChamber local bind address. LAN access is proxied when enabled                                                     |
 | `NEXT_PUBLIC_OPENCHAMBER_PORT` | Browser-visible OpenChamber port                                                                                       |
 

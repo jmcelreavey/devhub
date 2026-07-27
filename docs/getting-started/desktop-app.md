@@ -1,3 +1,14 @@
+---
+title: The desktop app
+description: Install and run DevHub as a native macOS app — no terminal, no checkout required.
+order: 3
+icon: Monitor
+tags: [setup, desktop]
+related:
+  - architecture/desktop-shell
+  - guides/desktop-recovery
+---
+
 # The DevHub desktop app
 
 DevHub ships as a macOS application. You do not need a terminal, a copy of this

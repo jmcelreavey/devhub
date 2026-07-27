@@ -1,3 +1,13 @@
+---
+title: Figma
+description: Give AI agents access to design files, components, frames and design-system context.
+order: 5
+icon: PenTool
+tags: [integrations]
+related:
+  - architecture/mcp-server
+---
+
 # Figma
 
 The Figma MCP integration gives AI agents access to design files, components, frames, screenshots, and design system context directly from Figma.

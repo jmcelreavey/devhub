@@ -1,3 +1,14 @@
+---
+title: Working on the desktop app
+description: "Everything under `desktop/`: staging, building, signing, and local installs."
+order: 14
+icon: Hammer
+tags: [desktop]
+related:
+  - architecture/desktop-shell
+  - guides/desktop-recovery
+---
+
 # Working on the desktop app
 
 Everything under `desktop/`. The dashboard is unchanged — it is still a Next.js

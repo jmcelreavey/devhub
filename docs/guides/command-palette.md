@@ -1,3 +1,13 @@
+---
+title: Command palette
+description: The fastest way to move around DevHub and trigger common actions.
+order: 1
+icon: Command
+tags: [ui]
+related:
+  - guides/theming
+---
+
 # Command Palette
 
 The command palette is the fastest way to move around DevHub and trigger common actions.

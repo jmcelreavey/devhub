@@ -1,3 +1,14 @@
+---
+title: OpenCode and OpenChamber
+description: The four cooperating local services started by `npm run dev`, and how to run them apart.
+order: 16
+icon: Terminal
+tags: [workflow]
+related:
+  - reference/scripts
+  - reference/environment-variables
+---
+
 # OpenCode and OpenChamber
 
 DevHub runs four cooperating local services during `npm run dev` and `npm run start`:

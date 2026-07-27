@@ -1,3 +1,14 @@
+---
+title: Persona system
+description: Layered instruction files that keep assistant behaviour consistent across every tool.
+order: 7
+icon: UserRound
+tags: [architecture, persona]
+related:
+  - architecture/token-budget
+  - guides/skills
+---
+
 # Persona System
 
 The persona system keeps AI assistant behavior consistent across tools.
@@ -59,7 +70,7 @@ Mode files under `persona/modes/` are listed in `persona/deep-preferences.md` wi
 | Tool preferences | `persona/modes/tool-preferences.md` |
 | Existing codebases | `persona/modes/existing-codebases.md` |
 
-See [Token Budget](../TOKEN_BUDGET.md) for why L2 stays off the sync path.
+See [Token Budget](token-budget.md) for why L2 stays off the sync path.
 
 ## Syncing Persona
 

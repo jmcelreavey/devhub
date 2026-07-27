@@ -1,3 +1,14 @@
+---
+title: Creating a plugin
+description: "Build a plugin repo from scratch: manifest, assets, dashboard modules, and registration."
+order: 12
+icon: PackagePlus
+tags: [plugins]
+related:
+  - architecture/plugins
+  - guides/fork-workflow
+---
+
 # Creating a Plugin
 
 A plugin is a **separate repo** that adds skills, agents, MCP servers, and/or a dashboard

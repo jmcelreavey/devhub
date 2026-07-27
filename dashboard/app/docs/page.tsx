@@ -1,15 +1,15 @@
-import { VaultIndexPage } from "@/components/vault/VaultIndexPage";
-import { getVaultTree } from "@/lib/vault/create-vault-routes";
-import { buildVaultIndexSummary } from "@/lib/vault/vault-index-summary";
-import { VAULT_PUBLIC } from "@/lib/vault/vault-public";
+import { DocsLandingPage } from "@/components/docs/DocsLandingPage";
+import { getDocIndex, getRecentDocs } from "@/lib/docs/doc-index";
 
 export default async function DocsIndexPage() {
-  const vault = VAULT_PUBLIC.docs;
-  const tree = await getVaultTree("docs");
-  const summary = buildVaultIndexSummary(tree, {
-    extension: vault.extension,
-    pageHref: vault.paths.pageHref,
-  });
+  const index = getDocIndex();
+  const published = index.docs.filter((doc) => !doc.draft);
 
-  return <VaultIndexPage vaultId="docs" summary={summary} />;
+  return (
+    <DocsLandingPage
+      sections={index.sections}
+      recent={getRecentDocs(4)}
+      totalDocs={published.length}
+    />
+  );
 }

@@ -1,3 +1,14 @@
+---
+title: Theming
+description: Theme modes, accent presets, plugin whitelabelling, and how the palette is applied on first paint.
+order: 9
+icon: Palette
+tags: [ui]
+related:
+  - guides/motion
+  - architecture/plugins
+---
+
 # Theming
 
 DevHub supports visual themes and accent choices so the dashboard feels comfortable for daily use.

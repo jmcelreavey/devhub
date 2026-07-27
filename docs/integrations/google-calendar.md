@@ -1,3 +1,13 @@
+---
+title: Google Calendar
+description: Upcoming events in the Today view and the morning briefing.
+order: 3
+icon: Calendar
+tags: [integrations]
+related:
+  - guides/standup
+---
+
 # Google Calendar
 
 The Google Calendar integration shows upcoming events in DevHub and supports calendar-focused views.

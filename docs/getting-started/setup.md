@@ -1,3 +1,14 @@
+---
+title: Setup
+description: Configure paths, ports, and optional integrations from the /setup page instead of hand-editing env files.
+order: 2
+icon: Settings
+tags: [setup]
+related:
+  - reference/environment-variables
+  - getting-started/installation
+---
+
 # Setup
 
 The setup page is the safest place to configure DevHub after installation.
@@ -111,4 +122,3 @@ checkout and has been removed — it asked somebody already using DevHub to buil
 DevHub. See [Desktop Development](../guides/desktop-development.md) for the
 full build, sign and release pipeline, and [Desktop App](desktop-app.md) for the
 user-facing side.
-

@@ -1,3 +1,13 @@
+---
+title: Install as a PWA
+description: Install the dashboard as a Progressive Web App from a supported browser.
+order: 11
+icon: Smartphone
+tags: [ui]
+related:
+  - getting-started/desktop-app
+---
+
 # PWA
 
 DevHub can be installed as a Progressive Web App from supported browsers.

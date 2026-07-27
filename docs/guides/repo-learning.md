@@ -1,3 +1,13 @@
+---
+title: Repo learning
+description: Get oriented in an unfamiliar checkout using deterministic repo facts plus optional AI summaries.
+order: 4
+icon: GitBranch
+tags: [workflow]
+related:
+  - integrations/github
+---
+
 # Repo Learning
 
 Repo Learning helps you get oriented in a local checkout from the **Repos** page. It combines deterministic repo facts with optional AI-generated learning artifacts from any OpenAI-compatible provider.

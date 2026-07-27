@@ -1,3 +1,15 @@
+---
+title: Architecture Overview
+description: The five moving parts of DevHub, how data flows between them, and the local-first constraints that shape everything else.
+order: 1
+icon: Compass
+tags: [architecture]
+related:
+  - architecture/dashboard
+  - architecture/sync-engine
+  - architecture/mcp-server
+---
+
 # Architecture Overview
 
 DevHub is a local-first control center for AI-assisted development.
@@ -17,15 +29,24 @@ It brings together a dashboard, shared agent configuration, persistent notes, ta
 
 ## Mental Model
 
-```text
-DevHub repo
-  -> dashboard for humans
-  -> MCP server for AI tools
-  -> shared config for coding assistants
-  -> notes/tasks as durable local memory
+One repo, four consumers. Everything else is plumbing between them.
+
+```mermaid
+graph LR
+  repo[("DevHub repo<br/>source of truth")]
+  repo --> dash["Dashboard<br/><i>humans</i>"]
+  repo --> mcp["MCP server<br/><i>AI tools</i>"]
+  repo --> sync["Sync engine<br/><i>coding assistants</i>"]
+  repo --> mem["Notes and tasks<br/><i>durable local memory</i>"]
+
+  dash --> files[("Local files")]
+  mcp --> files
+  sync --> tools["~/.claude, ~/.codex,<br/>~/.cursor, OpenCode"]
+  mem --> files
 ```
 
-The repo is the source of truth for shared configuration. Local tool directories receive synced copies.
+The repo is the source of truth for shared configuration. Local tool directories receive
+synced copies — never the other way round, unless you explicitly pull from a tool.
 
 ## Local-First Design
 

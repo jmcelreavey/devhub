@@ -1,3 +1,13 @@
+---
+title: MCP server split plan
+description: Splitting the single notes-server into DevHub MCP core plus a notes server.
+order: 3
+icon: Archive
+tags: [archive, mcp]
+related:
+  - architecture/mcp-server
+---
+
 # DevHub MCP Split & Expansion — Refactor Plan
 
 Splitting today's single `notes-server` into two MCP servers — **DevHub MCP** (core) and

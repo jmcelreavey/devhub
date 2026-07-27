@@ -1,3 +1,14 @@
+---
+title: API routes
+description: Local dashboard endpoints, their auth posture, and the notable user-facing ones.
+order: 1
+icon: Route
+tags: [reference]
+related:
+  - architecture/dashboard
+  - reference/environment-variables
+---
+
 # API Routes
 
 DevHub API routes are local endpoints used by the dashboard UI. They are not intended to be a public hosted API.
@@ -129,6 +140,12 @@ Sibling-repo git operations power `RepoGitWorkspace` on `/repos` and the DevHub 
 | `/api/repos/<name>/git/log`, `/git/show`, `/git/blame` | GET      | History graph, commit show, porcelain blame.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `/api/repos/<name>/branches`                           | GET/POST | `GET` lists local/remote branches with ahead/behind counts. `POST` `action`: `checkout`, `create-branch`, `delete-branch`, `fetch`, `pull`, `push`, `commit` (`message`, `amend?`), `stash-save`, `stash-apply`, `discard` (`paths`), `undo-commit`, `reset-stash-ahead`. Checkout auto-stashes dirty worktrees. Structured errors: `409` `{ code: "index_lock" }` when `.git/index.lock` blocks index writes; `409` `{ code: "stash_conflict", conflictFiles[] }` when stash apply/pop leaves unmerged paths; `422` `{ code: "hook_failed", hook?, phase, output, summary?, logPath? }` when a git hook fails (full output also in `.git/devhub-hook-failure.log`). Stash routes return the same `index_lock` / `stash_conflict` codes. |
 
+### Everything else
+
+The long tail, grouped by the surface that calls it.
+
+| Route | Used By | Notes |
+| ----- | ------- | ----- |
 | `GET /api/learnings` | Learnings browser | Without query: `{ entries }` from `notes/learnings/`. With `?category=<slug>`: returns one learning detail or `404`. |
 | `GET /api/status/git` | Top-bar sync indicator, Status page | Returns `branch`, `dirtyCount`, `contentDirtyCount`, `otherDirtyCount`, per-bucket counts (`notesCount`, `tasksCount`, `diagramsCount`, `docsCount`), `ahead`/`behind`, `conflictCount`, `conflictFiles`, `lastCommit`, and `hints[]`. Content buckets use `lib/content-sync-dirs.ts` (conventional `notes/`/`tasks/`/`docs/`/`collections/`/`upstarts/`/`diagrams/` prefixes plus configured env dirs inside the repo). `otherDirtyCount` excludes content; the Status health banner uses it so notes/tasks are not mislabeled as generic dirty paths. Upstream `git fetch` runs at most every four minutes; intermediate polls recount against the last fetched upstream ref. |
 | `GET /api/status/materialized` | Status plugin-drift banner | Returns `{ ok, checked, drifts[], message }` comparing materialised plugin dashboard copies to plugin source. `ok: false` when core edits would be lost on the next `sync_plugins`. See [Plugins — Materialization honesty](../architecture/plugins.md#materialization-honesty). |

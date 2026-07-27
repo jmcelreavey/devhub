@@ -31,6 +31,8 @@
     "verify": "npm run lint && npm run typecheck && npm run test && DEVHUB_SKIP_NEXT_TYPECHECK=true npm run build",
     "postinstall": "tsx scripts/postinstall.ts",
     "setup": "tsx scripts/setup-reminder.ts",
+    "docs:diagrams": "tsx scripts/check-docs-diagrams.mts",
+    "docs:frontmatter": "tsx scripts/apply-docs-frontmatter.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },

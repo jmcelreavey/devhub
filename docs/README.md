@@ -1,72 +1,74 @@
+---
+title: DevHub Documentation
+description: A local-first workspace for AI coding tools, notes, tasks, and shared agent configuration. Start here.
+order: 0
+icon: BookOpen
+tags: [overview]
+related:
+  - getting-started/installation
+  - architecture/overview
+  - guides/fork-workflow
+---
+
 # DevHub Documentation
 
-DevHub is a local-first workspace for managing AI coding tools, notes, tasks, integrations, and shared agent configuration.
+DevHub is a local-first workspace for managing AI coding tools, notes, tasks, integrations,
+and shared agent configuration. It runs on your machine, stores everything as files, and
+keeps those files in Git.
 
-These docs are written for day-to-day users and future contributors. They explain how the system works at a stable concept level, avoiding fragile implementation details that are likely to change.
+These docs describe the system at a stable concept level. Implementation details that churn
+weekly live in the code; what you'll find here is the shape of things and why it is that
+shape.
 
-## Start Here
+## How it fits together
 
-| Page                                            | Use It For                                          |
-| ----------------------------------------------- | --------------------------------------------------- |
-| [Installation](getting-started/installation.md) | Installing dependencies and starting DevHub         |
-| [Setup](getting-started/setup.md)               | Configuring paths, network access, and integrations |
-| [Desktop App](getting-started/desktop-app.md) | Installing and using the desktop app                |
+```mermaid
+graph TD
+  you(["You"]) --> dash["Dashboard<br/><i>localhost:1337</i>"]
+  ai(["AI tools"]) --> mcp["devhub MCP server"]
 
-## Architecture
+  dash --> files[("Files on disk<br/>notes, tasks, docs, skills")]
+  mcp --> files
+  files --> git[("Git")]
 
-| Page                                                 | Use It For                                                                   |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------- |
-| [Overview](architecture/overview.md)                 | Understanding the main parts of DevHub                                       |
-| [Dashboard](architecture/dashboard.md)               | How the web dashboard is organized                                           |
-| [Sync Engine](architecture/sync-engine.md)           | How skills, persona, agents, and MCP configs move between the repo and tools |
-| [MCP Server](architecture/mcp-server.md)             | How notes, tasks, and diagrams are exposed to AI tools                       |
-| [Notes System](architecture/notes-system.md)         | Note areas, master checklists, optional in-editor AI                         |
-| [Persona System](architecture/persona-system.md)     | How shared AI behavior is layered                                            |
-| [Desktop Shell](architecture/desktop-shell.md) | How the Tauri shell launches and supervises DevHub                          |
+  dash --> sync["Sync engine"]
+  sync --> tools["Tool configs<br/>~/.claude, ~/.cursor, ~/.codex"]
+```
 
-## Integrations
+Read [Architecture Overview](architecture/overview.md) for the full picture.
 
-| Page                                                   | Use It For                                        |
-| ------------------------------------------------------ | ------------------------------------------------- |
-| [Google Calendar](integrations/google-calendar.md)     | Calendar setup and usage                          |
-| [Jira](integrations/jira.md)                           | Jira Cloud setup and ticket views                 |
-| [Datadog](integrations/datadog.md)                     | Alert links and event summaries                   |
-| [GitHub](integrations/github.md)                       | Pull request tracking and standup support         |
+## Pick a path
 
-## Forking & Extending
+| If you want to…                    | Start at                                          |
+| ---------------------------------- | ------------------------------------------------- |
+| Get it running                     | [Installation](getting-started/installation.md)   |
+| Understand how it works            | [Architecture Overview](architecture/overview.md) |
+| Do a specific task                 | [Skills](guides/skills.md) and the other guides   |
+| Look something up                  | [API Routes](reference/api-routes.md)             |
+| Extend it without forking the core | [Plugin System](architecture/plugins.md)          |
+| Contribute back upstream           | [Fork Workflow](guides/fork-workflow.md)          |
 
-| Page                                                 | Use It For                                                       |
-| ---------------------------------------------------- | --------------------------------------------------------------- |
-| [Fork Workflow](guides/fork-workflow.md)             | Pulling core updates and contributing features back upstream    |
-| [Desktop Development](guides/desktop-development.md) | Building, testing, signing and releasing the desktop app        |
-| [Plugins](architecture/plugins.md)                   | Adding private/company features without touching the public core |
-| [Creating a Plugin](guides/creating-plugins.md)      | Step-by-step plugin authoring                                   |
-| [Contributing](../CONTRIBUTING.md)                   | Repo topology, mirror setup, personal-data boundary, standards  |
+The sidebar has the full contents; every section is also listed on the docs home page.
 
-## Guides
+## Conventions in these docs
 
-| Page                                         | Use It For                                      |
-| -------------------------------------------- | ----------------------------------------------- |
-| [Skills](guides/skills.md)                   | Creating, syncing, and collecting shared skills |
-| [Shared Agents](guides/agents.md)            | Subagent catalog, sync, and collect from local tools |
-| [OpenCode and OpenChamber](guides/opencode-and-chamber.md) | Local ports, shared OpenCode, config sync, 1Password |
-| [Repo Learning](guides/repo-learning.md)     | Onboarding briefs, tutor, and NotebookLM packs for local repos |
-| [Sharing](guides/sharing.md)                 | Temporary note/doc links via secret GitHub Gists |
-| [Command Palette](guides/command-palette.md) | Keyboard shortcuts and fast navigation          |
-| [Scheduled Jobs](guides/scheduled-jobs.md)   | Running safe maintenance actions on a schedule  |
-| [Standup](guides/standup.md)                 | Generating daily standup notes                  |
-| [Appraisal](guides/appraisal.md)           | MCP-backed performance review evidence capture  |
-| [PWA](guides/pwa.md)                         | Installing DevHub as a browser app              |
-| [Theming](guides/theming.md)                 | Choosing and customizing the look of DevHub     |
+Docs are Markdown files under `docs/`, editable in the app (**Edit** on any page) or in
+your editor. A few conventions make the rendered site work:
 
-## Reference
+- **Frontmatter drives navigation.** `title`, `description`, `section`, `order`, `icon`,
+  `tags` and `related` control how a page appears in the nav, on cards, and in the
+  related-docs footer.
+- **Links are relative Markdown links.** `../guides/theming.md` renders as a working
+  in-app link and still resolves on GitHub. Every such link also produces a backlink on
+  the target page.
+- **Diagrams are Mermaid.** Fenced `mermaid` code blocks render inline.
+- **Callouts use GitHub syntax.** `> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`,
+  `> [!WARNING]`, `> [!CAUTION]`.
 
-| Page                                                        | Use It For                                        |
-| ----------------------------------------------------------- | ------------------------------------------------- |
-| [API Routes](reference/api-routes.md)                       | High-level API surface reference                  |
-| [Environment Variables](reference/environment-variables.md) | Configuration variable reference                  |
-| [Scripts](reference/scripts.md)                             | CLI and lifecycle scripts                         |
-| [Platform Requirements](PLATFORM_REQUIREMENTS.md)           | Supported platforms and capabilities              |
-| [Memory Options](MEMORY_OPTIONS.md)                         | Why DevHub uses git-backed notes                  |
-| [Token Budget](TOKEN_BUDGET.md)                             | How persona and memory stay lightweight           |
-| [Backlog](reference/backlog.md)                             | Condensed quality backlog and future improvements |
+> [!TIP]
+> Adding a page is just adding a `.md` file in the right folder. The section, ordering,
+> nav entry, search index, and backlinks all follow from the file and its frontmatter —
+> there is no separate table of contents to keep in step.
+
+For repo topology, mirror setup, and the personal-data boundary, see
+[`CONTRIBUTING.md`](../CONTRIBUTING.md).

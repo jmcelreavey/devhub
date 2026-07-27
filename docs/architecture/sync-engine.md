@@ -1,6 +1,42 @@
+---
+title: Sync engine
+description: How shared skills, agents, persona and MCP config get copied into each tool's local directories.
+order: 4
+icon: RefreshCw
+tags: [architecture, sync]
+related:
+  - guides/skills
+  - guides/agents
+  - architecture/plugins
+---
+
 # Sync Engine
 
 The sync engine keeps AI tool configuration consistent across machines and tools.
+
+```mermaid
+graph LR
+  subgraph sources["Sources, in precedence order"]
+    core["Core repo<br/>skills/, agents/, mcp/shared/"]
+    ai["ai-tools checkout<br/><i>optional upstream</i>"]
+    plug["Registered plugins<br/><i>e.g. devhub-bi</i>"]
+    personal["~/.config/devhub/<br/>mcp-personal/"]
+  end
+
+  core --> merge{{"Merge<br/>core wins on collision"}}
+  ai --> merge
+  plug --> merge
+  personal --> merge
+
+  merge --> claude["~/.claude.json"]
+  merge --> codex["~/.codex/mcp.json"]
+  merge --> cursor["~/.cursor/mcp.json"]
+  merge --> oc["OpenCode config"]
+```
+
+> [!IMPORTANT]
+> Sync is one-way by default: repo to tool. Local edits in a tool directory are
+> overwritten on the next sync unless the entry is excluded.
 
 ## What It Syncs
 

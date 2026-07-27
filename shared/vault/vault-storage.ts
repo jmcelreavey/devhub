@@ -275,6 +275,15 @@ function walkExtensionFiles(
   }
 }
 
+/** Index of the first body line, skipping a leading `---` frontmatter block. */
+function frontmatterEndLine(lines: string[]): number {
+  if (lines[0]?.trim() !== "---") return 0;
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i].trim() === "---") return i + 1;
+  }
+  return 0;
+}
+
 export function searchTextFiles(
   root: string,
   extension: string,
@@ -294,7 +303,11 @@ export function searchTextFiles(
     const fullPath = path.join(root, relPath);
     const raw = fs.readFileSync(fullPath, "utf-8");
     const lines = raw.split("\n");
-    for (let i = 0; i < lines.length; i++) {
+    // Skip the frontmatter block. Its tags and descriptions restate the body,
+    // so matching there returns the same page twice — once for the content and
+    // once for the metadata describing that content.
+    const start = frontmatterEndLine(lines);
+    for (let i = start; i < lines.length; i++) {
       const line = lines[i];
       if (!line.toLowerCase().includes(q)) continue;
       const idx = line.toLowerCase().indexOf(q);

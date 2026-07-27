@@ -1,3 +1,13 @@
+---
+title: Jira
+description: Bring assigned tickets into DevHub and improve standup generation.
+order: 2
+icon: SquareKanban
+tags: [integrations]
+related:
+  - guides/standup
+---
+
 # Jira
 
 The Jira integration brings assigned tickets into DevHub and improves standup generation.

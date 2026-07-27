@@ -475,7 +475,7 @@ cd dashboard && npx tsx scripts/run-action.ts validate
 
 ## Platform Support
 
-See [`docs/PLATFORM_REQUIREMENTS.md`](docs/PLATFORM_REQUIREMENTS.md) for the full matrix. Short version: **Node 20+** and **Git** on macOS or WSL; dashboard + sync actions are TypeScript; iOS is read-only for repo files.
+See [`docs/reference/platform-support.md`](docs/reference/platform-support.md) for the full matrix. Short version: **Node 20+** and **Git** on macOS or WSL; dashboard + sync actions are TypeScript; iOS is read-only for repo files.
 
 ## Workflow Summary
 
@@ -489,9 +489,9 @@ See [`docs/PLATFORM_REQUIREMENTS.md`](docs/PLATFORM_REQUIREMENTS.md) for the ful
 
 | Document                          | Purpose                                                        |
 | --------------------------------- | -------------------------------------------------------------- |
-| `docs/MEMORY_OPTIONS.md`          | Memory architecture: git-based notes + custom notes MCP server |
-| `docs/PLATFORM_REQUIREMENTS.md`   | Platform capability matrix                                     |
-| `docs/TOKEN_BUDGET.md`            | Token budget analysis and optimization tips                    |
+| `docs/architecture/memory.md`          | Memory architecture: git-based notes + custom notes MCP server |
+| `docs/reference/platform-support.md`   | Platform capability matrix                                     |
+| `docs/architecture/token-budget.md`            | Token budget analysis and optimization tips                    |
 | `docs/guides/repo-learning.md`    | Repos page learning briefs, tutor, and NotebookLM source packs |
 | `docs/guides/creating-plugins.md` | Step-by-step guide to building a plugin                        |
 | `docs/architecture/plugins.md`    | Plugin system: manifest, registry, tier-1/tier-2, precedence   |

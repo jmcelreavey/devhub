@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { ChevronLeft, ChevronRight, Plus, Search, X } from "lucide-react";
 import { FileTree } from "@/components/FileTree";
 import { ResizeHandle } from "@/components/shell/ResizeHandle";
@@ -36,11 +43,19 @@ export function VaultFilesSidebar({
   search,
   onSearch,
   onNew,
+  title = "FILES",
+  searchPlaceholder = "Search…",
+  children,
 }: {
   vault: VaultId;
   search: string;
   onSearch: (q: string) => void;
   onNew: () => void;
+  /** Panel label. Docs use "DOCS" since they browse a nav, not a file tree. */
+  title?: string;
+  searchPlaceholder?: string;
+  /** Replaces the raw file tree. Docs pass a section-grouped nav instead. */
+  children?: ReactNode;
 }) {
   const vault = getVaultClient(vaultId);
   const collapsedKey = `${vaultId}-files-sidebar-collapsed`;
@@ -133,7 +148,7 @@ export function VaultFilesSidebar({
           <div className="shrink-0 border-b" style={{ borderColor: "var(--border)" }}>
             <div className="flex items-center justify-between px-3 py-2">
               <span className="text-xs font-semibold text-text-muted">
-                FILES
+                {title}
               </span>
               <button
                 type="button"
@@ -155,7 +170,7 @@ export function VaultFilesSidebar({
                   type="text"
                   value={search}
                   onChange={(e) => onSearch(e.target.value)}
-                  placeholder="Search…"
+                  placeholder={searchPlaceholder}
                   className="bg-transparent border-none outline-none text-xs w-full text-text"
                 />
                 {search ? (
@@ -167,7 +182,7 @@ export function VaultFilesSidebar({
             </div>
           </div>
           <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
-            <FileTree vault={vaultId} search={search} />
+            {children ?? <FileTree vault={vaultId} search={search} />}
           </div>
         </div>
       )}

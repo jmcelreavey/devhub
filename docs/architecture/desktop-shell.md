@@ -1,3 +1,14 @@
+---
+title: Desktop shell
+description: "The Tauri 2 wrapper: window lifecycle, the bundled Node server, and the updater."
+order: 8
+icon: AppWindow
+tags: [architecture, desktop]
+related:
+  - guides/desktop-development
+  - getting-started/desktop-app
+---
+
 # Desktop shell (Tauri 2)
 
 Status: **complete**. Phases 0–5 done; Electron removed 2026-07-26.

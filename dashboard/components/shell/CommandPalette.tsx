@@ -21,6 +21,7 @@ import { paletteCommandScore } from "@/lib/command-palette-score";
 import { useToast } from "@/lib/hooks/use-toast";
 import { copyContextPackToClipboard } from "@/lib/context-pack-client";
 import { buildSearchUrl } from "@/lib/search-ui";
+import type { DocSearchHit } from "@/lib/docs/doc-search-types";
 import { copyStandupMarkdownToClipboard } from "@/lib/standup/clipboard";
 import { saveStandupAsDailyNote } from "@/lib/standup/daily-note";
 import { isDiagramStoragePath, toDiagramRoutePath } from "@/lib/diagram-utils";
@@ -129,7 +130,12 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     contentSearchTimer.current = setTimeout(() => {
       Promise.all([
         fetch(buildSearchUrl(query, { mode: "auto" })).then((r) => r.json()),
-        fetch(buildSearchUrl(query, { vault: "docs" })).then((r) => r.json()),
+        // Docs use their own index rather than the generic vault grep: it knows
+        // titles and headings, so a hit can name the page and jump to the
+        // section instead of dropping you at the top of a 300-line reference.
+        fetch(`/api/docs/search?q=${encodeURIComponent(query)}&limit=8`)
+          .then((r) => r.json())
+          .catch(() => ({ results: [] })),
         // Terminal transcripts (R6). Every line is redacted server-side before
         // it gets here — see lib/terminal-search.ts. Failure is non-fatal: a
         // missing log dir shouldn't take notes and docs results down with it.
@@ -154,19 +160,19 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
               };
             },
           );
-          const docCmds: Command[] = (docsData.files ?? []).map(
-            (f: { path: string; matches: { text: string }[] }) => {
-              const cleanPath = f.path.replace(/\.md$/, "");
-              return {
-                id: `content:docs:${f.path}`,
-                kind: "content" as CommandKind,
-                label: cleanPath,
-                detail: f.matches[0]?.text ?? "",
-                hint: "doc",
-                perform: () => router.push(`/docs/${cleanPath}`),
-              };
-            },
-          );
+          const docCmds: Command[] = (docsData.results ?? []).map((hit: DocSearchHit) => {
+            const best = hit.matches[0];
+            return {
+              id: `content:docs:${hit.slug}`,
+              kind: "content" as CommandKind,
+              label: hit.title,
+              // Prefer the matched section over the doc description — the
+              // question the palette is answering is "where is this mentioned".
+              detail: best ? `${best.heading} — ${best.snippet}` : (hit.description ?? hit.slug),
+              hint: "doc",
+              perform: () => router.push(best?.href ?? hit.href),
+            };
+          });
           /*
             "What was that command I ran on Tuesday" — answered from the shell
             transcripts. Selecting a hit copies the line rather than navigating:

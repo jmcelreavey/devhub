@@ -1,3 +1,13 @@
+---
+title: Platform support
+description: Which platforms run DevHub fully, partially, or read-only.
+order: 4
+icon: MonitorSmartphone
+tags: [reference]
+related:
+  - getting-started/installation
+---
+
 # Platform Requirements
 
 DevHub is designed for local developer machines.

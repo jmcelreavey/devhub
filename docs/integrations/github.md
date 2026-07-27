@@ -1,3 +1,14 @@
+---
+title: GitHub
+description: PR tracking, repo awareness, and standup input via the local `gh` session.
+order: 1
+icon: GitPullRequest
+tags: [integrations]
+related:
+  - guides/standup
+  - guides/repo-learning
+---
+
 # GitHub
 
 DevHub uses GitHub data for pull request tracking, repo awareness, and standup generation.

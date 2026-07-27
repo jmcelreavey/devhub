@@ -1,3 +1,13 @@
+---
+title: Motion and loading states
+description: "The motion policy: shimmer for arriving content, spin only for user-triggered actions, and the reduced-motion kill switch."
+order: 10
+icon: Zap
+tags: [ui]
+related:
+  - guides/theming
+---
+
 # Motion, Loaders & Delight — Improvement Plan
 
 Date: 2026-06-10. Follow-up to `docs/codebase-review-2026-06-09.md` and the UX Explorations handoff. Focus: transitions, loading states, and tasteful fun.
