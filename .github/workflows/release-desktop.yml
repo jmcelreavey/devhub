@@ -126,6 +126,12 @@ jobs:
       - name: Inject version
         run: node desktop/scripts/inject-version.mjs "${{ steps.version.outputs.version }}"
 
+      # Cheap, and it runs on every platform in the matrix — the staging rules
+      # these cover are platform-dependent, so a pass on macOS says nothing
+      # about Linux.
+      - name: Test desktop scripts
+        run: npm run desktop:test
+
       - name: Stage bundle
         run: node desktop/scripts/stage-all.mjs
         env:

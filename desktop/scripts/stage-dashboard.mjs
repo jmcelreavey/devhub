@@ -28,6 +28,7 @@ import {
   servicesDir,
   stagingDir,
 } from "./staging-paths.mjs";
+import { NATIVE_BINARY_PATTERN, foreignBinaryReason } from "./native-binaries.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -139,6 +140,51 @@ function stageServer() {
   }
 
   stripEnvFiles();
+  stripForeignNativeBinaries();
+}
+
+/**
+ * Delete staged native binaries built for a platform or libc this bundle will
+ * never run on. See `native-binaries.mjs` for why they are here and why the
+ * Linux release job cannot package around them.
+ */
+function stripForeignNativeBinaries() {
+  const platform = os.platform();
+  const removed = [];
+
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!entry.isFile() || !NATIVE_BINARY_PATTERN.test(entry.name)) continue;
+
+      let reason;
+      try {
+        reason = foreignBinaryReason(fs.readFileSync(full), platform);
+      } catch {
+        continue;
+      }
+      if (!reason) continue;
+
+      fs.rmSync(full, { force: true });
+      removed.push(`${path.relative(serverDir, full)} (${reason})`);
+    }
+  };
+  walk(path.join(serverDir, "node_modules"));
+
+  if (removed.length > 0) {
+    log(`removed ${removed.length} native binary/binaries built for other targets:`);
+    for (const entry of removed) log(`  ${entry}`);
+  }
 }
 
 /**

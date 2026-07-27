@@ -11,6 +11,7 @@
     "desktop:dev": "node desktop/scripts/stage-all.mjs && cargo tauri dev --config desktop/src-tauri/tauri.conf.json",
     "desktop:build": "node desktop/scripts/stage-all.mjs && cargo tauri build --config desktop/src-tauri/tauri.conf.json && node desktop/scripts/sign-local.mjs",
     "desktop:doctor": "node desktop/scripts/doctor.mjs",
+    "desktop:test": "node --test \"desktop/**/*.test.mjs\"",
     "desktop:selftest": "node desktop/scripts/selftest.mjs",
     "dev": "npm run dev --prefix ./dashboard",
     "start": "npm run start --prefix ./dashboard",

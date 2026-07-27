@@ -34,6 +34,13 @@ jobs:
       - name: Setup dashboard
         uses: ./.github/actions/dashboard-setup
 
+      # The desktop staging and supervisor scripts are plain .mjs outside the
+      # dashboard's vitest project, so `verify` never saw them. They were
+      # therefore only exercised by a release build — which is a 25-minute,
+      # three-platform way to find out that a staging rule is wrong.
+      - name: Test desktop scripts
+        run: npm run desktop:test
+
       - name: Run verify
         run: npm run verify --prefix dashboard
 

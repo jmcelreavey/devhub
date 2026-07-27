@@ -20,6 +20,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { repoRoot, resourcesDir, serverDir } from "./staging-paths.mjs";
+import { NATIVE_BINARY_PATTERN, isMuslLinked } from "./native-binaries.mjs";
 
 let failures = 0;
 function fail(message) {
@@ -215,6 +216,38 @@ if (userOnlyNames.length === 0) {
     );
   } else {
     pass(`prerendered output is free of local content (${userOnlyNames.length} names checked)`);
+  }
+}
+
+/**
+ * 4. No native binary for a foreign platform or libc.
+ *
+ * `stage-dashboard.mjs` strips these; this is the check that they stayed
+ * stripped. It is here rather than left to the bundler because the way it
+ * surfaces otherwise is a Linux release job dying at packaging with "failed to
+ * run linuxdeploy" and no cause — linuxdeploy resolves every ELF in the AppDir,
+ * finds a musl-linked `sharp` prebuild, and cannot satisfy
+ * `libc.musl-x86_64.so.1` on a glibc system.
+ *
+ * On macOS the same binaries are only wasted megabytes, so this check runs on
+ * every platform to keep the failure honest wherever it is first noticed.
+ */
+{
+  const nodeModules = path.join(serverDir, "node_modules");
+  const offenders = [];
+  if (fs.existsSync(nodeModules)) {
+    for (const rel of walk(nodeModules)) {
+      if (!NATIVE_BINARY_PATTERN.test(rel)) continue;
+      if (isMuslLinked(fs.readFileSync(path.join(nodeModules, rel)))) offenders.push(`${rel} (musl)`);
+    }
+  }
+  if (offenders.length > 0) {
+    fail(
+      `${offenders.length} musl-linked native binary/binaries staged — ` +
+        `AppImage packaging will fail on them:\n      ${offenders.slice(0, 10).join("\n      ")}`,
+    );
+  } else {
+    pass("no musl-linked native binaries staged");
   }
 }
 
