@@ -21,7 +21,7 @@ mod updater;
 
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -30,7 +30,7 @@ use rand::Rng;
 use serde::Serialize;
 use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
-use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 use logging::DesktopLog;
 use paths::{default_app_data, RuntimePaths};
@@ -38,7 +38,12 @@ use sidecar::{BootState, Sidecar};
 
 const DEFAULT_PORT: u16 = 1337;
 const DEFAULT_TERMINAL_PORT: u16 = 1339;
-const DEV_SERVER_START_TIMEOUT: Duration = Duration::from_secs(90);
+/// A cold `npm run dev` in this checkout is genuinely slow: the `predev` health
+/// check, plugin materialisation, the peer services, and then a webpack cold
+/// compile. 90s used to expire mid-compile and present a working startup as a
+/// failure, so this is deliberately generous — the `try_wait` check in
+/// `wait_for_dev_server` is what makes a *dead* child fail fast.
+const DEV_SERVER_START_TIMEOUT: Duration = Duration::from_secs(300);
 const DEV_SERVER_STOP_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// A fresh 256-bit token per launch.
@@ -156,10 +161,15 @@ fn boot_state(state: tauri::State<'_, AppState>) -> BootState {
         .unwrap_or(BootState::Preparing)
 }
 
-/// The last lines of the desktop log, for the failure UI.
+/// The last lines of the desktop log, for the failure UI and the boot screen.
+///
+/// The boot screen polls this while starting. A startup that takes minutes with
+/// nothing to look at is indistinguishable from a hung one, and "open the log
+/// folder" is a poor answer when the window you are staring at could just show
+/// you the log.
 #[tauri::command]
 fn recent_logs(state: tauri::State<'_, AppState>) -> Vec<String> {
-    state.log.tail(40)
+    state.log.tail(80)
 }
 
 /// Reveal the log file in the OS file manager.
@@ -274,6 +284,31 @@ async fn retry_start(app: tauri::AppHandle) -> Result<(), String> {
     start_sidecar(&app)
 }
 
+/// Stop a leftover DevHub dev server that is holding our ports, then start.
+///
+/// Offered only when startup already classified the listener as one of our
+/// checkout's own dev services — but this deliberately takes no PID from the
+/// caller and re-derives everything. The boot page is a page; a command that
+/// accepts "please stop process 4211" is a process-killing primitive handed to a
+/// renderer, and the fact that today's renderer is trustworthy is not the kind
+/// of thing to build a security boundary on.
+///
+/// `stop_attached_dev_server` is reused rather than reimplemented because it
+/// already refuses to signal anything that fails the checkout fingerprint.
+#[tauri::command]
+async fn stop_conflicting_dev_server(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(state) = app.try_state::<AppState>() {
+        state.log.write_line(
+            "shell:startup",
+            "[startup] user asked DevHub to stop the leftover development server",
+        );
+    }
+    stop_attached_dev_server(&app).inspect_err(|err| {
+        fail(&app, err);
+    })?;
+    start_sidecar(&app)
+}
+
 fn set_boot(app: &tauri::AppHandle, next: BootState) {
     if let Some(state) = app.try_state::<AppState>() {
         if let Ok(mut guard) = state.boot.lock() {
@@ -328,6 +363,30 @@ fn dev_server_url_for(app: Option<&tauri::AppHandle>) -> Option<String> {
     }
 }
 
+/// Connect to the first resolved address that actually accepts.
+///
+/// `localhost` resolves to `::1` ahead of `127.0.0.1` on macOS, while both the
+/// packaged sidecar and `next dev` bind IPv4 only. Taking the first address and
+/// giving up reports "connection refused" against a server that is running
+/// perfectly well one entry later in the list — which is exactly what Rebuild
+/// did from a packaged window.
+fn connect_loopback(host: &str, port: u16, timeout: Duration) -> Result<TcpStream, String> {
+    let addresses = (host, port)
+        .to_socket_addrs()
+        .map_err(|err| err.to_string())?;
+    let mut last_error = None;
+    for address in addresses {
+        match TcpStream::connect_timeout(&address, timeout) {
+            Ok(stream) => return Ok(stream),
+            Err(err) => last_error = Some(err),
+        }
+    }
+    Err(match last_error {
+        Some(err) => err.to_string(),
+        None => format!("{host}:{port} did not resolve to any address"),
+    })
+}
+
 fn dev_server_responds(url: &str) -> Result<(), String> {
     let parsed = url
         .parse::<tauri::Url>()
@@ -339,13 +398,9 @@ fn dev_server_responds(url: &str) -> Result<(), String> {
     let port = parsed
         .port_or_known_default()
         .ok_or("Dev server URL has no port")?;
-    let addresses = (host, port)
-        .to_socket_addrs()
-        .map_err(|err| err.to_string())?;
-    let mut stream = addresses
-        .filter_map(|address| TcpStream::connect_timeout(&address, Duration::from_secs(2)).ok())
-        .next()
-        .ok_or_else(|| format!("No dev server is responding at {url}. Start `npm run dev` in the DevHub checkout, then Retry."))?;
+    let mut stream = connect_loopback(host, port, Duration::from_secs(2)).map_err(|_| {
+        format!("No dev server is responding at {url}. Start `npm run dev` in the DevHub checkout, then Retry.")
+    })?;
     stream
         .set_read_timeout(Some(Duration::from_secs(3)))
         .map_err(|err| err.to_string())?;
@@ -354,34 +409,54 @@ fn dev_server_responds(url: &str) -> Result<(), String> {
         "GET /api/desktop/health HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n"
     )
     .map_err(|err| err.to_string())?;
-    let mut response = [0_u8; 4096];
-    let size = stream.read(&mut response).map_err(|_| {
-        format!("The dev server at {url} did not return a health response. Start `npm run dev`, then Retry.")
-    })?;
-    let response = String::from_utf8_lossy(&response[..size]);
-    if !response.starts_with("HTTP/") {
-        return Err(format!("The process at {url} is not an HTTP server."));
+    // Accumulate rather than trusting one `read`, and match the marker in the
+    // raw bytes rather than parsing the body as JSON.
+    //
+    // Both matter against `next dev`. A single read routinely returns the status
+    // line with no body yet, and the body that follows is chunk-framed
+    // (`2f\r\n{"devhub":true,…}\r\n0\r\n\r\n`), which is not valid JSON until the
+    // framing is stripped. Parsing it therefore failed on every single poll, so
+    // attach sat on the boot screen watching a perfectly healthy server answer
+    // 200 four times a second. `sidecar::health_check` reads the same way.
+    let mut response = Vec::with_capacity(2048);
+    let mut chunk = [0_u8; 1024];
+    let mut status_checked = false;
+    loop {
+        let read = match stream.read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(read) => read,
+        };
+        response.extend_from_slice(&chunk[..read]);
+        let text = String::from_utf8_lossy(&response);
+
+        if !status_checked {
+            let Some(end) = text.find("\r\n") else {
+                continue; // status line still arriving
+            };
+            let status = &text[..end];
+            if !status.starts_with("HTTP/") {
+                return Err(format!("The process at {url} is not an HTTP server."));
+            }
+            if !status.starts_with("HTTP/1.1 200") && !status.starts_with("HTTP/1.0 200") {
+                return Err(format!(
+                    "The server at {url} did not pass DevHub's health check ({status}). Start `npm run dev` in this checkout, then Retry."
+                ));
+            }
+            status_checked = true;
+        }
+
+        if text.contains("\"devhub\":true") {
+            return Ok(());
+        }
     }
-    if !response.starts_with("HTTP/1.1 200") && !response.starts_with("HTTP/1.0 200") {
-        return Err(format!(
-            "The server at {url} did not pass DevHub's health check ({}). Start `npm run dev` in this checkout, then Retry.",
-            response.lines().next().unwrap_or("no HTTP status")
-        ));
-    }
-    let body = response
-        .split_once("\r\n\r\n")
-        .map(|(_, body)| body)
-        .unwrap_or_default();
-    let is_devhub = serde_json::from_str::<serde_json::Value>(body)
-        .ok()
-        .and_then(|value| value.get("devhub").and_then(|value| value.as_bool()))
-        == Some(true);
-    if !is_devhub {
+    if status_checked {
         return Err(format!(
             "The server at {url} returned 200 but is not DevHub. Start `npm run dev` in this checkout, then Retry."
         ));
     }
-    Ok(())
+    Err(format!(
+        "The dev server at {url} did not return a health response. Start `npm run dev`, then Retry."
+    ))
 }
 
 fn dev_server_endpoint(url: &str) -> Result<(String, u16), String> {
@@ -485,6 +560,15 @@ fn start_dev_server(app: &tauri::AppHandle, url: &str) -> Result<(), String> {
         .arg("dev")
         .current_dir(&repo_root)
         .env("PATH", &path)
+        // So the dashboard's log API (and anything else that reads app data)
+        // looks in the same place the shell writes, not the checkout root.
+        .env("DEVHUB_APP_DATA", &state.paths.app_data)
+        // Tells the dashboard that this server has an owner. Without it the
+        // Status page offers a rebuild that spawns a *detached* `npm run
+        // restart`, which frees port 1337 by killing whoever holds it — and it
+        // outlives this shell, so it can land after a mode switch and kill the
+        // server the user has since moved to. Been there.
+        .env("DEVHUB_SHELL_SUPERVISED", "1")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -658,24 +742,131 @@ fn process_parent(pid: u32) -> Option<u32> {
     .ok()
 }
 
-/// The only foreign listeners we may stop are DevHub's checkout services.
+/// The processes `npm run dev` starts in a DevHub checkout.
 ///
-/// A port number is not ownership. The listener must have the configured
-/// checkout's dashboard directory as its cwd *and* match one of the scripts
-/// `npm run dev` launches. That excludes unrelated local servers which merely
-/// happen to use our conventional ports.
-fn is_checkout_dev_listener(pid: u32, repo_root: &std::path::Path) -> bool {
-    let dashboard = repo_root.join("dashboard").canonicalize().ok();
-    let cwd = process_cwd(pid).and_then(|cwd| cwd.canonicalize().ok());
-    if dashboard != cwd {
+/// `next-server` earns its place despite being the vaguest: Next rewrites its
+/// own argv, so the worker holding port 1337 reports nothing but
+/// `next-server (v16.2.6)` — no path, no script name. The cwd check below is the
+/// only thing tying it to a checkout, which is why that check is required
+/// rather than merely corroborating.
+const DEV_SERVICE_MARKERS: [&str; 6] = [
+    "next-server",
+    "next dev",
+    "scripts/run-next-with-env.ts",
+    "scripts/lan-port-proxy.ts",
+    "scripts/terminal-pty-server.ts",
+    "scripts/start-peer-services.ts",
+];
+
+/// Is this process one of the services `npm run dev` starts in our checkout?
+///
+/// A port number is not ownership. The process must be running *from* the
+/// configured checkout's dashboard directory *and* match one of the scripts we
+/// launch. Either half alone is too weak: cwd alone would match a shell someone
+/// happened to leave in that directory, and the command alone would match a
+/// different worktree's dev server — which attach has been careful not to adopt
+/// since the day it shipped.
+///
+/// Pure over what the OS reports, so the classification is testable without
+/// spawning a process tree.
+fn is_checkout_dev_process(command: &str, cwd: Option<&Path>, dashboard: &Path) -> bool {
+    if cwd != Some(dashboard) {
         return false;
     }
+    DEV_SERVICE_MARKERS
+        .iter()
+        .any(|marker| command.contains(marker))
+}
+
+/// Who is holding a port, in the terms an error message needs.
+struct PortHolder {
+    pid: u32,
+    command: String,
+    /// A DevHub dev service from the configured checkout — ours to offer to
+    /// stop, rather than a stranger's process to refuse to touch.
+    ours: bool,
+}
+
+/// Every listener on `port`, classified.
+fn describe_port_holders(port: u16, repo_root: Option<&Path>) -> Vec<PortHolder> {
+    let dashboard = repo_root.and_then(|root| root.join("dashboard").canonicalize().ok());
+    listener_pids(port)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|pid| {
+            let command = process_command(pid)?.trim().to_string();
+            let cwd = process_cwd(pid).and_then(|cwd| cwd.canonicalize().ok());
+            let ours = dashboard.as_deref().is_some_and(|dashboard| {
+                is_checkout_dev_process(&command, cwd.as_deref(), dashboard)
+            });
+            Some(PortHolder { pid, command, ours })
+        })
+        .collect()
+}
+
+/// The listener worth naming, preferring one we recognise as ours.
+///
+/// `npm run dev` puts two listeners on 1337 — the LAN proxy and the Next worker
+/// — and `lsof` order is not meaningful. Reporting whichever came back first
+/// told the user their own dev server was "another program's process".
+fn describe_port_holder(port: u16, repo_root: Option<&Path>) -> Option<PortHolder> {
+    let holders = describe_port_holders(port, repo_root);
+    holders
+        .into_iter()
+        .reduce(|best, next| if best.ours { best } else { next })
+}
+
+/// Say what is on the port, and what can be done about it.
+///
+/// Named separately from the check because the message is the whole feature.
+/// "Port 1337 is in use by another program" was technically true and actively
+/// misleading: the program was `scripts/lan-port-proxy.ts` from this very
+/// checkout — DevHub's own dev helper, left behind by a `npm run dev` nobody
+/// remembered starting. Telling someone to go hunt down our mess by hand is not
+/// an error message, it is a shrug.
+fn port_conflict_message(port: u16, is_devhub: bool, holder: Option<&PortHolder>) -> String {
+    if is_devhub {
+        return format!(
+            "Another DevHub is already using port {port}. Quit it, or use the window that is already open."
+        );
+    }
+    match holder {
+        Some(holder) if holder.ours => format!(
+            "Port {port} is held by a leftover DevHub development server (PID {}) from your checkout. \
+             DevHub can stop it and carry on, or you can attach to it instead from View → Attach to Dev Server…",
+            holder.pid
+        ),
+        Some(holder) => format!(
+            "Port {port} is in use by PID {} ({}). DevHub will not stop another program's process — quit it, then Retry.",
+            holder.pid,
+            truncate_command(&holder.command)
+        ),
+        // lsof is absent or told us nothing. Still better than silence.
+        None => format!(
+            "Port {port} is in use and DevHub could not identify the process holding it. Run `lsof -nP -iTCP:{port} -sTCP:LISTEN` to find it, quit it, then Retry."
+        ),
+    }
+}
+
+/// Enough of a command line to recognise it, not enough to fill the dialog.
+fn truncate_command(command: &str) -> String {
+    const LIMIT: usize = 120;
+    if command.chars().count() <= LIMIT {
+        return command.to_string();
+    }
+    let kept: String = command.chars().take(LIMIT).collect();
+    format!("{kept}…")
+}
+
+fn is_checkout_dev_listener(pid: u32, repo_root: &std::path::Path) -> bool {
+    let Some(dashboard) = repo_root.join("dashboard").canonicalize().ok() else {
+        return false;
+    };
     let Some(command) = process_command(pid) else {
         return false;
     };
-    command.contains("next-server")
-        || command.contains("scripts/lan-port-proxy.ts")
-        || command.contains("scripts/terminal-pty-server.ts")
+    let cwd = process_cwd(pid).and_then(|cwd| cwd.canonicalize().ok());
+    is_checkout_dev_process(&command, cwd.as_deref(), &dashboard)
 }
 
 /// A healthy DevHub is still not necessarily *this checkout*. Attach must not
@@ -834,9 +1025,30 @@ fn stop_attached_dev_server(app: &tauri::AppHandle) -> Result<(), String> {
     ))
 }
 
+/// The `service` string the boot page renders, with elapsed seconds attached.
+///
+/// The boot page splits on `:` and looks the base up in its label table, so a
+/// long compile reads as progress rather than as an unchanging "Starting
+/// development server…" that is indistinguishable from a hang.
+fn starting_service_label(service: &str, elapsed: Duration) -> String {
+    format!("{service}:{}", elapsed.as_secs())
+}
+
 fn wait_for_dev_server(app: &tauri::AppHandle, url: &str) -> Result<(), String> {
-    let deadline = Instant::now() + DEV_SERVER_START_TIMEOUT;
+    let started = Instant::now();
+    let deadline = started + DEV_SERVER_START_TIMEOUT;
+    let mut last_reported = 0;
     while Instant::now() < deadline {
+        let elapsed = started.elapsed();
+        if elapsed.as_secs() / 5 > last_reported {
+            last_reported = elapsed.as_secs() / 5;
+            set_boot(
+                app,
+                BootState::Starting {
+                    service: starting_service_label("dev-server", elapsed),
+                },
+            );
+        }
         if dev_server_responds(url).is_ok() {
             if let Some(state) = app.try_state::<AppState>() {
                 state
@@ -881,6 +1093,7 @@ fn navigate_to_dev_server(app: &tauri::AppHandle, url: String) {
     };
     match attach_dev_bootstrap_url(&url) {
         Ok(attach_url) => {
+            let handoff = attach_url.to_string();
             if let Err(err) = window.navigate(attach_url) {
                 fail(
                     app,
@@ -892,7 +1105,10 @@ fn navigate_to_dev_server(app: &tauri::AppHandle, url: String) {
                         .log
                         .write_line("shell:attach", "[attach] navigation started");
                 }
-                set_boot(app, BootState::Ready { url });
+                // Ready.url is the URL the boot page itself will load if the
+                // shell navigate is ignored — so it must be attach-dev, not
+                // the bare origin (that would skip the SW clear).
+                set_boot(app, BootState::Ready { url: handoff });
                 show_main_window(app);
             }
         }
@@ -976,18 +1192,22 @@ fn start_sidecar(app: &tauri::AppHandle) -> Result<(), String> {
     // it: on a developer's machine port 1337 belongs to somebody's own server
     // at least as often as it belongs to us.
     if let Some(conflict) = sidecar.check_ports() {
-        let message = if conflict.is_devhub {
-            format!(
-                "Another DevHub is already using port {}. Quit it, or use the window that is already open.",
-                conflict.port
-            )
-        } else {
-            format!(
-                "Port {} is in use by another program. DevHub will not stop it — quit that program and try again.",
-                conflict.port
-            )
-        };
-        fail(app, &message);
+        let repo_root = dev_server_repo_root(app).ok();
+        let holder = describe_port_holder(conflict.port, repo_root.as_deref());
+        // On disk before the dialog: this is the line that explains a failed
+        // start after the fact, and the full command line is too long to show.
+        if let Some(holder) = holder.as_ref() {
+            state.log.write_line(
+                "shell:startup",
+                &format!(
+                    "[startup] port {} held by pid={} ours={} command={}",
+                    conflict.port, holder.pid, holder.ours, holder.command
+                ),
+            );
+        }
+        let stoppable = !conflict.is_devhub && holder.as_ref().is_some_and(|h| h.ours);
+        let message = port_conflict_message(conflict.port, conflict.is_devhub, holder.as_ref());
+        fail_with_recovery(app, &message, stoppable);
         return Err(message);
     }
 
@@ -1005,7 +1225,16 @@ fn start_sidecar(app: &tauri::AppHandle) -> Result<(), String> {
     std::thread::spawn(
         move || match sidecar.wait_until_healthy(Duration::from_secs(90)) {
             Ok(()) => {
-                set_boot(&handle, BootState::Ready { url: sidecar.url() });
+                // Bootstrap URL, not the bare origin: the boot page also
+                // navigates itself on Ready, and without the token it would
+                // land on / with no session cookie.
+                let handoff = sidecar.bootstrap_url();
+                set_boot(
+                    &handle,
+                    BootState::Ready {
+                        url: handoff.clone(),
+                    },
+                );
                 load_dashboard(&handle, &sidecar);
                 // Only once the app is healthy and on screen. Checking during
                 // startup competes with the thing the user is waiting for.
@@ -1019,6 +1248,11 @@ fn start_sidecar(app: &tauri::AppHandle) -> Result<(), String> {
 }
 
 fn fail(app: &tauri::AppHandle, message: &str) {
+    fail_with_recovery(app, message, false);
+}
+
+/// Fail, and say whether the boot screen may offer to stop a leftover of ours.
+fn fail_with_recovery(app: &tauri::AppHandle, message: &str, stoppable_dev_server: bool) {
     let logs = app
         .try_state::<AppState>()
         .map(|s| s.log.tail(20))
@@ -1031,6 +1265,7 @@ fn fail(app: &tauri::AppHandle, message: &str) {
         BootState::Failed {
             error: message.to_string(),
             logs,
+            stoppable_dev_server,
         },
     );
     show_main_window(app);
@@ -1042,18 +1277,94 @@ fn fail(app: &tauri::AppHandle, message: &str) {
 /// constant time, sets an HttpOnly cookie, and redirects to `/` without it. The
 /// token therefore never survives in the address bar, in history, or in a
 /// `Referer` header sent to anything the user later clicks.
+///
+/// The boot page also `location.replace`s the same URL when it sees Ready —
+/// belt and braces, because a healthy sidecar with a stuck boot screen is how
+/// this shipped. Errors are logged and, if the webview is still on the boot
+/// origin a few seconds later, surfaced as a failure instead of "opening…".
 fn load_dashboard(app: &tauri::AppHandle, sidecar: &Sidecar) {
     let Some(window) = app.get_webview_window("main") else {
+        if let Some(state) = app.try_state::<AppState>() {
+            state.log.write_line(
+                "shell:handoff",
+                "[handoff] no main window — cannot open the dashboard",
+            );
+        }
+        fail(app, "DevHub's window was not ready to open the dashboard.");
         return;
     };
     let url = sidecar.bootstrap_url();
-    match url.parse() {
-        Ok(parsed) => {
-            let _ = window.navigate(parsed);
-            show_main_window(app);
+    let parsed = match url.parse::<tauri::Url>() {
+        Ok(parsed) => parsed,
+        Err(err) => {
+            fail(app, &format!("Could not open the dashboard URL: {err}"));
+            return;
         }
-        Err(err) => fail(app, &format!("Could not open the dashboard URL: {err}")),
+    };
+
+    if let Some(state) = app.try_state::<AppState>() {
+        state
+            .log
+            .write_line("shell:handoff", "[handoff] navigation started");
     }
+
+    if let Err(err) = window.navigate(parsed) {
+        fail(
+            app,
+            &format!("Could not open the dashboard: {err}"),
+        );
+        return;
+    }
+    show_main_window(app);
+
+    // Confirm the webview actually left the boot page. navigate() is async on
+    // WKWebView; returning Ok here only means the request was queued. If it
+    // never commits, the user used to sit on "Ready — opening…" forever.
+    let watch = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(4));
+        let Some(window) = watch.get_webview_window("main") else {
+            return;
+        };
+        let Ok(current) = window.url() else {
+            return;
+        };
+        if matches!(current.scheme(), "http" | "https") {
+            if let Some(state) = watch.try_state::<AppState>() {
+                state.log.write_line(
+                    "shell:handoff",
+                    &format!("[handoff] webview is on {}", current.origin().ascii_serialization()),
+                );
+            }
+            return;
+        }
+        if let Some(state) = watch.try_state::<AppState>() {
+            state.log.write_line(
+                "shell:handoff",
+                &format!(
+                    "[handoff] still on {} after navigate — retrying once",
+                    current.scheme()
+                ),
+            );
+        }
+        if let Some(sidecar) = watch.try_state::<AppState>().map(|s| s.sidecar.clone()) {
+            let retry = sidecar.bootstrap_url();
+            if let Ok(parsed) = retry.parse::<tauri::Url>() {
+                let _ = window.navigate(parsed);
+            }
+        }
+        std::thread::sleep(Duration::from_secs(4));
+        let Ok(current) = window.url() else {
+            return;
+        };
+        if matches!(current.scheme(), "http" | "https") {
+            return;
+        }
+        fail(
+            &watch,
+            "DevHub's server is ready, but the window could not leave the startup screen. Try again, or use View → Attach to Dev Server…",
+        );
+    });
 }
 
 /// Show the window only once there is something worth looking at.
@@ -1065,6 +1376,196 @@ fn show_main_window(app: &tauri::AppHandle) {
         let _ = window.show();
         let _ = window.set_focus();
     }
+}
+
+fn menu_log(app: &tauri::AppHandle, message: &str) {
+    if let Some(state) = app.try_state::<AppState>() {
+        state.log.write_line("shell:menu", message);
+    }
+}
+
+/// Origin the main window is actually pointed at, if it is a dashboard.
+fn current_dashboard_origin(app: &tauri::AppHandle) -> Option<String> {
+    let window = app.get_webview_window("main")?;
+    let url = window.url().ok()?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return None;
+    }
+    Some(url.origin().ascii_serialization())
+}
+
+/// Stage a standalone dashboard from the checkout and install it into the
+/// packaged (or `desktop:dev` staging) server tree the shell actually serves.
+///
+/// `npm run build` alone only refreshes `dashboard/.next` in the checkout.
+/// Packaged mode keeps serving `Resources/server` from the last install, so
+/// Rebuild looked successful while the UI stayed on the previous bundle.
+fn run_dashboard_build(app: &tauri::AppHandle, repo_root: &Path) -> Result<(), String> {
+    let paths = resolve_paths(app)?;
+    let script = repo_root.join("desktop/scripts/rebuild-installed-server.mjs");
+    if !script.is_file() {
+        return Err(format!(
+            "Missing rebuild script at {}. Update the checkout and try again.",
+            script.display()
+        ));
+    }
+
+    let path = dev_server_path();
+    menu_log(
+        app,
+        &format!(
+            "[menu] rebuild staging dashboard from {} into {}",
+            repo_root.display(),
+            paths.server_dir.display()
+        ),
+    );
+
+    let mut command = Command::new("node");
+    command
+        .arg(&script)
+        .current_dir(repo_root)
+        .env("PATH", &path)
+        .env("DEVHUB_SERVER_DIR", &paths.server_dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        unsafe {
+            command.pre_exec(|| {
+                if libc_setsid() == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
+
+    let mut child = command
+        .spawn()
+        .map_err(|err| format!("Could not start dashboard rebuild: {err}"))?;
+
+    // Stream the build into the log so the boot screen's log panel shows it.
+    if let Some(state) = app.try_state::<AppState>() {
+        fn pump(
+            reader: impl std::io::Read + Send + 'static,
+            log: DesktopLog,
+            channel: &'static str,
+        ) {
+            std::thread::spawn(move || {
+                use std::io::BufRead;
+                for line in std::io::BufReader::new(reader)
+                    .lines()
+                    .map_while(Result::ok)
+                {
+                    log.write_line(channel, &line);
+                }
+            });
+        }
+        if let Some(stdout) = child.stdout.take() {
+            pump(stdout, state.log.clone(), "sidecar:build:stdout");
+        }
+        if let Some(stderr) = child.stderr.take() {
+            pump(stderr, state.log.clone(), "sidecar:build:stderr");
+        }
+    }
+
+    let status = child
+        .wait()
+        .map_err(|err| format!("Could not wait for dashboard rebuild: {err}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Dashboard rebuild failed ({status}). View → Show Logs has the compiler output."
+        ))
+    }
+}
+
+/// Rebuild the packaged server from the checkout, then relaunch onto it.
+///
+/// Relaunching rather than hand-restarting a server: the normal startup path
+/// already knows how to bring up whichever mode is selected, and reusing it
+/// means a rebuild cannot invent a third way for the shell to reach a running
+/// dashboard. The build step copies into Resources/server so packaged mode
+/// actually picks up the new UI.
+fn rebuild_dashboard(app: &tauri::AppHandle) {
+    let repo_root = match dev_server_repo_root(app) {
+        Ok(root) => root,
+        Err(err) => {
+            menu_log(app, &format!("[menu] rebuild-dashboard unavailable: {err}"));
+            app.dialog()
+                .message(format!(
+                    "{err}\n\nRebuilding needs a checkout. A packaged install on its own has nothing to build from — use DevHub → Check for Updates instead."
+                ))
+                .title("Cannot rebuild DevHub")
+                .kind(MessageDialogKind::Warning)
+                .show(|_| {});
+            return;
+        }
+    };
+
+    menu_log(
+        app,
+        &format!(
+            "[menu] rebuild-dashboard requested for {}",
+            repo_root.display()
+        ),
+    );
+
+    let handle = app.clone();
+    app.dialog()
+        .message(
+            "DevHub will stop its server, rebuild the dashboard from your checkout into this app, and relaunch.\n\nThis takes a couple of minutes. The startup screen has a log panel if you want to watch it.",
+        )
+        .title("Rebuild DevHub?")
+        .kind(MessageDialogKind::Info)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Rebuild".into(),
+            "Cancel".into(),
+        ))
+        .show(move |confirmed| {
+            if !confirmed {
+                menu_log(&handle, "[menu] rebuild-dashboard cancelled");
+                return;
+            }
+            let app = handle.clone();
+            std::thread::spawn(move || {
+                // Back to the boot screen first: the server is about to go away
+                // and a dashboard rendered against a dead server is a worse
+                // progress indicator than no dashboard at all.
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.navigate(
+                        "tauri://localhost/index.html"
+                            .parse()
+                            .expect("static boot URL"),
+                    );
+                }
+                set_boot(
+                    &app,
+                    BootState::Starting {
+                        service: "rebuild".into(),
+                    },
+                );
+
+                stop_dev_server(&app);
+                if let Some(state) = app.try_state::<AppState>() {
+                    state.sidecar.stop();
+                }
+
+                match run_dashboard_build(&app, &repo_root) {
+                    Ok(()) => {
+                        menu_log(&app, "[menu] rebuild-dashboard built; relaunching");
+                        app.restart();
+                    }
+                    Err(err) => {
+                        menu_log(&app, &format!("[menu] rebuild-dashboard failed: {err}"));
+                        fail(&app, &err);
+                    }
+                }
+            });
+        });
 }
 
 fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
@@ -1085,6 +1586,13 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         None::<&str>,
     )?;
     let show_logs = MenuItem::with_id(app, "show-logs", "Show Logs", true, None::<&str>)?;
+    let open_logs_folder = MenuItem::with_id(
+        app,
+        "open-logs-folder",
+        "Open Logs Folder",
+        true,
+        None::<&str>,
+    )?;
     // The replacement for the Electron launcher's dev toggle. Attaching points
     // the window at a dev server you are already running instead of the
     // packaged one; the choice persists so a relaunch keeps it.
@@ -1101,6 +1609,15 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         None::<&str>,
     )?;
     let reload = MenuItem::with_id(app, "reload", "Reload", true, Some("CmdOrCtrl+R"))?;
+    // No accelerator on purpose. This one costs minutes and takes the server
+    // down with it; it should not sit one fat-fingered keystroke from ⌘R.
+    let rebuild = MenuItem::with_id(
+        app,
+        "rebuild-dashboard",
+        "Rebuild Dashboard…",
+        true,
+        None::<&str>,
+    )?;
 
     let app_menu = Submenu::with_items(
         app,
@@ -1135,7 +1652,18 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     // Service restart controls deliberately live in the dashboard's own
     // Status page, not here. A desktop-only menu that grows a parallel set of
     // product actions is how two divergent UIs happen.
-    let view_menu = Submenu::with_items(app, "View", true, &[&reload, &show_logs, &dev_server])?;
+    let view_menu = Submenu::with_items(
+        app,
+        "View",
+        true,
+        &[
+            &reload,
+            &rebuild,
+            &show_logs,
+            &open_logs_folder,
+            &dev_server,
+        ],
+    )?;
 
     let window_menu = Submenu::with_items(
         app,
@@ -1239,6 +1767,7 @@ pub fn run() {
             desktop_info,
             renderer_log,
             retry_start,
+            stop_conflicting_dev_server,
             updater::current_version,
             updater::check_update,
             updater::install_update,
@@ -1270,6 +1799,7 @@ pub fn run() {
             let _ = paths.ensure_app_data();
 
             let log = DesktopLog::open(&paths.log_dir());
+            log.attach_emitter(handle.clone());
             log.write_line(
                 "shell:startup",
                 &format!("[startup] DevHub {} starting", env!("CARGO_PKG_VERSION")),
@@ -1376,6 +1906,27 @@ pub fn run() {
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
             "show-logs" => {
+                // Prefer the live dashboard so the in-app terminal view is
+                // what opens. Fall back to the folder only when nothing is
+                // answering — better than a dead menu item mid-boot.
+                if let Some(base) = current_dashboard_origin(app) {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let target = format!("{}/logs", base.trim_end_matches('/'));
+                        if let Ok(url) = target.parse() {
+                            let _ = window.navigate(url);
+                            return;
+                        }
+                    }
+                }
+                if let Some(state) = app.try_state::<AppState>() {
+                    let dir = state.paths.log_dir();
+                    let _ = tauri_plugin_opener::open_path(
+                        dir.to_string_lossy().to_string(),
+                        None::<&str>,
+                    );
+                }
+            }
+            "open-logs-folder" => {
                 if let Some(state) = app.try_state::<AppState>() {
                     let dir = state.paths.log_dir();
                     let _ = tauri_plugin_opener::open_path(
@@ -1389,6 +1940,7 @@ pub fn run() {
                     let _ = window.eval("window.location.reload()");
                 }
             }
+            "rebuild-dashboard" => rebuild_dashboard(app),
             "check-updates" => {
                 let _ = app.emit("devhub://check-updates", ());
             }
@@ -1491,6 +2043,7 @@ extern "C" {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::Ipv4Addr;
 
     fn url(s: &str) -> tauri::Url {
         s.parse().unwrap()
@@ -1552,6 +2105,25 @@ mod tests {
                 "{hostile} must not load in the app window"
             );
         }
+    }
+
+    /// The boot page is plain HTML with no bundler, so it cannot import
+    /// `@tauri-apps/api` — it reads `window.__TAURI__`, and that global only
+    /// exists when `withGlobalTauri` is on. It was off, so the boot script threw
+    /// on its first line and the page froze as static markup: no phase labels,
+    /// no log lines, no failure UI, and three dead buttons. The app underneath
+    /// was reporting a port conflict two seconds after launch to nobody.
+    ///
+    /// A one-word config regression is not something to rediscover twice.
+    #[test]
+    fn the_boot_page_has_a_tauri_global_to_talk_to() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        assert_eq!(
+            config["app"]["withGlobalTauri"],
+            serde_json::Value::Bool(true),
+            "boot/index.html reads window.__TAURI__; without withGlobalTauri it is undefined"
+        );
     }
 
     #[test]
@@ -1628,5 +2200,243 @@ mod tests {
                 .as_str(),
             "http://localhost:1337/attach-dev.html"
         );
+    }
+
+    /// Every command line below was copied from `ps` on a machine where this
+    /// actually went wrong, `next-server (v16.2.6)` included — Next rewrites its
+    /// argv, so the process holding port 1337 identifies itself by version
+    /// number and nothing else.
+    #[test]
+    fn our_own_dev_services_are_recognised_from_how_they_actually_look() {
+        let dashboard = Path::new("/repo/dashboard");
+        for command in [
+            "next-server (v16.2.6)",
+            "/n/bin/node /repo/dashboard/node_modules/next/dist/bin/next dev -p 1337 -H 127.0.0.1",
+            "node /repo/dashboard/node_modules/.bin/tsx scripts/lan-port-proxy.ts",
+            "/n/bin/node --require /repo/dashboard/node_modules/tsx/dist/preflight.cjs scripts/lan-port-proxy.ts",
+            "node /repo/dashboard/node_modules/.bin/tsx scripts/terminal-pty-server.ts",
+            "node /repo/dashboard/node_modules/.bin/tsx scripts/start-peer-services.ts",
+            "node /repo/dashboard/node_modules/.bin/tsx scripts/run-next-with-env.ts dev",
+        ] {
+            assert!(
+                is_checkout_dev_process(command, Some(dashboard), dashboard),
+                "should be recognised as ours: {command}"
+            );
+        }
+    }
+
+    /// The two halves of the fingerprint both have to matter, or this becomes a
+    /// licence to kill whatever is on the port.
+    #[test]
+    fn a_process_is_only_ours_when_both_the_command_and_the_directory_agree() {
+        let dashboard = Path::new("/repo/dashboard");
+        let ours = "node /repo/dashboard/node_modules/.bin/tsx scripts/lan-port-proxy.ts";
+
+        // Right command, wrong checkout: this is somebody else's worktree, and
+        // adopting or killing it has been a bug before.
+        assert!(!is_checkout_dev_process(
+            ours,
+            Some(Path::new("/other-repo/dashboard")),
+            dashboard
+        ));
+        // Right directory, unrelated command: a shell left sitting in the
+        // dashboard folder is not a dev server.
+        assert!(!is_checkout_dev_process(
+            "/bin/zsh -i",
+            Some(dashboard),
+            dashboard
+        ));
+        // No cwd readable at all — refuse rather than guess.
+        assert!(!is_checkout_dev_process(ours, None, dashboard));
+    }
+
+    #[test]
+    fn genuinely_foreign_processes_are_never_classified_as_ours() {
+        let dashboard = Path::new("/repo/dashboard");
+        for command in [
+            "/usr/local/bin/some-other-server --port 1337",
+            "python3 -m http.server 1337",
+            "/Applications/Docker.app/Contents/Resources/bin/com.docker.backend",
+        ] {
+            assert!(
+                !is_checkout_dev_process(command, Some(dashboard), dashboard),
+                "must not be treated as ours: {command}"
+            );
+        }
+    }
+
+    /// The bug in the copy: `scripts/lan-port-proxy.ts` from this very checkout
+    /// was reported as "another program's process", with an instruction to go
+    /// find and quit it by hand.
+    #[test]
+    fn our_own_leftover_is_owned_up_to_rather_than_disowned() {
+        let holder = PortHolder {
+            pid: 84174,
+            command: "node /repo/dashboard/node_modules/.bin/tsx scripts/lan-port-proxy.ts".into(),
+            ours: true,
+        };
+        let message = port_conflict_message(1337, false, Some(&holder));
+        assert!(
+            message.contains("84174"),
+            "must name the process: {message}"
+        );
+        assert!(
+            message.contains("leftover DevHub development server"),
+            "must admit it is ours: {message}"
+        );
+        assert!(
+            !message.contains("another program"),
+            "our own dev helper is not another program: {message}"
+        );
+    }
+
+    #[test]
+    fn an_unrelated_program_on_our_port_is_named_but_never_offered_up_for_killing() {
+        let holder = PortHolder {
+            pid: 999,
+            command: "/usr/local/bin/some-other-server --port 1337".into(),
+            ours: false,
+        };
+        let message = port_conflict_message(1337, false, Some(&holder));
+        assert!(message.contains("999"));
+        assert!(message.contains("some-other-server"));
+        assert!(
+            message.contains("will not stop"),
+            "a stranger's process is refused, not offered: {message}"
+        );
+    }
+
+    #[test]
+    fn an_unidentifiable_holder_still_gets_an_actionable_message() {
+        let message = port_conflict_message(1337, false, None);
+        assert!(
+            message.contains("lsof"),
+            "with no PID to name, hand over the command that finds it: {message}"
+        );
+    }
+
+    #[test]
+    fn a_second_devhub_is_reported_as_a_second_devhub() {
+        let holder = PortHolder {
+            pid: 1,
+            command: "devhub-desktop".into(),
+            ours: false,
+        };
+        let message = port_conflict_message(1337, true, Some(&holder));
+        assert!(message.contains("Another DevHub"));
+    }
+
+    #[test]
+    fn conflict_messages_stay_short_enough_to_read() {
+        let holder = PortHolder {
+            pid: 1,
+            command: "x".repeat(4000),
+            ours: false,
+        };
+        let message = port_conflict_message(1337, false, Some(&holder));
+        assert!(
+            message.chars().count() < 400,
+            "a dialog is not a log file: {} chars",
+            message.chars().count()
+        );
+    }
+
+    /// `npm run dev` puts two listeners on 1337 and `lsof` order is arbitrary.
+    /// Picking the wrong one is how the LAN proxy got described as a stranger.
+    #[test]
+    fn the_listener_we_recognise_is_the_one_we_report() {
+        let pick = |holders: Vec<PortHolder>| {
+            holders
+                .into_iter()
+                .reduce(|best, next| if best.ours { best } else { next })
+                .map(|h| h.pid)
+        };
+        let foreign = || PortHolder {
+            pid: 1,
+            command: "stranger".into(),
+            ours: false,
+        };
+        let mine = || PortHolder {
+            pid: 2,
+            command: "ours".into(),
+            ours: true,
+        };
+
+        assert_eq!(pick(vec![foreign(), mine()]), Some(2));
+        assert_eq!(pick(vec![mine(), foreign()]), Some(2));
+        assert_eq!(pick(vec![foreign()]), Some(1));
+        assert_eq!(pick(vec![]), None);
+    }
+
+    /// A failure only advertises the stop button when the shell decided the
+    /// listener was ours. The page must not be able to conjure it up.
+    #[test]
+    fn only_a_failure_over_our_own_leftover_offers_to_stop_it() {
+        let offered = BootState::Failed {
+            error: "port held".into(),
+            logs: vec![],
+            stoppable_dev_server: true,
+        };
+        let refused = BootState::Failed {
+            error: "port held".into(),
+            logs: vec![],
+            stoppable_dev_server: false,
+        };
+        let json = |state: &BootState| serde_json::to_value(state).unwrap();
+        assert_eq!(json(&offered)["stoppable_dev_server"], true);
+        assert_eq!(json(&refused)["stoppable_dev_server"], false);
+    }
+
+    #[test]
+    fn starting_label_carries_elapsed_seconds_for_the_boot_page() {
+        assert_eq!(
+            starting_service_label("dev-server", Duration::from_secs(45)),
+            "dev-server:45"
+        );
+    }
+
+    /// `localhost` resolves to `::1` first while the server binds IPv4 only.
+    /// Connecting to just the first address is what made Rebuild report
+    /// "Connection refused" at a dashboard that was running fine.
+    #[test]
+    fn connect_loopback_falls_through_to_the_address_that_listens() {
+        let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        assert!(
+            connect_loopback("localhost", port, Duration::from_secs(2)).is_ok(),
+            "IPv4-only listener must still be reachable via `localhost`"
+        );
+    }
+
+    /// `next dev` dribbles the status line out first and then chunk-frames the
+    /// body, so JSON-parsing whatever followed the first `\r\n\r\n` failed on
+    /// every poll and attach never left the boot screen.
+    #[test]
+    fn dev_server_health_survives_a_fragmented_chunked_response() {
+        let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().take(1).flatten() {
+                let mut request = Vec::new();
+                let mut chunk = [0_u8; 512];
+                while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+                    match stream.read(&mut chunk) {
+                        Ok(0) | Err(_) => break,
+                        Ok(read) => request.extend_from_slice(&chunk[..read]),
+                    }
+                }
+                // Headers first, body later, and chunk-framed when it arrives.
+                let _ = stream.write_all(
+                    b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Type: application/json\r\n\r\n",
+                );
+                std::thread::sleep(Duration::from_millis(30));
+                let _ = stream.write_all(
+                    b"2f\r\n{\"devhub\":true,\"desktop\":false,\"status\":\"browser\"}\r\n0\r\n\r\n",
+                );
+                let _ = stream.shutdown(std::net::Shutdown::Write);
+            }
+        });
+
+        assert!(dev_server_responds(&format!("http://127.0.0.1:{port}")).is_ok());
     }
 }

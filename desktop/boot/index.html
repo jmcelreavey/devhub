@@ -71,6 +71,22 @@
       }
       [data-state="failed"] .bar { display: none; }
 
+      .stream { margin-top: 18px; }
+      .stream summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 12px;
+        width: fit-content;
+        list-style: none;
+      }
+      .stream summary::-webkit-details-marker { display: none; }
+      .stream summary::before { content: "▸ "; }
+      .stream[open] summary::before { content: "▾ "; }
+      .stream summary:hover { color: var(--text); }
+      .stream summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+      /* Hidden once there is a real error on screen — that panel has its own. */
+      [data-state="failed"] .stream { display: none; }
+
       .error {
         margin-top: 20px;
         border: 1px solid var(--border);
@@ -109,6 +125,10 @@
       button:hover { border-color: var(--muted); }
       button.primary { background: var(--accent); border-color: var(--accent); color: #10160a; font-weight: 600; }
       button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      /* In flight. The card's progress bar says what is happening; these just
+         stop being clickable rather than growing spinners of their own. */
+      button:disabled { opacity: 0.5; cursor: default; }
+      button:disabled:hover { border-color: var(--border); }
 
       /* The kill-switch and the OS preference both mean "stop moving things". */
       @media (prefers-reduced-motion: reduce) {
@@ -134,11 +154,29 @@
 
         <div class="bar" aria-hidden="true"><span></span></div>
 
+        <!--
+          Collapsed by default: most starts are short and the log is noise. It
+          earns its place on the slow ones, where the alternative is staring at
+          a progress bar wondering whether anything is happening at all.
+        -->
+        <details class="stream" id="stream">
+          <summary>Show startup log</summary>
+          <pre id="stream-log">Waiting for output…</pre>
+        </details>
+
         <div class="error" id="error" hidden>
           <h2>DevHub could not start</h2>
           <p id="error-message"></p>
           <pre id="error-logs" hidden></pre>
+          <!--
+            "Stop it and continue" is first and hidden by default. It only
+            appears when the shell has already established that the process on
+            our port is one of DevHub's own dev services from this checkout, and
+            when it appears it is the action that actually fixes the problem —
+            so it takes primary, and Try again steps down to a plain button.
+          -->
           <div class="actions">
+            <button id="stop-dev" type="button" hidden>Stop it and continue</button>
             <button class="primary" id="retry" type="button">Try again</button>
             <button id="logs" type="button">Open logs</button>
             <button id="quit" type="button">Quit</button>
@@ -147,9 +185,76 @@
       </div>
     </main>
 
+    <!--
+      Installed before the module below, and deliberately not a module itself.
+
+      The bug this page shipped with was a TypeError on the first line of that
+      module. An error handler registered *inside* it could never have caught
+      it — the throw happens before the registration runs. This one is already
+      listening, touches nothing but the DOM, and cannot fail for the same
+      reason twice.
+    -->
+    <script>
+      window.__devhubBootError = null;
+      window.__devhubReportBootError = function (what) {
+        window.__devhubBootError =
+          "The startup screen hit an error and may not be updating:\n" +
+          what +
+          "\nDevHub itself may still be starting. View \u2192 Open Logs Folder has the real log.";
+        var panel = document.getElementById("stream");
+        var log = document.getElementById("stream-log");
+        if (panel) panel.open = true;
+        if (log) log.textContent = window.__devhubBootError;
+      };
+      window.addEventListener("error", function (event) {
+        window.__devhubReportBootError(event.message);
+      });
+      window.addEventListener("unhandledrejection", function (event) {
+        window.__devhubReportBootError(String(event.reason));
+      });
+    </script>
+
     <script type="module">
-      const { invoke } = window.__TAURI__.core;
-      const { listen } = window.__TAURI__.event;
+      /*
+       * The shell bridge, resolved rather than assumed.
+       *
+       * This used to be `const { invoke } = window.__TAURI__.core`, which threw
+       * on the first line whenever that global was absent — and it was absent,
+       * because `withGlobalTauri` was never enabled. A module that throws at the
+       * top level takes every listener, poller and button with it, and leaves
+       * the markup below on screen looking like a working boot screen that has
+       * been "Preparing your workspace…" for ten minutes. Reading it as a hang
+       * was the correct interpretation of the evidence.
+       *
+       * So: never assume the global, and degrade in stages.
+       *
+       *   1. `__TAURI__`           — commands and live events.
+       *   2. `__TAURI_INTERNALS__` — commands only; always present in a webview.
+       *      The boot screen survives on polling alone, so this loses latency,
+       *      not function.
+       *   3. neither              — say so on screen. An honest "the bridge is
+       *      missing" beats a plausible spinner.
+       */
+      function resolveBridge() {
+        const core = window.__TAURI__?.core;
+        const internals = window.__TAURI_INTERNALS__;
+        // Bind each function to the object it came from, not to whichever object
+        // happened to exist — these are methods, and `this` matters.
+        const source = typeof core?.invoke === "function" ? core : internals;
+        if (typeof source?.invoke !== "function") {
+          return { invoke: null, listen: null, degraded: "missing" };
+        }
+        const events = window.__TAURI__?.event;
+        const listen = typeof events?.listen === "function" ? events.listen.bind(events) : null;
+        return {
+          invoke: source.invoke.bind(source),
+          listen,
+          degraded: listen ? null : "polling-only",
+        };
+      }
+
+      const bridge = resolveBridge();
+      const invoke = bridge.invoke ?? (() => Promise.reject(new Error("No desktop bridge")));
 
       const card = document.getElementById("card");
       const title = document.getElementById("title");
@@ -157,6 +262,8 @@
       const errorBox = document.getElementById("error");
       const errorMessage = document.getElementById("error-message");
       const errorLogs = document.getElementById("error-logs");
+      const retryButton = document.getElementById("retry");
+      const stopDevButton = document.getElementById("stop-dev");
 
       /**
        * Plain language for each phase. "Starting service: next" is a status
@@ -167,11 +274,33 @@
         "dev-server": "Starting development server…",
         "stopping-dev-server": "Stopping development server…",
         "packaged-server": "Starting packaged server…",
+        rebuild: "Rebuilding the dashboard…",
         next: "Starting the dashboard…",
         terminal: "Starting the terminal…",
+        handoff: "Opening the dashboard…",
       };
 
+      /*
+       * How long this launch has been going, in whole seconds.
+       *
+       * The shell stamps elapsed seconds onto the phases it drives itself, but
+       * `preparing` has none — it is set before any timer exists — and that is
+       * the phase people sit in when something is wrong. A label that has not
+       * changed in two minutes is how a slow start becomes a bug report.
+       */
+      const startedAt = Date.now();
+      const elapsedSeconds = () => Math.floor((Date.now() - startedAt) / 1000);
+
+      /** Only worth showing once the wait is long enough to be in doubt. */
+      function withElapsed(label, phaseSeconds) {
+        const seconds = phaseSeconds ?? elapsedSeconds();
+        return seconds >= 3 ? `${label} (${seconds}s)` : label;
+      }
+
+      let lastState = { state: "preparing" };
+
       function render(state) {
+        lastState = state;
         card.dataset.state = state.state;
 
         if (state.state === "failed") {
@@ -181,44 +310,293 @@
           errorMessage.textContent = state.error ?? "Something went wrong during startup.";
           if (Array.isArray(state.logs) && state.logs.length > 0) {
             errorLogs.hidden = false;
-            errorLogs.textContent = state.logs.join("\n");
+            errorLogs.textContent = state.logs.map(formatLine).join("\n");
           }
-          document.getElementById("retry").focus();
+          // Only the shell can say whether the thing on our port is ours to
+          // stop. The page never decides that for itself.
+          const stoppable = state.stoppable_dev_server === true;
+          stopDevButton.hidden = !stoppable;
+          stopDevButton.classList.toggle("primary", stoppable);
+          retryButton.classList.toggle("primary", !stoppable);
+          (stoppable ? stopDevButton : retryButton).focus();
           return;
         }
 
+        // Reset what the failed/stopping branches changed. Retry has been
+        // unreachable until now, so nothing ever had to leave this state clean:
+        // it would have come back reading "DevHub could not start" over the old
+        // error log while cheerfully starting up again.
         errorBox.hidden = true;
-        if (state.state === "preparing") detail.textContent = "Preparing your workspace…";
-        else if (state.state === "starting") {
-          detail.textContent = SERVICE_LABEL[state.service] ?? "Starting services…";
-        } else if (state.state === "ready") detail.textContent = "Ready — opening…";
-        else if (state.state === "stopping") {
+        errorLogs.hidden = true;
+        stopDevButton.hidden = true;
+        title.textContent = "Starting DevHub";
+
+        if (state.state === "preparing") {
+          detail.textContent = withElapsed("Preparing your workspace…");
+        } else if (state.state === "starting") {
+          // The shell may append elapsed seconds as `service:45`. A cold dev
+          // server takes minutes, and a label that never changes for minutes
+          // is how a working startup gets read as a hang.
+          const [service, phase] = String(state.service ?? "").split(":");
+          const label = SERVICE_LABEL[service] ?? "Starting services…";
+          const phaseSeconds = phase ? Number(phase) : null;
+          detail.textContent = withElapsed(label, Number.isFinite(phaseSeconds) ? phaseSeconds : null);
+          // Rebuilds and long starts earn an open log panel without a click.
+          if (service === "rebuild" || elapsedSeconds() >= 3) openStream();
+        } else if (state.state === "ready") {
+          detail.textContent = "Ready — opening…";
+          // Navigate ourselves. The shell also calls window.navigate, but that
+          // path has left this exact screen up after a healthy sidecar — cookie
+          // set, updater already complaining, still "opening…". location.replace
+          // from the page that is actually painted is the reliable handoff.
+          const target = state.url;
+          if (
+            typeof target === "string" &&
+            /^https?:\/\//i.test(target) &&
+            !window.__devhubHandoffStarted
+          ) {
+            window.__devhubHandoffStarted = true;
+            try {
+              window.location.replace(target);
+            } catch (err) {
+              render({
+                state: "failed",
+                error: `Could not open the dashboard: ${err}`,
+              });
+              return;
+            }
+            setTimeout(() => {
+              if (card.dataset.state !== "ready") return;
+              render({
+                state: "failed",
+                error:
+                  "DevHub's server is ready, but this window could not open it. " +
+                  "Try again, or View → Open Logs Folder.",
+              });
+            }, 8000);
+          }
+        } else if (state.state === "stopping") {
           title.textContent = "Shutting down";
           detail.textContent = "Closing DevHub's services…";
         }
       }
 
-      // Ask for the current state as well as subscribing: on a fast machine
-      // every event fires before this listener exists.
-      listen("devhub://boot", (event) => render(event.payload));
-      invoke("boot_state").then(render).catch(() => {});
+      // Re-render on a timer so the elapsed count moves even when the shell has
+      // nothing new to report. Silence is the state that needs a clock most.
+      setInterval(() => {
+        if (lastState.state === "preparing" || lastState.state === "starting") render(lastState);
+      }, 1000);
 
-      document.getElementById("retry").addEventListener("click", async () => {
+      // Ask for the current state as well as subscribing: on a fast machine
+      // every event fires before this listener exists. Without `listen` the
+      // poll below is the only source, which is why it is unconditional.
+      bridge.listen?.("devhub://boot", (event) => render(event.payload))?.catch(() => {});
+      const pullState = () => invoke("boot_state").then(render).catch(() => {});
+      void pullState();
+      const stateTimer = setInterval(() => {
+        if (lastState.state === "ready" || lastState.state === "failed") {
+          clearInterval(stateTimer);
+          return;
+        }
+        void pullState();
+      }, 1000);
+
+      /*
+       * Live log feed. Two sources on purpose: a poll of the on-disk tail so a
+       * late-opened panel still has history, and `devhub://log` events so a
+       * rebuild streaming compiler output does not wait on the next tick.
+       *
+       * The poll is what replays the backlog. Most of startup happens before
+       * this page has a listener attached — the shell wires its emitter before
+       * the window even exists — so an events-only panel is empty for exactly
+       * the lines that explain a slow or failed start. `recent_logs` reads the
+       * on-disk tail of the current launch, so the first poll arrives with all
+       * of it.
+       */
+      const stream = document.getElementById("stream");
+      const streamLog = document.getElementById("stream-log");
+      const seen = [];
+      const seenKeys = new Set();
+      let stickToBottom = true;
+      /*
+       * What the panel says when it has no lines.
+       *
+       * This exists because "Waiting for output…" was a terminal state. It reads
+       * as "any moment now" forever, which is a lie the moment it has been true
+       * for ten seconds — and it was the only thing on screen while the shell
+       * had already given up. An empty panel is allowed; an empty panel
+       * pretending to be a loading panel is not.
+       */
+      let streamNotice = "Waiting for output…";
+      let emptyPolls = 0;
+
+      function setNotice(text) {
+        streamNotice = text;
+        renderStream();
+      }
+
+      function formatLine(raw) {
+        const match = String(raw).match(/^\[unix_ms=(\d+)\]\[([^\]]+)\]\s?(.*)$/);
+        if (!match) return String(raw);
+        const time = new Date(Number(match[1])).toLocaleTimeString(undefined, {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        });
+        return `${time}  ${match[2]}  ${match[3]}`;
+      }
+
+      function renderStream() {
+        // A broken boot script outranks anything else this panel could say —
+        // including real log lines, which would otherwise scroll it out of view.
+        if (window.__devhubBootError) {
+          streamLog.textContent = window.__devhubBootError;
+          return;
+        }
+        if (seen.length === 0) {
+          streamLog.textContent = streamNotice;
+          return;
+        }
+        streamLog.textContent = seen.map(formatLine).join("\n");
+        if (stickToBottom) streamLog.scrollTop = streamLog.scrollHeight;
+      }
+
+      function pushLines(lines) {
+        let changed = false;
+        for (const line of lines) {
+          if (!line || seenKeys.has(line)) continue;
+          seenKeys.add(line);
+          seen.push(line);
+          changed = true;
+        }
+        if (seen.length > 300) {
+          const dropped = seen.splice(0, seen.length - 300);
+          for (const line of dropped) seenKeys.delete(line);
+        }
+        if (changed) renderStream();
+      }
+
+      async function pullLog() {
+        try {
+          const lines = await invoke("recent_logs");
+          if (!Array.isArray(lines)) {
+            setNotice("The log feed returned something this screen cannot read.");
+            return;
+          }
+          if (lines.length === 0) {
+            emptyPolls += 1;
+            // Three empty polls is about two seconds. Before that, "waiting" is
+            // accurate; after it, the shell has genuinely logged nothing for
+            // this launch and saying so is the useful thing.
+            if (emptyPolls >= 3) {
+              setNotice(
+                `No output captured for this launch after ${elapsedSeconds()}s. ` +
+                  "DevHub has not logged anything yet — View → Open Logs Folder has the full history.",
+              );
+            }
+            return;
+          }
+          emptyPolls = 0;
+          pushLines(lines);
+        } catch (err) {
+          // Loudly, and in the panel. A swallowed error here is what left the
+          // placeholder on screen looking like a startup still in progress.
+          setNotice(`Could not read the startup log: ${err}`);
+        }
+      }
+
+      function openStream() {
+        stream.open = true;
+      }
+
+      streamLog.addEventListener("scroll", () => {
+        stickToBottom =
+          streamLog.scrollHeight - streamLog.scrollTop - streamLog.clientHeight < 24;
+      });
+
+      bridge.listen?.("devhub://log", (event) => {
+        const line = typeof event.payload === "string" ? event.payload : null;
+        if (!line) return;
+        pushLines([line]);
+        // A live line arriving is enough reason to open the panel on a rebuild.
+        if (card.dataset.state === "starting") openStream();
+      })?.catch(() => {});
+
+      /*
+       * Poll regardless of whether the panel is open.
+       *
+       * Tying the poll to the disclosure state meant opening it started from
+       * nothing, so the first thing a worried user saw was a placeholder. The
+       * cost of being ready instead is one IPC call per 750ms, only while
+       * starting.
+       */
+      void pullLog();
+      const logTimer = setInterval(() => {
+        if (lastState.state === "ready") {
+          clearInterval(logTimer);
+          return;
+        }
+        void pullLog();
+      }, 750);
+
+      // Auto-open after a few seconds even without a rebuild label — silence
+      // is what made the white-screen wait feel broken.
+      setTimeout(() => {
+        if (card.dataset.state === "starting" || card.dataset.state === "preparing") {
+          openStream();
+        }
+      }, 4000);
+
+      if (bridge.degraded === "missing") {
+        // Through render(), not by poking the DOM: that also parks `lastState`
+        // on "failed", which stops the pollers and the elapsed ticker. Otherwise
+        // the next tick would helpfully repaint a progress bar over the message.
+        render({
+          state: "failed",
+          error:
+            "DevHub's startup screen cannot reach the app shell, so it cannot report progress. " +
+            "The app itself may still be starting — check the log folder in ~/Library/Application Support/DevHub/logs. " +
+            "If this persists, reinstall DevHub.",
+        });
+      } else if (bridge.degraded === "polling-only") {
+        setNotice("Live log events are unavailable; polling the log file instead.");
+      }
+
+      /** Run a recovery command, showing progress on the card rather than a spinner. */
+      async function runRecovery(command) {
+        // The card's own sweep bar is the progress indicator: the state machine
+        // is about to drive it through stopping → starting, which is more
+        // informative than a spinner on a button nobody is looking at.
+        stopDevButton.disabled = true;
+        retryButton.disabled = true;
         render({ state: "preparing" });
         try {
-          await invoke("retry_start");
+          await invoke(command);
         } catch (err) {
-          render({ state: "failed", error: String(err), logs: await invoke("recent_logs").catch(() => []) });
+          render({
+            state: "failed",
+            error: String(err),
+            logs: await invoke("recent_logs").catch(() => []),
+          });
+        } finally {
+          stopDevButton.disabled = false;
+          retryButton.disabled = false;
         }
-      });
+      }
+
+      retryButton.addEventListener("click", () => void runRecovery("retry_start"));
+      stopDevButton.addEventListener("click", () => void runRecovery("stop_conflicting_dev_server"));
 
       document.getElementById("logs").addEventListener("click", () => {
         invoke("open_logs").catch(() => {});
       });
 
-      document.getElementById("quit").addEventListener("click", () => {
-        window.__TAURI__.core.invoke("plugin:process|exit", { code: 0 }).catch(() => window.close());
-      });
+      // `window.close()` rather than `plugin:process|exit`: the process plugin
+      // is not a dependency of this shell, so that invoke could only ever fail
+      // through to this. Closing the window runs the Destroyed handler, which
+      // is what actually stops the sidecar process group.
+      document.getElementById("quit").addEventListener("click", () => window.close());
     </script>
   </body>
 </html>

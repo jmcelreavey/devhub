@@ -69,6 +69,12 @@ export function HoverTip({
 
   useEffect(() => hide, [hide]);
 
+  // Modals / menus fire this so tips don't float over dialogs after a click.
+  useEffect(() => {
+    window.addEventListener("devhub:dismiss-hovertips", hide);
+    return () => window.removeEventListener("devhub:dismiss-hovertips", hide);
+  }, [hide]);
+
   return (
     <>
       <span

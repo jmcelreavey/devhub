@@ -8,9 +8,14 @@
  * Strategy per request class, because one strategy for everything is how
  * service workers end up serving stale JavaScript against fresh HTML:
  *
- *   /_next/static/*   cache-first, permanently. These filenames are
- *                     content-hashed, so a changed file is a changed URL and
- *                     stale content is impossible by construction.
+ *   /_next/static/*   cache-first *only* when the URL actually carries a build
+ *                     hash. Production chunks do; development chunks do not
+ *                     (`/_next/static/chunks/app/layout.js` is a stable URL
+ *                     whose bytes change on every edit). Packaged and attached
+ *                     modes share localhost:1337 and therefore one worker
+ *                     scope, so an unconditional rule here pins the first dev
+ *                     bundle a worker ever saw. Unhashed statics go
+ *                     network-first, and still cache for offline use.
  *   navigations       network-first, falling back to the cached page, then to
  *                     the offline shell. You get the last-known page rather
  *                     than a browser error.
@@ -22,7 +27,7 @@
  * the user believes failed is far worse than surfacing an error.
  */
 
-const VERSION = "v2";
+const VERSION = "v4";
 const STATIC_CACHE = `devhub-static-${VERSION}`;
 const PAGES_CACHE = `devhub-pages-${VERSION}`;
 const API_CACHE = `devhub-api-${VERSION}`;
@@ -57,9 +62,24 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-/** Content-hashed build output: safe to serve from cache indefinitely. */
-function isImmutableAsset(url) {
+/*
+ * A run of eight or more hex characters, delimited so it is a token rather than
+ * a coincidence inside a word. This is what webpack's `contenthash` looks like
+ * in every filename Next emits for a production build
+ * (`main-app-1a2b3c4d5e6f7890.js`, `css/e3b0c44298fc1c14.css`,
+ * `media/569ce4b8f30dc480-s.p.woff2`), and what development filenames never
+ * have. Anything this does not match is treated as mutable, which costs a
+ * revalidation and never costs correctness.
+ */
+const CONTENT_HASH = /(?:^|[-._/])[0-9a-f]{8,}(?:[-._]|$)/;
+
+function isBuildOutput(url) {
   return url.pathname.startsWith("/_next/static/");
+}
+
+/** Content-addressed build output: safe to serve from cache indefinitely. */
+function isImmutableAsset(url) {
+  return isBuildOutput(url) && CONTENT_HASH.test(url.pathname);
 }
 
 function isApi(url) {
@@ -107,6 +127,11 @@ self.addEventListener("fetch", (event) => {
 
   if (isImmutableAsset(url)) {
     event.respondWith(cacheFirst(request, STATIC_CACHE));
+    return;
+  }
+
+  if (isBuildOutput(url)) {
+    event.respondWith(networkFirst(request, STATIC_CACHE));
     return;
   }
 

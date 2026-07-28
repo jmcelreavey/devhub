@@ -134,19 +134,20 @@ export function resolveEntityLinks(kind: EntityKind, id: string, opts?: {
     related.push(...refsFromNote(p));
   };
 
+  let suppressJiraKey: string | undefined;
+
   if (kind === "task") {
     const found = findTask(id, opts?.date);
     const date = found?.date ?? opts?.date ?? todayISO();
     const text = found?.task.text ?? opts?.label ?? id;
-    pushNote(taskNotePath({ id, text, date }), text.slice(0, 48) || "Task note");
+    suppressJiraKey = found?.task.jiraKey;
+    // Companion note chip sits under the task title — don't re-echo the title.
+    pushNote(taskNotePath({ id, text, date }), "Note");
     if (found?.task.links?.length) related.push(...found.task.links);
-    if (found?.task.jiraKey) {
-      related.push({
-        kind: "jira",
-        id: found.task.jiraKey,
-        label: found.task.jiraKey,
-      });
-    }
+    // Do not auto-emit the task's own jiraKey as a related chip: the task row
+    // already has JiraKeyChip (copy) + open-in-Jira. Explicit jira links in
+    // task.links (a different key) still flow through above. Same-key refs
+    // scraped from the companion note are stripped below.
   } else if (kind === "calendar" || kind === "meeting") {
     const title = opts?.meetingTitle || opts?.label || id;
     const start = opts?.date ? `${opts.date}T00:00:00` : `${todayISO()}T00:00:00`;
@@ -179,9 +180,14 @@ export function resolveEntityLinks(kind: EntityKind, id: string, opts?: {
 
   // Deduplicate notes/related excluding the queried entity itself
   const selfKey = entityKey(entity);
+  const suppress = suppressJiraKey?.toUpperCase();
   return {
     entity,
     notes: mergeEntityRefs(notes),
-    related: mergeEntityRefs(related).filter((r) => entityKey(r) !== selfKey),
+    related: mergeEntityRefs(related).filter((r) => {
+      if (entityKey(r) === selfKey) return false;
+      if (suppress && r.kind === "jira" && r.id.toUpperCase() === suppress) return false;
+      return true;
+    }),
   };
 }

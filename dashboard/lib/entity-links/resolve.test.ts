@@ -62,6 +62,32 @@ describe("resolveEntityLinks", () => {
 
     const result = resolveEntityLinks("task", id, { date, label: "Ship linking" });
     expect(result.notes.some((n) => n.id.includes(id))).toBe(true);
+    expect(result.notes.find((n) => n.id.includes(id))?.label).toBe("Note");
     expect(result.related.some((r) => r.kind === "pr")).toBe(true);
+  });
+
+  it("does not auto-emit the task's own jiraKey as a related chip", () => {
+    const date = "2026-07-28";
+    const id = "abc-2";
+    fs.writeFileSync(
+      path.join(root, "tasks", `${date}.json`),
+      JSON.stringify([
+        {
+          id,
+          text: "PTF-99 Do the thing",
+          done: false,
+          jiraKey: "PTF-99",
+          createdAt: `${date}T10:00:00.000Z`,
+          links: [
+            { kind: "jira", id: "PTF-99", label: "PTF-99" },
+            { kind: "jira", id: "PTF-100", label: "PTF-100" },
+          ],
+        },
+      ]),
+    );
+
+    const result = resolveEntityLinks("task", id, { date });
+    expect(result.related.some((r) => r.kind === "jira" && r.id === "PTF-99")).toBe(false);
+    expect(result.related.some((r) => r.kind === "jira" && r.id === "PTF-100")).toBe(true);
   });
 });

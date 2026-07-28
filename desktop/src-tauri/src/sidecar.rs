@@ -34,9 +34,25 @@ use crate::paths::{sidecar_env, RuntimePaths};
 #[serde(tag = "state", rename_all = "lowercase")]
 pub enum BootState {
     Preparing,
-    Starting { service: String },
-    Ready { url: String },
-    Failed { error: String, logs: Vec<String> },
+    Starting {
+        service: String,
+    },
+    Ready {
+        url: String,
+    },
+    Failed {
+        error: String,
+        logs: Vec<String>,
+        /// A leftover DevHub dev server from this checkout is holding our port,
+        /// and stopping it is a thing the shell can safely offer to do.
+        ///
+        /// Carried on the state rather than parsed back out of the message,
+        /// because the boot page deciding whether to show a process-killing
+        /// button by string-matching an error sentence is a bug waiting for
+        /// somebody to reword the sentence.
+        #[serde(default)]
+        stoppable_dev_server: bool,
+    },
     Stopping,
 }
 
@@ -304,6 +320,7 @@ impl Sidecar {
     /// The server still *binds* 127.0.0.1; only the name the webview uses
     /// changes. Health checks below keep using the literal because they talk
     /// raw TCP and have no cookies to lose.
+    #[allow(dead_code)] // kept for call sites / debugging; handoff uses bootstrap_url()
     pub fn url(&self) -> String {
         format!("http://localhost:{}", self.port)
     }
@@ -327,12 +344,14 @@ fn parse_state(value: &serde_json::Value) -> Option<BootState> {
                 .unwrap_or("dashboard")
                 .to_string(),
         }),
-        "ready" => Some(BootState::Ready {
-            url: value
-                .get("url")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
+        // The supervisor's "ready" means Next is listening — not that the
+        // window has opened it. Promoting that to BootState::Ready made the
+        // boot page say "Ready — opening…" and stop polling while the shell
+        // still owed it a bootstrap navigation (and, worse, handed it a
+        // 127.0.0.1 URL with no token). The shell alone marks Ready, with the
+        // URL the webview must actually load.
+        "ready" => Some(BootState::Starting {
+            service: "handoff".into(),
         }),
         "failed" => Some(BootState::Failed {
             error: value
@@ -341,6 +360,9 @@ fn parse_state(value: &serde_json::Value) -> Option<BootState> {
                 .unwrap_or("Startup failed")
                 .to_string(),
             logs: Vec::new(),
+            // The supervisor reports its own failures; port ownership is the
+            // shell's business, so it never sets this.
+            stoppable_dev_server: false,
         }),
         "stopping" => Some(BootState::Stopping),
         _ => None,
@@ -402,9 +424,10 @@ mod tests {
         let ready = serde_json::json!({ "devhubSidecar": true, "state": "ready", "url": "http://127.0.0.1:1337" });
         assert_eq!(
             parse_state(&ready),
-            Some(BootState::Ready {
-                url: "http://127.0.0.1:1337".into()
-            })
+            Some(BootState::Starting {
+                service: "handoff".into()
+            }),
+            "supervisor ready is not window-ready — no token, wrong host"
         );
 
         let starting = serde_json::json!({ "state": "starting", "service": "terminal" });

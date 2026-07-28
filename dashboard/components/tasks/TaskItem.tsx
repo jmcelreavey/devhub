@@ -411,6 +411,7 @@ export function TaskItem({
             date={taskDate}
             label={task.text}
             seed={task.links as EntityRef[] | undefined}
+            suppressJiraKey={task.jiraKey}
           />
         </div>
       )}

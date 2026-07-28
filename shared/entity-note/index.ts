@@ -201,3 +201,44 @@ export function mergeEntityRefs(...groups: Array<EntityRef[] | undefined>): Enti
   }
   return out;
 }
+
+/**
+ * Replace or append the note's `## Links` section with the given refs.
+ * Preserves body content above/below the section. Empty refs removes the section.
+ */
+export function upsertEntityLinksInMarkdown(markdown: string, refs: EntityRef[]): string {
+  const section = buildEntityLinksSection(refs);
+  const lines = markdown.split("\n");
+  let start = -1;
+  let end = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (/^##\s+Links\s*$/i.test(trimmed)) {
+      start = i;
+      continue;
+    }
+    if (start >= 0 && /^##\s+/.test(trimmed)) {
+      end = i;
+      break;
+    }
+  }
+
+  if (start < 0) {
+    const base = markdown.replace(/\s*$/, "");
+    if (!section) return base;
+    return base ? `${base}\n\n${section}` : section;
+  }
+
+  if (end < 0) end = lines.length;
+  const before = lines.slice(0, start);
+  const after = lines.slice(end);
+  if (!section) {
+    return [...before, ...after].join("\n").replace(/\n{3,}/g, "\n\n").replace(/^\n+|\n+$/g, (m) =>
+      m.length > 1 ? "\n" : m,
+    );
+  }
+
+  const sectionLines = section.replace(/\n$/, "").split("\n");
+  const needsGap = after.length > 0 && after[0] !== "";
+  return [...before, ...sectionLines, ...(needsGap ? [""] : []), ...after].join("\n");
+}

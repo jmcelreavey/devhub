@@ -5,7 +5,16 @@ import { mutate } from "swr";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BlockNoteEditor } from "@/components/BlockNoteEditor";
-import { Save, Check, ChevronRight, Trash2, FolderInput, ListChecks } from "lucide-react";
+import {
+  BookOpen,
+  Check,
+  ChevronRight,
+  FolderInput,
+  Link2,
+  ListChecks,
+  Save,
+  Trash2,
+} from "lucide-react";
 import { useToast } from "@/lib/hooks/use-toast";
 import { MoveVaultPathModal } from "@/components/MoveVaultPathModal";
 import { HoverTip } from "@/components/ui/HoverTip";
@@ -25,6 +34,7 @@ import { VaultEditorNav } from "@/components/vault/VaultEditorNav";
 import { getVaultClient } from "@/lib/vault/vault-client";
 import type { VaultId } from "@/lib/vault/vault-client";
 import { blocksToText, textToBlocks } from "@/lib/markdown-convert";
+import { splitFrontmatterBlock } from "@/lib/docs/frontmatter";
 import {
   isCurrentNoteSaveGeneration,
   nextNoteSaveGeneration,
@@ -34,15 +44,24 @@ import {
   useNoteAutosaveInvalidationListener,
 } from "@/lib/notes/autosave-invalidation";
 import { EntityRelationsPanel } from "@/components/EntityRelationsPanel";
+import { EntityLinkDialog } from "@/components/EntityLinkDialog";
+import {
+  mergeEntityRefs,
+  parseEntityLinksFromMarkdown,
+  upsertEntityLinksInMarkdown,
+} from "@/lib/entity-note";
 
 export function VaultEditorPage({
   vault: vaultId,
   path: pathParts,
   notesAiConfigured,
+  readHref,
 }: {
   vault: VaultId;
   path: string[];
   notesAiConfigured?: boolean;
+  /** When set, shows a "Done" link back to the rendered read view (docs only). */
+  readHref?: string;
 }) {
   const vault = getVaultClient(vaultId);
   const { paths, apiPrefix, pagePrefix, itemLabel } = vault;
@@ -58,6 +77,9 @@ export function VaultEditorPage({
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [moveModalOpen, setMoveModalOpen] = useState(false);
+  /** Bumped when ## Links are written outside the editor so BlockNote remounts. */
+  const [editorEpoch, setEditorEpoch] = useState(0);
+  const [linkOpen, setLinkOpen] = useState(false);
   const isNotes = vaultId === "notes";
   const { data: allMasters } = useLive<MasterList[]>(
     isNotes && !isNew ? "/api/collections" : null,
@@ -68,6 +90,8 @@ export function VaultEditorPage({
   const isNewRef = useRef(isNew);
   const allMastersRef = useRef(allMasters);
   const pendingLegacyMigrationRef = useRef(false);
+  /** Raw frontmatter block for the doc being edited; re-prepended on save. */
+  const docFrontmatterRef = useRef("");
 
   const cancelPendingSave = useCallback(() => {
     if (saveTimer.current) {
@@ -98,10 +122,12 @@ export function VaultEditorPage({
 
   useEffect(() => {
     pendingLegacyMigrationRef.current = false;
+    docFrontmatterRef.current = "";
     let cancelled = false;
     setLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
     setError(null);
     setIsNew(false);
+    setEditorEpoch(0);
     fetch(`${apiPrefix}/${paths.apiPathFromSlug(filePath)}`)
       .then((r) => {
         if (!r.ok) {
@@ -119,7 +145,11 @@ export function VaultEditorPage({
         if (data) {
           if (vaultId === "docs") {
             const md = typeof data.content === "string" ? data.content : "";
-            setBlocks(textToBlocks(md) as DevHubPartialBlock[]);
+            // Frontmatter is metadata, not prose. Hold it aside verbatim so the
+            // editor never shows it and a save cannot mangle it.
+            const { block, body } = splitFrontmatterBlock(md);
+            docFrontmatterRef.current = block;
+            setBlocks(textToBlocks(body) as DevHubPartialBlock[]);
             return;
           }
           const content = Array.isArray(data.content) ? data.content : [];
@@ -164,9 +194,12 @@ export function VaultEditorPage({
       saveTimer.current = setTimeout(async () => {
         if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
         try {
-          const method = isNewRef.current ? "POST" : "PUT";
+          const wasNew = isNewRef.current;
+          const method = wasNew ? "POST" : "PUT";
           const bodyContent =
-            vaultId === "docs" ? blocksToText(newBlocks) : newBlocks;
+            vaultId === "docs"
+              ? `${docFrontmatterRef.current}${blocksToText(newBlocks)}`
+              : newBlocks;
           const r = await fetch(`${apiPrefix}/${paths.apiPathFromSlug(filePath)}`, {
             method,
             headers: { "Content-Type": "application/json" },
@@ -174,7 +207,10 @@ export function VaultEditorPage({
           });
           if (!r.ok) throw new Error(await r.text());
           if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
-          if (isNewRef.current) setIsNew(false);
+          if (wasNew) {
+            setIsNew(false);
+            router.refresh();
+          }
           setStatus("saved");
           setLastSaved(new Date());
           // Refresh share drift status (SWR dedupes rapid saves).
@@ -187,7 +223,7 @@ export function VaultEditorPage({
         }
       }, 1500);
     },
-    [apiPrefix, cancelPendingSave, filePath, paths, vaultId],
+    [apiPrefix, cancelPendingSave, filePath, paths, router, vaultId],
   );
 
   const handleDelete = useCallback(async () => {
@@ -212,6 +248,7 @@ export function VaultEditorPage({
         throw new Error(data.error ?? res.statusText);
       }
       router.push(pagePrefix);
+      router.refresh();
     } catch (e) {
       console.error(e);
       toast.error(e instanceof Error ? e.message : `Could not delete ${itemLabel}.`);
@@ -228,10 +265,32 @@ export function VaultEditorPage({
     [invalidatePendingSave, paths],
   );
 
+  const persistBlocksImmediate = useCallback(
+    async (newBlocks: DevHubPartialBlock[]) => {
+      cancelPendingSave();
+      const generation = saveGenerationRef.current;
+      const r = await fetch(`${apiPrefix}/${paths.apiPathFromSlug(filePath)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: newBlocks }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
+      setBlocks(newBlocks);
+      setEditorEpoch((n) => n + 1);
+      setStatus("saved");
+      setLastSaved(new Date());
+      void mutate("/api/share");
+      setTimeout(() => setStatus("idle"), 2000);
+    },
+    [apiPrefix, cancelPendingSave, filePath, paths],
+  );
+
   const handleMoved = useCallback(
     (newPath: string) => {
       toast.success("Moved.");
       router.push(paths.pageHref(newPath));
+      router.refresh();
     },
     [paths, router, toast],
   );
@@ -241,6 +300,7 @@ export function VaultEditorPage({
   const handleRenamed = useCallback(
     (newSlug: string) => {
       router.push(paths.pageHref(newSlug));
+      router.refresh();
     },
     [paths, router],
   );
@@ -360,9 +420,32 @@ export function VaultEditorPage({
               <span>Saved {lastSaved.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
             )}
           </div>
+          {readHref ? (
+            <Link
+              href={readHref}
+              className="btn btn-primary text-xs flex items-center gap-1 shrink-0 no-underline"
+              title="Back to the rendered doc"
+            >
+              <BookOpen size={13} aria-hidden />
+              Done
+            </Link>
+          ) : null}
           {!isNew && (
             <>
               <ShareControls vaultId={vaultId} path={filePath} />
+              {isNotes && !isNew && blocks ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost text-xs flex items-center gap-1 shrink-0"
+                  onClick={() => {
+                    window.dispatchEvent(new Event("devhub:dismiss-hovertips"));
+                    setLinkOpen(true);
+                  }}
+                >
+                  <Link2 size={14} aria-hidden />
+                  Add link
+                </button>
+              ) : null}
               {isNotes && !folderMaster ? (
                 <Link
                   href={notesChecklistsHref({ notePath: filePath, scope: createMasterScope ?? "" })}
@@ -407,7 +490,7 @@ export function VaultEditorPage({
 
       {blocks !== null || isNew ? (
         <BlockNoteEditor
-          key={filePath}
+          key={`${filePath}:${editorEpoch}`}
           initialContent={blocks && blocks.length > 0 ? blocks : undefined}
           onChange={handleChange}
           notePath={isNotes ? filePath : undefined}
@@ -429,7 +512,28 @@ export function VaultEditorPage({
       ) : null}
 
       {isNotes && !isNew && blocks ? (
-        <EntityRelationsPanel notePath={filePath} blocks={blocks} />
+        <EntityRelationsPanel
+          notePath={filePath}
+          blocks={blocks}
+          onAddLink={() => setLinkOpen(true)}
+        />
+      ) : null}
+
+      {isNotes && !isNew && blocks ? (
+        <EntityLinkDialog
+          open={linkOpen}
+          onClose={() => setLinkOpen(false)}
+          defaultKind="calendar"
+          description="Link a calendar event, PR, task, or Jira issue to this note."
+          onSave={async (ref) => {
+            const md = blocksToText(blocks);
+            const nextRefs = mergeEntityRefs(parseEntityLinksFromMarkdown(md), [ref]);
+            const nextMd = upsertEntityLinksInMarkdown(md, nextRefs);
+            const nextBlocks = textToBlocks(nextMd) as DevHubPartialBlock[];
+            await persistBlocksImmediate(nextBlocks);
+            toast.success("Link added");
+          }}
+        />
       ) : null}
 
       {moveModalOpen ? (

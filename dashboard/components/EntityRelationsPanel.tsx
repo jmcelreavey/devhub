@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CornerUpLeft, Share2 } from "lucide-react";
+import { CornerUpLeft, Link2, Share2 } from "lucide-react";
 import {
   defaultHrefForRef,
   parseEntityLinksFromMarkdown,
@@ -20,9 +20,12 @@ import type { DevHubPartialBlock } from "@/lib/blocknote/schema";
 export function EntityRelationsPanel({
   notePath,
   blocks,
+  onAddLink,
 }: {
   notePath: string;
   blocks: DevHubPartialBlock[] | null;
+  /** Opens the shared EntityLinkDialog (owned by the editor page). */
+  onAddLink?: () => void;
 }) {
   const outbound = useMemo(() => {
     if (!blocks?.length) return [] as EntityRef[];
@@ -55,7 +58,7 @@ export function EntityRelationsPanel({
     (r) => !outbound.some((o) => o.kind === r.kind && o.id === r.id),
   );
 
-  if (related.length === 0 && backlinks.length === 0) return null;
+  if (related.length === 0 && backlinks.length === 0 && !onAddLink) return null;
 
   return (
     <footer className="lib-footer entity-relations-footer">
@@ -85,6 +88,8 @@ export function EntityRelationsPanel({
               })}
             </ul>
           </div>
+        ) : onAddLink ? (
+          <p className="entity-relations-empty">No outbound links yet.</p>
         ) : null}
         {backlinks.length > 0 ? (
           <div>
@@ -110,6 +115,21 @@ export function EntityRelationsPanel({
                 );
               })}
             </ul>
+          </div>
+        ) : null}
+        {onAddLink ? (
+          <div className="entity-relations-add">
+            <button
+              type="button"
+              className="btn btn-ghost text-xs flex items-center gap-1"
+              onClick={() => {
+                window.dispatchEvent(new Event("devhub:dismiss-hovertips"));
+                onAddLink();
+              }}
+            >
+              <Link2 size={12} aria-hidden />
+              Add link
+            </button>
           </div>
         ) : null}
       </div>

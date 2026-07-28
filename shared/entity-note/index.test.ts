@@ -6,6 +6,7 @@ import {
   mergeEntityRefs,
   parseEntityLinksFromMarkdown,
   slugify,
+  upsertEntityLinksInMarkdown,
   type EntityRef,
 } from "./index.ts";
 
@@ -67,5 +68,24 @@ describe("format + build + parse round-trip", () => {
     expect(buildEntityLinksSection([{ kind: "note", id: "x", label: "X", href: "/notes/x" }])).toContain(
       "## Links",
     );
+  });
+
+  it("upsertEntityLinksInMarkdown replaces or appends ## Links", () => {
+    const withSection = ["# Hello", "", "## Links", "", "**Jira:** PTF-1", "", "## Notes", "body"].join(
+      "\n",
+    );
+    const replaced = upsertEntityLinksInMarkdown(withSection, [
+      { kind: "calendar", id: "evt-1", label: "Standup", href: "/calendar" },
+    ]);
+    expect(replaced).toContain("**Event:** [Standup](/calendar)");
+    expect(replaced).not.toContain("PTF-1");
+    expect(replaced).toContain("## Notes");
+
+    const appended = upsertEntityLinksInMarkdown("# Solo", [
+      { kind: "pr", id: "a/b#1", label: "a/b#1", href: "https://github.com/a/b/pull/1" },
+    ]);
+    expect(appended).toContain("# Solo");
+    expect(appended).toContain("## Links");
+    expect(appended).toContain("a/b#1");
   });
 });
