@@ -4622,6 +4622,9 @@ body[data-motion="off"] .briefing-wx-card {
   background: var(--bg-overlay);
   color: var(--text);
 }
+.launch-menu-item[data-danger="true"] .launch-menu-label {
+  color: var(--danger, #c44);
+}
 .launch-menu-item:focus-visible {
   outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
   outline-offset: -2px;

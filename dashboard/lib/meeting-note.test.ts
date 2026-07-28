@@ -30,6 +30,7 @@ describe("buildMeetingNoteMarkdown", () => {
     expect(md).toContain("**Date:** 2026-05-30");
     expect(md).toContain("**Time:** 14:00–15:00");
     expect(md).toContain("**Attendees:** a@x.com, b@x.com");
+    expect(md).toContain("## Links");
     expect(md).toContain("**Join:** https://meet.example/abc");
     expect(md).toContain("[Open in Calendar](https://calendar.google.com/event?eid=xyz)");
     expect(md).toContain("## Agenda");
@@ -40,6 +41,7 @@ describe("buildMeetingNoteMarkdown", () => {
   it("omits optional lines and labels all-day events", () => {
     const md = buildMeetingNoteMarkdown({ ...event, isAllDay: true, conferenceUrl: undefined, htmlLink: undefined, location: undefined });
     expect(md).toContain("**Time:** All day");
+    expect(md).not.toContain("## Links");
     expect(md).not.toContain("**Join:**");
     expect(md).not.toContain("Open in Calendar");
     expect(md).not.toContain("**Location:**");

@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { FileText } from "lucide-react";
 import type { CalendarEvent } from "@/lib/google-calendar";
 import { buildMeetingNoteMarkdown, meetingNotePath } from "@/lib/meeting-note";
-import { textToBlocks } from "@/lib/markdown-convert";
-import { getVaultClient } from "@/lib/vault/vault-client";
+import { createOrOpenVaultNote } from "@/lib/create-vault-note";
 import { useToast } from "@/lib/hooks/use-toast";
 
 interface CreateMeetingNoteButtonProps {
@@ -19,21 +18,18 @@ export function CreateMeetingNoteButton({ event, compact = false }: CreateMeetin
   const router = useRouter();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const notes = getVaultClient("notes");
 
   const create = async () => {
     setBusy(true);
     try {
       const path = meetingNotePath(event);
-      const content = textToBlocks(buildMeetingNoteMarkdown(event));
-      const res = await fetch(`${notes.apiPrefix}/${path}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
+      const { href } = await createOrOpenVaultNote({
+        path,
+        markdown: buildMeetingNoteMarkdown(event),
+        // Match prior behaviour: regenerating from the calendar strip refreshes the scaffold.
+        overwrite: true,
       });
-      if (!res.ok) throw new Error(await res.text());
-      notes.paths.notifyTreeChanged();
-      router.push(notes.paths.pageHref(path));
+      router.push(href);
     } catch (e) {
       console.error("create meeting note:", e);
       toast.error("Couldn't create meeting note.");

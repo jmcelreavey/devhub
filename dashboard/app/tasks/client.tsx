@@ -151,6 +151,7 @@ function TaskRow({
         ) : null}
       <TaskItem
         task={task}
+        date={record.date}
         readOnly={status === "moved"}
         onToggle={status === "abandoned" ? onReactivate : onToggle}
         onDelete={onDelete}

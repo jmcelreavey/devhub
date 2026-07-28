@@ -9,6 +9,11 @@ import {
   meetingNotePath,
   type MeetingNoteEvent,
 } from "../../../../shared/meeting-note/index.ts";
+import {
+  buildTaskNoteMarkdown,
+  taskNotePath,
+  type TaskNoteSource,
+} from "../../../../shared/task-note/index.ts";
 
 /** Workspace slice surfaced by notes_list / notes_search: daily/ + root .json. */
 function filterAgentNoteTree(entries: TreeEntry[]): TreeEntry[] {
@@ -236,6 +241,50 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
         };
       }
       const markdown = buildMeetingNoteMarkdown(event);
+      storage.write(path, textToBlocks(markdown));
+      return {
+        content: [
+          {
+            type: "text",
+            text: `${existing ? "Updated" : "Created"}: ${path}\n\n${markdown}`,
+          },
+        ],
+      };
+    },
+  );
+
+  server.registerTool(
+    "notes_create_task",
+    {
+      description:
+        "Create a note under task-notes/YYYY-MM-DD-<taskId> with a live taskRef backlink and notes/action-items scaffold (same as the task-row note action). Leaves an existing note alone unless overwrite is true.",
+      inputSchema: {
+        id: z.string().describe("Task id"),
+        text: z.string().describe("Task text / note title"),
+        date: z.string().describe("Task day date YYYY-MM-DD"),
+        jiraKey: z.string().optional(),
+        jiraUrl: z.string().optional().describe("Absolute Jira browse URL"),
+        overwrite: z
+          .boolean()
+          .optional()
+          .describe("If true, rewrite the note even when it already exists (default false)"),
+      },
+    },
+    async ({ id, text, date, jiraKey, jiraUrl, overwrite }) => {
+      const source: TaskNoteSource = { id, text, date, jiraKey, jiraUrl };
+      const path = taskNotePath(source);
+      const existing = storage.read(path);
+      if (existing && overwrite !== true) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Already exists: ${path}\nOpen in DevHub notes UI or notes_read this path.`,
+            },
+          ],
+        };
+      }
+      const markdown = buildTaskNoteMarkdown(source);
       storage.write(path, textToBlocks(markdown));
       return {
         content: [

@@ -603,6 +603,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
           <div className={exiting ? "task-exit" : undefined}>
             <TaskItem
               task={exiting ? { ...task, done: true } : task}
+              date={today}
               jiraStatus={task.jiraKey ? jiraStatuses[task.jiraKey] : undefined}
               dragHandleProps={q || exiting ? undefined : dragHandleProps}
               isDragging={isDragging}
@@ -782,6 +783,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
                 <TaskItem
                   key={task.id}
                   task={task}
+                  date={today}
                   jiraStatus={task.jiraKey ? jiraStatuses[task.jiraKey] : undefined}
                   onToggle={() => toggleTask(task.id)}
                   onDelete={() => deleteTask(task.id)}
@@ -814,6 +816,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
             <TaskItem
               key={task.id}
               task={task}
+              date={today}
               jiraStatus={undefined}
               onToggle={() => reactivateTask(task.id)}
               onDelete={() => deleteTask(task.id)}

@@ -3,6 +3,15 @@
  * and the DevHub MCP `notes_create_meeting` tool.
  */
 
+import {
+  buildEntityLinksSection,
+  joinMarkdownLines,
+  slugify,
+} from "../entity-note/index.ts";
+
+export type { SlugifyOptions } from "../entity-note/index.ts";
+export { slugify } from "../entity-note/index.ts";
+
 export interface MeetingNoteEvent {
   title: string;
   /** ISO datetime or YYYY-MM-DD (all-day). */
@@ -13,20 +22,6 @@ export interface MeetingNoteEvent {
   conferenceUrl?: string;
   htmlLink?: string;
   attendees?: string[];
-}
-
-export interface SlugifyOptions {
-  maxLen?: number;
-  fallback?: string;
-}
-
-export function slugify(text: string, options: SlugifyOptions = {}): string {
-  const { maxLen = 48, fallback = "untitled" } = options;
-  const slug = text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug.slice(0, maxLen) || fallback;
 }
 
 /** Repo-relative note path (no extension) for a meeting note derived from an event. */
@@ -48,16 +43,21 @@ function timeLabel(event: MeetingNoteEvent): string {
 
 /** Markdown scaffold for a meeting note, pre-filled from a calendar event. */
 export function buildMeetingNoteMarkdown(event: MeetingNoteEvent): string {
-  const lines: (string | null)[] = [
+  const links = buildEntityLinksSection([
+    event.htmlLink ? `**Event:** [Open in Calendar](${event.htmlLink})` : null,
+    event.conferenceUrl ? `**Join:** ${event.conferenceUrl}` : null,
+  ]);
+
+  return joinMarkdownLines([
     `# ${event.title}`,
     "",
     `**Date:** ${dateLabel(event)}`,
     `**Time:** ${timeLabel(event)}`,
     `**Attendees:** ${event.attendees?.join(", ") ?? ""}`,
     event.location ? `**Location:** ${event.location}` : null,
-    event.conferenceUrl ? `**Join:** ${event.conferenceUrl}` : null,
-    event.htmlLink ? `**Event:** [Open in Calendar](${event.htmlLink})` : null,
     "",
+    links ? links.trimEnd() : null,
+    links ? "" : null,
     "## Agenda",
     "",
     "- ",
@@ -69,6 +69,5 @@ export function buildMeetingNoteMarkdown(event: MeetingNoteEvent): string {
     "## Action items",
     "",
     "- [ ] ",
-  ];
-  return lines.filter((l) => l !== null).join("\n");
+  ]);
 }

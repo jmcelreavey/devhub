@@ -9,18 +9,37 @@
  * without the list around it - so it earns its own module.
  */
 import { useState, useEffect, useRef, type HTMLAttributes, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { type Task } from "@/lib/tasks/types";
 import { renderTaskTextContent } from "@/components/tasks/TaskText";
 import { stripLinkedJiraKeyFromText } from "@/lib/tasks/task-text";
 import { statusTone } from "@/components/jira/JiraWidget";
-import { X, ExternalLink, Circle, CheckCircle2, Pencil, Ban, RotateCcw, ArrowRight, Play, Pause, GripVertical, Ticket } from "lucide-react";
+import {
+  X,
+  ExternalLink,
+  Circle,
+  CheckCircle2,
+  Pencil,
+  Ban,
+  RotateCcw,
+  ArrowRight,
+  Play,
+  Pause,
+  GripVertical,
+  Ticket,
+  FileText,
+} from "lucide-react";
 import { JiraKeyChip } from "@/components/jira/JiraKeyChip";
 import { JiraStatusPill } from "@/components/jira/JiraStatusPill";
 import { HoverTip } from "@/components/ui/HoverTip";
 import { SeverityPill } from "@/components/ui/Severity";
 import { useSecondTick } from "@/lib/tickers";
-import { formatDuration, jiraBrowseUrl } from "@/lib/utils";
+import { formatDuration, jiraBrowseUrl, todayISO } from "@/lib/utils";
 import { openInBrowser } from "@/lib/desktop/bridge";
+import { buildTaskNoteMarkdown, taskNotePath } from "@/lib/task-note";
+import { createOrOpenVaultNote } from "@/lib/create-vault-note";
+import { useToast } from "@/lib/hooks/use-toast";
+import { TaskOverflowMenu, type TaskOverflowAction } from "@/components/tasks/TaskOverflowMenu";
 
 interface JiraStatus {
   name: string;
@@ -28,6 +47,7 @@ interface JiraStatus {
 
 export function TaskItem({
   task,
+  date,
   jiraStatus,
   readOnly = false,
   onToggle,
@@ -43,6 +63,8 @@ export function TaskItem({
   isDropTarget = false,
 }: {
   task: Task;
+  /** Day file this task lives in (YYYY-MM-DD). Defaults to today. */
+  date?: string;
   jiraStatus?: JiraStatus;
   readOnly?: boolean;
   onToggle: () => void;
@@ -57,10 +79,14 @@ export function TaskItem({
   isDragging?: boolean;
   isDropTarget?: boolean;
 }) {
+  const router = useRouter();
+  const toast = useToast();
+  const taskDate = date ?? todayISO();
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(task.text);
   const [showAbandon, setShowAbandon] = useState(false);
   const [abandonReason, setAbandonReason] = useState("");
+  const [noteBusy, setNoteBusy] = useState(false);
   // True only in the moment the user just checked the box, so the confetti
   // burst fires on completion — not when an already-done list renders.
   const [justCompleted, setJustCompleted] = useState(false);
@@ -94,6 +120,28 @@ export function TaskItem({
     setAbandonReason("");
   };
 
+  const openOrCreateNote = async () => {
+    setNoteBusy(true);
+    try {
+      const source = {
+        id: task.id,
+        text: task.text,
+        date: taskDate,
+        jiraKey: task.jiraKey,
+        jiraUrl: task.jiraKey ? jiraBrowseUrl(task.jiraKey) : undefined,
+      };
+      const { href } = await createOrOpenVaultNote({
+        path: taskNotePath(source),
+        markdown: buildTaskNoteMarkdown(source),
+      });
+      router.push(href);
+    } catch (e) {
+      console.error("create task note:", e);
+      toast.error("Couldn't create task note.");
+      setNoteBusy(false);
+    }
+  };
+
   const displayText = task.jiraKey
     ? stripLinkedJiraKeyFromText(task.text, task.jiraKey)
     : task.text;
@@ -111,6 +159,50 @@ export function TaskItem({
   const showTimerReadout = !isInactive && (!!task.timerStartedAt || (task.timeSpentMs ?? 0) > 0);
 
   const dueDateLabel = task.due ? new Date(task.due).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : null;
+
+  const overflowActions: TaskOverflowAction[] = [];
+  if (!isInactive && !task.done && onAddToJira) {
+    overflowActions.push({
+      id: "jira",
+      label: task.jiraKey ? "Update Jira ticket" : "Add to Jira",
+      icon: <Ticket size={12} aria-hidden />,
+      onSelect: onAddToJira,
+    });
+  }
+  if (!isInactive) {
+    overflowActions.push({
+      id: "edit",
+      label: "Edit task",
+      icon: <Pencil size={12} aria-hidden />,
+      onSelect: () => {
+        setEditing(true);
+        setEditText(task.text);
+      },
+    });
+  }
+  if (!isInactive && !task.done) {
+    overflowActions.push({
+      id: "abandon",
+      label: "Abandon task",
+      icon: <Ban size={12} aria-hidden />,
+      onSelect: () => setShowAbandon(true),
+    });
+  }
+  if (isAbandoned && onReactivate) {
+    overflowActions.push({
+      id: "reactivate",
+      label: "Reactivate task",
+      icon: <RotateCcw size={12} aria-hidden />,
+      onSelect: onReactivate,
+    });
+  }
+  overflowActions.push({
+    id: "delete",
+    label: "Delete task",
+    icon: <X size={12} aria-hidden />,
+    onSelect: onDelete,
+    danger: true,
+  });
 
   return (
     <div>
@@ -274,7 +366,7 @@ export function TaskItem({
         </div>
 
         {!editing && !showAbandon && (
-          <div className="task-row-actions flex items-start gap-1">
+          <div className="task-row-actions flex items-start gap-0.5">
             {onTimer && !isInactive && (
               <TaskActionTip label={task.timerStartedAt ? "Stop timer" : "Start timer"}>
                 <button
@@ -288,13 +380,20 @@ export function TaskItem({
                 </button>
               </TaskActionTip>
             )}
-            {!isInactive && !task.done && onAddToJira && (
-              <TaskActionTip label={task.jiraKey ? "Update Jira ticket from this task" : "Add to Jira"}>
-                <button type="button" onClick={(e) => { e.stopPropagation(); onAddToJira(); }} aria-label={task.jiraKey ? "Update Jira ticket from this task" : "Add to Jira"} className="task-icon-action">
-                  <Ticket size={12} aria-hidden />
-                </button>
-              </TaskActionTip>
-            )}
+            <TaskActionTip label="Open or create note">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void openOrCreateNote();
+                }}
+                disabled={noteBusy}
+                aria-label="Open or create note for this task"
+                className="task-icon-action"
+              >
+                <FileText size={12} aria-hidden />
+              </button>
+            </TaskActionTip>
             {!isAbandoned && task.jiraKey && (
               <TaskActionTip label={`Open ${task.jiraKey} in Jira`}>
                 <button
@@ -310,32 +409,7 @@ export function TaskItem({
                 </button>
               </TaskActionTip>
             )}
-            {!isInactive && (
-              <TaskActionTip label="Edit task">
-                <button type="button" onClick={(e) => { e.stopPropagation(); setEditing(true); setEditText(task.text); }} aria-label="Edit task" className="task-icon-action">
-                  <Pencil size={12} aria-hidden />
-                </button>
-              </TaskActionTip>
-            )}
-            {!isInactive && !task.done && (
-              <TaskActionTip label="Abandon task">
-                <button type="button" onClick={(e) => { e.stopPropagation(); setShowAbandon(true); }} aria-label="Abandon task" className="task-icon-action">
-                  <Ban size={12} aria-hidden />
-                </button>
-              </TaskActionTip>
-            )}
-            {isAbandoned && onReactivate && (
-              <TaskActionTip label="Reactivate task">
-                <button type="button" onClick={(e) => { e.stopPropagation(); onReactivate(); }} aria-label="Reactivate task" className="task-icon-action">
-                  <RotateCcw size={12} aria-hidden />
-                </button>
-              </TaskActionTip>
-            )}
-            <TaskActionTip label="Delete task">
-              <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }} aria-label="Delete task" className="task-icon-action">
-                <X size={12} aria-hidden />
-              </button>
-            </TaskActionTip>
+            <TaskOverflowMenu actions={overflowActions} />
           </div>
         )}
       </div>
