@@ -6,6 +6,7 @@ import type { CalendarEvent } from "@/lib/google-calendar";
 import { formatTime } from "@/lib/utils";
 import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
 import { CreateMeetingNoteButton } from "@/components/CreateMeetingNoteButton";
+import { EntityLinkChips } from "@/components/EntityLinkChips";
 
 interface CalendarResponse {
   events?: CalendarEvent[];
@@ -170,31 +171,42 @@ export function CalendarWidget({ collapsed = false, collapsedSummary, onToggle }
       {!collapsed ? (
         <div className="space-y-1 mt-1">
           {events.slice(0, 5).map((e) => (
-            <div key={e.id} className="group flex items-center gap-2 text-xs">
-              <span style={{ color: "var(--text-subtle)", minWidth: "44px" }}>
-                {e.isAllDay ? "All day" : `${formatTime(e.start)}`}
-              </span>
-              <span
-                className="min-w-0 truncate"
-                style={{
-                  color: isHappeningNow(e.start, e.end) ? "var(--accent)" : "var(--text-muted)",
-                }}
-              >
-                {e.title}
-              </span>
-              {e.conferenceUrl && (
-                <a
-                  href={e.conferenceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Join meeting"
+            <div key={e.id} className="space-y-0.5">
+              <div className="group flex items-center gap-2 text-xs">
+                <span style={{ color: "var(--text-subtle)", minWidth: "44px" }}>
+                  {e.isAllDay ? "All day" : `${formatTime(e.start)}`}
+                </span>
+                <span
+                  className="min-w-0 truncate"
+                  style={{
+                    color: isHappeningNow(e.start, e.end) ? "var(--accent)" : "var(--text-muted)",
+                  }}
                 >
-                  <Video size={10} className="text-accent" aria-hidden />
-                </a>
-              )}
-              <span className="ml-auto reveal-on-hover transition-opacity">
-                <CreateMeetingNoteButton event={e} compact />
-              </span>
+                  {e.title}
+                </span>
+                {e.conferenceUrl && (
+                  <a
+                    href={e.conferenceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Join meeting"
+                  >
+                    <Video size={10} className="text-accent" aria-hidden />
+                  </a>
+                )}
+                <span className="ml-auto flex items-center gap-1 shrink-0">
+                  <CreateMeetingNoteButton event={e} compact />
+                </span>
+              </div>
+              <EntityLinkChips
+                kind="calendar"
+                id={e.id}
+                date={(e.start || "").slice(0, 10)}
+                label={e.title}
+                meetingTitle={e.title}
+                href={e.htmlLink}
+                className="ml-[52px]"
+              />
             </div>
           ))}
         </div>

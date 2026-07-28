@@ -45,7 +45,7 @@ export const PATCH = withErrorHandler(async (req: Request) => {
   if (!parsed.success) {
     return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
   }
-  const { id, text, done, due, date, status, abandonReason, timer } = parsed.data;
+  const { id, text, done, due, date, status, abandonReason, timer, links } = parsed.data;
 
   if (timer) {
     const task = timer === "start" ? await startTaskTimer(id, date) : await stopTaskTimer(id, date);
@@ -65,10 +65,11 @@ export const PATCH = withErrorHandler(async (req: Request) => {
     return NextResponse.json(task);
   }
 
-  if (text !== undefined || due !== undefined) {
-    const patch: { text?: string; due?: string | null } = {};
+  if (text !== undefined || due !== undefined || links !== undefined) {
+    const patch: { text?: string; due?: string | null; links?: typeof links } = {};
     if (text !== undefined) patch.text = text;
     if (due !== undefined) patch.due = due;
+    if (links !== undefined) patch.links = links;
     const task = await updateTask(id, patch, date);
     if (!task) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(task);
@@ -80,7 +81,7 @@ export const PATCH = withErrorHandler(async (req: Request) => {
     return NextResponse.json(task);
   }
 
-  return NextResponse.json({ error: "Provide text, due, or done" }, { status: 400 });
+  return NextResponse.json({ error: "Provide text, due, done, or links" }, { status: 400 });
 }, "tasks.patch");
 
 export const DELETE = withErrorHandler(async (req: Request) => {

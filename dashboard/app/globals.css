@@ -2428,6 +2428,11 @@ body[data-motion="off"] .task-timer-dot {
   color: var(--accent);
 }
 
+.task-icon-action[data-linked="true"],
+.hub-icon-btn[data-linked="true"] {
+  color: var(--accent);
+}
+
 .task-row-actions {
   position: absolute;
   right: 0.5rem;
@@ -6414,4 +6419,123 @@ body[data-motion="off"] .repo-git-graph-row,
 body[data-motion="off"] .repo-git-file-actions,
 body[data-motion="off"] .repo-git-filter-search {
   transition: none;
+}
+
+/* Cross-entity hop-around chips on task / calendar / PR cards */
+.entity-link-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.entity-link-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 12rem;
+  padding: 1px 6px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  line-height: 1.4;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition:
+    color var(--dur-quick) var(--ease-swift),
+    border-color var(--dur-quick) var(--ease-swift),
+    background var(--dur-quick) var(--ease-swift);
+}
+
+.entity-link-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+a.entity-link-chip:hover {
+  color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 35%, transparent);
+  background: var(--accent-dim);
+}
+
+.entity-link-chip[data-kind="note"] {
+  color: var(--accent);
+}
+
+.entity-rel-kind {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-subtle);
+  margin-right: 4px;
+}
+
+.entity-relations-footer {
+  margin-top: var(--space-4);
+}
+
+.entity-link-dialog {
+  position: absolute;
+  right: 0.5rem;
+  top: 100%;
+  z-index: var(--z-dropdown, 40);
+  width: min(280px, calc(100vw - 24px));
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-md, 0 8px 24px color-mix(in oklab, #000 18%, transparent));
+}
+
+.entity-link-dialog-head {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.entity-link-dialog-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.entity-link-kind {
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.entity-link-kind[data-active="true"] {
+  color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 35%, transparent);
+  background: var(--accent-dim);
+}
+
+.entity-link-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.task-row {
+  position: relative;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entity-link-chip {
+    transition: none;
+  }
 }

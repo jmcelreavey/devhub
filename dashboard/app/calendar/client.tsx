@@ -6,6 +6,7 @@ import { Calendar, ChevronDown, ChevronUp, MapPin, RefreshCw, Settings2, Video }
 import { useLive } from "@/lib/hooks/use-fetch";
 import type { CalendarEvent, GoogleCalendarInfo } from "@/lib/google-calendar";
 import { CreateMeetingNoteButton } from "@/components/CreateMeetingNoteButton";
+import { EntityLinkChips } from "@/components/EntityLinkChips";
 import { formatTime, todayISO } from "@/lib/utils";
 import { EmptyState, FetchError, PageHeader, SkeletonRows } from "@/components";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
@@ -288,20 +289,30 @@ export default function CalendarPage() {
                       </div>
                     )}
                   </div>
-                  <div className="flex shrink-0 items-center gap-1 self-start">
-                    {e.conferenceUrl && (
-                      <a
-                        href={e.conferenceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn btn-ghost"
-                        style={{ fontSize: "11px", padding: "3px 6px" }}
-                        aria-label={`Join ${e.title}`}
-                      >
-                        <Video size={11} aria-hidden /> Join
-                      </a>
-                    )}
-                    <CreateMeetingNoteButton event={e} />
+                  <div className="flex shrink-0 flex-col items-end gap-1 self-start">
+                    <div className="flex items-center gap-1">
+                      {e.conferenceUrl && (
+                        <a
+                          href={e.conferenceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-ghost"
+                          style={{ fontSize: "11px", padding: "3px 6px" }}
+                          aria-label={`Join ${e.title}`}
+                        >
+                          <Video size={11} aria-hidden /> Join
+                        </a>
+                      )}
+                      <CreateMeetingNoteButton event={e} />
+                    </div>
+                    <EntityLinkChips
+                      kind="calendar"
+                      id={e.id}
+                      date={(e.start || "").slice(0, 10)}
+                      label={e.title}
+                      meetingTitle={e.title}
+                      href={e.htmlLink}
+                    />
                   </div>
                 </div>
               ))}

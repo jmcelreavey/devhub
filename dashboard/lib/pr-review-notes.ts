@@ -1,15 +1,9 @@
 import type { GithubPrRow } from "@/lib/github/prs";
+import { prNotePath as sharedPrNotePath } from "@/lib/pr-note";
 
-function slugifyPrPart(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-/** Stable notes path for a PR's review, e.g. `pr-reviews/businessinsider-syndication-services-41`. */
+/** Stable notes path for a PR's review — delegates to shared/pr-note. */
 export function prReviewNotePath(row: GithubPrRow): string {
-  return `pr-reviews/${slugifyPrPart(row.repo) || "repo"}-${row.number}`;
+  return sharedPrNotePath({ repo: row.repo, number: row.number });
 }
 
 export function prReviewNoteHref(row: GithubPrRow): string {

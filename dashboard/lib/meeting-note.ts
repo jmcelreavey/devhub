@@ -1,6 +1,7 @@
-/** Re-export shared meeting-note helpers (dashboard UI + MCP source of truth). */
+/** Re-export shared meeting-note helpers (dashboard UI + MCP + plugins). */
 export {
   buildMeetingNoteMarkdown,
+  meetingEntityRefs,
   meetingNotePath,
   slugify,
   type MeetingNoteEvent,

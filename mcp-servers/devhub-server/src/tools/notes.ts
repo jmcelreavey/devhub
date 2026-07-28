@@ -14,6 +14,9 @@ import {
   taskNotePath,
   type TaskNoteSource,
 } from "../../../../shared/task-note/index.ts";
+import { buildPrNoteMarkdown, prNotePath } from "../../../../shared/pr-note/index.ts";
+import { parseEntityLinksFromMarkdown } from "../../../../shared/entity-note/index.ts";
+import type { EntityRef } from "../../../../shared/entity-note/index.ts";
 
 /** Workspace slice surfaced by notes_list / notes_search: daily/ + root .json. */
 function filterAgentNoteTree(entries: TreeEntry[]): TreeEntry[] {
@@ -201,7 +204,7 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
     "notes_create_meeting",
     {
       description:
-        "Create a meeting note under meetings/YYYY-MM-DD-<slug> with agenda/notes/action-items scaffold (same as the Today strip button). Overwrites if the path already exists unless overwrite is false.",
+        "Create a meeting note under meetings/YYYY-MM-DD-<slug> with agenda/notes/action-items scaffold and a ## Links backref to the calendar event (same EntityRef contract as the Today/calendar UI button). Overwrites if the path already exists unless overwrite is false.",
       inputSchema: {
         title: z.string().describe("Meeting title"),
         start: z.string().describe("ISO start datetime or YYYY-MM-DD"),
@@ -257,7 +260,7 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
     "notes_create_task",
     {
       description:
-        "Create a note under task-notes/YYYY-MM-DD-<taskId> with a live taskRef backlink and notes/action-items scaffold (same as the task-row note action). Leaves an existing note alone unless overwrite is true.",
+        "Create a note under task-notes/YYYY-MM-DD-<taskId> with a ## Links section (live ::task-ref + Work href) — same EntityRef contract as the task-row note action. Leaves an existing note alone unless overwrite is true.",
       inputSchema: {
         id: z.string().describe("Task id"),
         text: z.string().describe("Task text / note title"),
@@ -291,6 +294,71 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
           {
             type: "text",
             text: `${existing ? "Updated" : "Created"}: ${path}\n\n${markdown}`,
+          },
+        ],
+      };
+    },
+  );
+
+  server.registerTool(
+    "notes_create_pr",
+    {
+      description:
+        "Create a PR review note under pr-reviews/<repo>-<n> with a ## Links EntityRef back to the PR (same contract as the PR row FileText action). Leaves an existing note alone unless overwrite is true.",
+      inputSchema: {
+        repo: z.string().describe("owner/repo"),
+        number: z.number().int().positive(),
+        title: z.string(),
+        url: z.string().describe("GitHub PR URL"),
+        overwrite: z.boolean().optional(),
+      },
+    },
+    async ({ repo, number, title, url, overwrite }) => {
+      const source = { repo, number, title, url };
+      const path = prNotePath(source);
+      const existing = storage.read(path);
+      if (existing && overwrite !== true) {
+        return {
+          content: [{ type: "text", text: `Already exists: ${path}` }],
+        };
+      }
+      const markdown = buildPrNoteMarkdown(source);
+      storage.write(path, textToBlocks(markdown));
+      return {
+        content: [
+          {
+            type: "text",
+            text: `${existing ? "Updated" : "Created"}: ${path}\n\n${markdown}`,
+          },
+        ],
+      };
+    },
+  );
+
+  server.registerTool(
+    "entity_links_read",
+    {
+      description:
+        "Read EntityRefs from a note's ## Links section (same parse as the UI relations panel).",
+      inputSchema: {
+        path: z.string().describe("Note path relative to notes/"),
+      },
+    },
+    async ({ path: filePath }) => {
+      const note = storage.read(filePath);
+      if (!note) {
+        return { content: [{ type: "text", text: `Not found: ${filePath}` }] };
+      }
+      const md = blocksToText(note.content);
+      const refs = parseEntityLinksFromMarkdown(md);
+      return {
+        content: [
+          {
+            type: "text",
+            text:
+              refs.length === 0
+                ? `No EntityRefs in ${filePath}`
+                : refs.map((r: EntityRef) => `- ${r.kind}:${r.id} — ${r.label}${r.href ? ` (${r.href})` : ""}`).join("\n"),
           },
         ],
       };

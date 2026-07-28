@@ -1,12 +1,16 @@
 /**
  * Meeting-note path + markdown scaffold — shared by the Today strip button
  * and the DevHub MCP `notes_create_meeting` tool.
+ *
+ * Same EntityRef / ## Links contract as task-note so calendar cards and
+ * task rows share one backlink shape.
  */
 
 import {
   buildEntityLinksSection,
   joinMarkdownLines,
   slugify,
+  type EntityRef,
 } from "../entity-note/index.ts";
 
 export type { SlugifyOptions } from "../entity-note/index.ts";
@@ -22,6 +26,8 @@ export interface MeetingNoteEvent {
   conferenceUrl?: string;
   htmlLink?: string;
   attendees?: string[];
+  /** Calendar event id when known (for future hop-around). */
+  id?: string;
 }
 
 /** Repo-relative note path (no extension) for a meeting note derived from an event. */
@@ -41,12 +47,26 @@ function timeLabel(event: MeetingNoteEvent): string {
   return end ? `${start}–${end}` : start;
 }
 
+/** EntityRefs embedded in a meeting note's ## Links section. */
+export function meetingEntityRefs(event: MeetingNoteEvent): Array<EntityRef | string> {
+  const refs: Array<EntityRef | string> = [];
+  if (event.htmlLink) {
+    refs.push({
+      kind: "calendar",
+      id: event.id || event.htmlLink,
+      label: "Open in Calendar",
+      href: event.htmlLink,
+    });
+  }
+  if (event.conferenceUrl) {
+    refs.push(`**Join:** ${event.conferenceUrl}`);
+  }
+  return refs;
+}
+
 /** Markdown scaffold for a meeting note, pre-filled from a calendar event. */
 export function buildMeetingNoteMarkdown(event: MeetingNoteEvent): string {
-  const links = buildEntityLinksSection([
-    event.htmlLink ? `**Event:** [Open in Calendar](${event.htmlLink})` : null,
-    event.conferenceUrl ? `**Join:** ${event.conferenceUrl}` : null,
-  ]);
+  const links = buildEntityLinksSection(meetingEntityRefs(event));
 
   return joinMarkdownLines([
     `# ${event.title}`,

@@ -32,7 +32,7 @@ describe("buildMeetingNoteMarkdown", () => {
     expect(md).toContain("**Attendees:** a@x.com, b@x.com");
     expect(md).toContain("## Links");
     expect(md).toContain("**Join:** https://meet.example/abc");
-    expect(md).toContain("[Open in Calendar](https://calendar.google.com/event?eid=xyz)");
+    expect(md).toContain("**Event:** [Open in Calendar](https://calendar.google.com/event?eid=xyz)");
     expect(md).toContain("## Agenda");
     expect(md).toContain("## Action items");
     expect(md).toContain("- [ ] ");

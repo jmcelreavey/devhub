@@ -39,16 +39,52 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
   server.registerTool(
     "tasks_create",
     {
-      description: "Create a new task. Auto-extracts Jira keys from text (e.g. DAD-1234).",
+      description:
+        "Create a new task. Auto-extracts Jira keys from text (e.g. DAD-1234). Optionally create a linked task note (EntityRef ## Links) and/or attach hop-around links (PR/calendar/note).",
       inputSchema: {
         text: z.string().describe("Task description (1-500 chars). Jira keys like DAD-1234 are auto-detected."),
         date: z.string().optional().describe("Date in YYYY-MM-DD format. Defaults to today."),
         due: z.string().optional().describe("Due date in YYYY-MM-DD format."),
+        withNote: z.boolean().optional().describe("If true, also create the linked task-notes/ note"),
+        links: z
+          .array(
+            z.object({
+              kind: z.enum(["task", "meeting", "pr", "note", "calendar", "jira"]),
+              id: z.string(),
+              label: z.string(),
+              href: z.string().optional(),
+            }),
+          )
+          .optional()
+          .describe("EntityRefs to store on the task for hop-around"),
       },
     },
-    async ({ text, date, due }) => {
+    async ({ text, date, due, withNote, links }) => {
       const task = tasksStorage.add(text, date, due);
-      return { content: [{ type: "text", text: `Created task: ${task.id} — ${task.text}` }] };
+      if (links?.length) {
+        tasksStorage.update(task.id, { links }, date);
+        task.links = links;
+      }
+      let noteLine = "";
+      if (withNote) {
+        const { buildTaskNoteMarkdown, taskNotePath } = await import(
+          "../../../../shared/task-note/index.ts"
+        );
+        const { textToBlocks } = await import("../convert.ts");
+        const day = date || new Date().toISOString().split("T")[0];
+        const source = { id: task.id, text: task.text, date: day, jiraKey: task.jiraKey };
+        const notePath = taskNotePath(source);
+        ctx.storage.write(notePath, textToBlocks(buildTaskNoteMarkdown(source)));
+        noteLine = `\nLinked note: ${notePath}`;
+      }
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Created task: ${task.id} — ${task.text}${noteLine}`,
+          },
+        ],
+      };
     },
   );
 
@@ -67,10 +103,21 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
           .describe("Status change: complete, abandon, or reactivate"),
         abandonReason: z.string().optional().describe("Reason for abandoning"),
         date: z.string().optional().describe("Date the task belongs to (YYYY-MM-DD). Defaults to today."),
+        links: z
+          .array(
+            z.object({
+              kind: z.enum(["task", "meeting", "pr", "note", "calendar", "jira"]),
+              id: z.string(),
+              label: z.string(),
+              href: z.string().optional(),
+            }),
+          )
+          .optional()
+          .describe("Replace hop-around EntityRefs on the task"),
       },
     },
-    async ({ id, text, done, due, status, abandonReason, date }) => {
-      const task = tasksStorage.update(id, { text, done, due, status, abandonReason }, date);
+    async ({ id, text, done, due, status, abandonReason, date, links }) => {
+      const task = tasksStorage.update(id, { text, done, due, status, abandonReason, links }, date);
       if (!task) {
         return { content: [{ type: "text", text: `Task not found: ${id}` }] };
       }

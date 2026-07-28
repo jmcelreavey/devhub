@@ -3,7 +3,15 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { NotesStorage } from "./storage.ts";
 
-// keep in sync with dashboard/lib/tasks-storage.ts Task
+// keep in sync with dashboard/lib/tasks/types.ts Task
+export interface EntityRef {
+  kind: "task" | "meeting" | "pr" | "note" | "calendar" | "jira";
+  id: string;
+  label: string;
+  href?: string;
+  marker?: string;
+}
+
 export interface Task {
   id: string;
   text: string;
@@ -18,6 +26,7 @@ export interface Task {
   movedToDate?: string;
   timeSpentMs?: number;
   timerStartedAt?: string;
+  links?: EntityRef[];
 }
 
 export interface TaskDaySummary {
@@ -123,6 +132,7 @@ export class TasksStorage {
       due?: string | null;
       status?: "complete" | "abandon" | "reactivate";
       abandonReason?: string;
+      links?: EntityRef[];
     },
     date?: string,
   ): Task | null {
@@ -147,6 +157,9 @@ export class TasksStorage {
       task.due = undefined;
     } else if (typeof patch.due === "string") {
       task.due = patch.due;
+    }
+    if (patch.links !== undefined) {
+      task.links = patch.links.length > 0 ? patch.links : undefined;
     }
     if (patch.status === "complete") {
       task.done = true;

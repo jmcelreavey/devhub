@@ -234,7 +234,7 @@ export async function deleteTask(taskId: string, date?: string): Promise<boolean
 
 export async function updateTask(
   taskId: string,
-  patch: { text?: string; due?: string | null },
+  patch: { text?: string; due?: string | null; links?: Task["links"] },
   date?: string,
 ): Promise<Task | null> {
   const target = date ?? todayISO();
@@ -250,6 +250,9 @@ export async function updateTask(
       task.due = undefined;
     } else if (typeof patch.due === "string") {
       task.due = patch.due;
+    }
+    if (patch.links !== undefined) {
+      task.links = patch.links.length > 0 ? patch.links : undefined;
     }
     await saveTasks(target, tasks);
     return task;

@@ -9,7 +9,6 @@
  * without the list around it - so it earns its own module.
  */
 import { useState, useEffect, useRef, type HTMLAttributes, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
 import { type Task } from "@/lib/tasks/types";
 import { renderTaskTextContent } from "@/components/tasks/TaskText";
 import { stripLinkedJiraKeyFromText } from "@/lib/tasks/task-text";
@@ -27,7 +26,6 @@ import {
   Pause,
   GripVertical,
   Ticket,
-  FileText,
 } from "lucide-react";
 import { JiraKeyChip } from "@/components/jira/JiraKeyChip";
 import { JiraStatusPill } from "@/components/jira/JiraStatusPill";
@@ -37,9 +35,12 @@ import { useSecondTick } from "@/lib/tickers";
 import { formatDuration, jiraBrowseUrl, todayISO } from "@/lib/utils";
 import { openInBrowser } from "@/lib/desktop/bridge";
 import { buildTaskNoteMarkdown, taskNotePath } from "@/lib/task-note";
-import { createOrOpenVaultNote } from "@/lib/create-vault-note";
-import { useToast } from "@/lib/hooks/use-toast";
+import { EntityNoteAction } from "@/components/EntityNoteAction";
+import { EntityLinkChips } from "@/components/EntityLinkChips";
+import { TaskLinkButton } from "@/components/TaskLinkButton";
 import { TaskOverflowMenu, type TaskOverflowAction } from "@/components/tasks/TaskOverflowMenu";
+import { mutate } from "swr";
+import type { EntityRef } from "@/lib/entity-note";
 
 interface JiraStatus {
   name: string;
@@ -79,14 +80,11 @@ export function TaskItem({
   isDragging?: boolean;
   isDropTarget?: boolean;
 }) {
-  const router = useRouter();
-  const toast = useToast();
   const taskDate = date ?? todayISO();
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(task.text);
   const [showAbandon, setShowAbandon] = useState(false);
   const [abandonReason, setAbandonReason] = useState("");
-  const [noteBusy, setNoteBusy] = useState(false);
   // True only in the moment the user just checked the box, so the confetti
   // burst fires on completion — not when an already-done list renders.
   const [justCompleted, setJustCompleted] = useState(false);
@@ -120,26 +118,13 @@ export function TaskItem({
     setAbandonReason("");
   };
 
-  const openOrCreateNote = async () => {
-    setNoteBusy(true);
-    try {
-      const source = {
-        id: task.id,
-        text: task.text,
-        date: taskDate,
-        jiraKey: task.jiraKey,
-        jiraUrl: task.jiraKey ? jiraBrowseUrl(task.jiraKey) : undefined,
-      };
-      const { href } = await createOrOpenVaultNote({
-        path: taskNotePath(source),
-        markdown: buildTaskNoteMarkdown(source),
-      });
-      router.push(href);
-    } catch (e) {
-      console.error("create task note:", e);
-      toast.error("Couldn't create task note.");
-      setNoteBusy(false);
-    }
+  const noteSource = {
+    id: task.id,
+    text: task.text,
+    date: taskDate,
+    jiraKey: task.jiraKey,
+    jiraUrl: task.jiraKey ? jiraBrowseUrl(task.jiraKey) : undefined,
+    related: task.links,
   };
 
   const displayText = task.jiraKey
@@ -380,20 +365,24 @@ export function TaskItem({
                 </button>
               </TaskActionTip>
             )}
-            <TaskActionTip label="Open or create note">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void openOrCreateNote();
+            <EntityNoteAction
+              path={taskNotePath(noteSource)}
+              markdown={buildTaskNoteMarkdown(noteSource)}
+              entityLabel={task.text}
+              variant="task-icon"
+              tipClassName="task-action-tip"
+              errorMessage="Couldn't create task note."
+            />
+            {!isInactive && (
+              <TaskLinkButton
+                taskId={task.id}
+                date={taskDate}
+                existing={task.links}
+                onChanged={() => {
+                  void mutate("/api/tasks");
                 }}
-                disabled={noteBusy}
-                aria-label="Open or create note for this task"
-                className="task-icon-action"
-              >
-                <FileText size={12} aria-hidden />
-              </button>
-            </TaskActionTip>
+              />
+            )}
             {!isAbandoned && task.jiraKey && (
               <TaskActionTip label={`Open ${task.jiraKey} in Jira`}>
                 <button
@@ -413,6 +402,18 @@ export function TaskItem({
           </div>
         )}
       </div>
+
+      {!editing && !showAbandon && (
+        <div className="ml-9 mr-2 mb-0.5">
+          <EntityLinkChips
+            kind="task"
+            id={task.id}
+            date={taskDate}
+            label={task.text}
+            seed={task.links as EntityRef[] | undefined}
+          />
+        </div>
+      )}
 
       {showAbandon && (
         <div

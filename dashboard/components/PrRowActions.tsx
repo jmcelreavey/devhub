@@ -7,20 +7,15 @@ import type { GithubPrRow } from "@/lib/github/prs";
 import { buildSlackMessage, copyWithToast } from "@/lib/pr-slack";
 import { agentReviewCommand, openTerminal } from "@/lib/terminal-launch";
 import { notifyPrReviewNoteWatch, prReviewNotePath } from "@/lib/pr-review-notes";
-import { PrReviewNoteLink } from "@/components/PrReviewNoteLink";
+import { buildPrNoteMarkdown, prEntityId, prNotePath } from "@/lib/pr-note";
+import { EntityNoteAction } from "@/components/EntityNoteAction";
+import { EntityLinkChips } from "@/components/EntityLinkChips";
 import { PR_ACTION_BASE, PR_ACTION_SIZE, type PrActionSize } from "@/components/pr-row-action-style";
 import { useToast } from "@/lib/hooks/use-toast";
 
 /**
- * One shared action row for a PR, used by both the dashboard panel and the
- * /prs page so the buttons stay identical in icon, colour, sizing and wording.
- *
- * - authored → Copy Slack "ready for review" message
- * - reviews  → Review (kicks off an OpenCode explain + review in the terminal)
- * - reviewed → Copy "reviewed — approved" / "reviewed" messages
- *
- * Every action is an accent (blue) icon + label. `size` switches between the
- * compact dashboard rows and the roomier /prs cards.
+ * One shared action row for a PR — Slack/Review plus the shared entity→note
+ * FileText affordance (same EntityNoteAction as tasks/calendar).
  */
 export type PrRowKind = "authored" | "reviews" | "reviewed";
 
@@ -56,56 +51,80 @@ export function PrRowActions({
   size?: PrActionSize;
 }) {
   const toast = useToast();
+  const notePath = prNotePath({ repo: row.repo, number: row.number });
+  // Keep legacy path helper in sync for the agent CLI watch event.
+  const watchPath = prReviewNotePath(row);
 
   return (
-    <>
-      {kind === "authored" && (
-        <PrActionButton
-          icon={MessageSquare}
-          label="Copy request"
-          title="Copy a Slack message asking for review"
-          size={size}
-          onClick={copyWithToast(buildSlackMessage(row, "awaiting"), "Slack message", toast)}
-        />
-      )}
-
-      {kind === "reviews" && (
-        <PrActionButton
-          icon={ScanSearch}
-          label="Review"
-          title="Explain & review this PR with your agent CLI"
-          size={size}
-          onClick={async () => {
-            openTerminal({
-              label: `review ${row.repo}#${row.number}`,
-              command: await agentReviewCommand(row.url, prReviewNotePath(row)),
-            });
-            notifyPrReviewNoteWatch(row);
-            toast.info("Reviewing in the terminal - a note link appears here when it's saved.");
-          }}
-        />
-      )}
-
-      {kind === "reviewed" && (
-        <>
-          <PrActionButton
-            icon={CircleCheck}
-            label="Copy approved"
-            title="Copy a Slack “reviewed - approved” message"
-            size={size}
-            onClick={copyWithToast(buildSlackMessage(row, "reviewed-approved"), "Slack message", toast)}
-          />
+    <div className="flex min-w-0 flex-col items-end gap-1">
+      <div className="flex flex-wrap items-center justify-end gap-1">
+        {kind === "authored" && (
           <PrActionButton
             icon={MessageSquare}
-            label="Copy reviewed"
-            title="Copy a Slack “reviewed” message"
+            label="Copy request"
+            title="Copy a Slack message asking for review"
             size={size}
-            onClick={copyWithToast(buildSlackMessage(row, "reviewed"), "Slack message", toast)}
+            onClick={copyWithToast(buildSlackMessage(row, "awaiting"), "Slack message", toast)}
           />
-        </>
-      )}
+        )}
 
-      <PrReviewNoteLink row={row} size={size} />
-    </>
+        {kind === "reviews" && (
+          <PrActionButton
+            icon={ScanSearch}
+            label="Review"
+            title="Explain & review this PR with your agent CLI"
+            size={size}
+            onClick={async () => {
+              openTerminal({
+                label: `review ${row.repo}#${row.number}`,
+                command: await agentReviewCommand(row.url, watchPath || notePath),
+              });
+              notifyPrReviewNoteWatch(row);
+              toast.info("Reviewing in the terminal - a note link appears here when it's saved.");
+            }}
+          />
+        )}
+
+        {kind === "reviewed" && (
+          <>
+            <PrActionButton
+              icon={CircleCheck}
+              label="Copy approved"
+              title="Copy a Slack “reviewed - approved” message"
+              size={size}
+              onClick={copyWithToast(buildSlackMessage(row, "reviewed-approved"), "Slack message", toast)}
+            />
+            <PrActionButton
+              icon={MessageSquare}
+              label="Copy reviewed"
+              title="Copy a Slack “reviewed” message"
+              size={size}
+              onClick={copyWithToast(buildSlackMessage(row, "reviewed"), "Slack message", toast)}
+            />
+          </>
+        )}
+
+        <EntityNoteAction
+          path={notePath}
+          markdown={buildPrNoteMarkdown({
+            repo: row.repo,
+            number: row.number,
+            title: row.title,
+            url: row.url,
+          })}
+          entityLabel={`${row.repo}#${row.number}`}
+          variant={size === "sm" ? "icon" : "button"}
+          errorMessage="Couldn't open PR note."
+        />
+      </div>
+      <EntityLinkChips
+        kind="pr"
+        id={prEntityId(row)}
+        label={`${row.repo}#${row.number}`}
+        href={row.url}
+        prRepo={row.repo}
+        prNumber={row.number}
+      />
+    </div>
   );
 }

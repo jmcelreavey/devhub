@@ -33,6 +33,7 @@ import {
   broadcastNoteAutosaveInvalidation,
   useNoteAutosaveInvalidationListener,
 } from "@/lib/notes/autosave-invalidation";
+import { EntityRelationsPanel } from "@/components/EntityRelationsPanel";
 
 export function VaultEditorPage({
   vault: vaultId,
@@ -425,6 +426,10 @@ export function VaultEditorPage({
           }
           style={{ minHeight: "60vh" }}
         />
+      ) : null}
+
+      {isNotes && !isNew && blocks ? (
+        <EntityRelationsPanel notePath={filePath} blocks={blocks} />
       ) : null}
 
       {moveModalOpen ? (

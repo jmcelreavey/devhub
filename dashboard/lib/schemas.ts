@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+export const EntityRefSchema = z.object({
+  kind: z.enum(["task", "meeting", "pr", "note", "calendar", "jira"]),
+  id: z.string().min(1).max(200),
+  label: z.string().min(1).max(200),
+  href: z.string().max(1000).optional(),
+  marker: z.string().max(500).optional(),
+});
+
 export const TaskCreateSchema = z.object({
   text: z.string().min(1, "text is required").max(500),
   due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "due must be YYYY-MM-DD").optional(),
@@ -16,6 +24,7 @@ export const TaskPatchSchema = z
     status: z.enum(["abandoned", "active"]).optional(),
     abandonReason: z.string().max(200).optional(),
     timer: z.enum(["start", "stop"]).optional(),
+    links: z.array(EntityRefSchema).max(20).optional(),
   })
   .refine(
     (v) =>
@@ -23,8 +32,9 @@ export const TaskPatchSchema = z
       v.done !== undefined ||
       v.due !== undefined ||
       v.status !== undefined ||
-      v.timer !== undefined,
-    { message: "Provide text, done, due, status, or timer" },
+      v.timer !== undefined ||
+      v.links !== undefined,
+    { message: "Provide text, done, due, status, timer, or links" },
   );
 
 export const TaskDeleteSchema = z.object({

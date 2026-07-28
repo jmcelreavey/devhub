@@ -10,6 +10,10 @@
  * A types-only module has no runtime imports, so both sides can depend on it
  * and the shapes cannot diverge again.
  */
+import type { EntityRef } from "@/lib/entity-note";
+
+export type { EntityRef };
+
 export interface Task {
   id: string;
   text: string;
@@ -30,6 +34,11 @@ export interface Task {
   rolledFromId?: string;
   /** Source date when this row was created by rollover. */
   rolledFromDate?: string;
+  /**
+   * Hop-around edges (PR, calendar, note, …) that don't live only in a note body.
+   * Same EntityRef contract as note ## Links / MCP / plugins.
+   */
+  links?: EntityRef[];
 }
 
 /**
