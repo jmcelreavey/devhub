@@ -38,6 +38,65 @@ Daily notes are for current work:
 
 They are easy to search and safe to edit from the dashboard or MCP tools.
 
+## Cross-entity linking
+
+Tasks, calendar events, pull requests, and notes share one **EntityRef** contract so you can hop between related work without hunting paths. The shape lives in `shared/entity-note/` and is re-exported from `dashboard/lib/entity-note.ts` after plugin materialize.
+
+| Field | Meaning |
+| ----- | ------- |
+| `kind` | `task`, `meeting`, `calendar`, `pr`, `note`, or `jira` |
+| `id` | Stable id within the kind (task UUID, `owner/repo#123`, calendar event id, note path, …) |
+| `label` | Human-readable text for chips and the `## Links` section |
+| `href` | Optional in-app or external URL for hop-around |
+| `marker` | Optional opaque line (e.g. `::task-ref …`) that wins over markdown formatting |
+
+### Where edges are stored
+
+| Storage | Use |
+| ------- | --- |
+| Note `## Links` section | Outbound refs embedded in note bodies (tasks, PRs, calendar, Jira, other notes) |
+| `Task.links` | Hop-around edges that do not require a note (task↔PR, task↔calendar, …) |
+| Stable note paths | Entity→note edge via deterministic paths (open-or-create from UI/MCP) |
+
+Reverse lookups combine those three sources: `dashboard/lib/entity-links/resolve.ts` scans stable paths, parses `## Links`, and reads `Task.links`.
+
+### Stable note paths
+
+| Entity | Path pattern | Example |
+| ------ | ------------ | ------- |
+| Task | `task-notes/YYYY-MM-DD-<taskId>` | `task-notes/2026-07-28-a1b2c3d4` |
+| Meeting / calendar event | `meetings/YYYY-MM-DD-<slug>` | `meetings/2026-07-28-standup` |
+| PR review | `pr-reviews/<repo-slug>-<n>` | `pr-reviews/businessinsider-fancy-repo-123` |
+
+Scaffolds are built by `shared/task-note/`, `shared/meeting-note/`, and `shared/pr-note/` — the same helpers power the dashboard note buttons and MCP `notes_create_*` tools.
+
+### `## Links` format
+
+Notes carry outbound refs in a `## Links` markdown section. Each line is either:
+
+- A labelled link: `**PR:** [owner/repo#123](https://github.com/…/pull/123)`
+- Plain text: `**Jira:** DAD-1234`
+- A task marker: `::task-ref <taskId> <YYYY-MM-DD> <label>`
+
+`parseEntityLinksFromMarkdown` and `buildEntityLinksSection` in `shared/entity-note/` are the canonical parse/write helpers. Do not invent per-feature link formats.
+
+### Dashboard surfaces
+
+| Surface | Behavior |
+| ------- | -------- |
+| Task row | **Note** (open-or-create task note), **Link** (attach PR/calendar/note/Jira via `Task.links`), overflow menu for secondary actions |
+| Calendar / Today | Meeting note button; **EntityLinkChips** on events |
+| PR row | Review note action; link chips for related entities |
+| Note editor footer | **EntityRelationsPanel** — outbound refs from `## Links` plus inbound refs from `/api/entity-links` |
+
+### API and MCP
+
+- `GET /api/entity-links?kind=&id=` — returns `{ entity, notes[], related[] }`. Optional query params: `date`, `label`, `href`, `meetingTitle`, `prRepo`, `prNumber`. See [API Routes](../reference/api-routes.md).
+- `PATCH /api/tasks` with `{ id, links: EntityRef[] }` replaces hop-around links on a task.
+- MCP: `notes_create_task`, `notes_create_meeting`, `notes_create_pr`, `entity_links_read`; `tasks_create` / `tasks_update` accept `links` and optional `withNote`.
+
+Plugins should import `shared/entity-note` (or `@/lib/entity-note` after materialize) rather than defining their own link shapes.
+
 ## Learnings
 
 Learnings are for information that should be useful again.

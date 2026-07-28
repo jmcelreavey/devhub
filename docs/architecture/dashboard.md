@@ -185,6 +185,21 @@ The **Review** row action does **not** call a review API. It opens the terminal 
 
 Full workflow, constraints, and troubleshooting: [GitHub integration](../integrations/github.md#row-actions).
 
+PR review notes include a `## Links` EntityRef back to the PR (same contract as task and meeting notes). The note editor footer shows inbound and outbound relations via **EntityRelationsPanel**.
+
+## Cross-entity linking
+
+Tasks, calendar events, PRs, and notes share hop-around links through the `EntityRef` contract (`shared/entity-note/`). UI entry points:
+
+| Area | Actions |
+| ---- | ------- |
+| **Work → Tasks** | **Note** opens or creates `task-notes/…`; **Link** attaches PR/calendar/note/Jira refs on `Task.links`; overflow menu holds secondary hover actions |
+| **Calendar** / Today briefing | Meeting **Note** button; link chips on events |
+| **PRs** | Review note action; link chips on PR rows |
+| **Notes** editor | Footer **Relations** panel — outbound `## Links` plus inbound refs from `GET /api/entity-links` |
+
+Stable path conventions, `## Links` format, API, and MCP tools: [Notes System — Cross-entity linking](notes-system.md#cross-entity-linking).
+
 ## Capability Radar
 
 **Library → Radar** (`/radar`) combines an automated capability scan with a personal technology radar you maintain by hand.

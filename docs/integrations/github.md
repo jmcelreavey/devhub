@@ -92,6 +92,10 @@ For example, `BusinessInsider/Fancy Repo#123` becomes
 shows a **Notes** link beside that PR. After clicking **Review**, the link polls
 for the note every few seconds; before a note exists, it renders nothing.
 
+Scaffolded review notes include a `## Links` section with an EntityRef back to the
+PR (same cross-entity contract as task and meeting notes). Agents can also create
+the scaffold with MCP `notes_create_pr`. See [Notes System — Cross-entity linking](../architecture/notes-system.md#cross-entity-linking).
+
 ### Review Note Constraints
 
 - The selected Agent CLI (`opencode` or `cursor-agent`) must be on `PATH`; otherwise

@@ -143,6 +143,19 @@ catalog entries so client configs pick up the new command, args, and environment
 
 `docs_write` is a full-file replacement, not a patch API.
 
+### Link tasks, meetings, and PRs from an agent
+
+Cross-entity edges use the shared `EntityRef` contract in `shared/entity-note/`. Notes store outbound refs in a `## Links` section; tasks can also carry `links` for hop-around without a note body.
+
+1. `notes_create_task` — scaffold `task-notes/YYYY-MM-DD-<taskId>` with `::task-ref` and Work href (same as the task-row **Note** action). Pass `overwrite: true` to rewrite an existing note.
+2. `notes_create_meeting` — scaffold `meetings/YYYY-MM-DD-<slug>` with calendar backrefs (same as the calendar **Note** button).
+3. `notes_create_pr` — scaffold `pr-reviews/<repo-slug>-<n>` with a PR EntityRef (same as the PR row note action).
+4. `entity_links_read` — parse `## Links` from an existing note path.
+5. `tasks_create` — optional `withNote: true` and/or `links: EntityRef[]` on the new task.
+6. `tasks_update` — pass `links` to replace hop-around refs on an existing task.
+
+Path helpers and markdown scaffolds live in `shared/task-note/`, `shared/meeting-note/`, and `shared/pr-note/`. When the dashboard is running, `GET /api/entity-links` resolves the combined read model (notes + related entities). See [Notes System — Cross-entity linking](notes-system.md#cross-entity-linking).
+
 ### Run a dashboard action
 
 1. Start the dashboard with `npm run dev`.
