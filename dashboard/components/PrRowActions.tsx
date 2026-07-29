@@ -124,6 +124,7 @@ export function PrRowActions({
         href={row.url}
         prRepo={row.repo}
         prNumber={row.number}
+        showNotes={false}
       />
     </div>
   );

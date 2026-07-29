@@ -106,6 +106,8 @@ export function EntityLinkChips({
   prNumber,
   /** Extra refs known client-side (e.g. task.links) shown immediately. */
   seed,
+  /** Hide canonical note links when the host already has a note action. */
+  showNotes = true,
   /** When set, hide jira chips for this key (host already shows a copy badge). */
   suppressJiraKey,
   className,
@@ -119,6 +121,7 @@ export function EntityLinkChips({
   prRepo?: string;
   prNumber?: number;
   seed?: EntityRef[];
+  showNotes?: boolean;
   suppressJiraKey?: string;
   className?: string;
 }) {
@@ -159,7 +162,7 @@ export function EntityLinkChips({
 
   const chips: EntityRef[] = [];
   const seen = new Set<string>();
-  for (const ref of [...(data?.notes ?? []), ...(data?.related ?? [])]) {
+  for (const ref of [...(showNotes ? data?.notes ?? [] : []), ...(data?.related ?? [])]) {
     const key = `${ref.kind}:${ref.id}`;
     if (seen.has(key)) continue;
     if (ref.kind === kind && ref.id === id) continue;
