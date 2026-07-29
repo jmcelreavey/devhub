@@ -132,6 +132,18 @@ Maintenance actions run in-process via `dashboard/lib/scripts-runner.ts` (not sh
 
 All mutating actions require same-origin `POST /api/scripts`. Only one instance of a given script ID can run at a time (`409` if already running). Output streams via `GET /api/scripts/stream/<runId>`; history persists under `~/.local/state/devhub/runs.jsonl`.
 
+## Docs maintenance
+
+Run from repo root (dashboard scripts):
+
+| Command | Purpose |
+| ------- | ------- |
+| `npm run docs:diagrams` | Headlessly render every Mermaid block in `docs/` under light and dark theme variables — catches syntax errors that would render as empty boxes in the read view |
+| `npm run docs:frontmatter` | Apply or refresh YAML frontmatter on doc files (title, description, section, order, icon, tags, related) |
+| `npm run docs:frontmatter -- --check` | Verify every doc has curated frontmatter without writing — used in CI guardrails |
+
+`npm run test` also runs `lib/docs/docs-tree.test.ts`, which fails on broken relative links, dead heading anchors, missing frontmatter, or unresolved doc icons.
+
 ## Git Hooks
 
 DevHub can install a pre-push hook that runs verification before pushing.

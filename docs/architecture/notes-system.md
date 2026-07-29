@@ -39,11 +39,16 @@ graph TD
 
 ## Main Note Areas
 
+Top-level folders under `notes/` are **areas** with curated labels and landing cards (`dashboard/lib/notes/note-areas.ts`). The **Library → Notes** landing page (`/notes`) groups recent files by area; `/notes/area/<id>` shows one area's index. Unknown folders still appear — they get a title-cased label and sort after known areas.
+
 | Area        | Purpose                                            |
 | ----------- | -------------------------------------------------- |
-| Daily notes | Day-by-day work notes and standups                 |
+| Daily       | Day-by-day work notes and standups                 |
 | Learnings   | Reusable knowledge distilled from work             |
 | Sessions    | Longer records of significant AI-assisted sessions |
+| Meetings    | Meeting notes and follow-ups                       |
+| Task notes  | Notes linked to a specific task (`task-notes/…`)   |
+| PR reviews  | Generated review notes, one per pull request       |
 | Diagrams    | tldraw files for visual notes                      |
 | Appraisal   | Structured review evidence and goals               |
 
@@ -117,7 +122,7 @@ Notes carry outbound refs in a `## Links` markdown section. Each line is either:
 
 | Surface | Behavior |
 | ------- | -------- |
-| Task row | **Note** (open-or-create task note), **Link** (attach PR/calendar/note/Jira via `Task.links`), overflow menu for secondary actions |
+| Task row | **Note** (open-or-create task note), **Link** (**EntityLinkDialog** — searchable pickers or paste a URL/key), overflow menu for secondary actions |
 | Calendar / Today | Meeting note button; **EntityLinkChips** on events |
 | PR row | Review note action; link chips for related entities |
 | Note editor footer | **EntityRelationsPanel** — outbound refs from `## Links` plus inbound refs from `/api/entity-links` |
@@ -182,7 +187,7 @@ Folder-scoped **master checklists** live under `collections/` at the repo root (
 | Labels  | Renaming a master item updates the canonical label. Linked blocks in other notes may show **drift** until you sync labels (see below). |
 | API     | `GET/POST /api/collections`, `GET/PATCH/DELETE /api/collections/[id]` (route name is historical; payloads use master-list shapes). |
 | Label sync | `GET /api/collections/[id]/linked-label-drift?itemId=…` counts linked blocks whose text differs from the master; `POST /api/collections/[id]/sync-linked-labels` with `{ itemId, label, excludeNotePath? }` rewrites matching blocks across notes. |
-| Assets  | Images under the notes tree (e.g. `garden/project/assets/photo-1.jpg`) are served at `GET /api/notes-assets/...`. MCP markdown uses notes-relative paths; saved BlockNote JSON stores `/api/notes-assets/...` URLs. Use `notes_write_asset` to upload bytes from agents. |
+| Assets  | Images and `.mp4` video under the notes tree (e.g. `garden/project/assets/photo-1.jpg`) are served at `GET /api/notes-assets/...`. MCP markdown uses notes-relative paths; saved BlockNote JSON stores `/api/notes-assets/...` URLs. Use `notes_write_asset` to upload bytes from agents. Allowed extensions: `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.mp4`. |
 
 Collection JSON writes are serialized with a repo mutex so rapid checklist edits from multiple tabs do not corrupt files.
 
@@ -208,9 +213,11 @@ The dashboard treats rooted file trees as **vaults** with shared storage, API, a
 | Notes | `NOTES_DIR` / `notes/` | BlockNote JSON (`.json`) | `/notes`, `/api/notes/...` |
 | Docs  | `REPO_ROOT/docs` (override with `DOCS_DIR`) | Markdown (`.md`) | `/docs`, `/api/docs/...` |
 
-Docs use the same BlockNote editor with markdown load/save via `shared/markdown-convert/`. Scoped git sync (`Sync content`) includes `docs/` alongside `notes/`, `collections/`, and `tasks/`.
+Docs default to a **read-first site** (`lib/docs/markdown-ast.ts` → `DocArticleView`): frontmatter-driven nav, table of contents, backlinks, Mermaid diagrams, GitHub callouts, and full-text search (`GET /api/docs/search`). Click **Edit** (or append `?edit=1`) to open the BlockNote editor with markdown round-trip via `shared/markdown-convert/`. Scoped git sync (`Sync content`) includes `docs/` alongside `notes/`, `collections/`, and `tasks/`.
 
-Open **Docs** in the sidebar (`/docs`) for the file tree, search, and BlockNote editing. Command palette content search includes docs when you use `/api/search` (notes by default; `?vault=docs` for docs-only API calls). Prefer editing architecture and guides here or in git — the automation that maintains this tree expects markdown on disk.
+Embedded media in docs can reference private note assets — a lone markdown link to `/api/notes-assets/.../*.mp4` renders as an inline `<video>` player. See [DevHub Documentation](../README.md) for frontmatter conventions and contributor guardrails (`npm run docs:diagrams`, `npm run docs:frontmatter -- --check`).
+
+Open **Docs** under **Library** (`/docs`) for the landing page, section indexes, file tree, and search. Command palette content search includes docs via `/api/search` (notes by default; `?vault=docs` for docs-only API calls). Prefer editing architecture and guides here or in git — the automation that maintains this tree expects markdown on disk.
 
 ### Content sync workflow
 

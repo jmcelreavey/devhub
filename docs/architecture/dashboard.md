@@ -20,7 +20,7 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 | Today        | Daily workspace with tasks, notes, calendar, tickets, PRs, standup tools, and a morning briefing widget |
 | Briefing     | Full-page personal start-of-day digest (weather, news, events, research, and more) |
 | Notes        | BlockNote editing, file tree, folder-scoped master checklists, optional OpenAI-compatible in-editor AI |
-| Docs         | In-app editing of repo `docs/` markdown (BlockNote with markdown round-trip), file tree, content sync |
+| Docs         | Read-first documentation site over repo `docs/` markdown (article view, TOC, backlinks, search, Mermaid); BlockNote edit mode via **Edit** or `?edit=1` |
 | Tasks        | Daily task management, drag reorder for open items, weekly review, and history |
 | Skills       | Shared skill viewing, creation, sync, and collection                         |
 | Actions      | Safe script runner for maintenance tasks                                     |
@@ -31,7 +31,7 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 
 ## Navigation (2026-06 IA)
 
-The sidebar is driven by `dashboard/lib/nav.ts` — thirteen primary destinations grouped into **Workspace**, **Library**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag.
+The sidebar is driven by `dashboard/lib/nav.ts` — twelve primary destinations grouped into **Workspace**, **Library**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag.
 
 | Sidebar | Route | Notes |
 | ------- | ----- | ----- |
@@ -59,7 +59,7 @@ The sidebar is driven by `dashboard/lib/nav.ts` — thirteen primary destination
 | Jira | Ticket list (same as `/tickets`) | Jira routes; tab hidden until Jira is configured |
 | History | Per-day task summaries | `GET /api/tasks/history?includeTasks=1` |
 
-**Library** and **System** use `SectionTabs` in the top bar when you land on any sibling route (for example `/docs` or `/setup`). Gated tabs (Ops, Datadog, Live links) appear only when setup enables them.
+**Library** and **System** use `SectionTabs` in the top bar when you land on any sibling route (for example `/docs` or `/setup`). Gated tabs (Ops, Datadog, Live links) appear only when setup enables them. **System** also includes a **Logs** tab (desktop only) for live tail of shell, sidecar, and renderer logs.
 
 ### Legacy routes
 
@@ -204,7 +204,7 @@ Tasks, calendar events, PRs, and notes share hop-around links through the `Entit
 
 | Area | Actions |
 | ---- | ------- |
-| **Work → Tasks** | **Note** opens or creates `task-notes/…`; **Link** attaches PR/calendar/note/Jira refs on `Task.links`; overflow menu holds secondary hover actions |
+| **Work → Tasks** | **Note** opens or creates `task-notes/…`; **Link** opens **EntityLinkDialog** (searchable pickers for PRs, calendar, notes, Jira, and recent tasks, or paste a URL/key); overflow menu holds secondary hover actions |
 | **Calendar** / Today briefing | Meeting **Note** button; link chips on events |
 | **PRs** | Review note action; link chips on PR rows |
 | **Notes** editor | Footer **Relations** panel — outbound `## Links` plus inbound refs from `GET /api/entity-links` |
@@ -308,8 +308,13 @@ The Status page (`/status`) aggregates Git, sync, services, and infra into one o
 | MCP | Runtime scan of `mcp/shared/` only | Idle = normal; missing binary = warning |
 | Infra | AWS profile/identity and kubectl context via `GET /api/bi` (plugin-backed) | Polls every 5 minutes; links to `/ops` |
 | LAN access | Wi‑Fi IPv4 badge + QR | Client builds `http://<ip>:<port>…` for phone access on the same network |
+| Dashboard rebuild | `GET/POST /api/status/dashboard/rebuild` | **Rebuild & restart** runs `npm run restart` in the linked checkout (production build + relaunch). Unavailable when the desktop shell supervises the server (`DEVHUB_SHELL_SUPERVISED=1`) or in a packaged app — use **View → Rebuild Dashboard…** or **Check for Updates** instead. Reopening DevHub does **not** rebuild. |
 
 Failed sync runs surface from `GET /api/scripts/history` with log detail from `GET /api/scripts/runs/<runId>`. The **Copy Chamber prompt** button builds a fix-it prompt from the last 120 log lines for verify/pre-push failures.
+
+### Desktop logs (`/logs`)
+
+On desktop, **System → Logs** (`/logs`, also in ⌘K) tails the rotating log files under the OS app-data directory (`~/Library/Application Support/DevHub/logs/` on macOS). The page polls `GET /api/status/logs` every two seconds while **Live** is on, with filters for `shell`, `sidecar`, and `renderer` sources. **Open folder** calls the Tauri `open_logs` bridge when available. For startup failures before the dashboard loads, see [Desktop recovery](../guides/desktop-recovery.md).
 
 The page reloads on manual refresh and polls Git/services/MCP/LAN every 30 seconds in the background.
 

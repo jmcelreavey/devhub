@@ -68,7 +68,7 @@ or macOS icon/splash changes require `npm run desktop:build` followed by
 
 ## Collecting desktop logs
 
-Use **View → Show Logs** in the desktop app, or open:
+Use **System → Logs** in the dashboard (`/logs`) for a live tail with source filters, or **View → Show Logs** in the desktop app to open the log folder. On disk:
 
 ```text
 ~/Library/Application Support/DevHub/logs/
