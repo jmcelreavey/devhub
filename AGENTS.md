@@ -139,7 +139,7 @@ All from the repo root:
 ### Loading & motion vocabulary
 
 - **Shimmer for content arriving, spin only for an action the user just triggered.** Data panels and route loads use skeletons (`SkeletonRows`, `PageSkeleton` via `loading.tsx`) shaped like the content they become; `animate-spin` is reserved for refresh/submit buttons the user clicked.
-- Motion is information — healthy systems hold still. 150–350ms, easing `cubic-bezier(.22,1,.36,1)`, transform/opacity only, no infinite loops on healthy state. Respect `prefers-reduced-motion` and the `body[data-motion="off"]` kill-switch (⌘K → "Toggle animations"). See `docs/guides/motion.md`.
+- Motion is information — healthy systems hold still. 150–350ms, easing `cubic-bezier(.22,1,.36,1)`, transform/opacity only, no infinite loops on healthy state. Respect `prefers-reduced-motion` and the `body[data-motion="off"]` kill-switch (⌘K → "Toggle animations"). See `docs/contributing/motion.md`.
 
 ### Plugin Architecture — CRITICAL FOR EDITING
 

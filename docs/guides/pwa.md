@@ -1,7 +1,7 @@
 ---
 title: Install as a PWA
 description: Install the dashboard as a Progressive Web App from a supported browser.
-order: 11
+order: 10
 icon: Smartphone
 tags: [ui]
 related:

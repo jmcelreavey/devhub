@@ -1,11 +1,11 @@
 ---
 title: Fork workflow
 description: "Working as a private mirror of the shared public core: pulling in, pushing back, and the personal-data boundary."
-order: 13
+order: 1
 icon: GitFork
 tags: [contributing]
 related:
-  - guides/creating-plugins
+  - contributing/creating-plugins
 ---
 
 # Fork Workflow — Pull & Push with the Public Core

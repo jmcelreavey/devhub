@@ -1,11 +1,11 @@
 ---
 title: Desktop recovery
 description: "When the desktop app will not start: a triage order, and how to prove each fix worked."
-order: 15
+order: 12
 icon: LifeBuoy
 tags: [desktop, troubleshooting]
 related:
-  - guides/desktop-development
+  - contributing/desktop-development
   - getting-started/desktop-app
 ---
 

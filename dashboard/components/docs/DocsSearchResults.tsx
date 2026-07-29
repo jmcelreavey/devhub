@@ -36,7 +36,7 @@ export function DocsSearchResults({ query }: { query: string }) {
   const results = data?.results;
   if (!results) {
     return (
-      <div className="docs-search-empty">
+      <div className="lib-search-empty">
         <SearchX size={18} aria-hidden />
         <p>Searching…</p>
       </div>
@@ -45,7 +45,7 @@ export function DocsSearchResults({ query }: { query: string }) {
 
   if (results.length === 0) {
     return (
-      <div className="docs-search-empty">
+      <div className="lib-search-empty">
         <SearchX size={18} aria-hidden />
         <p>No matches for “{trimmed}”.</p>
       </div>
@@ -53,21 +53,21 @@ export function DocsSearchResults({ query }: { query: string }) {
   }
 
   return (
-    <div className="docs-search-results" aria-busy={isLoading}>
-      <p className="docs-search-count">
+    <div className="lib-search-results" aria-busy={isLoading}>
+      <p className="lib-search-count">
         {results.length} {results.length === 1 ? "page" : "pages"}
       </p>
       {results.map((hit) => (
-        <div key={hit.slug} className="docs-search-hit">
-          <Link href={hit.href} className="docs-search-hit-title">
+        <div key={hit.slug} className="lib-search-hit">
+          <Link href={hit.href} className="lib-search-hit-title">
             <FileText size={12} aria-hidden />
             <span>{hit.title}</span>
           </Link>
-          <span className="docs-search-hit-section">{getSectionMeta(hit.section).label}</span>
+          <span className="lib-search-hit-section">{getSectionMeta(hit.section).label}</span>
           {hit.matches.map((match, i) => (
-            <Link key={i} href={match.href} className="docs-search-match">
-              <span className="docs-search-match-heading">{match.heading}</span>
-              <span className="docs-search-match-snippet">{match.snippet}</span>
+            <Link key={i} href={match.href} className="lib-search-match">
+              <span className="lib-search-match-heading">{match.heading}</span>
+              <span className="lib-search-match-snippet">{match.snippet}</span>
             </Link>
           ))}
         </div>

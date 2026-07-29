@@ -62,6 +62,12 @@ describe("inline parsing", () => {
     expect(inlineToPlainText(node.content)).toBe("a **b** c");
   });
 
+  it("preserves angle-bracket placeholders inside inline code", () => {
+    const [node] = nodesOf("Use `<domain>_<verb>` for the key.");
+    if (node.type !== "paragraph") throw new Error("expected paragraph");
+    expect(inlineToPlainText(node.content)).toBe("Use <domain>_<verb> for the key.");
+  });
+
   it("parses links and records them", () => {
     const { links } = parseMarkdown("See [the guide](guides/theming.md) for detail.");
     expect(links).toEqual([{ href: "guides/theming.md", text: "the guide" }]);

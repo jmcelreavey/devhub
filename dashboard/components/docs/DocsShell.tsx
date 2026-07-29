@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { NewVaultPathModal } from "@/components/NewVaultPathModal";
-import { DocsNav } from "@/components/docs/DocsNav";
+import { LibraryNav } from "@/components/library/LibraryNav";
 import { DocsSearchResults } from "@/components/docs/DocsSearchResults";
 import { VaultFilesSidebar } from "@/components/vault/VaultFilesSidebar";
 import type { DocNavGroup } from "@/lib/docs/doc-nav-types";
@@ -50,7 +50,14 @@ export function DocsShell({
         {search.trim().length >= 2 ? (
           <DocsSearchResults query={search} />
         ) : (
-          <DocsNav groups={groups} search={search} />
+          <LibraryNav
+            groups={groups.map((group) => ({ ...group, items: group.docs }))}
+            search={search}
+            basePath="/docs"
+            storageKey="devhub:docs-nav-open"
+            label="Documentation"
+            noun="docs"
+          />
         )}
       </VaultFilesSidebar>
       <div className="flex-1 overflow-y-auto">{children}</div>

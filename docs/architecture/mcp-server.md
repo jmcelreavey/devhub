@@ -274,7 +274,7 @@ back to the plugin checkout:
 During MCP sync, `PLUGIN_ROOT` is replaced with that plugin's registered path.
 During bootstrap and `npm run dev`, DevHub installs missing dependencies for enabled
 plugin MCP packages. See [Plugin System](plugins.md) and
-[Creating a Plugin](../guides/creating-plugins.md) for the plugin-side layout.
+[Creating a Plugin](../contributing/creating-plugins.md) for the plugin-side layout.
 
 ## Troubleshooting
 

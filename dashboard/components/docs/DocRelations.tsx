@@ -24,7 +24,7 @@ export function DocRelations({
   if (!hasRelations && !prev && !next) return null;
 
   return (
-    <footer className="docs-footer">
+    <footer className="lib-footer">
       {hasRelations ? (
         <div className="docs-relations">
           {related.length > 0 ? (
@@ -66,23 +66,23 @@ export function DocRelations({
       ) : null}
 
       {prev || next ? (
-        <nav className="docs-pager" aria-label="Documentation">
+        <nav className="lib-pager" aria-label="Documentation">
           {prev ? (
-            <Link href={prev.href} className="docs-pager-link" data-dir="prev">
-              <span className="docs-pager-eyebrow">
+            <Link href={prev.href} className="lib-pager-link" data-dir="prev">
+              <span className="lib-pager-eyebrow">
                 <ArrowLeft size={11} aria-hidden />
                 Previous
               </span>
-              <span className="docs-pager-title">{prev.title}</span>
+              <span className="lib-pager-title">{prev.title}</span>
             </Link>
           ) : null}
           {next ? (
-            <Link href={next.href} className="docs-pager-link" data-dir="next">
-              <span className="docs-pager-eyebrow">
+            <Link href={next.href} className="lib-pager-link" data-dir="next">
+              <span className="lib-pager-eyebrow">
                 Next
                 <ArrowRight size={11} aria-hidden />
               </span>
-              <span className="docs-pager-title">{next.title}</span>
+              <span className="lib-pager-title">{next.title}</span>
             </Link>
           ) : null}
         </nav>

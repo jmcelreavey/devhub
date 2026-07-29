@@ -39,9 +39,16 @@ export const DOC_SECTIONS: DocSectionMeta[] = [
   {
     id: "guides",
     label: "Guides",
-    description: "Task-shaped walkthroughs for the things you actually do day to day.",
+    description: "Task-shaped walkthroughs for using DevHub day to day.",
     icon: "Map",
     order: 30,
+  },
+  {
+    id: "contributing",
+    label: "Contributing",
+    description: "Build plugins, work on the desktop app, and push changes back to the public core.",
+    icon: "GitFork",
+    order: 35,
   },
   {
     id: "integrations",

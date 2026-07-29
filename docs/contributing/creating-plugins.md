@@ -1,12 +1,12 @@
 ---
 title: Creating a plugin
 description: "Build a plugin repo from scratch: manifest, assets, dashboard modules, and registration."
-order: 12
+order: 2
 icon: PackagePlus
 tags: [plugins]
 related:
   - architecture/plugins
-  - guides/fork-workflow
+  - contributing/fork-workflow
 ---
 
 # Creating a Plugin

@@ -15,6 +15,7 @@ import {
   getSectionMeta,
   ROOT_SECTION_ID,
   sectionIdForSlug,
+  type DocSectionMeta,
 } from "@/lib/docs/doc-sections";
 import type {
   DocDetail,
@@ -448,7 +449,9 @@ function buildGraph(raws: Map<string, RawDoc>): Graph {
 function breadcrumbsFor(slug: string, sectionId: string): Array<{ label: string; href?: string }> {
   const trail: Array<{ label: string; href?: string }> = [{ label: "Docs", href: "/docs" }];
   if (sectionId !== ROOT_SECTION_ID) {
-    trail.push({ label: getSectionMeta(sectionId).label, href: `/docs#${sectionId}` });
+    // Sections have their own page now, so the crumb navigates rather than
+    // scrolling the landing page to an anchor that no longer exists.
+    trail.push({ label: getSectionMeta(sectionId).label, href: `/docs/${sectionId}` });
   }
   const middle = slug.split("/").slice(1, -1);
   for (const part of middle) trail.push({ label: titleCase(part) });
@@ -497,6 +500,34 @@ export function getDocDetail(slug: string): DocDetail | null {
     next,
     breadcrumbs: breadcrumbsFor(slug, summary.section),
     source: raw.source,
+  };
+}
+
+/**
+ * A section's own page: its docs, plus the neighbouring sections.
+ *
+ * Returns null for an unknown id so the doc route can fall through to "this is
+ * a doc slug" without a section shadowing a real file.
+ */
+export function getSectionDetail(sectionId: string): {
+  meta: DocSectionMeta;
+  docs: DocSummary[];
+  prev: DocSectionMeta | null;
+  next: DocSectionMeta | null;
+} | null {
+  const index = getDocIndex();
+  const position = index.sections.findIndex((section) => section.meta.id === sectionId);
+  if (position === -1) return null;
+
+  const group = index.sections[position];
+  const docs = group.docs.filter((doc) => !doc.draft);
+  if (docs.length === 0) return null;
+
+  return {
+    meta: group.meta,
+    docs,
+    prev: position > 0 ? index.sections[position - 1].meta : null,
+    next: position < index.sections.length - 1 ? index.sections[position + 1].meta : null,
   };
 }
 

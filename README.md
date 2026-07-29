@@ -360,7 +360,7 @@ Register a plugin in a machine-local file (never committed):
 }
 ```
 
-Each plugin repo has a `devhub-plugin.json` manifest declaring what it contributes. To build one, follow [docs/guides/creating-plugins.md](docs/guides/creating-plugins.md); for the design, see [docs/architecture/plugins.md](docs/architecture/plugins.md). This generalises the older single `ai-tools` skill merge.
+Each plugin repo has a `devhub-plugin.json` manifest declaring what it contributes. To build one, follow [docs/contributing/creating-plugins.md](docs/contributing/creating-plugins.md); for the design, see [docs/architecture/plugins.md](docs/architecture/plugins.md). This generalises the older single `ai-tools` skill merge.
 
 ### Fork workflow
 
@@ -493,7 +493,7 @@ See [`docs/reference/platform-support.md`](docs/reference/platform-support.md) f
 | `docs/reference/platform-support.md`   | Platform capability matrix                                     |
 | `docs/architecture/token-budget.md`            | Token budget analysis and optimization tips                    |
 | `docs/guides/repo-learning.md`    | Repos page learning briefs, tutor, and NotebookLM source packs |
-| `docs/guides/creating-plugins.md` | Step-by-step guide to building a plugin                        |
+| `docs/contributing/creating-plugins.md` | Step-by-step guide to building a plugin                        |
 | `docs/architecture/plugins.md`    | Plugin system: manifest, registry, tier-1/tier-2, precedence   |
 | `CONTRIBUTING.md`                 | Private-mirror + upstream + backport fork workflow             |
 

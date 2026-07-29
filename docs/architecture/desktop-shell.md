@@ -5,7 +5,7 @@ order: 8
 icon: AppWindow
 tags: [architecture, desktop]
 related:
-  - guides/desktop-development
+  - contributing/desktop-development
   - getting-started/desktop-app
 ---
 
@@ -15,7 +15,7 @@ Status: **complete**. Phases 0–5 done; Electron removed 2026-07-26.
 `/Applications/DevHub.app` is the Tauri build, migrated and verified.
 
 - Users: [Desktop App](../getting-started/desktop-app.md)
-- Developers: [Desktop Development](../guides/desktop-development.md)
+- Developers: [Desktop Development](../contributing/desktop-development.md)
 - When it breaks: [Desktop Recovery](../guides/desktop-recovery.md)
 
 Outstanding: Apple Developer ID signing (builds are ad-hoc signed, so other

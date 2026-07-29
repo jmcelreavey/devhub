@@ -58,7 +58,7 @@ search), not the parser.
 
 > [!NOTE]
 > Nothing here is personal-data-bound, so the whole docs site is a candidate for
-> back-porting to the public core. See [Fork Workflow](../guides/fork-workflow.md).
+> back-porting to the public core. See [Fork Workflow](../contributing/fork-workflow.md).
 
 ### Guardrails worth keeping green
 

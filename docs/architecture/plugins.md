@@ -5,7 +5,7 @@ order: 6
 icon: Blocks
 tags: [architecture, plugins]
 related:
-  - guides/creating-plugins
+  - contributing/creating-plugins
   - guides/theming
 ---
 
@@ -37,7 +37,7 @@ graph TD
 > `git ls-files -- <path>` first: no output means the file is plugin-owned and
 > you should edit the plugin repo instead.
 
-> Building one? See the step-by-step [Creating a Plugin](../guides/creating-plugins.md) guide.
+> Building one? See the step-by-step [Creating a Plugin](../contributing/creating-plugins.md) guide.
 > This page is the design/reference.
 
 ## Tiers
@@ -202,7 +202,7 @@ Key properties:
   and a warning is logged. Disabling the brander restores the empty baseline and prunes the
   copied assets.
 
-See `docs/guides/creating-plugins.md` for a step-by-step branding walkthrough.
+See `docs/contributing/creating-plugins.md` for a step-by-step branding walkthrough.
 
 ## Manifest
 

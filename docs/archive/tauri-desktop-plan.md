@@ -18,7 +18,7 @@ See [`architecture/desktop-shell.md`](../architecture/desktop-shell.md) for what
 built, the measurements, and what remains (Apple Developer ID signing, a canary
 N→N+1 update, Linux/Windows). User and developer docs:
 [Desktop App](../getting-started/desktop-app.md),
-[Desktop Development](../guides/desktop-development.md),
+[Desktop Development](../contributing/desktop-development.md),
 [Desktop Recovery](../guides/desktop-recovery.md).
 
 Three real bugs were found by *running* this rather than reading it — two

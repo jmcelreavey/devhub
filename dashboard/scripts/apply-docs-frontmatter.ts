@@ -121,7 +121,7 @@ const META: Record<string, DocFrontmatter> = {
     icon: "Blocks",
     order: 6,
     tags: ["architecture", "plugins"],
-    related: ["guides/creating-plugins", "guides/theming"],
+    related: ["contributing/creating-plugins", "guides/theming"],
   },
   "architecture/persona-system": {
     title: "Persona system",
@@ -139,7 +139,7 @@ const META: Record<string, DocFrontmatter> = {
     icon: "AppWindow",
     order: 8,
     tags: ["architecture", "desktop"],
-    related: ["guides/desktop-development", "getting-started/desktop-app"],
+    related: ["contributing/desktop-development", "getting-started/desktop-app"],
   },
   "architecture/memory": {
     title: "Memory architecture",
@@ -237,14 +237,14 @@ const META: Record<string, DocFrontmatter> = {
     icon: "Palette",
     order: 9,
     tags: ["ui"],
-    related: ["guides/motion", "architecture/plugins"],
+    related: ["contributing/motion", "architecture/plugins"],
   },
-  "guides/motion": {
+  "contributing/motion": {
     title: "Motion and loading states",
     description:
       "The motion policy: shimmer for arriving content, spin only for user-triggered actions, and the reduced-motion kill switch.",
     icon: "Zap",
-    order: 10,
+    order: 4,
     tags: ["ui"],
     related: ["guides/theming"],
   },
@@ -252,33 +252,33 @@ const META: Record<string, DocFrontmatter> = {
     title: "Install as a PWA",
     description: "Install the dashboard as a Progressive Web App from a supported browser.",
     icon: "Smartphone",
-    order: 11,
+    order: 10,
     tags: ["ui"],
     related: ["getting-started/desktop-app"],
   },
-  "guides/creating-plugins": {
+  "contributing/creating-plugins": {
     title: "Creating a plugin",
     description:
       "Build a plugin repo from scratch: manifest, assets, dashboard modules, and registration.",
     icon: "PackagePlus",
-    order: 12,
+    order: 2,
     tags: ["plugins"],
-    related: ["architecture/plugins", "guides/fork-workflow"],
+    related: ["architecture/plugins", "contributing/fork-workflow"],
   },
-  "guides/fork-workflow": {
+  "contributing/fork-workflow": {
     title: "Fork workflow",
     description:
       "Working as a private mirror of the shared public core: pulling in, pushing back, and the personal-data boundary.",
     icon: "GitFork",
-    order: 13,
+    order: 1,
     tags: ["contributing"],
-    related: ["guides/creating-plugins"],
+    related: ["contributing/creating-plugins"],
   },
-  "guides/desktop-development": {
+  "contributing/desktop-development": {
     title: "Working on the desktop app",
     description: "Everything under `desktop/`: staging, building, signing, and local installs.",
     icon: "Hammer",
-    order: 14,
+    order: 3,
     tags: ["desktop"],
     related: ["architecture/desktop-shell", "guides/desktop-recovery"],
   },
@@ -287,16 +287,16 @@ const META: Record<string, DocFrontmatter> = {
     description:
       "When the desktop app will not start: a triage order, and how to prove each fix worked.",
     icon: "LifeBuoy",
-    order: 15,
+    order: 12,
     tags: ["desktop", "troubleshooting"],
-    related: ["guides/desktop-development", "getting-started/desktop-app"],
+    related: ["contributing/desktop-development", "getting-started/desktop-app"],
   },
   "guides/opencode-and-chamber": {
     title: "OpenCode and OpenChamber",
     description:
       "The four cooperating local services started by `npm run dev`, and how to run them apart.",
     icon: "Terminal",
-    order: 16,
+    order: 11,
     tags: ["workflow"],
     related: ["reference/scripts", "reference/environment-variables"],
   },

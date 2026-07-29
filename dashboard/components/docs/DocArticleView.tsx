@@ -18,9 +18,9 @@ export function DocArticleView({ detail }: { detail: DocDetail }) {
   const section = getSectionMeta(detail.section);
 
   return (
-    <div className="docs-shell">
-      <div className="docs-main">
-        <nav className="docs-breadcrumbs" aria-label="Breadcrumb">
+    <div className="lib-shell">
+      <div className="lib-main">
+        <nav className="lib-breadcrumbs" aria-label="Breadcrumb">
           {detail.breadcrumbs.map((crumb, i) => (
             <span key={i} className="flex items-center gap-1">
               {crumb.href ? <Link href={crumb.href}>{crumb.label}</Link> : <span>{crumb.label}</span>}

@@ -7,7 +7,6 @@ tags: [overview]
 related:
   - getting-started/installation
   - architecture/overview
-  - guides/fork-workflow
 ---
 
 # DevHub Documentation
@@ -46,7 +45,7 @@ Read [Architecture Overview](architecture/overview.md) for the full picture.
 | Do a specific task                 | [Skills](guides/skills.md) and the other guides   |
 | Look something up                  | [API Routes](reference/api-routes.md)             |
 | Extend it without forking the core | [Plugin System](architecture/plugins.md)          |
-| Contribute back upstream           | [Fork Workflow](guides/fork-workflow.md)          |
+| Contribute back upstream           | [Fork Workflow](contributing/fork-workflow.md)          |
 
 The sidebar has the full contents; every section is also listed on the docs home page.
 

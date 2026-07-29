@@ -1,7 +1,7 @@
 ---
 title: Working on the desktop app
 description: "Everything under `desktop/`: staging, building, signing, and local installs."
-order: 14
+order: 3
 icon: Hammer
 tags: [desktop]
 related:

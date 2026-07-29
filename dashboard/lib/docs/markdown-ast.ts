@@ -300,7 +300,15 @@ function uniqueSlug(ctx: BlockContext, text: string): string {
 }
 
 function stripHtml(line: string): string {
-  return line.replace(/<!--[\s\S]*?-->/g, "").replace(/<[^>]+>/g, "");
+  const code: string[] = [];
+  const protectedLine = line.replace(/(`+)([\s\S]*?)\1/g, (match) => {
+    code.push(match);
+    return `\0${code.length - 1}\0`;
+  });
+  return protectedLine
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\0(\d+)\0/g, (_, index: string) => code[Number(index)] ?? "");
 }
 
 function indentWidth(line: string): number {

@@ -1,7 +1,7 @@
 ---
 title: Motion and loading states
 description: "The motion policy: shimmer for arriving content, spin only for user-triggered actions, and the reduced-motion kill switch."
-order: 10
+order: 4
 icon: Zap
 tags: [ui]
 related:
@@ -23,7 +23,7 @@ Gaps: 22 files hand-roll `animate-spin` spinners; zero `loading.tsx` route skele
 ## Phase 1 — Loaders (consistency first, ~1 day)
 
 1. **Route-level skeletons.** Add `loading.tsx` to the heavy routes (`/work`, `/prs`, `/tickets`, `/status`, `/repos`, `/skills`, `/calendar`) rendering 3–4 `SkeletonRows` inside the standard page chrome. Cheap (one ~10-line file each) and kills the blank-page flash — the single biggest perceived-speed win available.
-2. **One loading vocabulary.** Rule: *shimmer for content arriving, spin only for an action the user just triggered* (refresh buttons keep `animate-spin`; data panels never spin). Sweep the 22 `animate-spin` call sites — most panel-level ones should become skeletons. Add the rule to AGENTS.md so new code follows it.
+2. **One loading vocabulary.** Rule: _shimmer for content arriving, spin only for an action the user just triggered_ (refresh buttons keep `animate-spin`; data panels never spin). Sweep the 22 `animate-spin` call sites — most panel-level ones should become skeletons. Add the rule to AGENTS.md so new code follows it.
 3. **Skeletons match the content's shape.** `SkeletonRows` gets optional `avatar`/`badge` variants so PR lists, ticket cards, and calendar rows shimmer in their real silhouette instead of generic bars (the settle feels seamless when the shapes line up).
 4. **Button busy states.** A tiny `useBusy` helper + `.btn[data-busy]` style (label dims, inline 3-dot pulse) replaces ad-hoc `disabled` flips on async buttons (Standup, Context pack, sync actions).
 
@@ -34,7 +34,7 @@ Gaps: 22 files hand-roll `animate-spin` spinners; zero `loading.tsx` route skele
 7. **Collapse/expand glide.** Today cards snap on collapse. Animate via CSS grid trick (`grid-template-rows: 0fr→1fr`, 200ms) on the card body — no JS height measurement needed.
 8. **Sidebar active pill slide.** The active nav background jumps between items; animate a shared pill (transform between item positions, 200ms). Small `NavLink` change, big perceived polish.
 9. **Palette entrance.** ⌘K overlay: backdrop fade (120ms) + panel scale `0.98→1` rise (180ms), exit reversed. Results list gets a 20ms-stagger on first open only.
-10. **Done-row exit.** Completing a task: row holds 300ms (let the check-draw land), then height-collapses out (200ms) as the Done count ticks up — completion reads as *departure*, not teleport.
+10. **Done-row exit.** Completing a task: row holds 300ms (let the check-draw land), then height-collapses out (200ms) as the Done count ticks up — completion reads as _departure_, not teleport.
 
 ## Phase 3 — Micro-interactions (~1 day)
 
@@ -74,7 +74,3 @@ Everything is `prefers-reduced-motion`-gated and killed by `body[data-motion="of
 Motion/loaders/delight vocabulary is **closed**. Do not open another easings / shimmer /
 entrance-animation epic. The ground rules above stay as permanent loading & motion
 vocabulary (also in `AGENTS.md`).
-
-**Next delight = functional weirdness**, not more polish: Agent Vibes soundtrack,
-queue-cleared personality — product behaviors that feel alive because they *do something*,
-not because the curve is nicer.

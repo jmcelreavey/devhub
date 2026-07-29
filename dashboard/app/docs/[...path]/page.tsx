@@ -1,6 +1,10 @@
 import { DocArticleView } from "@/components/docs/DocArticleView";
+import { DocsSectionPage } from "@/components/docs/DocsSectionPage";
 import { VaultEditorPage } from "@/components/vault/VaultEditorPage";
-import { getDocDetail } from "@/lib/docs/doc-index";
+import { getDocDetail, getSectionDetail } from "@/lib/docs/doc-index";
+
+/** Reads the docs tree from disk — see the note in `../page.tsx`. */
+export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ path: string[] }>;
@@ -19,6 +23,23 @@ export default async function DocPage({ params, searchParams }: PageProps) {
 
   const slug = decoded.join("/");
   const detail = getDocDetail(slug);
+
+  // A single segment that names a section renders that section's index — but
+  // only when it is not also a real doc slug, so a file can never be shadowed
+  // by a folder that happens to share its name.
+  if (!detail && decoded.length === 1) {
+    const section = getSectionDetail(decoded[0]);
+    if (section) {
+      return (
+        <DocsSectionPage
+          meta={section.meta}
+          docs={section.docs}
+          prev={section.prev}
+          next={section.next}
+        />
+      );
+    }
+  }
 
   // A missing detail means the file does not exist yet — fall through to the
   // editor so navigating to a new path still creates a doc, exactly as before.
