@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ChevronLeft, ChevronRight, Plus, Search, X } from "lucide-react";
+import type { ReactNode } from "react";
 import { FileTree } from "@/components/FileTree";
 import { NotesViewToggle, type NotesPanelView } from "@/components/notes/NotesViewToggle";
 import { ResizeHandle } from "@/components/shell/ResizeHandle";
@@ -42,6 +43,7 @@ export function NotesFilesSidebar({
   onSearch,
   onNew,
   showFileSearch,
+  children,
 }: {
   panel: NotesPanelView;
   onPanelChange: (view: NotesPanelView) => void;
@@ -49,6 +51,8 @@ export function NotesFilesSidebar({
   onSearch: (q: string) => void;
   onNew: () => void;
   showFileSearch: boolean;
+  /** Replaces the raw file tree. Notes pass an area-grouped nav instead. */
+  children?: ReactNode;
 }) {
   const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = usePersistedBool(STORAGE_KEY, isMobile);
@@ -135,7 +139,7 @@ export function NotesFilesSidebar({
           />
           {panel === "files" ? (
             <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
-              <FileTree search={search} />
+              {children ?? <FileTree search={search} />}
             </div>
           ) : (
             <p className="px-3 py-2 text-xs leading-relaxed text-text-subtle">

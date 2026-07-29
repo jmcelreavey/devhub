@@ -2,14 +2,14 @@
 /**
  * Bring the peer services up to date BEFORE Next.js starts compiling.
  *
- * Only OpenCode is auto-updated now: it upgrades a standalone binary in place.
- * OpenChamber is managed by the developer (system install), so DevHub no longer
- * updates it — see `lib/openchamber-command.ts`.
+ * Both peers are user-managed installs. Updates are best-effort and happen
+ * before the peer servers bind their ports.
  *
  * Always exits 0: updates are best-effort and must never block the app.
  */
 import process from "node:process";
 import { loadEnvWithOnePasswordFallback } from "./op-secrets";
+import { ensureOpenChamberCurrent } from "@/lib/openchamber-command";
 import { ensureOpenCodeCurrent } from "@/lib/opencode/update";
 
 function log(msg: string): void {
@@ -19,6 +19,7 @@ function log(msg: string): void {
 async function main(): Promise<void> {
   await loadEnvWithOnePasswordFallback(process.cwd());
   ensureOpenCodeCurrent(log);
+  ensureOpenChamberCurrent(log);
 }
 
 main().catch((err) => {

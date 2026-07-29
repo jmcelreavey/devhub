@@ -103,12 +103,33 @@ pub fn health_check(port: u16, token: &str) -> bool {
     if stream.write_all(request.as_bytes()).is_err() {
         return false;
     }
-    let mut body = String::new();
     use std::io::Read;
-    if stream.read_to_string(&mut body).is_err() {
-        return false;
+    let mut response = Vec::with_capacity(1024);
+    let mut chunk = [0; 1024];
+    let mut status_ok = false;
+    loop {
+        let read = match stream.read(&mut chunk) {
+            Ok(0) | Err(_) => return false,
+            Ok(read) => read,
+        };
+        response.extend_from_slice(&chunk[..read]);
+
+        let response = String::from_utf8_lossy(&response);
+        if let Some(status_end) = response.find("\r\n") {
+            if !response[..status_end].starts_with("HTTP/1.1 200") {
+                return false;
+            }
+            status_ok = true;
+        }
+        if status_ok && response.contains("\"devhub\":true") {
+            return true;
+        }
+        // Next responds with chunked keep-alive connections. Waiting for EOF
+        // here turns a healthy server into a startup timeout.
+        if response.len() >= 16 * 1024 {
+            return false;
+        }
     }
-    body.starts_with("HTTP/1.1 200") && body.contains("\"devhub\":true")
 }
 
 impl Sidecar {
@@ -417,6 +438,56 @@ mod tests {
             !health_check(port, "token"),
             "an arbitrary HTTP server must not pass as DevHub"
         );
+    }
+
+    #[test]
+    fn health_check_accepts_a_keep_alive_response() {
+        let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().take(1).flatten() {
+                use std::io::Write;
+                let _ = stream.write_all(
+                    b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: keep-alive\r\n\r\nf\r\n{\"devhub\":true}\r\n",
+                );
+                std::thread::sleep(Duration::from_secs(2));
+            }
+        });
+
+        let started = Instant::now();
+        assert!(health_check(port, "token"));
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn health_check_accepts_a_fragmented_status_line() {
+        let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().take(1).flatten() {
+                use std::io::Write;
+                let _ = stream.write_all(b"HTTP/1.");
+                std::thread::sleep(Duration::from_millis(20));
+                let _ =
+                    stream.write_all(b"1 200 OK\r\nContent-Length: 15\r\n\r\n{\"devhub\":true}");
+            }
+        });
+
+        assert!(health_check(port, "token"));
+    }
+
+    #[test]
+    fn health_check_rejects_a_body_without_a_status_line() {
+        let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().take(1).flatten() {
+                use std::io::Write;
+                let _ = stream.write_all(b"{\"devhub\":true}");
+            }
+        });
+
+        assert!(!health_check(port, "token"));
     }
 
     #[test]

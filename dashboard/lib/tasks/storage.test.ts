@@ -5,6 +5,7 @@ import path from "node:path";
 
 let tmpRepo: string;
 let originalRepoRoot: string | undefined;
+let originalTasksDir: string | undefined;
 
 async function freshTaskModule() {
   // Clear module cache so getRepoRoot picks up the new env value
@@ -16,12 +17,16 @@ async function freshTaskModule() {
 beforeEach(() => {
   tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-tasks-"));
   originalRepoRoot = process.env.REPO_ROOT;
+  originalTasksDir = process.env.TASKS_DIR;
   process.env.REPO_ROOT = tmpRepo;
+  process.env.TASKS_DIR = path.join(tmpRepo, "tasks");
 });
 
 afterEach(() => {
   if (originalRepoRoot === undefined) delete process.env.REPO_ROOT;
   else process.env.REPO_ROOT = originalRepoRoot;
+  if (originalTasksDir === undefined) delete process.env.TASKS_DIR;
+  else process.env.TASKS_DIR = originalTasksDir;
 });
 
 describe("tasks-storage", () => {

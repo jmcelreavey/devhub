@@ -1,9 +1,9 @@
 /**
  * Fail the build if a content route got statically prerendered.
  *
- * Docs read user content from disk and must render per request. `DOCS_DIR` is
- * only known at runtime — in the desktop app it comes from app-support config
- * that does not exist on the build machine — so a prerender
+ * Routes that read user content from disk must render per request. `DOCS_DIR`
+ * and `NOTES_DIR` are only known at runtime — in the desktop app they come from
+ * app-support config that does not exist on the build machine — so a prerender
  * bakes in whatever the *builder* could see.
  *
  * This is not hypothetical. The desktop bundle shipped a static `/docs` page
@@ -22,7 +22,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const buildDir = process.argv[2] ?? path.resolve(HERE, "../.next");
 
 /** Route paths, relative to `.next/server/app`, that must never be static. */
-const MUST_BE_DYNAMIC = ["docs"];
+const MUST_BE_DYNAMIC = ["docs", "notes"];
 
 const appDir = path.join(buildDir, "server", "app");
 if (!fs.existsSync(appDir)) {

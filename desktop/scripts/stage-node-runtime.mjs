@@ -126,6 +126,11 @@ export async function stageNodeRuntime({ platform = os.platform(), arch = os.arc
   }
   fs.copyFileSync(nodeBin, dest);
   fs.chmodSync(dest, 0o755);
+  // Copying a signed Mach-O invalidates its CodeDirectory on recent macOS.
+  // Re-sign before the smoke test; the finished app is signed again after bundling.
+  if (platform === "darwin") {
+    execFileSync("codesign", ["--force", "--sign", "-", "--timestamp=none", dest]);
+  }
   fs.rmSync(extractDir, { recursive: true, force: true });
 
   const version = execFileSync(dest, ["--version"], { encoding: "utf8" }).trim();

@@ -133,7 +133,10 @@ function findInNvmVersions(binName: string): string | null {
   const versionsDir = path.join(home, ".nvm", "versions", "node");
   if (!fs.existsSync(versionsDir)) return null;
 
-  for (const entry of fs.readdirSync(versionsDir)) {
+  const versions = fs
+    .readdirSync(versionsDir)
+    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+  for (const entry of versions) {
     const candidate = path.join(versionsDir, entry, "bin", binName);
     if (fs.existsSync(candidate)) return candidate;
   }
@@ -166,6 +169,34 @@ export function findOpenChamberBin(): string | null {
 
   cachedOpenChamberBin = found ?? null;
   return cachedOpenChamberBin;
+}
+
+/** Best-effort update for the system-managed OpenChamber install. */
+export function ensureOpenChamberCurrent(log: (msg: string) => void): void {
+  if (process.env.DEVHUB_SKIP_OPENCHAMBER_UPDATE) {
+    log("OpenChamber auto-update skipped (DEVHUB_SKIP_OPENCHAMBER_UPDATE)");
+    return;
+  }
+
+  const binary = findOpenChamberBin();
+  if (!binary) {
+    log("OpenChamber update check skipped (binary not installed)");
+    return;
+  }
+
+  log("checking OpenChamber for updates…");
+  const res = spawnSync(binary, ["update"], {
+    stdio: "inherit",
+    env: cleanOpenChamberEnv(),
+    timeout: 120_000,
+  });
+  if (res.error) {
+    log(`OpenChamber update check skipped (${res.error.message}); using existing binary`);
+    return;
+  }
+  if (res.status !== 0) {
+    log(`OpenChamber update failed (exit ${res.status ?? "signal"}); keeping existing binary`);
+  }
 }
 
 /**

@@ -26,7 +26,7 @@ export const NAV_GROUPS: { id: NavGroup; label: string }[] = [
  * see docs/codebase-review-2026-06-09.md). Merged concepts:
  *
  * - Work        = Tasks + Tickets (tabs on /work)
- * - Library     = Notes / Docs / Learnings / Diagrams (tabs over /notes…)
+ * - Library     = Notes / Docs / Diagrams (tabs over /notes…)
  * - System      = Status / Ops / Datadog / Actions / Setup (tabs over /status…)
  * - Search page → ⌘K palette
  *
@@ -75,6 +75,7 @@ export const LEGACY_NAV_ITEMS: NavItem[] = [
   { href: "/shared", label: "Live links", icon: "shared", group: "library", gate: "github" },
   { href: "/datadog", label: "Datadog", icon: "datadog", group: "system", gate: "datadog" },
   { href: "/actions", label: "Actions", icon: "actions", group: "system", desktopOnly: true },
+  { href: "/logs", label: "Logs", icon: "status", group: "system", desktopOnly: true },
   { href: "/setup", label: "Setup", icon: "setup", group: "system" },
 ];
 
@@ -108,7 +109,6 @@ export const SECTION_TABS: Record<string, SectionTab[]> = {
     [
       { href: "/notes", label: "Notes" },
       { href: "/docs", label: "Docs" },
-      { href: "/learnings", label: "Learnings" },
       { href: "/radar", label: "Radar" },
       { href: "/appraisal", label: "Appraisal" },
       { href: "/research", label: "Research" },
@@ -120,6 +120,7 @@ export const SECTION_TABS: Record<string, SectionTab[]> = {
   system: mergeSectionTabs(
     [
       { href: "/status", label: "Status" },
+      { href: "/logs", label: "Logs", desktopOnly: true },
       { href: "/datadog", label: "Datadog", gate: "datadog" },
       { href: "/actions", label: "Actions", desktopOnly: true },
       { href: "/setup", label: "Setup" },

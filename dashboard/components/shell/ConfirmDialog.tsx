@@ -92,6 +92,7 @@ function ConfirmDialogView({
   onPrompt: (value: string | null) => void;
 }) {
   const titleId = "confirm-dialog-title";
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
@@ -102,6 +103,15 @@ function ConfirmDialogView({
 
   useEffect(() => {
     previousFocus.current = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.open) {
+      if (typeof dialog.showModal !== "function") {
+        if (pending.kind === "prompt") onPrompt(null);
+        else onConfirm(false);
+        return;
+      }
+      dialog.showModal();
+    }
     if (pending.kind === "prompt") {
       inputRef.current?.focus();
     } else {
@@ -120,6 +130,7 @@ function ConfirmDialogView({
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
+      if (dialog?.open) dialog.close();
       previousFocus.current?.focus?.();
     };
   }, [pending, onConfirm, onPrompt]);
@@ -148,20 +159,16 @@ function ConfirmDialogView({
   }
 
   return (
-    <div
+    <dialog
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
-      className="modal-backdrop"
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "var(--scrim)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: "var(--z-toast)",
-        padding: 16,
+      className="confirm-dialog"
+      onCancel={(e) => {
+        e.preventDefault();
+        if (pending.kind === "prompt") onPrompt(null);
+        else onConfirm(false);
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
@@ -249,7 +256,7 @@ function ConfirmDialogView({
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }
 

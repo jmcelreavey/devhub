@@ -1,11 +1,75 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Preparing DevHub development server</title>
+    <style>
+      /*
+       * This page is on screen far longer than its one line of work suggests.
+       * It hands off to `/`, and in development that means waiting on a cold
+       * webpack compile — tens of seconds during which the browser still shows
+       * *this* document. An empty body therefore read as "the app broke", right
+       * after a boot screen that had been reassuring the user for a minute.
+       *
+       * Styles are inline and self-contained on purpose: the worker and its
+       * caches are being torn down underneath this page, so it cannot depend on
+       * a stylesheet request surviving. Deliberately matched to desktop/boot so
+       * the handover is invisible.
+       */
+      :root {
+        --bg: #0d1117;
+        --border: #262d36;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --accent: #9ed84a;
+        color-scheme: dark;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.55 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      main { height: 100%; display: grid; place-items: center; padding: 32px; }
+      .card { width: min(560px, 100%); }
+      h1 { font-size: 20px; margin: 0 0 6px; font-weight: 600; letter-spacing: -0.01em; }
+      p { margin: 0; color: var(--muted); }
+      .bar {
+        margin-top: 20px;
+        height: 3px;
+        border-radius: 999px;
+        background: var(--border);
+        overflow: hidden;
+      }
+      .bar span {
+        display: block;
+        height: 100%;
+        width: 35%;
+        border-radius: inherit;
+        background: var(--accent);
+        animation: sweep 1.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+      }
+      @keyframes sweep {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(340%); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .bar span { animation: none; width: 100%; opacity: 0.55; }
+      }
+    </style>
   </head>
   <body>
+    <main>
+      <div class="card">
+        <h1>Starting DevHub</h1>
+        <p id="detail" aria-live="polite">Clearing the packaged cache…</p>
+        <div class="bar" aria-hidden="true"><span></span></div>
+      </div>
+    </main>
     <script>
       /*
        * Attach and Packaged mode share localhost:1337, so WKWebView also shares
@@ -15,17 +79,39 @@
        * This page is a navigation (network-first in the worker), so it reaches
        * fresh code even when a previous development session cached an asset.
        */
+      const detail = document.getElementById("detail");
+
+      /*
+       * The first compile is the slow one and it gives no signal of its own, so
+       * count it out loud. Silence for a minute is what makes a working startup
+       * look like a hung one.
+       */
+      function countUp() {
+        const startedAt = Date.now();
+        setInterval(() => {
+          const seconds = Math.round((Date.now() - startedAt) / 1000);
+          detail.textContent =
+            seconds < 5
+              ? "Compiling the dashboard…"
+              : `Compiling the dashboard… (${seconds}s — the first build after a restart is the slow one)`;
+        }, 1000);
+      }
+
       void (async () => {
-        const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
+        const registrations = (await navigator.serviceWorker?.getRegistrations?.()) ?? [];
         await Promise.all(registrations.map((registration) => registration.unregister()));
-        const cacheNames = await caches?.keys?.() ?? [];
+        const cacheNames = (await caches?.keys?.()) ?? [];
         await Promise.all(
           cacheNames
             .filter((name) => name.startsWith("devhub-"))
             .map((name) => caches.delete(name)),
         );
+        countUp();
         window.location.replace("/");
-      })().catch(() => window.location.replace("/"));
+      })().catch(() => {
+        countUp();
+        window.location.replace("/");
+      });
     </script>
   </body>
 </html>

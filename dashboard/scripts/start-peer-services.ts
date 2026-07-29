@@ -10,6 +10,8 @@
  */
 import process from "node:process";
 import { loadEnvWithOnePasswordFallback } from "./op-secrets";
+import { ensureOpenChamberCurrent } from "../lib/openchamber-command";
+import { ensureOpenCodeCurrent } from "../lib/opencode/update";
 import {
   attachChamberShutdown,
   attachOpenCodeShutdown,
@@ -26,6 +28,13 @@ function log(msg: string): void {
 
 async function main(): Promise<void> {
   await loadEnvWithOnePasswordFallback(process.cwd());
+
+  // Dev startup runs this in predev. Packaged startup has no npm lifecycle,
+  // so perform the same best-effort check before starting either peer.
+  if (process.env.DEVHUB_PACKAGED_RUNTIME === "1") {
+    ensureOpenCodeCurrent(log);
+    ensureOpenChamberCurrent(log);
+  }
 
   log("starting OpenCode on OPENCODE_PORT (default 1338)…");
   let opencode;
@@ -48,8 +57,8 @@ async function main(): Promise<void> {
   if (isOpenChamberConfigured()) {
     log("starting OpenChamber on OPENCHAMBER_PORT (default 1336)…");
     try {
-      await startChamberPeer(log);
-      attachChamberShutdown(log);
+      const chamber = await startChamberPeer(log);
+      attachChamberShutdown(chamber, log);
     } catch (err) {
       log(`warning: ${err instanceof Error ? err.message : String(err)} — continuing without OpenChamber`);
     }

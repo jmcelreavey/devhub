@@ -249,13 +249,30 @@ export function attachOpenCodeShutdown(child: ChildProcess | null, log: PeerLog)
   };
 }
 
-export function attachChamberShutdown(log: PeerLog): () => void {
+export function attachChamberShutdown(handle: ChamberPeerHandle, log: PeerLog): () => void {
   const port = Number.parseInt(process.env.OPENCHAMBER_PORT ?? "1336", 10);
   let shuttingDown = false;
 
   const shutdown = (): void => {
     if (shuttingDown) return;
     shuttingDown = true;
+
+    if (handle.reusedExisting) {
+      log("leaving existing OpenChamber daemon running");
+      process.exit(0);
+      return;
+    }
+
+    if (handle.child?.pid) {
+      log("shutting down OpenChamber daemon");
+      const child = handle.child;
+      const finish = () => process.exit(0);
+      child.once("close", finish);
+      child.kill("SIGTERM");
+      setTimeout(finish, 2_000).unref();
+      return;
+    }
+
     log("shutting down OpenChamber daemon");
     void stopChamberPeer(log, port).finally(() => process.exit(0));
   };

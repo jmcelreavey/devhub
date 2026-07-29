@@ -68,6 +68,11 @@ Desktop.ini
 # Logs
 *.log
 logs/
+# Next.js routes that happen to be named logs/ — not log directories.
+!dashboard/app/logs/
+!dashboard/app/logs/**
+!dashboard/app/api/status/logs/
+!dashboard/app/api/status/logs/**
 
 # OS-level
 .Spotlight-V100

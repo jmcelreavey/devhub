@@ -11,7 +11,7 @@
  *
  * Common flags: --dry-run
  */
-import { getRepoRoot } from "@/lib/content/dirs";
+import { getCheckoutRoot } from "@/lib/desktop/runtime-paths";
 import { validateRepo } from "../lib/validate";
 import { updateAndSync } from "@/lib/sync/orchestrator";
 import { syncSkills } from "@/lib/sync/skills";
@@ -55,7 +55,10 @@ async function main(): Promise<void> {
   const flags = new Set(rest);
   const dryRun = flags.has("--dry-run");
   const emit = (line: string) => console.log(line);
-  const repoRoot = getRepoRoot();
+  const repoRoot = getCheckoutRoot();
+  if (!repoRoot) {
+    throw new Error("This action requires a linked DevHub checkout.");
+  }
 
   let code = 0;
   if (action === "validate") {

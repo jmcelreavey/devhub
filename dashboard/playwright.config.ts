@@ -34,6 +34,7 @@ export default defineConfig({
     baseURL,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
+    video: process.env.PLAYWRIGHT_VIDEO === "1" ? "on" : "off",
   },
 
   /**

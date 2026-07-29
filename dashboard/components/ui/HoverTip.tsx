@@ -87,6 +87,11 @@ export function HoverTip({
           if (label) timerRef.current = setTimeout(show, 800);
         }}
         onPointerLeave={hide}
+        // A press means the user is acting, not reading. Without this the
+        // hover timer keeps running through a drag — and a drag never delivers
+        // `pointerleave` here, so the tip would pop up mid-drag and then hang
+        // around at the grip's old position until the pointer came back.
+        onPointerDown={hide}
         onFocusCapture={show}
         onBlurCapture={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) hide();

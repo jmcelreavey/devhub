@@ -29,40 +29,58 @@ async function hydrated(page: Page): Promise<void> {
 }
 
 /**
- * Open the first real item under an index route, or report that there is none.
+ * Open the first real note from the tree API, or report that there is none.
  *
  * The index pages themselves mount no editor and no canvas, so a test that
  * only visits `/notes` skips every time and quietly reports success. These are
  * the two Phase 0 *stop conditions* — a permanently skipped stop-condition test
  * is worse than no test, because it looks like evidence.
  *
- * The links are client-rendered (these routes are statically prerendered and
- * hydrate with live data), so this waits for one to appear rather than reading
- * the initial HTML.
+ * Area links now share the `/notes/*` prefix, so choosing the first anchor can
+ * land on another index. The tree API identifies a real file directly.
  */
-async function openFirstItem(page: Page, section: "notes" | "diagrams"): Promise<boolean> {
-  await page.goto(`/${section}`);
-  await hydrated(page);
-
-  const link = page.locator(`a[href^="/${section}/"]`).first();
-  const found = await link
-    .waitFor({ state: "attached", timeout: 20_000 })
-    .then(() => true)
-    .catch(() => false);
-  if (!found) return false;
-
-  const href = await link.getAttribute("href");
-  if (!href) return false;
-  await page.goto(href);
-  await hydrated(page);
-  return true;
-}
-
 interface TreeNode {
   type: "dir" | "file";
   name: string;
   path: string;
   children?: TreeNode[];
+}
+
+async function preventVaultWrites(page: Page): Promise<void> {
+  await page.route("**/api/notes/**", async (route) => {
+    if (["POST", "PUT", "DELETE"].includes(route.request().method())) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+      return;
+    }
+    await route.continue();
+  });
+}
+
+async function openFirstNote(page: Page): Promise<boolean> {
+  const response = await page.request.get("/api/tree").catch(() => null);
+  if (!response?.ok()) return false;
+
+  const roots = (await response.json()) as TreeNode[];
+  const firstFile = (nodes: TreeNode[]): string | null => {
+    for (const node of nodes) {
+      if (node.type === "dir" && node.name === "diagrams") continue;
+      if (node.type === "file" && node.name.endsWith(".json")) return node.path;
+      const nested = node.children ? firstFile(node.children) : null;
+      if (nested) return nested;
+    }
+    return null;
+  };
+
+  const found = firstFile(Array.isArray(roots) ? roots : []);
+  if (!found) return false;
+  const path = found
+    .replace(/\.json$/, "")
+    .split("/")
+    .map(encodeURIComponent)
+    .join("/");
+  await page.goto(`/notes/${path}`);
+  await hydrated(page);
+  return true;
 }
 
 /**
@@ -128,7 +146,8 @@ test.describe("editor (BlockNote / ProseMirror)", () => {
      * `.fill()` (which bypasses the input pipeline entirely and would pass on
      * a completely broken editor).
      */
-    const opened = await openFirstItem(page, "notes");
+    await preventVaultWrites(page);
+    const opened = await openFirstNote(page);
     test.skip(!opened, "no notes exist in this environment");
 
     const editable = page.locator("[contenteditable='true']").first();
@@ -162,6 +181,7 @@ test.describe("canvas (tldraw)", () => {
      * zero width is the specific failure that looks fine in a screenshot of a
      * dark theme and is completely broken.
      */
+    await preventVaultWrites(page);
     const opened = await openFirstDiagram(page);
     test.skip(!opened, "no diagrams exist in this environment");
 

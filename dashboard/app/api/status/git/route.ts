@@ -1,8 +1,8 @@
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { detectGitConflicts } from "@/lib/git/conflicts";
-import { getRepoRoot } from "@/lib/notes/dir";
 import { buildContentBuckets, matchContentBucket } from "@/lib/content/sync-dirs";
+import { getCheckoutRoot } from "@/lib/desktop/runtime-paths";
 import { runGitRepo, runGitRepoAsync } from "@/lib/git/repo-local";
 import { isGitNoisePath } from "@/lib/repos/git-parsers";
 
@@ -11,7 +11,10 @@ const FETCH_TTL_MS = 4 * 60 * 1000;
 let lastUpstreamFetchAt = 0;
 
 export async function GET() {
-  const root = getRepoRoot();
+  const root = getCheckoutRoot();
+  if (!root) {
+    return NextResponse.json({ available: false });
+  }
   try {
     const branch = runGitRepo(root, ["rev-parse", "--abbrev-ref", "HEAD"]);
     const status = runGitRepo(root, ["status", "--porcelain=v1"]);

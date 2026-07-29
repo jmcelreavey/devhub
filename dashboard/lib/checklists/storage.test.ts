@@ -5,6 +5,7 @@ import path from "node:path";
 
 let tmpRepo: string;
 let originalRepoRoot: string | undefined;
+let originalCollectionsDir: string | undefined;
 
 async function freshModule() {
   const url = new URL("./storage.ts", import.meta.url).href + `?t=${Date.now()}`;
@@ -14,12 +15,16 @@ async function freshModule() {
 beforeEach(() => {
   tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-checklists-"));
   originalRepoRoot = process.env.REPO_ROOT;
+  originalCollectionsDir = process.env.COLLECTIONS_DIR;
   process.env.REPO_ROOT = tmpRepo;
+  process.env.COLLECTIONS_DIR = path.join(tmpRepo, "collections");
 });
 
 afterEach(() => {
   if (originalRepoRoot === undefined) delete process.env.REPO_ROOT;
   else process.env.REPO_ROOT = originalRepoRoot;
+  if (originalCollectionsDir === undefined) delete process.env.COLLECTIONS_DIR;
+  else process.env.COLLECTIONS_DIR = originalCollectionsDir;
   fs.rmSync(tmpRepo, { recursive: true, force: true });
 });
 

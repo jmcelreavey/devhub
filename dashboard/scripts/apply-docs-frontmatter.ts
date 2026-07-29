@@ -282,6 +282,15 @@ const META: Record<string, DocFrontmatter> = {
     tags: ["desktop"],
     related: ["architecture/desktop-shell", "guides/desktop-recovery"],
   },
+  "contributing/recording-demos": {
+    title: "Recording feature demos",
+    description:
+      "Capture sanitized feature walkthroughs with the existing Playwright journeys and repo-controlled output.",
+    icon: "Monitor",
+    order: 5,
+    tags: ["contributing", "testing"],
+    related: ["contributing/desktop-development", "reference/scripts"],
+  },
   "guides/desktop-recovery": {
     title: "Desktop recovery",
     description:

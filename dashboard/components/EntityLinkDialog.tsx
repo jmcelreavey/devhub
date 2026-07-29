@@ -465,7 +465,7 @@ function EntityLinkDialogSession({
       onClose={close}
       title={title}
       description={description}
-      maxWidth="max-w-md"
+      maxWidth="max-w-lg"
       footer={
         <div className="entity-link-dialog-actions">
           <button type="button" className="btn btn-ghost text-xs" disabled={busy} onClick={close}>
@@ -483,14 +483,15 @@ function EntityLinkDialogSession({
       }
     >
       <div className="entity-link-dialog-body">
-        <div className="entity-link-kinds" role="group" aria-label="Link type">
+        <div className="entity-link-kinds" role="tablist" aria-label="Link type">
           {KINDS.map((k) => (
             <button
               key={k.id}
               type="button"
               className="entity-link-kind"
               data-active={kind === k.id ? "true" : undefined}
-              aria-pressed={kind === k.id}
+              role="tab"
+              aria-selected={kind === k.id}
               onClick={() => resetKind(k.id)}
             >
               {k.label}

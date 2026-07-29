@@ -12,7 +12,6 @@ import { FocusTimer } from "@/components/tasks/FocusTimer";
 import { HoverTip } from "@/components/ui/HoverTip";
 import { QuickActions } from "@/components/shell/QuickActions";
 import { ContentSyncIndicator } from "@/components/runs/ContentSyncIndicator";
-import { AgentSoundtrack } from "@/components/AgentSoundtrack";
 import { LaunchMenu, type LaunchMenuItem } from "@/components/shell/LaunchMenu";
 import { useLaunchClaudeDesktop } from "@/lib/launch/claude";
 import { useLaunchChamberDesktop } from "@/lib/launch/chamber";
@@ -181,7 +180,6 @@ export function HubTopBar() {
         {/* Quick cluster - notes/tasks/diagrams/theme/accent/chamber */}
         <span role="group" className="hub-cluster" aria-label="Quick actions">
           <QuickActions />
-          <AgentSoundtrack />
           <ThemeToggle />
           {toolLaunchItems && (
             <LaunchMenu

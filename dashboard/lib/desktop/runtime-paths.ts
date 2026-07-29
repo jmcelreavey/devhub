@@ -66,6 +66,23 @@ export function getResourceRoot(): string {
 }
 
 /**
+ * Checkout path recorded by the desktop shell (`repo-path.txt` under app data).
+ *
+ * Attach / first-run write this so packaged mode can still run checkout-only
+ * actions such as sync without baking `REPO_ROOT` into the sidecar env.
+ */
+function linkedCheckoutFromAppData(): string | null {
+  try {
+    const file = path.join(getAppDataDir(), "repo-path.txt");
+    const raw = fs.readFileSync(file, "utf8").trim();
+    if (!raw) return null;
+    return path.resolve(expandHome(raw));
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The optional real git checkout, or `null`.
  *
  * "Real" means it has a `.git` entry. This check is the whole point: without
@@ -73,13 +90,22 @@ export function getResourceRoot(): string {
  * run `git status` against the application and report nonsense — or worse, a
  * sync would try to write into the read-only resource tree.
  *
+ * Resolution order:
+ * 1. `REPO_ROOT` env (explicit)
+ * 2. Desktop `repo-path.txt` under app data (linked checkout)
+ * 3. Inferred from this file's location (checkout / `npm run dev` only)
+ *
  * Callers that need a checkout should branch on `null` and hide the action,
  * not throw. "Sync is unavailable because there is no checkout" is a legitimate
  * state for an installed app, not an error.
  */
 export function getCheckoutRoot(): string | null {
   const explicit = trimmedEnv("REPO_ROOT");
-  const candidate = explicit ? path.resolve(explicit) : isDesktopRuntime() ? null : inferredCheckoutRoot();
+  const candidate = explicit
+    ? path.resolve(explicit)
+    : isDesktopRuntime()
+      ? linkedCheckoutFromAppData()
+      : inferredCheckoutRoot();
   if (!candidate) return null;
   try {
     if (!fs.existsSync(path.join(candidate, ".git"))) return null;

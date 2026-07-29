@@ -17,6 +17,8 @@ export interface LaunchConfig {
   releasesApiUrl?: string;
   webFallbackUrl?: string;
   envInject?: { key: string; valueFn: () => string };
+  /** Restart an existing macOS app so a new injected environment is applied. */
+  relaunchExisting?: boolean;
 }
 
 const HOME = process.env.HOME ?? os.homedir() ?? "";
@@ -69,6 +71,20 @@ function isAppRunning(macAppName: string): boolean {
 
 function focusExistingApp(macAppName: string): void {
   spawn("open", ["-a", macAppName], { detached: true, stdio: "ignore" }).unref();
+}
+
+async function relaunchExistingApp(macAppName: string): Promise<boolean> {
+  const result = spawnSync("pkill", ["-TERM", "-f", `${macAppName}.app/Contents/MacOS`], {
+    stdio: "ignore",
+    timeout: 5_000,
+  });
+  if (result.status !== 0) return false;
+
+  const deadline = Date.now() + 5_000;
+  while (isAppRunning(macAppName) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return !isAppRunning(macAppName);
 }
 
 function getLinuxArch(): "x86_64" | "aarch64" {
@@ -198,10 +214,19 @@ export async function launchDesktopApp(config: LaunchConfig): Promise<LaunchResu
 
   try {
     if (process.platform === "darwin" && isAppRunning(config.macAppName)) {
-      // Already running — focus it instead of stacking another instance.
-      focusExistingApp(config.macAppName);
-      const serverUrl = config.envInject?.valueFn();
-      return { ok: true as const, path: installed, focusedExisting: true, ...(serverUrl ? { serverUrl } : {}) };
+      if (!config.relaunchExisting) {
+        // Already running — focus it instead of stacking another instance.
+        focusExistingApp(config.macAppName);
+        const serverUrl = config.envInject?.valueFn();
+        return { ok: true as const, path: installed, focusedExisting: true, ...(serverUrl ? { serverUrl } : {}) };
+      }
+      if (!(await relaunchExistingApp(config.macAppName))) {
+        return {
+          error: `Could not restart ${config.appName} Desktop`,
+          hint: `Quit ${config.appName} manually, then try again.`,
+          status: 409,
+        };
+      }
     }
     if (process.platform === "darwin") {
       if (binary && !config.envInject) {

@@ -146,7 +146,10 @@ function repairedPath() {
     // cannot see.
     const nvm = path.join(home, ".nvm", "versions", "node");
     try {
-      for (const version of fs.readdirSync(nvm)) {
+      const versions = fs
+        .readdirSync(nvm)
+        .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+      for (const version of versions) {
         extras.push(path.join(nvm, version, "bin"));
       }
     } catch {
@@ -264,7 +267,7 @@ async function main() {
     process.exit(2);
   }
 
-  const env = managedEnv();
+  const env = { ...managedEnv(), DEVHUB_PACKAGED_RUNTIME: "1" };
 
   emit({ state: "starting", service: "next" });
   /**

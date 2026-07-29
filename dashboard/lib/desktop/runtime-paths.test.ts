@@ -113,6 +113,22 @@ describe("fresh desktop mode", () => {
     expect(getCheckoutRoot()).toBeNull();
   });
 
+  it("picks up a linked checkout from repo-path.txt under app data", () => {
+    const checkout = makeCheckout();
+    const appData = path.join(tmp, "app-data");
+    fs.mkdirSync(appData, { recursive: true });
+    fs.writeFileSync(path.join(appData, "repo-path.txt"), `${checkout}\n`);
+    expect(getCheckoutRoot()).toBe(checkout);
+    expect(hasCheckout()).toBe(true);
+  });
+
+  it("ignores a repo-path.txt that does not point at a git checkout", () => {
+    const appData = path.join(tmp, "app-data");
+    fs.mkdirSync(appData, { recursive: true });
+    fs.writeFileSync(path.join(appData, "repo-path.txt"), path.join(tmp, "not-a-repo"));
+    expect(getCheckoutRoot()).toBeNull();
+  });
+
   it("refuses to treat the resource root as a checkout even if REPO_ROOT points there", () => {
     process.env.REPO_ROOT = path.join(tmp, "resources");
     fs.mkdirSync(path.join(tmp, "resources"), { recursive: true });

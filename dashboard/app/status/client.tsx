@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useState, useCallback, useRef, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
-import { RefreshCw, Server, Link2, RotateCw, GitBranch, ArrowUp, ArrowDown, Play, AlertTriangle, Check, Wifi, QrCode, Cloud, ExternalLink, History } from "lucide-react";
+import { RefreshCw, Server, Link2, RotateCw, GitBranch, ArrowUp, ArrowDown, Play, AlertTriangle, Check, Wifi, QrCode, Cloud, ExternalLink, History, Hammer } from "lucide-react";
 import QRCode from "qrcode";
 import { CommitMessageModal, defaultCommitCheckpointMessage } from "@/components/runs/CommitMessageModal";
 import { getNow, subscribeMinute } from "@/lib/minute-tick";
@@ -85,6 +85,14 @@ interface ScriptRunLogPayload {
 interface FailedSyncRun {
   entry: ScriptHistoryEntry;
   log: ScriptRunLogPayload;
+}
+
+/** Mirrors GET /api/status/dashboard/rebuild. */
+interface RebuildCapability {
+  available: boolean;
+  mode: "dev" | "production" | "desktop-packaged";
+  checkout: string | null;
+  reason?: string;
 }
 
 async function fetchStatusRows(): Promise<
@@ -275,6 +283,10 @@ export default function StatusPage() {
   const boot = useBootGate(!loading);
   const [refreshed, setRefreshed] = useState(0);
   const [restarting, setRestarting] = useState<string | null>(null);
+  const [rebuildInfo, setRebuildInfo] = useState<RebuildCapability | null>(null);
+  const [rebuilding, setRebuilding] = useState(false);
+  const [rebuildMessage, setRebuildMessage] = useState<string | null>(null);
+  const rebuildWatch = useRef<{ poll: number; timeout: number } | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncDirtyModal, setSyncDirtyModal] = useState<{ dirtyCount: number } | null>(null);
   const [latestFailedSyncRun, setLatestFailedSyncRun] = useState<FailedSyncRun | null>(null);
@@ -335,10 +347,30 @@ export default function StatusPage() {
 
   const reload = useCallback(() => {
     setLoading(true);
-    void fetchStatusRows()
-      .then((rows) => applyStatusRows(rows, "always"))
+    void Promise.all([
+      fetchStatusRows(),
+      fetch("/api/status/dashboard/rebuild")
+        .then((r) => (r.ok ? (r.json() as Promise<RebuildCapability>) : null))
+        .catch(() => null),
+    ])
+      .then(([rows, rebuild]) => {
+        applyStatusRows(rows, "always");
+        if (rebuild) setRebuildInfo(rebuild);
+      })
       .finally(() => setLoading(false));
   }, [applyStatusRows]);
+
+  // A rebuild watch that outlives this page would reload the app out from under
+  // whatever the user navigated to next.
+  useEffect(
+    () => () => {
+      const watch = rebuildWatch.current;
+      if (!watch) return;
+      window.clearInterval(watch.poll);
+      window.clearTimeout(watch.timeout);
+    },
+    [],
+  );
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching external data on refresh
   useEffect(() => { reload(); }, [refreshed, reload]);
@@ -349,6 +381,62 @@ export default function StatusPage() {
     }, 30_000);
     return () => clearInterval(interval);
   }, [applyStatusRows]);
+
+  function stopRebuildWatch() {
+    const watch = rebuildWatch.current;
+    if (!watch) return;
+    window.clearInterval(watch.poll);
+    window.clearTimeout(watch.timeout);
+    rebuildWatch.current = null;
+  }
+
+  async function rebuildDashboard() {
+    if (rebuilding) return;
+    setRebuilding(true);
+    setRebuildMessage(null);
+    try {
+      const res = await fetch("/api/status/dashboard/rebuild", { method: "POST" });
+      const body = (await res.json().catch(() => null)) as {
+        message?: string;
+        error?: string;
+      } | null;
+      if (!res.ok) {
+        setRebuildMessage(body?.error ?? "Couldn't start rebuild.");
+        setRebuilding(false);
+        return;
+      }
+      setRebuildMessage(body?.message ?? "Rebuild started — waiting for the server to come back…");
+
+      // The old server keeps answering for the first seconds of the build, so a
+      // plain health poll would reload straight back into the process that is
+      // about to exit. Wait for the outage, then for the recovery.
+      let observedDown = false;
+      const poll = window.setInterval(() => {
+        void fetch("/api/status/dashboard/rebuild", {
+          cache: "no-store",
+          signal: AbortSignal.timeout(2000),
+        })
+          .then((r) => {
+            if (observedDown && r.ok) {
+              stopRebuildWatch();
+              window.location.reload();
+            }
+          })
+          .catch(() => {
+            observedDown = true;
+          });
+      }, 2000);
+      const timeout = window.setTimeout(() => {
+        stopRebuildWatch();
+        setRebuildMessage("Rebuild didn't bring the dashboard back. Check the terminal logs.");
+        setRebuilding(false);
+      }, 10 * 60_000);
+      rebuildWatch.current = { poll, timeout };
+    } catch {
+      setRebuildMessage("Couldn't start rebuild.");
+      setRebuilding(false);
+    }
+  }
 
   async function restartService(service: string) {
     setRestarting(service);
@@ -950,6 +1038,71 @@ export default function StatusPage() {
         </div>
 
         <InfraCard />
+        </div>
+
+        {/*
+          Maintenance sits last on purpose. It is a minutes-long action nobody
+          needs on arrival, and putting it above the service cards pushed the
+          actual status — the reason anyone opens this page — below the fold.
+        */}
+        <SectionLabel>Maintenance</SectionLabel>
+        <div className="card min-w-0">
+          <div className="card-header">
+            <span className="flex items-center gap-1.5"><Hammer size={12} />Rebuild dashboard</span>
+          </div>
+          <div className="card-body flex flex-col gap-3" style={{ padding: "12px 16px" }}>
+            <p className="text-xs leading-relaxed text-text-muted">
+              Reopening DevHub does <strong className="font-medium text-text">not</strong> rebuild.
+              Use this when a checkout-hosted dashboard needs a fresh production build.
+            </p>
+            {rebuildInfo?.mode === "dev" && (
+              <p className="text-xs leading-relaxed text-text-subtle">
+                You&apos;re on the dev server, which already hot-reloads. This runs a production{" "}
+                <code>npm run restart</code> — useful when webpack is wedged, not after every save.
+              </p>
+            )}
+            {rebuildInfo && !rebuildInfo.available && (
+              <p className="text-xs leading-relaxed text-text-subtle">{rebuildInfo.reason}</p>
+            )}
+            {rebuildMessage && (
+              <p
+                role="status"
+                aria-live="polite"
+                className="text-xs leading-relaxed"
+                style={{ color: rebuilding ? "var(--accent)" : "var(--danger)" }}
+              >
+                {rebuildMessage}
+              </p>
+            )}
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                type="button"
+                className="btn btn-ghost inline-flex shrink-0 items-center gap-1.5 text-xs"
+                style={{ padding: "4px 10px", minHeight: 28 }}
+                disabled={!rebuildInfo?.available || rebuilding}
+                aria-busy={rebuilding}
+                title={
+                  rebuildInfo === null
+                    ? "Checking whether this dashboard can rebuild itself…"
+                    : rebuildInfo.available
+                      ? `Runs npm run restart in ${rebuildInfo.checkout}`
+                      : rebuildInfo.reason
+                }
+                onClick={() => void rebuildDashboard()}
+              >
+                <RotateCw size={12} className={rebuilding ? "animate-spin" : ""} aria-hidden />
+                {rebuilding ? "Rebuilding…" : "Rebuild & restart"}
+              </button>
+              {rebuildInfo?.checkout && (
+                <code
+                  className="font-mono text-[11px] min-w-0 truncate text-text-subtle"
+                  title={rebuildInfo.checkout}
+                >
+                  {rebuildInfo.checkout}
+                </code>
+              )}
+            </div>
+          </div>
         </div>
 
       </div>

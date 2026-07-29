@@ -80,6 +80,10 @@ function fingerprint(dir) {
     for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
       if (entry.name === ".git" || entry.name === "node_modules") continue;
       const full = path.join(current, entry.name);
+      // The app writes shutdown breadcrumbs while this installer is running.
+      // Logs are diagnostic output, not user content, so including them makes
+      // a correct replacement look like it modified personal data.
+      if (path.relative(dir, full).split(path.sep)[0] === "logs") continue;
       if (entry.isDirectory()) {
         walk(full);
         continue;

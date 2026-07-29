@@ -86,8 +86,16 @@ describe("filterNavBySetup", () => {
 });
 
 describe("SECTION_TABS", () => {
+  it("keeps learnings inside Notes instead of a separate Library tab", () => {
+    expect(SECTION_TABS.library.map((t) => t.href)).not.toContain("/learnings");
+  });
+
   it("keeps Setup last on the system strip", () => {
     const system = SECTION_TABS.system.map((t) => t.href);
     expect(system[system.length - 1]).toBe("/setup");
+  });
+
+  it("exposes Logs on the system strip for the desktop shell", () => {
+    expect(SECTION_TABS.system.map((t) => t.href)).toContain("/logs");
   });
 });

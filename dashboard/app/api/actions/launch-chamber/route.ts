@@ -7,6 +7,7 @@ const CONFIG = {
   linuxBinName: "openchamber",
   releasesUrl: "https://github.com/openchamber/openchamber/releases/latest",
   webFallbackUrl: "http://localhost:1336",
+  relaunchExisting: true,
   envInject: { key: "OPENCHAMBER_SERVER_URL", valueFn: () => `http://localhost:${process.env.OPENCHAMBER_PORT ?? "1336"}` },
 };
 
