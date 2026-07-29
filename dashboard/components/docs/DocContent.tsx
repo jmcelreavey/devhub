@@ -197,6 +197,16 @@ function NodeView({ node }: { node: DocNode }): ReactNode {
         </figure>
       );
 
+    case "video":
+      return (
+        <figure className="docs-figure">
+          <video controls preload="metadata" playsInline className="docs-video">
+            <source src={node.src} type="video/mp4" />
+          </video>
+          <figcaption className="docs-figure-caption">{node.title}</figcaption>
+        </figure>
+      );
+
     case "divider":
       return <hr className="docs-divider" />;
 

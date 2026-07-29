@@ -6,7 +6,7 @@ import path from 'node:path';
 
 import { normalizeNoteAssetRelPath } from './markdown.ts';
 
-export const ALLOWED_NOTE_ASSET_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']);
+export const ALLOWED_NOTE_ASSET_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4']);
 
 export function isAllowedNoteAssetExtension(filename: string): boolean {
   const ext = path.posix.extname(filename).toLowerCase();
@@ -63,6 +63,8 @@ export function contentTypeForAssetExtension(ext: string): string {
       return 'image/gif';
     case '.webp':
       return 'image/webp';
+    case '.mp4':
+      return 'video/mp4';
     default:
       return 'application/octet-stream';
   }

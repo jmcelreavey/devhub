@@ -30,6 +30,10 @@ describe("notes-assets paths", () => {
     expect(() => assertNoteAssetRelPath("x.txt")).toThrow(/Unsupported/);
   });
 
+  it("allows MP4 walkthrough assets", () => {
+    expect(assertNoteAssetRelPath("assets/demos/today.mp4")).toBe("assets/demos/today.mp4");
+  });
+
   it("resolves assets under notes root", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "notes-assets-"));
     const rel = "garden/p/assets/x.jpg";

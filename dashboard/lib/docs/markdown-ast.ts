@@ -42,6 +42,7 @@ export type DocNode =
   | { type: "callout"; variant: CalloutVariant; title?: string; children: DocNode[] }
   | { type: "table"; align: Array<"left" | "center" | "right" | null>; header: InlineNode[][]; rows: InlineNode[][][] }
   | { type: "image"; src: string; alt: string }
+  | { type: "video"; src: string; title: string }
   | { type: "divider" };
 
 export interface TocEntry {
@@ -425,6 +426,17 @@ function parseBlocks(lines: string[], ctx: BlockContext): DocNode[] {
       nodes.push({ type: "image", alt: loneImage[1], src: cleanHref(loneImage[2]) });
       i += 1;
       continue;
+    }
+
+    // A standalone MP4 link remains a normal link on GitHub but renders inline here.
+    const loneLink = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(trimmed);
+    if (loneLink) {
+      const href = cleanHref(loneLink[2]);
+      if (/\.mp4(?:$|[?#])/i.test(href)) {
+        nodes.push({ type: "video", title: loneLink[1], src: href });
+        i += 1;
+        continue;
+      }
     }
 
     // Paragraph: consume until a blank line or the start of another block.

@@ -156,6 +156,15 @@ describe("misc blocks", () => {
     expect(node).toEqual({ type: "image", alt: "A diagram", src: "assets/flow.png" });
   });
 
+  it("promotes a standalone MP4 link to a video node", () => {
+    const [node] = nodesOf("[Today walkthrough](/api/notes-assets/assets/demos/today.mp4)");
+    expect(node).toEqual({
+      type: "video",
+      title: "Today walkthrough",
+      src: "/api/notes-assets/assets/demos/today.mp4",
+    });
+  });
+
   it("escapes raw HTML instead of passing it through", () => {
     const [node] = nodesOf("<script>alert(1)</script> hello");
     if (node.type !== "paragraph") throw new Error("expected paragraph");

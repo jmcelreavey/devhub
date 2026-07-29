@@ -6966,6 +6966,14 @@ ul.docs-list ul.docs-list {
   border-radius: var(--radius-sm);
 }
 
+.docs-video {
+  display: block;
+  width: 100%;
+  max-height: min(72vh, 720px);
+  border-radius: var(--radius-sm);
+  background: #000;
+}
+
 .docs-figure-caption {
   margin-top: var(--space-2);
   text-align: center;
