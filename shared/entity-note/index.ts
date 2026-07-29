@@ -12,7 +12,7 @@
  * `shared/entity-note` in MCP/sibling packages. Do not invent per-plugin formats.
  */
 
-export type EntityKind = "task" | "meeting" | "pr" | "note" | "calendar" | "jira";
+export type EntityKind = "task" | "meeting" | "pr" | "note" | "calendar" | "jira" | "repo";
 
 export interface EntityRef {
   kind: EntityKind;
@@ -57,6 +57,7 @@ const KIND_LABEL: Record<EntityKind, string> = {
   pr: "PR",
   note: "Note",
   jira: "Jira",
+  repo: "Repo",
 };
 
 /** One markdown line for an EntityRef (marker, or labelled link / plain text). */
@@ -161,6 +162,9 @@ function kindFromLabel(raw: string): EntityKind | null {
       return "note";
     case "jira":
       return "jira";
+    case "repo":
+    case "repository":
+      return "repo";
     default:
       return null;
   }
@@ -182,6 +186,8 @@ export function defaultHrefForRef(ref: EntityRef): string | undefined {
     }
     case "calendar":
       return "/calendar";
+    case "repo":
+      return "/repos";
     default:
       return undefined;
   }

@@ -49,7 +49,7 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
         links: z
           .array(
             z.object({
-              kind: z.enum(["task", "meeting", "pr", "note", "calendar", "jira"]),
+              kind: z.enum(["task", "meeting", "pr", "note", "calendar", "jira", "repo"]),
               id: z.string(),
               label: z.string(),
               href: z.string().optional(),
@@ -106,7 +106,7 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
         links: z
           .array(
             z.object({
-              kind: z.enum(["task", "meeting", "pr", "note", "calendar", "jira"]),
+              kind: z.enum(["task", "meeting", "pr", "note", "calendar", "jira", "repo"]),
               id: z.string(),
               label: z.string(),
               href: z.string().optional(),

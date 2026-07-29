@@ -5,7 +5,7 @@ import { formatZodError } from "@/lib/schemas";
 import { resolveEntityLinks } from "@/lib/entity-links/resolve";
 
 const QuerySchema = z.object({
-  kind: z.enum(["task", "meeting", "pr", "note", "calendar", "jira"]),
+  kind: z.enum(["task", "meeting", "pr", "note", "calendar", "jira", "repo"]),
   id: z.string().min(1).max(200),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   label: z.string().max(200).optional(),

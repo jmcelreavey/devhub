@@ -16,6 +16,7 @@ import {
   Calendar,
   ExternalLink,
   FileText,
+  FolderGit2,
   GitPullRequest,
   ListTodo,
   Ticket,
@@ -35,6 +36,7 @@ const KIND_ICON: Record<EntityKind, typeof FileText> = {
   meeting: Calendar,
   pr: GitPullRequest,
   jira: Ticket,
+  repo: FolderGit2,
 };
 
 const NOTE_LABEL_MAX = 28;

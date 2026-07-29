@@ -5,7 +5,7 @@ import { NotesStorage } from "./storage.ts";
 
 // keep in sync with dashboard/lib/tasks/types.ts Task
 export interface EntityRef {
-  kind: "task" | "meeting" | "pr" | "note" | "calendar" | "jira";
+  kind: "task" | "meeting" | "pr" | "note" | "calendar" | "jira" | "repo";
   id: string;
   label: string;
   href?: string;

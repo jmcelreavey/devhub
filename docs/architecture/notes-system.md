@@ -37,20 +37,30 @@ graph TD
 > vault storage layer, which is why the docs editor and the notes editor behave
 > identically.
 
+## Walkthroughs
+
+### Notes library
+
+[Notes library walkthrough](/api/notes-assets/assets/feature-demos/demo-06-notes-library.mp4)
+
+### Notes AI
+
+[Notes AI summarize and accept walkthrough](/api/notes-assets/assets/feature-demos/demo-14-notes-ai.mp4)
+
 ## Main Note Areas
 
 Top-level folders under `notes/` are **areas** with curated labels and landing cards (`dashboard/lib/notes/note-areas.ts`). The **Library → Notes** landing page (`/notes`) groups recent files by area; `/notes/area/<id>` shows one area's index. Unknown folders still appear — they get a title-cased label and sort after known areas.
 
-| Area        | Purpose                                            |
-| ----------- | -------------------------------------------------- |
-| Daily       | Day-by-day work notes and standups                 |
-| Learnings   | Reusable knowledge distilled from work             |
-| Sessions    | Longer records of significant AI-assisted sessions |
-| Meetings    | Meeting notes and follow-ups                       |
-| Task notes  | Notes linked to a specific task (`task-notes/…`)   |
-| PR reviews  | Generated review notes, one per pull request       |
-| Diagrams    | tldraw files for visual notes                      |
-| Appraisal   | Structured review evidence and goals               |
+| Area       | Purpose                                            |
+| ---------- | -------------------------------------------------- |
+| Daily      | Day-by-day work notes and standups                 |
+| Learnings  | Reusable knowledge distilled from work             |
+| Sessions   | Longer records of significant AI-assisted sessions |
+| Meetings   | Meeting notes and follow-ups                       |
+| Task notes | Notes linked to a specific task (`task-notes/…`)   |
+| PR reviews | Generated review notes, one per pull request       |
+| Diagrams   | tldraw files for visual notes                      |
+| Appraisal  | Structured review evidence and goals               |
 
 ## Two-Tier Memory
 
@@ -80,31 +90,31 @@ They are easy to search and safe to edit from the dashboard or MCP tools.
 
 Tasks, calendar events, pull requests, and notes share one **EntityRef** contract so you can hop between related work without hunting paths. The shape lives in `shared/entity-note/` and is re-exported from `dashboard/lib/entity-note.ts` after plugin materialize.
 
-| Field | Meaning |
-| ----- | ------- |
-| `kind` | `task`, `meeting`, `calendar`, `pr`, `note`, or `jira` |
-| `id` | Stable id within the kind (task UUID, `owner/repo#123`, calendar event id, note path, …) |
-| `label` | Human-readable text for chips and the `## Links` section |
-| `href` | Optional in-app or external URL for hop-around |
-| `marker` | Optional opaque line (e.g. `::task-ref …`) that wins over markdown formatting |
+| Field    | Meaning                                                                                  |
+| -------- | ---------------------------------------------------------------------------------------- |
+| `kind`   | `task`, `meeting`, `calendar`, `pr`, `note`, or `jira`                                   |
+| `id`     | Stable id within the kind (task UUID, `owner/repo#123`, calendar event id, note path, …) |
+| `label`  | Human-readable text for chips and the `## Links` section                                 |
+| `href`   | Optional in-app or external URL for hop-around                                           |
+| `marker` | Optional opaque line (e.g. `::task-ref …`) that wins over markdown formatting            |
 
 ### Where edges are stored
 
-| Storage | Use |
-| ------- | --- |
+| Storage                 | Use                                                                             |
+| ----------------------- | ------------------------------------------------------------------------------- |
 | Note `## Links` section | Outbound refs embedded in note bodies (tasks, PRs, calendar, Jira, other notes) |
-| `Task.links` | Hop-around edges that do not require a note (task↔PR, task↔calendar, …) |
-| Stable note paths | Entity→note edge via deterministic paths (open-or-create from UI/MCP) |
+| `Task.links`            | Hop-around edges that do not require a note (task↔PR, task↔calendar, …)         |
+| Stable note paths       | Entity→note edge via deterministic paths (open-or-create from UI/MCP)           |
 
 Reverse lookups combine those three sources: `dashboard/lib/entity-links/resolve.ts` scans stable paths, parses `## Links`, and reads `Task.links`.
 
 ### Stable note paths
 
-| Entity | Path pattern | Example |
-| ------ | ------------ | ------- |
-| Task | `task-notes/YYYY-MM-DD-<taskId>` | `task-notes/2026-07-28-a1b2c3d4` |
-| Meeting / calendar event | `meetings/YYYY-MM-DD-<slug>` | `meetings/2026-07-28-standup` |
-| PR review | `pr-reviews/<repo-slug>-<n>` | `pr-reviews/businessinsider-fancy-repo-123` |
+| Entity                   | Path pattern                     | Example                                     |
+| ------------------------ | -------------------------------- | ------------------------------------------- |
+| Task                     | `task-notes/YYYY-MM-DD-<taskId>` | `task-notes/2026-07-28-a1b2c3d4`            |
+| Meeting / calendar event | `meetings/YYYY-MM-DD-<slug>`     | `meetings/2026-07-28-standup`               |
+| PR review                | `pr-reviews/<repo-slug>-<n>`     | `pr-reviews/businessinsider-fancy-repo-123` |
 
 Scaffolds are built by `shared/task-note/`, `shared/meeting-note/`, and `shared/pr-note/` — the same helpers power the dashboard note buttons and MCP `notes_create_*` tools.
 
@@ -120,18 +130,18 @@ Notes carry outbound refs in a `## Links` markdown section. Each line is either:
 
 ### Dashboard surfaces
 
-| Surface | Behavior |
-| ------- | -------- |
-| Task row | **Note** (open-or-create task note), **Link** (**EntityLinkDialog** — searchable pickers or paste a URL/key), overflow menu for secondary actions |
-| Calendar / Today | Meeting note button; **EntityLinkChips** on events |
-| PR row | Review note action; link chips for related entities |
-| Note editor footer | **EntityRelationsPanel** — outbound refs from `## Links` plus inbound refs from `/api/entity-links` |
+| Surface            | Behavior                                                                                                                               |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Task row           | **Note** (open-or-create task note), **Link** (searchable PR/calendar/note/repo/Jira/task picker), overflow menu for secondary actions |
+| Calendar / Today   | Meeting note button; **EntityLinkChips** on events                                                                                     |
+| PR row             | Review note action; link chips for related entities                                                                                    |
+| Note editor footer | **EntityRelationsPanel** plus persistent Cursor Markdown working copies for linked repos                                               |
 
 ### API and MCP
 
 - `GET /api/entity-links?kind=&id=` — returns `{ entity, notes[], related[] }`. Optional query params: `date`, `label`, `href`, `meetingTitle`, `prRepo`, `prNumber`. See [API Routes](../reference/api-routes.md).
 - `PATCH /api/tasks` with `{ id, links: EntityRef[] }` replaces hop-around links on a task.
-- MCP: `notes_create_task`, `notes_create_meeting`, `notes_create_pr`, `entity_links_read`; `tasks_create` / `tasks_update` accept `links` and optional `withNote`.
+- MCP: `notes_create_task`, `notes_create_meeting`, `notes_create_pr`, `entity_links_read`, `notes_cursor_open`, `notes_cursor_apply`, `notes_cursor_delete`; `tasks_create` / `tasks_update` accept `links` and optional `withNote`.
 
 Plugins should import `shared/entity-note` (or `@/lib/entity-note` after materialize) rather than defining their own link shapes.
 
@@ -180,14 +190,14 @@ Files are a good fit because they are:
 
 Folder-scoped **master checklists** live under `collections/` at the repo root (one JSON file per list). They are edited from the **Checklists** view in the notes UI (`/notes` with the checklists panel, or `/collections` which redirects there).
 
-| Concept | Behavior |
-| ------- | -------- |
-| Scope   | Each master list is tied to a notes folder path (longest prefix wins for a given note). |
-| In notes | Insert a **Linked checklist** block from `/` or link tasks to the folder’s master. Checked state is shared across notes that reference the same master item. |
-| Labels  | Renaming a master item updates the canonical label. Linked blocks in other notes may show **drift** until you sync labels (see below). |
-| API     | `GET/POST /api/collections`, `GET/PATCH/DELETE /api/collections/[id]` (route name is historical; payloads use master-list shapes). |
-| Label sync | `GET /api/collections/[id]/linked-label-drift?itemId=…` counts linked blocks whose text differs from the master; `POST /api/collections/[id]/sync-linked-labels` with `{ itemId, label, excludeNotePath? }` rewrites matching blocks across notes. |
-| Assets  | Images and `.mp4` video under the notes tree (e.g. `garden/project/assets/photo-1.jpg`) are served at `GET /api/notes-assets/...`. MCP markdown uses notes-relative paths; saved BlockNote JSON stores `/api/notes-assets/...` URLs. Use `notes_write_asset` to upload bytes from agents. Allowed extensions: `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.mp4`. |
+| Concept    | Behavior                                                                                                                                                                                                                                                                                                                                                        |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scope      | Each master list is tied to a notes folder path (longest prefix wins for a given note).                                                                                                                                                                                                                                                                         |
+| In notes   | Insert a **Linked checklist** block from `/` or link tasks to the folder’s master. Checked state is shared across notes that reference the same master item.                                                                                                                                                                                                    |
+| Labels     | Renaming a master item updates the canonical label. Linked blocks in other notes may show **drift** until you sync labels (see below).                                                                                                                                                                                                                          |
+| API        | `GET/POST /api/collections`, `GET/PATCH/DELETE /api/collections/[id]` (route name is historical; payloads use master-list shapes).                                                                                                                                                                                                                              |
+| Label sync | `GET /api/collections/[id]/linked-label-drift?itemId=…` counts linked blocks whose text differs from the master; `POST /api/collections/[id]/sync-linked-labels` with `{ itemId, label, excludeNotePath? }` rewrites matching blocks across notes.                                                                                                              |
+| Assets     | Images and `.mp4` video under the notes tree (e.g. `garden/project/assets/photo-1.jpg`) are served at `GET /api/notes-assets/...`. MCP markdown uses notes-relative paths; saved BlockNote JSON stores `/api/notes-assets/...` URLs. Use `notes_write_asset` to upload bytes from agents. Allowed extensions: `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.mp4`. |
 
 Collection JSON writes are serialized with a repo mutex so rapid checklist edits from multiple tabs do not corrupt files.
 
@@ -208,10 +218,10 @@ Backend route: `POST /api/notes/ai/chat` (Vercel AI SDK + BlockNote server helpe
 
 The dashboard treats rooted file trees as **vaults** with shared storage, API, and UI. Filesystem primitives (`VaultStorage`, codecs, path helpers) live in [`shared/vault/`](../../shared/vault/README.md) and are extended by the dashboard (assets, BlockNote search) and MCP server (workspace-scoped note search).
 
-| Vault | Path (default) | Format | Routes |
-| ----- | -------------- | ------ | ------ |
-| Notes | `NOTES_DIR` / `notes/` | BlockNote JSON (`.json`) | `/notes`, `/api/notes/...` |
-| Docs  | `REPO_ROOT/docs` (override with `DOCS_DIR`) | Markdown (`.md`) | `/docs`, `/api/docs/...` |
+| Vault | Path (default)                              | Format                   | Routes                     |
+| ----- | ------------------------------------------- | ------------------------ | -------------------------- |
+| Notes | `NOTES_DIR` / `notes/`                      | BlockNote JSON (`.json`) | `/notes`, `/api/notes/...` |
+| Docs  | `REPO_ROOT/docs` (override with `DOCS_DIR`) | Markdown (`.md`)         | `/docs`, `/api/docs/...`   |
 
 Docs default to a **read-first site** (`lib/docs/markdown-ast.ts` → `DocArticleView`): frontmatter-driven nav, table of contents, backlinks, Mermaid diagrams, GitHub callouts, and full-text search (`GET /api/docs/search`). Click **Edit** (or append `?edit=1`) to open the BlockNote editor with markdown round-trip via `shared/markdown-convert/`. Scoped git sync (`Sync content`) includes `docs/` alongside `notes/`, `collections/`, and `tasks/`.
 
@@ -223,12 +233,12 @@ Open **Docs** under **Library** (`/docs`) for the landing page, section indexes,
 
 Content sync is the low-friction path for personal content that changes while using the dashboard. It is intentionally scoped: `dashboard/lib/content-sync-paths.ts` defines `notes/`, `collections/`, `tasks/`, `docs/`, and `upstarts/` as the paths staged by the `sync_notes_tasks_push` action.
 
-| Surface | Behavior |
-| ------- | -------- |
-| Top bar cloud button | Appears when `/api/status/git` reports dirty content (or unpushed commits after a successful content commit). It starts `POST /api/scripts` with `script: "sync_notes_tasks_push"`, which stages only the scoped content paths, creates an auto-generated `chore(content): ...` commit, and pushes the current branch. |
-| Top bar warning triangle | Opens the **Repo Git workspace** when non-content files are dirty or merge conflicts exist; runs `update_and_sync` when only upstream commits are waiting on a clean tree. Pre-push failures show an inline hook-failure dialog. |
-| Status page | Shows repo branch, ahead/behind counts, dirty content vs other dirty files, recent sync failures, merge conflicts, and sync-health checks. Use it when the top bar blocks sync or a scripted action fails. |
-| Actions page | Exposes the same allowlisted script IDs for manual runs and log inspection. `dry_run_scoped_sync` previews the scoped content commit without staging anything. |
+| Surface                  | Behavior                                                                                                                                                                                                                                                                                                               |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Top bar cloud button     | Appears when `/api/status/git` reports dirty content (or unpushed commits after a successful content commit). It starts `POST /api/scripts` with `script: "sync_notes_tasks_push"`, which stages only the scoped content paths, creates an auto-generated `chore(content): ...` commit, and pushes the current branch. |
+| Top bar warning triangle | Opens the **Repo Git workspace** when non-content files are dirty or merge conflicts exist; runs `update_and_sync` when only upstream commits are waiting on a clean tree. Pre-push failures show an inline hook-failure dialog.                                                                                       |
+| Status page              | Shows repo branch, ahead/behind counts, dirty content vs other dirty files, recent sync failures, merge conflicts, and sync-health checks. Use it when the top bar blocks sync or a scripted action fails.                                                                                                             |
+| Actions page             | Exposes the same allowlisted script IDs for manual runs and log inspection. `dry_run_scoped_sync` previews the scoped content commit without staging anything.                                                                                                                                                         |
 
 `/api/status/git` classifies content via `lib/content-sync-dirs.ts`. Each bucket always includes its **conventional in-repo folder** (`notes/`, `tasks/`, …) even when `NOTES_DIR` / `TASKS_DIR` env vars point elsewhere — relocated env values must not turn repo content into "other dirty files". A configured dir that resolves inside the repo adds its prefix on top. Root `diagrams/` counts as content-adjacent in dirty badges but is **not** staged by `sync_notes_tasks_push`; commit diagrams through the Repo Git workspace or a manual commit.
 
@@ -261,12 +271,12 @@ Notes and docs autosave on a short debounce. Each navigation or vault switch bum
 
 BlockNote link clicks in notes and docs resolve in-app when possible:
 
-| Link form | Behavior |
-| --------- | -------- |
-| `/notes/...`, `/docs/...` | Navigate within the dashboard |
-| Relative `.md` / `.json` paths | Resolve relative to the current note or doc slug |
-| `repo://` / `repo:` | Open a sibling repo file in Cursor via `POST /api/repos/<name>/open` |
-| `http(s):`, `mailto:`, `tel:` | Open externally (⌘/Ctrl-click opens in a new tab) |
+| Link form                      | Behavior                                                             |
+| ------------------------------ | -------------------------------------------------------------------- |
+| `/notes/...`, `/docs/...`      | Navigate within the dashboard                                        |
+| Relative `.md` / `.json` paths | Resolve relative to the current note or doc slug                     |
+| `repo://` / `repo:`            | Open a sibling repo file in Cursor via `POST /api/repos/<name>/open` |
+| `http(s):`, `mailto:`, `tel:`  | Open externally (⌘/Ctrl-click opens in a new tab)                    |
 
 See [Dashboard — Repo-aware links](dashboard.md#repo-aware-links) for repo link syntax.
 

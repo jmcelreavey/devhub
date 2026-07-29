@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const EntityRefSchema = z.object({
-  kind: z.enum(["task", "meeting", "pr", "note", "calendar", "jira"]),
+  kind: z.enum(["task", "meeting", "pr", "note", "calendar", "jira", "repo"]),
   id: z.string().min(1).max(200),
   label: z.string().min(1).max(200),
   href: z.string().max(1000).optional(),
@@ -65,6 +65,7 @@ export const JiraTransitionSchema = z.object({
 
 export const NotePutSchema = z.object({
   content: z.unknown(),
+  expectedModified: z.number().finite().nonnegative().nullable().optional(),
 });
 
 const EmptyableStringSchema = z.union([z.string().max(500), z.null()]);

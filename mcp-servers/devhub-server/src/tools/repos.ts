@@ -69,7 +69,7 @@ export function registerReposTools(server: McpServer, ctx: Context): void {
     },
     async ({ name }) =>
       withDashboardErrors(async () => {
-        const r = await dashboard.post<{ ok: boolean; path: string }>(repoPath(name, "/open"));
+        const r = await dashboard.post<{ ok: boolean; path: string }>(repoPath(name, "/open"), {});
         return { content: [{ type: "text", text: `Opened ${name} (${r.path}).` }] };
       }),
   );

@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Context } from "../context.ts";
 import type { TreeEntry } from "../storage.ts";
+import { withDashboardErrors } from "../dashboard-client.ts";
 import { flattenTree } from "../shared.ts";
 import { blocksToText, textToBlocks } from "../convert.ts";
 import {
@@ -29,7 +30,7 @@ function filterAgentNoteTree(entries: TreeEntry[]): TreeEntry[] {
 }
 
 export function registerNotesTools(server: McpServer, ctx: Context): void {
-  const { storage, notesDir } = ctx;
+  const { storage, notesDir, dashboard } = ctx;
 
   server.registerTool(
     "notes_list",
@@ -87,6 +88,71 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
       const action = existing ? "Updated" : "Created";
       return { content: [{ type: "text", text: `${action}: ${filePath}` }] };
     },
+  );
+
+  server.registerTool(
+    "notes_cursor_open",
+    {
+      description:
+        "Open a note as a persistent Markdown working copy in Cursor alongside a linked local repo. Rich notes that cannot safely round-trip open read-only.",
+      inputSchema: {
+        path: z.string().describe("Notes-relative path, with or without .json"),
+        repoName: z.string().describe("Local repo name as shown by repos_list"),
+      },
+    },
+    async ({ path: notePath, repoName }) =>
+      withDashboardErrors(async () => {
+        const result = await dashboard.post<{ writable: boolean }>(
+          `/api/repos/${encodeURIComponent(repoName)}/open`,
+          { notePath },
+        );
+        return {
+          content: [{
+            type: "text",
+            text: result.writable
+              ? `Opened ${notePath} with ${repoName} in Cursor. Edit the Markdown copy, then use notes_cursor_apply.`
+              : `Opened ${notePath} with ${repoName} in Cursor as read-only Markdown; rich blocks prevent safe write-back.`,
+          }],
+        };
+      }),
+  );
+
+  server.registerTool(
+    "notes_cursor_apply",
+    {
+      description:
+        "Apply a persistent Cursor Markdown working copy back to its DevHub note. Refuses stale or structurally unsafe writes.",
+      inputSchema: {
+        path: z.string().describe("Notes-relative source path"),
+        repoName: z.string().describe("Repo used when opening the working copy"),
+      },
+    },
+    async ({ path: notePath, repoName }) =>
+      withDashboardErrors(async () => {
+        await dashboard.patch(`/api/repos/${encodeURIComponent(repoName)}/open`, {
+          notePath,
+        });
+        return { content: [{ type: "text", text: `Applied Cursor changes to ${notePath}.` }] };
+      }),
+  );
+
+  server.registerTool(
+    "notes_cursor_delete",
+    {
+      description:
+        "Delete a persistent Cursor Markdown working copy without changing the DevHub source note.",
+      inputSchema: {
+        path: z.string().describe("Notes-relative source path"),
+        repoName: z.string().describe("Repo used when opening the working copy"),
+      },
+    },
+    async ({ path: notePath, repoName }) =>
+      withDashboardErrors(async () => {
+        await dashboard.delete(`/api/repos/${encodeURIComponent(repoName)}/open`, {
+          notePath,
+        });
+        return { content: [{ type: "text", text: `Deleted the Cursor working copy for ${notePath}.` }] };
+      }),
   );
 
   server.registerTool(

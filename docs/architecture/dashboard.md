@@ -15,49 +15,67 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 
 ## What The Dashboard Provides
 
-| Area         | Purpose                                                                      |
-| ------------ | ---------------------------------------------------------------------------- |
-| Today        | Daily workspace with tasks, notes, calendar, tickets, PRs, standup tools, and a morning briefing widget |
-| Briefing     | Full-page personal start-of-day digest (weather, news, events, research, and more) |
-| Notes        | BlockNote editing, file tree, folder-scoped master checklists, optional OpenAI-compatible in-editor AI |
-| Docs         | Read-first documentation site over repo `docs/` markdown (article view, TOC, backlinks, search, Mermaid); BlockNote edit mode via **Edit** or `?edit=1` |
-| Tasks        | Daily task management, drag reorder for open items, weekly review, and history |
-| Skills       | Shared skill viewing, creation, sync, and collection                         |
-| Actions      | Safe script runner for maintenance tasks                                     |
-| Status       | Health checks for repo, services, MCP, sync health, merge conflicts, and network access |
-| Setup        | Environment and integration configuration                                    |
+| Area         | Purpose                                                                                                     |
+| ------------ | ----------------------------------------------------------------------------------------------------------- |
+| Today        | Daily workspace with tasks, notes, calendar, tickets, PRs, standup tools, and a morning briefing widget     |
+| Briefing     | Full-page personal start-of-day digest (weather, news, events, research, and more)                          |
+| Notes        | BlockNote editing, file tree, folder-scoped master checklists, optional OpenAI-compatible in-editor AI      |
+| Docs         | Read-first docs site with article view, TOC, backlinks, search, Mermaid, and BlockNote edit mode            |
+| Tasks        | Daily task management, drag reorder for open items, weekly review, and history                              |
+| Skills       | Shared skill viewing, creation, sync, and collection                                                        |
+| Actions      | Safe script runner for maintenance tasks                                                                    |
+| Status       | Health checks for repo, services, MCP, sync health, merge conflicts, and network access                     |
+| Setup        | Environment and integration configuration                                                                   |
 | Repos        | Sibling git checkout discovery, GitHub clone/search, Cursor/GitKraken launch, compose-up, and Repo Learning |
-| Integrations | Calendar, Jira, Datadog, GitHub, and internal ops views                      |
+| Integrations | Calendar, Jira, Datadog, GitHub, and internal ops views                                                     |
+
+## Walkthroughs
+
+### Today workspace
+
+[Today tasks and planning walkthrough](/api/notes-assets/assets/feature-demos/demo-01-today.mp4)
+
+### Morning briefing
+
+[Briefing and design controls walkthrough](/api/notes-assets/assets/feature-demos/demo-02-briefing.mp4)
+
+### Research and diagrams
+
+[Research and diagrams walkthrough](/api/notes-assets/assets/feature-demos/demo-09-research-and-diagrams.mp4)
+
+### Status, actions, and setup
+
+[Status, Datadog, actions, and setup walkthrough](/api/notes-assets/assets/feature-demos/demo-11-status-datadog-actions-setup.mp4)
 
 ## Navigation (2026-06 IA)
 
 The sidebar is driven by `dashboard/lib/nav.ts` — twelve primary destinations grouped into **Workspace**, **Library**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag.
 
-| Sidebar | Route | Notes |
-| ------- | ----- | ----- |
-| Today | `/` | Daily hub |
-| Briefing | `/briefing` | Full morning digest |
-| Calendar | `/calendar` | Gated on `calendar` |
-| Work | `/work` | Tasks + Jira + History tabs (see below) |
-| PRs | `/prs` | Gated on `github` |
-| Review | `/review` | Weekly retrospective; desktop nav only |
-| Library | `/notes` | Top-bar tabs: Notes, Docs, Learnings, Radar, Appraisal, Research, Diagrams, Live links |
-| Agents | `/skills` | Skills, persona, MCP catalog |
-| Repos | `/repos` | Desktop nav only |
-| System | `/status` | Top-bar tabs: Status, Ops, Datadog, Actions, Setup |
-| Chamber | `/chamber` | Gated on `chamber` |
-| OpenCode | `/opencode` | Gated on `opencode` |
-| Claude | `/claude` | Gated on `claude`; desktop nav only |
+| Sidebar  | Route       | Notes                                                                                  |
+| -------- | ----------- | -------------------------------------------------------------------------------------- |
+| Today    | `/`         | Daily hub                                                                              |
+| Briefing | `/briefing` | Full morning digest                                                                    |
+| Calendar | `/calendar` | Gated on `calendar`                                                                    |
+| Work     | `/work`     | Tasks + Jira + History tabs (see below)                                                |
+| PRs      | `/prs`      | Gated on `github`                                                                      |
+| Review   | `/review`   | Weekly retrospective; desktop nav only                                                 |
+| Library  | `/notes`    | Top-bar tabs: Notes, Docs, Learnings, Radar, Appraisal, Research, Diagrams, Live links |
+| Agents   | `/skills`   | Skills, persona, MCP catalog                                                           |
+| Repos    | `/repos`    | Desktop nav only                                                                       |
+| System   | `/status`   | Top-bar tabs: Status, Ops, Datadog, Actions, Setup                                     |
+| Chamber  | `/chamber`  | Gated on `chamber`                                                                     |
+| OpenCode | `/opencode` | Gated on `opencode`                                                                    |
+| Claude   | `/claude`   | Gated on `claude`; desktop nav only                                                    |
 
 ### Merged destinations
 
 **Work** (`/work`) groups “things I owe” in one shell:
 
-| Tab | Content | API |
-| --- | ------- | --- |
-| Tasks | Today's open queue | `/api/tasks` |
-| Jira | Ticket list (same as `/tickets`) | Jira routes; tab hidden until Jira is configured |
-| History | Per-day task summaries | `GET /api/tasks/history?includeTasks=1` |
+| Tab     | Content                          | API                                              |
+| ------- | -------------------------------- | ------------------------------------------------ |
+| Tasks   | Today's open queue               | `/api/tasks`                                     |
+| Jira    | Ticket list (same as `/tickets`) | Jira routes; tab hidden until Jira is configured |
+| History | Per-day task summaries           | `GET /api/tasks/history?includeTasks=1`          |
 
 **Library** and **System** use `SectionTabs` in the top bar when you land on any sibling route (for example `/docs` or `/setup`). Gated tabs (Ops, Datadog, Live links) appear only when setup enables them. **System** also includes a **Logs** tab (desktop only) for live tail of shell, sidecar, and renderer logs.
 
@@ -120,25 +138,25 @@ This keeps the app understandable and makes most features independent.
 
 Daily tasks live in repo-root `tasks/YYYY-MM-DD.json` (one file per calendar day). The **Today** and **Tasks** views read and mutate them through `/api/tasks`.
 
-| Behavior | Detail |
-| -------- | ------ |
-| Rollover   | Open tasks from yesterday copy into today on first load; yesterday entries get `movedAt` / `movedToDate` |
-| Reorder    | Drag open tasks in the list (or use arrow keys on the drag handle). Only **open** tasks reorder; done, abandoned, and moved tasks keep their relative slots. Order is array position in the day's JSON file. |
-| API        | See table below |
+| Behavior | Detail                                                                                                                                                                                                       |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Rollover | Open tasks from yesterday copy into today on first load; yesterday entries get `movedAt` / `movedToDate`                                                                                                     |
+| Reorder  | Drag open tasks in the list (or use arrow keys on the drag handle). Only **open** tasks reorder; done, abandoned, and moved tasks keep their relative slots. Order is array position in the day's JSON file. |
+| API      | See table below                                                                                                                                                                                              |
 
 Completed and abandoned tasks stay in the file for history and standup; they are not included in reorder requests.
 
-| Method | Body | Purpose |
-| ------ | ---- | ------- |
-| `GET /api/tasks` | — | Runs rollover, returns `{ date, tasks[] }` for today |
-| `POST /api/tasks` | `{ text, date?, due? }` | Creates a task (`201`) |
-| `PATCH /api/tasks` | `{ ids[], date? }` | Reorders open tasks — every open id exactly once |
-| `PATCH /api/tasks` | `{ id, done }` | Toggle complete |
-| `PATCH /api/tasks` | `{ id, text?, due? }` | Edit text or due date |
-| `PATCH /api/tasks` | `{ id, status: "abandoned", abandonReason? }` | Abandon |
-| `PATCH /api/tasks` | `{ id, status: "active" }` | Reactivate abandoned task |
-| `PATCH /api/tasks` | `{ id, timer: "start" \| "stop", date? }` | Focus timer (see below) |
-| `DELETE /api/tasks` | `{ id, date? }` | Remove task from the day file |
+| Method              | Body                                          | Purpose                                              |
+| ------------------- | --------------------------------------------- | ---------------------------------------------------- |
+| `GET /api/tasks`    | —                                             | Runs rollover, returns `{ date, tasks[] }` for today |
+| `POST /api/tasks`   | `{ text, date?, due? }`                       | Creates a task (`201`)                               |
+| `PATCH /api/tasks`  | `{ ids[], date? }`                            | Reorders open tasks — every open id exactly once     |
+| `PATCH /api/tasks`  | `{ id, done }`                                | Toggle complete                                      |
+| `PATCH /api/tasks`  | `{ id, text?, due? }`                         | Edit text or due date                                |
+| `PATCH /api/tasks`  | `{ id, status: "abandoned", abandonReason? }` | Abandon                                              |
+| `PATCH /api/tasks`  | `{ id, status: "active" }`                    | Reactivate abandoned task                            |
+| `PATCH /api/tasks`  | `{ id, timer: "start" \| "stop", date? }`     | Focus timer (see below)                              |
+| `DELETE /api/tasks` | `{ id, date? }`                               | Remove task from the day file                        |
 
 ### Add to Jira
 
@@ -148,10 +166,10 @@ When Jira is configured, each task exposes an **Add to Jira** action. The modal 
 
 Each task can track focused work time via `timerStartedAt` (ISO start) and `timeSpentMs` (accumulated). Only **one** timer runs per calendar day — starting a timer on a new task stops any other running timer that day and folds elapsed time into `timeSpentMs`.
 
-| Action | API |
-| ------ | --- |
+| Action      | API                                                     |
+| ----------- | ------------------------------------------------------- |
 | Start timer | `PATCH /api/tasks` with `{ id, timer: "start", date? }` |
-| Stop timer | `PATCH /api/tasks` with `{ id, timer: "stop", date? }` |
+| Stop timer  | `PATCH /api/tasks` with `{ id, timer: "stop", date? }`  |
 
 Completing, abandoning, or deleting a task settles any running timer into `timeSpentMs`.
 
@@ -163,11 +181,11 @@ Completing, abandoning, or deleting a task settles any running timer into `timeS
 
 The **Review** page (`/review`, desktop nav) is a retrospective view over the last seven calendar days ending on a chosen date.
 
-| Surface | Route | Behavior |
-| ------- | ----- | -------- |
-| Review page | `/review` | Per-day created/completed/abandoned/moved bars, window totals, and a **slipped** list |
-| API | `GET /api/tasks/weekly?end=YYYY-MM-DD` | Same data as JSON; `end` defaults to today |
-| MCP | `tasks_weekly` | Dashboard-backed proxy of the weekly route |
+| Surface     | Route                                  | Behavior                                                                              |
+| ----------- | -------------------------------------- | ------------------------------------------------------------------------------------- |
+| Review page | `/review`                              | Per-day created/completed/abandoned/moved bars, window totals, and a **slipped** list |
+| API         | `GET /api/tasks/weekly?end=YYYY-MM-DD` | Same data as JSON; `end` defaults to today                                            |
+| MCP         | `tasks_weekly`                         | Dashboard-backed proxy of the weekly route                                            |
 
 **Slipped tasks** are detected when the same task text (normalized) appears as rolled over (`moved`) on three or more distinct days within the window (`SLIP_THRESHOLD = 3`). Rollover mints a new task id each day, so slip detection compares text across days rather than ids.
 
@@ -177,12 +195,12 @@ Pair with [Standup](../guides/standup.md) for daily forward-looking summaries; R
 
 One-shot terminal handoffs — PR review, capability **Build lab**, DX audit, repo upstart — run through either **OpenCode** (`opencode run`) or the **Cursor CLI** (`cursor-agent -p … --force --model <model>`). The choice is global, not per feature.
 
-| Surface | Route / env | Behavior |
-| ------- | ----------- | -------- |
-| Setup | `/setup → Agent CLI` | Pick CLI and optional model overrides |
-| Skills | **Skills → Agent CLI** | Same settings as Setup |
-| API | `GET/PUT /api/agent-cli` | Read/save `DEVHUB_AGENT_CLI`, `DEVHUB_AGENT_OPENCODE_MODEL`, `DEVHUB_AGENT_CURSOR_MODEL` in `dashboard/.env.local` |
-| Setup poll | `GET /api/setup/status` → `agentVars` | `{ cli, opencodeModel, cursorModel, cursorAgentInstalled }` for nav gates and the Cursor option |
+| Surface    | Route / env                           | Behavior                                                                                                           |
+| ---------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Setup      | `/setup → Agent CLI`                  | Pick CLI and optional model overrides                                                                              |
+| Skills     | **Skills → Agent CLI**                | Same settings as Setup                                                                                             |
+| API        | `GET/PUT /api/agent-cli`              | Read/save `DEVHUB_AGENT_CLI`, `DEVHUB_AGENT_OPENCODE_MODEL`, `DEVHUB_AGENT_CURSOR_MODEL` in `dashboard/.env.local` |
+| Setup poll | `GET /api/setup/status` → `agentVars` | `{ cli, opencodeModel, cursorModel, cursorAgentInstalled }` for nav gates and the Cursor option                    |
 
 OpenCode is the default (`DEVHUB_AGENT_CLI` omitted or `opencode`). Cursor appears only when `cursor-agent` resolves on `PATH`; `PUT` with `cli: "cursor"` returns `400` otherwise. Blank `opencodeModel` keeps the shared `opencode.json` default; Cursor defaults to `cursor-grok-4.5-high` when unset.
 
@@ -202,12 +220,12 @@ PR review notes include a `## Links` EntityRef back to the PR (same contract as 
 
 Tasks, calendar events, PRs, and notes share hop-around links through the `EntityRef` contract (`shared/entity-note/`). UI entry points:
 
-| Area | Actions |
-| ---- | ------- |
-| **Work → Tasks** | **Note** opens or creates `task-notes/…`; **Link** opens **EntityLinkDialog** (searchable pickers for PRs, calendar, notes, Jira, and recent tasks, or paste a URL/key); overflow menu holds secondary hover actions |
-| **Calendar** / Today briefing | Meeting **Note** button; link chips on events |
-| **PRs** | Review note action; link chips on PR rows |
-| **Notes** editor | Footer **Relations** panel — outbound `## Links` plus inbound refs from `GET /api/entity-links` |
+| Area                          | Actions                                                                                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Work → Tasks**              | **Note** opens or creates `task-notes/…`; **Link** opens searchable pickers for PR/calendar/note/repo/Jira/task refs; overflow holds secondary actions |
+| **Calendar** / Today briefing | Meeting **Note** button; link chips on events                                                                                                          |
+| **PRs**                       | Review note action; link chips on PR rows                                                                                                              |
+| **Notes** editor              | Relations panel plus repo-linked persistent Cursor Markdown working copies with safe apply/delete actions                                              |
 
 Stable path conventions, `## Links` format, API, and MCP tools: [Notes System — Cross-entity linking](notes-system.md#cross-entity-linking).
 
@@ -215,13 +233,13 @@ Stable path conventions, `## Links` format, API, and MCP tools: [Notes System �
 
 **Library → Radar** (`/radar`) combines an automated capability scan with a personal technology radar you maintain by hand.
 
-| Surface | Route / tool | Behavior |
-| ------- | ------------ | -------- |
-| Capability scan | `GET /api/capability/radar`, MCP `capability_radar` | Latest snapshot, diff (added/spread/removed), knowledge-drift rows from repo analysis |
-| Personal strip | `GET /api/radar/personal` | Parses `notes/radar/personal-radar.md` into adopt / trial / assess / hold items |
-| Scan action | `POST /api/capability/scan`, MCP `capability_scan` | Full scan; writes dated snapshot under `notes/.cache/capability/` |
-| Weekly digest | `POST /api/capability/digest`, job `capability_digest` | Generate or return digest markdown |
-| Build lab | Agent CLI + `capability-lab` skill (`GET /api/capability/journey/plan` → terminal handoff → `POST /api/capability/journey/adopt`) | Generation runs in the terminal; `POST /api/capability/journey` and MCP `capability_get_lab` only **fetch** an existing lab. Notes land under `notes/learnings/labs/…`. |
+| Surface         | Route / tool                                                                                                                      | Behavior                                                                                                                                                                |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Capability scan | `GET /api/capability/radar`, MCP `capability_radar`                                                                               | Latest snapshot, diff (added/spread/removed), knowledge-drift rows from repo analysis                                                                                   |
+| Personal strip  | `GET /api/radar/personal`                                                                                                         | Parses `notes/radar/personal-radar.md` into adopt / trial / assess / hold items                                                                                         |
+| Scan action     | `POST /api/capability/scan`, MCP `capability_scan`                                                                                | Full scan; writes dated snapshot under `notes/.cache/capability/`                                                                                                       |
+| Weekly digest   | `POST /api/capability/digest`, job `capability_digest`                                                                            | Generate or return digest markdown                                                                                                                                      |
+| Build lab       | Agent CLI + `capability-lab` skill (`GET /api/capability/journey/plan` → terminal handoff → `POST /api/capability/journey/adopt`) | Generation runs in the terminal; `POST /api/capability/journey` and MCP `capability_get_lab` only **fetch** an existing lab. Notes land under `notes/learnings/labs/…`. |
 
 ### Personal radar file
 
@@ -233,11 +251,11 @@ See [Capability Radar plan](../archive/capability-radar-plan.md) for scan archit
 
 The morning briefing is a personal start-of-day digest, not a work standup. It appears as a widget on **Today** and as a full page at `/briefing`.
 
-| Surface | Route | Behavior |
-| ------- | ----- | -------- |
-| Today widget | `GET /api/dashboard/morning-briefing` | Compact card in the Today grid (structured sections + rendered `text` summary). Weather uses a dedicated React hero (`DashboardBriefingWeather`) — separate from the AI canvas HTML on `/briefing`. |
-| Briefing page | `/briefing` | Full-page **AI-authored canvas** in a same-origin iframe (`GET /api/briefing/canvas`). Reshape via **Design** chat; refresh data without losing layout. |
-| MCP | `briefing_get` | Returns the same rendered text through the dashboard-backed MCP tool. |
+| Surface       | Route                                 | Behavior                                                                                                                                                                                            |
+| ------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Today widget  | `GET /api/dashboard/morning-briefing` | Compact card in the Today grid (structured sections + rendered `text` summary). Weather uses a dedicated React hero (`DashboardBriefingWeather`) — separate from the AI canvas HTML on `/briefing`. |
+| Briefing page | `/briefing`                           | Full-page **AI-authored canvas** in a same-origin iframe (`GET /api/briefing/canvas`). Reshape via **Design** chat; refresh data without losing layout.                                             |
+| MCP           | `briefing_get`                        | Returns the same rendered text through the dashboard-backed MCP tool.                                                                                                                               |
 
 ### Canvas page (`/briefing`)
 
@@ -261,18 +279,18 @@ Theme is bridged from the app shell (`lib/briefing-theme.ts`) so a dark-mode can
 
 Preferences live in `notes/.config/briefing-prefs.json` and sync with the repo like other notes config. There is no dedicated prefs API — edit the JSON directly, or ask **Design** chat (`POST /api/briefing/design`) to patch fields (location, feeds, section toggles, interests). Prefs control **what data** the canvas receives, not the canvas layout itself.
 
-| Section | Default | Source |
-| ------- | ------- | ------ |
-| Weather | on | Open-Meteo forecast for `location` (`name`, `lat`, `lon`) in prefs |
-| News | on | RSS feeds from prefs |
-| Events | on | Local event search around `eventSearchAreas` |
-| Trending Repos | on | GitHub trending by `repoLanguages` |
-| Hacker News | on | HN top stories |
-| Gaming | off | Gaming RSS feeds |
-| On This Day | on | Historical events |
-| Family Days Out | off | Nearby attractions when `hasKids` is enabled |
-| Background Research | on | Cached Last30Days briefs for configured interests |
-| Interests | off | AI snippets for configured hobbies (requires `AI_API_KEY`) |
+| Section             | Default | Source                                                             |
+| ------------------- | ------- | ------------------------------------------------------------------ |
+| Weather             | on      | Open-Meteo forecast for `location` (`name`, `lat`, `lon`) in prefs |
+| News                | on      | RSS feeds from prefs                                               |
+| Events              | on      | Local event search around `eventSearchAreas`                       |
+| Trending Repos      | on      | GitHub trending by `repoLanguages`                                 |
+| Hacker News         | on      | HN top stories                                                     |
+| Gaming              | off     | Gaming RSS feeds                                                   |
+| On This Day         | on      | Historical events                                                  |
+| Family Days Out     | off     | Nearby attractions when `hasKids` is enabled                       |
+| Background Research | on      | Cached Last30Days briefs for configured interests                  |
+| Interests           | off     | AI snippets for configured hobbies (requires `AI_API_KEY`)         |
 
 The Today widget weather hero (`DashboardBriefingWeather`) is separate from the `/briefing` canvas — it uses thermal/atmosphere bands derived from Open-Meteo codes and does not reload when you redesign the canvas.
 
@@ -297,18 +315,18 @@ The dashboard keeps Git sync state visible without making every page own Git log
 
 The Status page (`/status`) aggregates Git, sync, services, and infra into one operational view:
 
-| Section | What it shows | Primary actions |
-| ------- | ------------- | --------------- |
-| Health summary | Aggregates stopped peer services, non-content dirty paths, behind count, merge conflicts, missing MCP binaries, and last failed sync | Banner turns amber when any item is present |
-| Plugin materialization | `GET /api/status/materialized` — compares plugin-owned dashboard copies to plugin source | Amber banner when core copies diverge from the plugin checkout (edits there are lost on `sync_plugins` / `predev`) |
-| Repo | Branch, content vs other dirty counts, ahead/behind, last commit | **Sync** runs `update_and_sync` on a clean tree; **Commit & sync…** chains `commit_dirty_push` then `update_and_sync` when dirty |
-| Merge conflicts | Files with conflict markers under scoped content paths | Inline edit via `ConflictResolverPanel` |
-| Skill sync | `GET /api/sync-health` plus preview diffs when unhealthy | Links to Agents library; see [Skills guide](../guides/skills.md#sync-preview-before-sync) |
-| Services | OpenChamber and OpenCode port probes | Restart via `POST /api/status/services/restart`; cards hidden when setup disables a peer |
-| MCP | Runtime scan of `mcp/shared/` only | Idle = normal; missing binary = warning |
-| Infra | AWS profile/identity and kubectl context via `GET /api/bi` (plugin-backed) | Polls every 5 minutes; links to `/ops` |
-| LAN access | Wi‑Fi IPv4 badge + QR | Client builds `http://<ip>:<port>…` for phone access on the same network |
-| Dashboard rebuild | `GET/POST /api/status/dashboard/rebuild` | **Rebuild & restart** runs `npm run restart` in the linked checkout (production build + relaunch). Unavailable when the desktop shell supervises the server (`DEVHUB_SHELL_SUPERVISED=1`) or in a packaged app — use **View → Rebuild Dashboard…** or **Check for Updates** instead. Reopening DevHub does **not** rebuild. |
+| Section                | What it shows                                                                                                                        | Primary actions                                                                                                                                                                                                                                                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Health summary         | Aggregates stopped peer services, non-content dirty paths, behind count, merge conflicts, missing MCP binaries, and last failed sync | Banner turns amber when any item is present                                                                                                                                                                                                                                                                                 |
+| Plugin materialization | `GET /api/status/materialized` — compares plugin-owned dashboard copies to plugin source                                             | Amber banner when core copies diverge from the plugin checkout (edits there are lost on `sync_plugins` / `predev`)                                                                                                                                                                                                          |
+| Repo                   | Branch, content vs other dirty counts, ahead/behind, last commit                                                                     | **Sync** runs `update_and_sync` on a clean tree; **Commit & sync…** chains `commit_dirty_push` then `update_and_sync` when dirty                                                                                                                                                                                            |
+| Merge conflicts        | Files with conflict markers under scoped content paths                                                                               | Inline edit via `ConflictResolverPanel`                                                                                                                                                                                                                                                                                     |
+| Skill sync             | `GET /api/sync-health` plus preview diffs when unhealthy                                                                             | Links to Agents library; see [Skills guide](../guides/skills.md#sync-preview-before-sync)                                                                                                                                                                                                                                   |
+| Services               | OpenChamber and OpenCode port probes                                                                                                 | Restart via `POST /api/status/services/restart`; cards hidden when setup disables a peer                                                                                                                                                                                                                                    |
+| MCP                    | Runtime scan of `mcp/shared/` only                                                                                                   | Idle = normal; missing binary = warning                                                                                                                                                                                                                                                                                     |
+| Infra                  | AWS profile/identity and kubectl context via `GET /api/bi` (plugin-backed)                                                           | Polls every 5 minutes; links to `/ops`                                                                                                                                                                                                                                                                                      |
+| LAN access             | Wi‑Fi IPv4 badge + QR                                                                                                                | Client builds `http://<ip>:<port>…` for phone access on the same network                                                                                                                                                                                                                                                    |
+| Dashboard rebuild      | `GET/POST /api/status/dashboard/rebuild`                                                                                             | **Rebuild & restart** runs `npm run restart` in the linked checkout (production build + relaunch). Unavailable when the desktop shell supervises the server (`DEVHUB_SHELL_SUPERVISED=1`) or in a packaged app — use **View → Rebuild Dashboard…** or **Check for Updates** instead. Reopening DevHub does **not** rebuild. |
 
 Failed sync runs surface from `GET /api/scripts/history` with log detail from `GET /api/scripts/runs/<runId>`. The **Copy Chamber prompt** button builds a fix-it prompt from the last 120 log lines for verify/pre-push failures.
 
@@ -324,25 +342,25 @@ Merge conflict recovery lives on Status through `ConflictResolverPanel`. It read
 
 `RepoGitWorkspace` is the in-dashboard git UI for the DevHub checkout and every sibling repo on `/repos`. Open it from the top-bar warning control, a repo card's **Open Git** badge, or `/status` when code changes block sync.
 
-| Tab | Purpose |
-| --- | ------- |
-| Changes | Stage/unstage (per file, hunk, or all), inline diff, scoped discard (staged vs unstaged — discarding one side does not wipe the other), AI commit message, commit-only or commit-and-push |
-| Branches | Checkout, create, delete, pull, push (with pre-push hook failure handling) |
-| Stash | List, apply, pop, drop; stash conflicts open the terminal with a resolve command |
-| History | Commit graph, file history, show commit |
-| Conflicts | Inline conflict editor (same semantics as Status) |
-| Blame | Porcelain blame for a file path |
+| Tab       | Purpose                                                                                                                                                                                   |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Changes   | Stage/unstage (per file, hunk, or all), inline diff, scoped discard (staged vs unstaged — discarding one side does not wipe the other), AI commit message, commit-only or commit-and-push |
+| Branches  | Checkout, create, delete, pull, push (with pre-push hook failure handling)                                                                                                                |
+| Stash     | List, apply, pop, drop; stash conflicts open the terminal with a resolve command                                                                                                          |
+| History   | Commit graph, file history, show commit                                                                                                                                                   |
+| Conflicts | Inline conflict editor (same semantics as Status)                                                                                                                                         |
+| Blame     | Porcelain blame for a file path                                                                                                                                                           |
 
 API routes are scoped under `/api/repos/<name>/git/…` (and branch push/pull under `/api/repos/<name>/branches`). See [API Routes](../reference/api-routes.md#repo-git-routes).
 
 **DevHub-only:** personal content paths (`notes/`, `tasks/`, `collections/`, `upstarts/`, `docs/`, plus env-resolved content dirs) are classified by `lib/content-sync-dirs.ts` and **hidden from the Changes list** in the DevHub repo. Scoped sync (`sync_notes_tasks_push`) covers `notes/`, `collections/`, `tasks/`, `docs/`, and `upstarts/` — **not** `diagrams/`, which must be committed through the Repo Git workspace or a manual commit. Sibling repos show every file.
 
-| Problem | What to do |
-| ------- | ---------- |
-| `index.lock` / "could not write index" | Another git process may be running, or a prior command left `.git/index.lock`. DevHub never deletes the lock for you — confirm no git is active, remove the lock manually, retry. |
-| Pre-push verify failed | Read the hook output in **GitHookFailureDialog** or Status → failed sync logs. Full output is also written to `.git/devhub-hook-failure.log` in the repo. Fix lint/tests/build locally (`npm run verify`), or use **Copy Chamber prompt** / the `git-hook-fix` terminal handoff for an agent fix. Emergency bypass: `DEVHUB_SKIP_VERIFY=1 git push` (see [Scripts](../reference/scripts.md#git-hooks)). |
-| Stash apply left conflicts | The terminal drawer opens with the `git-conflict-resolve` skill preloaded. Resolve markers, then retry apply/pop from the Stash tab. |
-| Wrong Node version in hook | The pre-push hook sources `nvm` when your shell's Node does not match `.nvmrc`. Run `nvm install` from repo root if verify fails under a system Node. |
+| Problem                                | What to do                                                                                                                                                                                                                                                                                                                                                                                              |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.lock` / "could not write index" | Another git process may be running, or a prior command left `.git/index.lock`. DevHub never deletes the lock for you — confirm no git is active, remove the lock manually, retry.                                                                                                                                                                                                                       |
+| Pre-push verify failed                 | Read the hook output in **GitHookFailureDialog** or Status → failed sync logs. Full output is also written to `.git/devhub-hook-failure.log` in the repo. Fix lint/tests/build locally (`npm run verify`), or use **Copy Chamber prompt** / the `git-hook-fix` terminal handoff for an agent fix. Emergency bypass: `DEVHUB_SKIP_VERIFY=1 git push` (see [Scripts](../reference/scripts.md#git-hooks)). |
+| Stash apply left conflicts             | The terminal drawer opens with the `git-conflict-resolve` skill preloaded. Resolve markers, then retry apply/pop from the Stash tab.                                                                                                                                                                                                                                                                    |
+| Wrong Node version in hook             | The pre-push hook sources `nvm` when your shell's Node does not match `.nvmrc`. Run `nvm install` from repo root if verify fails under a system Node.                                                                                                                                                                                                                                                   |
 
 ## Safety Boundaries
 

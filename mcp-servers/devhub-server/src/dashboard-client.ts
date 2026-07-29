@@ -116,6 +116,14 @@ export class DashboardClient {
   post<T = unknown>(path: string, body?: unknown, timeoutMs?: number): Promise<T> {
     return this.request<T>(path, { method: "POST", body, timeoutMs });
   }
+
+  patch<T = unknown>(path: string, body?: unknown, timeoutMs?: number): Promise<T> {
+    return this.request<T>(path, { method: "PATCH", body, timeoutMs });
+  }
+
+  delete<T = unknown>(path: string, body?: unknown, timeoutMs?: number): Promise<T> {
+    return this.request<T>(path, { method: "DELETE", body, timeoutMs });
+  }
 }
 
 /**

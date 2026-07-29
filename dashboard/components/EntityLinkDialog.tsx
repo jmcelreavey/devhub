@@ -17,6 +17,7 @@ import type { CalendarEvent } from "@/lib/google-calendar";
 import type { GithubPrRow, GithubPrsApiPayload } from "@/lib/github/prs";
 import type { JiraTicket } from "@/lib/jira/client";
 import type { Task } from "@/lib/tasks/types";
+import type { ReposApiPayload } from "@/app/repos/types";
 import { isDiagramStoragePath } from "@/lib/diagram-utils";
 import { todayISO } from "@/lib/utils";
 
@@ -24,6 +25,7 @@ const KINDS: { id: EntityKind; label: string; hint: string }[] = [
   { id: "calendar", label: "Calendar", hint: "Pick today's event or paste an event id / Calendar URL" },
   { id: "pr", label: "PR", hint: "Pick from your open PRs, or paste a GitHub PR URL" },
   { id: "note", label: "Note", hint: "Search notes by title, or paste a vault path" },
+  { id: "repo", label: "Repo", hint: "Pick a local repository" },
   { id: "jira", label: "Jira", hint: "Pick from your tickets, or paste an issue key" },
   { id: "task", label: "Task", hint: "Search recent tasks by name" },
 ];
@@ -35,6 +37,7 @@ const PLACEHOLDERS: Record<EntityKind, string> = {
   jira: "PTF-1234",
   task: "task-uuid",
   meeting: "meeting id",
+  repo: "repository-name",
 };
 
 const TASK_PICKER_DAY_LIMIT = 14;
@@ -187,6 +190,14 @@ function flattenJiraOptions(tickets: JiraTicket[] | undefined): PickRow[] {
   }));
 }
 
+function flattenRepoOptions(data: ReposApiPayload | undefined): PickRow[] {
+  return (data?.repos ?? []).map((repo) => ({
+    id: repo.name,
+    title: repo.name,
+    meta: repo.branch || "Local repository",
+  }));
+}
+
 function filterRows(rows: PickRow[], query: string): PickRow[] {
   const q = query.trim().toLowerCase();
   const list = !q
@@ -216,7 +227,7 @@ export function EntityLinkDialog({
   onClose,
   onSave,
   title = "Link to…",
-  description = "Link a calendar event, PR, note, Jira issue, or task.",
+  description = "Link a calendar event, PR, note, repo, Jira issue, or task.",
   defaultKind = "calendar",
   excludeTaskId,
 }: EntityLinkDialogProps) {
@@ -298,6 +309,14 @@ function EntityLinkDialogSession({
     refreshInterval: 0,
   });
 
+  const {
+    data: repoData,
+    error: repoLoadError,
+    isLoading: repoLoading,
+  } = useLive<ReposApiPayload>(kind === "repo" ? "/api/repos" : null, {
+    refreshInterval: 0,
+  });
+
   const events = useMemo(() => cal?.events ?? [], [cal?.events]);
   const filteredEvents = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -333,6 +352,8 @@ function EntityLinkDialogSession({
 
   const jiraOptions = useMemo(() => flattenJiraOptions(jiraData?.tickets), [jiraData?.tickets]);
   const filteredJira = useMemo(() => filterRows(jiraOptions, query), [jiraOptions, query]);
+  const repoOptions = useMemo(() => flattenRepoOptions(repoData), [repoData]);
+  const filteredRepos = useMemo(() => filterRows(repoOptions, query), [repoOptions, query]);
 
   const selectedLabel = useMemo(() => {
     if (!value) return null;
@@ -343,8 +364,9 @@ function EntityLinkDialogSession({
       const hit = jiraOptions.find((t) => t.id === value);
       return hit ? `${hit.id} ${hit.title}` : null;
     }
+    if (kind === "repo") return repoOptions.find((repo) => repo.id === value)?.title ?? null;
     return null;
-  }, [kind, value, taskOptions, noteOptions, prOptions, jiraOptions]);
+  }, [kind, value, taskOptions, noteOptions, prOptions, jiraOptions, repoOptions]);
 
   const today = todayISO();
   const kindMeta = KINDS.find((k) => k.id === kind) ?? KINDS[0];
@@ -354,6 +376,7 @@ function EntityLinkDialogSession({
   const notesReady = noteTree !== undefined || !!noteLoadError;
   const prsReady = prData !== undefined || !!prLoadError;
   const jiraReady = jiraData !== undefined || !!jiraLoadError;
+  const reposReady = repoData !== undefined || !!repoLoadError;
 
   const showPasteField = (() => {
     if (kind === "calendar") return true;
@@ -385,6 +408,13 @@ function EntityLinkDialogSession({
         jiraData?.configured === false ||
         (jiraReady && jiraOptions.length === 0) ||
         (jiraReady && !jiraLoadError && filteredJira.length === 0)
+      );
+    }
+    if (kind === "repo") {
+      return (
+        !!repoLoadError ||
+        (reposReady && repoOptions.length === 0) ||
+        (reposReady && !repoLoadError && filteredRepos.length === 0)
       );
     }
     return true;
@@ -437,6 +467,10 @@ function EntityLinkDialogSession({
             if (ticket?.url) ref.href = ticket.url;
           }
         }
+      }
+      if (kind === "repo") {
+        const picked = repoOptions.find((repo) => repo.id === raw);
+        if (picked) ref.label = picked.title;
       }
       await onSave(ref);
       onClose();
@@ -732,11 +766,50 @@ function EntityLinkDialogSession({
           </PickerBlock>
         ) : null}
 
+        {kind === "repo" ? (
+          <PickerBlock
+            searchId={searchId}
+            searchLabel="Search repositories"
+            searchPlaceholder="Search local repositories…"
+            query={query}
+            onQueryChange={setQuery}
+            loading={!reposReady || (repoLoading && !repoData)}
+            loadingText="Loading repositories…"
+            error={repoLoadError ? "Couldn't load repositories. Paste a repository name below." : null}
+            empty={!repoLoadError && reposReady && repoOptions.length === 0}
+            emptyText="No local repositories found."
+            noMatch={repoOptions.length > 0 && filteredRepos.length === 0}
+            noMatchText={`No repositories match "${query.trim()}". Paste the folder name below.`}
+            hint="Local repositories. Select one, then Add link."
+            selectedLabel={selectedLabel}
+            busy={busy}
+            autoFocusSearch
+          >
+            {filteredRepos.map((opt) => (
+              <li key={opt.id}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={value === opt.id}
+                  className="entity-link-cal-item"
+                  data-selected={value === opt.id ? "true" : undefined}
+                  disabled={busy}
+                  onClick={() => selectRow(opt.id)}
+                >
+                  <span className="entity-link-cal-title">{opt.title}</span>
+                  <span className="entity-link-cal-time">{opt.meta}</span>
+                </button>
+              </li>
+            ))}
+          </PickerBlock>
+        ) : null}
+
         {kind !== "calendar" &&
         kind !== "task" &&
         kind !== "note" &&
         kind !== "pr" &&
-        kind !== "jira" ? (
+        kind !== "jira" &&
+        kind !== "repo" ? (
           <p className="entity-link-hint">{kindMeta.hint}</p>
         ) : null}
 
@@ -753,6 +826,8 @@ function EntityLinkDialogSession({
                       ? "PR URL"
                       : kind === "jira"
                         ? "Issue key"
+                        : kind === "repo"
+                          ? "Repository name"
                         : kindMeta.label}
             </span>
             <input
@@ -779,7 +854,8 @@ function EntityLinkDialogSession({
                       (kind === "pr" && (prLoadError || prOptions.length === 0 || prData?.configured === false)) ||
                       (kind === "jira" &&
                         (!!jiraLoadError || jiraOptions.length === 0 || jiraData?.configured === false)) ||
-                      (kind !== "task" && kind !== "note" && kind !== "pr" && kind !== "jira"))
+                      (kind === "repo" && (!!repoLoadError || repoOptions.length === 0)) ||
+                      (kind !== "task" && kind !== "note" && kind !== "pr" && kind !== "jira" && kind !== "repo"))
               }
               disabled={busy}
               autoComplete="off"

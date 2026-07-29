@@ -41,6 +41,14 @@ export function buildEntityRefFromInput(kind: EntityKind, rawInput: string): Ent
     };
   }
 
+  if (kind === "repo") {
+    const name = raw.replace(/^repo:/, "");
+    if (!name || name.includes("/") || name.includes("\\") || name.includes("..")) {
+      throw new Error("Choose a local repository.");
+    }
+    return { kind: "repo", id: name, label: name };
+  }
+
   if (kind === "calendar") {
     if (raw.startsWith("http")) {
       return {

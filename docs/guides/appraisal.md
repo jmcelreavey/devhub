@@ -14,12 +14,16 @@ DevHub captures review evidence through MCP tools on the `devhub` server. Entrie
 
 Use this when you want **dated, reference-backed moments** during the year — not a scramble to reconstruct impact at review time.
 
+## Walkthrough
+
+[Capability Radar and appraisal walkthrough](/api/notes-assets/assets/feature-demos/demo-08-radar-and-appraisal.mp4)
+
 ## Dashboard UI
 
-| Route | Purpose |
-| ----- | ------- |
-| `/appraisal` | Self-review hub — goals, themed entries, coverage bars, evidence suggestions from recent PRs/Jira/tasks, HR markdown export |
-| `/one-on-one` | 1:1 prep template seeded from appraisal themes and open goals |
+| Route         | Purpose                                                                                                                     |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `/appraisal`  | Self-review hub — goals, themed entries, coverage bars, evidence suggestions from recent PRs/Jira/tasks, HR markdown export |
+| `/one-on-one` | 1:1 prep template seeded from appraisal themes and open goals                                                               |
 
 Both live under **Library** section tabs (or **⌘K**). The evidence panel on `/appraisal` calls `GET /api/appraisal/evidence?days=`; the main year view uses `GET /api/appraisal/year?year=`. Goal create/revise and evidence **Record** use `POST /api/appraisal/year` and `POST /api/appraisal/evidence` respectively (same write paths as the MCP tools).
 
@@ -43,30 +47,30 @@ Appraisal paths are **outside** the default `notes_search` workspace slice. Read
 
 ### `appraisal_record` fields
 
-| Field | Required | Notes |
-| ----- | -------- | ----- |
-| `title` | yes | Short headline; deduped by slug (defaults from title) |
-| `theme` | yes | `impact`, `technical`, `collaboration`, or `growth` |
-| `summary` | yes | 1–3 factual sentences: what happened + evidence |
-| `references` | yes | At least one URL or ref string |
-| `subject` | no | Omit or `self` for your review; person slug for others |
-| `goal` | no | Must match a slug from `appraisal_set_goal` |
-| `date` | no | `YYYY-MM-DD`; defaults to today and selects the year file |
+| Field        | Required | Notes                                                     |
+| ------------ | -------- | --------------------------------------------------------- |
+| `title`      | yes      | Short headline; deduped by slug (defaults from title)     |
+| `theme`      | yes      | `impact`, `technical`, `collaboration`, or `growth`       |
+| `summary`    | yes      | 1–3 factual sentences: what happened + evidence           |
+| `references` | yes      | At least one URL or ref string                            |
+| `subject`    | no       | Omit or `self` for your review; person slug for others    |
+| `goal`       | no       | Must match a slug from `appraisal_set_goal`               |
+| `date`       | no       | `YYYY-MM-DD`; defaults to today and selects the year file |
 
 Updating an entry with the same slug replaces it in place.
 
 ## Tool reference
 
-| Tool | Purpose |
-| ---- | ------- |
-| `appraisal_set_goal` | Add or revise a goal for the year |
-| `appraisal_list_goals` | List goal slugs and titles |
-| `appraisal_record` | Capture or update a themed moment |
-| `appraisal_read` | Read one subject/year as markdown |
-| `appraisal_list` | List appraisal files for a subject |
-| `appraisal_people` | List people you have appraisal notes for |
-| `appraisal_summarize` | Theme-grouped summary for review prep |
-| `appraisal_delete` | Remove an entry by slug |
+| Tool                   | Purpose                                  |
+| ---------------------- | ---------------------------------------- |
+| `appraisal_set_goal`   | Add or revise a goal for the year        |
+| `appraisal_list_goals` | List goal slugs and titles               |
+| `appraisal_record`     | Capture or update a themed moment        |
+| `appraisal_read`       | Read one subject/year as markdown        |
+| `appraisal_list`       | List appraisal files for a subject       |
+| `appraisal_people`     | List people you have appraisal notes for |
+| `appraisal_summarize`  | Theme-grouped summary for review prep    |
+| `appraisal_delete`     | Remove an entry by slug                  |
 
 ## Example agent prompts
 
@@ -80,11 +84,11 @@ Appraisal notes live in the same git-backed notes tree as daily notes. If the re
 
 ## Troubleshooting
 
-| Issue | Fix |
-| ----- | --- |
-| `Unknown goal "…"` on record | Create the goal with `appraisal_set_goal` first, or omit `goal` |
-| Entry not in palette search | Expected — use `appraisal_read` or open `notes/appraisal/...` directly |
-| Empty year file | `appraisal_read` returns a skeleton with `## Goals` and theme headings when the file does not exist yet |
+| Issue                        | Fix                                                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `Unknown goal "…"` on record | Create the goal with `appraisal_set_goal` first, or omit `goal`                                         |
+| Entry not in palette search  | Expected — use `appraisal_read` or open `notes/appraisal/...` directly                                  |
+| Empty year file              | `appraisal_read` returns a skeleton with `## Goals` and theme headings when the file does not exist yet |
 
 ## See also
 

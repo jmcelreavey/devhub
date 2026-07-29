@@ -9,6 +9,7 @@ export interface LaunchMenuItem {
   label: string;
   description?: string;
   icon?: ReactNode;
+  danger?: boolean;
   onSelect: () => void | Promise<void>;
 }
 
@@ -19,6 +20,7 @@ export function LaunchMenu({
   align = "right",
   buttonClassName = "btn btn-ghost",
   buttonStyle,
+  disabled = false,
 }: {
   label: string;
   icon?: ReactNode;
@@ -26,6 +28,7 @@ export function LaunchMenu({
   align?: "left" | "right";
   buttonClassName?: string;
   buttonStyle?: CSSProperties;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties | undefined>();
@@ -72,6 +75,7 @@ export function LaunchMenu({
         type="button"
         className={buttonClassName}
         style={buttonStyle}
+        disabled={disabled}
         onClick={() => {
           updateMenuPosition();
           setOpen((value) => !value);
@@ -90,6 +94,7 @@ export function LaunchMenu({
               key={item.id}
               type="button"
               className="launch-menu-item"
+              data-danger={item.danger ? "true" : undefined}
               role="menuitem"
               onClick={() => {
                 setOpen(false);

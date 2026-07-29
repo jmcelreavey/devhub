@@ -34,7 +34,11 @@ export function useReposActions(opts: {
   async function openInCursor(name: string) {
     setOpening(name);
     try {
-      const res = await fetch(`/api/repos/${encodeURIComponent(name)}/open`, { method: "POST" });
+      const res = await fetch(`/api/repos/${encodeURIComponent(name)}/open`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
       if (!res.ok) throw new Error(await res.text());
     } catch (e) {
       console.error("open in cursor:", e);

@@ -38,14 +38,15 @@ export function resolveCursorBin(): string | null {
 }
 
 /**
- * Open an absolute path (file or folder) in Cursor. Returns an error string
- * when the CLI is missing or the path doesn't exist; null on success.
+ * Open an absolute path (file or folder) plus optional related files in Cursor.
+ * Returns an error string when the CLI is missing or a path doesn't exist.
  */
-export function openPathInCursor(absolutePath: string): string | null {
-  if (!fs.existsSync(absolutePath)) return "Path not found";
+export function openPathInCursor(absolutePath: string, additionalPaths: string[] = []): string | null {
+  const paths = [absolutePath, ...additionalPaths];
+  if (paths.some((target) => !fs.existsSync(target))) return "Path not found";
   const bin = resolveCursorBin();
   if (!bin) return "Cursor CLI not found on PATH";
-  const child = spawn(bin, [absolutePath], { detached: true, stdio: "ignore" });
+  const child = spawn(bin, paths, { detached: true, stdio: "ignore" });
   child.unref();
   return null;
 }

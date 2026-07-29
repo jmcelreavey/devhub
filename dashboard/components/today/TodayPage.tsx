@@ -69,6 +69,8 @@ export function TodayPage() {
     () => false,
   );
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const noteVersionsRef = useRef(new Map<string, number | null>());
   const blocksRef = useRef<DevHubPartialBlock[] | null>(null);
   const prevTodayDateRef = useRef(todayDate);
   const tabSave = useTabSaveStatus();
@@ -162,18 +164,29 @@ export function TodayPage() {
   }, [jira?.tickets?.length]);
 
   const persistNoteAtPath = useCallback(async (path: string, newBlocks: DevHubPartialBlock[]) => {
+    const hasVersion = noteVersionsRef.current.has(path);
+    const expectedModified = noteVersionsRef.current.get(path);
     if (isNoteEffectivelyEmpty(newBlocks)) {
       broadcastNoteAutosaveInvalidation(path);
-      const del = await fetch(`/api/notes/${path}`, { method: "DELETE" });
+      const params = hasVersion
+        ? `?expectedModified=${expectedModified === null ? "missing" : expectedModified}`
+        : "";
+      const del = await fetch(`/api/notes/${path}${params}`, { method: "DELETE" });
       if (!del.ok && del.status !== 404) throw new Error(await del.text());
+      noteVersionsRef.current.set(path, null);
       return;
     }
     const r = await fetch(`/api/notes/${path}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: newBlocks }),
+      body: JSON.stringify({
+        content: newBlocks,
+        ...(hasVersion ? { expectedModified } : {}),
+      }),
     });
     if (!r.ok) throw new Error(await r.text());
+    const saved = (await r.json()) as { modified?: number };
+    if (typeof saved.modified === "number") noteVersionsRef.current.set(path, saved.modified);
   }, []);
 
   useEffect(() => {
@@ -208,14 +221,20 @@ export function TodayPage() {
         const res = await fetch(`/api/notes/${todayPath}`);
         if (cancelled) return;
         if (res.ok) {
-          const data = await res.json();
+          const data = (await res.json()) as { content: DevHubPartialBlock[]; modified?: number };
+          noteVersionsRef.current.set(
+            todayPath,
+            typeof data.modified === "number" ? data.modified : null,
+          );
           setBlocks(data.content);
           return;
         }
+        noteVersionsRef.current.set(todayPath, null);
         setBlocks(EMPTY_NOTE_BLOCKS);
       } catch (e) {
         if (cancelled) return;
         console.error("Failed to load today note:", e);
+        noteVersionsRef.current.set(todayPath, null);
         setBlocks(EMPTY_NOTE_BLOCKS);
         toast.error("Couldn't load today's note. Showing a blank page.");
       }
@@ -233,7 +252,9 @@ export function TodayPage() {
       setStatus("saving");
       tabSave.setSaving();
       try {
-        await persistNoteAtPath(todayPath, newBlocks);
+        const queued = saveQueueRef.current.then(() => persistNoteAtPath(todayPath, newBlocks));
+        saveQueueRef.current = queued.catch(() => undefined);
+        await queued;
         setStatus("saved");
         tabSave.setSaved();
         setTimeout(() => setStatus("idle"), 2000);

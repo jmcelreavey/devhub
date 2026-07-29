@@ -52,6 +52,20 @@ describe("DashboardClient.request", () => {
     const client = new DashboardClient("http://localhost:1337");
     await expect(client.get("/api/x")).rejects.toBeInstanceOf(DashboardUnreachableError);
   });
+
+  it("sends PATCH and DELETE bodies for Cursor note actions", async () => {
+    const methods: string[] = [];
+    mockFetch((_url, init) => {
+      methods.push(init?.method ?? "GET");
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    const client = new DashboardClient("http://localhost:1337");
+
+    await client.patch("/api/x", { notePath: "daily/test" });
+    await client.delete("/api/x", { notePath: "daily/test" });
+
+    expect(methods).toEqual(["PATCH", "DELETE"]);
+  });
 });
 
 describe("withDashboardErrors", () => {

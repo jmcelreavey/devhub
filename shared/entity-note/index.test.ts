@@ -70,6 +70,16 @@ describe("format + build + parse round-trip", () => {
     );
   });
 
+  it("round-trips repository links", () => {
+    const markdown = buildEntityLinksSection([
+      { kind: "repo", id: "devhub-private", label: "devhub-private" },
+    ]);
+    expect(markdown).toContain("**Repo:** devhub-private");
+    expect(parseEntityLinksFromMarkdown(markdown)).toEqual([
+      { kind: "repo", id: "devhub-private", label: "devhub-private", href: undefined },
+    ]);
+  });
+
   it("upsertEntityLinksInMarkdown replaces or appends ## Links", () => {
     const withSection = ["# Hello", "", "## Links", "", "**Jira:** PTF-1", "", "## Notes", "body"].join(
       "\n",

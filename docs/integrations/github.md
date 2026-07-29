@@ -21,6 +21,10 @@ DevHub uses GitHub data for pull request tracking, repo awareness, and standup g
 - Repo discovery and quick actions.
 - OpenCode-powered PR explanation/review notes from the dashboard.
 
+## Walkthrough
+
+[Pull requests and weekly review walkthrough](/api/notes-assets/assets/feature-demos/demo-05-prs-and-weekly-review.mp4)
+
 ## Recommended Setup
 
 Install and authenticate the GitHub CLI:
@@ -45,16 +49,16 @@ See [Sharing](../guides/sharing.md) for the full workflow, security model, and t
 
 `/repos` is the local workspace for sibling git checkouts. DevHub scans `dirname(REPO_ROOT)` — typically `~/Developer` when DevHub lives at `~/Developer/devhub` — for direct-child folders containing `.git`.
 
-| Section | API | Behavior |
-| ------- | --- | -------- |
-| Local repos | `GET /api/repos` | Branch, remote, dirty/unpushed counts, and whether a compose file exists (`docker-compose.yml`, `compose.yaml`, etc.). |
-| GitHub search | `GET /api/repos/github?q=` | Requires `gh auth login`. Shows clone targets; already-cloned repos link to the local card. |
-| Clone | `POST /api/repos/clone` | Body `{ fullName: "owner/repo" }`. Clones into the scan directory using the repo name as the folder. |
-| Remove | `DELETE /api/repos/<name>` | Deletes the local folder. Cannot remove the current DevHub checkout. |
-| Open | `POST /api/repos/<name>/open` | Cursor CLI when available. |
-| Open Git | `RepoGitWorkspace` on the card | Full in-dashboard git UI (changes, branches, stash, history, conflicts, blame). Same component as the top-bar warning control for the DevHub checkout. |
-| GitKraken | `POST /api/repos/<name>/open-gitkraken` | When `GET /api/repos/apps` reports `gitkraken: true`. |
-| Compose | `POST /api/repos/<name>/compose-up` | `docker compose up -d` when the repo has a compose file and Docker is available. |
+| Section       | API                                     | Behavior                                                                                                                                               |
+| ------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Local repos   | `GET /api/repos`                        | Branch, remote, dirty/unpushed counts, and whether a compose file exists (`docker-compose.yml`, `compose.yaml`, etc.).                                 |
+| GitHub search | `GET /api/repos/github?q=`              | Requires `gh auth login`. Shows clone targets; already-cloned repos link to the local card.                                                            |
+| Clone         | `POST /api/repos/clone`                 | Body `{ fullName: "owner/repo" }`. Clones into the scan directory using the repo name as the folder.                                                   |
+| Remove        | `DELETE /api/repos/<name>`              | Deletes the local folder. Cannot remove the current DevHub checkout.                                                                                   |
+| Open          | `POST /api/repos/<name>/open`           | Cursor CLI when available.                                                                                                                             |
+| Open Git      | `RepoGitWorkspace` on the card          | Full in-dashboard git UI (changes, branches, stash, history, conflicts, blame). Same component as the top-bar warning control for the DevHub checkout. |
+| GitKraken     | `POST /api/repos/<name>/open-gitkraken` | When `GET /api/repos/apps` reports `gitkraken: true`.                                                                                                  |
+| Compose       | `POST /api/repos/<name>/compose-up`     | `docker compose up -d` when the repo has a compose file and Docker is available.                                                                       |
 
 Repo Learning (`?learn=<name>` or the **Learn** action) only resolves repos from this scan directory. See [Repo Learning](../guides/repo-learning.md).
 
@@ -73,11 +77,11 @@ on every render.
 
 ### Row Actions
 
-| PR list | Action | Result |
-| ------- | ------ | ------ |
-| Mine | **Copy request** | Copies a Slack-ready "ready for review" message. |
-| Review requested | **Review** | Opens the terminal drawer and runs the configured **Agent CLI** (`opencode run` or `cursor-agent`; see `/setup → Agent CLI`) with the `pr-explain-review` skill. |
-| Recently reviewed | **Copy approved** / **Copy reviewed** | Copies follow-up Slack messages. |
+| PR list           | Action                                | Result                                                                                                                                                           |
+| ----------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mine              | **Copy request**                      | Copies a Slack-ready "ready for review" message.                                                                                                                 |
+| Review requested  | **Review**                            | Opens the terminal drawer and runs the configured **Agent CLI** (`opencode run` or `cursor-agent`; see `/setup → Agent CLI`) with the `pr-explain-review` skill. |
+| Recently reviewed | **Copy approved** / **Copy reviewed** | Copies follow-up Slack messages.                                                                                                                                 |
 
 The **Review** action is intentionally local. It streams the explanation and review
 in DevHub's terminal drawer and tells the skill to save the finished write-up as a
@@ -126,12 +130,12 @@ GitHub activity can contribute to standup markdown, especially merged PRs and re
 
 ## Troubleshooting
 
-| Problem | Check |
-| ------- | ----- |
-| PRs do not load | `gh auth status` succeeds. |
-| Repo is missing | It has a GitHub remote and is discoverable from DevHub's repo search scope. |
-| Archived repo PRs are missing | Expected: authored and review-requested rows from archived repos are hidden. |
-| **Review** prints a CLI error | The selected Agent CLI (`opencode` or `cursor-agent`) is installed and on `PATH`. See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md#agent-cli-selection). |
-| **Notes** link never appears | The terminal review finished, the skill had notes MCP access, and it wrote to the exact `Notes MCP path` from the prompt. |
-| Review note landed in the wrong place | `NEXT_PUBLIC_REPO_ROOT` mirrors `REPO_ROOT` in `dashboard/.env.local`; restart DevHub so the terminal command can pin `NOTES_DIR`. |
-| Standup misses PRs | The PR was merged in the selected time window. |
+| Problem                               | Check                                                                                                                                                                    |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| PRs do not load                       | `gh auth status` succeeds.                                                                                                                                               |
+| Repo is missing                       | It has a GitHub remote and is discoverable from DevHub's repo search scope.                                                                                              |
+| Archived repo PRs are missing         | Expected: authored and review-requested rows from archived repos are hidden.                                                                                             |
+| **Review** prints a CLI error         | The selected Agent CLI (`opencode` or `cursor-agent`) is installed and on `PATH`. See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md#agent-cli-selection). |
+| **Notes** link never appears          | The terminal review finished, the skill had notes MCP access, and it wrote to the exact `Notes MCP path` from the prompt.                                                |
+| Review note landed in the wrong place | `NEXT_PUBLIC_REPO_ROOT` mirrors `REPO_ROOT` in `dashboard/.env.local`; restart DevHub so the terminal command can pin `NOTES_DIR`.                                       |
+| Standup misses PRs                    | The PR was merged in the selected time window.                                                                                                                           |

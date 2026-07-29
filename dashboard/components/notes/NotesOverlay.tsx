@@ -80,6 +80,8 @@ export function NotesOverlay({ open, onClose }: NoteOverlayProps) {
   } | null>(null);
   const [searching, setSearching] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const noteVersionsRef = useRef(new Map<string, number | null>());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [fileTreeKey, setFileTreeKey] = useState(0);
   const router = useRouter();
@@ -164,7 +166,11 @@ export function NotesOverlay({ open, onClose }: NoteOverlayProps) {
           if (!r.ok) throw new Error("Not found");
           return r.json();
         })
-        .then((data) => {
+        .then((data: { content: DevHubPartialBlock[]; modified?: number }) => {
+          noteVersionsRef.current.set(
+            cleanPath,
+            typeof data.modified === "number" ? data.modified : null,
+          );
           setActiveNote({ path: cleanPath, blocks: data.content });
         })
         .catch((e) => {
@@ -178,13 +184,30 @@ export function NotesOverlay({ open, onClose }: NoteOverlayProps) {
   const handleSave = useCallback(
     (blocks: DevHubPartialBlock[]) => {
       if (!activeNote) return;
-      fetch(`/api/notes/${notesApiPathFromSlug(activeNote.path)}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: blocks }),
-      }).catch((e) => {
+      const notePath = activeNote.path;
+      const save = saveQueueRef.current.then(async () => {
+        const hasVersion = noteVersionsRef.current.has(notePath);
+        const expectedModified = noteVersionsRef.current.get(notePath);
+        const response = await fetch(`/api/notes/${notesApiPathFromSlug(notePath)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: blocks,
+            ...(hasVersion ? { expectedModified } : {}),
+          }),
+        });
+        if (!response.ok) throw new Error(await response.text());
+        const saved = (await response.json()) as { modified?: number };
+        if (typeof saved.modified === "number") {
+          noteVersionsRef.current.set(notePath, saved.modified);
+        }
+      });
+      saveQueueRef.current = save.catch(() => undefined);
+      void save.catch((e) => {
         console.error("save note:", e);
-        toast.error("Couldn't save note.");
+        toast.error(e instanceof Error && e.message.includes("changed elsewhere")
+          ? "This note changed elsewhere. Reopen it before saving."
+          : "Couldn't save note.");
       });
     },
     [activeNote, toast],

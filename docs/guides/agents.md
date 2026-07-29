@@ -13,11 +13,15 @@ related:
 
 Shared agents are reusable subagent personas synced from `agents/shared/` into local tool directories (Cursor, Codex, OpenCode, and others). The dashboard **Agents → Agents** tab lists the catalog and runs **Sync agents**.
 
+## Walkthrough
+
+[Agents and repos walkthrough](/api/notes-assets/assets/feature-demos/demo-10-agents-and-repos.mp4)
+
 ## When To Use An Agent Vs A Skill
 
-| Artifact | Use for |
-| --- | --- |
-| **Skill** (`skills/shared/`) | Workflow the *current* agent loads inline when relevant (checklists, commands, procedures). |
+| Artifact                     | Use for                                                                                             |
+| ---------------------------- | --------------------------------------------------------------------------------------------------- |
+| **Skill** (`skills/shared/`) | Workflow the _current_ agent loads inline when relevant (checklists, commands, procedures).         |
 | **Agent** (`agents/shared/`) | Delegated specialist with isolated context — exploration, domain depth, or read-only investigation. |
 
 If the work is mostly "follow these steps in this conversation," prefer a skill. If the work needs a separate pass or a narrow expert hat, prefer an agent.
@@ -37,21 +41,21 @@ readonly: true
 Body: role, when called, workflow, rules, output shape, related skills (by name).
 ```
 
-| Field | Purpose |
-| --- | --- |
-| `description` | **Required.** Include "Use when …" triggers. |
-| `mode` | Always `subagent` for catalog agents. |
-| `readonly` | `true` = no file edits (discovery, CI triage); `false` = may implement. |
+| Field         | Purpose                                                                 |
+| ------------- | ----------------------------------------------------------------------- |
+| `description` | **Required.** Include "Use when …" triggers.                            |
+| `mode`        | Always `subagent` for catalog agents.                                   |
+| `readonly`    | `true` = no file edits (discovery, CI triage); `false` = may implement. |
 
 Do **not** put `tools:`, `model:`, or `permission:` in the repo copy — sync derives those.
 
 ## Per-Platform Output (at sync)
 
-| Target | Frontmatter |
-| --- | --- |
+| Target                                            | Frontmatter                                                       |
+| ------------------------------------------------- | ----------------------------------------------------------------- |
 | **OpenCode** (`.config/opencode/agent`, `agents`) | `mode: subagent`, `permission:` (`edit` / `bash` from `readonly`) |
-| **Cursor** (`.cursor/agents`) | `readonly`, `is_background: false` |
-| **Codex / Claude / config-ai** | Same as Cursor |
+| **Cursor** (`.cursor/agents`)                     | `readonly`, `is_background: false`                                |
+| **Codex / Claude / config-ai**                    | Same as Cursor                                                    |
 
 Prune on sync removes tool-dir agents that are no longer in the catalog (e.g. retired agents).
 
@@ -66,22 +70,22 @@ After edits, run **Sync agents** so local tools pick up changes.
 
 ### Dashboard API
 
-| Route | Purpose |
-| ----- | ------- |
-| `GET /api/agents` | List catalog agents (core + plugin; plugin rows are `readOnly`) |
-| `POST /api/agents` | Create `agents/shared/<name>.md` |
+| Route                                     | Purpose                                                           |
+| ----------------------------------------- | ----------------------------------------------------------------- |
+| `GET /api/agents`                         | List catalog agents (core + plugin; plugin rows are `readOnly`)   |
+| `POST /api/agents`                        | Create `agents/shared/<name>.md`                                  |
 | `GET/PUT/PATCH/DELETE /api/agents/<name>` | Read or edit one agent (mutations return `403` for plugin agents) |
-| `GET /api/agents/local` | Scan tool dirs for import candidates |
+| `GET /api/agents/local`                   | Scan tool dirs for import candidates                              |
 
 See [API Routes](../reference/api-routes.md) for request/response details.
 
 ## Core Agents
 
-| Agent | Focus |
-| --- | --- |
-| `repo-navigator` | Read-only codebase orientation and handoffs |
-| `devhub-specialist` | DevHub repo, sync, notes MCP |
-| `ci-investigator` | Single failing PR CI check |
+| Agent               | Focus                                       |
+| ------------------- | ------------------------------------------- |
+| `repo-navigator`    | Read-only codebase orientation and handoffs |
+| `devhub-specialist` | DevHub repo, sync, notes MCP                |
+| `ci-investigator`   | Single failing PR CI check                  |
 
 Domain-specific specialists (content, commerce, infrastructure, subscription, etc.) can
 be supplied by **plugins** — they appear in the catalog as read-only agents tagged with

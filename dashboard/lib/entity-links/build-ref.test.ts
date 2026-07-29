@@ -22,4 +22,15 @@ describe("buildEntityRefFromInput", () => {
     expect(ref.id).toBe("evt-abc");
     expect(ref.href).toBe("/calendar");
   });
+
+  it("builds repository refs from local folder names", () => {
+    expect(buildEntityRefFromInput("repo", "repo:devhub private")).toEqual({
+      kind: "repo",
+      id: "devhub private",
+      label: "devhub private",
+    });
+    expect(() => buildEntityRefFromInput("repo", "../elsewhere")).toThrow(
+      "Choose a local repository.",
+    );
+  });
 });

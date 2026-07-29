@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { mutate } from "swr";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -9,9 +9,12 @@ import {
   BookOpen,
   Check,
   ChevronRight,
+  Code2,
+  FileCheck2,
   FolderInput,
   Link2,
   ListChecks,
+  Loader2,
   Save,
   Trash2,
 } from "lucide-react";
@@ -45,6 +48,12 @@ import {
 } from "@/lib/notes/autosave-invalidation";
 import { EntityRelationsPanel } from "@/components/EntityRelationsPanel";
 import { EntityLinkDialog } from "@/components/EntityLinkDialog";
+import { LaunchMenu } from "@/components/shell/LaunchMenu";
+import {
+  applyCursorNoteDraft,
+  deleteCursorNoteDraft,
+  openRepoInCursor,
+} from "@/lib/open-in-cursor-client";
 import {
   mergeEntityRefs,
   parseEntityLinksFromMarkdown,
@@ -81,14 +90,18 @@ export function VaultEditorPage({
   /** Bumped when ## Links are written outside the editor so BlockNote remounts. */
   const [editorEpoch, setEditorEpoch] = useState(0);
   const [linkOpen, setLinkOpen] = useState(false);
+  const [cursorDraftRepo, setCursorDraftRepo] = useState<string | null>(null);
+  const [applyingCursorDraft, setApplyingCursorDraft] = useState(false);
   const isNotes = vaultId === "notes";
   const { data: allMasters } = useLive<MasterList[]>(
     isNotes && !isNew ? "/api/collections" : null,
   );
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveAbortRef = useRef<AbortController | null>(null);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   /** Bumped on navigation/delete so debounced saves cannot write a prior note. */
   const saveGenerationRef = useRef(0);
+  const sourceModifiedRef = useRef<number | null>(null);
   const isNewRef = useRef(isNew);
   const allMastersRef = useRef(allMasters);
   const pendingLegacyMigrationRef = useRef(false);
@@ -136,11 +149,13 @@ export function VaultEditorPage({
     setError(null);
     setIsNew(false);
     setEditorEpoch(0);
+    setCursorDraftRepo(null);
     fetch(`${apiPrefix}/${paths.apiPathFromSlug(filePath)}`)
       .then((r) => {
         if (!r.ok) {
           if (r.status === 404) {
             setIsNew(true);
+            sourceModifiedRef.current = null;
             setBlocks([]);
             if (vaultId === "docs") setDocBody("");
             return null;
@@ -149,9 +164,10 @@ export function VaultEditorPage({
         }
         return r.json();
       })
-      .then((data: { content: unknown } | null) => {
+      .then((data: { content: unknown; modified?: number } | null) => {
         if (cancelled) return;
         if (data) {
+          sourceModifiedRef.current = typeof data.modified === "number" ? data.modified : null;
           if (vaultId === "docs") {
             const md = typeof data.content === "string" ? data.content : "";
             // Frontmatter is metadata, not prose. Hold it aside verbatim so the
@@ -198,44 +214,55 @@ export function VaultEditorPage({
 
   const handleChange = useCallback(
     (newBlocks: DevHubPartialBlock[]) => {
+      setCursorDraftRepo(null);
       cancelPendingSave();
-      abortActiveSave();
       const generation = nextNoteSaveGeneration(saveGenerationRef.current);
       saveGenerationRef.current = generation;
       setStatus("saving");
       saveTimer.current = setTimeout(async () => {
-        if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
-        const controller = new AbortController();
-        saveAbortRef.current = controller;
-        try {
-          const wasNew = isNewRef.current;
-          const method = wasNew ? "POST" : "PUT";
-          const r = await fetch(`${apiPrefix}/${paths.apiPathFromSlug(filePath)}`, {
-            method,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content: newBlocks }),
-            signal: controller.signal,
-          });
-          if (!r.ok) throw new Error(await r.text());
+        const queued = saveQueueRef.current.then(async () => {
           if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
-          if (wasNew) {
-            setIsNew(false);
-            router.refresh();
+          const controller = new AbortController();
+          saveAbortRef.current = controller;
+          try {
+            const wasNew = isNewRef.current;
+            const method = wasNew ? "POST" : "PUT";
+            const r = await fetch(`${apiPrefix}/${paths.apiPathFromSlug(filePath)}`, {
+              method,
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                content: newBlocks,
+                ...(method === "PUT" && sourceModifiedRef.current !== null
+                  ? { expectedModified: sourceModifiedRef.current }
+                  : {}),
+              }),
+              signal: controller.signal,
+            });
+            if (!r.ok) throw new Error(await r.text());
+            const saved = (await r.json()) as { modified?: number };
+            if (typeof saved.modified === "number") sourceModifiedRef.current = saved.modified;
+            if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
+            if (wasNew) {
+              setIsNew(false);
+              router.refresh();
+            }
+            setStatus("saved");
+            setLastSaved(new Date());
+            // Refresh share drift status (SWR dedupes rapid saves).
+            void mutate("/api/share");
+          } catch (e) {
+            if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
+            setError(String(e));
+            setStatus("error");
+          } finally {
+            if (saveAbortRef.current === controller) saveAbortRef.current = null;
           }
-          setStatus("saved");
-          setLastSaved(new Date());
-          // Refresh share drift status (SWR dedupes rapid saves).
-          void mutate("/api/share");
-        } catch (e) {
-          if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
-          setError(String(e));
-          setStatus("error");
-        } finally {
-          if (saveAbortRef.current === controller) saveAbortRef.current = null;
-        }
+        });
+        saveQueueRef.current = queued.catch(() => undefined);
+        await queued;
       }, 1500);
     },
-    [abortActiveSave, apiPrefix, cancelPendingSave, filePath, paths, router],
+    [apiPrefix, cancelPendingSave, filePath, paths, router],
   );
 
   const handleDocChange = useCallback(
@@ -320,16 +347,25 @@ export function VaultEditorPage({
 
   const persistBlocksImmediate = useCallback(
     async (newBlocks: DevHubPartialBlock[]) => {
+      setCursorDraftRepo(null);
       cancelPendingSave();
+      await saveQueueRef.current;
       const generation = saveGenerationRef.current;
       const r = await fetch(`${apiPrefix}/${paths.apiPathFromSlug(filePath)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: newBlocks }),
+        body: JSON.stringify({
+          content: newBlocks,
+          ...(sourceModifiedRef.current !== null
+            ? { expectedModified: sourceModifiedRef.current }
+            : {}),
+        }),
       });
       if (!r.ok) throw new Error(await r.text());
+      const saved = (await r.json()) as { modified?: number };
       if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
       setBlocks(newBlocks);
+      if (typeof saved.modified === "number") sourceModifiedRef.current = saved.modified;
       setEditorEpoch((n) => n + 1);
       setStatus("saved");
       setLastSaved(new Date());
@@ -357,10 +393,61 @@ export function VaultEditorPage({
     [paths, router],
   );
 
+  const handleApplyCursorDraft = useCallback(async () => {
+    if (!cursorDraftRepo || status === "saving" || status === "error") return;
+    broadcastNoteAutosaveInvalidation(filePath);
+    invalidatePendingSave();
+    setApplyingCursorDraft(true);
+    try {
+      const result = await applyCursorNoteDraft(cursorDraftRepo, filePath, toast);
+      if (!result) return;
+      const content = Array.isArray(result.content) ? result.content : [];
+      setBlocks(
+        migrateNoteBlocks(
+          content as Parameters<typeof migrateNoteBlocks>[0],
+          filePath,
+          allMasters ?? [],
+        ) as DevHubPartialBlock[],
+      );
+      if ("modified" in result && typeof result.modified === "number") {
+        sourceModifiedRef.current = result.modified;
+      }
+      setEditorEpoch((value) => value + 1);
+      setStatus("saved");
+      setError(null);
+      setLastSaved(new Date());
+      void mutate("/api/share");
+      toast.success("Applied Cursor changes");
+    } finally {
+      setApplyingCursorDraft(false);
+    }
+  }, [allMasters, cursorDraftRepo, filePath, invalidatePendingSave, status, toast]);
+
+  const handleDeleteCursorDraft = useCallback(async () => {
+    if (!cursorDraftRepo || applyingCursorDraft) return;
+    const ok = await confirm({
+      title: "Delete Cursor working copy?",
+      message: `Delete the persistent Markdown copy for ${cursorDraftRepo}? The DevHub note is unchanged.`,
+      confirmLabel: "Delete copy",
+      variant: "danger",
+    });
+    if (!ok) return;
+    if (await deleteCursorNoteDraft(cursorDraftRepo, filePath, toast)) {
+      setCursorDraftRepo(null);
+      toast.success("Deleted Cursor working copy");
+    }
+  }, [applyingCursorDraft, confirm, cursorDraftRepo, filePath, toast]);
+
   const folderMaster = isNotes && allMasters ? getMasterForNotePath(filePath, allMasters) : undefined;
   const createMasterScope = isNotes
     ? parentScopePath(filePath) || filePath.split("/")[0] || filePath
     : "";
+  const linkedRepos = useMemo(() => {
+    if (!blocks?.length) return [];
+    return parseEntityLinksFromMarkdown(blocksToText(blocks))
+      .filter((ref) => ref.kind === "repo")
+      .map((ref) => ref.id);
+  }, [blocks]);
 
   if (loading) {
     return (
@@ -507,6 +594,55 @@ export function VaultEditorPage({
                   Add link
                 </button>
               ) : null}
+              {isNotes && linkedRepos.length > 0 ? (
+                <LaunchMenu
+                  label="Open with"
+                  icon={<Code2 size={14} aria-hidden />}
+                  buttonClassName="btn btn-ghost text-xs flex items-center gap-1 shrink-0"
+                  disabled={status === "saving" || status === "error" || applyingCursorDraft}
+                  items={linkedRepos.map((repo) => ({
+                    id: repo,
+                    label: linkedRepos.length === 1 ? "Cursor" : `Cursor · ${repo}`,
+                    description: `Open this note with ${repo}`,
+                    icon: <Code2 size={14} aria-hidden />,
+                    onSelect: async () => {
+                      const result = await openRepoInCursor(repo, toast, filePath);
+                      if (result?.writable) setCursorDraftRepo(repo);
+                      else if (result) {
+                        setCursorDraftRepo(null);
+                        toast.info("Opened a read-only Markdown copy; rich blocks prevent safe write-back.");
+                      }
+                    },
+                  }))}
+                />
+              ) : null}
+              {isNotes && cursorDraftRepo ? (
+                <LaunchMenu
+                  label="Apply Cursor changes"
+                  icon={<FileCheck2 size={14} aria-hidden />}
+                  buttonClassName="btn btn-ghost text-xs flex items-center gap-1 shrink-0"
+                  disabled={status === "saving" || status === "error" || applyingCursorDraft}
+                  items={[
+                    {
+                      id: "apply",
+                      label: applyingCursorDraft ? "Applying…" : "Apply changes",
+                      description: `Update this note from the ${cursorDraftRepo} Markdown copy`,
+                      icon: applyingCursorDraft
+                        ? <Loader2 size={14} className="animate-spin" aria-hidden />
+                        : <FileCheck2 size={14} aria-hidden />,
+                      onSelect: handleApplyCursorDraft,
+                    },
+                    {
+                      id: "delete",
+                      label: "Delete working copy",
+                      description: "Keep the DevHub note and remove the persistent Markdown copy",
+                      icon: <Trash2 size={14} aria-hidden />,
+                      danger: true,
+                      onSelect: handleDeleteCursorDraft,
+                    },
+                  ]}
+                />
+              ) : null}
               {isNotes && !folderMaster ? (
                 <Link
                   href={notesChecklistsHref({ notePath: filePath, scope: createMasterScope ?? "" })}
@@ -593,7 +729,7 @@ export function VaultEditorPage({
           open={linkOpen}
           onClose={() => setLinkOpen(false)}
           defaultKind="calendar"
-          description="Link a calendar event, PR, task, or Jira issue to this note."
+          description="Link a calendar event, PR, repo, task, or Jira issue to this note."
           onSave={async (ref) => {
             const md = blocksToText(blocks);
             const nextRefs = mergeEntityRefs(parseEntityLinksFromMarkdown(md), [ref]);

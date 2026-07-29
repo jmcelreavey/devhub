@@ -65,8 +65,23 @@ export function createVaultRoutes(vaultId: VaultId) {
         { status: 400 },
       );
     }
+    const storage = getVaultStorage(vaultId);
+    const expectedModified =
+      vaultId === "notes" && "expectedModified" in parsed.data
+        ? parsed.data.expectedModified
+        : undefined;
+    if (expectedModified !== undefined) {
+      const current = storage.read(filePath);
+      const stale = expectedModified === null ? current !== null : !current || current.modified !== expectedModified;
+      if (stale) {
+        return NextResponse.json(
+          { error: "This note changed elsewhere. Reload before saving." },
+          { status: 409 },
+        );
+      }
+    }
     const content = normalizeWriteContent(vaultId, parsed.data.content);
-    const result = getVaultStorage(vaultId).write(filePath, content);
+    const result = storage.write(filePath, content);
     revalidateVault(vaultId);
     return NextResponse.json(result);
   }, `${vaultId}.put`);
@@ -125,6 +140,21 @@ export function createVaultRoutes(vaultId: VaultId) {
       }
       revalidateVault(vaultId);
       return NextResponse.json({ ok: true, path: filePath });
+    }
+    const expectedRaw = new URL(req.url).searchParams.get("expectedModified");
+    if (vaultId === "notes" && expectedRaw !== null) {
+      const expectedModified = expectedRaw === "missing" ? null : Number(expectedRaw);
+      if (expectedModified !== null && (!Number.isFinite(expectedModified) || expectedModified < 0)) {
+        return NextResponse.json({ error: "Invalid expectedModified" }, { status: 400 });
+      }
+      const current = storage.read(filePath);
+      const stale = expectedModified === null ? current !== null : !current || current.modified !== expectedModified;
+      if (stale) {
+        return NextResponse.json(
+          { error: "This note changed elsewhere. Reload before deleting." },
+          { status: 409 },
+        );
+      }
     }
     const deleted = storage.delete(filePath);
     if (!deleted) return NextResponse.json({ error: "Not found" }, { status: 404 });
