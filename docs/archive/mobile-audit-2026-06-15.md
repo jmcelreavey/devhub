@@ -1,3 +1,11 @@
+---
+title: Mobile audit (June 2026)
+description: A point-in-time walk of every screen at 500px and 375px widths.
+order: 5
+icon: Archive
+tags: [archive, ui]
+---
+
 # Mobile Audit & Fixes — 2026-06-15
 
 Live walk of every screen in Chrome at phone widths (500px, then 375px /

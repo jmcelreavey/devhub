@@ -63,7 +63,7 @@ This repo includes a two-tier notes system for capturing and reusing knowledge:
 - Reference past learnings via the `learnings` skill
 - Notes are stored in `notes/` and synced with this repo via git
 
-For full details on the notes architecture, see `docs/TOKEN_BUDGET.md`.
+For full details on the notes architecture, see `docs/architecture/token-budget.md`.
 
 ## Context-specific modes (L2)
 

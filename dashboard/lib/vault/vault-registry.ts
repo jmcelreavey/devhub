@@ -39,7 +39,7 @@ export const VAULTS: Record<VaultId, VaultDefinition> = {
     ...VAULT_PUBLIC.docs,
     getRoot: getDocsDir,
     codec: markdownVaultCodec,
-    revalidatePaths: ["/docs"],
+    revalidatePaths: ["/docs", "/docs/[...path]"],
   },
 };
 

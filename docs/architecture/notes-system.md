@@ -1,8 +1,41 @@
+---
+title: Notes and vaults
+description: File-backed notes, docs, tasks and diagrams — the storage model shared by humans and AI tools.
+order: 3
+icon: NotebookPen
+tags: [architecture, notes]
+related:
+  - architecture/memory
+  - guides/sharing
+---
+
 # Notes System
 
 DevHub uses notes as persistent memory for both humans and AI tools.
 
 The goal is simple: keep useful context in plain local files that can be searched, edited, and synced with Git.
+
+```mermaid
+graph TD
+  editor["Dashboard editor<br/>BlockNote"]
+  mcp["MCP tools"]
+  git["Git"]
+
+  editor --> vault
+  mcp --> vault
+  vault[("Vault on disk")] --> git
+
+  vault --> daily["notes/daily/*.json"]
+  vault --> learn["notes/learnings/*"]
+  vault --> sess["notes/sessions/*"]
+  vault --> diag["notes/diagrams/*.tldr"]
+  vault --> docs["docs/**.md"]
+```
+
+> [!NOTE]
+> Notes are BlockNote JSON; docs are plain Markdown. Both go through the same
+> vault storage layer, which is why the docs editor and the notes editor behave
+> identically.
 
 ## Main Note Areas
 

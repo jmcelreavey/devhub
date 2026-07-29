@@ -3,7 +3,7 @@
  * Replace the installed Electron DevHub with the Tauri build, safely.
  *
  * This implements the nine-step gate in
- * `docs/tauri-desktop-implementation-plan.md`. It is written defensively
+ * `docs/archive/tauri-desktop-plan.md`. It is written defensively
  * because it is the one script here that touches `/Applications` and the one
  * whose failure mode is "the user has no working DevHub".
  *

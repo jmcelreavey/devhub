@@ -1,3 +1,11 @@
+---
+title: Capability radar plan
+description: Phases 0–4 built and verified; a few stretch items remain.
+order: 2
+icon: Archive
+tags: [archive]
+---
+
 # Capability Radar — implementation plan
 
 > Status: Phases 0–4 + lab-experience enhancements BUILT & VERIFIED · a few stretch items remain

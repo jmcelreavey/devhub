@@ -1,3 +1,13 @@
+---
+title: Performance appraisal
+description: Capture review evidence through MCP tools and render it as notes in the dashboard.
+order: 6
+icon: Award
+tags: [workflow]
+related:
+  - architecture/mcp-server
+---
+
 # Performance Appraisal (MCP + Dashboard)
 
 DevHub captures review evidence through MCP tools on the `devhub` server. Entries are BlockNote JSON under `notes/appraisal/` so the dashboard can render them like other notes.

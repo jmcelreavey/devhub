@@ -1,3 +1,13 @@
+---
+title: Self-appraisal MCP plan
+description: Implemented. The design behind the appraisal tools on the devhub server.
+order: 4
+icon: Archive
+tags: [archive]
+related:
+  - guides/appraisal
+---
+
 # Self-Appraisal Notes — Design Doc & Tool Specs
 
 Status: implemented (see `mcp-servers/devhub-server/src/tools/appraisal.ts`, `mcp-servers/devhub-server/src/appraisal.ts`, and `appraisal.test.ts`)

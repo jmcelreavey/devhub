@@ -1,3 +1,13 @@
+---
+title: Migrating an older setup
+description: Move an existing DevHub install onto the current directory layout.
+order: 4
+icon: ArrowRightLeft
+tags: [setup]
+related:
+  - getting-started/installation
+---
+
 # Migration
 
 Use this guide when moving from an older DevHub setup to the current structure.

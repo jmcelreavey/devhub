@@ -1,12 +1,23 @@
+---
+title: OpenCode and OpenChamber
+description: The four cooperating local services started by `npm run dev`, and how to run them apart.
+order: 11
+icon: Terminal
+tags: [workflow]
+related:
+  - reference/scripts
+  - reference/environment-variables
+---
+
 # OpenCode and OpenChamber
 
 DevHub runs four cooperating local services during `npm run dev` and `npm run start`:
 
-| Service     | Default port | Dashboard route | Role                             |
-| ----------- | ------------ | --------------- | -------------------------------- |
-| Dashboard   | `1337`       | `/`             | Main Next.js app                 |
-| OpenChamber | `1336`       | `/chamber`      | Thinking/workspace UI (iframe)   |
-| OpenCode    | `1338`       | `/opencode`     | Coding assistant web UI (iframe) |
+| Service     | Default port | Dashboard route | Role                              |
+| ----------- | ------------ | --------------- | --------------------------------- |
+| Dashboard   | `1337`       | `/`             | Main Next.js app                  |
+| OpenChamber | `1336`       | `/chamber`      | Thinking/workspace UI (iframe)    |
+| OpenCode    | `1338`       | `/opencode`     | Coding assistant web UI (iframe)  |
 | Terminal    | `1339`       | Docked drawer   | In-app PTY shell (WebSocket peer) |
 
 OpenCode is a **shared peer service**. OpenChamber connects to the same `opencode serve` instance instead of starting its own embedded server.
@@ -30,18 +41,19 @@ Startup lives in `dashboard/scripts/start-peer-services.ts` (chained OpenCode + 
 
 ### Peer Version Updates
 
-On every DevHub start (`npm run dev` / `npm run start`), `ensure-peers-current.ts` best-effort upgrades **OpenCode** before binding ports:
+On every DevHub start (`npm run dev` / `npm run start`), `ensure-peers-current.ts` best-effort upgrades both peers before binding ports:
 
-| Peer        | Mechanism                                               | Pin behavior                                                            |
-| ----------- | ------------------------------------------------------- | ----------------------------------------------------------------------- |
-| OpenCode    | Runs `opencode upgrade` (no-op when already current)    | Updates the user-installed binary; takes effect on the next clean start |
-| OpenChamber | **Not updated by DevHub** — you manage your own install | Whatever version you have installed is what DevHub serves               |
+| Peer        | Mechanism                                              | Pin behavior                                                            |
+| ----------- | ------------------------------------------------------ | ----------------------------------------------------------------------- |
+| OpenCode    | Runs `opencode upgrade` (no-op when already current)   | Updates the user-installed binary; takes effect on the next clean start |
+| OpenChamber | Runs `openchamber update` (no-op when already current) | Updates the user-installed binary; takes effect on the next clean start |
 
-The OpenCode check is **non-fatal** — offline, registry errors, or upgrade failures keep the existing binary and DevHub continues.
+Both checks are **non-fatal** — offline, registry errors, or upgrade failures keep the existing binary and DevHub continues.
 
-| Variable                      | Set to | Effect                           |
-| ----------------------------- | ------ | -------------------------------- |
-| `DEVHUB_SKIP_OPENCODE_UPDATE` | `1`    | Skip `opencode upgrade` on start |
+| Variable                         | Set to | Effect                             |
+| -------------------------------- | ------ | ---------------------------------- |
+| `DEVHUB_SKIP_OPENCODE_UPDATE`    | `1`    | Skip `opencode upgrade` on start   |
+| `DEVHUB_SKIP_OPENCHAMBER_UPDATE` | `1`    | Skip `openchamber update` on start |
 
 See [Environment Variables](../reference/environment-variables.md) for the full list.
 
@@ -49,7 +61,7 @@ See [Environment Variables](../reference/environment-variables.md) for the full 
 
 If a port is already listening, the startup script assumes the service is already running and keeps the npm/concurrently process alive without starting a duplicate listener.
 
-This lets you attach DevHub to an existing OpenCode session. For OpenChamber, startup also reuses an existing listener on `OPENCHAMBER_PORT`, but shutdown still runs `openchamber stop`. In practice, if DevHub attaches to an already-running OpenChamber on that port, exiting DevHub may stop that existing OpenChamber instance as well.
+This lets you attach DevHub to an existing OpenCode session. OpenChamber startup also reuses an existing listener on `OPENCHAMBER_PORT`, and shutdown leaves that existing process alone.
 
 ### OpenChamber → OpenCode Wiring
 
@@ -65,13 +77,13 @@ OpenChamber waits up to 30 seconds for OpenCode to listen before starting its ow
 
 The docked terminal is opened from the bottom drawer (or programmatically via `devhub:terminal-open`). Each session spawns a login shell rooted at `DEVHUB_DEVELOPER_DIR` (default `~/Developer`) unless a `cwd` is passed — PR **Review** on `/prs` passes the PR's repo path but still pins `REPO_ROOT`/`NOTES_DIR` to DevHub when `NEXT_PUBLIC_REPO_ROOT` is set.
 
-| Trigger | Behavior |
-| ------- | -------- |
-| Terminal drawer button | Opens a new shell session at the developer directory |
-| PR **Review** (`/prs`) | Runs the configured agent CLI (`opencode run` or `cursor-agent`) with the `pr-explain-review` skill; streams output in the drawer |
-| Repo Learning **OpenCode handoff** | Opens a terminal in the target repo with a copied handoff prompt |
-| Repos **DX Audit** | Runs the `dx-audit` skill via the configured agent CLI |
-| Capability **Build lab** | Runs the `capability-lab` skill in the kitchen-sink workspace |
+| Trigger                            | Behavior                                                                                                                          |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Terminal drawer button             | Opens a new shell session at the developer directory                                                                              |
+| PR **Review** (`/prs`)             | Runs the configured agent CLI (`opencode run` or `cursor-agent`) with the `pr-explain-review` skill; streams output in the drawer |
+| Repo Learning **OpenCode handoff** | Opens a terminal in the target repo with a copied handoff prompt                                                                  |
+| Repos **DX Audit**                 | Runs the `dx-audit` skill via the configured agent CLI                                                                            |
+| Capability **Build lab**           | Runs the `capability-lab` skill in the kitchen-sink workspace                                                                     |
 
 The PTY server binds **localhost only** and has no authentication — acceptable because DevHub is a local-only tool. Do not expose port `1339` off-host.
 
@@ -91,11 +103,11 @@ Settings are managed `.env.local` keys — `DEVHUB_AGENT_CLI`, `DEVHUB_AGENT_OPE
 
 Agents can summarize **what an OpenCode session did** (commands, MCP calls, file edits, failures) without replaying chat:
 
-| Surface | Entry point |
-| ------- | ----------- |
-| MCP | `sessions_recap` on the `devhub` server |
-| Skill | `devhub-recap` — call the tool and return the JSON unchanged |
-| HTTP | `GET /api/opencode/recap` (requires `requireDashboardAuth`; see [API Routes](../reference/api-routes.md)) |
+| Surface | Entry point                                                                                               |
+| ------- | --------------------------------------------------------------------------------------------------------- |
+| MCP     | `sessions_recap` on the `devhub` server                                                                   |
+| Skill   | `devhub-recap` — call the tool and return the JSON unchanged                                              |
+| HTTP    | `GET /api/opencode/recap` (requires `requireDashboardAuth`; see [API Routes](../reference/api-routes.md)) |
 
 OpenCode must be running on `OPENCODE_PORT`. The recap builder reads the OpenCode HTTP API, redacts secrets, and omits prompts/reasoning. Use `directory` to scope sessions to a workspace; pass `sessionId` when multiple root sessions are busy (`409`).
 
@@ -163,15 +175,15 @@ The **Status** page probes OpenChamber and OpenCode ports via `/api/status/servi
 
 ## Troubleshooting
 
-| Symptom                                 | Things to check                                                                                                                              |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Chamber iframe blank                    | OpenCode listening on `OPENCODE_PORT`; Status page service indicators                                                                        |
-| OpenCode won't start                    | `which opencode` or set `DEVHUB_OPENCODE_BINARY`; port `1338` not held by another process                                                    |
-| Provider auth errors                    | `/setup` or 1Password item fields; run sync after env vars are set; `DEVHUB_OP_REFRESH=1` once to refresh                                    |
-| LAN device can't reach Chamber/OpenCode | Enable LAN mode in `/setup`; it starts the LAN proxy for `1336` and `1338`. On WSL, still forward those ports from Windows (see root README) |
-| Two OpenCode instances                  | Should not happen when `OPENCODE_SKIP_START=true`; if you run `opencode serve` manually, let DevHub reuse that port                          |
+| Symptom                                 | Things to check                                                                                                                                           |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chamber iframe blank                    | OpenCode listening on `OPENCODE_PORT`; Status page service indicators                                                                                     |
+| OpenCode won't start                    | `which opencode` or set `DEVHUB_OPENCODE_BINARY`; port `1338` not held by another process                                                                 |
+| Provider auth errors                    | `/setup` or 1Password item fields; run sync after env vars are set; `DEVHUB_OP_REFRESH=1` once to refresh                                                 |
+| LAN device can't reach Chamber/OpenCode | Enable LAN mode in `/setup`; it starts the LAN proxy for `1336` and `1338`. On WSL, still forward those ports from Windows (see root README)              |
+| Two OpenCode instances                  | Should not happen when `OPENCODE_SKIP_START=true`; if you run `opencode serve` manually, let DevHub reuse that port                                       |
 | Terminal drawer blank or stuck          | Terminal peer on `1339`; check `concurrently` `term` process. Heavy zsh themes may need `DEVHUB_TERMINAL_ARGS=-f`. LAN proxy forwards `1339` when enabled |
-| PR review note in wrong repo            | Set `NEXT_PUBLIC_REPO_ROOT` in `dashboard/.env.local` to match `REPO_ROOT`; restart dev server |
+| PR review note in wrong repo            | Set `NEXT_PUBLIC_REPO_ROOT` in `dashboard/.env.local` to match `REPO_ROOT`; restart dev server                                                            |
 
 ## Related Docs
 

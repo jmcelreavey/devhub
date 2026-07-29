@@ -1,58 +1,21 @@
-"use client";
+import { DocsShell } from "@/components/docs/DocsShell";
+import { getDocIndex } from "@/lib/docs/doc-index";
+import type { DocNavGroup } from "@/lib/docs/doc-nav-types";
 
-import { Suspense, useState, useEffect } from "react";
-import { NewVaultPathModal } from "@/components/NewVaultPathModal";
-import { VaultFilesSidebar } from "@/components/vault/VaultFilesSidebar";
+/** Reads the docs tree from disk — see the note in `page.tsx`. Never prerender. */
+export const dynamic = "force-dynamic";
 
-export default function DocsLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex h-full overflow-hidden">
-          <div className="flex-1 overflow-y-auto">{children}</div>
-        </div>
-      }
-    >
-      <DocsLayoutInner>{children}</DocsLayoutInner>
-    </Suspense>
-  );
-}
+export default async function DocsLayout({ children }: { children: React.ReactNode }) {
+  const groups: DocNavGroup[] = getDocIndex()
+    .sections.map((section) => ({
+      id: section.meta.id,
+      label: section.meta.label,
+      secondary: section.meta.secondary,
+      docs: section.docs
+        .filter((doc) => !doc.draft)
+        .map(({ slug, title, href, description }) => ({ slug, title, href, description })),
+    }))
+    .filter((group) => group.docs.length > 0);
 
-function DocsLayoutInner({ children }: { children: React.ReactNode }) {
-  const [showNewModal, setShowNewModal] = useState(false);
-  const [newDocFolder, setNewDocFolder] = useState("");
-  const [search, setSearch] = useState("");
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const ce = e as CustomEvent<{ folder?: string }>;
-      setNewDocFolder(ce.detail?.folder ?? "");
-      setShowNewModal(true);
-    };
-    window.addEventListener("devhub:new-doc", handler);
-    return () => window.removeEventListener("devhub:new-doc", handler);
-  }, []);
-
-  return (
-    <div className="flex h-full overflow-hidden">
-      <VaultFilesSidebar
-        vault="docs"
-        search={search}
-        onSearch={setSearch}
-        onNew={() => {
-          setNewDocFolder("");
-          setShowNewModal(true);
-        }}
-      />
-      <div className="flex-1 overflow-y-auto">{children}</div>
-      {showNewModal ? (
-        <NewVaultPathModal
-          key={newDocFolder}
-          vault="docs"
-          defaultFolder={newDocFolder}
-          onClose={() => setShowNewModal(false)}
-        />
-      ) : null}
-    </div>
-  );
+  return <DocsShell groups={groups}>{children}</DocsShell>;
 }

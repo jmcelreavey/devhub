@@ -1,3 +1,14 @@
+---
+title: Theming
+description: Theme modes, accent presets, plugin whitelabelling, and how the palette is applied on first paint.
+order: 9
+icon: Palette
+tags: [ui]
+related:
+  - contributing/motion
+  - architecture/plugins
+---
+
 # Theming
 
 DevHub supports visual themes and accent choices so the dashboard feels comfortable for daily use.
@@ -27,7 +38,7 @@ An enabled plugin can contribute branding: custom presets, default mode, fonts, 
 - `defaultMode` can seed **system**, **dark**, or **light** for fresh installs; user overrides still win.
 - Logo and fonts replace the sidebar chip and UI typeface when configured.
 
-See [Plugins › Tier 3 — branding](../architecture/plugins.md#tier-3--branding-whitelabel) and [Creating a Plugin › Whitelabel](creating-plugins.md#5c-optional-whitelabel-devhub-tier-3-branding) for the manifest layout.
+See [Plugins › Tier 3 — branding](../architecture/plugins.md#tier-3--branding-whitelabel) and [Creating a Plugin › Whitelabel](../contributing/creating-plugins.md#5c-optional-whitelabel-devhub-tier-3-branding) for the manifest layout.
 
 ## OpenChamber Themes
 

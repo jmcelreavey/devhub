@@ -21,6 +21,7 @@
     "typecheck": "npm run typecheck --prefix ./dashboard",
     "test": "npm run test --prefix ./dashboard",
     "doctor": "npm run doctor --prefix ./dashboard",
+    "docs:diagrams": "npm run docs:diagrams --prefix ./dashboard",
     "setup": "npm run setup --prefix ./dashboard",
     "clean": "npm run clean --prefix ./dashboard",
     "restart": "npm run restart --prefix ./dashboard",

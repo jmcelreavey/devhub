@@ -1,15 +1,26 @@
-import { VaultIndexPage } from "@/components/vault/VaultIndexPage";
-import { getVaultTree } from "@/lib/vault/create-vault-routes";
-import { buildVaultIndexSummary } from "@/lib/vault/vault-index-summary";
-import { VAULT_PUBLIC } from "@/lib/vault/vault-public";
+import { DocsLandingPage } from "@/components/docs/DocsLandingPage";
+import { getDocIndex, getRecentDocs } from "@/lib/docs/doc-index";
+
+/**
+ * Never prerender. The docs tree is user content read from disk at request
+ * time, and `DOCS_DIR` is only known at runtime — in the desktop app it comes
+ * from app-support config that does not exist on the build machine.
+ *
+ * Without this the build bakes in whatever the builder could see, which for the
+ * desktop bundle was nothing: the shipped app served a static "No docs yet"
+ * page no matter what was actually on disk.
+ */
+export const dynamic = "force-dynamic";
 
 export default async function DocsIndexPage() {
-  const vault = VAULT_PUBLIC.docs;
-  const tree = await getVaultTree("docs");
-  const summary = buildVaultIndexSummary(tree, {
-    extension: vault.extension,
-    pageHref: vault.paths.pageHref,
-  });
+  const index = getDocIndex();
+  const published = index.docs.filter((doc) => !doc.draft);
 
-  return <VaultIndexPage vaultId="docs" summary={summary} />;
+  return (
+    <DocsLandingPage
+      sections={index.sections}
+      recent={getRecentDocs(4)}
+      totalDocs={published.length}
+    />
+  );
 }

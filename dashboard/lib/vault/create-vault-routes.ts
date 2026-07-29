@@ -29,8 +29,21 @@ function normalizeWriteContent(vaultId: VaultId, content: unknown): unknown {
   return content;
 }
 
+/**
+ * Invalidate every cached surface a vault write can affect.
+ *
+ * Entries containing `[` are dynamic route patterns and need the explicit
+ * "page" type — `revalidatePath("/docs")` alone leaves `/docs/<slug>` stale,
+ * which is how a saved doc used to keep rendering its old body.
+ */
+function revalidateVault(vaultId: VaultId): void {
+  for (const p of getVault(vaultId).revalidatePaths) {
+    if (p.includes("[")) revalidatePath(p, "page");
+    else revalidatePath(p);
+  }
+}
+
 export function createVaultRoutes(vaultId: VaultId) {
-  const vault = getVault(vaultId);
   const putSchema = vaultId === "docs" ? DocPutSchema : NotePutSchema;
 
   const GET = withErrorHandler(async (_req: NextRequest, { params }: Params) => {
@@ -54,9 +67,7 @@ export function createVaultRoutes(vaultId: VaultId) {
     }
     const content = normalizeWriteContent(vaultId, parsed.data.content);
     const result = getVaultStorage(vaultId).write(filePath, content);
-    for (const p of vault.revalidatePaths) {
-      revalidatePath(p);
-    }
+    revalidateVault(vaultId);
     return NextResponse.json(result);
   }, `${vaultId}.put`);
 
@@ -75,9 +86,7 @@ export function createVaultRoutes(vaultId: VaultId) {
           { status: 409 },
         );
       }
-      for (const p of vault.revalidatePaths) {
-        revalidatePath(p);
-      }
+      revalidateVault(vaultId);
       return NextResponse.json(created, { status: 201 });
     }
 
@@ -97,9 +106,7 @@ export function createVaultRoutes(vaultId: VaultId) {
     }
     const content = normalizeWriteContent(vaultId, parsed.data.content);
     const result = getVaultStorage(vaultId).write(filePath, content);
-    for (const p of vault.revalidatePaths) {
-      revalidatePath(p);
-    }
+    revalidateVault(vaultId);
     return NextResponse.json(result, { status: 201 });
   }, `${vaultId}.post`);
 
@@ -116,16 +123,12 @@ export function createVaultRoutes(vaultId: VaultId) {
       if (!deleted) {
         return NextResponse.json({ error: "Folder not found" }, { status: 404 });
       }
-      for (const p of vault.revalidatePaths) {
-        revalidatePath(p);
-      }
+      revalidateVault(vaultId);
       return NextResponse.json({ ok: true, path: filePath });
     }
     const deleted = storage.delete(filePath);
     if (!deleted) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    for (const p of vault.revalidatePaths) {
-      revalidatePath(p);
-    }
+    revalidateVault(vaultId);
     return NextResponse.json({ ok: true, path: filePath });
   }, `${vaultId}.delete`);
 
@@ -147,9 +150,7 @@ export function createVaultRoutes(vaultId: VaultId) {
         { status: 409 },
       );
     }
-    for (const p of vault.revalidatePaths) {
-      revalidatePath(p);
-    }
+    revalidateVault(vaultId);
     return NextResponse.json(result);
   }, `${vaultId}.patch`);
 

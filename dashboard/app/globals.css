@@ -7471,10 +7471,6 @@ a.entity-link-chip:hover {
   transition: rotate var(--dur-quick) var(--ease-swift);
 }
 
-.lib-nav-heading[aria-expanded="false"] .lib-nav-chevron {
-  rotate: -90deg;
-}
-
 .lib-nav-list {
   list-style: none;
   margin: 0 0 var(--space-2);

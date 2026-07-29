@@ -1,3 +1,14 @@
+---
+title: Shared agents
+description: Subagent personas synced from `agents/shared/` into Cursor, Codex, OpenCode and friends.
+order: 3
+icon: Bot
+tags: [agents]
+related:
+  - guides/skills
+  - architecture/persona-system
+---
+
 # Shared Agents
 
 Shared agents are reusable subagent personas synced from `agents/shared/` into local tool directories (Cursor, Codex, OpenCode, and others). The dashboard **Agents → Agents** tab lists the catalog and runs **Sync agents**.

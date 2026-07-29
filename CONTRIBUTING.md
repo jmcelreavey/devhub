@@ -5,7 +5,7 @@ your own copy with your own notes, tasks, persona, and (optionally) private plug
 pulling core improvements and contributing generic features back.
 
 See [`docs/architecture/plugins.md`](docs/architecture/plugins.md) for the plugin design and
-[`docs/guides/creating-plugins.md`](docs/guides/creating-plugins.md) for building one.
+[`docs/contributing/creating-plugins.md`](docs/contributing/creating-plugins.md) for building one.
 
 ## Repo topology
 

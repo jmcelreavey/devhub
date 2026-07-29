@@ -1,3 +1,13 @@
+---
+title: Datadog
+description: Alert views, on-call status, recent events, and AI investigation handoffs.
+order: 4
+icon: Activity
+tags: [integrations]
+related:
+  - reference/environment-variables
+---
+
 # Datadog
 
 The Datadog integration gives quick access to alert-related views, on-call status, recent events, and optional AI investigation handoffs.

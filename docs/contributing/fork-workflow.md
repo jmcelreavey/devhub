@@ -1,3 +1,13 @@
+---
+title: Fork workflow
+description: "Working as a private mirror of the shared public core: pulling in, pushing back, and the personal-data boundary."
+order: 1
+icon: GitFork
+tags: [contributing]
+related:
+  - contributing/creating-plugins
+---
+
 # Fork Workflow — Pull & Push with the Public Core
 
 DevHub is distributed as a **private mirror of a shared public core**. You run your own
@@ -12,6 +22,17 @@ company/personal features, see [Plugins](../architecture/plugins.md).
 
 The public core has an **unrelated git history** — it's seeded from a clean tree so your
 private history never leaks. That means you can't `git merge`/`rebase` across the two.
+
+```mermaid
+graph LR
+  pub[("Public core<br/><i>unrelated history</i>")]
+  priv[("Your private mirror")]
+
+  pub -->|"pull: copy files in,<br/>review, commit"| priv
+  priv -->|"push: cherry-pick generic<br/>changes, strip personal data"| pub
+
+  priv --- personal["notes/, tasks/, persona/<br/><i>never pushed</i>"]
+```
 Both directions instead port _content diffs_ with `git apply --3way`:
 
 - **Pull** (`scripts/devhub-update.sh`) applies new upstream changes onto your mirror.

@@ -1,3 +1,14 @@
+---
+title: Setup
+description: Configure paths, ports, and optional integrations from the /setup page instead of hand-editing env files.
+order: 2
+icon: Settings
+tags: [setup]
+related:
+  - reference/environment-variables
+  - getting-started/installation
+---
+
 # Setup
 
 The setup page is the safest place to configure DevHub after installation.
@@ -108,7 +119,6 @@ npm run desktop:install   # replace /Applications/DevHub.app, with safety checks
 
 The old `POST /api/setup/install-app` route built an Electron bundle from your
 checkout and has been removed — it asked somebody already using DevHub to build
-DevHub. See [Desktop Development](../guides/desktop-development.md) for the
+DevHub. See [Desktop Development](../contributing/desktop-development.md) for the
 full build, sign and release pipeline, and [Desktop App](desktop-app.md) for the
 user-facing side.
-

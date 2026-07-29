@@ -1,3 +1,14 @@
+---
+title: Token budget
+description: Splitting always-loaded guidance from on-demand knowledge so context stays useful.
+order: 10
+icon: Gauge
+tags: [architecture, persona]
+related:
+  - architecture/persona-system
+  - guides/skills
+---
+
 # Token Budget
 DevHub keeps AI context useful by separating always-loaded guidance from on-demand knowledge.
 ## Why Token Budget Matters

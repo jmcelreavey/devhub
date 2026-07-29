@@ -1,3 +1,13 @@
+---
+title: Scripts
+description: Root convenience scripts and dashboard lifecycle scripts, and what each one does.
+order: 3
+icon: SquareTerminal
+tags: [reference]
+related:
+  - guides/opencode-and-chamber
+---
+
 # Scripts
 
 DevHub scripts are split between root-level convenience scripts and dashboard lifecycle scripts.
@@ -34,7 +44,7 @@ Use this on a new machine or when you want to re-run the full setup flow.
 ## Fork Workflow Scripts
 
 For mirrors that track the public core via an `upstream` remote (see `CONTRIBUTING.md` and
-the [Fork Workflow](../guides/fork-workflow.md) guide):
+the [Fork Workflow](../contributing/fork-workflow.md) guide):
 
 > The **pull** direction is also available from the dashboard **Actions** page —
 > **Pull Core Updates (Preview)** (read-only) and **Pull Core Updates** (apply) wrap

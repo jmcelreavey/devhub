@@ -1,3 +1,13 @@
+---
+title: Scheduled jobs
+description: Run maintenance actions on a cron-like schedule while the dashboard is up.
+order: 7
+icon: Clock
+tags: [workflow]
+related:
+  - reference/scripts
+---
+
 # Scheduled Jobs
 
 Scheduled jobs let DevHub run selected maintenance actions on a cron-like schedule while the dashboard is running.

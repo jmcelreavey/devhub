@@ -70,6 +70,7 @@ export function VaultEditorPage({
   const confirm = useConfirm();
   const filePath = pathParts.join("/");
   const [blocks, setBlocks] = useState<DevHubPartialBlock[] | null>(null);
+  const [docBody, setDocBody] = useState<string | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +86,7 @@ export function VaultEditorPage({
     isNotes && !isNew ? "/api/collections" : null,
   );
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveAbortRef = useRef<AbortController | null>(null);
   /** Bumped on navigation/delete so debounced saves cannot write a prior note. */
   const saveGenerationRef = useRef(0);
   const isNewRef = useRef(isNew);
@@ -100,10 +102,16 @@ export function VaultEditorPage({
     }
   }, []);
 
+  const abortActiveSave = useCallback(() => {
+    saveAbortRef.current?.abort();
+    saveAbortRef.current = null;
+  }, []);
+
   const invalidatePendingSave = useCallback(() => {
     saveGenerationRef.current = nextNoteSaveGeneration(saveGenerationRef.current);
     cancelPendingSave();
-  }, [cancelPendingSave]);
+    abortActiveSave();
+  }, [abortActiveSave, cancelPendingSave]);
 
   useNoteAutosaveInvalidationListener(filePath, invalidatePendingSave);
 
@@ -134,6 +142,7 @@ export function VaultEditorPage({
           if (r.status === 404) {
             setIsNew(true);
             setBlocks([]);
+            if (vaultId === "docs") setDocBody("");
             return null;
           }
           throw new Error(`${r.status} ${r.statusText}`);
@@ -149,7 +158,8 @@ export function VaultEditorPage({
             // editor never shows it and a save cannot mangle it.
             const { block, body } = splitFrontmatterBlock(md);
             docFrontmatterRef.current = block;
-            setBlocks(textToBlocks(body) as DevHubPartialBlock[]);
+            setDocBody(body);
+            setBlocks([]);
             return;
           }
           const content = Array.isArray(data.content) ? data.content : [];
@@ -189,21 +199,22 @@ export function VaultEditorPage({
   const handleChange = useCallback(
     (newBlocks: DevHubPartialBlock[]) => {
       cancelPendingSave();
-      const generation = saveGenerationRef.current;
+      abortActiveSave();
+      const generation = nextNoteSaveGeneration(saveGenerationRef.current);
+      saveGenerationRef.current = generation;
       setStatus("saving");
       saveTimer.current = setTimeout(async () => {
         if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
+        const controller = new AbortController();
+        saveAbortRef.current = controller;
         try {
           const wasNew = isNewRef.current;
           const method = wasNew ? "POST" : "PUT";
-          const bodyContent =
-            vaultId === "docs"
-              ? `${docFrontmatterRef.current}${blocksToText(newBlocks)}`
-              : newBlocks;
           const r = await fetch(`${apiPrefix}/${paths.apiPathFromSlug(filePath)}`, {
             method,
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content: bodyContent }),
+            body: JSON.stringify({ content: newBlocks }),
+            signal: controller.signal,
           });
           if (!r.ok) throw new Error(await r.text());
           if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
@@ -215,15 +226,57 @@ export function VaultEditorPage({
           setLastSaved(new Date());
           // Refresh share drift status (SWR dedupes rapid saves).
           void mutate("/api/share");
-          setTimeout(() => setStatus("idle"), 2000);
         } catch (e) {
           if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
           setError(String(e));
           setStatus("error");
+        } finally {
+          if (saveAbortRef.current === controller) saveAbortRef.current = null;
         }
       }, 1500);
     },
-    [apiPrefix, cancelPendingSave, filePath, paths, router, vaultId],
+    [abortActiveSave, apiPrefix, cancelPendingSave, filePath, paths, router],
+  );
+
+  const handleDocChange = useCallback(
+    (body: string) => {
+      setDocBody(body);
+      cancelPendingSave();
+      abortActiveSave();
+      const generation = nextNoteSaveGeneration(saveGenerationRef.current);
+      saveGenerationRef.current = generation;
+      setStatus("saving");
+      saveTimer.current = setTimeout(async () => {
+        if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
+        const controller = new AbortController();
+        saveAbortRef.current = controller;
+        try {
+          const wasNew = isNewRef.current;
+          const r = await fetch(`${apiPrefix}/${paths.apiPathFromSlug(filePath)}`, {
+            method: wasNew ? "POST" : "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content: `${docFrontmatterRef.current}${body}` }),
+            signal: controller.signal,
+          });
+          if (!r.ok) throw new Error(await r.text());
+          if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
+          if (wasNew) {
+            setIsNew(false);
+            router.refresh();
+          }
+          setStatus("saved");
+          setLastSaved(new Date());
+          void mutate("/api/share");
+        } catch (e) {
+          if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
+          setError(String(e));
+          setStatus("error");
+        } finally {
+          if (saveAbortRef.current === controller) saveAbortRef.current = null;
+        }
+      }, 500);
+    },
+    [abortActiveSave, apiPrefix, cancelPendingSave, filePath, paths, router],
   );
 
   const handleDelete = useCallback(async () => {
@@ -281,7 +334,6 @@ export function VaultEditorPage({
       setStatus("saved");
       setLastSaved(new Date());
       void mutate("/api/share");
-      setTimeout(() => setStatus("idle"), 2000);
     },
     [apiPrefix, cancelPendingSave, filePath, paths],
   );
@@ -420,7 +472,7 @@ export function VaultEditorPage({
               <span>Saved {lastSaved.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
             )}
           </div>
-          {readHref ? (
+          {readHref && status !== "saving" && status !== "error" ? (
             <Link
               href={readHref}
               className="btn btn-primary text-xs flex items-center gap-1 shrink-0 no-underline"
@@ -429,6 +481,15 @@ export function VaultEditorPage({
               <BookOpen size={13} aria-hidden />
               Done
             </Link>
+          ) : readHref ? (
+            <span
+              className="btn btn-primary text-xs flex items-center gap-1 shrink-0 opacity-50"
+              aria-disabled="true"
+              title={status === "error" ? "Fix the save error before leaving" : "Waiting for save"}
+            >
+              <BookOpen size={13} aria-hidden />
+              Done
+            </span>
           ) : null}
           {!isNew && (
             <>
@@ -483,12 +544,20 @@ export function VaultEditorPage({
 
       {!isNotes && (blocks !== null || isNew) ? (
         <p className="text-xs mb-3 text-text-subtle">
-          Saved as Markdown on disk. Complex tables or raw HTML may shift slightly after edit - review diffs
-          before syncing.
+          Editing Markdown source directly so tables, diagrams, and formatting stay intact.
         </p>
       ) : null}
 
-      {blocks !== null || isNew ? (
+      {vaultId === "docs" && docBody !== null ? (
+        <textarea
+          value={docBody}
+          onChange={(event) => handleDocChange(event.target.value)}
+          aria-label="Markdown source"
+          className="input w-full font-mono text-sm leading-relaxed resize-y"
+          style={{ minHeight: "60vh" }}
+          spellCheck={false}
+        />
+      ) : blocks !== null || isNew ? (
         <BlockNoteEditor
           key={`${filePath}:${editorEpoch}`}
           initialContent={blocks && blocks.length > 0 ? blocks : undefined}

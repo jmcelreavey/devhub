@@ -1,3 +1,14 @@
+---
+title: Standup
+description: Generate a Markdown standup from local git, Jira and calendar signals.
+order: 5
+icon: Users
+tags: [workflow]
+related:
+  - integrations/jira
+  - integrations/github
+---
+
 # Standup
 
 DevHub can generate a Markdown standup summary from local work signals.

@@ -1,3 +1,14 @@
+---
+title: Memory architecture
+description: Why DevHub stores memory as git-backed local files, and what the alternatives cost.
+order: 9
+icon: Database
+tags: [architecture, notes]
+related:
+  - architecture/notes-system
+  - architecture/token-budget
+---
+
 # Memory Options
 
 DevHub uses git-backed local files for memory.

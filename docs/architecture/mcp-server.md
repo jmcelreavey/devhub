@@ -1,3 +1,14 @@
+---
+title: MCP server
+description: The local `devhub` Model Context Protocol server that exposes notes, tasks and dashboard workflows to AI tools.
+order: 5
+icon: Server
+tags: [architecture, mcp]
+related:
+  - architecture/dashboard
+  - guides/appraisal
+---
+
 # MCP Server
 
 DevHub ships a local Model Context Protocol (MCP) server named `devhub`. AI tools
@@ -8,6 +19,25 @@ The canonical server lives in `mcp-servers/devhub-server/src/mcp.ts`; the shared
 tool config lives in `mcp/shared/devhub.json`. Users normally do not start the
 server manually. Claude, Cursor, Codex, OpenCode, or another MCP client starts it
 from the synced config when a tool is invoked.
+
+```mermaid
+sequenceDiagram
+  participant Tool as AI tool
+  participant MCP as devhub MCP server
+  participant FS as Local files
+  participant Dash as Dashboard
+
+  Tool->>MCP: launch over stdio from synced config
+  Tool->>MCP: call a tool
+  alt filesystem-backed
+    MCP->>FS: read/write notes, tasks, skills
+    FS-->>MCP: content
+  else dashboard-backed
+    MCP->>Dash: HTTP with X-DevHub-Secret
+    Dash-->>MCP: JSON
+  end
+  MCP-->>Tool: tool result
+```
 
 ## Architecture
 
@@ -244,7 +274,7 @@ back to the plugin checkout:
 During MCP sync, `PLUGIN_ROOT` is replaced with that plugin's registered path.
 During bootstrap and `npm run dev`, DevHub installs missing dependencies for enabled
 plugin MCP packages. See [Plugin System](plugins.md) and
-[Creating a Plugin](../guides/creating-plugins.md) for the plugin-side layout.
+[Creating a Plugin](../contributing/creating-plugins.md) for the plugin-side layout.
 
 ## Troubleshooting
 

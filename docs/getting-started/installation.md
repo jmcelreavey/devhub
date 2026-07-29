@@ -1,3 +1,14 @@
+---
+title: Installation
+description: "Get DevHub running locally: prerequisites, Safe-Chain, install, and first launch."
+order: 1
+icon: Download
+tags: [setup]
+related:
+  - getting-started/setup
+  - reference/platform-support
+---
+
 # Installation
 
 DevHub is designed to run locally on your machine. It does not require a hosted database or cloud deployment.

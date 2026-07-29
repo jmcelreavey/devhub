@@ -1,3 +1,14 @@
+---
+title: Sharing notes and docs
+description: Publish a note or doc as a secret Gist — a read-only link you can paste anywhere.
+order: 8
+icon: Share2
+tags: [workflow]
+related:
+  - architecture/notes-system
+  - integrations/github
+---
+
 # Sharing Notes and Docs
 
 DevHub can publish a note or doc as a **secret GitHub Gist** — a temporary, read-only link you can paste into Slack or email without committing the content to git.

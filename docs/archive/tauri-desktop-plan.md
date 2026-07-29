@@ -1,15 +1,25 @@
+---
+title: Tauri desktop migration plan
+description: Completed 2026-07-26. The phased plan that replaced Electron with Tauri 2.
+order: 1
+icon: Archive
+tags: [archive, desktop]
+related:
+  - architecture/desktop-shell
+---
+
 # Tauri desktop migration and first-run experience
 
 Status: **complete** (2026-07-26). Every phase implemented. Electron removed;
 the Tauri build is installed at `/Applications/DevHub.app`, migrated, and
 verified.
 
-See [`architecture/desktop-shell.md`](architecture/desktop-shell.md) for what was
+See [`architecture/desktop-shell.md`](../architecture/desktop-shell.md) for what was
 built, the measurements, and what remains (Apple Developer ID signing, a canary
 N→N+1 update, Linux/Windows). User and developer docs:
-[Desktop App](getting-started/desktop-app.md),
-[Desktop Development](guides/desktop-development.md),
-[Desktop Recovery](guides/desktop-recovery.md).
+[Desktop App](../getting-started/desktop-app.md),
+[Desktop Development](../contributing/desktop-development.md),
+[Desktop Recovery](../guides/desktop-recovery.md).
 
 Three real bugs were found by *running* this rather than reading it — two
 personal-data leaks into the bundle and one that made a migrated user's notes
@@ -19,7 +29,7 @@ three now have a gate or a test.
 The plan text below is left as written, so the estimates it got wrong stay
 visible. Phase headings carry their outcome.
 
-Source plan: [`ROADMAP.md`](../ROADMAP.md), Phase 2
+Source plan: [`ROADMAP.md`](../../ROADMAP.md), Phase 2
 
 This plan replaces the Electron launcher with a self-contained Tauri 2 desktop
 application while keeping the existing Next.js dashboard. It also turns first
@@ -800,7 +810,7 @@ Paste the block below into a new chat from the `devhub-private` workspace.
 
 ```text
 Implement the Tauri desktop migration described in
-docs/tauri-desktop-implementation-plan.md.
+docs/archive/tauri-desktop-plan.md.
 
 Implement Phase 0 only and obey its exit gate. Do not scaffold the production
 shell until Playwright WebKit and the disposable Tauri/WKWebView sidecar harness

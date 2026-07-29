@@ -1,3 +1,14 @@
+---
+title: Skills
+description: "Reusable agent instructions: authoring them, syncing them, and where each tool picks them up."
+order: 2
+icon: Sparkles
+tags: [agents]
+related:
+  - guides/agents
+  - architecture/sync-engine
+---
+
 # Skills
 
 Skills are reusable instructions for AI agents. They capture repeatable workflows, checklists, and domain-specific guidance.
