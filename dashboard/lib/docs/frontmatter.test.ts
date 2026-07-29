@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseFrontmatter,
   serializeFrontmatter,
+  splitFrontmatterBlock,
   withFrontmatter,
 } from "@/lib/docs/frontmatter";
 
@@ -99,5 +100,13 @@ describe("withFrontmatter", () => {
   it("inserts a block when there was none", () => {
     const next = withFrontmatter("# Body\n", { title: "New" });
     expect(next.startsWith("---\ntitle: New\n---")).toBe(true);
+  });
+});
+
+describe("splitFrontmatterBlock", () => {
+  it("preserves the separator between frontmatter and body", () => {
+    const source = "---\ntitle: A\n---\n\n# Body\n";
+    const { block, body } = splitFrontmatterBlock(source);
+    expect(`${block}${body}`).toBe(source);
   });
 });

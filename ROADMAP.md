@@ -1,7 +1,7 @@
 # Tauri migration + onboarding overhaul — implementation plan
 
-*The active plan. A full Rust rewrite was costed and rejected — see the appendix at
-the bottom for why. This is the cheap path that fixes more of the real problem.*
+_The active plan. A full Rust rewrite was costed and rejected — see the appendix at
+the bottom for why. This is the cheap path that fixes more of the real problem._
 
 ---
 
@@ -36,8 +36,8 @@ missing (the app would have told the user to install something they already had)
 header.
 
 Required vs optional is the important distinction and it doesn't currently exist:
-`git` is genuinely required; `gh`, Docker, AWS CLI and `kubectl` gate *specific
-features* and should degrade rather than break.
+`git` is genuinely required; `gh`, Docker, AWS CLI and `kubectl` gate _specific
+features_ and should degrade rather than break.
 
 **Surface:** a Setup step listing each tool with status and a copyable install
 command. Not a wall of red — "3 of 8 available; here's what each unlocks".
@@ -54,7 +54,7 @@ rather than "this isn't set up yet".
 **Already there:** `SetupGateStatus` + `filterNavBySetup` in `lib/nav.ts` already gate
 nav items on integration status, so the hard part is done.
 
-**Remaining:** extend the gate to cover *tool* prerequisites (not just integrations)
+**Remaining:** extend the gate to cover _tool_ prerequisites (not just integrations)
 using the new dependency report, and add the single "more features available"
 affordance so hidden sections are discoverable rather than simply absent.
 
@@ -78,7 +78,7 @@ the BYO-credentials requirement, but the trade is poor for this product:
   callback domain that must stay up forever, a hosted privacy policy and terms, and the
   awkwardness that a distributed "public" client cannot keep a secret.
 
-For a tool whose stated constraint is *one machine, one developer*, that is all cost.
+For a tool whose stated constraint is _one machine, one developer_, that is all cost.
 It only pays once DevHub is genuinely distributed to people who aren't you - which is
 the same premise that justifies Tauri. But **Tauri pays even with one user** (200 MB →
 15 MB, half the RAM, real signing and auto-update, every day), whereas hosted OAuth pays
@@ -112,6 +112,7 @@ The current `/setup` is a checklist of technical fields. Restructure to:
 4. **Done** — land on a working page, not a settings screen.
 
 **Rules for this rewrite:**
+
 - Every step skippable; nothing blocks reaching a usable app.
 - No field asks for something the app can detect.
 - No jargon in labels. "PTY", "upstart", "backport", "materialise" and "vault" are
@@ -134,7 +135,7 @@ and renaming it across 41 sites would be churn rather than clarity.
 Shipped. Electron has been removed; `desktop/` is the shell. See
 [`docs/architecture/desktop-shell.md`](docs/architecture/desktop-shell.md) for
 what was built and measured, and
-[`docs/guides/desktop-development.md`](docs/guides/desktop-development.md) for
+[`docs/contributing/desktop-development.md`](docs/contributing/desktop-development.md) for
 how to work on it.
 
 **The size estimate below was wrong and is kept for honesty.** The measured
@@ -180,14 +181,14 @@ That means:
 
 ## 2.3 Sequence
 
-| Step | Work | Est. |
-|---|---|---|
-| 1 | Sidecar spike: Next server as a supervised child, health check, clean shutdown | 1 week |
-| 2 | Tauri shell: window, menus, deep links, single-instance guard | 1 week |
-| 3 | Native file/folder pickers replacing typed paths (helps 1.4 too) | 3 days |
-| 4 | Signing + notarisation (macOS), updater endpoint | 1 week |
-| 5 | WebView compatibility pass | 3–5 days |
-| 6 | Migration for existing installs — same config dirs, no data move | 2 days |
+| Step | Work                                                                           | Est.     |
+| ---- | ------------------------------------------------------------------------------ | -------- |
+| 1    | Sidecar spike: Next server as a supervised child, health check, clean shutdown | 1 week   |
+| 2    | Tauri shell: window, menus, deep links, single-instance guard                  | 1 week   |
+| 3    | Native file/folder pickers replacing typed paths (helps 1.4 too)               | 3 days   |
+| 4    | Signing + notarisation (macOS), updater endpoint                               | 1 week   |
+| 5    | WebView compatibility pass                                                     | 3–5 days |
+| 6    | Migration for existing installs — same config dirs, no data move               | 2 days   |
 
 ## 2.4 The WebView risk, named specifically
 
@@ -197,16 +198,17 @@ most between engines), **tldraw** (pointer events, canvas), **xterm** (font metr
 and clipboard), and **mermaid**.
 
 **Mitigation:** the 28-spec Playwright suite already covers all 20 routes for render
-+ console errors. Add a WebKit project to `playwright.config.ts` — Playwright ships
-WebKit — and run the existing suite against it **before** committing to Tauri. That's
-a day's work and it converts the biggest unknown into a measurement.
+
+- console errors. Add a WebKit project to `playwright.config.ts` — Playwright ships
+  WebKit — and run the existing suite against it **before** committing to Tauri. That's
+  a day's work and it converts the biggest unknown into a measurement.
 
 ---
 
 # Phase 3 — Optional Rust sidecars (1–2 weeks each, after Tauri)
 
-Once the Rust process exists, hot paths can move into it *if measurement justifies
-it*. Candidates, in order:
+Once the Rust process exists, hot paths can move into it _if measurement justifies
+it_. Candidates, in order:
 
 1. **Repo scanning** — 52 checkouts, currently a git subprocess each. `git2` in
    parallel is the clearest win and `/repos` is the slowest page.
@@ -222,11 +224,11 @@ Rust helps before betting a year on it.**
 
 ## Cost summary
 
-| Phase | Estimate |
-|---|---|
-| 1 — Onboarding | 4–7 weeks |
-| 2 — Tauri | 3–6 weeks |
-| 3 — Rust sidecars (optional) | 1–2 weeks each |
+| Phase                                    | Estimate       |
+| ---------------------------------------- | -------------- |
+| 1 — Onboarding                           | 4–7 weeks      |
+| 2 — Tauri                                | 3–6 weeks      |
+| 3 — Rust sidecars (optional)             | 1–2 weeks each |
 | **Total to "installable and intuitive"** | **7–13 weeks** |
 
 Against 9–18 months for the rewrite, for strictly more benefit on the stated goal.
@@ -256,7 +258,6 @@ execution rather than research.
 - **Google verification stalls.** Then 1.3 falls back to device-code or BYO
   credentials, and the wizard has to make that path as painless as possible instead.
 
-
 ---
 
 # Appendix — why not a Rust rewrite
@@ -270,7 +271,7 @@ runtime dependencies.
 The decisive constraint is that **the UI cannot leave the browser**. BlockNote,
 tldraw, mermaid, xterm and react-grid-layout have no Rust equivalents at any
 reasonable cost, so "port to Rust" can only mean a Rust backend behind the same web
-frontend - which *adds* a language and a build system rather than removing one.
+frontend - which _adds_ a language and a build system rather than removing one.
 
 The app is also I/O-bound, not CPU-bound: `/repos` is slow because it shells out to
 git 52 times, and that costs the same in any language.
@@ -290,12 +291,11 @@ likely to be complained about.
 4. **Don't rewrite.** 9–18 months, no feature progress, and it addresses one and a
    half of the seven real friction points.
 
-The instinct behind the question is sound — the app *is* heavier than it should be,
-and Electron *is* the reason. But that's a packaging problem with a packaging-shaped
+The instinct behind the question is sound — the app _is_ heavier than it should be,
+and Electron _is_ the reason. But that's a packaging problem with a packaging-shaped
 fix, and it costs weeks rather than a year.
 
 ---
-
 
 ### What would change this advice
 

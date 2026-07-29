@@ -86,6 +86,7 @@ export function VaultEditorPage({
     isNotes && !isNew ? "/api/collections" : null,
   );
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveAbortRef = useRef<AbortController | null>(null);
   /** Bumped on navigation/delete so debounced saves cannot write a prior note. */
   const saveGenerationRef = useRef(0);
   const isNewRef = useRef(isNew);
@@ -101,10 +102,16 @@ export function VaultEditorPage({
     }
   }, []);
 
+  const abortActiveSave = useCallback(() => {
+    saveAbortRef.current?.abort();
+    saveAbortRef.current = null;
+  }, []);
+
   const invalidatePendingSave = useCallback(() => {
     saveGenerationRef.current = nextNoteSaveGeneration(saveGenerationRef.current);
     cancelPendingSave();
-  }, [cancelPendingSave]);
+    abortActiveSave();
+  }, [abortActiveSave, cancelPendingSave]);
 
   useNoteAutosaveInvalidationListener(filePath, invalidatePendingSave);
 
@@ -192,10 +199,14 @@ export function VaultEditorPage({
   const handleChange = useCallback(
     (newBlocks: DevHubPartialBlock[]) => {
       cancelPendingSave();
-      const generation = saveGenerationRef.current;
+      abortActiveSave();
+      const generation = nextNoteSaveGeneration(saveGenerationRef.current);
+      saveGenerationRef.current = generation;
       setStatus("saving");
       saveTimer.current = setTimeout(async () => {
         if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
+        const controller = new AbortController();
+        saveAbortRef.current = controller;
         try {
           const wasNew = isNewRef.current;
           const method = wasNew ? "POST" : "PUT";
@@ -203,6 +214,7 @@ export function VaultEditorPage({
             method,
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ content: newBlocks }),
+            signal: controller.signal,
           });
           if (!r.ok) throw new Error(await r.text());
           if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
@@ -214,31 +226,37 @@ export function VaultEditorPage({
           setLastSaved(new Date());
           // Refresh share drift status (SWR dedupes rapid saves).
           void mutate("/api/share");
-          setTimeout(() => setStatus("idle"), 2000);
         } catch (e) {
           if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
           setError(String(e));
           setStatus("error");
+        } finally {
+          if (saveAbortRef.current === controller) saveAbortRef.current = null;
         }
       }, 1500);
     },
-    [apiPrefix, cancelPendingSave, filePath, paths, router],
+    [abortActiveSave, apiPrefix, cancelPendingSave, filePath, paths, router],
   );
 
   const handleDocChange = useCallback(
     (body: string) => {
       setDocBody(body);
       cancelPendingSave();
-      const generation = saveGenerationRef.current;
+      abortActiveSave();
+      const generation = nextNoteSaveGeneration(saveGenerationRef.current);
+      saveGenerationRef.current = generation;
       setStatus("saving");
       saveTimer.current = setTimeout(async () => {
         if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
+        const controller = new AbortController();
+        saveAbortRef.current = controller;
         try {
           const wasNew = isNewRef.current;
           const r = await fetch(`${apiPrefix}/${paths.apiPathFromSlug(filePath)}`, {
             method: wasNew ? "POST" : "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ content: `${docFrontmatterRef.current}${body}` }),
+            signal: controller.signal,
           });
           if (!r.ok) throw new Error(await r.text());
           if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
@@ -249,15 +267,16 @@ export function VaultEditorPage({
           setStatus("saved");
           setLastSaved(new Date());
           void mutate("/api/share");
-          setTimeout(() => setStatus("idle"), 2000);
         } catch (e) {
           if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
           setError(String(e));
           setStatus("error");
+        } finally {
+          if (saveAbortRef.current === controller) saveAbortRef.current = null;
         }
       }, 500);
     },
-    [apiPrefix, cancelPendingSave, filePath, paths, router],
+    [abortActiveSave, apiPrefix, cancelPendingSave, filePath, paths, router],
   );
 
   const handleDelete = useCallback(async () => {
@@ -315,7 +334,6 @@ export function VaultEditorPage({
       setStatus("saved");
       setLastSaved(new Date());
       void mutate("/api/share");
-      setTimeout(() => setStatus("idle"), 2000);
     },
     [apiPrefix, cancelPendingSave, filePath, paths],
   );

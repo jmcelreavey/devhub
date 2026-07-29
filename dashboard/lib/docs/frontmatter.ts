@@ -224,7 +224,7 @@ export function splitFrontmatterBlock(source: string): { block: string; body: st
     if (/^---[ \t]*$/.test(lines[i])) {
       return {
         block: `${lines.slice(0, i + 1).join("\n")}\n`,
-        body: lines.slice(i + 1).join("\n").replace(/^\s*\n/, ""),
+        body: lines.slice(i + 1).join("\n"),
       };
     }
   }

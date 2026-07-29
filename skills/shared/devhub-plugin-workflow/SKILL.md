@@ -16,7 +16,7 @@ relative path, and core compiles them as if they were its own.
 
 This skill is the day-to-day dev loop. For the design/reference see
 `docs/architecture/plugins.md`; for first-time scaffolding see
-`docs/guides/creating-plugins.md`.
+`docs/contributing/creating-plugins.md`.
 
 ## When To Use
 
