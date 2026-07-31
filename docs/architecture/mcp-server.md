@@ -186,6 +186,18 @@ Cross-entity edges use the shared `EntityRef` contract in `shared/entity-note/`.
 
 Path helpers and markdown scaffolds live in `shared/task-note/`, `shared/meeting-note/`, and `shared/pr-note/`. When the dashboard is running, `GET /api/entity-links` resolves the combined read model (notes + related entities). See [Notes System — Cross-entity linking](notes-system.md#cross-entity-linking).
 
+### Edit a note in Cursor with repo context
+
+When a note links to a local repo, agents can open a **persistent Markdown working copy** in Cursor next to that checkout, edit prose with full code context, and apply changes back when the BlockNote body round-trips safely.
+
+1. Ensure the note's `## Links` includes a `repo` ref (`id` = local folder name from `repos_list`).
+2. `notes_cursor_open` with `{ path, repoName }` — proxies `POST /api/repos/<repoName>/open`. The response text indicates whether the copy is writable.
+3. Edit the generated `.md` under `.devhub/cursor-notes/` in Cursor; keep the `<!-- DEVHUB NOTE WORKING COPY … -->` header.
+4. `notes_cursor_apply` with the same `path` and `repoName` — proxies `PATCH /api/repos/<repoName>/open`. Refuses stale or read-only copies (`409`).
+5. `notes_cursor_delete` removes the working copy without changing the DevHub note.
+
+Rich notes that cannot losslessly convert to Markdown open read-only; use DevHub or simplify the note body before expecting write-back. Full workflow and troubleshooting: [Notes System — Cursor note working copies](notes-system.md#cursor-note-working-copies).
+
 ### Run a dashboard action
 
 1. Start the dashboard with `npm run dev`.

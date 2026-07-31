@@ -92,7 +92,7 @@ Tasks, calendar events, pull requests, and notes share one **EntityRef** contrac
 
 | Field    | Meaning                                                                                  |
 | -------- | ---------------------------------------------------------------------------------------- |
-| `kind`   | `task`, `meeting`, `calendar`, `pr`, `note`, or `jira`                                   |
+| `kind`   | `task`, `meeting`, `calendar`, `pr`, `note`, `repo`, or `jira`                           |
 | `id`     | Stable id within the kind (task UUID, `owner/repo#123`, calendar event id, note path, …) |
 | `label`  | Human-readable text for chips and the `## Links` section                                 |
 | `href`   | Optional in-app or external URL for hop-around                                           |
@@ -144,6 +144,54 @@ Notes carry outbound refs in a `## Links` markdown section. Each line is either:
 - MCP: `notes_create_task`, `notes_create_meeting`, `notes_create_pr`, `entity_links_read`, `notes_cursor_open`, `notes_cursor_apply`, `notes_cursor_delete`; `tasks_create` / `tasks_update` accept `links` and optional `withNote`.
 
 Plugins should import `shared/entity-note` (or `@/lib/entity-note` after materialize) rather than defining their own link shapes.
+
+## Cursor note working copies
+
+Notes that link to a local repo (`kind: "repo"` in `## Links`) can open in **Cursor** alongside that checkout. DevHub projects the note to a persistent Markdown file under `.devhub/cursor-notes/` so agents can edit prose with full repo context, then write back safely when the BlockNote body round-trips losslessly.
+
+### When it is writable
+
+On open, DevHub converts the note to Markdown and compares the result to the source blocks (`dashboard/lib/notes/cursor-draft.ts`). When conversion is **lossless**, the working copy is editable and **Apply Cursor changes** is available. Rich blocks that cannot round-trip (custom embeds, linked checklists, etc.) still open as **read-only** projections for review — DevHub refuses `PATCH` apply with `409`.
+
+### Storage layout
+
+| File | Purpose |
+| ---- | ------- |
+| `.devhub/cursor-notes/<basename>-<key>.md` | Markdown projection with a `<!-- DEVHUB NOTE WORKING COPY … -->` header |
+| `.devhub/cursor-notes/<key>.json` | Manifest: `repoName`, `notePath`, `vaultKey`, `sourceHash`, `baseMarkdownHash`, `writable` |
+
+Files are mode `0600`; the directory is `0700`. Reopening the same note reuses an existing copy when the header is intact. The manifest's `sourceHash` must still match the live note at apply time — if you edited the note in DevHub after opening Cursor, apply fails with `409` until you reopen.
+
+### Dashboard workflow
+
+1. Add a **repo** link to the note (`## Links` or **Add link** → Repo).
+2. **Open with** → pick the linked repo. Cursor launches on the checkout with the Markdown copy in the same window group.
+3. Edit the `.md` file in Cursor (keep the header comment block).
+4. Back in DevHub, **Apply Cursor changes** writes the Markdown back to BlockNote JSON, or **Delete working copy** removes the persistent files without touching the source note.
+
+The footer actions appear only when the note has at least one repo link and the last open returned `writable: true`.
+
+### API and MCP
+
+| Action | Route / tool | Body / args |
+| ------ | ------------ | ----------- |
+| Open | `POST /api/repos/<name>/open`, MCP `notes_cursor_open` | `{ notePath }` — also opens the repo in Cursor; returns `{ ok, path, writable }` |
+| Apply | `PATCH /api/repos/<name>/open`, MCP `notes_cursor_apply` | `{ notePath }` — returns the updated note payload from vault storage |
+| Delete copy | `DELETE /api/repos/<name>/open`, MCP `notes_cursor_delete` | `{ notePath }` |
+
+`POST` still accepts `{ path?, line? }` for `repo://` links without a note projection. `503` when `cursor` is not on `PATH`.
+
+See [API Routes](../reference/api-routes.md) and [MCP Server — Edit a note in Cursor](mcp-server.md#edit-a-note-in-cursor-with-repo-context).
+
+### Troubleshooting
+
+| Problem | Check |
+| ------- | ----- |
+| **Open with** is missing | The note has a `repo` entry in `## Links` and the repo exists under the Repos scan directory. |
+| Opened read-only | The note has rich blocks that do not round-trip through Markdown; edit in DevHub or simplify the note body. |
+| Apply returns stale error | The DevHub note changed after Cursor opened — use **Open with** again to refresh the working copy. |
+| Header missing in `.md` | Do not delete the `<!-- DEVHUB NOTE WORKING COPY … -->` block; reopen from DevHub if it was removed. |
+| Working copy orphaned | **Delete working copy** from the note footer, or remove files under `.devhub/cursor-notes/` manually. |
 
 ## Learnings
 

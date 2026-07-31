@@ -225,9 +225,9 @@ Tasks, calendar events, PRs, and notes share hop-around links through the `Entit
 | **Work → Tasks**              | **Note** opens or creates `task-notes/…`; **Link** opens searchable pickers for PR/calendar/note/repo/Jira/task refs; overflow holds secondary actions |
 | **Calendar** / Today briefing | Meeting **Note** button; link chips on events                                                                                                          |
 | **PRs**                       | Review note action; link chips on PR rows                                                                                                              |
-| **Notes** editor              | Relations panel plus repo-linked persistent Cursor Markdown working copies with safe apply/delete actions                                              |
+| **Notes** editor              | Relations panel; **Open with** / **Apply Cursor changes** when the note links a local repo (persistent Markdown working copies)                         |
 
-Stable path conventions, `## Links` format, API, and MCP tools: [Notes System — Cross-entity linking](notes-system.md#cross-entity-linking).
+Stable path conventions, `## Links` format, API, and MCP tools: [Notes System — Cross-entity linking](notes-system.md#cross-entity-linking). Cursor working-copy workflow: [Notes System — Cursor note working copies](notes-system.md#cursor-note-working-copies).
 
 ## Capability Radar
 
