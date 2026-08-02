@@ -83,7 +83,7 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 
 | Group      | Tools                                                                                                                                                                                                                                                                                                                                                         |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Notes      | `notes_list`, `notes_read`, `notes_write`, `notes_write_asset`, `notes_append`, `notes_search`, `notes_delete`, `notes_create_meeting`, `notes_cursor_open`, `notes_cursor_apply`, `notes_cursor_delete`                                                                                                                                                      |
+| Notes      | `notes_list`, `notes_read`, `notes_write`, `notes_write_asset`, `notes_append`, `notes_search`, `notes_delete`, `notes_create_meeting`, `notes_create_task`, `notes_create_pr`, `entity_links_read`, `notes_cursor_open`, `notes_cursor_apply`, `notes_cursor_delete`                                                                                        |
 | Docs       | `docs_list`, `docs_read`, `docs_write`, `docs_append`, `docs_search`, `docs_delete`                                                                                                                                                                                                                                                                           |
 | Tasks      | `tasks_list`, `tasks_create`, `tasks_update`, `tasks_delete`, `tasks_history`                                                                                                                                                                                                                                                                                 |
 | Diagrams   | `diagrams_list`, `diagrams_read`, `diagrams_create`, `diagrams_update`, `diagrams_add_note`, `diagrams_delete`, `diagrams_rename`                                                                                                                                                                                                                             |
@@ -172,6 +172,8 @@ catalog entries so client configs pick up the new command, args, and environment
 3. Use `docs_write` only after merging your intended change into the full current content.
 
 `docs_write` is a full-file replacement, not a patch API.
+
+`notes_write_asset` accepts the same extensions as `GET /api/notes-assets/...`: `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, and `.mp4`. Write the bytes first, then reference the notes-relative path in markdown (`![caption](path/to/asset.jpg)`).
 
 ### Link tasks, meetings, and PRs from an agent
 

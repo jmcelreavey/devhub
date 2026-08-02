@@ -138,6 +138,20 @@ Tauri only updates upward — there is no in-app downgrade, deliberately.
 Download the older DMG from Releases and install it over the current one. Your
 data is version-independent and will be picked up as-is.
 
+## The dashboard looks stale after `git pull`
+
+The installed `.app` ships a **frozen** Next.js build inside `Contents/Resources/server/`. Reopening DevHub does **not** recompile your checkout — you are still running the dashboard that was baked in at install time until you rebuild.
+
+| Situation | Fix |
+| --------- | --- |
+| Installed app, you pulled dashboard changes | **View → Rebuild Dashboard…** (or **Status → Rebuild & restart** when the shell is *not* supervising the server). The boot page shows a log panel while Rust runs `desktop/scripts/rebuild-installed-server.mjs`, stages a fresh production build from your linked checkout, and relaunches. |
+| Installed app, active development | **View → Attach to Dev Server…** and run `npm run dev` in the checkout instead — hot reload without rebuilding the bundle. |
+| Browser / checkout `npm run dev` | Restart the dev server, or run `npm run restart` for a production build on port 1337. |
+
+`POST /api/status/dashboard/rebuild` is intentionally unavailable when `DEVHUB_SHELL_SUPERVISED=1` (the desktop sidecar owns the process). Use the menu rebuild in that case — see [Dashboard — Status page runbook](../architecture/dashboard.md#status-page-runbook).
+
+If rebuild fails, open **View → Show Logs** or **System → Logs** (`/logs`) for compiler output before retrying.
+
 ## Rebuilding from source
 
 If you have the repository:

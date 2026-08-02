@@ -134,8 +134,23 @@ Notes carry outbound refs in a `## Links` markdown section. Each line is either:
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
 | Task row           | **Note** (open-or-create task note), **Link** (searchable PR/calendar/note/repo/Jira/task picker), overflow menu for secondary actions |
 | Calendar / Today   | Meeting note button; **EntityLinkChips** on events                                                                                     |
-| PR row             | Review note action; link chips for related entities                                                                                    |
-| Note editor footer | **EntityRelationsPanel** plus persistent Cursor Markdown working copies for linked repos                                               |
+| PR row             | Review note action; link chips for related entities (note chips hidden when the row already has a **Notes** action)                    |
+| Note editor footer | **EntityRelationsPanel**, **Add link** (same dialog as task **Link**), plus persistent Cursor Markdown working copies for linked repos |
+
+### Link dialog (`EntityLinkDialog`)
+
+Task rows and the note editor footer share one modal (`dashboard/components/EntityLinkDialog.tsx`) for adding hop-around refs. It portals via `ModalShell` so it is not tied to hover shelves.
+
+| Kind     | Picker source | Paste fallback |
+| -------- | ------------- | -------------- |
+| Calendar | Today's events from `GET /api/calendar` | Event id or Google Calendar URL |
+| PR       | Open PRs from `GET /api/github/prs` | `https://github.com/org/repo/pull/n` |
+| Note     | Recent notes from the vault tree | Vault-relative path (e.g. `task-notes/2026-07-28-…`) |
+| Repo     | Sibling checkouts from `GET /api/repos` | Local folder name |
+| Jira     | Tickets from `GET /api/jira/tickets` | Issue key (e.g. `PTF-1234`) |
+| Task     | Last 14 days from `GET /api/tasks/history?includeTasks=1` | Task UUID |
+
+Pickers load once per kind when the dialog opens; filtering is in-memory (no per-keystroke remote search). Selecting a row or pasting a valid value calls `buildEntityRefFromInput` (`dashboard/lib/entity-links/build-ref.ts`) and appends the ref to the task's `links` array or the note's `## Links` section. Duplicate refs are ignored.
 
 ### API and MCP
 
