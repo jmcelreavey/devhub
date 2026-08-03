@@ -8685,6 +8685,95 @@ body[data-motion="off"] .lib-card-icon {
   color: var(--warning);
 }
 
+/* Commit context — Jira tickets and the review note that explains a commit. */
+.repo-git-commit-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.repo-git-context-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background var(--dur-quick) var(--ease-swift),
+    border-color var(--dur-quick) var(--ease-swift);
+}
+.repo-git-context-chip:hover {
+  border-color: color-mix(in oklab, var(--accent) 50%, var(--border));
+  color: var(--text);
+}
+.repo-git-context-chip[data-kind="ticket"] {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+/* A same-repo review is the answer; a cross-repo ticket hit is a lead. The
+   dashed border is the visual difference between the two. */
+.repo-git-context-chip[data-confidence="pr"],
+.repo-git-context-chip[data-confidence="ticket"] {
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+.repo-git-context-chip[data-confidence="related"] {
+  border-style: dashed;
+}
+.repo-git-context-chip-via {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  opacity: 0.7;
+}
+
+/* "Usually changed together" — co-change hints from local history. */
+.repo-git-coupling {
+  margin-top: 10px;
+  padding: 8px;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px dashed color-mix(in oklab, var(--warning) 45%, var(--border));
+  background: color-mix(in oklab, var(--warning) 7%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.repo-git-coupling-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-subtle);
+}
+.repo-git-coupling-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 0;
+}
+.repo-git-coupling-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.repo-git-coupling-because {
+  color: var(--text-subtle);
+  font-size: 10px;
+}
+
 /* Keyboard cheatsheet (?) */
 .repo-git-shortcuts {
   display: flex;

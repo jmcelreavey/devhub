@@ -24,6 +24,7 @@ import {
   openTerminal,
 } from "@/lib/terminal-launch";
 import { isGitNoisePath, looksLikeDirectoryPath, type DiffLine } from "@/lib/repos/git-parsers";
+import { CouplingHints } from "./CouplingHints";
 import { DiffMaximizeModal } from "./DiffMaximizeModal";
 import { DiffToolbar, DIFF_CONTEXT_LINES, type DiffContextMode } from "./DiffToolbar";
 import { GitDiffView } from "./GitDiffView";
@@ -443,6 +444,11 @@ export function ChangesPanel({
     [...stagedSplit.visible, ...unstagedSplit.visible].map((f) => f.path),
   ).size;
   const noiseOnly = visibleDirtyCount === 0 && noiseCount > 0;
+  // Noise paths are excluded: lockfiles and build junk couple to everything and
+  // would make the companion hints meaningless.
+  const dirtyPaths = [
+    ...new Set([...stagedSplit.visible, ...unstagedSplit.visible].map((f) => f.path)),
+  ];
   const cleanTree =
     Boolean(status?.clean) ||
     ((status?.files.length ?? 0) === 0 && !loading) ||
@@ -632,6 +638,7 @@ export function ChangesPanel({
             </div>
           )}
           {contentSyncHint}
+          <CouplingHints repoName={repoName} changedPaths={dirtyPaths} />
         </div>
         }
         secondary={

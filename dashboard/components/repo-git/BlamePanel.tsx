@@ -7,6 +7,7 @@ import { fieldMatchScore } from "@/lib/command-palette-score";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useVirtualRows } from "@/lib/hooks/use-virtual-rows";
+import { CommitContextChips } from "./CommitContextChips";
 import { RepoFileOpenMenu } from "./RepoFileOpenMenu";
 import { fetchGitJson, repoApi } from "./shared";
 
@@ -379,6 +380,8 @@ export function BlamePanel({
           ) : null}
         </div>
       )}
+
+      {view?.commit ? <CommitContextChips repoName={repoName} commit={view.commit} /> : null}
 
       {history.length > 0 && (
         <div className="repo-git-blame-history">

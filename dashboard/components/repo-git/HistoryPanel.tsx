@@ -18,6 +18,7 @@ import { useStoredFraction } from "@/lib/hooks/use-stored-state";
 import { useToast } from "@/lib/hooks/use-toast";
 import type { DiffLine } from "@/lib/repos/git-parsers";
 import type { GraphLaneCommit } from "@/lib/repos/git-graph";
+import { CommitContextChips } from "./CommitContextChips";
 import { CommitGraph } from "./CommitGraph";
 import { DiffMaximizeModal } from "./DiffMaximizeModal";
 import { DiffToolbar, DIFF_CONTEXT_LINES, type DiffContextMode } from "./DiffToolbar";
@@ -528,6 +529,7 @@ export function HistoryPanel({
                   {detailForSelection.body ? (
                     <pre className="repo-git-commit-body">{detailForSelection.body}</pre>
                   ) : null}
+                  <CommitContextChips repoName={repoName} commit={detailForSelection.hash} />
                   <div className="repo-git-commit-byline">
                     <span>{detailForSelection.author}</span>
                     {detailForSelection.authorEmail ? (
