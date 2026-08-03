@@ -9,6 +9,7 @@ import {
   GitBranch,
   GitCommit,
   History,
+  Keyboard,
   Layers,
   Maximize2,
   Minimize2,
@@ -29,6 +30,7 @@ import { ChangesPanel } from "./ChangesPanel";
 import { ConflictsPanel } from "./ConflictsPanel";
 import { GitHookFailureDialog } from "./GitHookFailureDialog";
 import { HistoryPanel } from "./HistoryPanel";
+import { ShortcutsOverlay } from "./ShortcutsOverlay";
 import { StashPanel } from "./StashPanel";
 import {
   postGitAction,
@@ -86,6 +88,9 @@ export function RepoGitWorkspace({
   const [tab, setTab] = useStoredChoice<RepoGitTabId>("devhub:repo-git:tab", "changes", TAB_IDS);
   /** When true, History opens focused on unpushed commits (from badge click). */
   const [historyFocusUnpushed, setHistoryFocusUnpushed] = useState(false);
+  /** Commit to select when Blame hands off to History. */
+  const [historyFocusCommit, setHistoryFocusCommit] = useState<string | null>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   /** Live visible dirty count from ChangesPanel; falls back to parent scan. */
   const [liveVisibleDirty, setLiveVisibleDirty] = useState<number | null>(null);
   const [hookFailure, setHookFailure] = useState<GitHookFailurePayload | null>(null);
@@ -174,6 +179,23 @@ export function RepoGitWorkspace({
       setPushing(false);
     }
   }, [pushing, repoName, showHookFailure, toast, onMutate]);
+
+  // "?" opens the cheatsheet — but only when the user isn't typing, otherwise
+  // it would swallow question marks in the commit message and search boxes.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "?" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      if (el?.isContentEditable) return;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      e.preventDefault();
+      setShortcutsOpen(true);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
 
   useEffect(() => {
     if (open && !wasOpen.current) {
@@ -334,6 +356,15 @@ export function RepoGitWorkspace({
                     <button
                       type="button"
                       className="btn btn-ghost repo-git-close"
+                      onClick={() => setShortcutsOpen(true)}
+                      aria-label="Keyboard shortcuts"
+                      title="Keyboard shortcuts (?)"
+                    >
+                      <Keyboard size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost repo-git-close"
                       onClick={() => setFullscreenPref(!fullscreen)}
                       aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
                       aria-pressed={fullscreen}
@@ -425,12 +456,22 @@ export function RepoGitWorkspace({
                       onMutate={onMutate}
                       focusUnpushed={historyFocusUnpushed}
                       onFocusUnpushedConsumed={() => setHistoryFocusUnpushed(false)}
+                      focusCommit={historyFocusCommit}
+                      onFocusCommitConsumed={() => setHistoryFocusCommit(null)}
                     />
                   )}
                   {tab === "conflicts" && (
                     <ConflictsPanel repoName={repoName} repoPath={repoPath} onMutate={onMutate} />
                   )}
-                  {tab === "blame" && <BlamePanel repoName={repoName} />}
+                  {tab === "blame" && (
+                    <BlamePanel
+                      repoName={repoName}
+                      onOpenInHistory={(hash) => {
+                        setHistoryFocusCommit(hash);
+                        setTab("history");
+                      }}
+                    />
+                  )}
                 </div>
               </div>
             </div>
@@ -494,6 +535,11 @@ export function RepoGitWorkspace({
         </div>
       )}
       {modal}
+      <ShortcutsOverlay
+        open={shortcutsOpen}
+        onClose={() => setShortcutsOpen(false)}
+        activeTab={tab}
+      />
       {typeof document !== "undefined" &&
         createPortal(
           <GitHookFailureDialog

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { ChevronLeft, EyeOff, RefreshCw } from "lucide-react";
+import { ChevronLeft, EyeOff, History as HistoryIcon, RefreshCw } from "lucide-react";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { fieldMatchScore } from "@/lib/command-palette-score";
 import { useLive } from "@/lib/hooks/use-fetch";
@@ -62,7 +62,14 @@ function blameUrl(repoName: string, view: BlameView, ignoreRevs: boolean): strin
   return repoApi(repoName, `/git/blame?${qs}`);
 }
 
-export function BlamePanel({ repoName }: { repoName: string }) {
+export function BlamePanel({
+  repoName,
+  onOpenInHistory,
+}: {
+  repoName: string;
+  /** Jump to a commit in the History tab. Omitted when there's nowhere to jump to. */
+  onOpenInHistory?: (hash: string) => void;
+}) {
   const toast = useToast();
   const [query, setQuery] = useState("");
   const [view, setView] = useState<BlameView | null>(null);
@@ -359,6 +366,17 @@ export function BlamePanel({ repoName }: { repoName: string }) {
               Blame previous
             </button>
           ) : null}
+          {onOpenInHistory && view?.commit ? (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={loading}
+              title="Open this revision in History"
+              onClick={() => onOpenInHistory(view.commit!)}
+            >
+              <HistoryIcon size={11} aria-hidden /> In History
+            </button>
+          ) : null}
         </div>
       )}
 
@@ -369,18 +387,33 @@ export function BlamePanel({ repoName }: { repoName: string }) {
             <span className="repo-git-section-label-end">{history.length}</span>
           </div>
           {history.slice(0, HISTORY_LIMIT).map((h) => (
-            <button
+            <div
               key={h.hash || h.shortHash}
-              type="button"
-              className="repo-git-blame-history-row"
+              className="repo-git-blame-history-item"
               data-active={view?.commit === h.hash || view?.commit === h.shortHash || undefined}
-              onClick={() => void openHistoryCommit(h)}
-              title="Blame file at this commit"
             >
-              <span className="font-mono text-accent">{h.shortHash}</span>
-              <span className="truncate">{h.subject}</span>
-              <span className="text-text-subtle">{h.relativeDate}</span>
-            </button>
+              <button
+                type="button"
+                className="repo-git-blame-history-row"
+                onClick={() => void openHistoryCommit(h)}
+                title="Blame file at this commit"
+              >
+                <span className="font-mono text-accent">{h.shortHash}</span>
+                <span className="truncate">{h.subject}</span>
+                <span className="text-text-subtle">{h.relativeDate}</span>
+              </button>
+              {onOpenInHistory ? (
+                <button
+                  type="button"
+                  className="repo-git-blame-history-open"
+                  title="Open this commit in History — see everything it changed"
+                  aria-label={`Open ${h.shortHash} in History`}
+                  onClick={() => onOpenInHistory(h.hash || h.shortHash)}
+                >
+                  <HistoryIcon size={11} aria-hidden />
+                </button>
+              ) : null}
+            </div>
           ))}
         </div>
       )}

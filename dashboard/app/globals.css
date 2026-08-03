@@ -6553,6 +6553,36 @@ button.conflict-path-row:not(:disabled):active {
   gap: 8px;
   font-size: 11px;
   color: var(--text-muted);
+  flex: 1;
+  min-width: 0;
+}
+/* Row = "blame at this commit"; the trailing button = "open it in History".
+   Two targets on one line, so the secondary one stays quiet until hover. */
+.repo-git-blame-history-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.repo-git-blame-history-open {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-quick) var(--ease-swift), color var(--dur-quick) var(--ease-swift);
+}
+.repo-git-blame-history-item:hover .repo-git-blame-history-open,
+.repo-git-blame-history-open:focus-visible {
+  opacity: 1;
+}
+.repo-git-blame-history-open:hover,
+.repo-git-blame-history-open:focus-visible {
+  color: var(--accent);
 }
 .repo-git-blame-table {
   border: 1px solid var(--border);
@@ -8653,6 +8683,51 @@ body[data-motion="off"] .lib-card-icon {
 }
 .repo-open-pr-link[data-checks="pending"] .repo-open-pr-checks {
   color: var(--warning);
+}
+
+/* Keyboard cheatsheet (?) */
+.repo-git-shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.repo-git-shortcuts-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.repo-git-shortcuts-row {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.repo-git-shortcuts-keys {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+.repo-git-shortcuts-keys kbd {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  background: var(--bg-muted);
+  color: var(--text);
+}
+
+/* Fetch / pull live in the strip so "3 behind" is actionable where it's shown. */
+.repo-git-branch-relation-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 /* History tab — branch vs main relationship */

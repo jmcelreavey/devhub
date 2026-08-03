@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { GitMerge, Layers, RefreshCw, RotateCcw, Search, Upload } from "lucide-react";
+import {
+  CornerDownLeft,
+  Download,
+  GitMerge,
+  Layers,
+  RefreshCw,
+  RotateCcw,
+  Search,
+  Upload,
+} from "lucide-react";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { useConfirm } from "@/components/shell/ConfirmDialog";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
@@ -51,6 +60,13 @@ interface BranchRelation {
   behindMain: number;
   onMain: boolean;
   mergedIntoMain: boolean;
+  /**
+   * Upstream-relative counts, kept separate from the main-relative ones above.
+   * Pull acts on the upstream tracking branch, so "behind main" and "can pull"
+   * are different questions and conflating them would offer a no-op button.
+   */
+  upstream: string | null;
+  behindUpstream: number;
 }
 
 interface LogPayload {
@@ -69,17 +85,24 @@ export function HistoryPanel({
   onMutate,
   focusUnpushed = false,
   onFocusUnpushedConsumed,
+  focusCommit = null,
+  onFocusCommitConsumed,
 }: {
   repoName: string;
   onMutate: () => void;
   focusUnpushed?: boolean;
   onFocusUnpushedConsumed?: () => void;
+  /** Select this commit on arrival — used by Blame's "Open in History". */
+  focusCommit?: string | null;
+  onFocusCommitConsumed?: () => void;
 }) {
   const toast = useToast();
   const confirm = useConfirm();
   const [commits, setCommits] = useState<GraphLaneCommit[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
+  /** Set while an externally focused commit should survive filter recalculation. */
+  const [pinnedHash, setPinnedHash] = useState<string | null>(null);
   const [acting, setActing] = useState<string | null>(null);
   const [authorFilter, setAuthorFilter] = useState("");
   const [search, setSearch] = useState("");
@@ -117,6 +140,8 @@ export function HistoryPanel({
         behindMain: logJson.behindMain ?? branchJson?.behindMain ?? 0,
         onMain: logJson.onMain ?? false,
         mergedIntoMain: logJson.mergedIntoMain ?? false,
+        upstream: branchJson?.upstream ?? null,
+        behindUpstream: branchJson?.behind ?? 0,
       });
 
       if (branchJson) {
@@ -174,12 +199,28 @@ export function HistoryPanel({
   }, [commits, authorFilter, search, unpushedOnly, isUnpushed]);
 
   useEffect(() => {
+    // A commit focused from Blame owns the selection: it is routinely older than
+    // the log window we loaded, so the usual "snap to the first visible row"
+    // correction below would bounce it straight back off screen.
+    if (pinnedHash) return;
     if (filtered.length === 0) {
       setSelected(null); // eslint-disable-line react-hooks/set-state-in-effect -- clear selection when filter empties
       return;
     }
     setSelected((prev) => (prev && filtered.some((c) => c.hash === prev) ? prev : filtered[0]!.hash));
-  }, [filtered]);
+  }, [filtered, pinnedHash]);
+
+  useEffect(() => {
+    if (!focusCommit) return;
+    // Clear filters so the commit is visible if it *is* in the loaded log.
+    setAuthorFilter(""); // eslint-disable-line react-hooks/set-state-in-effect -- external navigation into a specific commit
+    setSearch("");
+    setUnpushedOnly(false);
+    setSelectedFile(null);
+    setSelected(focusCommit);
+    setPinnedHash(focusCommit);
+    onFocusCommitConsumed?.();
+  }, [focusCommit, onFocusCommitConsumed]);
 
   useEffect(() => {
     if (!selected) {
@@ -247,6 +288,37 @@ export function HistoryPanel({
       await refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : opts.failLabel);
+    } finally {
+      setActing(null);
+    }
+  }
+
+  /**
+   * Fetch / pull straight from the relation strip.
+   *
+   * Both actions already existed on the branches route — they were only
+   * reachable from the Branches tab, so History could tell you it was behind
+   * and then offer nothing to do about it.
+   */
+  async function incoming(action: "fetch" | "pull") {
+    setActing(action);
+    try {
+      const result = await postGitAction<{ alreadyUpToDate?: boolean; message?: string }>(
+        repoApi(repoName, "/branches"),
+        { action },
+      );
+      if (!result.ok) throw new Error(result.kind === "error" ? result.message : result.kind);
+      if (action === "fetch") {
+        toast.success("Fetched — remote refs updated");
+      } else if (result.json.alreadyUpToDate) {
+        toast.success(result.json.message || "Already up to date — nothing to pull.");
+      } else {
+        toast.success(result.json.message?.split("\n")[0] || "Pulled");
+      }
+      onMutate();
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `${action} failed`);
     } finally {
       setActing(null);
     }
@@ -385,13 +457,21 @@ export function HistoryPanel({
               setAuthorFilter("");
               setSearch("");
               setUnpushedOnly(false);
+              setPinnedHash(null);
             }}
           >
             Clear filters
           </button>
         </div>
       )}
-      {relation?.mainBranch ? <BranchRelationStrip relation={relation} /> : null}
+      {relation?.mainBranch ? (
+        <BranchRelationStrip
+          relation={relation}
+          acting={acting}
+          onFetch={() => void incoming("fetch")}
+          onPull={() => void incoming("pull")}
+        />
+      ) : null}
       <RepoSplit
         className="repo-git-history-split"
         primaryFr={historyListFr}
@@ -408,6 +488,8 @@ export function HistoryPanel({
               onSelect={(hash) => {
                 setSelectedFile(null);
                 setSelected(hash);
+                // Any deliberate click hands the selection back to the filters.
+                setPinnedHash(null);
               }}
               unpushedHashes={unpushedHashes}
               mainRefNames={
@@ -481,6 +563,12 @@ export function HistoryPanel({
                           {detailForSelection.aheadCount}
                         </span>
                       </button>
+                    </div>
+                  )}
+                  {pinnedHash && !commits.some((c) => c.hash === pinnedHash) && (
+                    <div className="repo-git-commit-meta-note">
+                      Opened from Blame — this commit is older than the loaded history, so it
+                      isn&apos;t highlighted in the list.
                     </div>
                   )}
                   {showDivergedNote && (
@@ -614,7 +702,17 @@ export function HistoryPanel({
   );
 }
 
-function BranchRelationStrip({ relation }: { relation: BranchRelation }) {
+function BranchRelationStrip({
+  relation,
+  acting,
+  onFetch,
+  onPull,
+}: {
+  relation: BranchRelation;
+  acting: string | null;
+  onFetch: () => void;
+  onPull: () => void;
+}) {
   const main = relation.mainShort ?? "main";
   const ahead = relation.aheadMain;
   const behind = relation.behindMain;
@@ -705,6 +803,45 @@ function BranchRelationStrip({ relation }: { relation: BranchRelation }) {
           {behind > 0 && <span data-dir="behind">↓{behind}</span>}
         </div>
       )}
+      <div className="repo-git-branch-relation-actions">
+        <button
+          type="button"
+          className="btn btn-ghost"
+          disabled={acting !== null}
+          onClick={onFetch}
+          title="git fetch --all --prune — updates remote refs, leaves the working tree alone"
+        >
+          {acting === "fetch" ? (
+            <RefreshCw size={11} className="animate-spin" aria-hidden />
+          ) : (
+            <Download size={11} aria-hidden />
+          )}
+          Fetch
+        </button>
+        {relation.upstream ? (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            data-active={relation.behindUpstream > 0 || undefined}
+            disabled={acting !== null || relation.behindUpstream === 0}
+            onClick={onPull}
+            title={
+              relation.behindUpstream > 0
+                ? `git pull --ff-only — bring in ${relation.behindUpstream} commit${
+                    relation.behindUpstream === 1 ? "" : "s"
+                  } from ${relation.upstream}`
+                : `Up to date with ${relation.upstream}`
+            }
+          >
+            {acting === "pull" ? (
+              <RefreshCw size={11} className="animate-spin" aria-hidden />
+            ) : (
+              <CornerDownLeft size={11} aria-hidden />
+            )}
+            {relation.behindUpstream > 0 ? `Pull ${relation.behindUpstream}` : "Pull"}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
