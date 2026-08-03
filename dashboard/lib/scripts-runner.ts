@@ -602,38 +602,37 @@ export function startRun(
     emit("[TIMEOUT] Action exceeded time limit");
   }, def.timeoutMs);
 
-  if (REQUIRES_CHECKOUT.has(script) && !checkoutRoot) {
+  /**
+   * The one place a run is closed out. Every exit path — success, throw,
+   * timeout, missing checkout — goes through here so the audit log, the
+   * persisted log and the retention timer can't drift apart.
+   */
+  const finish = (code: number) => {
     clearTimeout(timer);
     running.delete(script);
     run.finishedAt = Date.now();
-    run.exitCode = 1;
-    emit("ERROR: No linked git checkout — attach a DevHub checkout before running this action.");
-    emit("[EXIT] 1");
+    run.exitCode = code;
+    emit(`[EXIT] ${run.exitCode}`);
     for (const sub of run.subscribers) sub("[DONE]");
     writeAuditLog(run);
     persistRunLogToDisk(run);
     setTimeout(() => runs.delete(runId), 3_600_000);
+  };
+
+  if (!repoRoot || (REQUIRES_CHECKOUT.has(script) && !checkoutRoot)) {
+    emit("ERROR: No linked git checkout — attach a DevHub checkout before running this action.");
+    finish(1);
     return { runId };
   }
 
   void def
-    .run(emit, repoRoot!, runOpts)
+    .run(emit, repoRoot, runOpts)
     .then((code) => (timedOut ? 124 : code))
     .catch((err) => {
       emit(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
       return 1;
     })
-    .then((code) => {
-      clearTimeout(timer);
-      running.delete(script);
-      run.finishedAt = Date.now();
-      run.exitCode = code ?? 1;
-      emit(`[EXIT] ${run.exitCode}`);
-      for (const sub of run.subscribers) sub("[DONE]");
-      writeAuditLog(run);
-      persistRunLogToDisk(run);
-      setTimeout(() => runs.delete(runId), 3_600_000);
-    });
+    .then((code) => finish(code ?? 1));
 
   return { runId };
 }

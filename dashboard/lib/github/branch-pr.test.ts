@@ -34,6 +34,9 @@ describe("findOpenPrForHeadBranch", () => {
       number: 42,
       title: "Add search agent",
       url: "https://github.com/acme/demo-app/pull/42",
+      // A PR with no statusCheckRollup reports "none" rather than a false green.
+      checks: "none",
+      checkCounts: { passed: 0, failed: 0, pending: 0 },
     });
 
     expect(execGh).toHaveBeenCalledWith(
@@ -47,7 +50,7 @@ describe("findOpenPrForHeadBranch", () => {
         "--limit",
         "1",
         "--json",
-        "number,title,url",
+        "number,title,url,statusCheckRollup",
       ],
       { cwd: "/tmp/demo-app" },
     );

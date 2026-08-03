@@ -107,7 +107,35 @@ export function CommitGraph({
           })}
         </svg>
       </div>
-      <div className="repo-git-graph-rows">
+      {/*
+        j/k (and arrows) move the selection. Listening on the container rather
+        than each row means it keeps working while focus sits on any row, and
+        the rows stay plain buttons.
+      */}
+      <div
+        className="repo-git-graph-rows"
+        onKeyDown={(e) => {
+          const delta =
+            e.key === "j" || e.key === "ArrowDown" ? 1
+            : e.key === "k" || e.key === "ArrowUp" ? -1
+            : 0;
+          if (delta === 0 || e.metaKey || e.ctrlKey || e.altKey) return;
+          e.preventDefault();
+          const current = commits.findIndex((c) => c.hash === selectedHash);
+          const nextIndex = Math.min(
+            commits.length - 1,
+            Math.max(0, (current < 0 ? 0 : current) + delta),
+          );
+          const next = commits[nextIndex];
+          if (!next) return;
+          onSelect?.(next.hash);
+          // Move focus with the selection so repeated presses keep working and
+          // the row is scrolled into view for free.
+          e.currentTarget
+            .querySelectorAll<HTMLButtonElement>(".repo-git-graph-row")
+            [nextIndex]?.focus();
+        }}
+      >
         {commits.map((c) => {
           const selected = selectedHash === c.hash;
           const unpushed = unpushedHashes?.has(c.hash) || unpushedHashes?.has(c.shortHash);

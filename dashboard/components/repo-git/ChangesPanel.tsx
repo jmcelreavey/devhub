@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
+import { useStoredFraction } from "@/lib/hooks/use-stored-state";
 import { useToast } from "@/lib/hooks/use-toast";
 import {
   agentCommitMessageCommand,
@@ -84,7 +85,7 @@ export function ChangesPanel({
   const [dirPreview, setDirPreview] = useState<{ entries: DiffDirEntry[]; message?: string } | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
   const [contextMode, setContextMode] = useState<DiffContextMode>("default");
-  const [listFr, setListFr] = useState(0.4);
+  const [listFr, setListFr] = useStoredFraction("devhub:repo-git:changes-list-fr", 0.4);
   const [diffMaximized, setDiffMaximized] = useState(false);
   const closeMaximized = useCallback(() => setDiffMaximized(false), []);
   const [message, setMessage] = useState("");

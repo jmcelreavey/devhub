@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Download, Trash2 } from "lucide-react";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
+import { useStoredFraction } from "@/lib/hooks/use-stored-state";
 import { useToast } from "@/lib/hooks/use-toast";
 import { agentStashMessageCommand, openTerminal } from "@/lib/terminal-launch";
 import type { DiffLine } from "@/lib/repos/git-parsers";
@@ -47,7 +48,7 @@ export function StashPanel({
   const [diffLoading, setDiffLoading] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
   const [contextMode, setContextMode] = useState<DiffContextMode>("default");
-  const [listFr, setListFr] = useState(0.42);
+  const [listFr, setListFr] = useStoredFraction("devhub:repo-git:stash-list-fr", 0.42);
   const [diffMaximized, setDiffMaximized] = useState(false);
   const closeMaximized = useCallback(() => setDiffMaximized(false), []);
 

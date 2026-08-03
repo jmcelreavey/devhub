@@ -13,8 +13,57 @@ import { isSafeCommitRef, isSafeRepoRelPath } from "@/lib/git/ref-safety";
 
 const CACHE_ROOT = path.join(os.homedir(), ".cache", "devhub", "git-revisions");
 
+/**
+ * Revisions older than this are dropped on the next write. A materialized blob
+ * is only useful while the editor tab that opened it is still around, so a day
+ * is generous — without this the directory grows for the life of the machine.
+ */
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
 function safeSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "x";
+}
+
+/**
+ * Best-effort sweep of stale `<repo>/<short>` revision directories.
+ *
+ * Deliberately never throws: a cache we failed to tidy must not break the
+ * "open this file at that commit" action the user actually asked for.
+ */
+export function pruneGitRevisionCache(now = Date.now(), ttlMs = CACHE_TTL_MS): number {
+  let removed = 0;
+  let repoDirs: string[];
+  try {
+    repoDirs = fs.readdirSync(CACHE_ROOT);
+  } catch {
+    return 0; // never created yet
+  }
+  for (const repoDir of repoDirs) {
+    const repoPath = path.join(CACHE_ROOT, repoDir);
+    let revisionDirs: string[] = [];
+    try {
+      revisionDirs = fs.readdirSync(repoPath);
+    } catch {
+      continue;
+    }
+    for (const revisionDir of revisionDirs) {
+      const revisionPath = path.join(repoPath, revisionDir);
+      try {
+        if (now - fs.statSync(revisionPath).mtimeMs <= ttlMs) continue;
+        fs.rmSync(revisionPath, { recursive: true, force: true });
+        removed += 1;
+      } catch {
+        // locked / vanished mid-sweep — leave it for next time
+      }
+    }
+    // Drop the repo folder once its last revision is gone.
+    try {
+      if (fs.readdirSync(repoPath).length === 0) fs.rmdirSync(repoPath);
+    } catch {
+      // non-empty or unreadable — fine
+    }
+  }
+  return removed;
 }
 
 export interface MaterializedRevision {
@@ -45,6 +94,8 @@ export async function materializeGitRevisionFile(
   if (blob.status !== 0) {
     return { error: (blob.stderr || "").trim() || "Could not read file at that revision" };
   }
+
+  pruneGitRevisionCache();
 
   const target = path.join(CACHE_ROOT, safeSegment(repoName), safeSegment(shortHash), filePath);
   fs.mkdirSync(path.dirname(target), { recursive: true });

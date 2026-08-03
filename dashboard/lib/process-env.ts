@@ -69,17 +69,16 @@ export function scrubNpmEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.Proces
 export function scrubDesktopRuntimeEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const clean = { ...env };
   for (const key of Object.keys(clean)) {
-    if (key === "DEVHUB_DESKTOP" || key.startsWith("DEVHUB_")) {
-      // Keep credential / op helpers that hooks may need; drop runtime layout.
-      if (
-        key.startsWith("DEVHUB_OP_") ||
-        key === "DEVHUB_REPOS_DIR" ||
-        key === "DEVHUB_ALLOWED_DEV_ORIGINS"
-      ) {
-        continue;
-      }
-      delete clean[key];
+    if (!key.startsWith("DEVHUB_")) continue;
+    // Keep credential / op helpers that hooks may need; drop runtime layout.
+    if (
+      key.startsWith("DEVHUB_OP_") ||
+      key === "DEVHUB_REPOS_DIR" ||
+      key === "DEVHUB_ALLOWED_DEV_ORIGINS"
+    ) {
+      continue;
     }
+    delete clean[key];
   }
   // Content dirs redirected into app-data — let checkout .env.local win instead.
   for (const key of ["NOTES_DIR", "TASKS_DIR", "COLLECTIONS_DIR", "UPSTARTS_DIR", "DOCS_DIR"]) {

@@ -5,8 +5,12 @@ import { ClipboardCopy, Check } from "lucide-react";
 import { ModalShell } from "@/components/shell/ModalShell";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { copyTextToClipboard } from "@/lib/clipboard";
+import { useVirtualRows } from "@/lib/hooks/use-virtual-rows";
 import { formatRelative } from "@/lib/utils";
 import type { TerminalTranscriptOptions } from "@/lib/terminal-launch";
+
+/** Fixed row height the transcript windowing maths depends on. */
+const TRANSCRIPT_ROW_H = 18;
 
 interface TranscriptPayload {
   sessionId: string;
@@ -30,6 +34,8 @@ export function TerminalTranscriptModal() {
   const [copied, setCopied] = useState<"line" | "all" | null>(null);
   const highlightRef = useRef<HTMLDivElement | null>(null);
   const copiedTimer = useRef<number | undefined>(undefined);
+  const lineCount = state.status === "ok" ? state.data.lines.length : 0;
+  const { scrollRef, window: rows, scrollToRow } = useVirtualRows(lineCount, TRANSCRIPT_ROW_H);
 
   useEffect(() => () => window.clearTimeout(copiedTimer.current), []);
 
@@ -90,11 +96,11 @@ export function TerminalTranscriptModal() {
 
   useEffect(() => {
     if (state.status !== "ok" || !target?.line) return;
-    const id = window.requestAnimationFrame(() => {
-      highlightRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-    });
+    // Jump by index, not by ref: the matched line is usually outside the
+    // rendered window, so scrolling the (unmounted) node would be a no-op.
+    const id = window.requestAnimationFrame(() => scrollToRow(target.line! - 1));
     return () => window.cancelAnimationFrame(id);
-  }, [state, target?.line]);
+  }, [state, target?.line, scrollToRow]);
 
   // Undefined when the hit's line falls outside the tail we fetched. "Copy line"
   // used to quietly fall back to the whole transcript in that case.
@@ -177,6 +183,7 @@ export function TerminalTranscriptModal() {
       {state.status === "error" && <p className="text-xs m-0 text-danger">{state.message}</p>}
       {state.status === "ok" && (
         <div
+          ref={scrollRef}
           className="font-mono text-xs rounded overflow-auto"
           style={{
             background: "var(--bg-muted)",
@@ -187,32 +194,39 @@ export function TerminalTranscriptModal() {
           {state.data.lines.length === 0 ? (
             <p className="m-0 p-3 text-text-subtle">(empty transcript)</p>
           ) : (
-            state.data.lines.map((line, idx) => {
-              const n = idx + 1;
-              const highlight = target?.line === n;
-              return (
-                <div
-                  key={n}
-                  ref={highlight ? highlightRef : undefined}
-                  className="flex gap-3 px-3 py-0.5"
-                  style={{
-                    background: highlight ? "var(--bg-elevated)" : undefined,
-                    boxShadow: highlight ? "inset 3px 0 0 var(--accent)" : undefined,
-                    color: "var(--text)",
-                  }}
-                >
-                  <span
-                    className="shrink-0 select-none text-right"
-                    style={{ width: 40, color: "var(--text-subtle)" }}
+            <>
+              {/* Windowed — a 2MB tail is tens of thousands of lines. */}
+              <div style={{ height: rows.padTop }} aria-hidden />
+              {state.data.lines.slice(rows.start, rows.end).map((line, idx) => {
+                const n = rows.start + idx + 1;
+                const highlight = target?.line === n;
+                return (
+                  <div
+                    key={n}
+                    ref={highlight ? highlightRef : undefined}
+                    className="flex gap-3 px-3"
+                    style={{
+                      height: TRANSCRIPT_ROW_H,
+                      lineHeight: `${TRANSCRIPT_ROW_H}px`,
+                      background: highlight ? "var(--bg-elevated)" : undefined,
+                      boxShadow: highlight ? "inset 3px 0 0 var(--accent)" : undefined,
+                      color: "var(--text)",
+                    }}
                   >
-                    {n}
-                  </span>
-                  <span style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                    {line || " "}
-                  </span>
-                </div>
-              );
-            })
+                    <span
+                      className="shrink-0 select-none text-right"
+                      style={{ width: 40, color: "var(--text-subtle)" }}
+                    >
+                      {n}
+                    </span>
+                    {/* `pre` not `pre-wrap`: wrapping would break the fixed row
+                        height the windowing maths depends on. */}
+                    <span style={{ whiteSpace: "pre", overflow: "hidden" }}>{line || " "}</span>
+                  </div>
+                );
+              })}
+              <div style={{ height: rows.padBottom }} aria-hidden />
+            </>
           )}
         </div>
       )}

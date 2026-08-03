@@ -5,6 +5,7 @@ import { GitMerge, Layers, RefreshCw, RotateCcw, Search, Upload } from "lucide-r
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { useConfirm } from "@/components/shell/ConfirmDialog";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
+import { useStoredFraction } from "@/lib/hooks/use-stored-state";
 import { useToast } from "@/lib/hooks/use-toast";
 import type { DiffLine } from "@/lib/repos/git-parsers";
 import type { GraphLaneCommit } from "@/lib/repos/git-graph";
@@ -12,6 +13,7 @@ import { CommitGraph } from "./CommitGraph";
 import { DiffMaximizeModal } from "./DiffMaximizeModal";
 import { DiffToolbar, DIFF_CONTEXT_LINES, type DiffContextMode } from "./DiffToolbar";
 import { GitDiffView } from "./GitDiffView";
+import { RangeCompareButton, RangeCompareModal } from "./RangeCompareModal";
 import { RepoFileOpenMenu } from "./RepoFileOpenMenu";
 import { RepoSplit } from "./SplitResize";
 import {
@@ -88,10 +90,11 @@ export function HistoryPanel({
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [contextMode, setContextMode] = useState<DiffContextMode>("default");
-  const [historyListFr, setHistoryListFr] = useState(0.46);
-  const [filesFr, setFilesFr] = useState(0.34);
+  const [historyListFr, setHistoryListFr] = useStoredFraction("devhub:repo-git:history-list-fr", 0.46);
+  const [filesFr, setFilesFr] = useStoredFraction("devhub:repo-git:history-files-fr", 0.34);
   const [diffMaximized, setDiffMaximized] = useState(false);
   const closeMaximized = useCallback(() => setDiffMaximized(false), []);
+  const [comparing, setComparing] = useState(false);
   const stackHistory = useMediaQuery("(max-width: 900px)");
   const stackDetail = useMediaQuery("(max-width: 720px)");
 
@@ -324,6 +327,9 @@ export function HistoryPanel({
           {acting === "undo" ? <RefreshCw size={11} className="animate-spin" /> : <RotateCcw size={11} />}
           Undo last commit
         </button>
+        {relation && !relation.onMain ? (
+          <RangeCompareButton onClick={() => setComparing(true)} />
+        ) : null}
         {unpushedHashes.size > 0 && (
           <button
             type="button"
@@ -596,6 +602,14 @@ export function HistoryPanel({
           />
         ) : null}
       </DiffMaximizeModal>
+      {comparing ? (
+        <RangeCompareModal
+          repoName={repoName}
+          open
+          onClose={() => setComparing(false)}
+          currentBranch={relation?.currentBranch}
+        />
+      ) : null}
     </div>
   );
 }

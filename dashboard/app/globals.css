@@ -5983,6 +5983,50 @@ body[data-motion="off"] .evolution-arrow {
   position: relative;
   min-height: 0;
 }
+/* Find-in-diff — floats over the diff so it costs no vertical space. */
+.repo-git-diff-find,
+.repo-git-diff-find-open {
+  position: sticky;
+  top: 4px;
+  z-index: 2;
+  margin-left: auto;
+  margin-right: 6px;
+  width: fit-content;
+}
+.repo-git-diff-find {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md, 0 4px 12px rgb(0 0 0 / 0.18));
+}
+.repo-git-diff-find-input {
+  font-size: 11px;
+  width: 180px;
+  min-width: 0;
+}
+.repo-git-diff-find-count {
+  font-size: 10px;
+  color: var(--text-subtle);
+  min-width: 34px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.repo-git-diff-find-open {
+  opacity: 0;
+  transition: opacity var(--dur-quick) var(--ease-swift);
+}
+.repo-git-diff-wrap:hover .repo-git-diff-find-open,
+.repo-git-diff-find-open:focus-visible {
+  opacity: 1;
+}
+.repo-git-diff-line[data-match="active"] {
+  background: color-mix(in oklab, var(--warning) 28%, transparent);
+  outline: 1px solid color-mix(in oklab, var(--warning) 60%, transparent);
+}
 .repo-git-diff {
   margin: 0;
   padding: 0;
@@ -6525,6 +6569,18 @@ button.conflict-path-row:not(:disabled):active {
   gap: 6px;
   padding: 1px 8px;
   border-bottom: 1px solid color-mix(in oklab, var(--border) 40%, transparent);
+  /* Fixed height is load-bearing: the blame list is windowed, and the row
+     geometry is what maps scroll position to line index. Keep in sync with
+     BLAME_ROW_H in BlamePanel.tsx. */
+  height: 18px;
+  box-sizing: border-box;
+  align-items: center;
+  overflow: hidden;
+}
+.repo-git-blame-line > * {
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 button.repo-git-blame-line,
@@ -8582,6 +8638,21 @@ body[data-motion="off"] .lib-card-icon {
 .repo-open-pr-link:hover {
   background: color-mix(in oklab, var(--accent) 18%, transparent);
   border-color: color-mix(in oklab, var(--accent) 55%, var(--border));
+}
+/* CI rollup. Tints the whole chip so a red build reads at a glance across a
+   long repo list; the icon shape carries the same meaning without colour. */
+.repo-open-pr-link[data-checks="passing"] .repo-open-pr-checks {
+  color: var(--success);
+}
+.repo-open-pr-link[data-checks="failing"] {
+  border-color: color-mix(in oklab, var(--danger) 55%, var(--border));
+  background: color-mix(in oklab, var(--danger) 12%, transparent);
+}
+.repo-open-pr-link[data-checks="failing"] .repo-open-pr-checks {
+  color: var(--danger);
+}
+.repo-open-pr-link[data-checks="pending"] .repo-open-pr-checks {
+  color: var(--warning);
 }
 
 /* History tab — branch vs main relationship */

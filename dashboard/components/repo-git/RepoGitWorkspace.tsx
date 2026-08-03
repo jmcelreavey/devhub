@@ -22,6 +22,7 @@ import { useToast } from "@/lib/hooks/use-toast";
 import { agentGitSyncConflictCommand, agentStashConflictCommand, openTerminal } from "@/lib/terminal-launch";
 import type { GitHookFailurePayload } from "@/lib/git/hook-failure";
 import type { StashConflictPayload } from "@/app/repos/types";
+import { useStoredChoice } from "@/lib/hooks/use-stored-state";
 import { BlamePanel } from "./BlamePanel";
 import { BranchesPanel } from "./BranchesPanel";
 import { ChangesPanel } from "./ChangesPanel";
@@ -48,6 +49,9 @@ const TABS: readonly [RepoGitTabId, string, LucideIcon][] = [
   ["blame", "Blame", GitCommit],
 ];
 
+/** Module-level so the stored-choice validator keeps a stable identity. */
+const TAB_IDS: readonly RepoGitTabId[] = TABS.map(([id]) => id);
+
 interface RepoGitWorkspaceProps {
   repoName: string;
   repoPath: string;
@@ -72,12 +76,14 @@ export function RepoGitWorkspace({
   open: openControlled,
   onOpenChange,
   hideTrigger = false,
-  initialTab = "changes",
+  initialTab,
 }: RepoGitWorkspaceProps) {
   const [openUncontrolled, setOpenUncontrolled] = useState(false);
   const controlled = openControlled !== undefined;
   const open = controlled ? openControlled : openUncontrolled;
-  const [tab, setTab] = useState<RepoGitTabId>(initialTab);
+  // Reopening lands on the tab you left, unless the caller asked for a specific
+  // one (e.g. the conflicts banner).
+  const [tab, setTab] = useStoredChoice<RepoGitTabId>("devhub:repo-git:tab", "changes", TAB_IDS);
   /** When true, History opens focused on unpushed commits (from badge click). */
   const [historyFocusUnpushed, setHistoryFocusUnpushed] = useState(false);
   /** Live visible dirty count from ChangesPanel; falls back to parent scan. */
@@ -115,7 +121,7 @@ export function RepoGitWorkspace({
     setHistoryFocusUnpushed(true);
     setTab("history");
     setOpen(true);
-  }, [setOpen]);
+  }, [setOpen, setTab]);
   const closeWorkspace = useCallback(() => {
     setOpen(false);
     setLiveVisibleDirty(null);
@@ -171,12 +177,12 @@ export function RepoGitWorkspace({
 
   useEffect(() => {
     if (open && !wasOpen.current) {
-      setTab(initialTab);
+      if (initialTab) setTab(initialTab);
       setHistoryFocusUnpushed(false);
       setFullscreen(readFullscreenPref());
     }
     wasOpen.current = open;
-  }, [open, initialTab]);
+  }, [open, initialTab, setTab]);
 
   useEffect(() => {
     if (!open) return;
@@ -214,7 +220,7 @@ export function RepoGitWorkspace({
       setTab(nextId);
       tabRefs.current.get(nextId)?.focus();
     },
-    [tab],
+    [tab, setTab],
   );
 
   async function offerAiConflict(conflict: StashConflictPayload) {

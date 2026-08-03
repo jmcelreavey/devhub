@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
-import { Bot, Minus, Plus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Bot, ChevronDown, ChevronUp, Minus, Plus, Search, X } from "lucide-react";
 import type { DiffLine } from "@/lib/repos/git-parsers";
 
 export interface DiffHunkAction {
@@ -58,6 +58,58 @@ export function GitDiffView({
 
   const hunkSpans = useMemo(() => buildHunkSpans(lines), [lines]);
 
+  const [find, setFind] = useState("");
+  const [findOpen, setFindOpen] = useState(false);
+  const [matchIndex, setMatchIndex] = useState(0);
+  const findInputRef = useRef<HTMLInputElement>(null);
+
+  /** Indices of lines containing the needle, in document order. */
+  const matches = useMemo(() => {
+    const needle = find.trim().toLowerCase();
+    if (!needle) return [];
+    const out: number[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i]!.text.toLowerCase().includes(needle)) out.push(i);
+    }
+    return out;
+  }, [find, lines]);
+
+  const activeMatchLine = matches.length > 0 ? matches[matchIndex % matches.length] : -1;
+
+  // Keep the current match on screen as the user steps through.
+  useEffect(() => {
+    if (activeMatchLine < 0) return;
+    rootRef.current
+      ?.querySelector(`[data-diff-line="${activeMatchLine}"]`)
+      ?.scrollIntoView({ block: "center" });
+  }, [activeMatchLine]);
+
+  const step = useCallback(
+    (delta: number) => {
+      if (matches.length === 0) return;
+      setMatchIndex((i) => (i + delta + matches.length) % matches.length);
+    },
+    [matches.length],
+  );
+
+  const openFind = useCallback(() => {
+    setFindOpen(true);
+    requestAnimationFrame(() => findInputRef.current?.select());
+  }, []);
+
+  // ⌘F / Ctrl-F while the pointer is in a diff searches the diff rather than
+  // the whole page — the browser's own find can't see virtualized/overflowed rows.
+  const onKeyDownCapture = useCallback(
+    (e: React.KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        e.stopPropagation();
+        openFind();
+      }
+    },
+    [openFind],
+  );
+
   const onMouseUp = useCallback(() => {
     if (!onSendSelectionToAi || !rootRef.current) return;
     const sel = window.getSelection();
@@ -86,7 +138,76 @@ export function GitDiffView({
   const hunkByHeader = new Map(hunkSpans.map((s) => [s.headerLineIndex, s]));
 
   return (
-    <div className="repo-git-diff-wrap">
+    <div className="repo-git-diff-wrap" onKeyDownCapture={onKeyDownCapture}>
+      {findOpen ? (
+        <div className="repo-git-diff-find" role="search">
+          <Search size={12} aria-hidden />
+          <input
+            ref={findInputRef}
+            className="input repo-git-diff-find-input"
+            type="search"
+            placeholder="Find in diff…"
+            value={find}
+            aria-label="Find in diff"
+            onChange={(e) => {
+              setFind(e.target.value);
+              setMatchIndex(0);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                step(e.shiftKey ? -1 : 1);
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setFindOpen(false);
+                setFind("");
+              }
+            }}
+          />
+          <span className="repo-git-diff-find-count" aria-live="polite">
+            {find.trim() ? (matches.length ? `${(matchIndex % matches.length) + 1}/${matches.length}` : "0") : ""}
+          </span>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={matches.length === 0}
+            aria-label="Previous match"
+            onClick={() => step(-1)}
+          >
+            <ChevronUp size={12} />
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={matches.length === 0}
+            aria-label="Next match"
+            onClick={() => step(1)}
+          >
+            <ChevronDown size={12} />
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            aria-label="Close find"
+            onClick={() => {
+              setFindOpen(false);
+              setFind("");
+            }}
+          >
+            <X size={12} />
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="btn btn-ghost repo-git-diff-find-open"
+          title="Find in diff (⌘F)"
+          aria-label="Find in diff"
+          onClick={openFind}
+        >
+          <Search size={12} />
+        </button>
+      )}
       <pre
         ref={rootRef}
         className="repo-git-diff"
@@ -98,6 +219,8 @@ export function GitDiffView({
           return (
             <div
               key={`${i}:${line.type}:${line.text.slice(0, 24)}`}
+              data-diff-line={i}
+              data-match={matches.length > 0 && i === activeMatchLine ? "active" : undefined}
               className={`repo-git-diff-line repo-git-diff-${line.type}`}
             >
               <span className="repo-git-diff-gutter" aria-hidden>

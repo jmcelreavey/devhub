@@ -1,8 +1,25 @@
+import fs from "node:fs";
+import path from "node:path";
 import { NextResponse, type NextRequest } from "next/server";
 import { runGitRepoAsync } from "@/lib/git/repo-local";
 import { isSafeCommitRef, isSafeRepoRelPath } from "@/lib/git/ref-safety";
 import { parseBlamePorcelain, parseFileHistory } from "@/lib/repos/git-parsers";
 import { gitFail, withScannedRepo, type RepoParams } from "../_shared";
+
+/** Conventional path git itself documents for blame.ignoreRevsFile. */
+const IGNORE_REVS_FILE = ".git-blame-ignore-revs";
+
+/**
+ * Repo-local ignore-revs file, when the project ships one.
+ *
+ * Without this a single "format the codebase" commit owns every line and blame
+ * is useless on exactly the repos that need it most.
+ */
+function ignoreRevsArgs(repoRoot: string, enabled: boolean): string[] {
+  if (!enabled) return [];
+  const file = path.join(repoRoot, IGNORE_REVS_FILE);
+  return fs.existsSync(file) ? ["--ignore-revs-file", IGNORE_REVS_FILE] : [];
+}
 
 /**
  * Blame a file (optionally at a revision). Pass `line` to also return
@@ -31,7 +48,12 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
     return NextResponse.json({ error: "Invalid line" }, { status: 400 });
   }
 
-  const blameArgs = ["blame", "--line-porcelain"];
+  // Default on — matching a repo's stated intent is the sane default; the UI
+  // toggle exists for "who actually touched this line, formatter included".
+  const useIgnoreRevs = req.nextUrl.searchParams.get("ignoreRevs") !== "0";
+  const ignoreArgs = ignoreRevsArgs(repoRoot, useIgnoreRevs);
+
+  const blameArgs = ["blame", "--line-porcelain", ...ignoreArgs];
   if (commit) blameArgs.push(commit);
   blameArgs.push("--", filePath);
 
@@ -70,5 +92,8 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
     lines: parseBlamePorcelain(blame.stdout || ""),
     history: historyOk ? parseFileHistory(history.stdout || "") : [],
     historyScope: line ? "line" : "file",
+    /** Whether this repo ships an ignore-revs file at all — drives the toggle. */
+    hasIgnoreRevs: fs.existsSync(path.join(repoRoot, IGNORE_REVS_FILE)),
+    ignoringRevs: ignoreArgs.length > 0,
   });
 }

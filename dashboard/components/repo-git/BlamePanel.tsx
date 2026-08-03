@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { ChevronLeft, RefreshCw } from "lucide-react";
+import { ChevronLeft, EyeOff, RefreshCw } from "lucide-react";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { fieldMatchScore } from "@/lib/command-palette-score";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
+import { useVirtualRows } from "@/lib/hooks/use-virtual-rows";
 import { RepoFileOpenMenu } from "./RepoFileOpenMenu";
 import { fetchGitJson, repoApi } from "./shared";
 
@@ -32,6 +33,8 @@ interface BlamePayload {
   lines: BlameLine[];
   history: BlameHistoryEntry[];
   historyScope: "file" | "line";
+  hasIgnoreRevs?: boolean;
+  ignoringRevs?: boolean;
 }
 
 interface BlameView {
@@ -41,16 +44,21 @@ interface BlameView {
 }
 
 const SUGGESTION_LIMIT = 12;
+/** Commits shown in the file/line history strip. */
+const HISTORY_LIMIT = 12;
+/** Must match `.repo-git-blame-line { height }` in globals.css. */
+const BLAME_ROW_H = 18;
 
 function scoreTrackedPath(query: string, filePath: string): number {
   const base = filePath.split("/").pop() ?? filePath;
   return Math.max(fieldMatchScore(query, filePath), fieldMatchScore(query, base));
 }
 
-function blameUrl(repoName: string, view: BlameView): string {
+function blameUrl(repoName: string, view: BlameView, ignoreRevs: boolean): string {
   const qs = new URLSearchParams({ path: view.path });
   if (view.commit) qs.set("commit", view.commit);
   if (view.line) qs.set("line", String(view.line));
+  if (!ignoreRevs) qs.set("ignoreRevs", "0");
   return repoApi(repoName, `/git/blame?${qs}`);
 }
 
@@ -64,6 +72,8 @@ export function BlamePanel({ repoName }: { repoName: string }) {
   const [history, setHistory] = useState<BlameHistoryEntry[]>([]);
   const [historyScope, setHistoryScope] = useState<"file" | "line">("file");
   const [selectedLine, setSelectedLine] = useState<number | null>(null);
+  const [ignoreRevs, setIgnoreRevs] = useState(true);
+  const [hasIgnoreRevs, setHasIgnoreRevs] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -71,6 +81,7 @@ export function BlamePanel({ repoName }: { repoName: string }) {
   // git is slow enough that they finish out of order. Only the newest may apply.
   const requestSeq = useRef(0);
   const suggestionListId = useId();
+  const { scrollRef, window: rows } = useVirtualRows(lines.length, BLAME_ROW_H);
 
   const { data: filesPayload } = useLive<{ files: string[] }>(
     repoApi(repoName, "/git/files"),
@@ -98,7 +109,12 @@ export function BlamePanel({ repoName }: { repoName: string }) {
     return () => document.removeEventListener("mousedown", onDown);
   }, [suggestOpen]);
 
-  async function load(next: BlameView, opts?: { pushStack?: boolean }) {
+  /** `ignoreRevsOverride` lets the toggle reload with its new value before state settles. */
+  async function load(
+    next: BlameView,
+    opts?: { pushStack?: boolean },
+    ignoreRevsOverride?: boolean,
+  ) {
     const filePath = next.path.trim();
     if (!filePath) {
       toast.error("Enter a file path");
@@ -111,8 +127,11 @@ export function BlamePanel({ repoName }: { repoName: string }) {
       if (opts?.pushStack && view) {
         setStack((prev) => [...prev, view]);
       }
-      const json = await fetchGitJson<BlamePayload>(blameUrl(repoName, { ...next, path: filePath }));
+      const json = await fetchGitJson<BlamePayload>(
+        blameUrl(repoName, { ...next, path: filePath }, ignoreRevsOverride ?? ignoreRevs),
+      );
       if (seq !== requestSeq.current) return;
+      setHasIgnoreRevs(json.hasIgnoreRevs === true);
       setLines(json.lines ?? []);
       setHistory(json.history ?? []);
       setHistoryScope(json.historyScope === "line" ? "line" : "file");
@@ -275,6 +294,28 @@ export function BlamePanel({ repoName }: { repoName: string }) {
         <button type="submit" className="btn btn-primary" disabled={loading}>
           {loading ? <RefreshCw size={11} className="animate-spin" /> : "Blame"}
         </button>
+        {hasIgnoreRevs ? (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            data-active={ignoreRevs || undefined}
+            aria-pressed={ignoreRevs}
+            disabled={loading || !view}
+            title={
+              ignoreRevs
+                ? "Ignoring revisions listed in .git-blame-ignore-revs (formatting sweeps). Click to include them."
+                : "Including every commit, formatting sweeps included. Click to honour .git-blame-ignore-revs."
+            }
+            onClick={() => {
+              const next = !ignoreRevs;
+              setIgnoreRevs(next);
+              if (view) void load(view, undefined, next);
+            }}
+          >
+            <EyeOff size={11} aria-hidden />
+            {ignoreRevs ? "Ignoring sweeps" : "All commits"}
+          </button>
+        ) : null}
         {path && lines.length > 0 ? (
           <RepoFileOpenMenu
             repoName={repoName}
@@ -327,7 +368,7 @@ export function BlamePanel({ repoName }: { repoName: string }) {
             {historyScope === "line" ? "Line history" : "File history"}
             <span className="repo-git-section-label-end">{history.length}</span>
           </div>
-          {history.slice(0, 12).map((h) => (
+          {history.slice(0, HISTORY_LIMIT).map((h) => (
             <button
               key={h.hash || h.shortHash}
               type="button"
@@ -351,8 +392,10 @@ export function BlamePanel({ repoName }: { repoName: string }) {
           history; click a commit to drill in.
         </div>
       ) : (
-        <div className="repo-git-blame-table">
-          {lines.map((l) => (
+        <div className="repo-git-blame-table" ref={scrollRef}>
+          {/* Windowed: a 5k-line file would otherwise mount 5k focusable rows. */}
+          <div style={{ height: rows.padTop }} aria-hidden />
+          {lines.slice(rows.start, rows.end).map((l) => (
             <button
               key={`${l.lineNumber}-${l.hash}`}
               type="button"
@@ -369,6 +412,7 @@ export function BlamePanel({ repoName }: { repoName: string }) {
               <code className="repo-git-blame-code">{l.content}</code>
             </button>
           ))}
+          <div style={{ height: rows.padBottom }} aria-hidden />
         </div>
       )}
     </div>
