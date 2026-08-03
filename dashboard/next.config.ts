@@ -49,9 +49,18 @@ function extraAllowedDevOriginsFromEnv(): string[] {
  * benefit from. `desktop/scripts/stage-dashboard.mjs` sets DEVHUB_DESKTOP_BUILD=1.
  */
 const desktopBuild = process.env.DEVHUB_DESKTOP_BUILD === "1";
+/** Isolate `npm run verify` / pre-push builds from a live `next-server` `.next` dir. */
+const verifyBuild = process.env.DEVHUB_VERIFY_BUILD === "1";
 
 const nextConfig: NextConfig = {
   ...(desktopBuild ? ({ output: "standalone" } as const) : {}),
+  ...(verifyBuild ? ({ distDir: ".next-verify" } as const) : {}),
+  /**
+   * Pin the default so a corrupted/partial config merge cannot blow up as
+   * `TypeError: generate is not a function` inside Next's generateBuildId.
+   * Returning null keeps Next's nanoid fallback.
+   */
+  generateBuildId: () => null,
   /**
    * `npm run verify` runs `tsc --noEmit` before `next build`. Skipping Next's second
    * full-program typecheck avoids CI OOM (~2GB default heap) and saves minutes.

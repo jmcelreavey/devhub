@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
-import { augmentedPathEnv } from "@/lib/process-env";
+import { augmentedPathEnv, scrubDesktopRuntimeEnv } from "@/lib/process-env";
 
 const execFileAsync = promisify(execFile);
 
@@ -26,7 +26,7 @@ interface GitRepoRunOptions {
 }
 
 export function gitEnv(): NodeJS.ProcessEnv {
-  return augmentedPathEnv({ GIT_TERMINAL_PROMPT: "0" });
+  return scrubDesktopRuntimeEnv(augmentedPathEnv({ GIT_TERMINAL_PROMPT: "0" }));
 }
 
 /** Git commands that talk to remotes and need GitHub CLI credential helper in the dashboard server. */
@@ -153,6 +153,24 @@ export function gitShortHead(repoRoot: string): string | undefined {
 /** Short SHA for a ref (e.g. `origin/main`), or undefined. */
 export function gitShortRef(repoRoot: string, ref: string): string | undefined {
   return git(repoRoot, ["rev-parse", "--short", ref]);
+}
+
+/** Resolve origin's default branch tip (origin/main or origin/master). */
+export async function resolveDefaultRemoteBranch(repoRoot: string): Promise<string | null> {
+  const symbolic = await runGitRepoAsync(repoRoot, [
+    "symbolic-ref",
+    "--quiet",
+    "--short",
+    "refs/remotes/origin/HEAD",
+  ]);
+  const ref = symbolic.stdout.trim();
+  if (symbolic.status === 0 && ref.startsWith("origin/")) return ref;
+  for (const candidate of ["origin/main", "origin/master"] as const) {
+    if ((await runGitRepoAsync(repoRoot, ["rev-parse", "--verify", "--quiet", candidate])).status === 0) {
+      return candidate;
+    }
+  }
+  return null;
 }
 
 /** Fetch a branch from origin; updates remote refs only (does not touch the working tree). */

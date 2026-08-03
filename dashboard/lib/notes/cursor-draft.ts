@@ -21,6 +21,10 @@ export interface CursorDraftResult {
   writable: boolean;
 }
 
+export interface ExistingCursorDraft {
+  writable: boolean;
+}
+
 export class CursorDraftError extends Error {
   constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
     super(message);
@@ -40,7 +44,7 @@ function vaultKey(vaultRoot: string): string {
   return hash(path.resolve(vaultRoot)).slice(0, 12);
 }
 
-function draftKey(repoName: string, notePath: string, vaultRoot: string): string {
+function legacyDraftKey(repoName: string, notePath: string, vaultRoot: string): string {
   return hash(`${vaultKey(vaultRoot)}\0${repoName}\0${notePath}`).slice(0, 16);
 }
 
@@ -48,8 +52,22 @@ function safeBaseName(notePath: string): string {
   return path.basename(notePath).replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 64) || "note";
 }
 
-function draftFiles(repoName: string, notePath: string, vaultRoot: string, rootDir: string) {
-  const key = draftKey(repoName, notePath, vaultRoot);
+function safePathSegment(value: string): string {
+  const result = value.replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 64) || "note";
+  return result === "." || result === ".." ? "note" : result;
+}
+
+function draftFiles(repoName: string, notePath: string, rootDir: string) {
+  const segments = notePath.split("/").filter(Boolean).map(safePathSegment);
+  const noteFile = segments.pop() ?? "note";
+  return {
+    markdownPath: path.join(rootDir, safePathSegment(repoName), ...segments, `${noteFile}.md`),
+    manifestPath: path.join(rootDir, safePathSegment(repoName), ...segments, `${noteFile}.json`),
+  };
+}
+
+function legacyDraftFiles(repoName: string, notePath: string, vaultRoot: string, rootDir: string) {
+  const key = legacyDraftKey(repoName, notePath, vaultRoot);
   return {
     markdownPath: path.join(rootDir, `${safeBaseName(notePath)}-${key}.md`),
     manifestPath: path.join(rootDir, `${key}.json`),
@@ -82,6 +100,17 @@ function stripDraftHeader(markdown: string): string {
   const end = markdown.indexOf(DRAFT_HEADER_END);
   if (end < 0) throw new CursorDraftError("The Cursor working-copy header is incomplete.");
   return markdown.slice(end + DRAFT_HEADER_END.length).replace(/^\r?\n+/, "");
+}
+
+function draftBody(markdown: string): string {
+  // Older Cursor sessions can remove the instructional header; the manifest still
+  // identifies the working copy, so retain the user's Markdown rather than losing it.
+  return markdown.startsWith(DRAFT_HEADER_START) ? stripDraftHeader(markdown) : markdown;
+}
+
+function restoreDraftHeader(markdown: string, repoName: string, notePath: string, writable: boolean): string {
+  if (markdown.startsWith(DRAFT_HEADER_START)) return markdown;
+  return `${draftHeader(repoName, notePath, writable)}${markdown.replace(/^\r?\n+/, "")}`;
 }
 
 function readManifest(manifestPath: string): CursorDraftManifest | null {
@@ -138,6 +167,39 @@ export function cursorDraftRoot(): string {
   return path.join(getCheckoutRoot() ?? getRepoRoot(), ".devhub", "cursor-notes");
 }
 
+function existingDraftFiles(
+  repoName: string,
+  notePath: string,
+  vaultRoot: string,
+  rootDir = cursorDraftRoot(),
+): { markdownPath: string; manifestPath: string } | null {
+  for (const files of [
+    draftFiles(repoName, notePath, rootDir),
+    legacyDraftFiles(repoName, notePath, vaultRoot, rootDir),
+  ]) {
+    if (fs.existsSync(files.markdownPath) && readManifest(files.manifestPath)) return files;
+  }
+  return null;
+}
+
+export function getCursorDraft(
+  repoName: string,
+  notePath: string,
+  vaultRoot: string,
+  rootDir = cursorDraftRoot(),
+): ExistingCursorDraft | null {
+  const files = existingDraftFiles(repoName, notePath, vaultRoot, rootDir);
+  if (!files) return null;
+  const manifest = readManifest(files.manifestPath);
+  if (!manifest || manifest.repoName !== repoName || manifest.notePath !== notePath) return null;
+  try {
+    draftBody(fs.readFileSync(files.markdownPath, "utf8"));
+    return { writable: manifest.writable };
+  } catch {
+    return null;
+  }
+}
+
 export function createCursorDraft(
   repoName: string,
   notePath: string,
@@ -148,15 +210,21 @@ export function createCursorDraft(
   fs.mkdirSync(rootDir, { recursive: true, mode: 0o700 });
   fs.chmodSync(rootDir, 0o700);
 
-  const files = draftFiles(repoName, notePath, vaultRoot, rootDir);
+  const files = draftFiles(repoName, notePath, rootDir);
   const sourceHash = hash(content);
-  const existing = readManifest(files.manifestPath);
+  const existingFiles = existingDraftFiles(repoName, notePath, vaultRoot, rootDir);
+  const existing = existingFiles && readManifest(existingFiles.manifestPath);
 
-  if (existing && fs.existsSync(files.markdownPath)) {
-    stripDraftHeader(fs.readFileSync(files.markdownPath, "utf8"));
-    return { markdownPath: files.markdownPath, writable: existing.writable };
+  if (existing && existingFiles) {
+    const existingMarkdown = fs.readFileSync(existingFiles.markdownPath, "utf8");
+    writePrivate(
+      existingFiles.markdownPath,
+      restoreDraftHeader(existingMarkdown, repoName, notePath, existing.writable),
+    );
+    return { markdownPath: existingFiles.markdownPath, writable: existing.writable };
   }
 
+  fs.mkdirSync(path.dirname(files.markdownPath), { recursive: true, mode: 0o700 });
   const blocks = Array.isArray(content) ? content : [content];
   const markdown = normalizeMarkdown(blocksToText(blocks));
   const writable = supportsLosslessWriteBack(content, markdown);
@@ -180,9 +248,9 @@ export function applyCursorDraft(
   vaultRoot: string,
   rootDir = cursorDraftRoot(),
 ): unknown[] {
-  const files = draftFiles(repoName, notePath, vaultRoot, rootDir);
-  const manifest = readManifest(files.manifestPath);
-  if (!manifest || !fs.existsSync(files.markdownPath)) {
+  const files = existingDraftFiles(repoName, notePath, vaultRoot, rootDir);
+  const manifest = files && readManifest(files.manifestPath);
+  if (!files || !manifest) {
     throw new CursorDraftError("No Cursor working copy exists for this note.", 404);
   }
   if (manifest.repoName !== repoName || manifest.notePath !== notePath || manifest.vaultKey !== vaultKey(vaultRoot)) {
@@ -198,7 +266,7 @@ export function applyCursorDraft(
     );
   }
 
-  const markdown = normalizeMarkdown(stripDraftHeader(fs.readFileSync(files.markdownPath, "utf8")));
+  const markdown = normalizeMarkdown(draftBody(fs.readFileSync(files.markdownPath, "utf8")));
   return textToBlocks(markdown);
 }
 
@@ -209,10 +277,10 @@ export function markCursorDraftApplied(
   vaultRoot: string,
   rootDir = cursorDraftRoot(),
 ): void {
-  const files = draftFiles(repoName, notePath, vaultRoot, rootDir);
-  const manifest = readManifest(files.manifestPath);
-  if (!manifest || !fs.existsSync(files.markdownPath)) return;
-  const markdown = normalizeMarkdown(stripDraftHeader(fs.readFileSync(files.markdownPath, "utf8")));
+  const files = existingDraftFiles(repoName, notePath, vaultRoot, rootDir);
+  const manifest = files && readManifest(files.manifestPath);
+  if (!files || !manifest) return;
+  const markdown = normalizeMarkdown(draftBody(fs.readFileSync(files.markdownPath, "utf8")));
   const nextManifest: CursorDraftManifest = {
     ...manifest,
     sourceHash: hash(content),
@@ -227,7 +295,8 @@ export function deleteCursorDraft(
   vaultRoot: string,
   rootDir = cursorDraftRoot(),
 ): boolean {
-  const files = draftFiles(repoName, notePath, vaultRoot, rootDir);
+  const files = existingDraftFiles(repoName, notePath, vaultRoot, rootDir);
+  if (!files) return false;
   let deleted = false;
   for (const filePath of [files.markdownPath, files.manifestPath]) {
     try {

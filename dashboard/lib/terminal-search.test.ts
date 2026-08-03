@@ -1,5 +1,9 @@
-import { describe, it, expect } from "vitest";
-import { redactSecrets } from "@/lib/terminal-search";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { readSessionLogTail } from "@/lib/terminal-log";
+import { getSessionTranscript, redactSecrets } from "@/lib/terminal-search";
 
 /**
  * These are the tests that matter for R6. Search over shell transcripts is only
@@ -83,5 +87,45 @@ describe("redactSecrets", () => {
   it("is idempotent", () => {
     const once = redactSecrets("PASSWORD=hunter2");
     expect(redactSecrets(once)).toBe(once);
+  });
+});
+
+describe("getSessionTranscript / readSessionLogTail", () => {
+  const SESSION = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+  let dir: string;
+  let prev: string | undefined;
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-term-"));
+    prev = process.env.DEVHUB_TERMINAL_LOG_DIR;
+    process.env.DEVHUB_TERMINAL_LOG_DIR = dir;
+  });
+
+  afterEach(() => {
+    if (prev === undefined) delete process.env.DEVHUB_TERMINAL_LOG_DIR;
+    else process.env.DEVHUB_TERMINAL_LOG_DIR = prev;
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("returns null for a missing session", () => {
+    expect(getSessionTranscript(SESSION)).toBeNull();
+    expect(readSessionLogTail(SESSION)).toBeNull();
+  });
+
+  it("returns redacted lines with stable 1-based indexes", () => {
+    const file = path.join(dir, `${SESSION}.log`);
+    const secret = "wJalrXUtnFEMI";
+    fs.writeFileSync(file, `hello world\nexport AWS_SECRET_ACCESS_KEY=${secret}\nbye\n`, "utf8");
+    const raw = readSessionLogTail(SESSION);
+    expect(raw).not.toBeNull();
+    expect(raw!.lines[0]).toBe("hello world");
+    expect(raw!.lines[1]).toContain(secret);
+
+    const view = getSessionTranscript(SESSION);
+    expect(view).not.toBeNull();
+    expect(view!.lines[0]).toBe("hello world");
+    expect(view!.lines[1]).not.toContain(secret);
+    expect(view!.lines[1]).toContain("[redacted]");
+    expect(view!.lines[2]).toBe("bye");
   });
 });

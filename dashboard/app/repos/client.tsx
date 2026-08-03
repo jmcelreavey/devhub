@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
+import { revalidateRepoOpenPrs } from "@/lib/github/repo-open-pr-swr";
 import { FetchError } from "@/components/ui/FetchError";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 import {
@@ -156,6 +157,7 @@ export default function ReposPage() {
             onClick={() => {
               void mutateLocal();
               void mutateGithub();
+              revalidateRepoOpenPrs();
             }}
             disabled={isLocalValidating || isGithubValidating}
             aria-label="Refresh repos"
@@ -230,7 +232,10 @@ export default function ReposPage() {
               onCursor={actions.openInCursor}
               onClaudeDesktop={actions.launchClaudeDesktop}
               onRemove={actions.removeRepo}
-              onRefreshLocal={() => mutateLocal()}
+              onRefreshLocal={() => {
+                void mutateLocal();
+                revalidateRepoOpenPrs(repo.name);
+              }}
             />
           ))}
 

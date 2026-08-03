@@ -4,11 +4,23 @@
  * Front-and-center Link dialog — shared by task rows and note footers.
  * Portals via ModalShell so it is not tied to hover shelves.
  *
- * Pickers load once per kind (local files or server-cached PR/Jira lists).
- * Filtering is in-memory — no per-keystroke remote search.
+ * Every link kind is one entry in KIND_CONFIG below: an endpoint, a row
+ * adapter, and its copy. The dialog itself knows nothing kind-specific, so
+ * adding a kind is one config entry rather than another copy of the picker.
+ *
+ * Pickers load once per kind (SWR caches per endpoint, so tabbing back is
+ * instant). Filtering is in-memory — no per-keystroke remote search.
  */
 
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import { ModalShell } from "@/components/shell/ModalShell";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { buildEntityRefFromInput } from "@/lib/entity-links/build-ref";
@@ -20,25 +32,6 @@ import type { Task } from "@/lib/tasks/types";
 import type { ReposApiPayload } from "@/app/repos/types";
 import { isDiagramStoragePath } from "@/lib/diagram-utils";
 import { todayISO } from "@/lib/utils";
-
-const KINDS: { id: EntityKind; label: string; hint: string }[] = [
-  { id: "calendar", label: "Calendar", hint: "Pick today's event or paste an event id / Calendar URL" },
-  { id: "pr", label: "PR", hint: "Pick from your open PRs, or paste a GitHub PR URL" },
-  { id: "note", label: "Note", hint: "Search notes by title, or paste a vault path" },
-  { id: "repo", label: "Repo", hint: "Pick a local repository" },
-  { id: "jira", label: "Jira", hint: "Pick from your tickets, or paste an issue key" },
-  { id: "task", label: "Task", hint: "Search recent tasks by name" },
-];
-
-const PLACEHOLDERS: Record<EntityKind, string> = {
-  calendar: "Event id or https://calendar.google.com/…",
-  pr: "https://github.com/org/repo/pull/1",
-  note: "task-notes/2026-07-28-…",
-  jira: "PTF-1234",
-  task: "task-uuid",
-  meeting: "meeting id",
-  repo: "repository-name",
-};
 
 const TASK_PICKER_DAY_LIMIT = 14;
 const LIST_LIMIT = 40;
@@ -72,12 +65,42 @@ interface PickRow {
   id: string;
   title: string;
   meta: string;
+  /** Rendered before the title in a monospace-ish weight (Jira keys). */
+  key?: string;
+  /** Merged into the built EntityRef when this row is picked. */
+  overrides?: Partial<EntityRef>;
 }
 
-interface TaskPickOption extends PickRow {
-  date: string;
-  done: boolean;
-  abandoned: boolean;
+interface RowContext {
+  excludeTaskId?: string;
+  today: string;
+}
+
+/**
+ * Everything that differs between link kinds. `toRows` owns the shape of its
+ * own endpoint payload; `defineKind` keeps that typed at the definition site
+ * and erases it for the lookup table.
+ */
+interface KindConfig<TData> {
+  label: string;
+  /** Endpoint backing the picker, or null for paste-only kinds. */
+  endpoint: string | null;
+  toRows: (data: TData | undefined, ctx: RowContext) => PickRow[];
+  /** True when the integration isn't set up — shows setupText, not emptyText. */
+  isUnconfigured?: (data: TData | undefined) => boolean;
+  setupText?: string;
+  searchLabel: string;
+  searchPlaceholder: string;
+  hint: string;
+  loadingText: string;
+  emptyText: string;
+  errorText: string;
+  pasteLabel: string;
+  pastePlaceholder: string;
+}
+
+function defineKind<TData>(config: KindConfig<TData>): KindConfig<unknown> {
+  return config as KindConfig<unknown>;
 }
 
 function formatTaskDay(date: string, today: string): string {
@@ -86,64 +109,55 @@ function formatTaskDay(date: string, today: string): string {
   return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
-function taskStatusLabel(opt: TaskPickOption): string {
-  if (opt.abandoned) return "Abandoned";
-  if (opt.done) return "Done";
-  return "Open";
-}
-
-function flattenTaskOptions(
-  days: TaskHistoryDay[] | undefined,
-  excludeTaskId: string | undefined,
-): TaskPickOption[] {
+function taskRows(days: TaskHistoryDay[] | undefined, ctx: RowContext): PickRow[] {
   if (!days?.length) return [];
-  const today = todayISO();
   const seen = new Set<string>();
-  const items: TaskPickOption[] = [];
+  const items: (PickRow & { date: string; open: boolean })[] = [];
 
   for (const day of days.slice(0, TASK_PICKER_DAY_LIMIT)) {
     for (const t of day.tasks) {
-      if (excludeTaskId && t.id === excludeTaskId) continue;
-      if (t.movedAt) continue;
-      if (seen.has(t.id)) continue;
+      if (t.id === ctx.excludeTaskId || t.movedAt || seen.has(t.id)) continue;
       seen.add(t.id);
+      const status = t.abandonedAt ? "Abandoned" : t.done ? "Done" : null;
       items.push({
         id: t.id,
         title: t.text,
-        meta: "",
+        meta: `${formatTaskDay(day.date, ctx.today)}${status ? ` · ${status}` : ""}`,
         date: day.date,
-        done: t.done,
-        abandoned: !!t.abandonedAt,
+        open: !t.done && !t.abandonedAt,
+        overrides: { label: t.text },
       });
     }
   }
 
-  items.sort((a, b) => {
-    const aOpen = !a.done && !a.abandoned ? 0 : 1;
-    const bOpen = !b.done && !b.abandoned ? 0 : 1;
-    if (aOpen !== bOpen) return aOpen - bOpen;
-    const aToday = a.date === today ? 0 : 1;
-    const bToday = b.date === today ? 0 : 1;
-    if (aToday !== bToday) return aToday - bToday;
-    return b.date.localeCompare(a.date) || a.title.localeCompare(b.title);
-  });
-
+  // Open before closed, today before older, newest day first.
+  items.sort(
+    (a, b) =>
+      Number(b.open) - Number(a.open) ||
+      Number(b.date === ctx.today) - Number(a.date === ctx.today) ||
+      b.date.localeCompare(a.date) ||
+      a.title.localeCompare(b.title),
+  );
   return items;
 }
 
-function flattenNoteOptions(tree: TreeNode[] | undefined): PickRow[] {
+function noteRows(tree: TreeNode[] | undefined): PickRow[] {
   if (!tree?.length) return [];
-  const files: { id: string; title: string; meta: string; modified: number }[] = [];
+  const files: { row: PickRow; modified: number }[] = [];
 
   const walk = (nodes: TreeNode[]) => {
     for (const node of nodes) {
       if (node.type === "file") {
         if (isDiagramStoragePath(node.path)) continue;
         const id = node.path.replace(/\.json$/i, "");
+        const title = node.name.replace(/\.json$/i, "");
         files.push({
-          id,
-          title: node.name.replace(/\.json$/i, ""),
-          meta: id.includes("/") ? id.split("/").slice(0, -1).join("/") : "Notes",
+          row: {
+            id,
+            title,
+            meta: id.includes("/") ? id.split("/").slice(0, -1).join("/") : "Notes",
+            overrides: { label: title },
+          },
           modified: node.modified ?? 0,
         });
       } else if (node.children?.length) {
@@ -154,61 +168,180 @@ function flattenNoteOptions(tree: TreeNode[] | undefined): PickRow[] {
   walk(tree);
 
   return files
-    .sort((a, b) => b.modified - a.modified || a.title.localeCompare(b.title))
+    .sort((a, b) => b.modified - a.modified || a.row.title.localeCompare(b.row.title))
     .slice(0, NOTE_RECENT_FALLBACK)
-    .map(({ id, title, meta }) => ({ id, title, meta }));
+    .map((f) => f.row);
 }
 
-function flattenPrOptions(data: GithubPrsApiPayload | undefined): PickRow[] {
+function prRows(data: GithubPrsApiPayload | undefined): PickRow[] {
   if (!data?.configured) return [];
-  const rows: GithubPrRow[] = [
+  const all: GithubPrRow[] = [
     ...(data.authored ?? []),
     ...(data.reviews ?? []),
     ...(data.recentlyReviewed ?? []),
   ];
   const seen = new Set<string>();
   const out: PickRow[] = [];
-  for (const row of rows) {
+  for (const row of all) {
     const id = row.url || `${row.repo}#${row.number}`;
     if (!id || seen.has(id)) continue;
     seen.add(id);
+    const slug = `${row.repo}#${row.number}`;
     out.push({
       id,
-      title: row.title || `${row.repo}#${row.number}`,
-      meta: `${row.repo}#${row.number}`,
+      title: row.title || slug,
+      meta: slug,
+      // The dialog's paste path parses a URL into owner/repo#n; a picked row
+      // already knows both, so pin the canonical id rather than the URL.
+      overrides: { id: slug, label: row.title || slug },
     });
   }
   return out.slice(0, LIST_LIMIT);
 }
 
-function flattenJiraOptions(tickets: JiraTicket[] | undefined): PickRow[] {
-  if (!tickets?.length) return [];
-  return tickets.slice(0, LIST_LIMIT).map((t) => ({
+function jiraRows(data: JiraResponse | undefined): PickRow[] {
+  return (data?.tickets ?? []).slice(0, LIST_LIMIT).map((t) => ({
     id: t.key,
     title: t.summary || t.key,
     meta: t.status || t.key,
+    key: t.key,
+    overrides: {
+      label: `${t.key}: ${t.summary || t.key}`,
+      ...(t.url ? { href: t.url } : {}),
+    },
   }));
 }
 
-function flattenRepoOptions(data: ReposApiPayload | undefined): PickRow[] {
+function repoRows(data: ReposApiPayload | undefined): PickRow[] {
   return (data?.repos ?? []).map((repo) => ({
     id: repo.name,
     title: repo.name,
     meta: repo.branch || "Local repository",
+    overrides: { label: repo.name },
   }));
+}
+
+function calendarRows(data: CalendarResponse | undefined): PickRow[] {
+  return (data?.events ?? []).slice(0, LIST_LIMIT).map((ev) => ({
+    id: ev.id,
+    title: ev.title || "Untitled",
+    meta: ev.isAllDay
+      ? "All day"
+      : new Date(ev.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    overrides: {
+      label: ev.title || "Calendar event",
+      href: ev.htmlLink || "/calendar",
+    },
+  }));
+}
+
+/** Tab order is the order of this map. */
+const KIND_CONFIG = {
+  calendar: defineKind<CalendarResponse>({
+    label: "Calendar",
+    endpoint: "/api/calendar",
+    toRows: calendarRows,
+    isUnconfigured: (data) => data?.needsReauth === true,
+    setupText: "Calendar needs reconnect. Paste an event id below, or fix Google on Setup.",
+    searchLabel: "Filter events",
+    searchPlaceholder: "Filter today's events…",
+    hint: "Today's events. Select one, then Add link.",
+    loadingText: "Loading today's events…",
+    emptyText: "No events loaded for today. Paste an event id or Calendar URL below.",
+    errorText: "Couldn't load events. Paste an event id or Calendar URL below.",
+    pasteLabel: "Event id or URL",
+    pastePlaceholder: "Event id or https://calendar.google.com/…",
+  }),
+  pr: defineKind<GithubPrsApiPayload>({
+    label: "PR",
+    endpoint: "/api/github/prs",
+    toRows: prRows,
+    isUnconfigured: (data) => data?.configured === false,
+    setupText: "GitHub CLI isn't signed in. Paste a PR URL below, or connect gh.",
+    searchLabel: "Filter PRs",
+    searchPlaceholder: "Filter open / review PRs…",
+    hint: "From your cached PR list. Select one, then Add link.",
+    loadingText: "Loading your PRs…",
+    emptyText: "No open or review PRs cached. Paste a GitHub PR URL below.",
+    errorText: "Couldn't load PRs. Paste a GitHub URL below.",
+    pasteLabel: "PR URL",
+    pastePlaceholder: "https://github.com/org/repo/pull/1",
+  }),
+  note: defineKind<TreeNode[]>({
+    label: "Note",
+    endpoint: "/api/tree",
+    toRows: noteRows,
+    searchLabel: "Search notes",
+    searchPlaceholder: "Search notes…",
+    hint: "Recent notes. Select one, then Add link.",
+    loadingText: "Loading notes…",
+    emptyText: "No notes found. Paste a vault path below.",
+    errorText: "Couldn't load notes. Paste a vault path below.",
+    pasteLabel: "Vault path",
+    pastePlaceholder: "task-notes/2026-07-28-…",
+  }),
+  repo: defineKind<ReposApiPayload>({
+    label: "Repo",
+    endpoint: "/api/repos",
+    toRows: repoRows,
+    searchLabel: "Search repositories",
+    searchPlaceholder: "Search local repositories…",
+    hint: "Local repositories. Select one, then Add link.",
+    loadingText: "Loading repositories…",
+    emptyText: "No local repositories found.",
+    errorText: "Couldn't load repositories. Paste a repository name below.",
+    pasteLabel: "Repository name",
+    pastePlaceholder: "repository-name",
+  }),
+  jira: defineKind<JiraResponse>({
+    label: "Jira",
+    endpoint: "/api/jira/tickets",
+    toRows: jiraRows,
+    isUnconfigured: (data) => data?.configured === false || !!data?.error,
+    setupText: "Jira isn't configured. Paste an issue key below, or finish Setup.",
+    searchLabel: "Filter tickets",
+    searchPlaceholder: "Filter your tickets…",
+    hint: "From your cached ticket list. Select one, then Add link.",
+    loadingText: "Loading your tickets…",
+    emptyText: "No tickets in the cached list. Paste an issue key below.",
+    errorText: "Couldn't load tickets. Paste an issue key below.",
+    pasteLabel: "Issue key",
+    pastePlaceholder: "PTF-1234",
+  }),
+  task: defineKind<TaskHistoryDay[]>({
+    label: "Task",
+    endpoint: "/api/tasks/history?includeTasks=1",
+    toRows: taskRows,
+    searchLabel: "Search tasks",
+    searchPlaceholder: "Search tasks…",
+    hint: "Today and recent days. Select one, then Add link.",
+    loadingText: "Loading recent tasks…",
+    emptyText: "No recent tasks found. Paste a task id below if you have one.",
+    errorText: "Couldn't load tasks. Paste a task id below, or try again.",
+    pasteLabel: "Task id",
+    pastePlaceholder: "task-uuid",
+  }),
+} satisfies Partial<Record<EntityKind, KindConfig<unknown>>>;
+
+type PickerKind = keyof typeof KIND_CONFIG;
+
+const KIND_ORDER = Object.keys(KIND_CONFIG) as PickerKind[];
+
+function isPickerKind(kind: EntityKind): kind is PickerKind {
+  return kind in KIND_CONFIG;
 }
 
 function filterRows(rows: PickRow[], query: string): PickRow[] {
   const q = query.trim().toLowerCase();
-  const list = !q
-    ? rows
-    : rows.filter(
-        (r) =>
-          r.title.toLowerCase().includes(q) ||
-          r.meta.toLowerCase().includes(q) ||
-          r.id.toLowerCase().includes(q),
-      );
-  return list.slice(0, LIST_LIMIT);
+  if (!q) return rows.slice(0, LIST_LIMIT);
+  return rows
+    .filter(
+      (r) =>
+        r.title.toLowerCase().includes(q) ||
+        r.meta.toLowerCase().includes(q) ||
+        r.id.toLowerCase().includes(q),
+    )
+    .slice(0, LIST_LIMIT);
 }
 
 export interface EntityLinkDialogProps {
@@ -244,7 +377,7 @@ export function EntityLinkDialog({
       onSave={onSave}
       title={title}
       description={description}
-      defaultKind={defaultKind}
+      defaultKind={isPickerKind(defaultKind) ? defaultKind : "calendar"}
       excludeTaskId={excludeTaskId}
     />
   );
@@ -262,163 +395,48 @@ function EntityLinkDialogSession({
   onSave: (ref: EntityRef) => Promise<void>;
   title: string;
   description: string;
-  defaultKind: EntityKind;
+  defaultKind: PickerKind;
   excludeTaskId?: string;
 }) {
   const inputId = useId();
   const searchId = useId();
-  const [kind, setKind] = useState<EntityKind>(defaultKind);
+  const [kind, setKind] = useState<PickerKind>(defaultKind);
   const [value, setValue] = useState("");
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: cal } = useLive<CalendarResponse>(kind === "calendar" ? "/api/calendar" : null, {
+  const config = KIND_CONFIG[kind];
+  const { data, error: loadError, isLoading } = useLive<unknown>(config.endpoint, {
     refreshInterval: 0,
   });
-
-  const {
-    data: taskDays,
-    error: taskLoadError,
-    isLoading: taskLoading,
-  } = useLive<TaskHistoryDay[]>(kind === "task" ? "/api/tasks/history?includeTasks=1" : null, {
-    refreshInterval: 0,
-  });
-
-  const {
-    data: noteTree,
-    error: noteLoadError,
-    isLoading: noteLoading,
-  } = useLive<TreeNode[]>(kind === "note" ? "/api/tree" : null, {
-    refreshInterval: 0,
-  });
-
-  const {
-    data: prData,
-    error: prLoadError,
-    isLoading: prLoading,
-  } = useLive<GithubPrsApiPayload>(kind === "pr" ? "/api/github/prs" : null, {
-    refreshInterval: 0,
-  });
-
-  const {
-    data: jiraData,
-    error: jiraLoadError,
-    isLoading: jiraLoading,
-  } = useLive<JiraResponse>(kind === "jira" ? "/api/jira/tickets" : null, {
-    refreshInterval: 0,
-  });
-
-  const {
-    data: repoData,
-    error: repoLoadError,
-    isLoading: repoLoading,
-  } = useLive<ReposApiPayload>(kind === "repo" ? "/api/repos" : null, {
-    refreshInterval: 0,
-  });
-
-  const events = useMemo(() => cal?.events ?? [], [cal?.events]);
-  const filteredEvents = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const list = !q
-      ? events
-      : events.filter((e) => (e.title || "").toLowerCase().includes(q) || e.id.toLowerCase().includes(q));
-    return list.slice(0, 12);
-  }, [events, query]);
-  const calReady = cal !== undefined;
-
-  const taskOptions = useMemo(
-    () => flattenTaskOptions(taskDays, excludeTaskId),
-    [taskDays, excludeTaskId],
-  );
-  const filteredTasks = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const list = !q
-      ? taskOptions
-      : taskOptions.filter(
-          (t) =>
-            t.title.toLowerCase().includes(q) ||
-            t.id.toLowerCase().includes(q) ||
-            t.date.includes(q),
-        );
-    return list.slice(0, LIST_LIMIT);
-  }, [taskOptions, query]);
-
-  const noteOptions = useMemo(() => flattenNoteOptions(noteTree), [noteTree]);
-  const filteredNotes = useMemo(() => filterRows(noteOptions, query), [noteOptions, query]);
-
-  const prOptions = useMemo(() => flattenPrOptions(prData), [prData]);
-  const filteredPrs = useMemo(() => filterRows(prOptions, query), [prOptions, query]);
-
-  const jiraOptions = useMemo(() => flattenJiraOptions(jiraData?.tickets), [jiraData?.tickets]);
-  const filteredJira = useMemo(() => filterRows(jiraOptions, query), [jiraOptions, query]);
-  const repoOptions = useMemo(() => flattenRepoOptions(repoData), [repoData]);
-  const filteredRepos = useMemo(() => filterRows(repoOptions, query), [repoOptions, query]);
-
-  const selectedLabel = useMemo(() => {
-    if (!value) return null;
-    if (kind === "task") return taskOptions.find((t) => t.id === value)?.title ?? null;
-    if (kind === "note") return noteOptions.find((t) => t.id === value)?.title ?? null;
-    if (kind === "pr") return prOptions.find((t) => t.id === value)?.title ?? null;
-    if (kind === "jira") {
-      const hit = jiraOptions.find((t) => t.id === value);
-      return hit ? `${hit.id} ${hit.title}` : null;
-    }
-    if (kind === "repo") return repoOptions.find((repo) => repo.id === value)?.title ?? null;
-    return null;
-  }, [kind, value, taskOptions, noteOptions, prOptions, jiraOptions, repoOptions]);
 
   const today = todayISO();
-  const kindMeta = KINDS.find((k) => k.id === kind) ?? KINDS[0];
+  const rows = useMemo(
+    () => config.toRows(data, { excludeTaskId, today }),
+    [config, data, excludeTaskId, today],
+  );
+  const filtered = useMemo(() => filterRows(rows, query), [rows, query]);
+
+  const unconfigured = !loadError && !!config.isUnconfigured?.(data);
+  const settled = data !== undefined || !!loadError;
+  const loading = !settled || (isLoading && data === undefined);
+
+  // The paste field is the escape hatch: show it whenever the picker can't
+  // offer what the user is after.
+  const showPasteField = !!loadError || unconfigured || filtered.length === 0;
+  const showPicker = !loading && !loadError && !unconfigured && rows.length > 0;
+
+  const notice = loadError
+    ? config.errorText
+    : unconfigured
+      ? (config.setupText ?? config.errorText)
+      : rows.length === 0 && settled
+        ? config.emptyText
+        : null;
+
+  const selectedLabel = value ? (rows.find((r) => r.id === value)?.title ?? null) : null;
   const canSubmit = value.trim().length > 0 && !busy;
-
-  const tasksReady = taskDays !== undefined || !!taskLoadError;
-  const notesReady = noteTree !== undefined || !!noteLoadError;
-  const prsReady = prData !== undefined || !!prLoadError;
-  const jiraReady = jiraData !== undefined || !!jiraLoadError;
-  const reposReady = repoData !== undefined || !!repoLoadError;
-
-  const showPasteField = (() => {
-    if (kind === "calendar") return true;
-    if (kind === "task") {
-      return (
-        !!taskLoadError ||
-        (tasksReady && taskOptions.length === 0) ||
-        (tasksReady && !taskLoadError && filteredTasks.length === 0)
-      );
-    }
-    if (kind === "note") {
-      return (
-        !!noteLoadError ||
-        (notesReady && noteOptions.length === 0) ||
-        (notesReady && !noteLoadError && filteredNotes.length === 0)
-      );
-    }
-    if (kind === "pr") {
-      return (
-        !!prLoadError ||
-        (prsReady && prOptions.length === 0) ||
-        (prsReady && !prLoadError && filteredPrs.length === 0) ||
-        prData?.configured === false
-      );
-    }
-    if (kind === "jira") {
-      return (
-        !!jiraLoadError ||
-        jiraData?.configured === false ||
-        (jiraReady && jiraOptions.length === 0) ||
-        (jiraReady && !jiraLoadError && filteredJira.length === 0)
-      );
-    }
-    if (kind === "repo") {
-      return (
-        !!repoLoadError ||
-        (reposReady && repoOptions.length === 0) ||
-        (reposReady && !repoLoadError && filteredRepos.length === 0)
-      );
-    }
-    return true;
-  })();
 
   const close = () => {
     if (busy) return;
@@ -436,43 +454,8 @@ function EntityLinkDialogSession({
     setError(null);
     try {
       const ref = buildEntityRefFromInput(kind, raw);
-      if (kind === "calendar" && overrideValue) {
-        const picked = events.find((e) => e.id === raw);
-        if (picked) {
-          ref.label = picked.title || "Calendar event";
-          ref.href = picked.htmlLink || "/calendar";
-        }
-      }
-      if (kind === "task") {
-        const picked = taskOptions.find((t) => t.id === raw);
-        if (picked) ref.label = picked.title;
-      }
-      if (kind === "note") {
-        const picked = noteOptions.find((t) => t.id === raw);
-        if (picked) ref.label = picked.title;
-      }
-      if (kind === "pr") {
-        const picked = prOptions.find((t) => t.id === raw);
-        if (picked) {
-          ref.label = picked.title;
-          if (picked.meta) ref.id = picked.meta;
-        }
-      }
-      if (kind === "jira") {
-        const picked = jiraOptions.find((t) => t.id === raw);
-        if (picked) {
-          ref.label = `${picked.id}: ${picked.title}`;
-          if (jiraData?.tickets) {
-            const ticket = jiraData.tickets.find((t) => t.key === raw);
-            if (ticket?.url) ref.href = ticket.url;
-          }
-        }
-      }
-      if (kind === "repo") {
-        const picked = repoOptions.find((repo) => repo.id === raw);
-        if (picked) ref.label = picked.title;
-      }
-      await onSave(ref);
+      const picked = rows.find((r) => r.id === raw);
+      await onSave(picked?.overrides ? { ...ref, ...picked.overrides } : ref);
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't add link.");
@@ -481,12 +464,7 @@ function EntityLinkDialogSession({
     }
   };
 
-  const selectRow = (id: string) => {
-    setValue(id);
-    setError(null);
-  };
-
-  const resetKind = (next: EntityKind) => {
+  const switchKind = (next: PickerKind) => {
     setKind(next);
     setValue("");
     setQuery("");
@@ -518,322 +496,54 @@ function EntityLinkDialogSession({
     >
       <div className="entity-link-dialog-body">
         <div className="entity-link-kinds" role="tablist" aria-label="Link type">
-          {KINDS.map((k) => (
+          {KIND_ORDER.map((k) => (
             <button
-              key={k.id}
+              key={k}
               type="button"
               className="entity-link-kind"
-              data-active={kind === k.id ? "true" : undefined}
+              data-active={kind === k ? "true" : undefined}
               role="tab"
-              aria-selected={kind === k.id}
-              onClick={() => resetKind(k.id)}
+              aria-selected={kind === k}
+              onClick={() => switchKind(k)}
             >
-              {k.label}
+              {KIND_CONFIG[k].label}
             </button>
           ))}
         </div>
 
-        {kind === "calendar" ? (
-          <div className="entity-link-cal-picker">
-            {!calReady ? (
-              <p className="entity-link-hint">Loading today&apos;s events…</p>
-            ) : cal?.needsReauth ? (
-              <p className="entity-link-hint">
-                Calendar needs reconnect. Paste an event id below, or fix Google on Setup.
-              </p>
-            ) : events.length > 0 ? (
-              <>
-                {events.length > 5 ? (
-                  <label className="entity-link-field" htmlFor={searchId}>
-                    <span className="entity-link-field-label">Filter events</span>
-                    <input
-                      id={searchId}
-                      className="input entity-link-input"
-                      placeholder="Filter today's events…"
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                      disabled={busy}
-                      autoComplete="off"
-                      spellCheck={false}
-                    />
-                  </label>
-                ) : null}
-                <p className="entity-link-hint">Today&apos;s events. Click one to link.</p>
-                {filteredEvents.length > 0 ? (
-                  <ul className="entity-link-cal-list">
-                    {filteredEvents.map((ev) => (
-                      <li key={ev.id}>
-                        <button
-                          type="button"
-                          className="entity-link-cal-item"
-                          disabled={busy}
-                          onClick={() => void save(ev.id)}
-                        >
-                          <span className="entity-link-cal-title">{ev.title || "Untitled"}</span>
-                          <span className="entity-link-cal-time">
-                            {ev.isAllDay
-                              ? "All day"
-                              : new Date(ev.start).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="entity-link-hint">No events match that filter.</p>
-                )}
-                <p className="entity-link-hint entity-link-hint-or">Or paste an id / URL</p>
-              </>
-            ) : (
-              <p className="entity-link-hint">
-                No events loaded for today. Paste a Calendar event id or Google Calendar URL.
-              </p>
-            )}
-          </div>
-        ) : null}
+        {loading ? <PickerSkeleton label={config.loadingText} /> : null}
 
-        {kind === "task" ? (
+        {showPicker ? (
           <PickerBlock
             searchId={searchId}
-            searchLabel="Search tasks"
-            searchPlaceholder="Search tasks…"
+            config={config}
             query={query}
-            onQueryChange={setQuery}
-            loading={!tasksReady || (taskLoading && !taskDays)}
-            loadingText="Loading recent tasks…"
-            error={taskLoadError ? "Couldn't load tasks. Paste a task id below, or try again." : null}
-            empty={!taskLoadError && tasksReady && taskOptions.length === 0}
-            emptyText="No recent tasks found. Paste a task id below if you have one."
-            noMatch={taskOptions.length > 0 && filteredTasks.length === 0}
-            noMatchText={`No tasks match "${query.trim()}". Paste an id below if you need one outside this list.`}
-            hint="Today and recent days. Select one, then Add link."
+            onQueryChange={(next) => {
+              setQuery(next);
+              setError(null);
+            }}
+            rows={filtered}
+            totalRows={rows.length}
+            value={value}
+            onSelect={(id) => {
+              setValue(id);
+              setError(null);
+            }}
+            onSubmit={(id) => void save(id)}
             selectedLabel={selectedLabel}
             busy={busy}
-            autoFocusSearch
-          >
-            {filteredTasks.map((opt) => (
-              <li key={opt.id}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={value === opt.id}
-                  className="entity-link-cal-item"
-                  data-selected={value === opt.id ? "true" : undefined}
-                  disabled={busy}
-                  onClick={() => selectRow(opt.id)}
-                >
-                  <span className="entity-link-cal-title">{opt.title || "Untitled"}</span>
-                  <span className="entity-link-cal-time">
-                    {formatTaskDay(opt.date, today)}
-                    {opt.done || opt.abandoned ? ` · ${taskStatusLabel(opt)}` : ""}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </PickerBlock>
+          />
         ) : null}
 
-        {kind === "note" ? (
-          <PickerBlock
-            searchId={searchId}
-            searchLabel="Search notes"
-            searchPlaceholder="Search notes…"
-            query={query}
-            onQueryChange={setQuery}
-            loading={!notesReady || (noteLoading && !noteTree)}
-            loadingText="Loading notes…"
-            error={noteLoadError ? "Couldn't load notes. Paste a vault path below." : null}
-            empty={!noteLoadError && notesReady && noteOptions.length === 0}
-            emptyText="No notes found. Paste a vault path below."
-            noMatch={noteOptions.length > 0 && filteredNotes.length === 0}
-            noMatchText={`No notes match "${query.trim()}". Paste a path below.`}
-            hint="Recent notes. Select one, then Add link."
-            selectedLabel={selectedLabel}
-            busy={busy}
-            autoFocusSearch
-          >
-            {filteredNotes.map((opt) => (
-              <li key={opt.id}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={value === opt.id}
-                  className="entity-link-cal-item"
-                  data-selected={value === opt.id ? "true" : undefined}
-                  disabled={busy}
-                  onClick={() => selectRow(opt.id)}
-                >
-                  <span className="entity-link-cal-title">{opt.title || "Untitled"}</span>
-                  <span className="entity-link-cal-time">{opt.meta}</span>
-                </button>
-              </li>
-            ))}
-          </PickerBlock>
-        ) : null}
+        {notice ? <p className="entity-link-hint">{notice}</p> : null}
 
-        {kind === "pr" ? (
-          <PickerBlock
-            searchId={searchId}
-            searchLabel="Filter PRs"
-            searchPlaceholder="Filter open / review PRs…"
-            query={query}
-            onQueryChange={setQuery}
-            loading={!prsReady || (prLoading && !prData)}
-            loadingText="Loading your PRs…"
-            error={
-              prLoadError
-                ? "Couldn't load PRs. Paste a GitHub URL below."
-                : prData?.configured === false
-                  ? "GitHub CLI isn't signed in. Paste a PR URL below, or connect gh."
-                  : null
-            }
-            empty={prsReady && prData?.configured !== false && !prLoadError && prOptions.length === 0}
-            emptyText="No open or review PRs cached. Paste a GitHub PR URL below."
-            noMatch={prOptions.length > 0 && filteredPrs.length === 0}
-            noMatchText={`No PRs match "${query.trim()}". Paste a URL below.`}
-            hint="From your cached PR list. Select one, then Add link."
-            selectedLabel={selectedLabel}
-            busy={busy}
-            autoFocusSearch={prOptions.length > 0}
-          >
-            {filteredPrs.map((opt) => (
-              <li key={opt.id}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={value === opt.id}
-                  className="entity-link-cal-item"
-                  data-selected={value === opt.id ? "true" : undefined}
-                  disabled={busy}
-                  onClick={() => selectRow(opt.id)}
-                >
-                  <span className="entity-link-cal-title">{opt.title}</span>
-                  <span className="entity-link-cal-time">{opt.meta}</span>
-                </button>
-              </li>
-            ))}
-          </PickerBlock>
-        ) : null}
-
-        {kind === "jira" ? (
-          <PickerBlock
-            searchId={searchId}
-            searchLabel="Filter tickets"
-            searchPlaceholder="Filter your tickets…"
-            query={query}
-            onQueryChange={setQuery}
-            loading={!jiraReady || (jiraLoading && !jiraData)}
-            loadingText="Loading your tickets…"
-            error={
-              jiraLoadError || jiraData?.error
-                ? "Couldn't load tickets. Paste an issue key below."
-                : jiraData?.configured === false
-                  ? "Jira isn't configured. Paste an issue key below, or finish Setup."
-                  : null
-            }
-            empty={
-              jiraReady && jiraData?.configured !== false && !jiraLoadError && jiraOptions.length === 0
-            }
-            emptyText="No tickets in the cached list. Paste an issue key below."
-            noMatch={jiraOptions.length > 0 && filteredJira.length === 0}
-            noMatchText={`No tickets match "${query.trim()}". Paste a key below.`}
-            hint="From your cached ticket list. Select one, then Add link."
-            selectedLabel={selectedLabel}
-            busy={busy}
-            autoFocusSearch={jiraOptions.length > 0}
-          >
-            {filteredJira.map((opt) => (
-              <li key={opt.id}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={value === opt.id}
-                  className="entity-link-cal-item"
-                  data-selected={value === opt.id ? "true" : undefined}
-                  disabled={busy}
-                  onClick={() => selectRow(opt.id)}
-                >
-                  <span className="entity-link-cal-title">
-                    <span className="entity-link-pick-key">{opt.id}</span> {opt.title}
-                  </span>
-                  <span className="entity-link-cal-time">{opt.meta}</span>
-                </button>
-              </li>
-            ))}
-          </PickerBlock>
-        ) : null}
-
-        {kind === "repo" ? (
-          <PickerBlock
-            searchId={searchId}
-            searchLabel="Search repositories"
-            searchPlaceholder="Search local repositories…"
-            query={query}
-            onQueryChange={setQuery}
-            loading={!reposReady || (repoLoading && !repoData)}
-            loadingText="Loading repositories…"
-            error={repoLoadError ? "Couldn't load repositories. Paste a repository name below." : null}
-            empty={!repoLoadError && reposReady && repoOptions.length === 0}
-            emptyText="No local repositories found."
-            noMatch={repoOptions.length > 0 && filteredRepos.length === 0}
-            noMatchText={`No repositories match "${query.trim()}". Paste the folder name below.`}
-            hint="Local repositories. Select one, then Add link."
-            selectedLabel={selectedLabel}
-            busy={busy}
-            autoFocusSearch
-          >
-            {filteredRepos.map((opt) => (
-              <li key={opt.id}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={value === opt.id}
-                  className="entity-link-cal-item"
-                  data-selected={value === opt.id ? "true" : undefined}
-                  disabled={busy}
-                  onClick={() => selectRow(opt.id)}
-                >
-                  <span className="entity-link-cal-title">{opt.title}</span>
-                  <span className="entity-link-cal-time">{opt.meta}</span>
-                </button>
-              </li>
-            ))}
-          </PickerBlock>
-        ) : null}
-
-        {kind !== "calendar" &&
-        kind !== "task" &&
-        kind !== "note" &&
-        kind !== "pr" &&
-        kind !== "jira" &&
-        kind !== "repo" ? (
-          <p className="entity-link-hint">{kindMeta.hint}</p>
-        ) : null}
-
-        {showPasteField ? (
+        {showPasteField && !loading ? (
           <label className="entity-link-field" htmlFor={inputId}>
-            <span className="entity-link-field-label">
-              {kind === "calendar"
-                ? "Event id or URL"
-                : kind === "task"
-                  ? "Task id"
-                  : kind === "note"
-                    ? "Vault path"
-                    : kind === "pr"
-                      ? "PR URL"
-                      : kind === "jira"
-                        ? "Issue key"
-                        : kind === "repo"
-                          ? "Repository name"
-                        : kindMeta.label}
-            </span>
+            <span className="entity-link-field-label">{config.pasteLabel}</span>
             <input
               id={inputId}
               className="input entity-link-input"
-              placeholder={PLACEHOLDERS[kind]}
+              placeholder={config.pastePlaceholder}
               value={value}
               onChange={(e) => {
                 setValue(e.target.value);
@@ -845,18 +555,7 @@ function EntityLinkDialogSession({
                   void save();
                 }
               }}
-              autoFocus={
-                kind === "calendar"
-                  ? calReady && events.length === 0
-                  : showPasteField &&
-                    ((kind === "task" && (taskLoadError || taskOptions.length === 0)) ||
-                      (kind === "note" && (noteLoadError || noteOptions.length === 0)) ||
-                      (kind === "pr" && (prLoadError || prOptions.length === 0 || prData?.configured === false)) ||
-                      (kind === "jira" &&
-                        (!!jiraLoadError || jiraOptions.length === 0 || jiraData?.configured === false)) ||
-                      (kind === "repo" && (!!repoLoadError || repoOptions.length === 0)) ||
-                      (kind !== "task" && kind !== "note" && kind !== "pr" && kind !== "jira" && kind !== "repo"))
-              }
+              autoFocus={!showPicker}
               disabled={busy}
               autoComplete="off"
               spellCheck={false}
@@ -864,80 +563,152 @@ function EntityLinkDialogSession({
           </label>
         ) : null}
 
-        {error ? <p className="entity-link-error" role="alert">{error}</p> : null}
+        {error ? (
+          <p className="entity-link-error" role="alert">
+            {error}
+          </p>
+        ) : null}
       </div>
     </ModalShell>
   );
 }
 
+/** Shimmer in the list's silhouette — content arriving never spins. */
+function PickerSkeleton({ label }: { label: string }): ReactNode {
+  return (
+    <div className="entity-link-skeleton" role="status" aria-live="polite">
+      <span className="sr-only">{label}</span>
+      <span className="entity-link-skeleton-field" aria-hidden />
+      <span className="entity-link-skeleton-list" aria-hidden>
+        {[0, 1, 2, 3].map((i) => (
+          <span key={i} className="entity-link-skeleton-row" />
+        ))}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Search + roving-focus listbox. Arrow keys move the selection, Enter commits
+ * it, so the whole dialog is reachable without touching the mouse.
+ */
 function PickerBlock({
   searchId,
-  searchLabel,
-  searchPlaceholder,
+  config,
   query,
   onQueryChange,
-  loading,
-  loadingText,
-  error,
-  empty,
-  emptyText,
-  noMatch,
-  noMatchText,
-  hint,
+  rows,
+  totalRows,
+  value,
+  onSelect,
+  onSubmit,
   selectedLabel,
   busy,
-  autoFocusSearch,
-  children,
 }: {
   searchId: string;
-  searchLabel: string;
-  searchPlaceholder: string;
+  config: KindConfig<unknown>;
   query: string;
   onQueryChange: (v: string) => void;
-  loading: boolean;
-  loadingText: string;
-  error: string | null;
-  empty: boolean;
-  emptyText: string;
-  noMatch: boolean;
-  noMatchText: string;
-  hint: string;
+  rows: PickRow[];
+  totalRows: number;
+  value: string;
+  onSelect: (id: string) => void;
+  onSubmit: (id: string) => void;
   selectedLabel: string | null;
   busy: boolean;
-  autoFocusSearch?: boolean;
-  children: ReactNode;
 }) {
-  if (loading) return <p className="entity-link-hint">{loadingText}</p>;
-  if (error) return <p className="entity-link-hint">{error}</p>;
-  if (empty) return <p className="entity-link-hint">{emptyText}</p>;
+  const listId = useId();
+  const activeIndex = rows.findIndex((r) => r.id === value);
+  const activeRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: "nearest" });
+  }, [value]);
+
+  const move = (delta: number) => {
+    if (rows.length === 0) return;
+    const from = activeIndex < 0 ? (delta > 0 ? -1 : 0) : activeIndex;
+    const next = (from + delta + rows.length) % rows.length;
+    onSelect(rows[next].id);
+  };
+
+  const onKeyDown = (e: ReactKeyboardEvent) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      move(1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      move(-1);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      // One match left after filtering is unambiguous — take it.
+      const target = value || (rows.length === 1 ? rows[0].id : "");
+      if (target) onSubmit(target);
+    }
+  };
 
   return (
-    <div className="entity-link-task-picker">
+    <div className="entity-link-picker">
       <label className="entity-link-field" htmlFor={searchId}>
-        <span className="entity-link-field-label">{searchLabel}</span>
+        <span className="entity-link-field-label">{config.searchLabel}</span>
         <input
           id={searchId}
           className="input entity-link-input"
-          placeholder={searchPlaceholder}
+          placeholder={config.searchPlaceholder}
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
-          autoFocus={autoFocusSearch}
+          onKeyDown={onKeyDown}
+          role="combobox"
+          aria-expanded={rows.length > 0}
+          aria-controls={listId}
+          aria-activedescendant={activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined}
+          autoFocus
           disabled={busy}
           autoComplete="off"
           spellCheck={false}
         />
       </label>
-      {noMatch ? (
-        <p className="entity-link-hint">{noMatchText}</p>
+
+      {rows.length === 0 ? (
+        <p className="entity-link-hint">
+          {`No matches for "${query.trim()}". Paste one below instead.`}
+        </p>
       ) : (
         <>
-          <p className="entity-link-hint">{hint}</p>
-          <ul className="entity-link-cal-list" role="listbox" aria-label={searchLabel}>
-            {children}
+          <p className="entity-link-hint">{config.hint}</p>
+          <ul id={listId} className="entity-link-cal-list" role="listbox" aria-label={config.searchLabel}>
+            {rows.map((row, i) => (
+              <li key={row.id} role="presentation">
+                <button
+                  type="button"
+                  id={`${listId}-${i}`}
+                  role="option"
+                  aria-selected={value === row.id}
+                  ref={value === row.id ? activeRef : undefined}
+                  className="entity-link-cal-item"
+                  data-selected={value === row.id ? "true" : undefined}
+                  disabled={busy}
+                  onClick={() => onSelect(row.id)}
+                  onDoubleClick={() => onSubmit(row.id)}
+                  onKeyDown={onKeyDown}
+                >
+                  <span className="entity-link-cal-title">
+                    {row.key ? <span className="entity-link-pick-key">{row.key}</span> : null}
+                    {row.key ? " " : null}
+                    {row.title || "Untitled"}
+                  </span>
+                  <span className="entity-link-cal-time">{row.meta}</span>
+                </button>
+              </li>
+            ))}
           </ul>
-          {selectedLabel ? (
-            <p className="entity-link-hint entity-link-hint-or">Selected: {selectedLabel}</p>
-          ) : null}
+          <p className="entity-link-hint entity-link-hint-or">
+            {selectedLabel
+              ? `Selected: ${selectedLabel}`
+              : totalRows > rows.length
+                ? `Showing ${rows.length} of ${totalRows}. Keep typing to narrow.`
+                : "↑↓ to move, Enter to link."}
+          </p>
         </>
       )}
     </div>

@@ -20,6 +20,7 @@ import {
 import { HoverTip } from "@/components/ui/HoverTip";
 import { usePrompt } from "@/components/shell/ConfirmDialog";
 import { RepoGitWorkspace } from "@/components/repo-git/RepoGitWorkspace";
+import { RepoOpenPrLink } from "@/components/repos/RepoOpenPrLink";
 import { claudeCliCommand, opencodeCliCommand, openTerminal } from "@/lib/terminal-launch";
 import type { GithubRepoInfo, RepoInfo } from "./types";
 
@@ -98,6 +99,10 @@ export function SearchCard({
             placeholder="Filter local… type to also search GitHub"
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
           />
         </div>
         <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter local repos">
@@ -239,7 +244,12 @@ export function LocalRepoCard({
             <div className="flex items-center gap-2 font-semibold text-sm break-words leading-snug text-text">
               {repo.name}
             </div>
-            {repo.branch && <MetaChip icon={<GitBranch size={11} />} label={repo.branch} />}
+            {repo.branch && (
+              <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                <MetaChip icon={<GitBranch size={11} />} label={repo.branch} />
+                {githubUrl ? <RepoOpenPrLink repoName={repo.name} branch={repo.branch} /> : null}
+              </div>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <div ref={upstartMenuRef} className="relative inline-flex">

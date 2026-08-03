@@ -36,19 +36,29 @@ export interface EntityLinksResult {
 }
 
 function noteHref(notePath: string): string {
-  return `/notes/${notePath.split("/").map(encodeURIComponent).join("/")}`;
+  return defaultHrefForRef({ kind: "note", id: notePath, label: notePath }) ?? "/notes";
+}
+
+/**
+ * Absolute path for a vault-relative note, or null if it escapes the vault.
+ *
+ * `id` reaches here straight from the /api/entity-links query string, so
+ * `../../` would otherwise read any JSON file on the box.
+ */
+function noteFilePath(relPath: string): string | null {
+  const root = path.resolve(getNotesDir());
+  const full = path.resolve(root, `${relPath}.json`);
+  return full === root || full.startsWith(root + path.sep) ? full : null;
 }
 
 function noteExists(relPath: string): boolean {
-  const root = getNotesDir();
-  const full = path.join(root, `${relPath}.json`);
-  return fs.existsSync(full);
+  const full = noteFilePath(relPath);
+  return full != null && fs.existsSync(full);
 }
 
 function readNoteMarkdown(relPath: string): string | null {
-  const root = getNotesDir();
-  const full = path.join(root, `${relPath}.json`);
-  if (!fs.existsSync(full)) return null;
+  const full = noteFilePath(relPath);
+  if (!full || !fs.existsSync(full)) return null;
   try {
     const raw = JSON.parse(fs.readFileSync(full, "utf8")) as { content?: unknown };
     if (!raw.content) return null;

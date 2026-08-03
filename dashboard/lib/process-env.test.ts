@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import path from "node:path";
-import { augmentedPathEnv, extraPathSegments, scrubNpmEnv } from "./process-env";
+import { augmentedPathEnv, extraPathSegments, scrubDesktopRuntimeEnv, scrubNpmEnv } from "./process-env";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -12,7 +12,7 @@ describe("scrubNpmEnv", () => {
   it("removes npm lifecycle and config variables", () => {
     const env = scrubNpmEnv({
       HOME: "/tmp/home",
-      NODE_ENV: "test",
+      NODE_ENV: "production",
       PATH: "/usr/bin",
       INIT_CWD: "/repo",
       npm_command: "run",
@@ -72,5 +72,32 @@ describe("augmentedPathEnv", () => {
   it("does not invent home-relative paths when HOME is absent", () => {
     expect(extraPathSegments(undefined)).not.toContain("/.local/bin");
     expect(extraPathSegments(undefined)).not.toContain("/.opencode/bin");
+  });
+});
+
+describe("scrubDesktopRuntimeEnv", () => {
+  it("drops desktop layout vars but keeps op helpers", () => {
+    const env = scrubDesktopRuntimeEnv({
+      HOME: "/tmp/home",
+      PATH: "/usr/bin",
+      NODE_ENV: "production",
+      DEVHUB_DESKTOP: "1",
+      DEVHUB_APP_DATA: "/tmp/app-data",
+      DEVHUB_SERVER_DIR: "/Applications/DevHub.app/Contents/Resources/server",
+      DEVHUB_OP_VAULT: "Private",
+      NOTES_DIR: "/tmp/app-data/notes",
+      TASKS_DIR: "/tmp/app-data/tasks",
+      OPENCODE_PORT: "1338",
+    } as NodeJS.ProcessEnv);
+
+    expect(env.HOME).toBe("/tmp/home");
+    expect(env.OPENCODE_PORT).toBe("1338");
+    expect(env.DEVHUB_OP_VAULT).toBe("Private");
+    expect(env.DEVHUB_DESKTOP).toBeUndefined();
+    expect(env.DEVHUB_APP_DATA).toBeUndefined();
+    expect(env.DEVHUB_SERVER_DIR).toBeUndefined();
+    expect(env.NOTES_DIR).toBeUndefined();
+    expect(env.TASKS_DIR).toBeUndefined();
+    expect(env.NODE_ENV).toBeUndefined();
   });
 });

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import type { ReactNode } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { GitPullRequest, RefreshCw } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import type { GithubPrsApiPayload, GithubPrRow, RecentlyReviewedPr } from "@/lib/github/prs";
 import { useMarkPrsSeen } from "@/lib/hooks/use-sidebar-counts";
+import { parseGithubPrUrl } from "@/lib/entity-links/parse-pr";
 import { PrRowActions } from "@/components/PrRowActions";
 import { FetchError, EmptyState, SkeletonRows } from "@/components";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
@@ -53,6 +54,9 @@ function RecentlyReviewedCard({ row }: { row: RecentlyReviewedPr }) {
 
 export default function PrsPage() {
   const [prTab, setPrTab] = useState<PrTab>("authored");
+  const [manualUrl, setManualUrl] = useState("");
+  const [manualPr, setManualPr] = useState<GithubPrRow | null>(null);
+  const [manualError, setManualError] = useState("");
   const { data, error, isLoading, mutate, isValidating } = useLive<GithubPrsApiPayload>("/api/github/prs");
   const boot = useBootGate(data !== undefined || !!error);
 
@@ -61,6 +65,29 @@ export default function PrsPage() {
   const recentlyReviewed = data?.recentlyReviewed ?? EMPTY_RECENTLY_REVIEWED;
   useMarkPrsSeen();
   const activePrs = prTab === "authored" ? authored : prTab === "reviews" ? reviews : recentlyReviewed;
+
+  const addManualPr = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const parsed = parseGithubPrUrl(manualUrl.trim());
+    if (!parsed) {
+      setManualPr(null);
+      setManualError("Enter a GitHub pull request URL.");
+      return;
+    }
+
+    const existing = [...authored, ...reviews, ...recentlyReviewed].find(
+      (row) => row.repo === parsed.repo && row.number === parsed.number,
+    );
+    setManualPr(
+      existing ?? {
+        repo: parsed.repo,
+        number: parsed.number,
+        title: `${parsed.repo}#${parsed.number}`,
+        url: `https://github.com/${parsed.repo}/pull/${parsed.number}`,
+      },
+    );
+    setManualError("");
+  };
 
   if (!data?.configured && !isLoading && !error) {
     return (
@@ -99,6 +126,37 @@ export default function PrsPage() {
       </div>
 
       {error && <FetchError message="Couldn't reach GitHub." onRetry={() => mutate()} />}
+
+      <div className="mb-4 space-y-2">
+        <form className="card flex flex-col gap-2 sm:flex-row" style={{ padding: 10 }} onSubmit={addManualPr}>
+          <label htmlFor="manual-pr-url" className="sr-only">
+            GitHub pull request URL
+          </label>
+          <input
+            id="manual-pr-url"
+            type="url"
+            className="input min-w-0 flex-1 font-mono text-xs"
+            placeholder="Paste any GitHub PR URL, including drafts"
+            value={manualUrl}
+            onChange={(event) => {
+              setManualUrl(event.target.value);
+              setManualPr(null);
+              setManualError("");
+            }}
+            aria-invalid={manualError ? true : undefined}
+            aria-describedby={manualError ? "manual-pr-error" : undefined}
+          />
+          <button type="submit" className="btn btn-secondary shrink-0 text-xs" disabled={!manualUrl.trim()}>
+            Add PR
+          </button>
+        </form>
+        {manualError && (
+          <p id="manual-pr-error" className="text-xs text-danger" role="alert">
+            {manualError}
+          </p>
+        )}
+        {manualPr && <PrCard row={manualPr} mode="reviews" />}
+      </div>
 
       <div className="flex gap-1 mb-4" style={{ borderBottom: "1px solid var(--border-muted)" }}>
         {(["authored", "reviews", "recent"] as const).map((t) => (

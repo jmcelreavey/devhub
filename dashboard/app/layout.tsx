@@ -14,6 +14,7 @@ import { CollapsibleSidebar } from "@/components/shell/CollapsibleSidebar";
 import { MobileShell } from "@/components/shell/MobileShell";
 import { NotesOverlayProvider } from "@/components/notes/NotesOverlayProvider";
 import { TerminalDock } from "@/components/shell/TerminalDock";
+import { TerminalTranscriptModal } from "@/components/shell/TerminalTranscriptModal";
 import { PWAInstallPrompt } from "@/components/shell/PWAInstallPrompt";
 import { ServiceWorkerRegister } from "@/components/shell/ServiceWorkerRegister";
 import { ThemeSystemSync } from "@/components/shell/ThemeSystemSync";
@@ -167,6 +168,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <PersistentRepoLearnDock />
             <NotesOverlayProvider />
             <TerminalDock />
+            <TerminalTranscriptModal />
             <PWAInstallPrompt />
             <KonamiGate />
           </ConfirmProvider>

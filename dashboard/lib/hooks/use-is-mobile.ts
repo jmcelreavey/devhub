@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { matchesMediaQuery, useMediaQuery } from "@/lib/hooks/use-media-query";
 
 /**
  * Single source of truth for the mobile breakpoint. Mirrors Tailwind's
@@ -14,14 +14,7 @@ export const MOBILE_MEDIA_QUERY = "(max-width: 767px)";
  * reactive value isn't needed (e.g. "navigate instead of open a panel").
  */
 export function isMobileViewport(): boolean {
-  if (typeof window === "undefined" || !window.matchMedia) return false;
-  return window.matchMedia(MOBILE_MEDIA_QUERY).matches;
-}
-
-function subscribe(cb: () => void): () => void {
-  const mq = window.matchMedia(MOBILE_MEDIA_QUERY);
-  mq.addEventListener("change", cb);
-  return () => mq.removeEventListener("change", cb);
+  return matchesMediaQuery(MOBILE_MEDIA_QUERY);
 }
 
 /**
@@ -30,5 +23,5 @@ function subscribe(cb: () => void): () => void {
  * the server render and avoid hydration mismatches.
  */
 export function useIsMobile(): boolean {
-  return useSyncExternalStore(subscribe, isMobileViewport, () => false);
+  return useMediaQuery(MOBILE_MEDIA_QUERY);
 }

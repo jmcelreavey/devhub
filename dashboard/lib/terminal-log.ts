@@ -10,6 +10,7 @@
  * Both the peer script and the API route resolve the log directory the same
  * way (they run on the same machine), so the shared logic lives here.
  */
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -36,6 +37,48 @@ export function isValidSessionId(id: string): boolean {
 export function terminalLogPath(sessionId: string): string | null {
   if (!isValidSessionId(sessionId)) return null;
   return path.join(terminalLogDir(), `${sessionId}.log`);
+}
+
+/** Cap for search + historical transcript views (live dock copy still reads the full file). */
+export const SESSION_LOG_TAIL_BYTES = 2 * 1024 * 1024;
+
+export interface SessionLogTail {
+  sessionId: string;
+  /** Cleaned lines from the on-disk tail (1-based indexes match search hits). */
+  lines: string[];
+  modifiedAt: number;
+  /** True when the log file is larger than {@link SESSION_LOG_TAIL_BYTES}. */
+  truncated: boolean;
+}
+
+/**
+ * Read the tail of a session log, cleaned of ANSI — same window search uses so
+ * line numbers from `/api/terminal/search` line up with the transcript viewer.
+ */
+export function readSessionLogTail(sessionId: string): SessionLogTail | null {
+  const file = terminalLogPath(sessionId);
+  if (!file) return null;
+  try {
+    const { size, mtimeMs } = fs.statSync(file);
+    const start = Math.max(0, size - SESSION_LOG_TAIL_BYTES);
+    const fd = fs.openSync(file, "r");
+    let raw: string;
+    try {
+      const buf = Buffer.alloc(Math.min(size, SESSION_LOG_TAIL_BYTES));
+      fs.readSync(fd, buf, 0, buf.length, start);
+      raw = buf.toString("utf8");
+    } finally {
+      fs.closeSync(fd);
+    }
+    return {
+      sessionId,
+      lines: cleanTerminalOutput(raw).split("\n"),
+      modifiedAt: mtimeMs,
+      truncated: size > SESSION_LOG_TAIL_BYTES,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ANSI/terminal escape sequences are stripped in two passes so this source

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { blocksToText, textToBlocks } from "./index.ts";
+import { blocksToPortableMarkdown, blocksToText, textToBlocks } from "./index.ts";
 
 function b(type: string, text: string, extra?: Record<string, unknown>): Record<string, unknown> {
   return {
@@ -487,5 +487,333 @@ describe("round-trip: text -> blocks -> text", () => {
     expect(roundTripped).toContain("| Skills");
     expect(roundTripped).toContain("`skills/shared/`");
     expect(roundTripped.split("\n").filter((l) => l.startsWith("|")).length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+
+describe("blocksToPortableMarkdown", () => {
+  it("renders toggles as HTML details/summary", () => {
+    const block = {
+      id: "x",
+      type: "toggleListItem",
+      props: {},
+      content: [{ type: "text", text: "Before you start", styles: {} }],
+      children: [b("bulletListItem", "Wait for a dry day")],
+    };
+    expect(blocksToPortableMarkdown([block])).toBe(
+      "<details>\n<summary>Before you start</summary>\n\n- Wait for a dry day\n\n</details>",
+    );
+  });
+
+  it("humanizes task-ref markers", () => {
+    const block = {
+      id: "x",
+      type: "taskRef",
+      props: {
+        taskId: "cdc243c8-3352-488a-8d0f-deb465e8a5d5",
+        date: "2026-07-31",
+        label: "PTF-4484 Address BI Jobs Feedback",
+      },
+      children: [],
+    };
+    expect(blocksToPortableMarkdown([block])).toBe(
+      "*Task: PTF-4484 Address BI Jobs Feedback*",
+    );
+  });
+
+  it("emits wholly italic paragraphs as blockquotes with KaTeX textColor", () => {
+    const block = bInline("paragraph", [
+      { type: "text", text: "Not a blocker", styles: { italic: true, textColor: "green" } },
+    ]);
+    expect(blocksToPortableMarkdown([block])).toBe(
+      "> $\\color{#4d6461}{\\textit{Not a blocker}}$",
+    );
+  });
+
+  it("spaces paragraphs and keeps headings scannable", () => {
+    const md = blocksToPortableMarkdown([
+      b("heading", "Notes", { level: 2 }),
+      b("paragraph", "First point"),
+      bInline("paragraph", [{ type: "text", text: "Status", styles: { italic: true } }]),
+    ]);
+    expect(md).toBe("## Notes\n\nFirst point\n\n> *Status*");
+  });
+
+  it("keeps toggle paragraphs as paragraphs, lifting only italic status lines", () => {
+    const block = {
+      id: "x",
+      type: "toggleListItem",
+      props: {},
+      content: [{ type: "text", text: "Feedback", styles: {} }],
+      children: [
+        b("paragraph", "(CS) Something broken"),
+        bInline("paragraph", [
+          { type: "text", text: "Not a blocker", styles: { italic: true, textColor: "green" } },
+        ]),
+      ],
+    };
+    expect(blocksToPortableMarkdown([block])).toBe(
+      [
+        "<details>",
+        "<summary>Feedback</summary>",
+        "",
+        "(CS) Something broken",
+        "",
+        "> $\\color{#4d6461}{\\textit{Not a blocker}}$",
+        "",
+        "</details>",
+      ].join("\n"),
+    );
+  });
+
+  it("serializes a paragraph the same way in or out of a toggle", () => {
+    const para = b("paragraph", "(CS) Upload spinner?");
+    const loose = blocksToPortableMarkdown([para]);
+    const nested = blocksToPortableMarkdown([
+      {
+        id: "x",
+        type: "toggleListItem",
+        props: {},
+        content: [{ type: "text", text: "Feedback", styles: {} }],
+        children: [para],
+      },
+    ]);
+    expect(loose).toBe("(CS) Upload spinner?");
+    expect(nested).toContain("\n\n(CS) Upload spinner?\n\n");
+  });
+
+  it("does not let a leading parenthesis change how later paragraphs render", () => {
+    const children = [
+      b("paragraph", "Currently showing a spinner while we process."),
+      b("paragraph", "Second thought."),
+    ];
+    const tagged = blocksToPortableMarkdown([
+      {
+        id: "x",
+        type: "toggleListItem",
+        props: {},
+        content: [{ type: "text", text: "F", styles: {} }],
+        children: [b("paragraph", "(CS) Upload spinner?"), ...children],
+      },
+    ]);
+    const untagged = blocksToPortableMarkdown([
+      {
+        id: "x",
+        type: "toggleListItem",
+        props: {},
+        content: [{ type: "text", text: "F", styles: {} }],
+        children: [b("paragraph", "Upload spinner?"), ...children],
+      },
+    ]);
+    // The only difference between the two should be the leading "(CS) ".
+    expect(tagged.replace("(CS) ", "")).toBe(untagged);
+    // No paragraph got demoted into a blockquote by the tag.
+    expect(tagged).not.toContain("\n> ");
+  });
+
+  it("colors italic text and italic links without swallowing the URL", () => {
+    const block = bInline("paragraph", [
+      { type: "text", text: "Pointing to ", styles: { italic: true, textColor: "green" } },
+      {
+        type: "link",
+        href: "https://www.businessinsider.com/terms",
+        content: [
+          { type: "text", text: "standard BI T&Cs", styles: { italic: true, textColor: "green" } },
+        ],
+      },
+    ]);
+    expect(blocksToPortableMarkdown([block])).toBe(
+      "> $\\color{#4d6461}{\\textit{Pointing to }}$[$\\color{#4d6461}{\\textit{standard BI T\\&Cs}}$](https://www.businessinsider.com/terms)",
+    );
+  });
+
+  it("preserves nested bullets under toggles", () => {
+    const block = {
+      id: "x",
+      type: "toggleListItem",
+      props: {},
+      content: [{ type: "text", text: "Feedback", styles: {} }],
+      children: [
+        b("paragraph", "(For UX) Masthead?"),
+        b("bulletListItem", "Clicking BI | Jobs goes home"),
+        bInline("paragraph", [{ type: "text", text: "Not a blocker", styles: { italic: true } }]),
+      ],
+    };
+    const md = blocksToPortableMarkdown([block]);
+    expect(md).toContain("(For UX) Masthead?");
+    expect(md).toContain("- Clicking BI | Jobs goes home");
+    expect(md).toContain("> *Not a blocker*");
+  });
+
+  it("exports red/orange status colors via KaTeX for gist preview", () => {
+    const md = blocksToPortableMarkdown([
+      bInline("paragraph", [
+        { type: "text", text: "Blocked on auth", styles: { italic: true, textColor: "red" } },
+      ]),
+      bInline("paragraph", [
+        { type: "text", text: "At risk — timeline", styles: { italic: true, textColor: "orange" } },
+      ]),
+      b("paragraph", "Plain follow-up"),
+    ]);
+    expect(md).toBe(
+      [
+        "> $\\color{#e03e3e}{\\textit{Blocked on auth}}$",
+        "",
+        "> $\\color{#d9730d}{\\textit{At risk — timeline}}$",
+        "",
+        "Plain follow-up",
+      ].join("\n"),
+    );
+  });
+
+  it("applies block-level textColor when inline has none", () => {
+    const block = {
+      id: "x",
+      type: "paragraph",
+      props: { textColor: "blue", backgroundColor: "default", textAlignment: "left" },
+      content: [{ type: "text", text: "Needs review", styles: {} }],
+      children: [],
+    };
+    expect(blocksToPortableMarkdown([block])).toBe(
+      "$\\color{#0b6e99}{\\textsf{Needs review}}$",
+    );
+  });
+
+  it("does not emit KaTeX colors in DevHub round-trip markdown", () => {
+    const block = bInline("paragraph", [
+      { type: "text", text: "Blocked", styles: { italic: true, textColor: "red" } },
+    ]);
+    expect(blocksToText([block])).toBe("*Blocked*");
+  });
+
+  it("does not change DevHub round-trip toggle directives", () => {
+    const block = {
+      id: "x",
+      type: "toggleListItem",
+      props: {},
+      content: [{ type: "text", text: "Before you start", styles: {} }],
+      children: [b("bulletListItem", "Wait for a dry day")],
+    };
+    expect(blocksToText([block])).toBe(
+      "::toggle Before you start\n- Wait for a dry day\n::end-toggle",
+    );
+  });
+
+  it("keeps mixed list types tight and separates them from prose", () => {
+    const md = blocksToPortableMarkdown([
+      b("paragraph", "Intro"),
+      b("bulletListItem", "one"),
+      b("bulletListItem", "two"),
+      b("paragraph", "Outro"),
+    ]);
+    expect(md).toBe("Intro\n\n- one\n- two\n\nOutro");
+  });
+
+  it("indents nested list children under their parent item", () => {
+    const md = blocksToPortableMarkdown([
+      {
+        id: "x",
+        type: "bulletListItem",
+        props: {},
+        content: [{ type: "text", text: "parent", styles: {} }],
+        children: [b("bulletListItem", "child")],
+      },
+    ]);
+    expect(md).toBe("- parent\n  - child");
+  });
+
+  it("renders checklist state", () => {
+    const md = blocksToPortableMarkdown([
+      { id: "a", type: "checkListItem", props: { checked: true }, content: [{ type: "text", text: "done", styles: {} }], children: [] },
+      { id: "b", type: "checkListItem", props: { checked: false }, content: [{ type: "text", text: "todo", styles: {} }], children: [] },
+    ]);
+    expect(md).toBe("- [x] done\n- [ ] todo");
+  });
+
+  it("nests toggles inside toggles", () => {
+    const md = blocksToPortableMarkdown([
+      {
+        id: "x",
+        type: "toggleListItem",
+        props: {},
+        content: [{ type: "text", text: "Outer", styles: {} }],
+        children: [
+          {
+            id: "y",
+            type: "toggleListItem",
+            props: {},
+            content: [{ type: "text", text: "Inner", styles: {} }],
+            children: [b("paragraph", "deep")],
+          },
+        ],
+      },
+    ]);
+    expect(md).toContain("<summary>Outer</summary>");
+    expect(md).toContain("<summary>Inner</summary>");
+    expect(md).toContain("deep");
+  });
+
+  it("renders an empty toggle without a dangling blank body", () => {
+    const md = blocksToPortableMarkdown([
+      { id: "x", type: "toggleListItem", props: {}, content: [], children: [] },
+    ]);
+    expect(md).toBe("<details>\n<summary>Details</summary>\n\n</details>");
+  });
+
+  it("keeps code fences literal inside a toggle", () => {
+    const md = blocksToPortableMarkdown([
+      {
+        id: "x",
+        type: "toggleListItem",
+        props: {},
+        content: [{ type: "text", text: "Repro", styles: {} }],
+        children: [
+          { id: "c", type: "codeBlock", props: { language: "ts" }, content: [{ type: "text", text: "const a = 1;", styles: {} }], children: [] },
+        ],
+      },
+    ]);
+    expect(md).toContain("```ts\nconst a = 1;\n```");
+  });
+
+  it("drops empty paragraphs instead of emitting stray blank chunks", () => {
+    const md = blocksToPortableMarkdown([
+      b("paragraph", "A"),
+      b("paragraph", "   "),
+      b("paragraph", "B"),
+    ]);
+    expect(md).toBe("A\n\nB");
+  });
+
+  it("survives unknown block types and malformed blocks", () => {
+    const md = blocksToPortableMarkdown([
+      { id: "a", type: "someFutureBlock", props: {}, content: [{ type: "text", text: "kept", styles: {} }], children: [] },
+      { id: "b", type: "paragraph" },
+      {},
+      b("paragraph", "after"),
+    ] as unknown[]);
+    expect(md).toBe("kept\n\nafter");
+  });
+
+  it("does not treat a partially italic paragraph as a quote", () => {
+    const md = blocksToPortableMarkdown([
+      bInline("paragraph", [
+        { type: "text", text: "mostly plain ", styles: {} },
+        { type: "text", text: "emphasis", styles: { italic: true } },
+      ]),
+    ]);
+    expect(md).toBe("mostly plain *emphasis*");
+  });
+
+  it("escapes HTML in toggle summaries", () => {
+    const block = {
+      id: "x",
+      type: "toggleListItem",
+      props: {},
+      content: [{ type: "text", text: "A <B> & C", styles: {} }],
+      children: [],
+    };
+    expect(blocksToPortableMarkdown([block])).toContain(
+      "<summary>A &lt;B&gt; &amp; C</summary>",
+    );
   });
 });

@@ -56,6 +56,9 @@ jobs:
         working-directory: dashboard
 
       - name: Smoke test the built app
+        # verify builds to `.next-verify`; e2e must start against that distDir.
+        env:
+          DEVHUB_VERIFY_BUILD: "1"
         run: npm run test:e2e --prefix dashboard
 
       - name: Upload Playwright report on failure

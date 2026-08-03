@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { runGitRepoAsync } from "@/lib/git/repo-local";
+import { isSafeCommitRef } from "@/lib/git/ref-safety";
 import { parseUnifiedDiff } from "@/lib/repos/git-parsers";
 import { gitFail, withScannedRepo, type RepoParams } from "../_shared";
 
@@ -8,11 +9,13 @@ interface ChangedFile {
   status: string;
 }
 
-function isSafeCommitRef(ref: string): boolean {
-  if (!ref || ref.length > 128) return false;
-  if (ref.includes("..") || ref.includes("\0") || /\s/.test(ref)) return false;
-  // Allow full/short SHA and common symbolic tips used in the UI.
-  return /^[0-9a-fA-F]{4,40}$/.test(ref) || /^(HEAD)([~^][0-9]*)*$/.test(ref);
+/** Unified context lines for `git show -U`. Default 3; `full=1` → whole file. */
+function parseUnifiedContext(raw: string | null, full: boolean): number {
+  if (full) return 999_999;
+  if (raw == null || raw === "") return 3;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 3;
+  return Math.min(999_999, Math.max(0, Math.floor(n)));
 }
 
 function parseNameStatus(stdout: string): ChangedFile[] {
@@ -46,6 +49,10 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
     ""
   ).trim();
   const filePath = req.nextUrl.searchParams.get("path");
+  const unified = parseUnifiedContext(
+    req.nextUrl.searchParams.get("context"),
+    req.nextUrl.searchParams.get("full") === "1",
+  );
 
   if (!commit || !isSafeCommitRef(commit)) {
     return NextResponse.json({ error: "Invalid commit" }, { status: 400 });
@@ -96,6 +103,7 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
       "--format=",
       "--patch",
       "--find-renames",
+      `-U${unified}`,
       commit,
       "--",
       selectedPath,
@@ -148,6 +156,7 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
     raw,
     lines: parseUnifiedDiff(raw),
     empty: !raw.trim(),
+    context: unified,
     isHead,
     isAncestorOfHead,
     aheadCount,

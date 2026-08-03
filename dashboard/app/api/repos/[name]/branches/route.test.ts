@@ -8,9 +8,10 @@ vi.mock("@/lib/scanned-repo", () => ({
 vi.mock("@/lib/git/repo-local", () => ({
   runGitRepo: vi.fn(),
   runGitRepoAsync: vi.fn(),
+  resolveDefaultRemoteBranch: vi.fn(async () => "origin/main"),
 }));
 
-import { runGitRepoAsync } from "@/lib/git/repo-local";
+import { resolveDefaultRemoteBranch, runGitRepoAsync } from "@/lib/git/repo-local";
 import { POST } from "./route";
 import { parseChangedFiles, parseLeftRightCount, parseUnpushedCommits } from "./parsers";
 
@@ -127,11 +128,11 @@ describe("POST /api/repos/[name]/branches", () => {
   });
 
   it("stashes dirty work, syncs with main, pushes, then restores the stash", async () => {
+    vi.mocked(resolveDefaultRemoteBranch).mockResolvedValue("origin/main");
     vi.mocked(runGitRepoAsync).mockImplementation(async (_repoRoot, args) => {
       const command = args.join(" ");
       const outputs: Record<string, string> = {
         "rev-parse --abbrev-ref HEAD": "feature/foo\n",
-        "symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
         "status --porcelain": " M src/a.ts\n",
         "rev-parse --abbrev-ref --symbolic-full-name @{u}": "origin/feature/foo\n",
       };
@@ -144,6 +145,7 @@ describe("POST /api/repos/[name]/branches", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({ ok: true, mainBranch: "origin/main", stashed: true });
+    expect(resolveDefaultRemoteBranch).toHaveBeenCalledWith("/tmp/test-repo");
     expect(runGitRepoAsync).toHaveBeenCalledWith("/tmp/test-repo", ["stash", "pop", "stash@{0}"]);
   });
 });

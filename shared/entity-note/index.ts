@@ -39,7 +39,9 @@ export function slugify(text: string, options: SlugifyOptions = {}): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  return slug.slice(0, maxLen) || fallback;
+  // Trim again after truncating — cutting mid-separator otherwise leaves a
+  // trailing hyphen in the note filename.
+  return slug.slice(0, maxLen).replace(/-+$/, "") || fallback;
 }
 
 export function entityKey(ref: Pick<EntityRef, "kind" | "id">): string {
@@ -239,9 +241,13 @@ export function upsertEntityLinksInMarkdown(markdown: string, refs: EntityRef[])
   const before = lines.slice(0, start);
   const after = lines.slice(end);
   if (!section) {
-    return [...before, ...after].join("\n").replace(/\n{3,}/g, "\n\n").replace(/^\n+|\n+$/g, (m) =>
-      m.length > 1 ? "\n" : m,
-    );
+    // Removing the section leaves the blank lines that framed it — collapse
+    // runs to a single blank line and trim the ends back to one newline.
+    return [...before, ...after]
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .replace(/^\n+/, "")
+      .replace(/\n+$/, "\n");
   }
 
   const sectionLines = section.replace(/\n$/, "").split("\n");

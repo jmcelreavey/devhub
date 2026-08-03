@@ -3839,6 +3839,32 @@ body[data-motion="off"] .briefing-wx-card {
   -webkit-backdrop-filter: none;
 }
 
+.modal-shell-dialog {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 16px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  overflow: auto;
+  box-sizing: border-box;
+}
+.modal-shell-dialog-top {
+  align-items: flex-start;
+  padding-top: 12vh;
+}
+.modal-shell-dialog::backdrop {
+  background: var(--scrim);
+}
+
 .confirm-dialog {
   position: fixed;
   inset: 0;
@@ -4633,8 +4659,11 @@ body.sortable-dragging * {
   display: inline-flex;
 }
 .launch-menu {
+  /* Popover top-layer when open; inset/margin reset beats UA popover defaults. */
   position: fixed;
-  z-index: 80;
+  inset: unset;
+  margin: 0;
+  z-index: var(--z-prompt);
   display: flex;
   min-width: 230px;
   flex-direction: column;
@@ -4647,6 +4676,9 @@ body.sortable-dragging * {
   box-shadow:
     0 18px 42px rgba(0, 0, 0, 0.58),
     0 0 0 1px color-mix(in oklab, var(--bg-overlay) 55%, transparent);
+}
+.launch-menu:not(:popover-open)[hidden] {
+  display: none;
 }
 .launch-menu-item {
   display: flex;
@@ -5630,6 +5662,12 @@ body[data-motion="off"] .evolution-arrow {
   font-size: 11px;
   color: var(--text-subtle);
 }
+.repo-git-changes-split {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+}
 .repo-git-changes-grid {
   display: grid;
   grid-template-columns: minmax(220px, 0.9fr) minmax(280px, 1.5fr);
@@ -5754,12 +5792,129 @@ body[data-motion="off"] .evolution-arrow {
   flex: 1;
 }
 .repo-git-diff-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 6px 10px;
   font-size: 11px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-surface);
   color: var(--text-muted);
   flex-shrink: 0;
+  min-width: 0;
+}
+.repo-git-diff-head > .font-mono,
+.repo-git-diff-head > .text-text-subtle {
+  flex: 1;
+  min-width: 0;
+}
+.repo-git-diff-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.repo-git-diff-context {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  overflow: hidden;
+  background: var(--bg);
+}
+.repo-git-diff-context-btn {
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-subtle);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition:
+    background var(--dur-quick) var(--ease-swift),
+    color var(--dur-quick) var(--ease-swift);
+}
+.repo-git-diff-context-btn:last-child {
+  border-right: 0;
+}
+.repo-git-diff-context-btn:hover {
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+.repo-git-diff-context-btn[data-active] {
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+}
+.repo-git-diff-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px !important;
+  color: var(--text-subtle);
+  font-size: 10px;
+  font-weight: 600;
+}
+.repo-git-diff-open:hover:not(:disabled) {
+  color: var(--text);
+}
+.repo-git-diff-open-label {
+  letter-spacing: 0.02em;
+}
+.repo-git-header-push-group {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  overflow: hidden;
+  background: var(--bg-elevated);
+}
+.repo-git-header-push-group .repo-git-header-push,
+.repo-git-header-push-group .repo-git-header-unpushed-link {
+  border-radius: 0 !important;
+  margin: 0;
+}
+.repo-git-header-push-group .repo-git-header-push {
+  border-right: 1px solid var(--border);
+}
+.repo-git-header-unpushed-link {
+  padding: 2px 8px !important;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-subtle);
+}
+.repo-git-header-unpushed-link:hover {
+  color: var(--text);
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+}
+.repo-git-diff-maximize {
+  padding: 2px 6px !important;
+  color: var(--text-subtle);
+}
+.repo-git-diff-maximize:hover:not(:disabled) {
+  color: var(--text);
+}
+.repo-git-diff-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: -1rem;
+  min-height: min(70vh, 720px);
+  max-height: min(78vh, 820px);
+  border-top: 0;
+}
+.repo-git-diff-modal .repo-git-diff-head {
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+}
+.repo-git-diff-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg);
 }
 .repo-git-diff-body {
   flex: 1;
@@ -5995,18 +6150,73 @@ body[data-motion="off"] .evolution-arrow {
   overflow-y: auto;
   background: var(--bg-surface);
 }
-.repo-git-history-split {
+.repo-git-split {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.15fr);
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  align-items: stretch;
+}
+.repo-git-split-stacked {
+  grid-template-columns: 1fr !important;
   gap: 10px;
+  overflow: auto;
+}
+.repo-git-split-pane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.repo-git-split-handle {
+  width: 5px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: col-resize;
+  position: relative;
+  flex-shrink: 0;
+  align-self: stretch;
+  /* Claim the gesture so a pointer drag resizes instead of scrolling the pane. */
+  touch-action: none;
+  transition: background var(--dur-quick) var(--ease-swift);
+}
+.repo-git-split-handle::after {
+  content: "";
+  position: absolute;
+  inset: 8px 1px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--border) 80%, transparent);
+  transition:
+    background var(--dur-quick) var(--ease-swift),
+    inset var(--dur-quick) var(--ease-swift);
+}
+.repo-git-split-handle:hover::after,
+.repo-git-split-handle:focus-visible::after,
+body[data-repo-git-split-dragging] .repo-git-split-handle::after {
+  background: var(--accent);
+  inset: 4px 1px;
+}
+.repo-git-split-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+body[data-repo-git-split-dragging] {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+.repo-git-history-split {
+  gap: 0;
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
-@media (max-width: 900px) {
-  .repo-git-history-split {
-    grid-template-columns: 1fr;
-  }
+.repo-git-history-split.repo-git-split-stacked {
+  gap: 10px;
 }
 .repo-git-history-list {
   min-width: 0;
@@ -6093,22 +6303,26 @@ body[data-motion="off"] .evolution-arrow {
   color: var(--text-subtle);
 }
 .repo-git-history-detail-grid {
-  display: grid;
-  grid-template-columns: minmax(140px, 0.75fr) minmax(180px, 1.25fr);
-  gap: 0;
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  border-top: 1px solid var(--border);
 }
-@media (max-width: 720px) {
-  .repo-git-history-detail-grid {
-    grid-template-columns: 1fr;
-  }
+.repo-git-history-detail-grid.repo-git-split-stacked .repo-git-commit-files {
+  border-right: 0;
+  border-bottom: 1px solid var(--border);
+  max-height: 180px;
 }
 .repo-git-commit-files {
   border-right: 1px solid var(--border);
   overflow: auto;
   min-height: 0;
+  height: 100%;
+}
+.repo-git-history-detail-grid .repo-git-split-handle {
+  background: var(--bg-surface);
+  border-left: 1px solid color-mix(in oklab, var(--border) 55%, transparent);
+  border-right: 1px solid color-mix(in oklab, var(--border) 55%, transparent);
 }
 .repo-git-commit-file {
   display: flex;
@@ -6131,13 +6345,23 @@ body[data-motion="off"] .evolution-arrow {
 .repo-git-commit-file[data-active] {
   background: color-mix(in oklab, var(--accent) 11%, transparent);
 }
-/* Beat global `button:active { scale: 0.96 }` — selection rows must not bounce. */
-@media (prefers-reduced-motion: no-preference) {
-  button.repo-git-graph-row:not(:disabled):active,
-  button.repo-git-commit-file:not(:disabled):active,
-  button.repo-unpushed-badge:not(:disabled):active {
-    scale: 1;
-  }
+/* Beat global `button:active { scale: 0.96 }` — full-width selection rows must
+   not bounce sideways (center-origin shrink shifts left-aligned content right).
+   Press like shell chrome (`.hub-icon-btn`): opacity settle. Global
+   `filter: brightness(0.96)` on `:active` still applies. Scale kill is
+   unconditional so `data-motion="off"` (transitions only) still won't bounce. */
+button.repo-git-graph-row:not(:disabled):active,
+button.repo-git-commit-file:not(:disabled):active,
+button.repo-unpushed-badge:not(:disabled):active,
+button.repo-git-file-main:not(:disabled):active,
+button.repo-git-stash-main:not(:disabled):active,
+button.repo-git-branch-main:not(:disabled):active,
+button.repo-git-blame-line:not(:disabled):active,
+button.repo-git-blame-history-row:not(:disabled):active,
+button.repo-git-blame-suggestion:not(:disabled):active,
+button.conflict-path-row:not(:disabled):active {
+  scale: 1;
+  opacity: 0.85;
 }
 .repo-git-ref-chip[data-tone="warning"] {
   background: color-mix(in oklab, var(--warning) 16%, transparent);
@@ -6302,6 +6526,51 @@ body[data-motion="off"] .evolution-arrow {
   padding: 1px 8px;
   border-bottom: 1px solid color-mix(in oklab, var(--border) 40%, transparent);
 }
+
+button.repo-git-blame-line,
+.repo-git-blame-line {
+  cursor: pointer;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}
+button.repo-git-blame-history-row {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}
+.repo-git-blame-line[data-active] {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+}
+.repo-git-blame-line:hover {
+  background: color-mix(in oklab, var(--bg-overlay) 70%, transparent);
+}
+.repo-git-blame-history-row {
+  cursor: pointer;
+}
+.repo-git-blame-history-row:hover,
+.repo-git-blame-history-row[data-active] {
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+}
+.repo-git-blame-crumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 8px;
+  font-size: 11px;
+  color: var(--text-subtle);
+}
+.repo-git-blame-crumb button {
+  font-size: 11px;
+  padding: 2px 6px;
+}
 .repo-git-blame-meta {
   color: var(--accent);
   font-size: 10px;
@@ -6314,6 +6583,45 @@ body[data-motion="off"] .evolution-arrow {
   color: var(--text-subtle);
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+.repo-git-blame-path-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.repo-git-blame-suggestions {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-elevated, var(--bg-surface));
+  box-shadow: var(--shadow-md, 0 8px 24px color-mix(in oklab, #000 18%, transparent));
+}
+.repo-git-blame-suggestion {
+  display: flex;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.repo-git-blame-suggestion[data-active="true"],
+.repo-git-blame-suggestion:hover {
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
 }
 .repo-git-blame-code {
   font-family: var(--font-mono, ui-monospace, monospace);
@@ -7135,19 +7443,61 @@ ul.docs-list ul.docs-list {
     background var(--dur-quick) var(--ease-swift);
 }
 
-.entity-link-chip span {
+.entity-link-chip > span {
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-a.entity-link-chip:hover {
-  color: var(--accent);
-  border-color: color-mix(in oklab, var(--accent) 35%, transparent);
-  background: var(--accent-dim);
+/* Each kind carries its own hue so a row of chips is scannable without
+   reading the labels. --chip-tint drives icon, hover and focus together. */
+.entity-link-chip {
+  --chip-tint: var(--text-muted);
+}
+.entity-link-chip[data-kind="note"] {
+  --chip-tint: var(--accent);
+}
+.entity-link-chip[data-kind="pr"] {
+  --chip-tint: var(--success);
+}
+.entity-link-chip[data-kind="jira"] {
+  --chip-tint: var(--info);
+}
+.entity-link-chip[data-kind="calendar"],
+.entity-link-chip[data-kind="meeting"] {
+  --chip-tint: var(--warning);
+}
+.entity-link-chip[data-kind="repo"],
+.entity-link-chip[data-kind="task"] {
+  --chip-tint: var(--text-muted);
 }
 
-.entity-link-chip[data-kind="note"] {
-  color: var(--accent);
+.entity-link-chip svg {
+  color: var(--chip-tint);
+  flex-shrink: 0;
+}
+
+.entity-link-chip-out {
+  opacity: 0.6;
+}
+
+a.entity-link-chip:hover,
+button.entity-link-chip:hover {
+  color: var(--chip-tint);
+  border-color: color-mix(in oklab, var(--chip-tint) 35%, transparent);
+  background: color-mix(in oklab, var(--chip-tint) 12%, transparent);
+}
+
+a.entity-link-chip:focus-visible,
+button.entity-link-chip:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--chip-tint) 55%, transparent);
+  outline-offset: 1px;
+}
+
+/* "+3" overflow toggle — a chip that reveals the rest. */
+button.entity-link-chip-more {
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
 .entity-rel-kind {
@@ -7197,8 +7547,8 @@ a.entity-link-chip:hover {
   text-align: center;
   white-space: nowrap;
   transition:
-    background 120ms var(--ease-swift),
-    color 120ms var(--ease-swift);
+    background var(--dur-quick) var(--ease-swift),
+    color var(--dur-quick) var(--ease-swift);
 }
 
 .entity-link-kind:hover {
@@ -7223,8 +7573,9 @@ a.entity-link-chip:hover {
   color: var(--text-muted);
 }
 
+/* Trailing helper line under a picker — slightly quieter than the lead hint. */
 .entity-link-hint-or {
-  margin: 0;
+  color: var(--text-subtle);
 }
 
 .entity-link-field {
@@ -7255,8 +7606,7 @@ a.entity-link-chip:hover {
   color: var(--danger);
 }
 
-.entity-link-cal-picker,
-.entity-link-task-picker {
+.entity-link-picker {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -7269,10 +7619,66 @@ a.entity-link-chip:hover {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 180px;
+  max-height: 220px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 4px;
   border: 1px solid var(--border-muted);
   border-radius: var(--radius-sm);
+}
+
+/* Content arriving shimmers; it never spins. */
+.entity-link-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.entity-link-skeleton-field {
+  height: 30px;
+  border-radius: var(--radius-sm);
+}
+
+.entity-link-skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 1px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+}
+
+.entity-link-skeleton-row {
+  height: 30px;
+}
+
+.entity-link-skeleton-field,
+.entity-link-skeleton-row {
+  display: block;
+  background: linear-gradient(
+    90deg,
+    var(--bg-elevated) 0%,
+    var(--bg-overlay) 50%,
+    var(--bg-elevated) 100%
+  );
+  background-size: 200% 100%;
+  animation: entity-link-shimmer 1.1s var(--ease-swift) infinite;
+}
+
+@keyframes entity-link-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entity-link-skeleton-field,
+  .entity-link-skeleton-row {
+    animation: none;
+  }
 }
 
 .entity-link-cal-item {
@@ -7289,6 +7695,9 @@ a.entity-link-chip:hover {
   color: var(--text);
   cursor: pointer;
   font-size: 12px;
+  transition:
+    background var(--dur-quick) var(--ease-swift),
+    color var(--dur-quick) var(--ease-swift);
 }
 
 .entity-link-cal-item:last-child {
@@ -7299,9 +7708,17 @@ a.entity-link-chip:hover {
   background: var(--bg-overlay);
 }
 
+/* Keyboard selection is driven from the search field, so the row itself must
+   carry a visible marker rather than relying on DOM focus. */
 .entity-link-cal-item[data-selected="true"] {
   background: var(--accent-dim);
   color: var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.entity-link-cal-item:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 55%, transparent);
+  outline-offset: -2px;
 }
 
 .entity-link-cal-item[data-selected="true"] .entity-link-cal-time {
@@ -8141,4 +8558,92 @@ body[data-motion="off"] .lib-card-icon {
 .lib-nav-delete:disabled {
   pointer-events: none;
   opacity: 0.3;
+}
+
+
+/* Open PR affordance on local repo cards */
+.repo-open-pr-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--border));
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background 150ms var(--ease-swift),
+    border-color 150ms var(--ease-swift);
+}
+.repo-open-pr-link:hover {
+  background: color-mix(in oklab, var(--accent) 18%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 55%, var(--border));
+}
+
+/* History tab — branch vs main relationship */
+.repo-git-branch-relation {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-surface);
+}
+.repo-git-branch-relation-viz {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.repo-git-branch-relation-copy {
+  min-width: 0;
+  flex: 1;
+}
+.repo-git-branch-relation-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+.repo-git-branch-relation-status {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-subtle);
+}
+.repo-git-branch-relation-counts {
+  display: inline-flex;
+  gap: 6px;
+  flex-shrink: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+.repo-git-branch-relation-counts [data-dir="ahead"] {
+  color: var(--accent);
+}
+.repo-git-branch-relation-counts [data-dir="behind"] {
+  color: var(--warning);
+}
+.repo-git-branch-relation[data-tone="merged"] {
+  border-color: color-mix(in oklab, var(--success) 35%, var(--border));
+}
+.repo-git-branch-relation[data-tone="diverged"] {
+  border-color: color-mix(in oklab, var(--warning) 40%, var(--border));
+}
+.repo-git-branch-relation[data-tone="ahead"] {
+  border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
+}
+.repo-git-ref-chip[data-tone="main"] {
+  background: color-mix(in oklab, var(--success) 16%, transparent);
+  color: var(--success);
+}
+.repo-git-graph-row[data-on-main]:not([data-selected]) {
+  box-shadow: inset 2px 0 0 color-mix(in oklab, var(--success) 65%, transparent);
 }

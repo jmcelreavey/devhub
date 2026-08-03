@@ -1,8 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { runGitRepoAsync } from "@/lib/git/repo-local";
+import { isSafeCommitRef, isSafeRepoRelPath } from "@/lib/git/ref-safety";
 import { parseBlamePorcelain, parseFileHistory } from "@/lib/repos/git-parsers";
 import { gitFail, withScannedRepo, type RepoParams } from "../_shared";
 
+/**
+ * Blame a file (optionally at a revision). Pass `line` to also return
+ * line-scoped history via `git log -L` for drill-down.
+ */
 export async function GET(req: NextRequest, { params }: RepoParams) {
   const { name } = await params;
   const resolved = withScannedRepo(name);
@@ -10,27 +15,60 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
   const { repoRoot } = resolved;
 
   const filePath = req.nextUrl.searchParams.get("path");
-  if (!filePath || filePath.includes("..") || filePath.startsWith("/")) {
+  if (!filePath || !isSafeRepoRelPath(filePath)) {
     return NextResponse.json({ error: "Valid path required" }, { status: 400 });
   }
 
+  const commitRaw = req.nextUrl.searchParams.get("commit")?.trim() || "";
+  const commit = commitRaw && isSafeCommitRef(commitRaw) ? commitRaw : null;
+  if (commitRaw && !commit) {
+    return NextResponse.json({ error: "Invalid commit" }, { status: 400 });
+  }
+
+  const lineRaw = req.nextUrl.searchParams.get("line");
+  const line = lineRaw ? Number(lineRaw) : null;
+  if (lineRaw && (!Number.isInteger(line) || (line ?? 0) < 1)) {
+    return NextResponse.json({ error: "Invalid line" }, { status: 400 });
+  }
+
+  const blameArgs = ["blame", "--line-porcelain"];
+  if (commit) blameArgs.push(commit);
+  blameArgs.push("--", filePath);
+
+  const historyArgs = line
+    ? [
+        "log",
+        ...(commit ? [commit] : []),
+        "-L",
+        `${line},${line}:${filePath}`,
+        "-s",
+        "--max-count=30",
+        "--pretty=format:%x1e%H%x00%h%x00%s%x00%an%x00%ar",
+      ]
+    : [
+        "log",
+        "--max-count=30",
+        "--format=%x1e%H%x00%h%x00%s%x00%an%x00%ar",
+        ...(commit ? [commit] : []),
+        "--",
+        filePath,
+      ];
+
   const [blame, history] = await Promise.all([
-    runGitRepoAsync(repoRoot, ["blame", "--line-porcelain", "--", filePath], { timeout: 30_000 }),
-    runGitRepoAsync(repoRoot, [
-      "log",
-      "--max-count=30",
-      "--format=%x1e%H%x00%h%x00%s%x00%an%x00%ar",
-      "--",
-      filePath,
-    ]),
+    runGitRepoAsync(repoRoot, blameArgs, { timeout: 30_000 }),
+    runGitRepoAsync(repoRoot, historyArgs, { timeout: 30_000 }),
   ]);
 
   if (blame.status !== 0) return gitFail(blame, "Blame failed");
-  if (history.status !== 0) return gitFail(history, "File history failed");
+  // Line history can fail on renames / binary; still return blame lines.
+  const historyOk = history.status === 0;
 
   return NextResponse.json({
     path: filePath,
+    commit: commit ?? null,
+    line: line ?? null,
     lines: parseBlamePorcelain(blame.stdout || ""),
-    history: parseFileHistory(history.stdout || ""),
+    history: historyOk ? parseFileHistory(history.stdout || "") : [],
+    historyScope: line ? "line" : "file",
   });
 }

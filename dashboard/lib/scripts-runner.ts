@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { getRepoRoot, getHome } from "@/lib/notes/dir";
+import { getRepoRoot, getHome, getCheckoutRoot } from "@/lib/content/dirs";
 import { syncSkills, verifySync } from "@/lib/sync/skills";
 import { syncAgents } from "@/lib/sync/agents";
 import { syncPersona } from "@/lib/sync/persona";
@@ -182,7 +182,8 @@ const ACTIONS: Record<string, ActionDef> = {
   push_unpushed_commits: {
     label: "Push Unpushed Commits",
     description: "Push ahead commits on main/master without staging or committing files.",
-    timeoutMs: 60_000,
+    // Pre-push runs full verify (~2 min); keep headroom past GIT_NETWORK_TIMEOUT.
+    timeoutMs: 300_000,
     mutates: true,
     effects: [
       "Fetches origin/<branch> and checks ahead count",
@@ -547,6 +548,18 @@ export function getRunLogPayload(runId: string): RunLogPayload | null {
   }
 }
 
+/** Actions that run git against the linked checkout (not app-data content root). */
+const REQUIRES_CHECKOUT = new Set<AllowedScript>([
+  "update_and_sync",
+  "commit_dirty_push",
+  "sync_notes_push",
+  "sync_notes_tasks_push",
+  "dry_run_scoped_sync",
+  "push_unpushed_commits",
+  "pull_core_preview",
+  "pull_core",
+]);
+
 export function startRun(
   script: AllowedScript,
   runOpts?: RunScriptOptions,
@@ -560,7 +573,11 @@ export function startRun(
 
   const runId = randomUUID();
   const def = ACTIONS[script];
-  const repoRoot = getRepoRoot();
+  // Git actions need the linked checkout. getRepoRoot() is the *content* base
+  // (app-data in desktop) — using it for push/commit makes `git branch` return ""
+  // and the top-bar toast "Push failed (exit 1). N unpushed commit(s) remain."
+  const checkoutRoot = getCheckoutRoot();
+  const repoRoot = checkoutRoot ?? getRepoRoot();
 
   const run: RunState = {
     runId,
@@ -585,8 +602,22 @@ export function startRun(
     emit("[TIMEOUT] Action exceeded time limit");
   }, def.timeoutMs);
 
+  if (REQUIRES_CHECKOUT.has(script) && !checkoutRoot) {
+    clearTimeout(timer);
+    running.delete(script);
+    run.finishedAt = Date.now();
+    run.exitCode = 1;
+    emit("ERROR: No linked git checkout — attach a DevHub checkout before running this action.");
+    emit("[EXIT] 1");
+    for (const sub of run.subscribers) sub("[DONE]");
+    writeAuditLog(run);
+    persistRunLogToDisk(run);
+    setTimeout(() => runs.delete(runId), 3_600_000);
+    return { runId };
+  }
+
   void def
-    .run(emit, repoRoot, runOpts)
+    .run(emit, repoRoot!, runOpts)
     .then((code) => (timedOut ? 124 : code))
     .catch((err) => {
       emit(`ERROR: ${err instanceof Error ? err.message : String(err)}`);

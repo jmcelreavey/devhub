@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { runGitRepo, runGitRepoAsync } from "@/lib/git/repo-local";
+import { resolveDefaultRemoteBranch, runGitRepo, runGitRepoAsync } from "@/lib/git/repo-local";
 import { detectUnmergedFiles } from "@/lib/git/conflicts";
 import {
   formatIndexLockError,
@@ -57,15 +57,6 @@ async function resolveUpstream(repoRoot: string): Promise<string | null> {
   return upstream.status === 0 && ref ? ref : null;
 }
 
-async function resolveDefaultRemoteBranch(repoRoot: string): Promise<string | null> {
-  const symbolic = await runGitRepoAsync(repoRoot, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]);
-  const ref = symbolic.stdout.trim();
-  if (symbolic.status === 0 && ref.startsWith("origin/")) return ref;
-  for (const candidate of ["origin/main", "origin/master"]) {
-    if ((await runGitRepoAsync(repoRoot, ["rev-parse", "--verify", "--quiet", candidate])).status === 0) return candidate;
-  }
-  return null;
-}
 
 function unpushedLogArgs(upstream: string | null): string[] {
   return upstream ? [`${upstream}..HEAD`] : ["HEAD", "--not", "--remotes"];
@@ -200,6 +191,18 @@ export async function POST(req: NextRequest, { params }: Params) {
     case "checkout": {
       if (!body.branch || typeof body.branch !== "string") {
         return NextResponse.json({ error: "Missing branch name" }, { status: 400 });
+      }
+      const unmerged = detectUnmergedFiles(rp);
+      if (unmerged.length > 0) {
+        return NextResponse.json(
+          {
+            error:
+              `Cannot switch branches: ${unmerged.length} unmerged path${unmerged.length === 1 ? "" : "s"}. ` +
+              "Resolve conflicts in the Conflicts tab (or abort the conflicted merge/stash) first.",
+            conflictFiles: unmerged.map((f) => f.path),
+          },
+          { status: 409 },
+        );
       }
       const status = await runGitRepoAsync(rp, ["status", "--porcelain"]);
       const hasChanges = (status.stdout || "").trim().length > 0;

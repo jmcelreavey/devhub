@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,6 +9,7 @@ import {
   createCursorDraft,
   CursorDraftError,
   deleteCursorDraft,
+  getCursorDraft,
   markCursorDraftApplied,
 } from "./cursor-draft";
 
@@ -82,6 +84,52 @@ describe("Cursor note working copies", () => {
     expect(deleteCursorDraft("devhub", "daily/review", "/vault/notes", root)).toBe(true);
     expect(fs.existsSync(draft.markdownPath)).toBe(false);
     expect(deleteCursorDraft("devhub", "daily/review", "/vault/notes", root)).toBe(false);
+  });
+
+  it("uses a predictable path and finds a persisted working copy", () => {
+    const draft = createCursorDraft(
+      "insider-app",
+      "discovery/PTF-4485",
+      textToBlocks("Original"),
+      "/vault/notes",
+      root,
+    );
+
+    expect(draft.markdownPath).toBe(path.join(root, "insider-app", "discovery", "PTF-4485.md"));
+    expect(getCursorDraft("insider-app", "discovery/PTF-4485", "/vault/notes", root)).toEqual({ writable: true });
+  });
+
+  it("finds working copies created before predictable paths", () => {
+    const notePath = "discovery/PTF-4485";
+    const vaultRoot = "/vault/notes";
+    const draft = createCursorDraft("insider-app", notePath, textToBlocks("Original"), vaultRoot, root);
+    const vaultKey = crypto.createHash("sha256").update(path.resolve(vaultRoot)).digest("hex").slice(0, 12);
+    const key = crypto
+      .createHash("sha256")
+      .update(`${vaultKey}\0insider-app\0${notePath}`)
+      .digest("hex")
+      .slice(0, 16);
+
+    fs.renameSync(draft.markdownPath, path.join(root, `PTF-4485-${key}.md`));
+    fs.renameSync(draft.markdownPath.replace(/\.md$/, ".json"), path.join(root, `${key}.json`));
+
+    expect(getCursorDraft("insider-app", notePath, vaultRoot, root)).toEqual({ writable: true });
+  });
+
+  it("keeps headerless Cursor edits available and restores their header on reopen", () => {
+    const source = textToBlocks("Original");
+    const draft = createCursorDraft("insider-app", "discovery/PTF-4485", source, "/vault/notes", root);
+    const editedMarkdown = fs.readFileSync(draft.markdownPath, "utf8")
+      .replace(/<!--[\s\S]*?-->\n+/, "")
+      .replace("Original", "Updated from Cursor");
+    fs.writeFileSync(draft.markdownPath, editedMarkdown);
+
+    expect(getCursorDraft("insider-app", "discovery/PTF-4485", "/vault/notes", root)).toEqual({ writable: true });
+    expect(blocksToText(applyCursorDraft("insider-app", "discovery/PTF-4485", source, "/vault/notes", root)))
+      .toContain("Updated from Cursor");
+
+    createCursorDraft("insider-app", "discovery/PTF-4485", source, "/vault/notes", root);
+    expect(fs.readFileSync(draft.markdownPath, "utf8")).toMatch(/^<!-- DEVHUB NOTE WORKING COPY/);
   });
 
   it("marks rich BlockNote content as read-only", () => {

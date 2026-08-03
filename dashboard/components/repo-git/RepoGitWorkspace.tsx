@@ -289,34 +289,40 @@ export function RepoGitWorkspace({
                   <span className={hasDirty ? "badge badge-warning" : "badge badge-success"}>
                     {hasDirty ? `${displayDirty} changed` : "clean"}
                   </span>
-                  {hasUnpushed ? (
-                    <button
-                      type="button"
-                      className="repo-unpushed-badge"
-                      onClick={() => {
-                        setHistoryFocusUnpushed(true);
-                        setTab("history");
-                      }}
-                      title="View unpushed commits in History"
-                    >
-                      <Upload size={10} aria-hidden /> {unpushedCount} unpushed
-                    </button>
-                  ) : null}
                   {(hasUnpushed || pushing) && (
-                    <button
-                      type="button"
-                      className="btn btn-ghost repo-git-header-push"
-                      disabled={pushing}
-                      onClick={() => void pushRepo()}
-                      title={pushing ? "Push in progress…" : `Push ${unpushedCount} commit${unpushedCount === 1 ? "" : "s"}`}
-                    >
-                      {pushing ? (
-                        <RefreshCw size={11} className="animate-spin" aria-hidden />
-                      ) : (
-                        <Upload size={11} aria-hidden />
-                      )}
-                      {pushing ? "Pushing…" : `Push ${unpushedCount || ""}`.trim()}
-                    </button>
+                    <div className="repo-git-header-push-group">
+                      <button
+                        type="button"
+                        className="btn btn-ghost repo-git-header-push"
+                        disabled={pushing}
+                        onClick={() => void pushRepo()}
+                        title={
+                          pushing
+                            ? "Push in progress…"
+                            : `Push ${unpushedCount} commit${unpushedCount === 1 ? "" : "s"} not on upstream (distinct from ahead-of-main)`
+                        }
+                      >
+                        {pushing ? (
+                          <RefreshCw size={11} className="animate-spin" aria-hidden />
+                        ) : (
+                          <Upload size={11} aria-hidden />
+                        )}
+                        {pushing ? "Pushing…" : `Push ${unpushedCount}`}
+                      </button>
+                      {!pushing ? (
+                        <button
+                          type="button"
+                          className="btn btn-ghost repo-git-header-unpushed-link"
+                          onClick={() => {
+                            setHistoryFocusUnpushed(true);
+                            setTab("history");
+                          }}
+                          title="Show unpushed commits in History"
+                        >
+                          History
+                        </button>
+                      ) : null}
+                    </div>
                   )}
                   <div className="repo-git-header-actions">
                     <button

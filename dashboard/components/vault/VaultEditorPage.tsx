@@ -39,6 +39,11 @@ import type { VaultId } from "@/lib/vault/vault-client";
 import { blocksToText, textToBlocks } from "@/lib/markdown-convert";
 import { splitFrontmatterBlock } from "@/lib/docs/frontmatter";
 import {
+  firstHeadingFromBlocks,
+  titleFromDocMarkdown,
+  vaultDisplayTitle,
+} from "@/lib/vault/display-title";
+import {
   isCurrentNoteSaveGeneration,
   nextNoteSaveGeneration,
 } from "@/lib/notes/save-generation";
@@ -52,6 +57,7 @@ import { LaunchMenu } from "@/components/shell/LaunchMenu";
 import {
   applyCursorNoteDraft,
   deleteCursorNoteDraft,
+  getCursorNoteDraft,
   openRepoInCursor,
 } from "@/lib/open-in-cursor-client";
 import {
@@ -90,9 +96,10 @@ export function VaultEditorPage({
   /** Bumped when ## Links are written outside the editor so BlockNote remounts. */
   const [editorEpoch, setEditorEpoch] = useState(0);
   const [linkOpen, setLinkOpen] = useState(false);
-  const [cursorDraftRepo, setCursorDraftRepo] = useState<string | null>(null);
+  const [cursorDraft, setCursorDraft] = useState<{ notePath: string; repoName: string } | null>(null);
   const [applyingCursorDraft, setApplyingCursorDraft] = useState(false);
   const isNotes = vaultId === "notes";
+  const cursorDraftRepo = cursorDraft?.notePath === filePath ? cursorDraft.repoName : null;
   const { data: allMasters } = useLive<MasterList[]>(
     isNotes && !isNew ? "/api/collections" : null,
   );
@@ -107,6 +114,7 @@ export function VaultEditorPage({
   const pendingLegacyMigrationRef = useRef(false);
   /** Raw frontmatter block for the doc being edited; re-prepended on save. */
   const docFrontmatterRef = useRef("");
+  const [docFrontmatter, setDocFrontmatter] = useState("");
 
   const cancelPendingSave = useCallback(() => {
     if (saveTimer.current) {
@@ -146,10 +154,10 @@ export function VaultEditorPage({
     docFrontmatterRef.current = "";
     let cancelled = false;
     setLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
+    setDocFrontmatter("");
     setError(null);
     setIsNew(false);
     setEditorEpoch(0);
-    setCursorDraftRepo(null);
     fetch(`${apiPrefix}/${paths.apiPathFromSlug(filePath)}`)
       .then((r) => {
         if (!r.ok) {
@@ -174,6 +182,7 @@ export function VaultEditorPage({
             // editor never shows it and a save cannot mangle it.
             const { block, body } = splitFrontmatterBlock(md);
             docFrontmatterRef.current = block;
+            setDocFrontmatter(block);
             setDocBody(body);
             setBlocks([]);
             return;
@@ -214,7 +223,7 @@ export function VaultEditorPage({
 
   const handleChange = useCallback(
     (newBlocks: DevHubPartialBlock[]) => {
-      setCursorDraftRepo(null);
+      setCursorDraft(null);
       cancelPendingSave();
       const generation = nextNoteSaveGeneration(saveGenerationRef.current);
       saveGenerationRef.current = generation;
@@ -347,7 +356,7 @@ export function VaultEditorPage({
 
   const persistBlocksImmediate = useCallback(
     async (newBlocks: DevHubPartialBlock[]) => {
-      setCursorDraftRepo(null);
+      setCursorDraft(null);
       cancelPendingSave();
       await saveQueueRef.current;
       const generation = saveGenerationRef.current;
@@ -383,7 +392,18 @@ export function VaultEditorPage({
     [paths, router, toast],
   );
 
-  const title = pathParts[pathParts.length - 1] ?? filePath;
+  const fileName = pathParts[pathParts.length - 1] ?? filePath;
+  const contentTitle = useMemo(() => {
+    if (vaultId === "docs") {
+      return titleFromDocMarkdown(`${docFrontmatter}${docBody ?? ""}`) ?? undefined;
+    }
+    if (blocks?.length) return firstHeadingFromBlocks(blocks) ?? undefined;
+    return undefined;
+  }, [blocks, docBody, docFrontmatter, vaultId]);
+  const { displayTitle, fromContent } = vaultDisplayTitle(fileName, contentTitle);
+  // Only pass content-derived titles; truncation of machine filenames is NotePageTitle's job.
+  const headerDisplayTitle = fromContent ? displayTitle : undefined;
+  const headerLabel = displayTitle;
 
   const handleRenamed = useCallback(
     (newSlug: string) => {
@@ -416,6 +436,7 @@ export function VaultEditorPage({
       setStatus("saved");
       setError(null);
       setLastSaved(new Date());
+      setCursorDraft(null);
       void mutate("/api/share");
       toast.success("Applied Cursor changes");
     } finally {
@@ -433,7 +454,7 @@ export function VaultEditorPage({
     });
     if (!ok) return;
     if (await deleteCursorNoteDraft(cursorDraftRepo, filePath, toast)) {
-      setCursorDraftRepo(null);
+      setCursorDraft(null);
       toast.success("Deleted Cursor working copy");
     }
   }, [applyingCursorDraft, confirm, cursorDraftRepo, filePath, toast]);
@@ -448,6 +469,19 @@ export function VaultEditorPage({
       .filter((ref) => ref.kind === "repo")
       .map((ref) => ref.id);
   }, [blocks]);
+
+  useEffect(() => {
+    if (!isNotes || isNew || linkedRepos.length === 0) return;
+    let cancelled = false;
+    void Promise.all(linkedRepos.map(async (repo) => ({ repo, draft: await getCursorNoteDraft(repo, filePath) })))
+      .then((drafts) => {
+        const match = drafts.find(({ draft }) => draft?.writable);
+        if (!cancelled) setCursorDraft(match ? { notePath: filePath, repoName: match.repo } : null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [filePath, isNew, isNotes, linkedRepos]);
 
   if (loading) {
     return (
@@ -501,15 +535,16 @@ export function VaultEditorPage({
               {isNotes ? (
                 <NotePageTitle
                   noteSlug={filePath}
-                  title={title}
+                  title={fileName}
+                  displayTitle={headerDisplayTitle}
                   nested
                   isNew={isNew}
                   onRenamed={handleRenamed}
                   renameFile={isNotes ? guardedRenameFile : undefined}
                 />
               ) : (
-                <span className="text-lg font-semibold text-text">
-                  {title}
+                <span className="text-lg font-semibold text-text break-words">
+                  {headerLabel}
                 </span>
               )}
             </nav>
@@ -528,15 +563,16 @@ export function VaultEditorPage({
               {isNotes ? (
                 <NotePageTitle
                   noteSlug={filePath}
-                  title={title}
+                  title={fileName}
+                  displayTitle={headerDisplayTitle}
                   nested
                   isNew={isNew}
                   onRenamed={handleRenamed}
                   renameFile={isNotes ? guardedRenameFile : undefined}
                 />
               ) : (
-                <span className="text-lg font-semibold text-text">
-                  {title}
+                <span className="text-lg font-semibold text-text break-words">
+                  {headerLabel}
                 </span>
               )}
             </nav>
@@ -607,9 +643,9 @@ export function VaultEditorPage({
                     icon: <Code2 size={14} aria-hidden />,
                     onSelect: async () => {
                       const result = await openRepoInCursor(repo, toast, filePath);
-                      if (result?.writable) setCursorDraftRepo(repo);
+                      if (result?.writable) setCursorDraft({ notePath: filePath, repoName: repo });
                       else if (result) {
-                        setCursorDraftRepo(null);
+                        setCursorDraft(null);
                         toast.info("Opened a read-only Markdown copy; rich blocks prevent safe write-back.");
                       }
                     },
@@ -655,14 +691,14 @@ export function VaultEditorPage({
               ) : null}
               <button
                 type="button"
-                title={`Move ${title}`}
+                title={`Move ${headerLabel}`}
                 onClick={() => setMoveModalOpen(true)}
                 className="btn btn-ghost text-xs flex items-center gap-1 shrink-0"
               >
                 <FolderInput size={14} aria-hidden />
                 Move
               </button>
-              <HoverTip label={deleting ? "Deleting…" : `Delete ${title}`}>
+              <HoverTip label={deleting ? "Deleting…" : `Delete ${headerLabel}`}>
                 <button
                   type="button"
                   disabled={deleting}

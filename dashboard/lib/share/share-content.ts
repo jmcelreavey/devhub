@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
-import { blocksToText } from "@/lib/markdown-convert";
+import { blocksToPortableMarkdown, blocksToText } from "@/lib/markdown-convert";
+import {
+  firstHeadingFromMarkdown,
+  titleFromDocMarkdown,
+  vaultDisplayTitle,
+} from "@/lib/vault/display-title";
 import { getVaultStorage } from "@/lib/vault/vault-registry";
 import { listShares } from "@/lib/share/share-store";
 import type { ShareStatus, VaultId } from "@/lib/share/share-public";
@@ -13,12 +18,20 @@ export interface ShareSource {
 export function readShareSource(vault: VaultId, sharePath: string): ShareSource | null {
   const file = getVaultStorage(vault).read(sharePath);
   if (!file) return null;
-  const title = sharePath.split("/").pop() ?? sharePath;
+  const fileName = sharePath.split("/").pop() ?? sharePath;
+
   if (vault === "docs") {
-    return { title, markdown: typeof file.content === "string" ? file.content : "" };
+    const markdown = typeof file.content === "string" ? file.content : "";
+    const { displayTitle } = vaultDisplayTitle(fileName, titleFromDocMarkdown(markdown));
+    return { title: displayTitle, markdown };
   }
+
   const blocks = Array.isArray(file.content) ? file.content : [];
-  return { title, markdown: blocksToText(blocks) };
+  // Round-trip markdown is for DevHub; gists need portable GitHub markdown.
+  const markdown = blocksToPortableMarkdown(blocks);
+  const contentTitle = firstHeadingFromMarkdown(blocksToText(blocks));
+  const { displayTitle } = vaultDisplayTitle(fileName, contentTitle);
+  return { title: displayTitle, markdown };
 }
 
 /** Stable fingerprint of published markdown, used to detect drift. */

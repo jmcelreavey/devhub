@@ -51,13 +51,24 @@ const SECRET_KEYS = ["JIRA_API_TOKEN", "GOOGLE_CLIENT_SECRET"];
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "op-test-"));
-  vi.clearAllMocks();
+  // resetAllMocks clears leftover mockImplementationOnce queues — clearAllMocks
+  // alone leaves them, so a short-circuited earlier test can poison later ones.
+  vi.resetAllMocks();
   vi.spyOn(process.stdout, "write").mockImplementation(() => true);
   // patchDashboardEnvLocalFile must call the mutator so process.env side-effects happen.
   mockPatch.mockImplementation((mutator: (overrides: Map<string, string>) => void) => {
     mutator(new Map());
   });
-  for (const k of [...SECRET_KEYS, "NOTES_DIR", "DEVHUB_OP_ITEM", "DEVHUB_OP_VAULT", "DEVHUB_OP_REFRESH", "DEVHUB_OP_CACHE", "DEVHUB_OP_SYNC_LOCAL"]) {
+  for (const k of [
+    ...SECRET_KEYS,
+    "NOTES_DIR",
+    "DEVHUB_OP_ITEM",
+    "DEVHUB_OP_VAULT",
+    "DEVHUB_OP_REFRESH",
+    "DEVHUB_OP_CACHE",
+    "DEVHUB_OP_CACHE_DIR",
+    "DEVHUB_OP_SYNC_LOCAL",
+  ]) {
     delete process.env[k];
   }
 });

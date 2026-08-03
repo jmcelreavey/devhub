@@ -23,7 +23,11 @@ import {
   openTerminal,
 } from "@/lib/terminal-launch";
 import { isGitNoisePath, looksLikeDirectoryPath, type DiffLine } from "@/lib/repos/git-parsers";
+import { DiffMaximizeModal } from "./DiffMaximizeModal";
+import { DiffToolbar, DIFF_CONTEXT_LINES, type DiffContextMode } from "./DiffToolbar";
 import { GitDiffView } from "./GitDiffView";
+import { RepoFileOpenMenu } from "./RepoFileOpenMenu";
+import { RepoSplit } from "./SplitResize";
 import {
   fetchGitJson,
   IconBtn,
@@ -79,6 +83,10 @@ export function ChangesPanel({
   const [rawDiff, setRawDiff] = useState("");
   const [dirPreview, setDirPreview] = useState<{ entries: DiffDirEntry[]; message?: string } | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
+  const [contextMode, setContextMode] = useState<DiffContextMode>("default");
+  const [listFr, setListFr] = useState(0.4);
+  const [diffMaximized, setDiffMaximized] = useState(false);
+  const closeMaximized = useCallback(() => setDiffMaximized(false), []);
   const [message, setMessage] = useState("");
   const [acting, setActing] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
@@ -157,6 +165,8 @@ export function ChangesPanel({
           path: selected.path,
           staged: selected.staged ? "1" : "0",
         });
+        if (contextMode === "full") qs.set("full", "1");
+        else qs.set("context", String(DIFF_CONTEXT_LINES[contextMode]));
         const json = await fetchGitJson<{
           kind?: "file" | "directory";
           lines?: DiffLine[];
@@ -191,7 +201,7 @@ export function ChangesPanel({
     return () => {
       cancelled = true;
     };
-  }, [selected, repoName, toast]);
+  }, [selected, repoName, toast, contextMode]);
 
   async function stageAction(
     action: "stage" | "unstage" | "discard",
@@ -493,7 +503,14 @@ export function ChangesPanel({
           )}
         </div>
       ) : (
-      <div className="repo-git-changes-grid">
+      <RepoSplit
+        className="repo-git-changes-split"
+        primaryFr={listFr}
+        onPrimaryFrChange={setListFr}
+        minPrimaryFr={0.22}
+        maxPrimaryFr={0.62}
+        handleLabel="Resize file list and diff"
+        primary={
         <div className="repo-git-file-cols">
           <FileSection
             title="Staged"
@@ -615,7 +632,8 @@ export function ChangesPanel({
           )}
           {contentSyncHint}
         </div>
-
+        }
+        secondary={
         <div className="repo-git-diff-pane">
           <div className="repo-git-diff-head">
             {selected ? (
@@ -626,6 +644,17 @@ export function ChangesPanel({
             ) : (
               <span className="text-text-subtle">Select a file to inspect the diff</span>
             )}
+            <DiffToolbar
+              mode={contextMode}
+              onModeChange={setContextMode}
+              onMaximize={() => setDiffMaximized(true)}
+              maximizeDisabled={!selected || Boolean(dirPreview)}
+              openSlot={
+                selected && !dirPreview ? (
+                  <RepoFileOpenMenu repoName={repoName} filePath={selected.path} disabled={diffLoading} />
+                ) : null
+              }
+            />
           </div>
           <div
             key={selected ? `${selected.staged ? "s" : "u"}:${selected.path}` : "none"}
@@ -650,8 +679,36 @@ export function ChangesPanel({
             )}
           </div>
         </div>
-      </div>
+        }
+      />
       )}
+
+      <DiffMaximizeModal
+        maximized={diffMaximized}
+        canOpen={Boolean(selected) && !dirPreview}
+        onClose={closeMaximized}
+        title={selected?.path ?? "Diff"}
+        description={selected ? (selected.staged ? "Staged changes" : "Unstaged changes") : undefined}
+        mode={contextMode}
+        onModeChange={setContextMode}
+        openSlot={
+          selected ? (
+            <RepoFileOpenMenu repoName={repoName} filePath={selected.path} disabled={diffLoading} />
+          ) : null
+        }
+      >
+        {diffLoading ? (
+          <SkeletonRows count={12} height={14} />
+        ) : (
+          <GitDiffView
+            lines={diffLines}
+            hunkMode={selected ? (selected.staged ? "unstage" : "stage") : undefined}
+            hunkBusy={acting !== null}
+            onHunkAction={selected && rawDiff ? (a) => void hunkAction(a) : undefined}
+            onSendSelectionToAi={selected ? (snippet, hint) => void sendSelectionToAi(snippet, hint) : undefined}
+          />
+        )}
+      </DiffMaximizeModal>
 
       {/* Commit bar stays mounted after a successful commit so the modal never
           feels "done"/closed — user can Push from the header next. */}

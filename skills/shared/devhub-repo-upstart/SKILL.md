@@ -65,6 +65,21 @@ store path instead.
 - For Node projects, run the install step every time (`npm install`, or the
   repo's documented package manager equivalent) so dependencies do not silently
   go stale.
+- DevHub desktop (and some parent shells) inject env into the child process —
+  notably `NODE_ENV=production` and `PORT=1337` (DevHub's own listen port). Bare
+  `npm install` under `NODE_ENV=production` **omits/removes devDependencies**, so
+  local CLIs like `nest` / `jest` vanish and start scripts fail with
+  `command not found`. Inherited `PORT` makes anything that does
+  `process.env.PORT || <default>` bind to 1337 and collide with DevHub. Before
+  install/start: `unset NODE_ENV` and `unset PORT` (or set the project's real
+  port; install with `--include=dev` if needed).
+- After `npm install`, verify CLIs used by start scripts exist under
+  `node_modules/.bin` (nest, next, vite, etc.). Fail fast with a clear message
+  if missing — do not assume `npm run` will magically find them.
+- Prefer `npm run <script>` / `npx` (local bins). If a script calls a bare
+  binary and install is flaky, use `npx <cli>` or ensure the package is a real
+  dependency. Watch `allow-scripts` / safe-chain warnings; they can leave
+  packages present but tools half-broken.
 - Start the dev environment from the script. Do not end with instructions like
   `Run: npm run dev`; run it.
 - Keep machine-specific paths and secrets out of the script.
@@ -73,6 +88,11 @@ store path instead.
 - If the app needs environment variables, point to the repo's example or docs
   instead of guessing values.
 - Keep the script readable; future agents and humans will edit it under pressure.
+
+- **Smoke-test before handoff:** after install (+ bin checks), run the start
+  command far enough to catch `command not found` / immediate crashes, then
+  kill the process — do not leave servers hanging in the agent session. A bin
+  check alone is not enough if the start script shells out to another tool.
 
 ## Debugging
 
@@ -84,7 +104,13 @@ store path instead.
 
 ## Verification
 
-- Run or dry-check `bash <devhub-upstart-path>` from the **target repo root**
-  when it will not trap the agent in a long-running foreground server.
-- If you cannot fully start the project, leave the script printing clear next
-  steps and explain the blocker.
+- From the **target repo root**, run install (with `NODE_ENV` unset / `--include=dev`
+  as above), confirm start-script CLIs exist under `node_modules/.bin`, then
+  briefly start the app (or the same `npm run …` the upstart uses) until it is
+  past binary resolution — then kill it. Do not hand off an upstart that only
+  “looks right” on paper.
+- If a full start will trap the agent, smoke-test the start command in the
+  background and kill after the first healthy log line or a short timeout; still
+  treat immediate `command not found` as a failed verification.
+- If you cannot start the project, leave the script printing clear next steps
+  and explain the blocker.

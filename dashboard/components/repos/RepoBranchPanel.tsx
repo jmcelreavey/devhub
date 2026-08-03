@@ -133,6 +133,19 @@ export function RepoBranchPanel({ repoName, repoPath, onMutate }: RepoBranchPane
     toast.info("Resolving conflicts in the terminal — watch the agent session.");
   }
 
+  async function checkoutBranch(branch: string) {
+    const dirty = Boolean(data?.hasChanges);
+    const ok = await confirm({
+      title: `Switch to ${branch}?`,
+      message: dirty
+        ? `Working tree has uncommitted changes. DevHub will auto-stash them, check out ${branch}, then re-apply the stash.`
+        : `Check out branch “${branch}”.`,
+      confirmLabel: "Switch branch",
+    });
+    if (!ok) return;
+    await act("checkout", branch);
+  }
+
   async function act(action: string, branch?: string) {
     setActing(action);
     try {
@@ -240,7 +253,7 @@ export function RepoBranchPanel({ repoName, repoPath, onMutate }: RepoBranchPane
                     opacity: acting === `checkout-${b.name}` ? 0.5 : 1,
                   }}
                   disabled={b.current || acting !== null}
-                  onClick={() => act("checkout", b.name)}
+                  onClick={() => void checkoutBranch(b.name)}
                 >
                   {b.current ? (
                     <Check size={12} className="text-accent" />

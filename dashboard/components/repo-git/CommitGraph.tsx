@@ -8,6 +8,8 @@ interface CommitGraphProps {
   onSelect?: (hash: string) => void;
   /** Full or short hashes of commits ahead of upstream — lightly marked in the list. */
   unpushedHashes?: Set<string>;
+  /** Refs treated as the default branch (e.g. main, origin/main) for chip tone. */
+  mainRefNames?: string[];
 }
 
 const ROW_H = 32;
@@ -15,7 +17,18 @@ const LANE_W = 14;
 const PAD_X = 10;
 const NODE_R = 4;
 
-export function CommitGraph({ commits, selectedHash, onSelect, unpushedHashes }: CommitGraphProps) {
+function isMainRef(ref: string, mainRefNames: string[]): boolean {
+  const normalized = ref.replace(/^HEAD -> /, "").trim();
+  return mainRefNames.some((name) => normalized === name || normalized.endsWith(`/${name}`));
+}
+
+export function CommitGraph({
+  commits,
+  selectedHash,
+  onSelect,
+  unpushedHashes,
+  mainRefNames = [],
+}: CommitGraphProps) {
   if (commits.length === 0) {
     return (
       <div className="repo-git-empty">
@@ -98,6 +111,7 @@ export function CommitGraph({ commits, selectedHash, onSelect, unpushedHashes }:
         {commits.map((c) => {
           const selected = selectedHash === c.hash;
           const unpushed = unpushedHashes?.has(c.hash) || unpushedHashes?.has(c.shortHash);
+          const onMain = mainRefNames.length > 0 && c.refs.some((ref) => isMainRef(ref, mainRefNames));
           return (
             <button
               key={c.hash}
@@ -105,6 +119,7 @@ export function CommitGraph({ commits, selectedHash, onSelect, unpushedHashes }:
               className="repo-git-graph-row"
               data-selected={selected || undefined}
               data-unpushed={unpushed || undefined}
+              data-on-main={onMain || undefined}
               style={{ height: ROW_H }}
               onClick={() => onSelect?.(c.hash)}
             >
@@ -115,7 +130,13 @@ export function CommitGraph({ commits, selectedHash, onSelect, unpushedHashes }:
               {c.refs.length > 0 && (
                 <span className="repo-git-graph-refs">
                   {c.refs.slice(0, 3).map((ref) => (
-                    <span key={ref} className="repo-git-ref-chip">{ref}</span>
+                    <span
+                      key={ref}
+                      className="repo-git-ref-chip"
+                      data-tone={isMainRef(ref, mainRefNames) ? "main" : undefined}
+                    >
+                      {ref}
+                    </span>
                   ))}
                 </span>
               )}

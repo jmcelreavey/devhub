@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { ChevronLeft, RefreshCw } from "lucide-react";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
+import { fieldMatchScore } from "@/lib/command-palette-score";
+import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
+import { RepoFileOpenMenu } from "./RepoFileOpenMenu";
 import { fetchGitJson, repoApi } from "./shared";
 
 interface BlameLine {
@@ -15,39 +18,199 @@ interface BlameLine {
 }
 
 interface BlameHistoryEntry {
+  hash?: string;
   shortHash: string;
   subject: string;
   author: string;
   relativeDate: string;
 }
 
+interface BlamePayload {
+  path: string;
+  commit: string | null;
+  line: number | null;
+  lines: BlameLine[];
+  history: BlameHistoryEntry[];
+  historyScope: "file" | "line";
+}
+
+interface BlameView {
+  path: string;
+  commit: string | null;
+  line: number | null;
+}
+
+const SUGGESTION_LIMIT = 12;
+
+function scoreTrackedPath(query: string, filePath: string): number {
+  const base = filePath.split("/").pop() ?? filePath;
+  return Math.max(fieldMatchScore(query, filePath), fieldMatchScore(query, base));
+}
+
+function blameUrl(repoName: string, view: BlameView): string {
+  const qs = new URLSearchParams({ path: view.path });
+  if (view.commit) qs.set("commit", view.commit);
+  if (view.line) qs.set("line", String(view.line));
+  return repoApi(repoName, `/git/blame?${qs}`);
+}
+
 export function BlamePanel({ repoName }: { repoName: string }) {
   const toast = useToast();
-  const [path, setPath] = useState("");
+  const [query, setQuery] = useState("");
+  const [view, setView] = useState<BlameView | null>(null);
+  const [stack, setStack] = useState<BlameView[]>([]);
   const [loading, setLoading] = useState(false);
   const [lines, setLines] = useState<BlameLine[]>([]);
   const [history, setHistory] = useState<BlameHistoryEntry[]>([]);
+  const [historyScope, setHistoryScope] = useState<"file" | "line">("file");
+  const [selectedLine, setSelectedLine] = useState<number | null>(null);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  // Monotonic token: clicking through lines fires overlapping blame requests and
+  // git is slow enough that they finish out of order. Only the newest may apply.
+  const requestSeq = useRef(0);
+  const suggestionListId = useId();
 
-  async function load(target?: string) {
-    const filePath = (target ?? path).trim();
+  const { data: filesPayload } = useLive<{ files: string[] }>(
+    repoApi(repoName, "/git/files"),
+    { revalidateOnFocus: false, refreshInterval: 0 },
+  );
+  const suggestions = useMemo(() => {
+    const files = filesPayload?.files ?? [];
+    const q = query.trim();
+    if (!q || files.length === 0) return [];
+    return files
+      .map((filePath) => ({ filePath, score: scoreTrackedPath(q, filePath) }))
+      .filter((row) => row.score > 0)
+      .sort((a, b) => b.score - a.score || a.filePath.localeCompare(b.filePath))
+      .slice(0, SUGGESTION_LIMIT)
+      .map((row) => row.filePath);
+  }, [filesPayload?.files, query]);
+
+  useEffect(() => {
+    if (!suggestOpen) return;
+    const onDown = (event: MouseEvent) => {
+      if (wrapRef.current?.contains(event.target as Node)) return;
+      setSuggestOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [suggestOpen]);
+
+  async function load(next: BlameView, opts?: { pushStack?: boolean }) {
+    const filePath = next.path.trim();
     if (!filePath) {
       toast.error("Enter a file path");
       return;
     }
+    setSuggestOpen(false);
     setLoading(true);
+    const seq = ++requestSeq.current;
     try {
-      const json = await fetchGitJson<{ lines: BlameLine[]; history: BlameHistoryEntry[] }>(
-        repoApi(repoName, `/git/blame?path=${encodeURIComponent(filePath)}`),
-      );
+      if (opts?.pushStack && view) {
+        setStack((prev) => [...prev, view]);
+      }
+      const json = await fetchGitJson<BlamePayload>(blameUrl(repoName, { ...next, path: filePath }));
+      if (seq !== requestSeq.current) return;
       setLines(json.lines ?? []);
       setHistory(json.history ?? []);
-      setPath(filePath);
+      setHistoryScope(json.historyScope === "line" ? "line" : "file");
+      setView({
+        path: json.path || filePath,
+        commit: json.commit,
+        line: json.line,
+      });
+      setSelectedLine(json.line);
+      setQuery(json.path || filePath);
     } catch (err) {
+      if (seq !== requestSeq.current) return;
       toast.error(err instanceof Error ? err.message : "Blame failed");
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) setLoading(false);
     }
   }
+
+  function pickSuggestion(filePath: string) {
+    setQuery(filePath);
+    setStack([]);
+    void load({ path: filePath, commit: null, line: null });
+  }
+
+  function goBack() {
+    // Pop outside the updater — a state updater must be pure, and firing the
+    // fetch from inside it double-loaded under StrictMode's double invocation.
+    const prior = stack[stack.length - 1];
+    if (!prior) return;
+    setStack((prev) => prev.slice(0, -1));
+    void load(prior);
+  }
+
+  async function selectLine(line: BlameLine) {
+    if (!view) return;
+    setSelectedLine(line.lineNumber);
+    await load(
+      { path: view.path, commit: view.commit, line: line.lineNumber },
+      { pushStack: view.line !== line.lineNumber },
+    );
+  }
+
+  async function openHistoryCommit(entry: BlameHistoryEntry) {
+    if (!view) return;
+    const commit = entry.hash || entry.shortHash;
+    if (!commit) return;
+    await load(
+      { path: view.path, commit, line: view.line },
+      { pushStack: true },
+    );
+  }
+
+  async function blamePrevious() {
+    if (!view || selectedLine == null) return;
+    const row = lines.find((l) => l.lineNumber === selectedLine) ?? lines[0];
+    if (!row?.hash) {
+      toast.error("No commit on this line");
+      return;
+    }
+    // Parent of the line's introducing commit — classic "blame previous".
+    await load(
+      { path: view.path, commit: `${row.hash}^`, line: selectedLine },
+      { pushStack: true },
+    );
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (suggestOpen && suggestions.length > 0) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setActiveIndex((i) => Math.min(i + 1, suggestions.length - 1));
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setActiveIndex((i) => Math.max(i - 1, 0));
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setSuggestOpen(false);
+        return;
+      }
+      if (event.key === "Enter") {
+        const idx = Math.min(activeIndex, suggestions.length - 1);
+        if (suggestions[idx]) {
+          event.preventDefault();
+          pickSuggestion(suggestions[idx]!);
+          return;
+        }
+      }
+    }
+  }
+
+  const showSuggestions = suggestOpen && query.trim().length > 0 && suggestions.length > 0;
+  const highlightIndex =
+    suggestions.length === 0 ? 0 : Math.min(activeIndex, suggestions.length - 1);
+  const path = view?.path ?? "";
 
   return (
     <div className="repo-git-blame">
@@ -55,46 +218,156 @@ export function BlamePanel({ repoName }: { repoName: string }) {
         className="repo-git-changes-toolbar"
         onSubmit={(e) => {
           e.preventDefault();
-          void load();
+          if (showSuggestions && suggestions[highlightIndex]) {
+            pickSuggestion(suggestions[highlightIndex]!);
+            return;
+          }
+          setStack([]);
+          void load({ path: query, commit: null, line: null });
         }}
       >
-        <input
-          className="input"
-          style={{ fontSize: 12, flex: 1, minWidth: 0 }}
-          placeholder="path/to/file.ts"
-          value={path}
-          onChange={(e) => setPath(e.target.value)}
-        />
+        <div className="repo-git-blame-path-wrap" ref={wrapRef}>
+          <input
+            className="input"
+            style={{ fontSize: 12, width: "100%", minWidth: 0 }}
+            placeholder="Search path… e.g. BlamePanel or route.ts"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setActiveIndex(0);
+              setSuggestOpen(true);
+            }}
+            onFocus={() => setSuggestOpen(true)}
+            onKeyDown={onKeyDown}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={showSuggestions}
+            aria-controls={suggestionListId}
+            aria-activedescendant={
+              showSuggestions ? `${suggestionListId}-${highlightIndex}` : undefined
+            }
+            autoComplete="off"
+            spellCheck={false}
+          />
+          {showSuggestions && (
+            <ul id={suggestionListId} className="repo-git-blame-suggestions" role="listbox">
+              {suggestions.map((filePath, index) => (
+                <li
+                  key={filePath}
+                  id={`${suggestionListId}-${index}`}
+                  role="option"
+                  aria-selected={index === highlightIndex}
+                >
+                  <button
+                    type="button"
+                    className="repo-git-blame-suggestion"
+                    data-active={index === highlightIndex || undefined}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    onClick={() => pickSuggestion(filePath)}
+                  >
+                    <span className="truncate">{filePath}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         <button type="submit" className="btn btn-primary" disabled={loading}>
           {loading ? <RefreshCw size={11} className="animate-spin" /> : "Blame"}
         </button>
+        {path && lines.length > 0 ? (
+          <RepoFileOpenMenu
+            repoName={repoName}
+            filePath={path}
+            commit={view?.commit ?? undefined}
+            disabled={loading}
+          />
+        ) : null}
       </form>
+
+      {(stack.length > 0 || view?.commit || view?.line) && (
+        <div className="repo-git-blame-crumb">
+          {stack.length > 0 ? (
+            <button type="button" className="btn btn-ghost" onClick={goBack} disabled={loading}>
+              <ChevronLeft size={12} /> Back
+            </button>
+          ) : null}
+          <span>
+            {view?.commit ? (
+              <>
+                at <span className="font-mono text-accent">{view.commit.slice(0, 7)}</span>
+              </>
+            ) : (
+              "HEAD"
+            )}
+            {view?.line ? (
+              <>
+                {" "}
+                · line <span className="font-mono text-accent">{view.line}</span>
+              </>
+            ) : null}
+          </span>
+          {selectedLine != null ? (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={loading}
+              title="Blame the parent of this line's commit"
+              onClick={() => void blamePrevious()}
+            >
+              Blame previous
+            </button>
+          ) : null}
+        </div>
+      )}
+
       {history.length > 0 && (
         <div className="repo-git-blame-history">
-          {history.slice(0, 8).map((h) => (
-            <div key={h.shortHash} className="repo-git-blame-history-row">
+          <div className="repo-git-section-label" style={{ padding: "0 0 4px" }}>
+            {historyScope === "line" ? "Line history" : "File history"}
+            <span className="repo-git-section-label-end">{history.length}</span>
+          </div>
+          {history.slice(0, 12).map((h) => (
+            <button
+              key={h.hash || h.shortHash}
+              type="button"
+              className="repo-git-blame-history-row"
+              data-active={view?.commit === h.hash || view?.commit === h.shortHash || undefined}
+              onClick={() => void openHistoryCommit(h)}
+              title="Blame file at this commit"
+            >
               <span className="font-mono text-accent">{h.shortHash}</span>
               <span className="truncate">{h.subject}</span>
               <span className="text-text-subtle">{h.relativeDate}</span>
-            </div>
+            </button>
           ))}
         </div>
       )}
       {loading && lines.length === 0 ? (
         <SkeletonRows count={10} height={16} />
       ) : lines.length === 0 ? (
-        <div className="repo-git-empty">Enter a tracked file path to see blame and history.</div>
+        <div className="repo-git-empty">
+          Type part of a filename to find a tracked path, then blame it. Click a line for its
+          history; click a commit to drill in.
+        </div>
       ) : (
         <div className="repo-git-blame-table">
           {lines.map((l) => (
-            <div key={`${l.lineNumber}-${l.hash}`} className="repo-git-blame-line">
+            <button
+              key={`${l.lineNumber}-${l.hash}`}
+              type="button"
+              className="repo-git-blame-line"
+              data-active={selectedLine === l.lineNumber || undefined}
+              onClick={() => void selectLine(l)}
+              title="Show history for this line"
+            >
               <span className="repo-git-blame-meta font-mono" title={`${l.author} · ${l.date}`}>
                 {l.hash}
               </span>
               <span className="repo-git-blame-author truncate">{l.author}</span>
               <span className="repo-git-blame-num">{l.lineNumber}</span>
               <code className="repo-git-blame-code">{l.content}</code>
-            </div>
+            </button>
           ))}
         </div>
       )}

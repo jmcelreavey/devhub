@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 /**
@@ -19,6 +21,16 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${PORT}`;
 
 /** Reuse whatever is already listening locally; CI always starts its own. */
 const useExternalServer = Boolean(process.env.PLAYWRIGHT_BASE_URL);
+
+/**
+ * `npm run verify` builds into `.next-verify` (DEVHUB_VERIFY_BUILD=1) so it does
+ * not clobber a live `next-server` `.next`. CI runs e2e right after verify, so
+ * start must point at that distDir — otherwise `next start` looks for `.next`
+ * and dies with production-start-no-build-id.
+ */
+const verifyDistReady = fs.existsSync(path.join(__dirname, ".next-verify", "BUILD_ID"));
+const useVerifyDist =
+  process.env.DEVHUB_VERIFY_BUILD === "1" || Boolean(process.env.CI && verifyDistReady);
 
 export default defineConfig({
   testDir: "./e2e",
@@ -68,6 +80,10 @@ export default defineConfig({
           timeout: 120_000,
           stdout: "pipe",
           stderr: "pipe",
+          env: {
+            ...process.env,
+            ...(useVerifyDist ? { DEVHUB_VERIFY_BUILD: "1" } : {}),
+          },
         },
       }),
 });

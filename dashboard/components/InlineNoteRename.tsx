@@ -7,6 +7,7 @@ import { useToast } from "@/lib/hooks/use-toast";
 export function InlineNoteRename({
   noteSlug,
   displayName,
+  editName,
   onRenamed,
   renameFile = renameNoteFile,
   disabled = false,
@@ -19,6 +20,8 @@ export function InlineNoteRename({
 }: {
   noteSlug: string;
   displayName: string;
+  /** Basename used when renaming; defaults to displayName. */
+  editName?: string;
   onRenamed: (newSlug: string) => void;
   renameFile?: (currentSlug: string, newBaseName: string) => Promise<string>;
   disabled?: boolean;
@@ -35,6 +38,7 @@ export function InlineNoteRename({
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const renameBase = editName ?? displayName;
 
   useEffect(() => {
     if (renaming) inputRef.current?.focus();
@@ -54,12 +58,12 @@ export function InlineNoteRename({
     e.preventDefault();
     e.stopPropagation();
     setRenaming(true);
-    setValue(displayName);
+    setValue(renameBase);
   };
 
   const commit = async () => {
     const trimmed = value.trim();
-    if (!trimmed || trimmed === displayName) {
+    if (!trimmed || trimmed === renameBase) {
       cancel();
       return;
     }

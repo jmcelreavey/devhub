@@ -14,6 +14,11 @@ describe("slugify / entityKey", () => {
   it("slugifies", () => {
     expect(slugify("Sprint Planning!")).toBe("sprint-planning");
   });
+  it("never ends on a separator after truncation", () => {
+    // maxLen lands exactly on the hyphen between "ab" and "cd".
+    expect(slugify("ab cd", { maxLen: 3 })).toBe("ab");
+    expect(slugify("!!!", { maxLen: 8 })).toBe("untitled");
+  });
   it("keys kind+id", () => {
     expect(entityKey({ kind: "task", id: "abc" })).toBe("task:abc");
   });
@@ -97,5 +102,16 @@ describe("format + build + parse round-trip", () => {
     expect(appended).toContain("# Solo");
     expect(appended).toContain("## Links");
     expect(appended).toContain("a/b#1");
+  });
+
+  it("removes the section cleanly when there are no refs left", () => {
+    const md = ["# Hello", "", "## Links", "", "**Jira:** PTF-1", "", "## Notes", "body"].join("\n");
+    const stripped = upsertEntityLinksInMarkdown(md, []);
+    expect(stripped).not.toContain("## Links");
+    expect(stripped).not.toContain("PTF-1");
+    expect(stripped).toContain("# Hello");
+    expect(stripped).toContain("## Notes");
+    // No blank-line crater where the section used to be.
+    expect(stripped).not.toMatch(/\n{3,}/);
   });
 });

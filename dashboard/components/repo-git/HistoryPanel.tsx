@@ -1,14 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Layers, RefreshCw, RotateCcw, Search, Upload } from "lucide-react";
+import { GitMerge, Layers, RefreshCw, RotateCcw, Search, Upload } from "lucide-react";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { useConfirm } from "@/components/shell/ConfirmDialog";
+import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { useToast } from "@/lib/hooks/use-toast";
 import type { DiffLine } from "@/lib/repos/git-parsers";
 import type { GraphLaneCommit } from "@/lib/repos/git-graph";
 import { CommitGraph } from "./CommitGraph";
+import { DiffMaximizeModal } from "./DiffMaximizeModal";
+import { DiffToolbar, DIFF_CONTEXT_LINES, type DiffContextMode } from "./DiffToolbar";
 import { GitDiffView } from "./GitDiffView";
+import { RepoFileOpenMenu } from "./RepoFileOpenMenu";
+import { RepoSplit } from "./SplitResize";
 import {
   fetchGitJson,
   postGitAction,
@@ -30,9 +35,31 @@ interface CommitShowPayload {
   path: string | null;
   lines: DiffLine[];
   empty: boolean;
+  context?: number;
   isHead?: boolean;
   isAncestorOfHead?: boolean;
   aheadCount?: number;
+}
+
+interface BranchRelation {
+  currentBranch: string;
+  mainBranch: string | null;
+  mainShort: string | null;
+  aheadMain: number;
+  behindMain: number;
+  onMain: boolean;
+  mergedIntoMain: boolean;
+}
+
+interface LogPayload {
+  commits: GraphLaneCommit[];
+  currentBranch?: string;
+  mainBranch?: string | null;
+  mainShort?: string | null;
+  aheadMain?: number;
+  behindMain?: number;
+  onMain?: boolean;
+  mergedIntoMain?: boolean;
 }
 
 export function HistoryPanel({
@@ -56,19 +83,38 @@ export function HistoryPanel({
   const [search, setSearch] = useState("");
   const [unpushedOnly, setUnpushedOnly] = useState(false);
   const [unpushedHashes, setUnpushedHashes] = useState<Set<string>>(() => new Set());
+  const [relation, setRelation] = useState<BranchRelation | null>(null);
   const [detail, setDetail] = useState<CommitShowPayload | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [contextMode, setContextMode] = useState<DiffContextMode>("default");
+  const [historyListFr, setHistoryListFr] = useState(0.46);
+  const [filesFr, setFilesFr] = useState(0.34);
+  const [diffMaximized, setDiffMaximized] = useState(false);
+  const closeMaximized = useCallback(() => setDiffMaximized(false), []);
+  const stackHistory = useMediaQuery("(max-width: 900px)");
+  const stackDetail = useMediaQuery("(max-width: 720px)");
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const [logJson, branchJson] = await Promise.all([
-        fetchGitJson<{ commits: GraphLaneCommit[] }>(repoApi(repoName, "/git/log?limit=80")),
+        fetchGitJson<LogPayload>(repoApi(repoName, "/git/log?limit=80")),
         fetchGitJson<BranchesPayload>(repoApi(repoName, "/branches")).catch(() => null),
       ]);
       setCommits(logJson.commits ?? []);
       setSelected((prev) => prev ?? logJson.commits?.[0]?.hash ?? null);
+      setRelation({
+        currentBranch: logJson.currentBranch ?? branchJson?.currentBranch ?? "HEAD",
+        mainBranch: logJson.mainBranch ?? branchJson?.mainBranch ?? null,
+        mainShort:
+          logJson.mainShort ??
+          (branchJson?.mainBranch ? branchJson.mainBranch.replace(/^origin\//, "") : null),
+        aheadMain: logJson.aheadMain ?? branchJson?.aheadMain ?? 0,
+        behindMain: logJson.behindMain ?? branchJson?.behindMain ?? 0,
+        onMain: logJson.onMain ?? false,
+        mergedIntoMain: logJson.mergedIntoMain ?? false,
+      });
 
       if (branchJson) {
         const next = new Set<string>();
@@ -144,6 +190,11 @@ export function HistoryPanel({
       try {
         const params = new URLSearchParams({ commit: selected });
         if (selectedFile) params.set("path", selectedFile);
+        if (contextMode === "full") {
+          params.set("full", "1");
+        } else {
+          params.set("context", String(DIFF_CONTEXT_LINES[contextMode]));
+        }
         const json = await fetchGitJson<CommitShowPayload>(
           repoApi(repoName, `/git/show?${params.toString()}`),
         );
@@ -160,7 +211,7 @@ export function HistoryPanel({
     return () => {
       cancelled = true;
     };
-  }, [repoName, selected, selectedFile, toast]);
+  }, [repoName, selected, selectedFile, contextMode, toast]);
 
   /** POST a branches action with confirm + toasts (undo-commit / reset-stash-ahead). */
   async function confirmedBranchesAction(opts: {
@@ -334,139 +385,312 @@ export function HistoryPanel({
           </button>
         </div>
       )}
-      <div className="repo-git-history-split">
-        <div className="repo-git-history-list">
-          <CommitGraph
-            commits={filtered}
-            selectedHash={selected}
-            onSelect={(hash) => {
-              setSelectedFile(null);
-              setSelected(hash);
-            }}
-            unpushedHashes={unpushedHashes}
-          />
-        </div>
-        <div className="repo-git-history-detail">
-          {!selected ? (
-            <div className="repo-git-empty">Select a commit to inspect its changes.</div>
-          ) : !detailForSelection && detailLoading ? (
-            <SkeletonRows count={10} height={14} />
-          ) : detailForSelection ? (
-            <>
-              <div className="repo-git-commit-meta">
-                <div className="repo-git-commit-meta-top">
-                  <span className="repo-git-graph-hash font-mono">{detailForSelection.shortHash}</span>
-                  {selectedCommit && isUnpushed(selectedCommit) && (
-                    <span className="repo-git-ref-chip" data-tone="warning">
-                      unpushed
-                    </span>
-                  )}
-                  {detailForSelection.parents[0] && (
-                    <span className="text-xs text-text-subtle">
-                      parent {detailForSelection.parents[0].slice(0, 7)}
-                    </span>
-                  )}
-                </div>
-                <div className="repo-git-commit-subject">{detailForSelection.subject}</div>
-                {detailForSelection.body ? (
-                  <pre className="repo-git-commit-body">{detailForSelection.body}</pre>
-                ) : null}
-                <div className="repo-git-commit-byline">
-                  <span>{detailForSelection.author}</span>
-                  {detailForSelection.authorEmail ? (
-                    <span className="text-text-subtle">
-                      &lt;{detailForSelection.authorEmail}&gt;
-                    </span>
-                  ) : null}
-                  <span className="text-text-subtle">
-                    {detailForSelection.relativeDate}
-                    {detailForSelection.date
-                      ? ` · ${detailForSelection.date.slice(0, 19).replace("T", " ")}`
-                      : ""}
-                  </span>
-                </div>
-                {canResetStashAhead && (
-                  <div className="repo-git-commit-meta-actions">
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      disabled={acting !== null}
-                      title={`Stash ${detailForSelection.aheadCount} commit${
-                        detailForSelection.aheadCount === 1 ? "" : "s"
-                      } ahead, then reset HEAD to this commit`}
-                      onClick={() => void resetStashAhead()}
-                    >
-                      {acting === "reset-stash" ? (
-                        <RefreshCw size={11} className="animate-spin" />
-                      ) : (
-                        <Layers size={11} />
-                      )}
-                      Stash ahead & reset
-                      <span className="repo-git-commit-meta-actions-count">
-                        {detailForSelection.aheadCount}
+      {relation?.mainBranch ? <BranchRelationStrip relation={relation} /> : null}
+      <RepoSplit
+        className="repo-git-history-split"
+        primaryFr={historyListFr}
+        onPrimaryFrChange={setHistoryListFr}
+        minPrimaryFr={0.28}
+        maxPrimaryFr={0.62}
+        stacked={stackHistory}
+        handleLabel="Resize history list and detail"
+        primary={
+          <div className="repo-git-history-list">
+            <CommitGraph
+              commits={filtered}
+              selectedHash={selected}
+              onSelect={(hash) => {
+                setSelectedFile(null);
+                setSelected(hash);
+              }}
+              unpushedHashes={unpushedHashes}
+              mainRefNames={
+                relation?.mainShort
+                  ? [relation.mainShort, `origin/${relation.mainShort}`, relation.mainBranch].filter(
+                      (ref): ref is string => Boolean(ref),
+                    )
+                  : []
+              }
+            />
+          </div>
+        }
+        secondary={
+          <div className="repo-git-history-detail">
+            {!selected ? (
+              <div className="repo-git-empty">Select a commit to inspect its changes.</div>
+            ) : !detailForSelection && detailLoading ? (
+              <SkeletonRows count={10} height={14} />
+            ) : detailForSelection ? (
+              <>
+                <div className="repo-git-commit-meta">
+                  <div className="repo-git-commit-meta-top">
+                    <span className="repo-git-graph-hash font-mono">{detailForSelection.shortHash}</span>
+                    {selectedCommit && isUnpushed(selectedCommit) && (
+                      <span className="repo-git-ref-chip" data-tone="warning">
+                        unpushed
                       </span>
-                    </button>
+                    )}
+                    {detailForSelection.parents[0] && (
+                      <span className="text-xs text-text-subtle">
+                        parent {detailForSelection.parents[0].slice(0, 7)}
+                      </span>
+                    )}
                   </div>
-                )}
-                {showDivergedNote && (
-                  <div className="repo-git-commit-meta-note">
-                    Not an ancestor of HEAD — stash-ahead reset is unavailable for diverged history.
+                  <div className="repo-git-commit-subject">{detailForSelection.subject}</div>
+                  {detailForSelection.body ? (
+                    <pre className="repo-git-commit-body">{detailForSelection.body}</pre>
+                  ) : null}
+                  <div className="repo-git-commit-byline">
+                    <span>{detailForSelection.author}</span>
+                    {detailForSelection.authorEmail ? (
+                      <span className="text-text-subtle">
+                        &lt;{detailForSelection.authorEmail}&gt;
+                      </span>
+                    ) : null}
+                    <span className="text-text-subtle">
+                      {detailForSelection.relativeDate}
+                      {detailForSelection.date
+                        ? ` · ${detailForSelection.date.slice(0, 19).replace("T", " ")}`
+                        : ""}
+                    </span>
                   </div>
-                )}
-              </div>
-              <div className="repo-git-history-detail-grid">
-                <div className="repo-git-commit-files">
-                  <div className="repo-git-section-label">
-                    Files
-                    <span className="repo-git-section-label-end">{detailForSelection.files.length}</span>
-                  </div>
-                  {detailForSelection.files.length === 0 ? (
-                    <div className="repo-git-empty-sm">No file changes in this commit.</div>
-                  ) : (
-                    detailForSelection.files.map((f) => (
+                  {canResetStashAhead && (
+                    <div className="repo-git-commit-meta-actions">
                       <button
-                        key={f.path}
                         type="button"
-                        className="repo-git-commit-file"
-                        data-active={activeFile === f.path || undefined}
-                        onClick={() => setSelectedFile(f.path)}
+                        className="btn btn-ghost"
+                        disabled={acting !== null}
+                        title={`Stash ${detailForSelection.aheadCount} commit${
+                          detailForSelection.aheadCount === 1 ? "" : "s"
+                        } ahead, then reset HEAD to this commit`}
+                        onClick={() => void resetStashAhead()}
                       >
-                        <span className="repo-git-file-status">{f.status}</span>
-                        <span className="font-mono truncate" title={f.path}>
-                          {f.path}
+                        {acting === "reset-stash" ? (
+                          <RefreshCw size={11} className="animate-spin" />
+                        ) : (
+                          <Layers size={11} />
+                        )}
+                        Stash ahead & reset
+                        <span className="repo-git-commit-meta-actions-count">
+                          {detailForSelection.aheadCount}
                         </span>
                       </button>
-                    ))
+                    </div>
+                  )}
+                  {showDivergedNote && (
+                    <div className="repo-git-commit-meta-note">
+                      Not an ancestor of HEAD — stash-ahead reset is unavailable for diverged history.
+                    </div>
                   )}
                 </div>
-                <div className="repo-git-diff-pane">
-                  <div className="repo-git-diff-head">
-                    {activeFile ? (
-                      <span className="font-mono truncate" title={activeFile}>
-                        {activeFile}
-                      </span>
-                    ) : (
-                      <span className="text-text-subtle">Select a file</span>
-                    )}
-                  </div>
-                  <div className="repo-git-diff-body repo-git-diff-body-static">
-                    {detailLoading ? (
-                      <SkeletonRows count={8} height={14} />
-                    ) : (
-                      <GitDiffView
-                        lines={detailForSelection.lines}
-                        emptyMessage="No textual diff for this file (binary or empty)."
-                      />
-                    )}
-                  </div>
-                </div>
-              </div>
+                <RepoSplit
+                  className="repo-git-history-detail-grid"
+                  primaryFr={filesFr}
+                  onPrimaryFrChange={setFilesFr}
+                  minPrimaryFr={0.18}
+                  maxPrimaryFr={0.55}
+                  stacked={stackDetail}
+                  handleLabel="Resize file list and diff"
+                  primary={
+                    <div className="repo-git-commit-files">
+                      <div className="repo-git-section-label">
+                        Files
+                        <span className="repo-git-section-label-end">{detailForSelection.files.length}</span>
+                      </div>
+                      {detailForSelection.files.length === 0 ? (
+                        <div className="repo-git-empty-sm">No file changes in this commit.</div>
+                      ) : (
+                        detailForSelection.files.map((f) => (
+                          <button
+                            key={f.path}
+                            type="button"
+                            className="repo-git-commit-file"
+                            data-active={activeFile === f.path || undefined}
+                            onClick={() => setSelectedFile(f.path)}
+                          >
+                            <span className="repo-git-file-status">{f.status}</span>
+                            <span className="font-mono truncate" title={f.path}>
+                              {f.path}
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  }
+                  secondary={
+                    <div className="repo-git-diff-pane">
+                      <div className="repo-git-diff-head">
+                        {activeFile ? (
+                          <span className="font-mono truncate" title={activeFile}>
+                            {activeFile}
+                          </span>
+                        ) : (
+                          <span className="text-text-subtle">Select a file</span>
+                        )}
+                        <DiffToolbar
+                          mode={contextMode}
+                          onModeChange={setContextMode}
+                          onMaximize={() => setDiffMaximized(true)}
+                          maximizeDisabled={!activeFile}
+                          openSlot={
+                            activeFile && detailForSelection ? (
+                              <RepoFileOpenMenu
+                                repoName={repoName}
+                                filePath={activeFile}
+                                commit={detailForSelection.hash}
+                                disabled={detailLoading}
+                              />
+                            ) : null
+                          }
+                        />
+                      </div>
+                      <div className="repo-git-diff-body repo-git-diff-body-static">
+                        {detailLoading ? (
+                          <SkeletonRows count={8} height={14} />
+                        ) : (
+                          <GitDiffView
+                            lines={detailForSelection.lines}
+                            emptyMessage="No textual diff for this file (binary or empty)."
+                          />
+                        )}
+                      </div>
+                    </div>
+                  }
+                />
+              </>
+            ) : (
+              <div className="repo-git-empty">Could not load commit detail.</div>
+            )}
+          </div>
+        }
+      />
+      <DiffMaximizeModal
+        maximized={diffMaximized}
+        canOpen={Boolean(activeFile)}
+        onClose={closeMaximized}
+        title={activeFile ?? "Diff"}
+        description={
+          detailForSelection
+            ? `${detailForSelection.shortHash} · ${detailForSelection.subject}`
+            : undefined
+        }
+        mode={contextMode}
+        onModeChange={setContextMode}
+        openSlot={
+          activeFile && detailForSelection ? (
+            <RepoFileOpenMenu
+              repoName={repoName}
+              filePath={activeFile}
+              commit={detailForSelection.hash}
+              disabled={detailLoading}
+            />
+          ) : null
+        }
+      >
+        {detailLoading ? (
+          <SkeletonRows count={12} height={14} />
+        ) : detailForSelection ? (
+          <GitDiffView
+            lines={detailForSelection.lines}
+            emptyMessage="No textual diff for this file (binary or empty)."
+          />
+        ) : null}
+      </DiffMaximizeModal>
+    </div>
+  );
+}
+
+function BranchRelationStrip({ relation }: { relation: BranchRelation }) {
+  const main = relation.mainShort ?? "main";
+  const ahead = relation.aheadMain;
+  const behind = relation.behindMain;
+
+  let status: string;
+  let tone: "ok" | "ahead" | "behind" | "diverged" | "merged";
+  if (relation.onMain) {
+    status = `On ${main}`;
+    tone = "ok";
+  } else if (relation.mergedIntoMain) {
+    status =
+      behind > 0
+        ? `Merged into ${main} · ${behind} behind tip`
+        : `Merged into ${main}`;
+    tone = "merged";
+  } else if (ahead > 0 && behind > 0) {
+    status = `Diverged from ${main} · ↑${ahead} · ↓${behind}`;
+    tone = "diverged";
+  } else if (ahead > 0) {
+    status = `↑${ahead} ahead of ${main}`;
+    tone = "ahead";
+  } else if (behind > 0) {
+    status = `↓${behind} behind ${main}`;
+    tone = "behind";
+  } else {
+    status = `Aligned with ${main}`;
+    tone = "ok";
+  }
+
+  const relationTitle =
+    "Ahead/behind vs default main (origin/" +
+    main +
+    "). Unpushed / Push counts are vs your upstream tracking branch — they can differ.";
+
+  return (
+    <div className="repo-git-branch-relation" data-tone={tone} title={relationTitle}>
+      <div className="repo-git-branch-relation-viz" aria-hidden>
+        <svg width="72" height="28" viewBox="0 0 72 28">
+          {/* main lane */}
+          <line x1="8" y1="8" x2="64" y2="8" stroke="var(--success)" strokeWidth="1.5" opacity="0.7" />
+          <circle cx="64" cy="8" r="3.5" fill="var(--success)" />
+          {/* branch lane */}
+          {!relation.onMain && (
+            <>
+              <path
+                d={
+                  ahead > 0 || behind > 0 || relation.mergedIntoMain
+                    ? "M 28 8 C 28 18, 36 20, 44 20"
+                    : "M 28 8 L 44 20"
+                }
+                fill="none"
+                stroke="var(--accent)"
+                strokeWidth="1.5"
+                opacity="0.85"
+              />
+              <line
+                x1="44"
+                y1="20"
+                x2={relation.mergedIntoMain ? "44" : "64"}
+                y2="20"
+                stroke="var(--accent)"
+                strokeWidth="1.5"
+                opacity="0.85"
+              />
+              {!relation.mergedIntoMain && (
+                <circle cx="64" cy="20" r="3.5" fill="var(--accent)" />
+              )}
+              {relation.mergedIntoMain && (
+                <circle cx="44" cy="20" r="3" fill="var(--accent)" opacity="0.7" />
+              )}
             </>
-          ) : (
-            <div className="repo-git-empty">Could not load commit detail.</div>
           )}
-        </div>
+          {relation.onMain && <circle cx="40" cy="8" r="3" fill="var(--accent)" />}
+        </svg>
       </div>
+      <div className="repo-git-branch-relation-copy">
+        <div className="repo-git-branch-relation-title">
+          <GitMerge size={11} aria-hidden />
+          <span className="font-mono">{relation.currentBranch}</span>
+          <span className="text-text-subtle">vs</span>
+          <span className="font-mono">{main}</span>
+        </div>
+        <div className="repo-git-branch-relation-status">{status}</div>
+      </div>
+      {!relation.onMain && (ahead > 0 || behind > 0) && (
+        <div className="repo-git-branch-relation-counts" aria-label="Ahead and behind main">
+          {ahead > 0 && <span data-dir="ahead">↑{ahead}</span>}
+          {behind > 0 && <span data-dir="behind">↓{behind}</span>}
+        </div>
+      )}
     </div>
   );
 }

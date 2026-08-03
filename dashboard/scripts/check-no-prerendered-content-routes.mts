@@ -19,7 +19,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const buildDir = process.argv[2] ?? path.resolve(HERE, "../.next");
+const buildDir =
+  process.argv[2] ??
+  path.resolve(
+    HERE,
+    process.env.DEVHUB_VERIFY_BUILD === "1" ? "../.next-verify" : "../.next",
+  );
 
 /** Route paths, relative to `.next/server/app`, that must never be static. */
 const MUST_BE_DYNAMIC = ["docs", "notes"];

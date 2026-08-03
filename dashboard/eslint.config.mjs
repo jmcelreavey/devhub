@@ -9,6 +9,8 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    // `npm run verify` isolates builds into `.next-verify` (see next.config.ts).
+    ".next-verify/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
@@ -16,3 +18,4 @@ const eslintConfig = defineConfig([
 ]);
 
 export default eslintConfig;
+

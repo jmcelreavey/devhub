@@ -29,6 +29,7 @@ import { flattenTreeFiles } from "@/lib/tree-utils";
 import { clearFocusSession, readFocusSession, writeFocusSession } from "@/lib/focus-session-storage";
 import { clearRouteUsage, summariseRouteUsage } from "@/lib/route-usage";
 import { copyTextToClipboard } from "@/lib/clipboard";
+import { openTerminalTranscript } from "@/lib/terminal-launch";
 import { openInBrowser } from "@/lib/desktop/bridge";
 
 type CommandKind = "nav" | "note" | "task" | "ticket" | "action" | "diagram" | "content";
@@ -174,21 +175,24 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             };
           });
           /*
-            "What was that command I ran on Tuesday" — answered from the shell
-            transcripts. Selecting a hit copies the line rather than navigating:
-            these are historical sessions, most of them already closed, so the
-            useful action is getting the command back onto your clipboard.
+            "What was that command I ran on Tuesday" — open the historical
+            transcript at the matched line. Sessions are usually closed, so this
+            is a read-only viewer (copy lives in the modal footer).
           */
           const terminalCmds: Command[] = (terminalData.matches ?? [])
             .slice(0, 8)
-            .map((m: { sessionId: string; line: number; text: string }) => ({
+            .map((m: { sessionId: string; line: number; text: string; modifiedAt?: number }) => ({
               id: `content:terminal:${m.sessionId}:${m.line}`,
               kind: "content" as CommandKind,
               label: m.text.trim().slice(0, 120) || "(blank line)",
               detail: `session ${m.sessionId.slice(0, 8)} · line ${m.line}`,
-              hint: "terminal",
+              hint: "Open",
               perform: () => {
-                void copyTextToClipboard(m.text.trim());
+                openTerminalTranscript({
+                  sessionId: m.sessionId,
+                  line: m.line,
+                  modifiedAt: m.modifiedAt,
+                });
               },
             }));
 
@@ -203,7 +207,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     return () => {
       if (contentSearchTimer.current) clearTimeout(contentSearchTimer.current);
     };
-  }, [open, query, router]);
+  }, [open, query, router, toast]);
 
   const toggleTaskDone = useCallback(
     async (id: string) => {
@@ -600,13 +604,21 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
               {cmd.hint && (
                 <span style={{ fontSize: 11, color: "var(--text-subtle)" }}>{cmd.hint}</span>
               )}
-              <ChevronRight size={12} className="text-text-subtle" aria-hidden />
+              {commandNavigates(cmd) && (
+                <ChevronRight size={12} className="text-text-subtle" aria-hidden />
+              )}
             </button>
           ))}
         </div>
       </div>
     </div>
   );
+}
+
+/** Nav-style chevron only when selecting opens somewhere (in-app or browser). */
+function commandNavigates(cmd: Command): boolean {
+  if (cmd.kind === "action" || cmd.kind === "task") return false;
+  return true;
 }
 
 function CommandIcon({ kind }: { kind: CommandKind }) {

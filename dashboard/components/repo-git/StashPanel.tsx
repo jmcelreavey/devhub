@@ -7,7 +7,10 @@ import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
 import { useToast } from "@/lib/hooks/use-toast";
 import { agentStashMessageCommand, openTerminal } from "@/lib/terminal-launch";
 import type { DiffLine } from "@/lib/repos/git-parsers";
+import { DiffMaximizeModal } from "./DiffMaximizeModal";
+import { DiffToolbar, DIFF_CONTEXT_LINES, type DiffContextMode } from "./DiffToolbar";
 import { GitDiffView } from "./GitDiffView";
+import { RepoSplit } from "./SplitResize";
 import {
   fetchGitJson,
   IconBtn,
@@ -43,6 +46,10 @@ export function StashPanel({
   const [diffLines, setDiffLines] = useState<DiffLine[]>([]);
   const [diffLoading, setDiffLoading] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
+  const [contextMode, setContextMode] = useState<DiffContextMode>("default");
+  const [listFr, setListFr] = useState(0.42);
+  const [diffMaximized, setDiffMaximized] = useState(false);
+  const closeMaximized = useCallback(() => setDiffMaximized(false), []);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -76,12 +83,13 @@ export function StashPanel({
     setDiffLoading(true);
     void (async () => {
       try {
-        const result = await postGitAction<{ lines: DiffLine[] }>(repoApi(repoName, "/git/stash"), {
-          action: "show",
-          ref: selected,
-        });
-        if (!result.ok) throw new Error(result.kind === "error" ? result.message : result.kind);
-        if (!cancelled) setDiffLines(result.json.lines ?? []);
+        const qs = new URLSearchParams({ stash: selected });
+        if (contextMode === "full") qs.set("full", "1");
+        else qs.set("context", String(DIFF_CONTEXT_LINES[contextMode]));
+        const json = await fetchGitJson<{ lines: DiffLine[] }>(
+          repoApi(repoName, `/git/diff?${qs}`),
+        );
+        if (!cancelled) setDiffLines(json.lines ?? []);
       } catch (err) {
         if (!cancelled) {
           setDiffLines([]);
@@ -94,7 +102,7 @@ export function StashPanel({
     return () => {
       cancelled = true;
     };
-  }, [selected, repoName, toast]);
+  }, [selected, repoName, toast, contextMode]);
 
   async function act(action: string, ref?: string, message?: string) {
     if (action === "drop" && ref) {
@@ -118,7 +126,15 @@ export function StashPanel({
         }
         throw new Error(result.kind === "error" ? result.message : result.kind);
       }
-      toast.success(action === "save" ? "Stashed" : action === "pop" ? "Popped" : action === "apply" ? "Applied" : "Dropped");
+      toast.success(
+        action === "save"
+          ? "Stashed"
+          : action === "pop"
+            ? "Popped"
+            : action === "apply"
+              ? "Applied"
+              : "Dropped",
+      );
       if (action !== "show") {
         setSelected(null);
         onMutate();
@@ -175,6 +191,8 @@ export function StashPanel({
 
   if (loading && stashes.length === 0) return <SkeletonRows count={4} height={32} />;
 
+  const selectedEntry = stashes.find((s) => s.ref === selected) ?? null;
+
   return (
     <div className="repo-git-stash">
       <div className="repo-git-changes-toolbar">
@@ -186,46 +204,86 @@ export function StashPanel({
           {stashes.length} stash{stashes.length === 1 ? "" : "es"}
         </span>
       </div>
-      <div className="repo-git-changes-grid">
-        <div className="repo-git-file-cols">
-          {stashes.length === 0 ? (
-            <div className="repo-git-empty">No stashes — save a named WIP when you need a clean tree.</div>
-          ) : (
-            stashes.map((s) => (
-              <div key={s.ref} className="repo-git-stash-row" data-active={selected === s.ref || undefined}>
-                <button type="button" className="repo-git-stash-main" onClick={() => setSelected(s.ref)}>
-                  <span className="font-mono text-accent">{s.ref}</span>
-                  <span className="truncate" title={s.message}>{s.message}</span>
-                  {s.branch && <span className="repo-git-ref-chip">{s.branch}</span>}
-                </button>
-                <div className="repo-git-file-actions">
-                  <IconBtn label="Apply" onClick={() => void act("apply", s.ref)} disabled={acting !== null}>
-                    Apply
-                  </IconBtn>
-                  <IconBtn label="Pop" onClick={() => void act("pop", s.ref)} disabled={acting !== null}>
-                    Pop
-                  </IconBtn>
-                  <IconBtn label="Drop" danger onClick={() => void act("drop", s.ref)} disabled={acting !== null}>
-                    <Trash2 size={10} />
-                  </IconBtn>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-        <div className="repo-git-diff-pane">
-          <div className="repo-git-diff-head">
-            {selected ? <span className="font-mono">{selected}</span> : <span className="text-text-subtle">Select a stash to preview</span>}
-          </div>
-          <div key={selected ?? "none"} className="repo-git-diff-body">
-            {diffLoading ? (
-              <SkeletonRows count={6} height={14} />
+      <RepoSplit
+        className="repo-git-changes-split"
+        primaryFr={listFr}
+        onPrimaryFrChange={setListFr}
+        minPrimaryFr={0.22}
+        maxPrimaryFr={0.62}
+        handleLabel="Resize stash list and diff"
+        primary={
+          <div className="repo-git-file-cols">
+            {stashes.length === 0 ? (
+              <div className="repo-git-empty">No stashes — save a named WIP when you need a clean tree.</div>
             ) : (
-              <GitDiffView lines={diffLines} emptyMessage="Empty stash or binary-only changes." />
+              stashes.map((s) => (
+                <div key={s.ref} className="repo-git-stash-row" data-active={selected === s.ref || undefined}>
+                  <button type="button" className="repo-git-stash-main" onClick={() => setSelected(s.ref)}>
+                    <span className="font-mono text-accent">{s.ref}</span>
+                    <span className="truncate" title={s.message}>
+                      {s.message}
+                    </span>
+                    {s.branch && <span className="repo-git-ref-chip">{s.branch}</span>}
+                  </button>
+                  <div className="repo-git-file-actions">
+                    <IconBtn label="Apply" onClick={() => void act("apply", s.ref)} disabled={acting !== null}>
+                      Apply
+                    </IconBtn>
+                    <IconBtn label="Pop" onClick={() => void act("pop", s.ref)} disabled={acting !== null}>
+                      Pop
+                    </IconBtn>
+                    <IconBtn label="Drop" danger onClick={() => void act("drop", s.ref)} disabled={acting !== null}>
+                      <Trash2 size={10} />
+                    </IconBtn>
+                  </div>
+                </div>
+              ))
             )}
           </div>
-        </div>
-      </div>
+        }
+        secondary={
+          <div className="repo-git-diff-pane">
+            <div className="repo-git-diff-head">
+              {selected ? (
+                <span className="font-mono truncate" title={selectedEntry?.message}>
+                  {selected}
+                  {selectedEntry?.message ? ` · ${selectedEntry.message}` : ""}
+                </span>
+              ) : (
+                <span className="text-text-subtle">Select a stash to preview</span>
+              )}
+              <DiffToolbar
+                mode={contextMode}
+                onModeChange={setContextMode}
+                onMaximize={() => setDiffMaximized(true)}
+                maximizeDisabled={!selected}
+              />
+            </div>
+            <div key={selected ?? "none"} className="repo-git-diff-body">
+              {diffLoading ? (
+                <SkeletonRows count={6} height={14} />
+              ) : (
+                <GitDiffView lines={diffLines} emptyMessage="Empty stash or binary-only changes." />
+              )}
+            </div>
+          </div>
+        }
+      />
+      <DiffMaximizeModal
+        maximized={diffMaximized}
+        canOpen={Boolean(selected)}
+        onClose={closeMaximized}
+        title={selected ?? "Stash"}
+        description={selectedEntry?.message}
+        mode={contextMode}
+        onModeChange={setContextMode}
+      >
+        {diffLoading ? (
+          <SkeletonRows count={12} height={14} />
+        ) : (
+          <GitDiffView lines={diffLines} emptyMessage="Empty stash or binary-only changes." />
+        )}
+      </DiffMaximizeModal>
     </div>
   );
 }

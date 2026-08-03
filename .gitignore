@@ -23,6 +23,7 @@ node_modules.host/
 
 # Next.js dashboard build artifacts
 dashboard/.next/
+dashboard/.next-verify/
 dashboard/.env.local
 dashboard/output/
 

@@ -92,6 +92,19 @@ export function BranchesPanel({
     }
   }
 
+  async function checkoutBranch(branch: string) {
+    const dirty = Boolean(data?.hasChanges);
+    const ok = await confirm({
+      title: `Switch to ${branch}?`,
+      message: dirty
+        ? `Working tree has uncommitted changes. DevHub will auto-stash them, check out ${branch}, then re-apply the stash (conflicts go to the Conflicts tab).`
+        : `Check out branch “${branch}”. Local HEAD will move; uncommitted work is none right now.`,
+      confirmLabel: "Switch branch",
+    });
+    if (!ok) return;
+    await act("checkout", { branch });
+  }
+
   async function createBranch() {
     const name = await prompt({
       title: "Create branch",
@@ -187,7 +200,7 @@ export function BranchesPanel({
               type="button"
               className="repo-git-branch-main"
               disabled={b.current || acting !== null}
-              onClick={() => void act("checkout", { branch: b.name })}
+              onClick={() => void checkoutBranch(b.name)}
             >
               {b.current ? <Check size={12} className="text-accent" /> : <CornerDownLeft size={12} className="text-text-subtle" />}
               <span style={{ fontWeight: b.current ? 600 : 400 }}>{b.name}</span>

@@ -40,9 +40,18 @@ const KIND_ICON: Record<EntityKind, typeof FileText> = {
 };
 
 const NOTE_LABEL_MAX = 28;
+const CHIP_LIMIT = 6;
 
 function normalizeLabel(s: string): string {
   return s.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/** Strip a ticket key the host card already displays, then tidy whitespace. */
+function stripKey(text: string, key: string | undefined): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (!key) return clean;
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return clean.replace(new RegExp(`\\b${escaped}\\b`, "gi"), " ").replace(/\s+/g, " ").trim();
 }
 
 /** Short chip text — avoid repeating the host title / ticket key. */
@@ -50,47 +59,29 @@ export function chipDisplayLabel(
   ref: EntityRef,
   opts?: { suppressJiraKey?: string; hostLabel?: string },
 ): string {
-  let label = (ref.label || ref.id || "").replace(/\s+/g, " ").trim();
-
-  if (opts?.suppressJiraKey) {
-    const re = new RegExp(`\\b${opts.suppressJiraKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi");
-    label = label.replace(re, " ").replace(/\s+/g, " ").trim();
-  }
+  let label = stripKey(ref.label || ref.id || "", opts?.suppressJiraKey);
 
   if (ref.kind === "note") {
     // Companion task notes sit under the row title — never re-echo it / the key.
     if (ref.id.startsWith("task-notes/")) return "Note";
-    if (!label || /^note$/i.test(label) || /^task note$/i.test(label)) return "Note";
+    if (!label || /^(task )?note$/i.test(label)) return "Note";
     if (opts?.hostLabel) {
-      let host = opts.hostLabel.replace(/\s+/g, " ").trim();
-      if (opts.suppressJiraKey) {
-        const re = new RegExp(
-          `\\b${opts.suppressJiraKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
-          "gi",
-        );
-        host = host.replace(re, " ").replace(/\s+/g, " ").trim();
-      }
-      if (normalizeLabel(label) === normalizeLabel(host)) return "Note";
-      // Title with key at either end should still collapse.
-      if (
-        normalizeLabel(host).includes(normalizeLabel(label)) &&
-        label.length >= 12
-      ) {
-        return "Note";
-      }
-      if (normalizeLabel(host).startsWith(normalizeLabel(label)) && label.length >= 12) {
-        return "Note";
-      }
+      const host = normalizeLabel(stripKey(opts.hostLabel, opts.suppressJiraKey));
+      // An echo of the host title (whole or leading fragment) adds nothing.
+      if (host === normalizeLabel(label)) return "Note";
+      if (label.length >= 12 && host.includes(normalizeLabel(label))) return "Note";
     }
     // Prefer a short basename over a long vault path echo.
-    if (label.includes("/")) {
-      label = label.split("/").pop() || label;
-    }
+    if (label.includes("/")) label = label.split("/").pop() || label;
     if (label.length > NOTE_LABEL_MAX) return `${label.slice(0, NOTE_LABEL_MAX - 1)}…`;
     return label || "Note";
   }
 
-  if (ref.kind === "jira" && opts?.suppressJiraKey && ref.id.toUpperCase() === opts.suppressJiraKey.toUpperCase()) {
+  if (
+    ref.kind === "jira" &&
+    opts?.suppressJiraKey &&
+    ref.id.toUpperCase() === opts.suppressJiraKey.toUpperCase()
+  ) {
     return opts.suppressJiraKey;
   }
 
@@ -127,9 +118,11 @@ export function EntityLinkChips({
   suppressJiraKey?: string;
   className?: string;
 }) {
+  const seedKey = JSON.stringify(seed ?? []);
   const [data, setData] = useState<EntityLinksPayload | null>(
     seed?.length ? { notes: [], related: seed } : null,
   );
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -140,16 +133,14 @@ export function EntityLinkChips({
     if (meetingTitle) params.set("meetingTitle", meetingTitle);
     if (prRepo) params.set("prRepo", prRepo);
     if (prNumber != null) params.set("prNumber", String(prNumber));
-    const seedKey = JSON.stringify(seed ?? []);
 
     void fetch(`/api/entity-links?${params}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((json: EntityLinksPayload | null) => {
         if (cancelled || !json) return;
-        const seeded = seedKey ? (JSON.parse(seedKey) as EntityRef[]) : [];
         setData({
           notes: json.notes ?? [],
-          related: [...seeded, ...(json.related ?? [])],
+          related: [...((JSON.parse(seedKey) as EntityRef[]) ?? []), ...(json.related ?? [])],
         });
       })
       .catch(() => {
@@ -158,13 +149,11 @@ export function EntityLinkChips({
     return () => {
       cancelled = true;
     };
-    // seed serialized to avoid identity churn
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, id, date, label, href, meetingTitle, prRepo, prNumber, JSON.stringify(seed ?? [])]);
+  }, [kind, id, date, label, href, meetingTitle, prRepo, prNumber, seedKey]);
 
   const chips: EntityRef[] = [];
   const seen = new Set<string>();
-  for (const ref of [...(showNotes ? data?.notes ?? [] : []), ...(data?.related ?? [])]) {
+  for (const ref of [...(showNotes ? (data?.notes ?? []) : []), ...(data?.related ?? [])]) {
     const key = `${ref.kind}:${ref.id}`;
     if (seen.has(key)) continue;
     if (ref.kind === kind && ref.id === id) continue;
@@ -181,19 +170,21 @@ export function EntityLinkChips({
 
   if (chips.length === 0) return null;
 
+  const hidden = expanded ? 0 : Math.max(0, chips.length - CHIP_LIMIT);
+  const visible = hidden > 0 ? chips.slice(0, CHIP_LIMIT) : chips;
+
   return (
-    <ul
-      className={`entity-link-chips ${className ?? ""}`.trim()}
-      aria-label="Linked entities"
-    >
-      {chips.slice(0, 6).map((ref) => {
+    <ul className={`entity-link-chips ${className ?? ""}`.trim()} aria-label="Linked entities">
+      {visible.map((ref) => {
         const Icon = KIND_ICON[ref.kind] ?? ExternalLink;
-        const target = defaultHrefForRef(ref) ?? ref.href;
+        const target = defaultHrefForRef(ref);
         const text = chipDisplayLabel(ref, { suppressJiraKey, hostLabel: label });
+        const external = !!target && /^https?:\/\//i.test(target);
         const inner = (
           <>
             <Icon size={10} aria-hidden />
             <span>{text}</span>
+            {external ? <ExternalLink size={9} aria-hidden className="entity-link-chip-out" /> : null}
           </>
         );
         return (
@@ -204,6 +195,9 @@ export function EntityLinkChips({
                 className="entity-link-chip"
                 data-kind={ref.kind}
                 title={ref.label || text}
+                // External chips must not navigate the app (or the desktop
+                // shell) away from the page the user is working on.
+                {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
                 onClick={(e) => e.stopPropagation()}
               >
                 {inner}
@@ -216,6 +210,21 @@ export function EntityLinkChips({
           </li>
         );
       })}
+      {hidden > 0 ? (
+        <li>
+          <button
+            type="button"
+            className="entity-link-chip entity-link-chip-more"
+            aria-label={`Show ${hidden} more linked ${hidden === 1 ? "entity" : "entities"}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded(true);
+            }}
+          >
+            +{hidden}
+          </button>
+        </li>
+      ) : null}
     </ul>
   );
 }

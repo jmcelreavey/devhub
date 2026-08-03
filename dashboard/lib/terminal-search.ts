@@ -19,7 +19,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { terminalLogDir, cleanTerminalOutput, isValidSessionId } from "@/lib/terminal-log";
+import { terminalLogDir, isValidSessionId, readSessionLogTail } from "@/lib/terminal-log";
 
 export interface TerminalMatch {
   sessionId: string;
@@ -41,7 +41,6 @@ export interface TerminalSearchResult {
 
 /** Don't read unbounded history into memory for one query. */
 const MAX_SESSIONS = 60;
-const MAX_BYTES_PER_LOG = 2 * 1024 * 1024;
 const MAX_MATCHES = 200;
 /** A pasted base64 blob shouldn't blow up the response. */
 const MAX_LINE_CHARS = 400;
@@ -129,24 +128,27 @@ export function listSessionLogs(): { sessionId: string; file: string; modifiedAt
   return out.sort((a, b) => b.modifiedAt - a.modifiedAt);
 }
 
-/** Read the tail of a log, cleaned of ANSI, as lines. */
-function readCleanLines(file: string): string[] {
-  try {
-    const { size } = fs.statSync(file);
-    const start = Math.max(0, size - MAX_BYTES_PER_LOG);
-    const fd = fs.openSync(file, "r");
-    let raw: string;
-    try {
-      const buf = Buffer.alloc(Math.min(size, MAX_BYTES_PER_LOG));
-      fs.readSync(fd, buf, 0, buf.length, start);
-      raw = buf.toString("utf8");
-    } finally {
-      fs.closeSync(fd);
-    }
-    return cleanTerminalOutput(raw).split("\n");
-  } catch {
-    return [];
-  }
+export interface SessionTranscript {
+  sessionId: string;
+  /** Redacted cleaned lines (same indexing as search hits). */
+  lines: string[];
+  modifiedAt: number;
+  truncated: boolean;
+}
+
+/**
+ * Historical transcript for the viewer — same tail + line index as search,
+ * with secrets masked before anything reaches the browser.
+ */
+export function getSessionTranscript(sessionId: string): SessionTranscript | null {
+  const tail = readSessionLogTail(sessionId);
+  if (!tail) return null;
+  return {
+    sessionId: tail.sessionId,
+    lines: tail.lines.map((line) => redactSecrets(line)),
+    modifiedAt: tail.modifiedAt,
+    truncated: tail.truncated,
+  };
 }
 
 /**
@@ -167,7 +169,9 @@ export function searchTerminalSessions(query: string, limit = MAX_MATCHES): Term
 
   for (const log of logs) {
     searched += 1;
-    const lines = readCleanLines(log.file);
+    const tail = readSessionLogTail(log.sessionId);
+    if (!tail) continue;
+    const lines = tail.lines;
     for (let i = 0; i < lines.length; i++) {
       if (!lines[i].toLowerCase().includes(needle)) continue;
       if (matches.length >= limit) {

@@ -57,6 +57,41 @@ export function scrubNpmEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.Proces
   return clean;
 }
 
+
+/**
+ * Strip packaged-desktop runtime vars from an env passed to git / hooks.
+ *
+ * The desktop sidecar sets DEVHUB_DESKTOP, redirects NOTES_DIR into app-data,
+ * and forces NODE_ENV=production. Pre-push runs `npm run verify` which must look
+ * like a normal checkout shell — otherwise hooks resolve the wrong roots and
+ * Next builds can blow up with opaque "generate is not a function" failures.
+ */
+export function scrubDesktopRuntimeEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const clean = { ...env };
+  for (const key of Object.keys(clean)) {
+    if (key === "DEVHUB_DESKTOP" || key.startsWith("DEVHUB_")) {
+      // Keep credential / op helpers that hooks may need; drop runtime layout.
+      if (
+        key.startsWith("DEVHUB_OP_") ||
+        key === "DEVHUB_REPOS_DIR" ||
+        key === "DEVHUB_ALLOWED_DEV_ORIGINS"
+      ) {
+        continue;
+      }
+      delete clean[key];
+    }
+  }
+  // Content dirs redirected into app-data — let checkout .env.local win instead.
+  for (const key of ["NOTES_DIR", "TASKS_DIR", "COLLECTIONS_DIR", "UPSTARTS_DIR", "DOCS_DIR"]) {
+    delete clean[key];
+  }
+  // Desktop sidecar forces NODE_ENV=production; hooks must not inherit it.
+  if (clean.NODE_ENV === "production") {
+    delete (clean as { NODE_ENV?: string }).NODE_ENV;
+  }
+  return clean;
+}
+
 export function augmentedPathEnv(extra: Partial<NodeJS.ProcessEnv> = {}): NodeJS.ProcessEnv {
   const base = { ...scrubNpmEnv(), ...extra };
   const existing = base.PATH ?? "";

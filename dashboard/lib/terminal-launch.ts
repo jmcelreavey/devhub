@@ -8,6 +8,18 @@ export interface TerminalLaunchOptions {
   command?: string;
 }
 
+export interface TerminalTranscriptOptions {
+  sessionId: string;
+  /** 1-based line within the cleaned/redacted transcript tail. */
+  line?: number;
+  modifiedAt?: number;
+}
+
+/** Open the read-only historical transcript viewer (⌘K terminal hits). */
+export function openTerminalTranscript(options: TerminalTranscriptOptions): void {
+  window.dispatchEvent(new CustomEvent("devhub:terminal-transcript", { detail: options }));
+}
+
 export function openTerminal(options: TerminalLaunchOptions = {}): void {
   window.dispatchEvent(new CustomEvent("devhub:terminal-open", { detail: options }));
 }
