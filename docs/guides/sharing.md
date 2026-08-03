@@ -24,7 +24,7 @@ Publishing uses `gh gist create` / `gh gist edit` under the hood. DevHub does no
 
 Open any note or doc. The **Share** control in the editor header:
 
-1. Converts the current content to markdown (BlockNote notes → markdown via `blocksToText`; docs use the on-disk `.md` file).
+1. Converts the current content to markdown (BlockNote notes → **portable GitHub markdown** via `blocksToPortableMarkdown` — toggles become `<details>`, DevHub `::directives` are humanized or dropped, bold/italic/code survive; docs use the on-disk `.md` file).
 2. Creates a **secret** gist (unlisted, but readable by anyone with the URL).
 3. Copies the gist URL to your clipboard.
 
@@ -69,7 +69,7 @@ Treat live links like unlisted URLs: fine for short-lived handoffs, not for long
 | Live links nav missing | Enable GitHub in **Setup** |
 | Stale badge won't clear | Open the note, edit if needed, then **Update** on `/shared` or re-share from the editor |
 | Link stopped working | 14-day TTL may have expired; re-publish if you still need it |
-| Wrong formatting in gist | Notes export plain markdown from BlockNote; complex blocks may simplify |
+| Wrong formatting in gist | Notes export portable markdown (not DevHub round-trip `::directives`); shared checklists, task refs, and other rich blocks may simplify or drop |
 
 ## Related Docs
 

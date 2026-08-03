@@ -344,12 +344,16 @@ Merge conflict recovery lives on Status through `ConflictResolverPanel`. It read
 
 | Tab       | Purpose                                                                                                                                                                                   |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Changes   | Stage/unstage (per file, hunk, or all), inline diff, scoped discard (staged vs unstaged — discarding one side does not wipe the other), AI commit message, commit-only or commit-and-push |
+| Changes   | Stage/unstage (per file, hunk, or all), inline diff with **find** (`⌘F` / `Ctrl+F` while focused), scoped discard (staged vs unstaged — discarding one side does not wipe the other), AI commit message, commit-only or commit-and-push |
 | Branches  | Checkout, create, delete, pull, push (with pre-push hook failure handling)                                                                                                                |
 | Stash     | List, apply, pop, drop; stash conflicts open the terminal with a resolve command                                                                                                          |
-| History   | Commit graph, file history, show commit                                                                                                                                                   |
+| History   | Commit graph (windowed for large repos), branch relation banner (ahead/behind trunk), author/search filters, commit detail with file list + diff, **Compare branch** range diff vs default remote branch, **Open with → Cursor** at a historical revision |
 | Conflicts | Inline conflict editor (same semantics as Status)                                                                                                                                         |
-| Blame     | Porcelain blame for a file path                                                                                                                                                           |
+| Blame     | Searchable file picker (`GET /api/repos/<name>/git/files`), porcelain blame, **Open with → Cursor** at the blamed revision                                                                |
+
+**Diff panes** share a toolbar: context lines (default / none / full), maximize to a modal, and in-pane find. Split layouts (History file list ↔ diff, Stash list ↔ diff, range compare) are resizable; pane fractions persist in `localStorage`.
+
+When the checkout is on a feature branch with an open GitHub PR, the workspace header and `/repos` cards show a compact PR link plus rolled-up CI state (`passing` / `failing` / `pending`) from `GET /api/repos/<name>/pr` (requires `gh auth login`; skipped on the repo's default branch).
 
 API routes are scoped under `/api/repos/<name>/git/…` (and branch push/pull under `/api/repos/<name>/branches`). See [API Routes](../reference/api-routes.md#repo-git-routes).
 

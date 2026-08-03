@@ -32,6 +32,7 @@ Cmd+K
 - Common actions.
 - Standup shortcuts.
 - **Content** — full-text matches inside notes when your query is at least two characters (debounced; uses `GET /api/search` substring mode).
+- **Terminal sessions** — matches in recent PTY logs when your query is at least two characters (`GET /api/terminal/search`). Selecting a hit opens a read-only transcript modal with line numbers and copy actions; output is secret-redacted (unlike **Copy all output** on a live dock tab, which uses the raw log).
 
 For TF-IDF "related notes" search across the full notes vault, use the **Search** page at `/search` (`?mode=semantic` on the API). The palette always uses exact substring matching so results stay predictable for quick navigation.
 
