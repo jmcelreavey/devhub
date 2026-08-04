@@ -37,12 +37,14 @@ Use this skill to create or update reusable learning notes in DevHub notes, usua
 3. If the task updates an existing structured note, especially one the user says they already edited, verify the exact backing file under `REPO_ROOT/notes/<path>.json` before editing. `notes_read` is useful for content, but the file is the source of truth for BlockNote structure.
 4. Draft the note in Markdown using only sections that help the reader understand the topic.
 5. Prefer concrete repo evidence from the current conversation, files, or commands over memory.
-6. Choose the safest write path:
+6. When a note spans repositories or services, verify each claim in the owning repo. If the current code tool is scoped to one repo, use DevHub repo tools, commit/file history, or the GitHub CLI rather than guessing or changing tool security settings.
+7. Name boundary semantics precisely. For example, distinguish "SNS accepted the event" from "SendGrid accepted the email" and "the recipient received it".
+8. Choose the safest write path:
    - Use `notes_write` only when intentionally replacing the whole note after rereading the latest version.
    - Use `notes_append` only when the user explicitly wants content added at the end.
    - For targeted edits inside an existing note, table, or section, patch the on-disk BlockNote JSON or use the app/API path that preserves the existing block structure. Do not rewrite the whole note from memory.
-7. Re-read the note with `notes_read` and, for targeted edits, also inspect or search the exact `REPO_ROOT/notes/<path>.json` file to confirm the requested headings/table rows/strings exist in the saved file.
-8. Report the path and a brief summary of what was captured.
+9. Re-read the note with `notes_read` and, for targeted edits, also inspect or search the exact `REPO_ROOT/notes/<path>.json` file to confirm the requested headings/table rows/strings exist in the saved file.
+10. Report the path and a brief summary of what was captured.
 
 ## Existing Note Update Rules
 
@@ -69,6 +71,22 @@ Use these sections as building blocks, not as a mandatory template:
 
 Prefer `Summary`, `What It Is`, `Why It Matters`, `When To Use It`, and `Example` by default. Add `Where It Lives` for repo, tool, or system topics. Add `Watch Outs` when there are pitfalls.
 
+## Review-Ready System Notes
+
+When the user expects to explain or defend a system design, optimize the note for questions rather than writing a feature tour. Useful sections are:
+
+- `Elevator Pitch`: the whole design in two or three sentences.
+- `Responsibility Split`: what deterministic code, AI, infrastructure, and downstream services each own and explicitly do not own.
+- `End-to-End Flow`: a short text diagram from input to final side effect.
+- `State`: persisted fields and the exact meaning of each watermark or status.
+- `Bulk and Queue Behaviour`: concurrency, backpressure, retries, acknowledgement, and dead-letter handling.
+- `Failure Matrix`: what changes and what remains untouched for each failure boundary.
+- `Questions You May Be Asked`: concise answers to likely design-review questions.
+
+For event-driven systems, document what acknowledgement means at every hop. Do not collapse publish, queue processing, provider acceptance, and end-user delivery into one "sent" state.
+
+If the documented behavior exists only on an unmerged branch or is not deployed yet, label that clearly instead of presenting it as universal current behavior.
+
 ## 5Ws Notes
 
 If the user asks for the 5Ws, map them into useful learning sections instead of forcing a rigid template:
@@ -85,6 +103,7 @@ Add `How It Works`, `Example`, and `Watch Outs` when they make the note more use
 
 - Confirm the note path is relative to the DevHub notes root, such as `learnings/web/feature-flags`.
 - Re-read the note after writing it.
+- Spot-check technical boundary claims against the relevant source or infrastructure definition, especially retry counts, queue visibility, concurrency, state transitions, and delivery guarantees.
 - For updates to existing notes, verify the expected changes in `REPO_ROOT/notes/<path>.json` as well as through `notes_read`.
 - For table/section edits, search for the exact requested heading, table row, or key phrase in the saved JSON before reporting success.
 - For skill-file edits, ensure `SKILL.md` exists and starts with YAML frontmatter.
