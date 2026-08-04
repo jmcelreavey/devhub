@@ -38,8 +38,8 @@ dashboard/output/
 .claire/
 debug-*.sh
 
-# Electron packaged output
-electron-wrapper/release/
+# Electron launcher removed; ignore local leftovers
+electron-wrapper/
 
 # macOS
 .DS_Store

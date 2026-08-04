@@ -183,7 +183,7 @@ plugin** that declares `branding` and writes machine-local generated files:
 | `lib/plugin-branding.generated.ts` | `presets`, `defaultPreset`, `defaultMode`, `logo` | `lib/theme-presets.ts`, `lib/brand-mark.ts` |
 | `public/fonts-plugin/*` | `fonts` dir | `@font-face url("/fonts-plugin/…")` in your `themeCss` |
 | `public/plugin-brand-logo.*` | `logo.src` | sidebar chip, mobile bar, boot screen |
-| `public/plugin-desktop-icon.png` | `desktopIcon` | the Tauri desktop shell (`desktop/`) |
+| `public/plugin-desktop-icon.png` | `desktopIcon` | `desktop/scripts/stage-icons.mjs` during `desktop:stage` / `desktop:build` (OS app icon). Absent → core bottle from `dashboard/public/icon-512.png`. |
 | `~/.config/openchamber/{themes,settings.json}` | `openchamber` | OpenChamber itself (only if installed) |
 
 Key properties:

@@ -18,6 +18,7 @@ import {
   resourcesDir,
   serverDir,
   servicesDir,
+  stagingDir,
   hostTargetTriple,
 } from "./staging-paths.mjs";
 
@@ -68,8 +69,12 @@ const staged = [
   ["client assets", path.join(serverDir, ".next", "static")],
   ["sidecar supervisor", path.join(servicesDir, "supervisor.mjs")],
   ["terminal server", path.join(servicesDir, "terminal-pty-server.cjs")],
-  ["node-pty binding", path.join(servicesDir, "node_modules", "node-pty", "build", "Release")],
+  [
+    "node-pty binding",
+    path.join(servicesDir, "node_modules", "node-pty", "prebuilds", `${os.platform()}-${os.arch()}`),
+  ],
   ["packaged resources", path.join(resourcesDir, "MANIFEST.json")],
+  ["app icons", path.join(stagingDir, "icons", "128x128.png")],
 ];
 for (const [label, target] of staged) {
   check(`staged: ${label}`, fs.existsSync(target), path.relative(repoRoot, target), "npm run desktop:stage");
