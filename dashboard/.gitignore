@@ -50,6 +50,7 @@ next-env.d.ts
 /public/fonts-plugin/
 /public/plugin-brand-logo.*
 /public/plugin-electron-icon.png
+/public/plugin-desktop-icon.png
 
 # Playwright
 /test-results/
