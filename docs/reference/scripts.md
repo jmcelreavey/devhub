@@ -89,6 +89,21 @@ Maintenance actions run in-process via `dashboard/lib/scripts-runner.ts` (not sh
 
 `GET /api/scripts` returns `{ scripts: string[], catalog: ScriptCatalogEntry[] }` where each catalog entry includes `id`, `label`, `description`, `mutates`, `effects[]`, and `cmd`.
 
+### Linked checkout requirement
+
+Several actions read repo source or `.git` state from the **linked DevHub checkout** (`getCheckoutRoot()`), not from the app-data content base. On the installed desktop app without a linked checkout, these fail immediately:
+
+```text
+ERROR: No linked git checkout — attach a DevHub checkout before running this action.
+```
+
+| Category | Script IDs |
+| -------- | ---------- |
+| Git and content sync | `update_and_sync`, `commit_dirty_push`, `sync_notes_push`, `sync_notes_tasks_push`, `push_unpushed_commits`, `pull_core` |
+| Catalog sync (checkout paths) | `sync_skills` — reads `skills/shared/` from the git tree |
+
+Attach via **View → Attach to Dev Server…** or record the checkout during desktop migration. Preview-only actions (`dry_run_scoped_sync`, `pull_core_preview`) and catalog syncs that only copy local tool state (`sync_agents`, `sync_mcp_servers`, `sync_native_persona`, `sync_opencode_config`) do not require a checkout.
+
 ### Git and content sync
 
 | ID                      | Label                        | Mutates | Notes                                                         |

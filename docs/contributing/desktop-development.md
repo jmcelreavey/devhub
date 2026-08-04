@@ -110,6 +110,8 @@ Staging takes a couple of minutes because it runs a full Next production build.
 If you are only changing Rust, stage once and then use `cargo` directly in
 `desktop/src-tauri/`.
 
+`desktop:stage` also runs `desktop/scripts/stage-icons.mjs`, which copies either the plugin branding icon (`dashboard/public/plugin-desktop-icon.png`, materialised by `sync_plugins` when a branding plugin is enabled) or the core DevHub bottle (`dashboard/public/icon-512.png`) into `desktop/staging/icons/` before `cargo tauri icon` generates bundle assets. Icons in `src-tauri/icons/` are committed defaults; plugin branding stages into the gitignored staging dir so a whitelabel build does not dirty core icons.
+
 ```bash
 cd desktop/src-tauri
 cargo test

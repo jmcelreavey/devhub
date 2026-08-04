@@ -75,6 +75,8 @@ Run skill sync when:
 - A tool does not show a skill you expect.
 - You want the latest ai-tools skills (or use **Refresh** on the Skills page).
 
+Skill sync reads `skills/shared/` from the **linked DevHub checkout**, not from app-data. On the installed desktop app without a linked checkout, **Sync skills** fails with "No linked git checkout" — attach a checkout (**View → Attach to Dev Server…**) or run sync from a browser session rooted in the repo. See [Scripts — Linked checkout requirement](../reference/scripts.md#linked-checkout-requirement).
+
 Use the source filter (**All / DevHub / ai-tools / Local**) and the eye control to exclude catalog skills from sync and prune.
 
 ### Sync preview before sync

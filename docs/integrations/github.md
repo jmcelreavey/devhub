@@ -125,6 +125,10 @@ the scaffold with MCP `notes_create_pr`. See [Notes System — Cross-entity link
 - Re-running the review for the same PR overwrites the existing note at the same
   path.
 
+### Review notes in Git history
+
+In the **Repo Git workspace** (History or Blame), DevHub parses each commit message for PR numbers and Jira keys and matches local review notes under `notes/pr-reviews/`. Context chips link to the note ("why was this accepted?") or open Jira directly. Match confidence: `pr` (same PR), `ticket` (same Jira key), `related` (same ticket, different repo). Hosted git UIs cannot make this jump — the notes stay local. API: `GET /api/repos/<name>/git/commit-context?commit=`.
+
 ## Standup Support
 
 GitHub activity can contribute to standup markdown, especially merged PRs and review activity.
