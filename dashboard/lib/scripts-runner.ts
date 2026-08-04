@@ -548,8 +548,9 @@ export function getRunLogPayload(runId: string): RunLogPayload | null {
   }
 }
 
-/** Actions that run git against the linked checkout (not app-data content root). */
+/** Actions that require source assets or git state from the linked checkout, not app-data. */
 const REQUIRES_CHECKOUT = new Set<AllowedScript>([
+  "sync_skills",
   "update_and_sync",
   "commit_dirty_push",
   "sync_notes_push",
