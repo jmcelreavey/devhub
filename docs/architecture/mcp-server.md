@@ -46,7 +46,7 @@ The server has two tool tiers:
 | Tier              | Source Of Truth                           | Dashboard Required | Tool Groups                                                                                                                                                  |
 | ----------------- | ----------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Filesystem-backed | Local files under configured content dirs | No                 | Notes, docs, tasks, diagrams, appraisal, DX audit                                                                                                            |
-| Dashboard-backed  | DevHub HTTP routes on `DEVHUB_BASE_URL`   | Yes                | Status, briefing, calendar, work/PRs/Jira, assets, search, scripts, repos (list/open/reveal/clone/learn + full git workspace), capability, sessions, Datadog |
+| Dashboard-backed  | DevHub HTTP routes on `DEVHUB_BASE_URL`   | Yes                | Status, briefing, calendar, work/PRs/Jira, assets, search, scripts, repos (list/open/reveal/clone/learn + full git workspace), capability, sessions, share, workspace reads, Datadog |
 | Script-backed     | Local shell scripts under `REPO_ROOT`     | No (runs detached) | `repo_ship`, `repo_ship_status`                                                                                                                              |
 
 Filesystem-backed tools call the vault/storage layer directly and work headless.
@@ -100,6 +100,8 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 | Scripts    | `scripts_list`, `scripts_run`, `scripts_run_status`, `scripts_history`                                                                                                                                                                                                                                                                                        |
 | Repos      | `repos_list`, `repos_open`, `repos_reveal`, `repos_clone`, `repo_learn`, `repos_git_status`, `repos_git_stage`, `repos_git_discard`, `repos_git_stage_hunk`, `repos_git_diff`, `repos_git_stash`, `repos_git_branches`, `repos_git_branch`, `repos_git_commit`, `repos_git_push`, `repos_git_log`, `repos_git_show`, `repos_git_blame`, `repos_git_conflicts` |
 | Sessions   | `sessions_recap`                                                                                                                                                                                                                                                                                                                                              |
+| Share      | `share_list`, `share_publish`, `share_one_time`, `share_revoke` — parity with the editor **Share** / **One-time** buttons; registry stays in the dashboard process                                                                                                                                                                                            |
+| Workspace  | `skills_list`, `skills_read`, `context_pack`, `collections_list`, `jobs_list`, `jobs_get`, `research_list`, `radar_personal`, `persona_list`, `learnings_list`, `agents_list`, `briefing_tasks` — read-only GET proxies for dashboard areas that had no MCP coverage                                                                                           |
 | Datadog    | `datadog_oncall`, `datadog_recent_alerts`, `datadog_investigate`                                                                                                                                                                                                                                                                                              |
 
 BI-specific MCP tools are contributed by the private BI plugin as a separate server; they are not part of the core DevHub server.
@@ -264,6 +266,28 @@ Capability tools proxy dashboard routes under `/api/capability/*`. Start `npm ru
 5. `capability_complete_lab` — mark a lab done and tick its follow-up task.
 
 See the [Capability Radar plan](../archive/capability-radar-plan.md) for the original feature map (archived — it shipped as `dashboard/lib/capability/`).
+
+### Share a note or doc from an agent
+
+Share tools proxy `/api/share` and `/api/share/one-time`. Start `npm run dev` first.
+
+1. `share_list` — live gist links (stale/missing flags) and unread one-time links.
+2. `share_publish` with `vault` (`notes` or `docs`) and `path` (vault-relative, no extension) — stable secret gist; re-run to push updates. Needs `gh auth login`.
+3. `share_one_time` with the same `vault`/`path` — burn-after-reading PrivateBin link. Returns the URL and, by default, a generated passphrase in the **same** tool result — treat the whole response as sensitive and deliver link and password on separate channels.
+4. `share_revoke` with `id` (one-time, from `share_list` or `share_one_time`) or `vault`+`path` (live gist).
+
+One-time links created via MCP appear on `/shared` and can be revoked from either side. See [Sharing notes and docs](../guides/sharing.md).
+
+### Orient in the workspace from an agent
+
+Workspace tools are read-only GET proxies — useful as a first call when picking up work cold:
+
+- `context_pack` — consolidated working-state snapshot (optional `format`, e.g. `markdown`).
+- `skills_list` / `skills_read` — browse the merged skill catalog before improvising.
+- `collections_list` — optional `notePath` filter for membership.
+- `jobs_list` / `jobs_get`, `research_list`, `radar_personal`, `learnings_list` (optional `category`), `agents_list`, `briefing_tasks`, `persona_list`.
+
+Writes in these areas (`/api/persona` POST, `/api/collections` POST, `/api/briefing/tasks` POST, `/api/actions/*` launches) are deliberately not exposed yet.
 
 ### Ship everything to main
 

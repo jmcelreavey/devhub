@@ -152,8 +152,22 @@ anyone holding it before it's read can open it.
 | Recipient says the one-time link is dead | Something opened it first (a link scanner, or a forwarded copy), or the expiry elapsed. Re-share |
 | Recipient can't decrypt | They need the password too, and the full URL including everything after the `#` — some clients truncate it |
 
+## MCP Tools
+
+Agents can share through the dashboard-backed MCP tools (dashboard must be running):
+
+| Tool | Use when |
+| ---- | -------- |
+| `share_list` | Inspect live and unread one-time links |
+| `share_publish` | Stable secret gist (`vault` + `path`) |
+| `share_one_time` | Burn-after-reading link; passphrase returned once in the tool result |
+| `share_revoke` | `id` for one-time, or `vault`+`path` for a live gist |
+
+`share_one_time` puts the link and password in the same response — deliver them on separate channels. Full inventory and workflows: [MCP Server](../architecture/mcp-server.md#share-a-note-or-doc-from-an-agent).
+
 ## Related Docs
 
 - [GitHub integration](../integrations/github.md) — `gh` auth and PR views
 - [Notes System](../architecture/notes-system.md) — vault storage and sidebar ordering
 - [API Routes](../reference/api-routes.md) — `/api/share` endpoints
+- [MCP Server](../architecture/mcp-server.md) — `share_*` and workspace read tools

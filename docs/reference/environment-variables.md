@@ -83,6 +83,14 @@ These vars gate the **Ops** tab and `GET /api/setup/status` → `bi`. They do no
 
 `BI_OPS_USER_EMAIL` (Datadog table above) also contributes to `bi` presence. When any of these (or a profile in `~/.aws/config`) is present, `bi: true` in setup status. Configure in `dashboard/.env.local` or via 1Password when `DEVHUB_OP_SYNC_LOCAL=1`.
 
+## Sharing (one-time links)
+
+| Variable         | Default                  | Purpose                                                                                                                                          |
+| ---------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PRIVATEBIN_URL` | `https://privatebin.net` | PrivateBin instance for **One-time** shares (`POST /api/share/one-time`). Content is encrypted client-side before upload; this only picks which server stores ciphertext. Trailing slashes are stripped. Set in `dashboard/.env.local` — not on `/setup`. |
+
+See [Sharing notes and docs](../guides/sharing.md) for gist vs one-time behaviour, the `#-` URL form (link-scanner safe), and rate-limit troubleshooting.
+
 ## Notes, Repo Learning, and Briefing AI (Optional)
 
 BlockNote AI in the notes editor, Repo Learning generated artifacts, and morning-briefing AI features (design chat, interest snippets, research fallbacks) work with any **OpenAI-compatible** chat-completions endpoint — [z.ai](https://z.ai) (the default), OpenAI, OpenRouter, Together, Groq, a local Ollama/LM Studio server, etc. Point `AI_BASE_URL` / `AI_MODEL` at your provider and set `AI_API_KEY`. Configure these in `dashboard/.env.local` only - not on `/setup`.
