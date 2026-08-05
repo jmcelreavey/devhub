@@ -59,12 +59,14 @@ export function scrubNpmEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.Proces
 
 
 /**
- * Strip packaged-desktop runtime vars from an env passed to git / hooks.
+ * Strip packaged-desktop runtime vars from an env passed to child processes.
  *
  * The desktop sidecar sets DEVHUB_DESKTOP, redirects NOTES_DIR into app-data,
- * and forces NODE_ENV=production. Pre-push runs `npm run verify` which must look
- * like a normal checkout shell — otherwise hooks resolve the wrong roots and
- * Next builds can blow up with opaque "generate is not a function" failures.
+ * and forces NODE_ENV=production. The packaged Next standalone server also
+ * stashes `__NEXT_PRIVATE_STANDALONE_CONFIG` on process.env (JSON — no
+ * functions). Git hooks and terminal shells must look like a normal checkout
+ * shell instead of inheriting DevHub's private runtime, or `next build` dies
+ * with `TypeError: generate is not a function`.
  */
 export function scrubDesktopRuntimeEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const clean = { ...env };
@@ -87,6 +89,14 @@ export function scrubDesktopRuntimeEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEn
   // Desktop sidecar forces NODE_ENV=production; hooks must not inherit it.
   if (clean.NODE_ENV === "production") {
     delete (clean as { NODE_ENV?: string }).NODE_ENV;
+  }
+  delete clean.PORT;
+  // Next standalone server.js does:
+  //   process.env.__NEXT_PRIVATE_STANDALONE_CONFIG = JSON.stringify(nextConfig)
+  // JSON drops functions, so a leaked copy makes `next build` in pre-push blow up
+  // with `TypeError: generate is not a function` (generateBuildId is missing).
+  for (const key of Object.keys(clean)) {
+    if (key.startsWith("__NEXT_PRIVATE_")) delete clean[key];
   }
   return clean;
 }

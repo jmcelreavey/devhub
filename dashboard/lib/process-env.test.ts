@@ -81,6 +81,7 @@ describe("scrubDesktopRuntimeEnv", () => {
       HOME: "/tmp/home",
       PATH: "/usr/bin",
       NODE_ENV: "production",
+      PORT: "1337",
       DEVHUB_DESKTOP: "1",
       DEVHUB_APP_DATA: "/tmp/app-data",
       DEVHUB_SERVER_DIR: "/Applications/DevHub.app/Contents/Resources/server",
@@ -88,6 +89,8 @@ describe("scrubDesktopRuntimeEnv", () => {
       NOTES_DIR: "/tmp/app-data/notes",
       TASKS_DIR: "/tmp/app-data/tasks",
       OPENCODE_PORT: "1338",
+      __NEXT_PRIVATE_STANDALONE_CONFIG: JSON.stringify({ distDir: ".next" }),
+      __NEXT_PRIVATE_RENDER_WORKER: "1",
     } as NodeJS.ProcessEnv);
 
     expect(env.HOME).toBe("/tmp/home");
@@ -99,5 +102,8 @@ describe("scrubDesktopRuntimeEnv", () => {
     expect(env.NOTES_DIR).toBeUndefined();
     expect(env.TASKS_DIR).toBeUndefined();
     expect(env.NODE_ENV).toBeUndefined();
+    expect(env.PORT).toBeUndefined();
+    expect(env.__NEXT_PRIVATE_STANDALONE_CONFIG).toBeUndefined();
+    expect(env.__NEXT_PRIVATE_RENDER_WORKER).toBeUndefined();
   });
 });

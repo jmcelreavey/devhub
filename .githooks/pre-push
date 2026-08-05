@@ -49,6 +49,27 @@ if [[ ! -d "$DASHBOARD_DIR/node_modules" ]]; then
     exit 0
 fi
 
+# Desktop sidecar / polluted IDE shells leave NODE_ENV=production, PORT, and
+# DEVHUB_* layout vars. That makes `next build` fail with opaque
+# `TypeError: generate is not a function`. Mirror scrubDesktopRuntimeEnv here so
+# pushes from Cursor/IDE terminals get the same hygiene as DevHub's git API.
+if [[ "${NODE_ENV:-}" == "production" ]]; then
+    unset NODE_ENV
+fi
+unset PORT
+while IFS= read -r key; do
+    case "$key" in
+        DEVHUB_OP_*|DEVHUB_REPOS_DIR|DEVHUB_ALLOWED_DEV_ORIGINS) ;;
+        DEVHUB_*) unset "$key" ;;
+    esac
+done < <(env | awk -F= '/^DEVHUB_/ { print $1 }')
+unset NOTES_DIR TASKS_DIR COLLECTIONS_DIR UPSTARTS_DIR DOCS_DIR
+# Packaged Next standalone puts a JSON config (no functions) on process.env;
+# if that leaks into this hook, `next build` dies with generate is not a function.
+while IFS= read -r key; do
+    unset "$key"
+done < <(env | awk -F= '/^__NEXT_PRIVATE_/ { print $1 }')
+
 echo "[pre-push] Running dashboard verify…"
 cd "$DASHBOARD_DIR"
 if ! npm run --silent verify; then

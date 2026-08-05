@@ -22,4 +22,5 @@ PUBLIC_PATHS=(.gitattributes .githooks .github .gitignore .nvmrc AGENTS.md
 # public core.
 PERSONAL_PATHS=(notes tasks collections upstarts
                 dashboard/.env.local persona/identity.txt
-                TEMPLATE_AND_PLUGIN_PLAN.md scripts/make-public-seed.sh)
+                TEMPLATE_AND_PLUGIN_PLAN.md scripts/make-public-seed.sh
+                MCP_PARITY_AUDIT.md ONE_TIME_SHARE_PLAN.md)

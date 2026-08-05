@@ -111,7 +111,8 @@ const ACTIONS: Record<string, ActionDef> = {
   commit_dirty_push: {
     label: "Commit & Push Dirty Files",
     description: "Stage all changes, commit, and push current branch.",
-    timeoutMs: 120_000,
+    // Pre-push runs full verify (lint+typecheck+tests+build) — often 3–4 min.
+    timeoutMs: 600_000,
     mutates: true,
     effects: [
       "Runs git add -A in this repo",
@@ -124,7 +125,7 @@ const ACTIONS: Record<string, ActionDef> = {
   sync_notes_push: {
     label: "Sync Notes (Commit + Push)",
     description: "Commit and push changes under notes/ only.",
-    timeoutMs: 120_000,
+    timeoutMs: 600_000,
     mutates: true,
     effects: [
       "Stages only changes under notes/",
@@ -144,7 +145,7 @@ const ACTIONS: Record<string, ActionDef> = {
     label: "Sync content (Commit + Push)",
     description:
       "Commit and push changes under notes/, collections/ (checklists), tasks/, docs/, and upstarts/ only.",
-    timeoutMs: 120_000,
+    timeoutMs: 600_000,
     mutates: true,
     effects: [
       "Stages only changes under notes/, collections/, tasks/, docs/, and upstarts/",
@@ -182,8 +183,8 @@ const ACTIONS: Record<string, ActionDef> = {
   push_unpushed_commits: {
     label: "Push Unpushed Commits",
     description: "Push ahead commits on main/master without staging or committing files.",
-    // Pre-push runs full verify (~2 min); keep headroom past GIT_NETWORK_TIMEOUT.
-    timeoutMs: 300_000,
+    // Pre-push runs full verify (lint+typecheck+tests+build) — often 3–4 min.
+    timeoutMs: 600_000,
     mutates: true,
     effects: [
       "Fetches origin/<branch> and checks ahead count",

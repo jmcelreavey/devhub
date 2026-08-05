@@ -1,5 +1,5 @@
 import { deleteGist } from "@/lib/share/gist";
-import { listShares, removeShare } from "@/lib/share/share-store";
+import { listShares, pruneExpiredOneTimeShares, removeShare } from "@/lib/share/share-store";
 import { shareExpiresAt } from "@/lib/share/share-public";
 
 /** How often the background sweep checks for expired live links. */
@@ -23,6 +23,16 @@ export async function sweepExpiredShares(now: number = Date.now()): Promise<numb
       console.error("[share-expiry] failed to expire", share.key, err);
     }
   }
+
+  // One-time links expire server-side on the PrivateBin instance, so there is
+  // nothing to delete — just stale rows to forget. Failures here must not stop
+  // the gist sweep, which is the half that leaves real artefacts behind.
+  try {
+    await pruneExpiredOneTimeShares(now);
+  } catch (err) {
+    console.error("[share-expiry] failed to prune one-time links", err);
+  }
+
   return removed;
 }
 

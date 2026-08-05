@@ -36,7 +36,7 @@ export function isGitNetworkCommand(args: string[]): boolean {
 }
 
 /** Default cap for fetch/pull/push so a hung credential helper or network never stalls the API forever. */
-export const GIT_NETWORK_TIMEOUT_MS = 300_000;
+export const GIT_NETWORK_TIMEOUT_MS = 600_000;
 export const GIT_MAX_BUFFER_BYTES = 50 * 1024 * 1024;
 
 function outputLimitError(args: string[], maxBuffer: number): string {

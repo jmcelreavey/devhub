@@ -41,3 +41,42 @@ export const SHARE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 export function shareExpiresAt(share: Pick<ShareRecord, "createdAt">): number {
   return share.createdAt + SHARE_TTL_MS;
 }
+
+/**
+ * A note published as a one-time PrivateBin link.
+ *
+ * Deliberately *not* a `ShareRecord`. A gist share is a stable URL we keep in
+ * sync with the note, so "stale" and "update" mean something. A one-time link
+ * is consumed on first read: there is nothing to update, the URL changes on
+ * every publish, and after the recipient opens it the content is gone from the
+ * server entirely. Modelling both with one type produced a `/shared` page that
+ * offered Update buttons that could not work.
+ *
+ * We cannot observe whether it has been read — that is the server's business
+ * and it tells nobody — so this record is a local receipt, not a status.
+ */
+export interface OneTimeRecord {
+  /** Local id. Not the paste id, so the registry alone cannot open the paste. */
+  id: string;
+  vault: VaultId;
+  /** Decoded vault slug (no extension) the link was made from. */
+  path: string;
+  title: string;
+  /** Full URL including the key fragment. This is the secret. */
+  url: string;
+  pasteId: string;
+  /** Lets us revoke before first read. Useless afterwards. */
+  deleteToken: string;
+  hasPassword: boolean;
+  burnAfterReading: boolean;
+  /** PrivateBin expiry key, e.g. `1day`. */
+  expire: string;
+  createdAt: number;
+  /** Epoch ms the instance will drop it, mirrored locally for display only. */
+  expiresAt: number;
+}
+
+/** One-time links we no longer need to show, because the server dropped them. */
+export function oneTimeIsExpired(record: Pick<OneTimeRecord, "expiresAt">, now = Date.now()): boolean {
+  return now >= record.expiresAt;
+}

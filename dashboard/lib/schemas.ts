@@ -208,6 +208,23 @@ export const ShareCreateSchema = z.object({
 });
 
 /**
+ * One-time (PrivateBin) shares. `password` is a boolean, not a string: DevHub
+ * generates the passphrase server-side and returns it once. Accepting a
+ * caller-supplied password would put it in the request body, the browser's
+ * memory and any proxy log, for no benefit — nobody is typing a better one.
+ */
+export const OneTimeShareCreateSchema = z.object({
+  vault: z.string(),
+  path: z.string().min(1),
+  password: z.boolean().default(true),
+  expire: z.enum(["5min", "10min", "1hour", "1day", "1week", "1month"]).default("1day"),
+});
+
+export const OneTimeShareDeleteSchema = z.object({
+  id: z.string().min(1),
+});
+
+/**
  * `/api/setup/save` writes dashboard/.env.local — the highest-consequence body
  * in the app, since it is what toggles LAN exposure and rewrites integration
  * secrets. Every group is optional (the UI saves one section at a time) but

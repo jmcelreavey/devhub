@@ -7,6 +7,7 @@ import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { useConfirm } from "@/components/shell/ConfirmDialog";
+import { OneTimeLinksSection } from "@/components/OneTimeLinksSection";
 import { getVaultClient } from "@/lib/vault/vault-client";
 import { shareExpiresAt, type ShareRecord, type ShareStatus } from "@/lib/share/share-public";
 
@@ -224,6 +225,8 @@ export default function SharedClient() {
           ))}
         </div>
       )}
+
+      <OneTimeLinksSection />
     </div>
   );
 }

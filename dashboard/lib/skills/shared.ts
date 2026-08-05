@@ -39,12 +39,93 @@ export function skillMdPath(skillDir: string): string {
   return path.join(skillDir, SKILL_MD);
 }
 
-/** Extract a `description:` (or first prose line) from skill/agent markdown frontmatter. */
+/** `description: >-` / `|` and friends — a YAML block scalar header. */
+const BLOCK_SCALAR_HEADER = /^(\s*)description:\s*([|>])[+-]?\d*\s*$/;
+
+/** `description: value`, possibly quoted. */
+const INLINE_DESCRIPTION = /^\s*description:\s*(.+?)\s*$/;
+
+/** Strip one layer of matching surrounding quotes, leaving inner apostrophes alone. */
+function unquote(value: string): string {
+  const match = value.match(/^(['"])([\s\S]*)\1$/);
+  return match ? match[2] : value;
+}
+
+/**
+ * Read the indented body of a YAML block scalar and flatten it to one string.
+ *
+ * Folded (`>`) joins wrapped lines with spaces; literal (`|`) keeps the line
+ * breaks. Chomping indicators (`-`, `+`) only affect trailing newlines, which
+ * we trim either way, so they are parsed but ignored.
+ */
+function readBlockScalar(lines: string[], headerIndex: number, keyIndent: number, style: "|" | ">"): string {
+  const body: string[] = [];
+  for (let i = headerIndex + 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (line.trim() === "") {
+      body.push("");
+      continue;
+    }
+    const indent = line.length - line.trimStart().length;
+    if (indent <= keyIndent) break;
+    body.push(line);
+  }
+  while (body.length > 0 && body[body.length - 1] === "") body.pop();
+  if (body.length === 0) return "";
+
+  const indents = body.filter((l) => l.trim() !== "").map((l) => l.length - l.trimStart().length);
+  const minIndent = Math.min(...indents);
+  const dedented = body.map((l) => (l.trim() === "" ? "" : l.slice(minIndent)));
+
+  if (style === "|") return dedented.join("\n").trim();
+
+  // Folded: a blank line is a paragraph break, everything else joins with a space.
+  const paragraphs: string[] = [];
+  let current: string[] = [];
+  for (const line of dedented) {
+    if (line === "") {
+      if (current.length > 0) paragraphs.push(current.join(" "));
+      current = [];
+    } else {
+      current.push(line);
+    }
+  }
+  if (current.length > 0) paragraphs.push(current.join(" "));
+  return paragraphs.join("\n\n").trim();
+}
+
+/**
+ * Extract a `description:` (or first prose line) from skill/agent markdown
+ * frontmatter.
+ *
+ * Handles YAML block scalars. The previous implementation matched
+ * `/^description:\s*(.+)/m` and so captured the *indicator* — 10 of 42 skills
+ * reported their description as the literal string `">-"`, because a long
+ * description is naturally written as `description: >-` with the prose on the
+ * following indented lines. That is the field the skills page and any agent use
+ * to decide whether a skill is relevant, so those skills were effectively
+ * invisible.
+ */
 export function descriptionFromFrontmatter(content: string): string | null {
-  const descMatch = content.match(/^description:\s*(.+)/m);
-  if (descMatch) return descMatch[1].trim().replace(/['"]/g, "");
-  const lines = content.split("\n").filter(Boolean);
-  const nonHeader = lines.find((l) => !l.startsWith("#") && !l.startsWith("---") && !l.includes(":"));
+  const lines = content.split("\n");
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const block = lines[i].match(BLOCK_SCALAR_HEADER);
+    if (block) {
+      const [, indent, style] = block;
+      const value = readBlockScalar(lines, i, indent.length, style as "|" | ">");
+      return value || null;
+    }
+
+    const inline = lines[i].match(INLINE_DESCRIPTION);
+    if (inline) {
+      const value = unquote(inline[1]).trim();
+      return value || null;
+    }
+  }
+
+  const prose = lines.filter(Boolean);
+  const nonHeader = prose.find((l) => !l.startsWith("#") && !l.startsWith("---") && !l.includes(":"));
   return nonHeader?.trim() ?? null;
 }
 

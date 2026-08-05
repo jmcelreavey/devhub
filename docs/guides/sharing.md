@@ -1,6 +1,6 @@
 ---
 title: Sharing notes and docs
-description: Publish a note or doc as a secret Gist — a read-only link you can paste anywhere.
+description: Publish a note or doc as a secret Gist, or as a one-time link that self-destructs.
 order: 8
 icon: Share2
 tags: [workflow]
@@ -11,16 +11,31 @@ related:
 
 # Sharing Notes and Docs
 
-DevHub can publish a note or doc as a **secret GitHub Gist** — a temporary, read-only link you can paste into Slack or email without committing the content to git.
+DevHub has two ways to hand someone a note without committing it to git. They behave
+differently on purpose:
 
-## Requirements
+| | **Share** (live link) | **One-time** |
+| --- | --- | --- |
+| Backed by | Secret GitHub Gist | PrivateBin paste |
+| URL | Stable — re-push edits to it | New link every time |
+| Lifetime | 14 days, or until you remove it | Destroyed on first read |
+| Password | No | Yes, generated for you |
+| Needs | `gh` authenticated | Nothing |
+| Good for | An evolving doc someone keeps checking | A one-off handover you'd rather not leave lying around |
+
+Pick **Share** when the recipient should keep seeing your latest version. Pick
+**One-time** when they should see it once and then it should be gone.
+
+## Live Links (Gist)
+
+### Requirements
 
 - [GitHub CLI](https://cli.github.com/) installed and authenticated (`gh auth login`).
 - GitHub enabled in **Setup** (same gate as PR views and the **Live links** sidebar entry).
 
 Publishing uses `gh gist create` / `gh gist edit` under the hood. DevHub does not store a separate GitHub token.
 
-## Publish From The Editor
+### Publish From The Editor
 
 Open any note or doc. The **Share** control in the editor header:
 
@@ -32,7 +47,7 @@ If the note is already live, clicking **Share** again (or **Update** on the **Li
 
 Empty notes cannot be published.
 
-## Live Links Registry
+### Live Links Registry
 
 **Live links** (`/shared`) lists every gist DevHub is tracking:
 
@@ -45,21 +60,83 @@ Empty notes cannot be published.
 
 The registry is local state at `~/.local/state/devhub/shares.json`. It is **not** synced through git. Gists themselves live on GitHub under your account.
 
-## Expiry And Cleanup
+### Expiry And Cleanup
 
 Live links expire **14 days** after they are first published. A background sweep (every six hours while the dashboard is running) deletes expired gists and removes their registry entries.
 
 Use **Remove** or **Remove all** on `/shared` to unpublish early.
 
+---
+
+## One-Time Links (PrivateBin)
+
+The **One-time** button in the editor header publishes the note as a
+[PrivateBin](https://privatebin.info/) paste that the server destroys the first time it is
+opened. No `gh`, no account, no token — PrivateBin is free and needs no sign-up.
+
+The note is encrypted **on this machine** before it is sent. The key lives in the URL
+fragment (after the `#`), which browsers never transmit, so the instance stores ciphertext
+it cannot read.
+
+### Publishing
+
+1. Pick an expiry — 1 hour, 1 day or 1 week. This is a backstop; the paste normally dies on
+   first read.
+2. Leave **Protect with a generated password** on unless you have a reason not to.
+3. **Create link**.
+
+You get back a link and a six-word password, with a copy button for each.
+
+> **Send them separately.** The password is a second factor. Pasting both into the same
+> Slack message makes it decoration. The password is shown **once** and never stored — if
+> you lose it, revoke the link and make a new one.
+
+### Why Slack Doesn't Burn The Link
+
+A naive burn-after-reading link pasted into Slack gets fetched by Slack's link unfurler
+before any human opens it, which destroys the paste and hands your recipient a 404.
+Outlook and corporate link scanners do the same.
+
+DevHub emits the `#-` URL form (note the dash after the `#`), which PrivateBin added for
+exactly this. It makes the page ask for confirmation instead of decrypting on load, so a
+scanner that runs the JavaScript still doesn't consume the paste.
+
+### Managing One-Time Links
+
+`/shared` lists unread one-time links below the live links, with **Copy** and **Revoke**.
+
+There is deliberately no *Update* button and no *Open* link: the paste is immutable, and
+opening it from DevHub would spend the recipient's only read.
+
+DevHub **cannot tell you whether a link has been read** — the server destroys it and
+reports to nobody. A link disappearing from the list means it expired locally, not that it
+was opened. **Revoke** only works while the link is still unread; afterwards it just tidies
+the local list.
+
+### Configuration
+
+| Setting | Default |
+| ------- | ------- |
+| `PRIVATEBIN_URL` in `dashboard/.env.local` | `https://privatebin.net` |
+
+Point it at a self-hosted instance if you'd rather not depend on the public one's uptime.
+Because content is encrypted client-side, this is a choice about *availability*, not
+confidentiality.
+
+---
+
 ## Security Model
 
-| Property | Behavior |
-| -------- | -------- |
-| Visibility | Secret gists — not listed publicly, but **anyone with the link can read** |
-| Write access | Read-only for recipients; only you can update or delete via DevHub |
-| Repo sync     | Shared content does not appear in `notes/`, `docs/`, or git unless you commit it separately |
+| Property | Live link (gist) | One-time link |
+| -------- | ---------------- | ------------- |
+| Visibility | Unlisted, but **anyone with the link can read** | Ciphertext only; needs the key in the URL, plus the password if set |
+| Server can read it | Yes — GitHub holds plaintext | No — encrypted before it leaves your machine |
+| Write access | Read-only; only you can update or delete | Read-once; nobody can update |
+| Repo sync | Shared content does not appear in `notes/`, `docs/` or git unless you commit it separately | Same |
 
-Treat live links like unlisted URLs: fine for short-lived handoffs, not for long-term or sensitive archives.
+Treat live links like unlisted URLs: fine for short-lived handoffs, not for long-term or
+sensitive archives. One-time links are the stronger option, but they are still a link —
+anyone holding it before it's read can open it.
 
 ## Troubleshooting
 
@@ -70,6 +147,10 @@ Treat live links like unlisted URLs: fine for short-lived handoffs, not for long
 | Stale badge won't clear | Open the note, edit if needed, then **Update** on `/shared` or re-share from the editor |
 | Link stopped working | 14-day TTL may have expired; re-publish if you still need it |
 | Wrong formatting in gist | Notes export portable markdown (not DevHub round-trip `::directives`); shared checklists, task refs, and other rich blocks may simplify or drop |
+| "Please wait 10 seconds between each post" | privatebin.net rate-limits creation to one paste per 10 seconds per IP. Wait and retry; a self-hosted instance sets its own limit |
+| One-time link fails to create | The instance may be down — check `PRIVATEBIN_URL`, or point it at another instance |
+| Recipient says the one-time link is dead | Something opened it first (a link scanner, or a forwarded copy), or the expiry elapsed. Re-share |
+| Recipient can't decrypt | They need the password too, and the full URL including everything after the `#` — some clients truncate it |
 
 ## Related Docs
 

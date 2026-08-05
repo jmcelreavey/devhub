@@ -33,6 +33,7 @@ import { notesChecklistsHref } from "@/lib/checklists/notes-url";
 import type { DevHubPartialBlock } from "@/lib/blocknote/schema";
 import { NotePageTitle } from "@/components/notes/NotePageTitle";
 import { ShareControls } from "@/components/ShareControls";
+import { OneTimeShareButton } from "@/components/OneTimeShareButton";
 import { VaultEditorNav } from "@/components/vault/VaultEditorNav";
 import { getVaultClient } from "@/lib/vault/vault-client";
 import type { VaultId } from "@/lib/vault/vault-client";
@@ -617,6 +618,7 @@ export function VaultEditorPage({
           {!isNew && (
             <>
               <ShareControls vaultId={vaultId} path={filePath} />
+              <OneTimeShareButton vaultId={vaultId} path={filePath} />
               {isNotes && !isNew && blocks ? (
                 <button
                   type="button"

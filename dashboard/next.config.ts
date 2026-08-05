@@ -59,6 +59,10 @@ const nextConfig: NextConfig = {
    * Pin the default so a corrupted/partial config merge cannot blow up as
    * `TypeError: generate is not a function` inside Next's generateBuildId.
    * Returning null keeps Next's nanoid fallback.
+   *
+   * Note: the packaged desktop server sets `__NEXT_PRIVATE_STANDALONE_CONFIG`
+   * (JSON, functions stripped). If that leaks into `next build`, this pin is
+   * never read — scrub it in scrubDesktopRuntimeEnv / pre-push instead.
    */
   generateBuildId: () => null,
   /**

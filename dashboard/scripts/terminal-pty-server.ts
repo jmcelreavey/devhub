@@ -48,6 +48,7 @@ import {
   isDesktopSession,
   isValidTerminalTicket,
 } from "../lib/desktop/bootstrap-auth";
+import { scrubDesktopRuntimeEnv } from "../lib/process-env";
 
 const PORT = Number.parseInt(process.env.TERMINAL_PORT ?? "1339", 10);
 /** A shell that prints nothing for this long during startup is presumed hung. */
@@ -141,7 +142,7 @@ function shellCommand(mode: ShellMode): ShellCommand {
  */
 function shellEnv(): Record<string, string> {
   const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
+  for (const [key, value] of Object.entries(scrubDesktopRuntimeEnv(process.env))) {
     if (value === undefined) continue;
     if (key.startsWith("npm_") || key.startsWith("NEXT_") || key === "NODE_OPTIONS") continue;
     env[key] = value;
