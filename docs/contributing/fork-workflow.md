@@ -122,6 +122,17 @@ allows only catalog-owned paths and the leak scan blocks internal names/secrets.
 tool previews by default and requires `confirm: true` before mutation. For a **reviewed** public contribution, prefer the manual
 backport + PR flow above instead.
 
+## Backport watermark
+
+`scripts/devhub-backport-status.sh` tracks how far your mirror has drifted ahead of public core since you last ported generic work. It uses a watermark file (`.git/devhub-backport-watermark`) rather than comparing commit histories — public core was seeded with unrelated history, so there is no stable commit identity to diff.
+
+```bash
+bash scripts/devhub-backport-status.sh              # list commits waiting to backport
+bash scripts/devhub-backport-status.sh --set-watermark  # mark current HEAD as caught up
+```
+
+Exit `0` = nothing pending; exit `1` = commits are waiting (informational only). The pre-push hook runs this after verify and prints a reminder when work is pending — it never blocks the push. After a successful `devhub-backport.sh` or `devhub-ship.sh` public step, advance the marker with `devhub-update.sh --mark-synced` or `--set-watermark`.
+
 ## See also
 
 - The **`devhub-fork-workflow`** skill loads this workflow on demand in AI tools (triggers:

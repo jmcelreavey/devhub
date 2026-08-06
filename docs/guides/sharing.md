@@ -58,7 +58,7 @@ Empty notes cannot be published.
 | Update         | Re-push current content to the gist |
 | Remove         | Delete the gist and drop the registry entry |
 
-The registry is local state at `~/.local/state/devhub/shares.json`. It is **not** synced through git. Gists themselves live on GitHub under your account.
+The registry is local state at `~/.local/state/devhub/shares.json` (schema version 2: `shares[]` for live gists, `oneTime[]` for unread PrivateBin links). It is **not** synced through git. Gists themselves live on GitHub under your account; one-time pastes live on the configured PrivateBin instance as ciphertext DevHub cannot read back.
 
 ### Expiry And Cleanup
 

@@ -163,9 +163,15 @@ Run from repo root (dashboard scripts):
 
 DevHub can install a pre-push hook that runs verification before pushing.
 
-The hook (`.githooks/pre-push`) runs `scripts/scan-leaks.sh` then `npm run verify` (lint, typecheck, tests, production build with `DEVHUB_SKIP_NEXT_TYPECHECK=true`). It is wired during `dashboard/scripts/postinstall.ts` and `scripts/install.sh`.
+The hook (`.githooks/pre-push`) runs `scripts/scan-leaks.sh tree`, scrubs polluted runtime env, then `npm run verify` (lint, typecheck, tests, production build with `DEVHUB_SKIP_NEXT_TYPECHECK=true`). It is wired during `dashboard/scripts/postinstall.ts` and `scripts/install.sh`.
 
 When the active shell's Node does not match `.nvmrc`, the hook sources `nvm.sh` and runs `nvm use` before verify — so pushes from IDEs or GUI clients do not false-fail under a system Node. Install the pinned version (`nvm install` from repo root) if you see a warning about a Node mismatch.
+
+Before verify, the hook unsets `NODE_ENV=production`, `PORT`, `NOTES_DIR`/`TASKS_DIR`/other content-dir overrides, most `DEVHUB_*` layout vars, and `__NEXT_PRIVATE_*` keys. Desktop sidecars and IDE terminals often inherit these from a running app; without the scrub, `next build` inside verify can fail with opaque `TypeError: generate is not a function`.
+
+If `dashboard/node_modules` is missing, the hook prints a reminder and **exits 0** (push proceeds) — run `npm install` at the repo root to enable checks.
+
+After a successful verify, the hook runs `scripts/devhub-backport-status.sh --quiet`. When generic commits since the backport watermark still need porting to public core, it prints a reminder and **still allows the push** — see [Fork workflow — Backport watermark](../contributing/fork-workflow.md#backport-watermark).
 
 Emergency bypass — use sparingly, then run `npm run verify` locally before merging:
 
