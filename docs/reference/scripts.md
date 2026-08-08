@@ -99,10 +99,10 @@ ERROR: No linked git checkout — attach a DevHub checkout before running this a
 
 | Category | Script IDs |
 | -------- | ---------- |
-| Git and content sync | `update_and_sync`, `commit_dirty_push`, `sync_notes_push`, `sync_notes_tasks_push`, `push_unpushed_commits`, `pull_core` |
+| Git and content sync | `update_and_sync`, `commit_dirty_push`, `sync_notes_push`, `sync_notes_tasks_push`, `dry_run_scoped_sync`, `push_unpushed_commits`, `pull_core_preview`, `pull_core` |
 | Catalog sync (checkout paths) | `sync_skills` — reads `skills/shared/` from the git tree |
 
-Attach via **View → Attach to Dev Server…** or record the checkout during desktop migration. Preview-only actions (`dry_run_scoped_sync`, `pull_core_preview`) and catalog syncs that only copy local tool state (`sync_agents`, `sync_mcp_servers`, `sync_native_persona`, `sync_opencode_config`) do not require a checkout.
+Attach via **View → Attach to Dev Server…** or record the checkout during desktop migration. Preview actions still need the checkout because they read `.git` state or repo paths from the linked tree — they do not mutate, but they are not runnable from app-data alone. Catalog syncs that only copy local tool state (`sync_agents`, `sync_mcp_servers`, `sync_native_persona`, `sync_opencode_config`) do not require a checkout.
 
 ### Git and content sync
 

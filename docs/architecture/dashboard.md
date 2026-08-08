@@ -59,10 +59,10 @@ The sidebar is driven by `dashboard/lib/nav.ts` — thirteen primary destination
 | Work     | `/work`     | Tasks + Jira + History tabs (see below)                                                |
 | PRs      | `/prs`      | Gated on `github`                                                                      |
 | Review   | `/review`   | Weekly retrospective; desktop nav only                                                 |
-| Library  | `/notes`    | Top-bar tabs: Notes, Docs, Learnings, Radar, Appraisal, Research, Diagrams, Live links |
+| Library  | `/notes`    | Top-bar tabs: Notes, Docs, Radar, Appraisal, Research, Diagrams, Live links (gated)      |
 | Agents   | `/skills`   | Skills, persona, MCP catalog                                                           |
 | Repos    | `/repos`    | Desktop nav only                                                                       |
-| System   | `/status`   | Top-bar tabs: Status, Ops, Datadog, Actions, Setup                                     |
+| System   | `/status`   | Top-bar tabs: Status, Logs (desktop), Datadog (gated), Actions (desktop), Setup; plugin tabs (e.g. Ops) insert before Setup when enabled |
 | Chamber  | `/chamber`  | Gated on `chamber`                                                                     |
 | OpenCode | `/opencode` | Gated on `opencode`                                                                    |
 | Claude   | `/claude`   | Gated on `claude`; desktop nav only                                                    |
@@ -81,7 +81,7 @@ The sidebar is driven by `dashboard/lib/nav.ts` — thirteen primary destination
 
 ### Legacy routes
 
-Older URLs still work and remain reachable via **⌘K** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/appraisal`, `/one-on-one`, `/radar`, `/research`, `/tasks`, `/tickets`, `/search`, `/learnings`, `/diagrams`, `/docs`, `/shared`, `/ops`, `/datadog`, `/actions`, `/setup`. They no longer have permanent sidebar slots — Library section tabs cover `/radar`, `/appraisal`, and `/research`.
+Older URLs still work and remain reachable via **⌘K** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/appraisal`, `/one-on-one`, `/radar`, `/research`, `/tasks`, `/tickets`, `/search`, `/learnings`, `/diagrams`, `/docs`, `/shared`, `/ops`, `/datadog`, `/actions`, `/setup`. They no longer have permanent sidebar slots — Library section tabs cover `/radar`, `/appraisal`, and `/research`; `/learnings` stays palette-only.
 
 On mobile, the bottom shelf uses **Work** (`/work`) instead of separate Tasks/Tickets entries.
 
