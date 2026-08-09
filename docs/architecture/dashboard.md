@@ -35,6 +35,8 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 
 [Today tasks and planning walkthrough](/api/notes-assets/assets/feature-demos/demo-01-today.mp4)
 
+When allowlisted script runs failed since your last visit, Today shows a dismissible **While you were away** banner (`WhileYouWereAway` → `GET /api/since?ts=<epoch-ms>`). The client stores the last-visit timestamp in `localStorage` (`devhub:last-visit`) and stamps it on unmount so opening the page does not immediately mark failures as seen. Successes are counted in the payload but do not surface a banner — only failures earn the alert. Default lookback is 12 hours when no prior visit is recorded.
+
 ### Morning briefing
 
 [Briefing and design controls walkthrough](/api/notes-assets/assets/feature-demos/demo-02-briefing.mp4)
@@ -306,6 +308,7 @@ The dashboard keeps Git sync state visible without making every page own Git log
 
 - `ContentSyncIndicator` is mounted in the desktop and mobile top bars. It polls `GET /api/status/git` every 30 seconds and hides itself when the repo is clean and up to date.
 - The cloud button is for scoped content only: `notes/`, `collections/`, `tasks/`, `docs/`, and `upstarts/`. It runs the `sync_notes_tasks_push` action through `POST /api/scripts`. When content is clean but commits are unpushed, the cloud retries `push_unpushed_commits`.
+- On the packaged desktop app, content sync (`sync_notes_tasks_push`), `update_and_sync`, and `sync_skills` read git state from the **linked checkout**, not app-data. Without a linked checkout they fail with "No linked git checkout". Attach via **View → Attach to Dev Server…** or see [Scripts — Linked checkout requirement](../reference/scripts.md#linked-checkout-requirement).
 - The warning triangle opens the **Repo Git workspace** for non-content dirty files and merge conflicts, or runs `update_and_sync` when only **origin** commits are waiting (clean tree). Pre-push hook failures surface a **GitHookFailureDialog** with log excerpts and a Chamber fix-it prompt.
 - **Origin vs public core:** `update_and_sync` pulls/rebases from `origin` (your private mirror remote). Porting changes from the public template uses `pull_core` / `pull_core_preview` via `POST /api/scripts` → `scripts/devhub-update.sh`. **Backport** (`scripts/devhub-backport.sh`) is intentionally CLI/skill-only — there is no dashboard API. See [Fork workflow](../contributing/fork-workflow.md) and [Scripts](../reference/scripts.md).
 - The Status page is the runbook surface. It shows repo branch, dirty content vs other dirty paths, ahead/behind counts, latest failed sync logs, conflict resolution, skill sync health, service status, MCP runtime status, and LAN access.

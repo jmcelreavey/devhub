@@ -100,6 +100,15 @@ live there and cannot be affected by it.
 If you chose "keep in place" during migration, the relevant folders stay
 wherever they already were and DevHub simply points at them.
 
+### Git sync and linked checkouts
+
+Notes, tasks, and other content in app-data work without a git checkout. **Pushing
+content to git**, pulling updates, syncing `skills/shared/` from the tree, or
+porting public-core changes requires a linked DevHub git checkout — attach one
+via **View → Attach to Dev Server…** (or record it during migration). Without
+that link, the top-bar cloud sync button and **Sync skills** fail with "No
+linked git checkout". See [Scripts — Linked checkout requirement](../reference/scripts.md#linked-checkout-requirement).
+
 ## Updates
 
 DevHub checks for an update shortly after it finishes starting — never during

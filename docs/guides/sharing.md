@@ -103,7 +103,7 @@ scanner that runs the JavaScript still doesn't consume the paste.
 
 ### Managing One-Time Links
 
-`/shared` lists unread one-time links below the live links, with **Copy** and **Revoke**.
+`/shared` lists unread one-time links below the live links, with **Copy** and **Revoke**. The **Live links** Library tab and ⌘K palette entry are gated on GitHub setup (`gh` authenticated), but one-time links created from the editor work without `gh` — navigate to `/shared` directly or use MCP `share_list` / `share_revoke_one_time` to manage them when the tab is hidden.
 
 There is deliberately no *Update* button and no *Open* link: the paste is immutable, and
 opening it from DevHub would spend the recipient's only read.
