@@ -59,7 +59,7 @@ Selecting a content result opens the matching note or diagram.
 
 ## Keyboard Shortcuts
 
-Press `?` while focused on DevHub to view the available shortcuts.
+Press `?` while focused on DevHub to view **global** app shortcuts (navigation, panels, command palette). The Repo Git workspace has a separate context overlay — press `?` while that panel is focused. See [Dashboard — Repo Git workspace](../architecture/dashboard.md#repo-git-workspace).
 
 Common shortcuts include:
 

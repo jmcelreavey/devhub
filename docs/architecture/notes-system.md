@@ -330,6 +330,28 @@ Notes and docs can be published as secret GitHub Gists for short-lived read-only
 
 Notes and docs autosave on a short debounce. Each navigation or vault switch bumps a **save generation** so in-flight saves from the previous page are dropped instead of overwriting the new page. If you edit and navigate away within the debounce window, wait a moment or use explicit save before leaving.
 
+### Note and doc titles
+
+The editor header (`NotePageTitle`) prefers a **content title** over the filename:
+
+| Vault | Title source |
+| ----- | ------------ |
+| Notes | First `#`–`###` heading in the BlockNote body (`lib/vault/display-title.ts`) |
+| Docs  | Frontmatter `title`, else first heading |
+
+When no content title exists, machine filenames are shortened — date+UUID task-note paths collapse to `YYYY-MM-DD-<short-id>…` so slugs do not dominate the chrome. Click the title to **rename** the underlying file (`InlineNoteRename`); renames go through vault path helpers and update the URL slug on success. The file tree uses the same rename control.
+
+### Markdown serialization
+
+`shared/markdown-convert` supports two BlockNote → markdown modes:
+
+| Mode | Flag | Used for |
+| ---- | ---- | -------- |
+| Round-trip | default (`blocksToText`) | Vault storage, Cursor working copies, MCP `notes_write` — preserves `::task-ref`, `::shared-checklist`, toggles, etc. |
+| Portable | `{ portable: true }` / `blocksToPortableMarkdown` | Gist and one-time share export — GitHub-friendly: toggles → `<details>`, directives humanized or dropped |
+
+Cursor apply refuses writes when portable conversion would be lossy; share export always uses portable. See [Sharing — Publish from the editor](../guides/sharing.md#publish-from-the-editor).
+
 ### In-app links
 
 BlockNote link clicks in notes and docs resolve in-app when possible:

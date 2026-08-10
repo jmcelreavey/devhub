@@ -356,7 +356,11 @@ Merge conflict recovery lives on Status through `ConflictResolverPanel`. It read
 
 **Diff panes** share a toolbar: context lines (default / none / full), maximize to a modal, and in-pane find. Split layouts (History file list ↔ diff, Stash list ↔ diff, range compare) are resizable; pane fractions persist in `localStorage`.
 
-Press **`?`** anywhere in the workspace for keyboard shortcuts (tab navigation, split-pane resize, History `j`/`k`, diff find). `Esc` closes the top-most dialog.
+Press **`?`** while the Repo Git workspace is focused for its **context shortcuts** overlay (not the global app shortcuts from [Command palette](../guides/command-palette.md#keyboard-shortcuts)). Tab-aware bindings include History `j`/`k` commit navigation, split-pane resize (`Tab` to focus the handle, `←`/`→` resize, `Home`/`End` snap), and diff find (`⌘F` / `Ctrl+F` when a diff pane is focused). `Esc` closes the top-most dialog.
+
+**Compare branch** (History tab) opens a range diff with `base...head` (defaults: `head=HEAD`, `base` = merge-base with the repo's default remote branch). The modal lists changed files; selecting one shows a unified diff with the same toolbar as commit detail. Ahead/behind counts in the banner reflect `head` vs `base`. API: `GET /api/repos/<name>/git/range?base=&head=&path=`.
+
+**Usually changed together** (Changes tab) calls `GET /api/repos/<name>/git/coupling?paths=` for staged/unstaged paths. Suggestions come from the last 800 non-merge commits (5-minute in-process cache). Each hint shows how often the suggested file changed in the same commit as your selection — advisory, not a linter rule.
 
 **Commit context** joins git history to local reasoning: `GET /api/repos/<name>/git/commit-context?commit=` parses the commit subject/body for PR numbers and Jira keys, then matches review notes under `notes/pr-reviews/` (`pr` = same PR, `ticket` = same Jira key, `related` = same ticket in a different repo). Chips appear on History commit detail and Blame. Hosted git cannot do this — the notes never leave your machine. See [GitHub integration — Review notes in Git history](../integrations/github.md#review-notes-in-git-history).
 

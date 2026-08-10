@@ -226,7 +226,11 @@ Then declare a `branding` block in `devhub-plugin.json`:
 ```
 
 `desktopIcon` replaces the deprecated `electronIcon` field; the materialiser accepts
-either for one release cycle.
+either for one release cycle. The materialiser writes `dashboard/public/plugin-desktop-icon.png`
+locally; `desktop/scripts/stage-icons.mjs` copies it into `desktop/staging/icons/` at
+build time. This file is **gitignored in core** — do not commit it in the public
+template. When no plugin icon is present, the packaged app uses the core DevHub bottle
+(`dashboard/public/icon-512.png`).
 
 Every field is optional — contribute only a palette, or only a logo, if that's all you
 need. Your `theme.css` must define the palette variables for **both** `data-theme="dark"`

@@ -106,6 +106,8 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 
 BI-specific MCP tools are contributed by the private BI plugin as a separate server; they are not part of the core DevHub server.
 
+**Scope notes:** `notes_list` and `notes_search` cover the workspace slice only — `daily/` journals plus root-level `.json` scratch notes. Structured areas like `learnings/` need explicit paths via `notes_read`. `calendar_list` returns Google Calendar **accounts and selection state**, not events (use `calendar_week` for the week grid).
+
 Dashboard-backed tools that mutate runtime or external state require `confirm: true` (for example `services_restart`, mutating `scripts_run` entries, `repos_git_stage`, `repos_git_commit`, `repos_git_push`, `repos_git_branch`, and `jira_ticket_transition`). Long-running actions return a `runId`; poll the matching status tool, such as `scripts_run_status`, until the run exits. MCP cannot stream the dashboard's live run log.
 
 All `repos_git_*` tools proxy the Repo Git workspace HTTP routes (`/api/repos/<name>/git/*` and `/branches`) — they do not shell out to `git` directly from the MCP process. Start the dashboard before using them.
@@ -230,9 +232,11 @@ The dashboard route redacts secrets (tokens, env values, URL credentials) before
 2. `repos_git_status` with `name` (from `repos_list`) to inspect branch, staged/unstaged files, conflicts, and ahead/behind counts. When `name` is the **DevHub checkout**, files under syncable content paths (`notes/`, `tasks/`, `docs/`, `collections/`, `upstarts/`, `diagrams/`, plus env-resolved content dirs) are **omitted** from `files` — use `status_git` or `sync_notes_tasks_push` for those. The payload includes `contentSyncCount` (how many content files were hidden). Sibling repos return every file.
 3. `repos_git_diff` to read unified diffs; `repos_git_stage` / `repos_git_discard` / `repos_git_stage_hunk` to shape the index (`confirm: true`).
 4. `repos_git_commit` with `message` and `confirm: true` to commit staged changes (optional `amend`).
-5. `repos_git_push` with `confirm: true` to push (optional `remote`, `branch`).
+5. `repos_git_push` with `confirm: true` to push the current branch to `origin` (no `remote`/`branch` args — use `repos_git_branch` with `action: "push"` for non-default remotes).
 
 For branch checkout, pull, fetch, and undo, use `repos_git_branches` (read) and `repos_git_branch` (mutate). Stash, log, show, blame, and conflict resolution have matching `repos_git_*` tools that proxy the same routes as the Repo Git workspace UI.
+
+**Not exposed as MCP tools** (dashboard UI / direct HTTP only): `GET /api/repos/<name>/git/commit-context`, `.../git/coupling`, `.../git/range`. Agents can call these via `DEVHUB_BASE_URL` when needed; there is no `repos_git_commit_context` / `repos_git_coupling` / `repos_git_range` registrar yet.
 
 Structured errors from the underlying routes: `409 index_lock` (another git process holds `.git/index.lock`), `409 stash_conflict` (unmerged paths after stash apply/pop), `422 hook_failed` (pre-commit/pre-push). Hook failures persist full output under `.git/devhub-hook-failure.log` in the target repo. The UI offers a terminal handoff via the `git-hook-fix` skill.
 
