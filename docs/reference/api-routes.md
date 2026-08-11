@@ -56,8 +56,8 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 ## Common Behavior
 
 - Routes return JSON unless they stream logs or redirect.
-- Most mutating routes use a **loose** same-origin check: browser requests without an `Origin` header are allowed; when `Origin` is present it must match the request host.
-- A small set of **sensitive** routes use `requireDashboardAuth` instead: when `DEVHUB_API_SECRET` is set, callers must send `X-DevHub-Secret`; when unset, a **strict** same-origin check applies (missing `Origin` is rejected). The MCP `DashboardClient` sends `Origin` plus the secret when configured.
+- **Mutating routes** (`POST`, `PUT`, `PATCH`, `DELETE` under `/api/*`) are guarded globally by `dashboard/proxy.ts` via `requireDashboardAuth`: callers must send a **strict** same-origin `Origin` header (present and matching `Host`) **or** `X-DevHub-Secret` matching `DEVHUB_API_SECRET`. Missing `Origin` without a valid secret is rejected — that closes the LAN hole where any local process could mutate state with a bare `curl`. Set `DEVHUB_API_SECRET` when the dashboard is reachable off localhost; the MCP `DashboardClient` sends `Origin` plus the secret when configured.
+- **GET routes** are not covered by the proxy. Sensitive reads that need the same guard must call `requireDashboardAuth` in the route handler (currently `GET /api/opencode/recap`).
 - Long-running actions expose progress through server-sent events.
 - Optional integrations should fail clearly when unconfigured: HTTP **503** with
   `{ error: "<Name> is not configured.", code: "not_configured" }` via
@@ -167,6 +167,20 @@ Packaged-app endpoints under `/api/desktop/*`. Auth uses bootstrap token → `Ht
 | `/api/desktop/selftest-roundtrip` | GET | Packaged `--self-test` storage round-trip. Desktop + bootstrap-auth only. |
 
 See [Desktop app](../getting-started/desktop-app.md) and [Desktop shell](../architecture/desktop-shell.md).
+
+### Collections routes
+
+Master checklist CRUD under repo `collections/` (route name is historical; payloads use master-list shapes). See [Notes System — Master Checklists](../architecture/notes-system.md#master-checklists).
+
+| Route | Method | Purpose |
+| ----- | ------ | ------- |
+| `/api/collections` | GET | List all master lists. With `?notePath=` (notes-relative path), returns only the list whose folder scope matches (longest prefix wins). |
+| `/api/collections` | POST | Create a master list. Body: `{ name, scopePath, icon? }`. `409` when scope conflicts. |
+| `/api/collections/[id]` | GET | Fetch one master list by id. |
+| `/api/collections/[id]` | PATCH | Discriminated `action` body: `updateCollection`, `addItem`, `updateItem`, `deleteItem`, `promoteItem`, or `reorderItems` (see `CollectionRoutePatchSchema` in `lib/schemas.ts`). |
+| `/api/collections/[id]` | DELETE | Remove the master list file. |
+| `/api/collections/[id]/linked-label-drift` | GET | `?itemId=` (required), optional `excludeNotePath`. Returns `{ masterLabel, driftCount, … }` for linked blocks whose text differs from the master item. |
+| `/api/collections/[id]/sync-linked-labels` | POST | Body: `{ itemId, label, excludeNotePath? }`. Rewrites matching linked blocks across notes. |
 
 ### Everything else
 

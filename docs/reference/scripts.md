@@ -145,7 +145,7 @@ Attach via **View → Attach to Dev Server…** or record the checkout during de
 | `verify_sync`       | Verify Sync Health       | no      |
 | `capability_digest` | Weekly Capability Digest | yes     | Runs scan + diff + digest; writes `notes/learnings/digests/<date>.json` |
 
-All mutating actions require same-origin `POST /api/scripts`. Only one instance of a given script ID can run at a time (`409` if already running). Output streams via `GET /api/scripts/stream/<runId>`; history persists under `~/.local/state/devhub/runs.jsonl`.
+All mutating actions require `requireDashboardAuth` on `POST /api/scripts` (global `proxy.ts` guard — strict same-origin `Origin` or `X-DevHub-Secret`). Only one instance of a given script ID can run at a time (`409` if already running). Output streams via `GET /api/scripts/stream/<runId>`; history persists under `~/.local/state/devhub/runs.jsonl`.
 
 ## Docs maintenance
 

@@ -112,7 +112,7 @@ Dashboard-backed tools that mutate runtime or external state require `confirm: t
 
 All `repos_git_*` tools proxy the Repo Git workspace HTTP routes (`/api/repos/<name>/git/*` and `/branches`) — they do not shell out to `git` directly from the MCP process. Start the dashboard before using them.
 
-Sensitive dashboard routes (currently `GET /api/opencode/recap`) use `requireDashboardAuth`. Set `DEVHUB_API_SECRET` in `dashboard/.env.local` and in the synced MCP env when LAN exposure or non-browser callers need access; `DashboardClient` sends `Origin` and `X-DevHub-Secret` automatically.
+Sensitive dashboard routes use `requireDashboardAuth` (mutating routes via global `proxy.ts`; `GET /api/opencode/recap` in-route). Set `DEVHUB_API_SECRET` in `dashboard/.env.local` and in the synced MCP env when LAN exposure or non-browser callers need access; `DashboardClient` sends `Origin` and `X-DevHub-Secret` automatically.
 
 ## Storage Model
 
@@ -210,6 +210,8 @@ Rich notes that cannot losslessly convert to Markdown open read-only; use DevHub
 2. Call `scripts_list` and inspect whether the target action mutates state.
 3. Call `scripts_run` with the script id. Add `confirm: true` only after checking the listed effects.
 4. Poll `scripts_run_status` with the returned `runId`.
+
+On the packaged desktop app, checkout-gated script IDs (`sync_skills`, `sync_notes_tasks_push`, `update_and_sync`, and other git/content sync actions) require a **linked DevHub checkout** — without one, `scripts_run` fails with `No linked git checkout`. Check `hasCheckout` from `GET /api/setup/status` or attach via **View → Attach to Dev Server…**. See [Scripts — Linked checkout requirement](../reference/scripts.md#linked-checkout-requirement).
 
 ### Check local health from an agent
 
