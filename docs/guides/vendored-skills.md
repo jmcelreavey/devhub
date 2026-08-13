@@ -139,8 +139,8 @@ have to open each `SKILL.md` to know what you were redistributing. A separate
 directory makes it a filesystem fact, and gives the catalog somewhere to hang a
 distinct `vendor` origin so the Skills page can label them honestly.
 
-Full provenance, the pinned upstream commit and the security review are in
-[`skills/vendor/NOTICE.md`](../../skills/vendor/NOTICE.md).
+Full provenance, the pinned upstream commit and the security review are recorded in
+`skills/vendor/NOTICE.md` (created when skills are vendored into the repo).
 
 ## Precedence
 

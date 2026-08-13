@@ -104,6 +104,7 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 | Workspace  | `skills_list`, `skills_read`, `context_pack`, `collections_list`, `jobs_list`, `jobs_get`, `research_list`, `radar_personal`, `persona_list`, `learnings_list`, `agents_list`, `briefing_tasks` — read-only GET proxies for dashboard areas that had no MCP coverage                                                                                           |
 | Datadog    | `datadog_oncall`, `datadog_recent_alerts`, `datadog_investigate`                                                                                                                                                                                                                                                                                              |
 | Recall     | `recall`, `recall_graph`, `recall_remember`, `recall_index`                                                                                                                                                                                                                                                                                                   |
+| Ownership  | `owned_repos`, `repo_owner_brief`, `repo_pr_radar`, `repo_who_owns`, `repo_knowledge_gaps` — dashboard-backed proxies for `/api/own/*`                                                                                                                                                                                                                        |
 
 `recall` is the one an agent should reach for first. `search` answers "which
 files contain these words"; `recall` answers "what do I already know about
@@ -244,9 +245,21 @@ The dashboard route redacts secrets (tokens, env values, URL credentials) before
 
 For branch checkout, pull, fetch, and undo, use `repos_git_branches` (read) and `repos_git_branch` (mutate). Stash, log, show, blame, and conflict resolution have matching `repos_git_*` tools that proxy the same routes as the Repo Git workspace UI.
 
-**Not exposed as MCP tools** (dashboard UI / direct HTTP only): `GET /api/repos/<name>/git/commit-context`, `.../git/coupling`, `.../git/range`. Agents can call these via `DEVHUB_BASE_URL` when needed; there is no `repos_git_commit_context` / `repos_git_coupling` / `repos_git_range` registrar yet.
+**Not exposed as MCP tools** (dashboard UI / direct HTTP only): `GET /api/repos/<name>/git/commit-context`, `.../git/coupling`, `.../git/range`, `.../git/reflog`, `.../git/remotes`, `.../git/worktrees`, `POST .../git/commit-action`. Agents can call these via `DEVHUB_BASE_URL` when needed; there is no matching `repos_git_*` registrar yet.
 
 Structured errors from the underlying routes: `409 index_lock` (another git process holds `.git/index.lock`), `409 stash_conflict` (unmerged paths after stash apply/pop), `422 hook_failed` (pre-commit/pre-push). Hook failures persist full output under `.git/devhub-hook-failure.log` in the target repo. The UI offers a terminal handoff via the `git-hook-fix` skill.
+
+### Triage owned repos from an agent
+
+Ownership tools proxy `/api/own/*`. Start the dashboard and ensure `gh auth login` is configured.
+
+1. `owned_repos` — list repos marked owned with obligation summaries (`GET /api/own?summary=1`).
+2. `repo_owner_brief` with `repo: "owner/name"` — obligations, inbound PR radar, domains, and teams.
+3. `repo_pr_radar` — filter open PRs by inferred `team` or `since` ISO timestamp.
+4. `repo_who_owns` with `repo` and `path` — CODEOWNERS/domain mapping plus historical reviewers from co-change (`POST /api/own/.../blast`).
+5. `repo_knowledge_gaps` — ranked learning queue for unfamiliar inbound churn.
+
+User-facing workflow and storage layout: [Repo ownership](../guides/repo-ownership.md). The `repo-ownership` skill and `repo-owner` agent under `skills/shared/` and `agents/shared/` mirror these panels for terminal handoffs.
 
 ### Capture appraisal notes from an agent
 
