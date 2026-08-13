@@ -278,8 +278,19 @@ export function domainContributions(commits: ParsedCommit[], domains: RepoDomain
     }
   }
   return [...counts].map(([key, commitCount]) => {
-    const [author = "", domainId = ""] = key.split("");
-    return { author, domainId, commits: commitCount };
+    // Keys are `${email}${domainId}` with no delimiter — resolve by suffix against
+    // known domain ids (longest match first so `api` beats `a` if both exist).
+    const sorted = [...domains].sort((a, b) => b.id.length - a.id.length);
+    for (const domain of sorted) {
+      if (key.endsWith(domain.id)) {
+        return {
+          author: key.slice(0, key.length - domain.id.length),
+          domainId: domain.id,
+          commits: commitCount,
+        };
+      }
+    }
+    return { author: key, domainId: "", commits: commitCount };
   });
 }
 

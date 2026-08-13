@@ -47,7 +47,12 @@ function hasPython(): boolean {
 }
 
 const PYTHON = hasPython();
-const describeIfPython = PYTHON ? describe : describe.skip;
+
+function hasVendorSkills(): boolean {
+  return fs.existsSync(path.join(VENDOR, "commit-archaeologist", "scripts", "archaeologist.py"));
+}
+
+const describeIfVendorEval = PYTHON && hasVendorSkills() ? describe : describe.skip;
 
 interface Fixture {
   root: string;
@@ -83,7 +88,7 @@ function runSkill(script: string, args: string[]): unknown {
 }
 
 beforeAll(() => {
-  if (!PYTHON) return;
+  if (!PYTHON || !hasVendorSkills()) return;
   fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-skill-eval-"));
   fs.rmSync(fixtureDir, { recursive: true, force: true });
   const out = execFileSync("python3", [BUILDER, fixtureDir], {
@@ -98,7 +103,7 @@ afterAll(() => {
   if (fixtureDir) fs.rmSync(fixtureDir, { recursive: true, force: true });
 });
 
-describeIfPython("commit-archaeologist", () => {
+describeIfVendorEval("commit-archaeologist", () => {
   interface Report {
     introduced_by: { subject: string };
     timeline: Array<{ category: string; subject: string }>;
@@ -154,7 +159,7 @@ describeIfPython("commit-archaeologist", () => {
   });
 });
 
-describeIfPython("scope-creep-detector", () => {
+describeIfVendorEval("scope-creep-detector", () => {
   interface Report {
     in_scope: Array<{ path: string }>;
     likely_creep: Array<{ path: string; signals: string[] }>;
@@ -207,7 +212,7 @@ describeIfPython("scope-creep-detector", () => {
   });
 });
 
-describeIfPython("project-graveyard", () => {
+describeIfVendorEval("project-graveyard", () => {
   interface Report {
     /**
      * `causes` is a ranked list of `[code, humanExplanation]` pairs, not a

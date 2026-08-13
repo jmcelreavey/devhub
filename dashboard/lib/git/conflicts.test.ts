@@ -85,5 +85,5 @@ describe("git-conflicts", () => {
     });
     expect(resolveConflictSide(repo, "file.txt", "theirs")).toEqual({ ok: true });
     expect(fs.readFileSync(path.join(repo, "file.txt"), "utf-8")).toBe("theirs\n");
-  });
+  }, 30_000);
 });

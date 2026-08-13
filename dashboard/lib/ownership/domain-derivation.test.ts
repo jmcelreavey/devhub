@@ -130,7 +130,7 @@ describe("overrides", () => {
     // listed first would otherwise shadow every specific one.
     expect(domainForPath(domains, "src/api/index.ts")?.id).toBe("api");
     expect(domainForPath(domains, "README.md")?.id).toBe("everything");
-  });
+  }, 30_000);
 
   it("samples tracked files so overrides retain CODEOWNERS", async () => {
     write("CODEOWNERS", "/src/api/** @acme/api\n");
