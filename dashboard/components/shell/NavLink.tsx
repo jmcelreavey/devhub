@@ -26,6 +26,8 @@ import {
   Bot,
   Newspaper,
   Radar,
+  BrainCircuit,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import type { NavItem } from "@/lib/nav";
@@ -48,7 +50,9 @@ const ICONS: Record<string, LucideIcon> = {
   status: Activity,
   skills: Zap,
   repos: FolderGit2,
+  own: ShieldCheck,
   radar: Radar,
+  recall: BrainCircuit,
   actions: Play,
   setup: Settings2,
   datadog: LineChart,

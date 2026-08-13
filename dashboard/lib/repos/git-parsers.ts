@@ -31,8 +31,19 @@ export interface GraphCommitRaw {
   parents: string[];
   subject: string;
   author: string;
+  /** Author email, used only to derive an avatar. Empty when git has none. */
+  authorEmail: string;
   relativeDate: string;
   refs: string[];
+  /** True when `git log` decorated this commit with `HEAD` — i.e. it is checked out. */
+  isHead: boolean;
+  /**
+   * The branch HEAD points at, when the decoration was `HEAD -> name`. Null on a
+   * detached HEAD (decorated as a bare `HEAD`) and on every other commit. Kept
+   * apart from `refs` so the UI can mark the checked-out branch specifically
+   * rather than guessing which of several refs is the current one.
+   */
+  headBranch: string | null;
 }
 
 export interface BlameLine {
@@ -130,22 +141,56 @@ export function parseStashList(stdout: string): StashEntry[] {
 
 /**
  * Parse graph log:
- * `%x1e%H%x00%P%x00%h%x00%s%x00%an%x00%ar%x00%D`
+ * `%x1e%H%x00%P%x00%h%x00%s%x00%an%x00%ar%x00%D%x00%ae`
  */
 export function parseGraphLog(stdout: string): GraphCommitRaw[] {
   return stdout
     .split("\u001e")
     .filter((chunk) => chunk.trim())
     .map((chunk) => {
-      const [hash = "", parentsRaw = "", shortHash = "", subject = "", author = "", relativeDate = "", refsRaw = ""] =
-        chunk.trim().split("\0");
+      // authorEmail is appended last rather than slotted in beside %an, so an
+      // older cached payload still parses every field it used to.
+      const [
+        hash = "",
+        parentsRaw = "",
+        shortHash = "",
+        subject = "",
+        author = "",
+        relativeDate = "",
+        refsRaw = "",
+        authorEmail = "",
+      ] = chunk.trim().split("\0");
       const parents = parentsRaw.trim() ? parentsRaw.trim().split(/\s+/) : [];
-      const refs = refsRaw
+      const rawRefs = refsRaw
         .split(",")
         .map((r) => r.trim())
-        .filter(Boolean)
-        .map((r) => r.replace(/^HEAD -> /, "").replace(/^tag: /, "tag:"));
-      return { hash, shortHash, parents, subject, author, relativeDate, refs };
+        .filter(Boolean);
+      // `HEAD -> name` used to be flattened to `name`, which threw away the only
+      // signal that a branch is the checked-out one. Read it before rewriting.
+      let isHead = false;
+      let headBranch: string | null = null;
+      for (const ref of rawRefs) {
+        if (ref === "HEAD") isHead = true;
+        else if (ref.startsWith("HEAD -> ")) {
+          isHead = true;
+          headBranch = ref.slice("HEAD -> ".length).trim() || null;
+        }
+      }
+      const refs = rawRefs
+        .map((r) => r.replace(/^HEAD -> /, "").replace(/^tag: /, "tag:"))
+        .filter((r) => r !== "HEAD");
+      return {
+        hash,
+        shortHash,
+        parents,
+        subject,
+        author,
+        authorEmail: authorEmail.trim().toLowerCase(),
+        relativeDate,
+        refs,
+        isHead,
+        headBranch,
+      };
     });
 }
 

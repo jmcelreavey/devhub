@@ -16,6 +16,7 @@ import { validateRepo } from "../lib/validate";
 import { updateAndSync } from "@/lib/sync/orchestrator";
 import { syncSkills } from "@/lib/sync/skills";
 import { syncAgents } from "@/lib/sync/agents";
+import { buildCoworkPlugin } from "@/lib/sync/cowork";
 import { syncMcpServers } from "@/lib/sync/mcp";
 import { syncPersona } from "@/lib/sync/persona";
 import { materializePlugins } from "../lib/plugins/materialize";
@@ -40,6 +41,15 @@ async function runSync(repoRoot: string, dryRun: boolean): Promise<number> {
     () => syncAgents({ emit, repoRoot, dryRun }),
     () => syncMcpServers({ emit, repoRoot, dryRun }),
     () => syncPersona({ emit, repoRoot, dryRun }),
+    // Cowork has no directory to sync into, so it is a build target rather than a copy
+    // target — see lib/sync/cowork.ts. Non-fatal: every other tool is already synced.
+    () =>
+      buildCoworkPlugin({ emit, repoRoot, dryRun })
+        .then((r) => r.code)
+        .catch((e: unknown) => {
+          emit(`WARNING: Cowork bundle build failed (${e instanceof Error ? e.message : String(e)}).`);
+          return 0;
+        }),
   ]) {
     code = (await step()) || code;
   }

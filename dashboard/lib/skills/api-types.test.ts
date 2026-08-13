@@ -13,7 +13,7 @@ const sample: SkillListItem[] = [
 
 describe("skills-api-types", () => {
   it("counts skills by source", () => {
-    expect(countSkillsBySource(sample)).toEqual({ all: 3, devhub: 2, "ai-tools": 1 });
+    expect(countSkillsBySource(sample)).toEqual({ all: 3, devhub: 2, vendor: 0, "ai-tools": 1 });
   });
 
   it("filters skills by source", () => {

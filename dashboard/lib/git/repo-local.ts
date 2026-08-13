@@ -136,13 +136,83 @@ function git(repoRoot: string, args: string[]): string | undefined {
 
 /** Origin remote URL from `.git/config`, or null. */
 export function readOriginRemoteUrl(repoRoot: string): string | null {
+  return readRemoteUrl(repoRoot, "origin");
+}
+
+/**
+ * Directory holding the config for this checkout.
+ *
+ * `<repo>/.git` for a clone. For a worktree, `.git` is a file naming a gitdir
+ * under the main repository's `.git/worktrees/`, and the config it shares lives
+ * in the common dir that `commondir` points at.
+ */
+function resolveConfigDir(repoRoot: string): string {
+  const dotGit = path.join(repoRoot, ".git");
   try {
-    const config = fs.readFileSync(path.join(repoRoot, ".git", "config"), "utf-8");
-    const match = config.match(/\[remote "origin"\][\s\S]*?url\s*=\s*(.+)/);
-    return match?.[1]?.trim() ?? null;
+    if (fs.statSync(dotGit).isDirectory()) return dotGit;
+    const pointer = /^gitdir:\s*(.+)$/m.exec(fs.readFileSync(dotGit, "utf-8").trim());
+    if (!pointer?.[1]) return dotGit;
+    const gitDir = path.isAbsolute(pointer[1].trim())
+      ? pointer[1].trim()
+      : path.resolve(repoRoot, pointer[1].trim());
+    const commonPath = path.join(gitDir, "commondir");
+    if (!fs.existsSync(commonPath)) return gitDir;
+    const common = fs.readFileSync(commonPath, "utf-8").trim();
+    return path.isAbsolute(common) ? common : path.resolve(gitDir, common);
+  } catch {
+    return dotGit;
+  }
+}
+
+/**
+ * A named remote's URL from `.git/config`, or null.
+ *
+ * Reads the config rather than shelling out because callers are synchronous and
+ * on the render path. The section match is anchored to the next `[` so a remote
+ * whose block has no `url` cannot pick up the URL of the one after it.
+ */
+export function readRemoteUrl(repoRoot: string, remote: string): string | null {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(remote)) return null;
+  try {
+    // `.git` is a file in a worktree, pointing at a gitdir that shares the main
+    // repository's config — so the path has to be resolved rather than assumed.
+    const config = fs.readFileSync(path.join(resolveConfigDir(repoRoot), "config"), "utf-8");
+    const section = new RegExp(
+      `\\[remote "${remote.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"\\]([^[]*)`,
+    ).exec(config);
+    const url = section?.[1] ? /^\s*url\s*=\s*(.+)$/m.exec(section[1]) : null;
+    return url?.[1]?.trim() ?? null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Browsable https URL for an origin remote, or null.
+ *
+ * Handles the three shapes a remote actually takes in the wild — scp-style
+ * `git@host:owner/repo.git`, `ssh://git@host/owner/repo.git`, and plain https —
+ * so "Open on GitHub" works regardless of how the repo was cloned.
+ */
+export function remoteWebUrl(remote: string | null): string | null {
+  if (!remote) return null;
+  const trimmed = remote.trim().replace(/\.git$/, "");
+  const scp = trimmed.match(/^[\w.-]+@([\w.-]+):(.+)$/);
+  if (scp) return `https://${scp[1]}/${scp[2]}`;
+  const ssh = trimmed.match(/^ssh:\/\/(?:[\w.-]+@)?([\w.-]+)(?::\d+)?\/(.+)$/);
+  if (ssh) return `https://${ssh[1]}/${ssh[2]}`;
+  if (/^https?:\/\//.test(trimmed)) {
+    try {
+      const url = new URL(trimmed);
+      url.protocol = "https:";
+      url.username = "";
+      url.password = "";
+      return url.toString().replace(/\/$/, "");
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 /** Short SHA of HEAD, or undefined when not a git repo / empty. */

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { AcknowledgeButton } from "@/components/radar/AcknowledgeButton";
+import { ReleaseRadarPanel } from "@/components/radar/ReleaseRadarPanel";
 import {
   Activity,
   Boxes,
@@ -39,9 +41,28 @@ import type {
   DriftEntry,
 } from "@/lib/capability/types";
 
+/** A drift row the user has already seen, carrying when and at what level. */
+type AcknowledgedDrift = DriftEntry & {
+  acknowledgedAt: string;
+  acknowledgedAt_watermark: number;
+};
+
+/**
+ * The API adds acknowledgement partitioning on top of the pure snapshot diff,
+ * so this is CapabilityDiff plus the rows filtered out of it.
+ */
+type RadarDiff = CapabilityDiff & {
+  acknowledged?: {
+    added: DiffEntry[];
+    spread: DiffEntry[];
+    drift: AcknowledgedDrift[];
+  };
+  acknowledgedCount?: number;
+};
+
 interface RadarPayload {
   snapshot: CapabilitySnapshot | null;
-  diff: CapabilityDiff | null;
+  diff: RadarDiff | null;
   snapshots: { id: string; createdAt: string; repoCount: number }[];
   aiConfigured: boolean;
 }
@@ -57,6 +78,10 @@ interface PersonalRadarPayload {
   exists: boolean;
   items: { ring: "adopt" | "trial" | "assess" | "hold"; text: string }[];
   markdown: string;
+  ownedRepoAttention: {
+    repo: { fullName: string };
+    attention: { score: number; reasons: string[] };
+  }[];
 }
 
 const RING_ORDER = ["adopt", "trial", "assess", "hold"] as const;
@@ -69,7 +94,7 @@ const RING_LABEL: Record<(typeof RING_ORDER)[number], string> = {
 
 function PersonalRadarPanel() {
   const { data } = useLive<PersonalRadarPayload>("/api/radar/personal", { refreshInterval: 0 });
-  if (!data?.exists) {
+  if (!data?.exists && !data?.ownedRepoAttention.length) {
     return (
       <div className="card card-body mb-4 mt-3 text-xs text-text-subtle">
         <p>
@@ -87,7 +112,7 @@ function PersonalRadarPanel() {
     );
   }
   return (
-    <section className="card mb-4 mt-3" aria-label="Personal tech radar">
+    <section className="card mb-4 mt-3" aria-label="Personal radar">
       <div className="card-header flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-text">
           Personal radar
@@ -96,7 +121,7 @@ function PersonalRadarPanel() {
           notes/{data.path}
         </span>
       </div>
-      <div className="card-body grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {data.exists && <div className="card-body grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {RING_ORDER.map((ring) => {
           const items = data.items.filter((i) => i.ring === ring);
           return (
@@ -118,7 +143,23 @@ function PersonalRadarPanel() {
             </div>
           );
         })}
-      </div>
+      </div>}
+      {data.ownedRepoAttention.length > 0 && (
+        <div className="card-body border-t" style={{ borderColor: "var(--border)" }}>
+          <div className="mb-2 text-[11px] font-semibold text-text-muted">Owned repositories</div>
+          <div className="space-y-2">
+            {data.ownedRepoAttention.slice(0, 5).map((row) => {
+              const [owner, name] = row.repo.fullName.split("/");
+              return (
+                <Link key={row.repo.fullName} href={`/own/${encodeURIComponent(owner!)}/${encodeURIComponent(name!)}`} className="flex items-center justify-between gap-3 text-xs">
+                  <span className="font-medium text-text">{row.repo.fullName}</span>
+                  <span className="truncate text-right text-warning">{row.attention.reasons.slice(0, 2).join(" · ")}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -255,9 +296,20 @@ export default function RadarClient() {
           <DigestSection includeGithub={includeGithub} githubFilter={githubFilter} />
           {diff && <EvolutionFeed diff={diff} aiConfigured={data?.aiConfigured ?? false} />}
           <Coverage snapshot={snapshot} />
-          {diff && diff.drift.length > 0 && (
-            <DriftPanel drift={diff.drift} aiConfigured={data?.aiConfigured ?? false} />
+          {diff && (diff.drift.length > 0 || (diff.acknowledged?.drift.length ?? 0) > 0) && (
+            <DriftPanel
+              drift={diff.drift}
+              acknowledged={diff.acknowledged?.drift ?? []}
+              aiConfigured={data?.aiConfigured ?? false}
+              onChange={() => void mutate()}
+            />
           )}
+          <section>
+            <SectionTitle icon={<Boxes size={15} />} title="Dependency divergence">
+              Where your repos disagree about a major version - the newest line names the repo to copy the upgrade from
+            </SectionTitle>
+            <ReleaseRadarPanel />
+          </section>
           <LabsSection />
         </div>
       ) : null}
@@ -580,8 +632,20 @@ function Coverage({ snapshot }: { snapshot: CapabilitySnapshot }) {
   );
 }
 
-function DriftPanel({ drift, aiConfigured }: { drift: DriftEntry[]; aiConfigured: boolean }) {
+function DriftPanel({
+  drift,
+  acknowledged,
+  aiConfigured,
+  onChange,
+}: {
+  drift: DriftEntry[];
+  acknowledged: AcknowledgedDrift[];
+  aiConfigured: boolean;
+  onChange: () => void;
+}) {
   const { bySignal } = useLabRecords();
+  const [showAcknowledged, setShowAcknowledged] = useState(false);
+
   return (
     <section>
       <SectionTitle icon={<Activity size={15} />} title="Knowledge drift">
@@ -589,8 +653,45 @@ function DriftPanel({ drift, aiConfigured }: { drift: DriftEntry[]; aiConfigured
       </SectionTitle>
       <div className="flex flex-col gap-2 mt-2">
         {drift.map((d) => (
-          <DriftRow key={d.id} d={d} aiConfigured={aiConfigured} record={bySignal.get(d.id)} />
+          <DriftRow
+            key={d.id}
+            d={d}
+            aiConfigured={aiConfigured}
+            record={bySignal.get(d.id)}
+            onChange={onChange}
+          />
         ))}
+
+        {drift.length === 0 && acknowledged.length > 0 && (
+          <div className="text-xs text-text-subtle px-1">
+            Nothing new since you last looked.
+          </div>
+        )}
+
+        {/* Acknowledged rows stay reachable. A surface that can hide things but
+            not show them again teaches people not to press the hide button. */}
+        {acknowledged.length > 0 && (
+          <>
+            <button
+              type="button"
+              className="btn-ghost text-xs self-start"
+              onClick={() => setShowAcknowledged((v) => !v)}
+            >
+              {showAcknowledged ? "Hide" : "Show"} {acknowledged.length} already seen
+            </button>
+            {showAcknowledged &&
+              acknowledged.map((d) => (
+                <DriftRow
+                  key={d.id}
+                  d={d}
+                  aiConfigured={aiConfigured}
+                  record={bySignal.get(d.id)}
+                  acknowledged
+                  onChange={onChange}
+                />
+              ))}
+          </>
+        )}
       </div>
     </section>
   );
@@ -600,14 +701,21 @@ function DriftRow({
   d,
   aiConfigured,
   record,
+  acknowledged = false,
+  onChange,
 }: {
   d: DriftEntry;
   aiConfigured: boolean;
   record?: LabRecordSummary;
+  acknowledged?: boolean;
+  onChange: () => void;
 }) {
   const labState = useLab(d.id, undefined, !!record);
   return (
-    <div className="card radar-card flex flex-col" style={{ padding: "10px 14px" }}>
+    <div
+      className="card radar-card flex flex-col"
+      style={{ padding: "10px 14px", opacity: acknowledged ? 0.6 : undefined }}
+    >
       <div className="flex items-center gap-3">
         <Clock size={14} className="shrink-0 text-warning" />
         <div className="flex-1 min-w-0">
@@ -619,6 +727,13 @@ function DriftRow({
             {d.repoDelta > 0 && <> · now in {d.repoDelta} more repo{d.repoDelta === 1 ? "" : "s"} ({d.repoCount} total)</>}
           </div>
         </div>
+        <AcknowledgeButton
+          kind="capability"
+          id={d.id}
+          watermark={d.repoCount}
+          acknowledged={acknowledged}
+          onDone={onChange}
+        />
         <LabButton
           onClick={() => void labState.toggle()}
           label={labState.label}

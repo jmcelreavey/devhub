@@ -14,6 +14,7 @@ import { copyTextToClipboard } from "@/lib/clipboard";
 import { openInBrowser } from "@/lib/desktop/bridge";
 import { QueueRow } from "@/components/ui/QueueRow";
 import { HoverTip } from "@/components/ui/HoverTip";
+import { PersonChip } from "@/components/PersonChip";
 
 interface JiraResponse {
   tickets?: JiraTicket[];
@@ -145,14 +146,26 @@ export function JiraWidget({ collapsed = false, collapsedSummary, onToggle }: Ji
           ) : gridSize === "2x1" ? (
             <div role="list" aria-label="Your Jira tickets">
               {sortedTickets.slice(0, 4).map((t) => (
-                <QueueRow
-                  key={t.key}
-                  monoKey={t.key}
-                  title={t.summary}
-                  size="compact"
-                  href={t.url}
-                  statusPill={<JiraStatusPill ticketKey={t.key} status={t.status} />}
-                />
+                <div key={t.key} className="flex items-center gap-1.5 pr-2">
+                  {t.assignee ? (
+                    <PersonChip
+                      name={t.assignee.displayName}
+                      email={t.assignee.email}
+                      avatarUrl={t.assignee.avatarUrl}
+                      size={16}
+                      nameClassName="sr-only"
+                      className="pl-2"
+                    />
+                  ) : null}
+                  <QueueRow
+                    className="min-w-0 flex-1"
+                    monoKey={t.key}
+                    title={t.summary}
+                    size="compact"
+                    href={t.url}
+                    statusPill={<JiraStatusPill ticketKey={t.key} status={t.status} />}
+                  />
+                </div>
               ))}
               {sortedTickets.length > 4 && (
                 <div className="px-3 py-1 text-[11px] text-text-subtle">
@@ -189,6 +202,15 @@ export function JiraWidget({ collapsed = false, collapsedSummary, onToggle }: Ji
                     {t.summary}
                   </span>
                   <span className="jira-widget-meta flex shrink-0 items-center gap-2">
+                    {t.assignee ? (
+                      <PersonChip
+                        name={t.assignee.displayName}
+                        email={t.assignee.email}
+                        avatarUrl={t.assignee.avatarUrl}
+                        size={16}
+                        className="hidden sm:inline-flex max-w-[9rem]"
+                      />
+                    ) : null}
                     <JiraStatusPill ticketKey={t.key} status={t.status} />
                     <span
                       className="text-[11px] shrink-0 tabular-nums text-right pt-0.5 text-text-subtle"

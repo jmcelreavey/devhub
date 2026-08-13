@@ -7,6 +7,7 @@ tags: [architecture, notes]
 related:
   - architecture/notes-system
   - architecture/token-budget
+  - architecture/recall
 ---
 
 # Memory Options
@@ -51,3 +52,16 @@ DevHub is personal and local-first. A file-based memory system matches that shap
 - Search is simpler than a dedicated database search engine.
 
 For this project, those tradeoffs are acceptable because clarity and ownership matter more than scale.
+
+## Retrieval sits on top, not instead
+
+The table above rejects vector search as "less exact and harder to audit". That
+holds for a store which *replaces* the files. [Recall](recall.md) adds a
+derived index beside them instead: files stay canonical, every retrieved
+passage cites the `sourceId` it came from, and the whole index is gitignored
+and safe to delete because it rebuilds from the files in about 150 ms.
+
+Recall also introduces the one genuinely new source of truth in this design —
+an append-only event log under `notes/.index/events/`. It is NDJSON precisely
+so it keeps the properties this page argues for: readable with `tail`,
+diffable, recoverable from git history.

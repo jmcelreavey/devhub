@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   AlertCircle,
   BookOpen,
@@ -55,22 +55,41 @@ export interface LearnRepo {
 export function LearnContent({
   repo,
   focusLab,
+  domain,
+  ownedRepo,
   variant = "page",
 }: {
   repo: LearnRepo;
   focusLab?: string;
+  domain?: string;
+  ownedRepo?: string;
   variant?: "panel" | "page";
 }) {
   const toast = useToast();
   const [copied, setCopied] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const { data, error, isLoading, mutate } = useLive<RepoLearnApiPayload>(repoLearnApiPath(repo.name), {
+  const learnQuery = new URLSearchParams();
+  if (domain) learnQuery.set("domain", domain);
+  if (ownedRepo) learnQuery.set("owned", ownedRepo);
+  const learnPath = `${repoLearnApiPath(repo.name)}${learnQuery.size ? `?${learnQuery}` : ""}`;
+  const { data, error, isLoading, mutate } = useLive<RepoLearnApiPayload>(learnPath, {
     refreshInterval: 0,
     revalidateOnFocus: false,
   });
   const context = data?.context;
   const artifacts = data?.artifacts;
   const initialLoading = isLoading && !data;
+
+  useEffect(() => {
+    if (!domain || !ownedRepo) return;
+    const [owner, name] = ownedRepo.split("/");
+    if (!owner || !name) return;
+    void fetch(`/api/own/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/gaps`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "learn-opened", domainId: domain }),
+    });
+  }, [domain, ownedRepo]);
 
   async function copyText(id: string, text: string) {
     try {
@@ -86,7 +105,7 @@ export function LearnContent({
   async function refreshLearn() {
     setRefreshing(true);
     try {
-      const res = await fetch(`${repoLearnApiPath(repo.name)}?refresh=1`);
+      const res = await fetch(`${learnPath}${learnPath.includes("?") ? "&" : "?"}refresh=1`);
       const json = (await res.json()) as RepoLearnApiPayload;
       if (!res.ok) throw new Error((json as { error?: string }).error ?? "Refresh failed");
       await mutate(json, { revalidate: false });
@@ -163,6 +182,16 @@ export function LearnContent({
                 <FactChip key={dir} label={dir} mono />
               ))}
             </div>
+            {data.ownership && (
+              <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                <div className="mb-1.5 text-[11px] font-medium text-text-muted">Ownership familiarity</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {data.ownership.gaps.slice(0, 6).map((gap) => (
+                    <FactChip key={gap.domainId} label={`${gap.label} · ${Math.round(gap.familiarity * 100)}%`} mono />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="card card-body">

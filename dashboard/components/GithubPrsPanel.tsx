@@ -11,6 +11,7 @@ import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
 import { PrRowActions, type PrRowKind } from "@/components/PrRowActions";
 import { ConditionalList } from "@/components/ui/EmptyStateRow";
 import { useGridSize } from "@/lib/hooks/use-grid-size";
+import { PersonChip } from "@/components/PersonChip";
 
 const EMPTY_PR_ROWS: GithubPrRow[] = [];
 const EMPTY_RECENTLY_REVIEWED: RecentlyReviewedPr[] = [];
@@ -26,8 +27,18 @@ function PrRowLink({ row, kind }: { row: GithubPrRow; kind?: PrRowKind }) {
           className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 no-underline text-text"
         >
           <span className="break-words text-sm font-medium leading-snug">{row.title}</span>
-          <span className="font-mono text-[11px] leading-tight text-text-muted">
-            {row.repo}#{row.number}
+          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="font-mono text-[11px] leading-tight text-text-muted">
+              {row.repo}#{row.number}
+            </span>
+            {row.author ? (
+              <PersonChip
+                name={row.author.login}
+                email={`${row.author.login}@users.noreply.github.com`}
+                avatarUrl={row.author.avatarUrl}
+                size={14}
+              />
+            ) : null}
           </span>
         </a>
         {kind && <PrRowActions row={row} kind={kind} size="sm" />}

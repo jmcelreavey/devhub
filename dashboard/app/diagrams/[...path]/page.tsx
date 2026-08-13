@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ChevronRight, PenTool, Trash2, Download } from "lucide-react";
+import { CopyLocationButton } from "@/components/ui/CopyLocationButton";
+import { ShareControls } from "@/components/ShareControls";
+import { OneTimeShareButton } from "@/components/OneTimeShareButton";
 import dynamic from "next/dynamic";
 import type { Editor } from "tldraw";
 import { useToast } from "@/lib/hooks/use-toast";
@@ -162,6 +165,9 @@ export default function DiagramEditorPage() {
           inputClassName="min-w-0 flex-1 bg-transparent border-none outline-none text-sm font-medium"
           title="Double-click to rename"
         />
+        <CopyLocationButton path={filePath} variant="button" size={12} />
+        <ShareControls vaultId="notes" path={filePath} />
+        <OneTimeShareButton vaultId="notes" path={filePath} />
         <button
           type="button"
           onClick={() => void handleExport("svg")}

@@ -40,6 +40,7 @@ export const GET = withErrorHandler(async (request: Request) => {
       generatedAt: context.generatedAt,
       cached: hadCache,
       prefs: readBriefingPrefs(),
+      ownedRepoAttention: context.ownedRepoAttention ?? [],
     },
     { headers: NO_STORE },
   );

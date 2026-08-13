@@ -32,7 +32,15 @@ import { copyTextToClipboard } from "@/lib/clipboard";
 import { openTerminalTranscript } from "@/lib/terminal-launch";
 import { openInBrowser } from "@/lib/desktop/bridge";
 
-type CommandKind = "nav" | "note" | "task" | "ticket" | "action" | "diagram" | "content";
+type CommandKind =
+  | "nav"
+  | "note"
+  | "task"
+  | "ticket"
+  | "action"
+  | "diagram"
+  | "content"
+  | "repo";
 
 interface Command {
   id: string;
@@ -64,12 +72,21 @@ interface TicketItem {
   url: string;
 }
 
+/** Just enough of a repo to offer it as a destination. */
+interface RepoEntry {
+  name: string;
+  branch: string | null;
+  dirtyCount: number;
+  unpushedCount: number;
+}
+
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [query, setQuery] = useState("");
   const [notes, setNotes] = useState<NoteFile[]>([]);
   const [diagrams, setDiagrams] = useState<NoteFile[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [tickets, setTickets] = useState<TicketItem[]>([]);
+  const [repos, setRepos] = useState<RepoEntry[]>([]);
   const [contentResults, setContentResults] = useState<Command[]>([]);
   const [highlightIdx, setHighlightIdx] = useState(0);
   const router = useRouter();
@@ -96,12 +113,19 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       fetch("/api/jira/tickets")
         .then((r) => (r.ok ? r.json() : { tickets: [] }))
         .catch(() => ({ tickets: [] })),
-    ]).then(([tree, tasksData, ticketsData]) => {
+      // Repos were the one thing the palette could not reach, which on a
+      // machine with 52 checkouts made it the slowest way to open the most
+      // common destination.
+      fetch("/api/repos")
+        .then((r) => (r.ok ? r.json() : { repos: [] }))
+        .catch(() => ({ repos: [] })),
+    ]).then(([tree, tasksData, ticketsData, reposData]) => {
       const allFiles = flattenTreeFiles(tree as unknown[]);
       setNotes(allFiles.filter((f) => !isDiagramStoragePath(f.path)));
       setDiagrams(allFiles.filter((f) => isDiagramStoragePath(f.path)));
       setTasks((tasksData.tasks ?? []) as TaskItem[]);
       setTickets((ticketsData.tickets ?? []) as TicketItem[]);
+      setRepos((reposData.repos ?? []) as RepoEntry[]);
     });
     return () => {
       previousFocus.current?.focus?.();
@@ -243,6 +267,31 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       detail: n.path.replace(/\.json$/, ""),
       perform: () => router.push(`/notes/${n.path.replace(/\.json$/, "")}`),
     }));
+
+    /**
+     * Repos as destinations. The detail line carries branch and dirty state so
+     * the palette answers "which of these is the one I was working in" without
+     * a round trip to /repos.
+     */
+    const repoCmds: Command[] = repos.map((r) => {
+      const state = [
+        r.branch,
+        r.dirtyCount > 0 ? `${r.dirtyCount} changed` : null,
+        r.unpushedCount > 0 ? `${r.unpushedCount} unpushed` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      return {
+        id: `repo:${r.name}`,
+        kind: "repo",
+        label: r.name,
+        detail: state || undefined,
+        hint: "repo",
+        // /repos filters to the named repo, which is the existing way in — the
+        // Git workspace opens from the card rather than having its own route.
+        perform: () => router.push(`/repos?repo=${encodeURIComponent(r.name)}`),
+      };
+    });
 
     const diagramCmds: Command[] = diagrams.map((d) => ({
       id: `diagram:${d.path}`,
@@ -422,8 +471,16 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       },
     ];
 
-    return [...navCmds, ...actionCmds, ...taskCmds, ...ticketCmds, ...noteCmds, ...diagramCmds];
-  }, [notes, diagrams, tasks, tickets, router, toggleTaskDone, toast, setup]);
+    return [
+      ...navCmds,
+      ...actionCmds,
+      ...repoCmds,
+      ...taskCmds,
+      ...ticketCmds,
+      ...noteCmds,
+      ...diagramCmds,
+    ];
+  }, [notes, diagrams, tasks, tickets, repos, router, toggleTaskDone, toast, setup]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) {
@@ -433,7 +490,13 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       const ticket = commands.filter((c) => c.kind === "ticket").slice(0, 5);
       const note = commands.filter((c) => c.kind === "note").slice(0, 8);
       const diagram = commands.filter((c) => c.kind === "diagram").slice(0, 5);
-      return [...action, ...task, ...ticket, ...note, ...diagram];
+      // Repos with uncommitted or unpushed work only, on the empty query — the
+      // full list is 52 entries and belongs behind a search, but the handful
+      // you left work in is exactly what the default view is for.
+      const repo = commands
+        .filter((c) => c.kind === "repo" && Boolean(c.detail?.includes("changed") || c.detail?.includes("unpushed")))
+        .slice(0, 5);
+      return [...action, ...repo, ...task, ...ticket, ...note, ...diagram];
     }
 
     const scored = commands

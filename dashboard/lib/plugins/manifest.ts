@@ -23,11 +23,11 @@ const pluginNavItemSchema = z
     href: z.string().min(1),
     label: z.string().min(1),
     icon: z.string().min(1),
-    group: z.enum(["workspace", "library", "system"]),
+    group: z.enum(["workspace", "library", "bi", "system"]),
     gate: z.string().min(1).optional(),
     desktopOnly: z.boolean().optional(),
     shortcut: z.string().min(1).optional(),
-    section: z.enum(["library", "system"]).optional(),
+    section: z.enum(["library", "system", "bi"]).optional(),
   })
   .strict();
 

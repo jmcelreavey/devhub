@@ -29,6 +29,7 @@ import { readFocusSession, writeFocusSession } from "@/lib/focus-session-storage
 import { todayISO, yesterdayISO, dailyNotePath, formatDayLabel, formatTime } from "@/lib/utils";
 import type { GithubPrRow, GithubPrsApiPayload } from "@/lib/github/prs";
 import type { CalendarEvent } from "@/lib/google-calendar";
+import { PersonChip } from "@/components/PersonChip";
 
 interface BriefingResponse {
   ok: boolean;
@@ -41,6 +42,7 @@ interface JiraTicketRow {
   summary?: string;
   status: string;
   url?: string;
+  assignee?: { displayName: string; email?: string; avatarUrl?: string };
 }
 
 interface JiraResponse {
@@ -451,6 +453,15 @@ export function TodayFocusView() {
                     >
                       {r.title}
                     </a>
+                    {r.author ? (
+                      <PersonChip
+                        name={r.author.login}
+                        email={`${r.author.login}@users.noreply.github.com`}
+                        avatarUrl={r.author.avatarUrl}
+                        size={16}
+                        className="hidden sm:inline-flex max-w-[7rem] shrink-0"
+                      />
+                    ) : null}
                     {/*
                       Hidden below `sm`. The title is `flex-1` (basis 0) while
                       this is `shrink` (basis auto), so on a 390px row this took
@@ -560,6 +571,15 @@ export function TodayFocusView() {
                       {t.summary ?? t.key}
                     </span>
                   )}
+                  {t.assignee ? (
+                    <PersonChip
+                      name={t.assignee.displayName}
+                      email={t.assignee.email}
+                      avatarUrl={t.assignee.avatarUrl}
+                      size={16}
+                      className="hidden sm:inline-flex max-w-[7rem] shrink-0"
+                    />
+                  ) : null}
                   <JiraStatusPill ticketKey={t.key} status={t.status} />
                 </div>
               ))}

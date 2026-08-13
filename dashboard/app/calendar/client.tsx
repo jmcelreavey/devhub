@@ -10,6 +10,7 @@ import { EntityLinkChips } from "@/components/EntityLinkChips";
 import { formatTime, todayISO } from "@/lib/utils";
 import { EmptyState, FetchError, PageHeader, SkeletonRows } from "@/components";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
+import { PersonChip } from "@/components/PersonChip";
 
 function isToday(dateStr: string): boolean {
   return dateStr === todayISO();
@@ -271,6 +272,16 @@ export default function CalendarPage() {
                     <div className="font-medium break-words leading-snug text-text">
                       {e.title}
                     </div>
+                    {e.organizer?.displayName || e.organizer?.email ? (
+                      <div className="mt-0.5">
+                        <PersonChip
+                          name={e.organizer.displayName || e.organizer.email || ""}
+                          email={e.organizer.email}
+                          size={16}
+                          className="max-w-[14rem]"
+                        />
+                      </div>
+                    ) : null}
                     {multiCalendar && e.calendarName ? (
                       <div className="text-xs flex items-center gap-1 mt-0.5 text-text-subtle">
                         <span

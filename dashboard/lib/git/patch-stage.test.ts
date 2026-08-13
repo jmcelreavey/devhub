@@ -106,4 +106,102 @@ describe("stageDiffHunk", () => {
     const cached = runGitRepo(repo, ["diff", "--cached", "--", "a.txt"]).stdout;
     expect(cached).toContain("TWO");
   });
+
+  /** A repo with two independent edits inside a single hunk. */
+  function mixedRepo(): string {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-line-stage-"));
+    repos.push(repo);
+    runGitRepo(repo, ["init", "-b", "main"]);
+    runGitRepo(repo, ["config", "user.email", "t@t.com"]);
+    runGitRepo(repo, ["config", "user.name", "T"]);
+    runGitRepo(repo, ["config", "commit.gpgsign", "false"]);
+    fs.writeFileSync(path.join(repo, "a.txt"), "one\ntwo\nthree\nfour\nfive\n");
+    runGitRepo(repo, ["add", "a.txt"]);
+    runGitRepo(repo, ["commit", "-m", "init"]);
+    fs.writeFileSync(path.join(repo, "a.txt"), "one\nTWO\nthree\nFOUR\nfive\n");
+    return repo;
+  }
+
+  /** Hunk-body indexes of the change lines matching `pattern`. */
+  function pick(raw: string, hunkIndex: number, pattern: RegExp): number[] {
+    const hunk = parseFileDiff(raw).hunks[hunkIndex]!;
+    return hunk.lines.flatMap((line, i) => (i > 0 && pattern.test(line) ? [i] : []));
+  }
+
+  it("stages only the selected lines, leaving the rest of the hunk unstaged", async () => {
+    // The case hunk-level staging cannot express, and the reason `git add -p`
+    // still gets reached for.
+    const repo = mixedRepo();
+    const raw = runGitRepo(repo, ["diff", "--", "a.txt"]).stdout;
+
+    const result = await stageDiffHunk({
+      repoRoot: repo,
+      rawDiff: raw,
+      filePath: "a.txt",
+      hunkIndex: 0,
+      lineIndexes: pick(raw, 0, /^[-+](two|TWO)$/),
+      reverse: false,
+    });
+
+    expect(result.ok).toBe(true);
+    const cached = runGitRepo(repo, ["diff", "--cached", "--", "a.txt"]).stdout;
+    expect(cached).toContain("+TWO");
+    expect(cached).not.toContain("FOUR");
+    // The unselected edit survives in the working tree.
+    expect(runGitRepo(repo, ["diff", "--", "a.txt"]).stdout).toContain("+FOUR");
+  });
+
+  it("unstages only the selected lines", async () => {
+    // Regression: buildHunkPatch never saw `reverse`, so on an unstage it kept
+    // unselected deletions as context and dropped unselected additions — the
+    // exact opposite of what a reverse-applied patch needs. The apply either
+    // failed outright or unstaged a line the user had not picked.
+    const repo = mixedRepo();
+    const raw = runGitRepo(repo, ["diff", "--", "a.txt"]).stdout;
+    await stageDiffHunk({
+      repoRoot: repo,
+      rawDiff: raw,
+      filePath: "a.txt",
+      hunkIndex: 0,
+      reverse: false,
+    });
+
+    const staged = runGitRepo(repo, ["diff", "--cached", "--", "a.txt"]).stdout;
+    const result = await stageDiffHunk({
+      repoRoot: repo,
+      rawDiff: staged,
+      filePath: "a.txt",
+      hunkIndex: 0,
+      lineIndexes: pick(staged, 0, /^[-+](two|TWO)$/),
+      reverse: true,
+    });
+
+    expect(result.ok).toBe(true);
+    const afterCached = runGitRepo(repo, ["diff", "--cached", "--", "a.txt"]).stdout;
+    // TWO came back out of the index; FOUR stayed in.
+    expect(afterCached).not.toContain("TWO");
+    expect(afterCached).toContain("+FOUR");
+    // Nothing was lost from the working tree by the round trip.
+    expect(fs.readFileSync(path.join(repo, "a.txt"), "utf-8")).toBe("one\nTWO\nthree\nFOUR\nfive\n");
+  });
+});
+
+describe("buildHunkPatch line selection", () => {
+  const parsed = parseFileDiff(SAMPLE);
+
+  it("demotes an unselected deletion to context when staging", () => {
+    // It is still in the index, so the patch has to say it is there.
+    const patch = buildHunkPatch(parsed, 0, "foo.ts", [4], false)!;
+    expect(patch).toContain(" line2");
+    expect(patch).not.toMatch(/^-line2$/m);
+  });
+
+  it("demotes an unselected addition to context when unstaging", () => {
+    // Reversed: the staged addition is in the index, so it must be represented,
+    // and the staged deletion is already gone, so it must not be.
+    const patch = buildHunkPatch(parsed, 0, "foo.ts", [4], true)!;
+    expect(patch).toContain(" STAGED");
+    expect(patch).not.toMatch(/^-line2$/m);
+    expect(patch).not.toMatch(/^\+STAGED$/m);
+  });
 });

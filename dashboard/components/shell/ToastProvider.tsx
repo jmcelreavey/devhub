@@ -97,10 +97,50 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({ push, dismiss }), [push, dismiss]);
 
+  /**
+   * Toasts live in the top layer, not merely at a high z-index.
+   *
+   * The git workspace is a native `<dialog>` opened with `showModal()`, which
+   * promotes it (and its `::backdrop`) into the browser's top layer. Nothing in
+   * the normal layer can paint above that, whatever `z-index` says — so a push
+   * could fail and its error toast would render *behind* the scrim. From the
+   * user's side the button simply did nothing. `popover` puts the stack in the
+   * same top layer, where the modal can no longer bury it.
+   */
+  const stackRef = useRef<HTMLDivElement>(null);
+  const visibleCount = toasts.length;
+
+  useEffect(() => {
+    const el = stackRef.current;
+    if (!el || typeof el.showPopover !== "function") return;
+    try {
+      if (visibleCount === 0) {
+        if (el.matches(":popover-open")) el.hidePopover();
+        return;
+      }
+      if (el.matches(":popover-open")) {
+        // Top-layer order is entry order. A stack that was already open when a
+        // modal opened now sits *under* it, so re-enter to get back on top.
+        if (!document.querySelector("dialog[open]")) return;
+        el.hidePopover();
+      }
+      el.showPopover();
+    } catch {
+      // Unsupported or a racing toggle — the fixed-position fallback still paints.
+    }
+  }, [visibleCount]);
+
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="toast-stack" role="region" aria-live="polite" aria-label="Notifications">
+      <div
+        ref={stackRef}
+        popover="manual"
+        className="toast-stack"
+        role="region"
+        aria-live="polite"
+        aria-label="Notifications"
+      >
         {toasts.map((t) => (
           <ToastItem key={t.id} toast={t} leaving={leaving.has(t.id)} onDismiss={() => dismiss(t.id)} />
         ))}

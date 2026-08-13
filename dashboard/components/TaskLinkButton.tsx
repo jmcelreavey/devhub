@@ -28,7 +28,7 @@ export function TaskLinkButton({
 
   return (
     <>
-      <HoverTip label="Link calendar, PR, or note" pos="top-end" className="task-action-tip">
+      <HoverTip label="Link calendar, PR, note, or diagram" pos="top-end" className="task-action-tip">
         <button
           type="button"
           className="task-icon-action"
@@ -51,7 +51,7 @@ export function TaskLinkButton({
         onClose={() => setOpen(false)}
         defaultKind="calendar"
         excludeTaskId={taskId}
-        description="Link a calendar event, PR, note, Jira issue, or another task."
+        description="Link a calendar event, PR, note, diagram, Jira issue, or another task."
         onSave={async (ref) => {
           const next = [
             ...(existing ?? []).filter((r) => !(r.kind === ref.kind && r.id === ref.id)),

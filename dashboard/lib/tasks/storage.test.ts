@@ -80,6 +80,40 @@ describe("tasks-storage", () => {
     expect(updated.due).toBe("2026-05-09");
   });
 
+  it("updateTask promotes a jira link into text/jiraKey when unset", async () => {
+    const m = await freshTaskModule();
+    const t = await m.addTask("Ship the thing");
+    expect(t.jiraKey).toBeUndefined();
+    const updated = await m.updateTask(t.id, {
+      links: [{ kind: "jira", id: "FOO-42", label: "FOO-42" }],
+    });
+    expect(updated?.links).toEqual([{ kind: "jira", id: "FOO-42", label: "FOO-42" }]);
+    expect(updated?.jiraKey).toBe("FOO-42");
+    expect(updated?.text).toBe("FOO-42 Ship the thing");
+  });
+
+  it("updateTask does not change an existing jiraKey when adding links", async () => {
+    const m = await freshTaskModule();
+    const t = await m.addTask("BAR-1 already associated");
+    expect(t.jiraKey).toBe("BAR-1");
+    const updated = await m.updateTask(t.id, {
+      links: [{ kind: "jira", id: "ZZZ-9", label: "ZZZ-9" }],
+    });
+    expect(updated?.jiraKey).toBe("BAR-1");
+    expect(updated?.text).toBe("BAR-1 already associated");
+  });
+
+  it("updateTask clears links when patched to an empty array", async () => {
+    const m = await freshTaskModule();
+    const t = await m.addTask("with link");
+    await m.updateTask(t.id, {
+      links: [{ kind: "pr", id: "org/repo#1", label: "PR" }],
+    });
+    const cleared = await m.updateTask(t.id, { links: [] });
+    expect(cleared?.links).toBeUndefined();
+    expect(cleared?.text).toBe("with link");
+  });
+
   it("reorderOpenTasks persists open task order without moving completed tasks", async () => {
     const m = await freshTaskModule();
     const one = await m.addTask("one");

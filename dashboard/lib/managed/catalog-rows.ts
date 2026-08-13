@@ -153,9 +153,10 @@ export function countManagedRowsBySkillSource(
   rows: ManagedCatalogRow<SkillListItem>[],
 ): Record<SkillSourceFilter, number> {
   const devhub = rows.filter((r) => r.kind === "catalog" && r.item.source === "devhub").length;
+  const vendor = rows.filter((r) => r.kind === "catalog" && r.item.source === "vendor").length;
   const aiTools = rows.filter((r) => r.kind === "catalog" && r.item.source === "ai-tools").length;
   const local = rows.filter((r) => r.kind === "local-only" || !!r.localCandidate).length;
-  return { all: rows.length, devhub, "ai-tools": aiTools, local };
+  return { all: rows.length, devhub, vendor, "ai-tools": aiTools, local };
 }
 
 export function countImportableRows(rows: ManagedCatalogRow[]): number {

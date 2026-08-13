@@ -85,6 +85,55 @@ describe("format + build + parse round-trip", () => {
     ]);
   });
 
+  it("round-trips diagram links", () => {
+    const markdown = buildEntityLinksSection([
+      {
+        kind: "diagram",
+        id: "diagrams/Acme/overview",
+        label: "overview",
+        href: "/diagrams/Acme/overview",
+      },
+    ]);
+    expect(markdown).toContain("**Diagram:** [overview](/diagrams/Acme/overview)");
+    expect(parseEntityLinksFromMarkdown(markdown)).toEqual([
+      {
+        kind: "diagram",
+        id: "diagrams/Acme/overview",
+        label: "overview",
+        href: "/diagrams/Acme/overview",
+      },
+    ]);
+  });
+
+  it("normalises encoded diagram hrefs to vault storage ids", () => {
+    const markdown = [
+      "## Links",
+      "",
+      "**Diagram:** [Legal overview](/diagrams/Acme/Widget/Legal%20architecture%20overview)",
+      "",
+    ].join("\n");
+    expect(parseEntityLinksFromMarkdown(markdown)).toEqual([
+      {
+        kind: "diagram",
+        id: "diagrams/Acme/Widget/Legal architecture overview",
+        label: "Legal overview",
+        href: "/diagrams/Acme/Widget/Legal%20architecture%20overview",
+      },
+    ]);
+  });
+
+  it("dedupes diagram refs across build + parse id shapes", () => {
+    const built = {
+      kind: "diagram" as const,
+      id: "diagrams/Acme/overview",
+      label: "overview",
+      href: "/diagrams/Acme/overview",
+    };
+    const section = buildEntityLinksSection([built]);
+    const parsed = parseEntityLinksFromMarkdown(section);
+    expect(mergeEntityRefs(parsed, [built])).toHaveLength(1);
+  });
+
   it("upsertEntityLinksInMarkdown replaces or appends ## Links", () => {
     const withSection = ["# Hello", "", "## Links", "", "**Jira:** PTF-1", "", "## Notes", "body"].join(
       "\n",

@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Download,
   FileWarning,
+  FolderTree,
   GitBranch,
   GitCommit,
   History,
@@ -14,6 +15,7 @@ import {
   Maximize2,
   Minimize2,
   RefreshCw,
+  Undo2,
   Upload,
   X,
   type LucideIcon,
@@ -30,6 +32,8 @@ import { ChangesPanel } from "./ChangesPanel";
 import { ConflictsPanel } from "./ConflictsPanel";
 import { GitHookFailureDialog } from "./GitHookFailureDialog";
 import { HistoryPanel } from "./HistoryPanel";
+import { ReflogPanel } from "./ReflogPanel";
+import { WorktreesPanel } from "./WorktreesPanel";
 import { ShortcutsOverlay } from "./ShortcutsOverlay";
 import { StashPanel } from "./StashPanel";
 import {
@@ -49,6 +53,10 @@ const TABS: readonly [RepoGitTabId, string, LucideIcon][] = [
   ["history", "History", History],
   ["conflicts", "Conflicts", FileWarning],
   ["blame", "Blame", GitCommit],
+  ["worktrees", "Worktrees", FolderTree],
+  // Last, because it is the tab you reach for when something has gone wrong
+  // rather than part of the daily loop.
+  ["reflog", "Reflog", Undo2],
 ];
 
 /** Module-level so the stored-choice validator keeps a stable identity. */
@@ -147,7 +155,12 @@ export function RepoGitWorkspace({
     // Slightly above server GIT_NETWORK_TIMEOUT_MS so the API can return a 504 first.
     const timeoutMs = 310_000;
     try {
-      const result = await postGitAction<{ alreadyUpToDate?: boolean; message?: string }>(
+      const result = await postGitAction<{
+        alreadyUpToDate?: boolean;
+        message?: string;
+        setUpstream?: boolean;
+        branch?: string | null;
+      }>(
         repoApi(repoName, "/branches"),
         { action: "push" },
         { signal: AbortSignal.timeout(timeoutMs) },
@@ -162,7 +175,9 @@ export function RepoGitWorkspace({
       toast.success(
         result.json.alreadyUpToDate
           ? result.json.message || "Already up to date — nothing to push."
-          : "Pushed",
+          : result.json.setUpstream && result.json.branch
+            ? `Pushed — now tracking origin/${result.json.branch}`
+            : "Pushed",
       );
       onMutate();
     } catch (err) {
@@ -246,9 +261,14 @@ export function RepoGitWorkspace({
   );
 
   async function offerAiConflict(conflict: StashConflictPayload) {
-    const syncingMain = conflict.action === "sync-main";
+    const syncingMain = conflict.action === "sync-main" || conflict.action === "merge-branch";
     const ok = await confirm({
-      title: conflict.branch ? `Switched to ${conflict.branch}, stash conflicts` : "Stash left conflicts",
+      title:
+        conflict.action === "merge-branch"
+          ? `Merging ${conflict.syncTarget ?? "branch"} left conflicts`
+          : conflict.branch
+            ? `Switched to ${conflict.branch}, stash conflicts`
+            : "Stash left conflicts",
       message: [
         conflict.error,
         "",
@@ -454,6 +474,10 @@ export function RepoGitWorkspace({
                     <HistoryPanel
                       repoName={repoName}
                       onMutate={onMutate}
+                      onConflict={offerAiConflict}
+                      onHookFailure={showHookFailure}
+                      pushing={pushing}
+                      onPush={() => void pushRepo()}
                       focusUnpushed={historyFocusUnpushed}
                       onFocusUnpushedConsumed={() => setHistoryFocusUnpushed(false)}
                       focusCommit={historyFocusCommit}
@@ -467,6 +491,19 @@ export function RepoGitWorkspace({
                     <BlamePanel
                       repoName={repoName}
                       onOpenInHistory={(hash) => {
+                        setHistoryFocusCommit(hash);
+                        setTab("history");
+                      }}
+                    />
+                  )}
+                  {tab === "worktrees" && (
+                    <WorktreesPanel repoName={repoName} onMutate={onMutate} />
+                  )}
+                  {tab === "reflog" && (
+                    <ReflogPanel
+                      repoName={repoName}
+                      onMutate={onMutate}
+                      onOpenCommit={(hash) => {
                         setHistoryFocusCommit(hash);
                         setTab("history");
                       }}

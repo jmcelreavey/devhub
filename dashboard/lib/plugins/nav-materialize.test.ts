@@ -29,8 +29,7 @@ describe("collectPluginNav", () => {
             href: "/ops",
             label: "Ops",
             icon: "ops",
-            group: "system",
-            section: "system",
+            group: "bi",
           },
         ],
       }),
@@ -41,8 +40,7 @@ describe("collectPluginNav", () => {
         href: "/ops",
         label: "Ops",
         icon: "ops",
-        group: "system",
-        section: "system",
+        group: "bi",
         gate: "bi",
       },
     ]);
@@ -52,7 +50,7 @@ describe("collectPluginNav", () => {
     const a = mkPlugin({
       root: "dashboard",
       paths: ["app/ops"],
-      nav: [{ href: "/ops", label: "Ops", icon: "ops", group: "system" }],
+      nav: [{ href: "/ops", label: "Ops", icon: "ops", group: "bi" }],
     });
     const b: RegisteredPlugin = {
       ...a,
@@ -63,7 +61,7 @@ describe("collectPluginNav", () => {
         dashboard: {
           root: "dashboard",
           paths: ["app/other"],
-          nav: [{ href: "/ops", label: "Other", icon: "ops", group: "system" }],
+          nav: [{ href: "/ops", label: "Other", icon: "ops", group: "bi" }],
         },
       },
     };

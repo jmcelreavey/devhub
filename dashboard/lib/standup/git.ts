@@ -93,13 +93,20 @@ export async function gitFetch(cwd: string): Promise<void> {
 }
 
 export interface GitLogWindowOptions {
-  /** Filter to commits whose author name/email substring-matches this value. */
-  authorMatch?: string;
+  /**
+   * Filter to commits whose author name/email substring-matches any of these.
+   *
+   * A list rather than a single value because one person routinely commits
+   * under several addresses — a work one and a personal one, typically — and
+   * matching only `git config user.email` silently dropped every commit made
+   * under the other. `git log` ORs repeated `--author` patterns.
+   */
+  authorMatches?: string[];
   /**
    * When true, searches across all refs (`--all`). Useful for picking up
    * feature-branch commits that aren't on the current HEAD.
    *
-   * Caveat: combined with `authorMatch`, this can include rebased / cherry-picked
+   * Caveat: combined with `authorMatches`, this can include rebased / cherry-picked
    * commits authored on different days — `git log` filters by author date and
    * `--all` widens the ref set, not the time window.
    */
@@ -128,8 +135,8 @@ export async function gitLogLinesLocalMidnightWindow(
       "-n",
       String(maxLines + 1),
     ];
-    if (opts.authorMatch) {
-      args.push(`--author=${opts.authorMatch}`);
+    for (const match of opts.authorMatches ?? []) {
+      if (match.trim()) args.push(`--author=${match}`);
     }
     const { stdout } = await exec("git", args, { cwd, maxBuffer: 2 * 1024 * 1024 });
     const lines = stdout.trim().split("\n").filter(Boolean);

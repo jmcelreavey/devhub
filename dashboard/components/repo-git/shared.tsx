@@ -9,7 +9,15 @@ import type { StashConflictPayload } from "@/app/repos/types";
 
 /* ─── Shared types ─── */
 
-export type RepoGitTabId = "changes" | "branches" | "stash" | "history" | "conflicts" | "blame";
+export type RepoGitTabId =
+  | "changes"
+  | "branches"
+  | "stash"
+  | "history"
+  | "conflicts"
+  | "blame"
+  | "worktrees"
+  | "reflog";
 
 export interface StatusFile {
   path: string;
@@ -36,10 +44,22 @@ export interface StatusPayload {
 export interface BranchInfo {
   name: string;
   current: boolean;
+  /** Tracking branch (`origin/foo`), or null when this branch was never pushed. */
+  upstream?: string | null;
+  shortHash?: string;
+}
+
+export interface RemoteBranchInfo {
+  name: string;
+  remote: string;
+  localName: string;
+  shortHash: string;
+  trackedLocalName: string | null;
 }
 
 export interface BranchesPayload {
   branches: BranchInfo[];
+  remoteBranches: RemoteBranchInfo[];
   currentBranch: string;
   upstream: string | null;
   ahead: number;
@@ -50,6 +70,8 @@ export interface BranchesPayload {
   mainBranch: string | null;
   aheadMain: number;
   behindMain: number;
+  /** https base for the origin remote, for "Open on GitHub". Null when unparseable. */
+  remoteWebUrl?: string | null;
 }
 
 export type CommitMode = "commit-and-push" | "commit-only";
@@ -90,7 +112,18 @@ export function parseStashConflict(body: string): StashConflictPayload | null {
     if (json.code !== "stash_conflict") return null;
     return {
       code: "stash_conflict",
-      action: json.action === "stash-apply" ? "stash-apply" : json.action === "sync-main" ? "sync-main" : "checkout",
+      action:
+        json.action === "stash-apply"
+          ? "stash-apply"
+          : json.action === "sync-main"
+            ? "sync-main"
+          : json.action === "merge-branch"
+            ? "merge-branch"
+            : json.action === "cherry-pick"
+              ? "cherry-pick"
+              : json.action === "revert"
+                ? "revert"
+              : "checkout",
       branch: typeof json.branch === "string" ? json.branch : undefined,
       switched: Boolean(json.switched),
       conflictFiles: Array.isArray(json.conflictFiles)

@@ -20,6 +20,7 @@ import {
 } from "@/lib/diagram-utils";
 import { flattenTreeFiles } from "@/lib/tree-utils";
 import { SidePanel } from "@/components/shell/SidePanel";
+import { CopyLocationButton } from "@/components/ui/CopyLocationButton";
 
 interface DiagramsOverlayProps {
   open: boolean;
@@ -228,16 +229,20 @@ export function DiagramsOverlay({ open, onClose }: DiagramsOverlayProps) {
         ) : (
           <div className="p-2">
             {filteredDiagrams.map((d) => (
-              <button
+              <div
                 key={d.path}
-                className="w-full text-left px-3 py-2 rounded text-xs hover:bg-[var(--bg-elevated)] flex items-center gap-2"
-                onClick={() => openDiagram(d.path)}
+                className="group w-full text-left px-3 py-2 rounded text-xs hover:bg-[var(--bg-elevated)] flex items-center gap-2"
               >
-                <PenTool
-                  size={12} className="text-text-subtle"
-                />
-                <span className="text-text">{d.name}</span>
-              </button>
+                <button
+                  type="button"
+                  className="flex-1 min-w-0 flex items-center gap-2 text-left"
+                  onClick={() => openDiagram(d.path)}
+                >
+                  <PenTool size={12} className="text-text-subtle" aria-hidden />
+                  <span className="text-text truncate">{d.name}</span>
+                </button>
+                <CopyLocationButton path={d.path} size={11} stopPropagation />
+              </div>
             ))}
           </div>
         )}

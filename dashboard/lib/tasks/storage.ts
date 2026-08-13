@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { getTasksDir } from "@/lib/notes/dir";
 import { writeAtomic, safeReadJSON, withMutex } from "@/lib/atomic-write";
 import { todayISO, JIRA_KEY_RE } from "@/lib/utils";
+import { textWithJiraLinkPromotion } from "@/lib/tasks/task-text";
 
 // Canonical shape lives in ./types so client components can import it too
 // (this module imports node:fs and cannot be reached from the browser).
@@ -253,6 +254,13 @@ export async function updateTask(
     }
     if (patch.links !== undefined) {
       task.links = patch.links.length > 0 ? patch.links : undefined;
+      // Promote a Jira hop-link into the title when the task isn't already
+      // Jira-associated — same convention as typing PROJ-123 in the text.
+      const nextText = textWithJiraLinkPromotion(task.text, task.jiraKey, task.links);
+      if (nextText !== task.text) {
+        task.text = nextText;
+        task.jiraKey = extractJiraKey(nextText);
+      }
     }
     await saveTasks(target, tasks);
     return task;

@@ -41,6 +41,7 @@ import { TaskLinkButton } from "@/components/TaskLinkButton";
 import { TaskOverflowMenu, type TaskOverflowAction } from "@/components/tasks/TaskOverflowMenu";
 import { mutate } from "swr";
 import type { EntityRef } from "@/lib/entity-note";
+import { useToast } from "@/lib/hooks/use-toast";
 
 interface JiraStatus {
   name: string;
@@ -80,6 +81,7 @@ export function TaskItem({
   isDragging?: boolean;
   isDropTarget?: boolean;
 }) {
+  const toast = useToast();
   const taskDate = date ?? todayISO();
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(task.text);
@@ -307,7 +309,7 @@ export function TaskItem({
               onBlur={saveEdit}
             />
           ) : (
-            <span className="text-sm min-w-0 flex-1 basis-[min(100%,12rem)] break-words leading-snug" style={textStyle}>
+            <span className="task-row-title text-sm leading-snug" style={textStyle}>
               {task.jiraKey && !isAbandoned
                 ? renderTaskTextContent(displayText)
                 : renderTaskTextContent(task.text)}
@@ -412,6 +414,26 @@ export function TaskItem({
             label={task.text}
             seed={task.links as EntityRef[] | undefined}
             suppressJiraKey={task.jiraKey}
+            onRemoveSeed={
+              readOnly || isInactive
+                ? undefined
+                : async (ref) => {
+                    const next = (task.links ?? []).filter(
+                      (r) => !(r.kind === ref.kind && r.id === ref.id),
+                    );
+                    const res = await fetch("/api/tasks", {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ id: task.id, date: taskDate, links: next }),
+                    });
+                    if (!res.ok) {
+                      toast.error("Couldn't remove link");
+                      throw new Error(await res.text());
+                    }
+                    void mutate("/api/tasks");
+                    toast.success("Link removed");
+                  }
+            }
           />
         </div>
       )}

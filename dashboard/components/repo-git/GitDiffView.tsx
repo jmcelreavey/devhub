@@ -6,6 +6,12 @@ import type { DiffLine } from "@/lib/repos/git-parsers";
 
 export interface DiffHunkAction {
   hunkIndex: number;
+  /**
+   * Body indexes within the hunk (0 is the @@ header) when the user picked
+   * individual lines. Absent means the whole hunk, which is the existing
+   * behaviour.
+   */
+  lineIndexes?: number[];
 }
 
 interface GitDiffViewProps {
@@ -22,6 +28,32 @@ interface GitDiffViewProps {
 interface HunkSpan {
   hunkIndex: number;
   headerLineIndex: number;
+}
+
+/**
+ * Map each rendered line to its hunk and its index within that hunk's body.
+ *
+ * The staging API addresses lines by their position inside the hunk, counting
+ * the @@ header as 0, so the view has to speak the same coordinates rather than
+ * its own flat line numbers.
+ */
+function buildLineCoords(lines: DiffLine[]): Map<number, { hunkIndex: number; bodyIndex: number }> {
+  const coords = new Map<number, { hunkIndex: number; bodyIndex: number }>();
+  let hunkIndex = -1;
+  let bodyIndex = 0;
+  lines.forEach((line, i) => {
+    if (line.type === "hunk") {
+      hunkIndex += 1;
+      bodyIndex = 0;
+      return;
+    }
+    if (hunkIndex < 0) return;
+    bodyIndex += 1;
+    if (line.type === "add" || line.type === "del") {
+      coords.set(i, { hunkIndex, bodyIndex });
+    }
+  });
+  return coords;
 }
 
 function buildHunkSpans(lines: DiffLine[]): HunkSpan[] {
@@ -49,14 +81,59 @@ export function GitDiffView({
     null,
   );
   const [prevLines, setPrevLines] = useState(lines);
+  /** Rendered line indexes the user has ticked for line-level staging. */
+  const [selectedLines, setSelectedLines] = useState<Set<number>>(() => new Set());
+  const lineCoords = useMemo(() => buildLineCoords(lines), [lines]);
 
   // Dismiss a stale AI selection when the diff content changes.
   if (lines !== prevLines) {
     setPrevLines(lines);
     setAiPopup(null);
+    // The indexes refer to the diff that just changed underneath them.
+    setSelectedLines(new Set());
   }
 
   const hunkSpans = useMemo(() => buildHunkSpans(lines), [lines]);
+  const selectable = Boolean(hunkMode && onHunkAction);
+
+  /**
+   * Toggle a line, or extend from the last one with shift.
+   *
+   * Range select matters more here than it looks: the common shape is a run of
+   * adjacent lines belonging to one logical change, and ticking eight of them
+   * individually is enough friction to send someone back to `git add -p`.
+   */
+  const toggleLine = useCallback(
+    (index: number, extend: boolean) => {
+      setSelectedLines((current) => {
+        const next = new Set(current);
+        if (extend && current.size > 0) {
+          const anchor = Math.max(...current);
+          const [from, to] = anchor < index ? [anchor, index] : [index, anchor];
+          for (let i = from; i <= to; i += 1) if (lineCoords.has(i)) next.add(i);
+          return next;
+        }
+        if (next.has(index)) next.delete(index);
+        else next.add(index);
+        return next;
+      });
+    },
+    [lineCoords],
+  );
+
+  /**
+   * Selected lines grouped by hunk, since the staging API takes one hunk at a
+   * time. A selection spanning two hunks is applied as two calls.
+   */
+  const selectionByHunk = useMemo(() => {
+    const byHunk = new Map<number, number[]>();
+    for (const index of [...selectedLines].sort((a, b) => a - b)) {
+      const coord = lineCoords.get(index);
+      if (!coord) continue;
+      byHunk.set(coord.hunkIndex, [...(byHunk.get(coord.hunkIndex) ?? []), coord.bodyIndex]);
+    }
+    return byHunk;
+  }, [selectedLines, lineCoords]);
 
   const [find, setFind] = useState("");
   const [findOpen, setFindOpen] = useState(false);
@@ -208,6 +285,38 @@ export function GitDiffView({
           <Search size={12} />
         </button>
       )}
+      {selectable && selectedLines.size > 0 && (
+        <div className="repo-git-diff-selection-bar">
+          <span>
+            {selectedLines.size} line{selectedLines.size === 1 ? "" : "s"} selected
+            {selectionByHunk.size > 1 ? ` across ${selectionByHunk.size} hunks` : ""}
+          </span>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={hunkBusy}
+            onClick={() => {
+              // One call per hunk: the API stages within a single hunk, and a
+              // selection is free to span several.
+              for (const [hunkIndex, lineIndexes] of selectionByHunk) {
+                onHunkAction?.({ hunkIndex, lineIndexes });
+              }
+              setSelectedLines(new Set());
+            }}
+          >
+            {hunkMode === "unstage" ? <Minus size={10} /> : <Plus size={10} />}
+            {hunkMode === "unstage" ? "Unstage lines" : "Stage lines"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ padding: "2px 6px" }}
+            onClick={() => setSelectedLines(new Set())}
+          >
+            Clear
+          </button>
+        </div>
+      )}
       <pre
         ref={rootRef}
         className="repo-git-diff"
@@ -221,7 +330,11 @@ export function GitDiffView({
               key={`${i}:${line.type}:${line.text.slice(0, 24)}`}
               data-diff-line={i}
               data-match={matches.length > 0 && i === activeMatchLine ? "active" : undefined}
-              className={`repo-git-diff-line repo-git-diff-${line.type}`}
+              data-selected={selectedLines.has(i) || undefined}
+              className={`repo-git-diff-line repo-git-diff-${line.type}${
+                selectable && lineCoords.has(i) ? " repo-git-diff-selectable" : ""
+              }`}
+              onClick={selectable && lineCoords.has(i) ? (e) => toggleLine(i, e.shiftKey) : undefined}
             >
               <span className="repo-git-diff-gutter" aria-hidden>
                 {line.type === "add" ? "+" : line.type === "del" ? "−" : line.type === "hunk" ? "@" : " "}

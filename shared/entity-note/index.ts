@@ -12,7 +12,7 @@
  * `shared/entity-note` in MCP/sibling packages. Do not invent per-plugin formats.
  */
 
-export type EntityKind = "task" | "meeting" | "pr" | "note" | "calendar" | "jira" | "repo";
+export type EntityKind = "task" | "meeting" | "pr" | "note" | "diagram" | "calendar" | "jira" | "repo";
 
 export interface EntityRef {
   kind: EntityKind;
@@ -58,6 +58,7 @@ const KIND_LABEL: Record<EntityKind, string> = {
   calendar: "Event",
   pr: "PR",
   note: "Note",
+  diagram: "Diagram",
   jira: "Jira",
   repo: "Repo",
 };
@@ -136,14 +137,59 @@ export function parseEntityLinksFromMarkdown(markdown: string): EntityRef[] {
     const href = linkMatch[3]?.trim();
     const kind = kindFromLabel(kindRaw);
     if (!kind || !label) continue;
-    push({
-      kind,
-      id: href || label,
-      label,
-      href: href || undefined,
-    });
+    push(refFromParsedLink(kind, label, href));
   }
   return refs;
+}
+
+/** Decode one path segment; leave the raw value if it wasn't valid URI encoding. */
+function decodePathSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
+/**
+ * Prefer stable vault ids over route hrefs when parsing ## Links.
+ * Diagram/note links are written as `[label](/diagrams/…)` / `[label](/notes/…)`,
+ * but callers (merge, entity-links API refine, chips) expect storage paths.
+ */
+function refFromParsedLink(kind: EntityKind, label: string, href?: string): EntityRef {
+  const raw = (href || label).trim();
+  if (kind === "diagram") {
+    let id = raw.replace(/^\/+/, "").replace(/\.json$/i, "");
+    if (id.startsWith("notes/diagrams/")) id = id.slice("notes/".length);
+    if (!id.startsWith("diagrams/")) id = id ? `diagrams/${id}` : "diagrams";
+    id = id.split("/").map(decodePathSegment).join("/");
+    return {
+      kind,
+      id,
+      label,
+      href: href || undefined,
+    };
+  }
+  if (kind === "note") {
+    // Only strip the app route prefix (`/notes/…`). Vault paths may legitimately
+    // start with `notes/` (nested folder under the vault root).
+    let id = raw.replace(/\.json$/i, "");
+    if (id.startsWith("/notes/")) id = id.slice("/notes/".length);
+    id = id.replace(/^\/+/, "");
+    id = id.split("/").map(decodePathSegment).join("/");
+    return {
+      kind,
+      id,
+      label,
+      href: href || undefined,
+    };
+  }
+  return {
+    kind,
+    id: raw,
+    label,
+    href: href || undefined,
+  };
 }
 
 function kindFromLabel(raw: string): EntityKind | null {
@@ -162,6 +208,8 @@ function kindFromLabel(raw: string): EntityKind | null {
       return "pr";
     case "note":
       return "note";
+    case "diagram":
+      return "diagram";
     case "jira":
       return "jira";
     case "repo":
@@ -180,6 +228,12 @@ export function defaultHrefForRef(ref: EntityRef): string | undefined {
       return "/work?tab=tasks";
     case "note":
       return `/notes/${ref.id.split("/").map(encodeURIComponent).join("/")}`;
+    case "diagram": {
+      // id is vault storage (`diagrams/…`) or a route (`/diagrams/…`).
+      const raw = ref.id.replace(/^\/diagrams\//, "").replace(/^diagrams\//, "");
+      if (!raw) return "/diagrams";
+      return `/diagrams/${raw.split("/").map(encodeURIComponent).join("/")}`;
+    }
     case "pr": {
       // id form: owner/repo#123
       const m = ref.id.match(/^([^/#]+\/[^/#]+)#(\d+)$/);

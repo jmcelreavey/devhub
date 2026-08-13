@@ -37,11 +37,27 @@ errors. Tool **descriptions** are the source of truth for args; this skill carri
 unlike the filtered notes slice).
 
 **Tasks** — `tasks_list/create/update/delete/history`. Jira keys in text (e.g. `DAD-1234`)
-are auto-detected. **Diagrams** — `diagrams_*` over tldraw JSON; prefer
-`diagrams_create`/`diagrams_add_note` over hand-written `diagrams_update` payloads, because
-tldraw snapshots must include both `store` and `schema`. **Appraisal** —
+are auto-detected. **Appraisal** —
 `appraisal_record/set_goal/list_goals/read/list/people/summarize/delete` for performance
 review notes.
+
+**Diagrams** — `diagrams_*` over tldraw JSON. Never hand-write `diagrams_update`
+payloads: tldraw snapshots must carry both `store` and `schema`, and `index` must be a
+valid fractional-index key (`a0`…`az`, then `b00`), not a counter.
+
+- **Architecture, flow and sequence diagrams → `diagrams_set_graph`.** Describe nodes,
+  edges and groups; the tool does layering, text measurement, arrow binding and swimlanes.
+  Do not place boxes by hand — you cannot measure rendered text, so hand-picked
+  coordinates overlap once the text wraps.
+- **Boxes and connectors → `diagrams_add_shape` + `diagrams_add_arrow`.** Shapes are sized
+  to their text and return `x/y/w/h`; arrows bind to shape ids and follow them.
+- **`diagrams_add_note` is for actual sticky notes** — a comment or TODO on a canvas, not
+  the building block of a diagram.
+- Keep node labels to a few short lines and edge labels to one or two short words; tldraw
+  wraps arrow labels to a fraction of the arrow length and breaks longer text mid-word.
+- `diagrams_read` returns a summary with positions, sizes and any overlapping pairs — use
+  it to check your work. `raw:true` returns the (large) full JSON.
+- `diagrams_repair` recomputes note sizing across all diagrams.
 
 **DX audits** — `dx_audit_list` / `dx_audit_read` over reports the `dx-audit` skill writes
 to `reviews/dx-audit-<repo>-<YYYY-MM-DD>`. `dx_audit_read` with just a repo name returns
@@ -58,6 +74,8 @@ the latest audit as markdown; run new audits from the Repos page **DX Audit** bu
 - **On-call** — `datadog_oncall`, `datadog_recent_alerts`, `datadog_investigate`
   (starts an OpenCode investigation session).
 - **Repos** — `repos_list`, `repos_open`, `repos_reveal`, `repos_clone`, `repo_learn`.
+- **Repo ownership** — `owned_repos`, `repo_owner_brief`, `repo_pr_radar`,
+  `repo_who_owns`, `repo_changed_since`, `repo_knowledge_gaps`.
 - **Repo git workspace** (proxies `/api/repos/:name/git/*` + branches) —
   `repos_git_status`, `repos_git_stage`, `repos_git_discard`, `repos_git_stage_hunk`,
   `repos_git_diff`, `repos_git_stash`, `repos_git_branches`, `repos_git_branch`

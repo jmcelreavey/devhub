@@ -13,6 +13,12 @@ export interface BranchOpenPr {
   checkCounts: { passed: number; failed: number; pending: number };
 }
 
+export interface WorkflowRun {
+  status?: string;
+  conclusion?: string;
+  headSha?: string;
+}
+
 interface GhCheckRow {
   /** Check runs use conclusion+status; commit statuses use state. */
   conclusion?: string;
@@ -57,6 +63,18 @@ export function summarizeChecks(rows: GhCheckRow[] | undefined): {
     : counts.passed > 0 ? "passing"
     : "none";
   return { checks, checkCounts: counts };
+}
+
+export function summarizeWorkflowRuns(
+  runs: WorkflowRun[],
+  currentHeadSha?: string | null,
+): "passing" | "pending" | "failing" | "unknown" {
+  const headSha = currentHeadSha ?? runs.find((run) => run.headSha)?.headSha;
+  const headRuns = headSha ? runs.filter((run) => run.headSha === headSha) : [];
+  if (headRuns.length === 0) return "unknown";
+  if (headRuns.some((run) => run.conclusion && !["success", "neutral", "skipped"].includes(run.conclusion))) return "failing";
+  if (headRuns.some((run) => run.status !== "completed")) return "pending";
+  return headRuns.every((run) => ["success", "neutral", "skipped"].includes(run.conclusion ?? "")) ? "passing" : "unknown";
 }
 
 /**

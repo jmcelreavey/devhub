@@ -34,11 +34,19 @@ export function RangeCompareModal({
   open,
   onClose,
   currentBranch,
+  base,
+  head,
+  title = "Compare with default branch",
 }: {
   repoName: string;
   open: boolean;
   onClose: () => void;
   currentBranch?: string;
+  /** Left side of the range. Defaults to the repo's trunk, server-side. */
+  base?: string;
+  /** Right side of the range. Defaults to HEAD, server-side. */
+  head?: string;
+  title?: string;
 }) {
   const toast = useToast();
   const [data, setData] = useState<RangePayload | null>(null);
@@ -61,6 +69,8 @@ export function RangeCompareModal({
     void (async () => {
       try {
         const qs = new URLSearchParams();
+        if (base) qs.set("base", base);
+        if (head) qs.set("head", head);
         if (selectedFile) qs.set("path", selectedFile);
         if (contextMode === "full") qs.set("full", "1");
         else qs.set("context", String(DIFF_CONTEXT_LINES[contextMode]));
@@ -76,7 +86,7 @@ export function RangeCompareModal({
       cancelled = true;
       window.clearTimeout(boot);
     };
-  }, [open, selectedFile, contextMode, repoName, toast]);
+  }, [open, selectedFile, contextMode, repoName, base, head, toast]);
 
   const summary = data
     ? `${data.head} vs ${data.base} · ${data.ahead} ahead · ${data.behind} behind`
@@ -88,7 +98,7 @@ export function RangeCompareModal({
     <ModalShell
       open={open}
       onClose={onClose}
-      title="Compare with default branch"
+      title={title}
       description={summary}
       maxWidth="max-w-[min(96vw,1200px)]"
       align="top"

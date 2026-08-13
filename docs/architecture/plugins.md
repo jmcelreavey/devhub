@@ -96,10 +96,12 @@ resolve unchanged and Next compiles them as if they were core files. It:
   per-machine since it depends on which plugins are registered);
 - prunes paths no longer contributed.
 
-Nav: a plugin's pages still need a sidebar entry. Today the gated entry (e.g. `/ops` with
-`gate: "bi"`) lives as a stub in core `lib/nav.ts`; the `bi` gate is computed by a
-dependency-free `lib/bi-presence.ts` detector so core holds no BI feature code. (Generic
-plugin-contributed nav is a possible future enhancement.)
+Nav: plugins declare `dashboard.nav` entries in `devhub-plugin.json`. The materialiser
+writes them into `lib/plugin-nav.generated.ts`; core merges them into the sidebar via
+`groupSidebarNav` (and into ⌘K via `ALL_NAV_DESTINATIONS`). Use `group: "bi"` for
+BI-owned destinations — Ops ships that way from `devhub-bi`. The `bi` gate is still
+computed by a dependency-free `lib/bi-presence.ts` detector so core holds no BI feature
+code.
 
 ### Overlays (single-file extensions)
 

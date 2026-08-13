@@ -18,6 +18,7 @@ import {
   getGithubLogin,
 } from "@/lib/standup/github-merged";
 import { listRepos, type RepoInfo } from "@/lib/repos";
+import { loadRepoPeople } from "@/lib/people/repo-people";
 import { withErrorHandler } from "@/lib/api-utils";
 import { pMapSettled } from "@/lib/p-limit";
 import {
@@ -44,9 +45,15 @@ export const dynamic = "force-dynamic";
 /**
  * Per-repo commit collection — fetch, resolve git user.email, run the log window.
  *
- * `user.email` is the right `--author` filter (not the GitHub login): git
+ * Addresses are the right `--author` filter (not the GitHub login): git
  * substring-matches on the commit's Author line, which contains the email the
  * user configured locally, not the GitHub handle.
+ *
+ * All of the user's addresses, not just `git config user.email`. Filtering on
+ * the locally configured address alone meant commits made under a second
+ * identity — a work address on one repo, a personal one on another — were
+ * missing from the user's own standup, which is exactly the report where an
+ * omission goes unnoticed.
  */
 async function collectCommitsForRepo(
   repo: RepoInfo,
@@ -54,15 +61,36 @@ async function collectCommitsForRepo(
   untilGit: string,
 ): Promise<{ name: string; subjects: string[]; truncated: boolean }> {
   await gitFetch(repo.path);
-  const authorMatch = (await getGitUserEmail(repo.path)) ?? undefined;
+  const authorMatches = await resolveSelfEmails(repo.path);
   const { lines, truncated } = await gitLogLinesLocalMidnightWindow(
     repo.path,
     sinceGit,
     untilGit,
     MAX_GIT,
-    { authorMatch, allRefs: true },
+    { authorMatches, allRefs: true },
   );
   return { name: repo.name, subjects: lines, truncated };
+}
+
+/**
+ * Every address belonging to whoever is configured as the committer here.
+ *
+ * Starts from `git config user.email` — the only thing that identifies "me"
+ * without asking — then widens to the other addresses the identity layer has
+ * merged into the same person. Falls back to the configured address alone if
+ * resolution turns up nothing, so this can only ever match more than before.
+ */
+async function resolveSelfEmails(repoPath: string): Promise<string[]> {
+  const configured = (await getGitUserEmail(repoPath))?.trim().toLowerCase();
+  if (!configured) return [];
+  try {
+    const { byEmail } = await loadRepoPeople(repoPath);
+    const self = byEmail[configured];
+    if (self?.emails.length) return self.emails;
+  } catch {
+    // Identity resolution is best-effort; the configured address still works.
+  }
+  return [configured];
 }
 
 export const GET = withErrorHandler(async (request: Request) => {

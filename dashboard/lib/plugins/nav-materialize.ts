@@ -20,7 +20,7 @@ import type { NavItem, SectionTab } from "./nav";
 
 export const PLUGIN_NAV_ITEMS: NavItem[] = [];
 
-export const PLUGIN_SECTION_TABS: Partial<Record<"library" | "system", SectionTab[]>> = {};
+export const PLUGIN_SECTION_TABS: Partial<Record<"library" | "system" | "bi", SectionTab[]>> = {};
 `;
 
 function setSkipWorktree(repoRoot: string, rel: string, skip: boolean): void {
@@ -88,18 +88,19 @@ export function collectPluginNav(plugins: RegisteredPlugin[]): {
 function buildGeneratedTs(items: PluginNavItem[], pluginNames: string[]): string {
   if (items.length === 0) return EMPTY_NAV_TS;
 
-  const sectionTabs: Record<"library" | "system", PluginNavItem[]> = {
+  const sectionTabs: Record<"library" | "system" | "bi", PluginNavItem[]> = {
     library: [],
     system: [],
+    bi: [],
   };
   for (const item of items) {
-    if (item.section === "library" || item.section === "system") {
+    if (item.section === "library" || item.section === "system" || item.section === "bi") {
       sectionTabs[item.section].push(item);
     }
   }
 
   const sectionBlocks: string[] = [];
-  for (const key of ["library", "system"] as const) {
+  for (const key of ["library", "system", "bi"] as const) {
     if (sectionTabs[key].length === 0) continue;
     sectionBlocks.push(
       `  ${key}: [\n${sectionTabs[key].map(renderSectionTab).join(",\n")},\n  ]`,
@@ -114,7 +115,7 @@ export const PLUGIN_NAV_ITEMS: NavItem[] = [
 ${items.map(renderNavItem).join(",\n")},
 ];
 
-export const PLUGIN_SECTION_TABS: Partial<Record<"library" | "system", SectionTab[]>> = {
+export const PLUGIN_SECTION_TABS: Partial<Record<"library" | "system" | "bi", SectionTab[]>> = {
 ${sectionBlocks.join(",\n")}
 };
 `;

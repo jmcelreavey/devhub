@@ -1,6 +1,6 @@
 "use client";
 
-import { Lightbulb } from "lucide-react";
+import { Lightbulb, Users } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import type { CouplingSuggestion } from "@/lib/git/change-coupling";
 import { repoApi } from "./shared";
@@ -8,6 +8,8 @@ import { repoApi } from "./shared";
 interface CouplingPayload {
   suggestions: CouplingSuggestion[];
   commitsAnalysed: number;
+  domains: { label: string; changedFiles: number }[];
+  reviewers: { person: { displayName: string }; touches: number }[];
 }
 
 const basename = (p: string) => p.split("/").pop() || p;
@@ -44,7 +46,7 @@ export function CouplingHints({
   });
 
   const suggestions = data?.suggestions ?? [];
-  if (suggestions.length === 0) return null;
+  if (suggestions.length === 0 && !data?.domains.length && !data?.reviewers.length) return null;
 
   return (
     <div className="repo-git-coupling">
@@ -52,6 +54,13 @@ export function CouplingHints({
         <Lightbulb size={11} aria-hidden />
         Usually changed together
       </div>
+      {data?.domains.length ? (
+        <div className="flex flex-wrap gap-1.5 px-2 pb-1.5">
+          {data.domains.map((domain) => (
+            <span key={domain.label} className="badge badge-muted">{domain.label} · {domain.changedFiles}</span>
+          ))}
+        </div>
+      ) : null}
       {suggestions.map((s) => (
         <div
           key={s.path}
@@ -67,6 +76,12 @@ export function CouplingHints({
           </span>
         </div>
       ))}
+      {data?.reviewers.length ? (
+        <div className="repo-git-coupling-row" title="Suggested from commit history on the changed files">
+          <span className="inline-flex items-center gap-1.5"><Users size={11} aria-hidden /> Reviewers</span>
+          <span className="repo-git-coupling-stat">{data.reviewers.slice(0, 3).map((reviewer) => reviewer.person.displayName).join(", ")}</span>
+        </div>
+      ) : null}
     </div>
   );
 }

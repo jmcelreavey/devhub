@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { revalidateRepoOpenPrs } from "@/lib/github/repo-open-pr-swr";
+import { revalidateOwnedRepos } from "@/lib/ownership/owned-repos-swr";
 import { FetchError } from "@/components/ui/FetchError";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 import {
@@ -17,7 +18,9 @@ import {
 import { LearnPanel } from "./LearnPanel";
 import { EvolutionStrip } from "./EvolutionStrip";
 import { useReposActions } from "./useReposActions";
+import { useToast } from "@/lib/hooks/use-toast";
 import type { GithubReposApiPayload, RepoInfo, ReposApiPayload } from "./types";
+import type { ResolvedOwnedRepo } from "@/lib/ownership/types";
 
 function parseGithubFetchErrorMessage(error: unknown): string {
   if (!(error instanceof Error)) return "Couldn’t load GitHub repos.";
@@ -41,11 +44,23 @@ function githubUrl(remote: string | null) {
   return m ? `https://github.com/${m[1]}` : null;
 }
 
+function githubFullName(remote: string | null): string | null {
+  return githubUrl(remote)?.replace("https://github.com/", "") ?? null;
+}
+
 export default function ReposPage() {
+  const toast = useToast();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const learnParam = searchParams.get("learn");
+  /**
+   * Deep link to one repo, used by the command palette. Seeds the filter rather
+   * than routing anywhere new, because the repo card — with its Git workspace,
+   * Upstart and Learn actions — is already the destination; there was just no
+   * way to arrive at it by name.
+   */
+  const repoParam = searchParams.get("repo");
 
   const {
     data,
@@ -56,7 +71,15 @@ export default function ReposPage() {
   } = useLive<ReposApiPayload>("/api/repos");
   const boot = useBootGate(data !== undefined || !!localError);
   const repos = data?.repos ?? [];
-  const [query, setQuery] = useState("");
+  const { data: ownershipData, mutate: mutateOwnership } = useLive<{ repos: ResolvedOwnedRepo[] }>("/api/own", {
+    refreshInterval: 0,
+  });
+  const [ownershipBusy, setOwnershipBusy] = useState<string | null>(null);
+  const ownedRepos = useMemo(
+    () => new Set((ownershipData?.repos ?? []).map((repo) => repo.fullName.toLowerCase())),
+    [ownershipData?.repos],
+  );
+  const [query, setQuery] = useState(repoParam ?? "");
   const [debouncedGithubQuery, setDebouncedGithubQuery] = useState("");
   const githubSearchQuery = debouncedGithubQuery.trim();
   const githubKey = useMemo(
@@ -140,6 +163,25 @@ export default function ReposPage() {
     setLearnParam(null);
   }
 
+  async function toggleOwned(fullName: string, owned: boolean) {
+    setOwnershipBusy(fullName);
+    try {
+      const response = await fetch("/api/own", {
+        method: owned ? "POST" : "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fullName }),
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(body.error ?? "Could not update ownership");
+      revalidateOwnedRepos();
+      await mutateOwnership();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not update ownership");
+    } finally {
+      setOwnershipBusy(null);
+    }
+  }
+
   return (
     <div className="page-wrapper">
       <BootScreen state={boot} />
@@ -219,6 +261,10 @@ export default function ReposPage() {
               key={repo.name}
               repo={repo}
               githubUrl={githubUrl(repo.remote)}
+              ownershipFullName={githubFullName(repo.remote)}
+              owned={ownedRepos.has(githubFullName(repo.remote)?.toLowerCase() ?? "")}
+              ownershipBusy={ownershipBusy}
+              onToggleOwned={toggleOwned}
               apps={apps}
               isDesktop={isDesktop}
               opening={actions.opening}
@@ -280,6 +326,9 @@ export default function ReposPage() {
                 cloning={actions.cloning}
                 onCursor={actions.openInCursor}
                 onClone={actions.cloneRepo}
+                owned={ownedRepos.has(repo.fullName.toLowerCase())}
+                ownershipBusy={ownershipBusy}
+                onToggleOwned={toggleOwned}
               />
             ))}
             {!isGithubValidating && !githubError && githubRepos.length === 0 && (

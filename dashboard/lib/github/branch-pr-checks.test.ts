@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeChecks } from "./branch-pr";
+import { summarizeChecks, summarizeWorkflowRuns } from "./branch-pr";
 
 describe("summarizeChecks", () => {
   it("reports none when there are no checks", () => {
@@ -45,5 +45,22 @@ describe("summarizeChecks", () => {
 
   it("ignores rows it cannot classify rather than guessing", () => {
     expect(summarizeChecks([{ conclusion: "SOMETHING_NEW" }]).checks).toBe("none");
+  });
+});
+
+describe("summarizeWorkflowRuns", () => {
+  it("aggregates workflows for the latest commit only", () => {
+    expect(summarizeWorkflowRuns([
+      { headSha: "new", status: "completed", conclusion: "success" },
+      { headSha: "new", status: "completed", conclusion: "failure" },
+      { headSha: "old", status: "completed", conclusion: "success" },
+    ])).toBe("failing");
+  });
+
+  it("uses the actual default-branch head over gh run ordering", () => {
+    expect(summarizeWorkflowRuns([
+      { headSha: "old", status: "completed", conclusion: "failure" },
+      { headSha: "current", status: "completed", conclusion: "success" },
+    ], "current")).toBe("passing");
   });
 });

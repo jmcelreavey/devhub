@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { resolveDefaultRemoteBranch, runGitRepoAsync } from "@/lib/git/repo-local";
-import { layoutCommitGraph } from "@/lib/repos/git-graph";
+import { layoutCommitGraph, openBoundary } from "@/lib/repos/git-graph";
 import { parseGraphLog } from "@/lib/repos/git-parsers";
 import { parseLeftRightCount } from "../../branches/parsers";
 import { gitFail, withScannedRepo, type RepoParams } from "../_shared";
@@ -10,13 +10,60 @@ function shortMainName(ref: string | null): string | null {
   return ref.replace(/^origin\//, "");
 }
 
+/**
+ * Continuation tips arrive as hashes from a previous page's open frontier. They
+ * are interpolated into a git argv, so accept only what a hash can look like —
+ * anything else is dropped rather than corrected, since a malformed cursor is a
+ * bug on our side and should not be guessed at.
+ */
+/**
+ * Resolve a query that looks like a commit hash to a full sha.
+ *
+ * Searching for a hash is the one case `--grep` cannot serve — the hash is not
+ * in the message — and it is a common thing to paste in. Only hex of a
+ * plausible length is tried, so an ordinary word never costs a subprocess, and
+ * `^{commit}` keeps a tag or tree from resolving here.
+ */
+async function resolveCommitish(repoRoot: string, query: string): Promise<string | null> {
+  if (!/^[0-9a-f]{4,40}$/i.test(query)) return null;
+  const result = await runGitRepoAsync(repoRoot, ["rev-parse", "--verify", `${query}^{commit}`]);
+  if (result.status !== 0) return null;
+  const sha = result.stdout.trim();
+  return /^[0-9a-f]{40}$/.test(sha) ? sha : null;
+}
+
+function parseTips(raw: string | null): string[] {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((t) => t.trim())
+    .filter((t) => /^[0-9a-f]{7,40}$/.test(t))
+    .slice(0, 64);
+}
+
 export async function GET(req: NextRequest, { params }: RepoParams) {
   const { name } = await params;
   const resolved = withScannedRepo(name);
   if (!resolved.ok) return resolved.response;
 
   const limitRaw = Number(req.nextUrl.searchParams.get("limit") ?? "40");
-  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 5), 100) : 40;
+  const limit = Number.isFinite(limitRaw)
+    ? Math.min(Math.max(Math.floor(limitRaw), 5), 100)
+    : 40;
+  const cursorTips = parseTips(req.nextUrl.searchParams.get("tips"));
+  // `scope=current` walks only HEAD and the default remote tip, which is the old
+  // behaviour and stays available for very wide repos.
+  const scope = req.nextUrl.searchParams.get("scope") === "current" ? "current" : "all";
+  const query = (req.nextUrl.searchParams.get("q") ?? "").trim();
+  // Repeatable: one person commits under several addresses, and `git log` ORs
+  // repeated `--author` patterns.
+  const authorMatches = req.nextUrl.searchParams
+    .getAll("author")
+    .map((a) => a.trim())
+    .filter(Boolean)
+    .slice(0, 16);
+  const offsetRaw = Number(req.nextUrl.searchParams.get("offset") ?? "0");
+  const offset = Number.isFinite(offsetRaw) ? Math.max(Math.floor(offsetRaw), 0) : 0;
 
   const [mainBranch, headResult] = await Promise.all([
     resolveDefaultRemoteBranch(resolved.repoRoot),
@@ -24,18 +71,44 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
   ]);
   const currentBranch = headResult.status === 0 ? headResult.stdout.trim() : "HEAD";
 
-  // Include the default remote tip so the graph shows fork/merge vs main,
-  // not just a flat walk of the current branch.
-  const tips = ["HEAD"];
-  if (mainBranch) tips.push(mainBranch);
+  // Continuation pages walk from the previous page's open frontier. A first
+  // page walks every ref: with only HEAD and the default remote tip the graph
+  // is close to linear by construction, so the rail showed a single column and
+  // the lane palette never came into play.
+  const walkArgs =
+    cursorTips.length > 0
+      ? cursorTips
+      : scope === "current"
+        ? mainBranch
+          ? ["HEAD", mainBranch]
+          : ["HEAD"]
+        : ["HEAD", "--branches", "--remotes", "--tags"];
+
+  // A query that looks like a hash is a jump, not a text search: `--grep` would
+  // never match it, since the hash is not in the message.
+  const directHit = await resolveCommitish(resolved.repoRoot, query);
+
+  const searchArgs = [
+    ...(query && !directHit ? ["--regexp-ignore-case", `--grep=${query}`, "--fixed-strings"] : []),
+    ...authorMatches.map((a) => `--author=${a}`),
+  ];
+  const searching = searchArgs.length > 0 || Boolean(directHit);
 
   const [log, mainAheadBehind] = await Promise.all([
     runGitRepoAsync(resolved.repoRoot, [
       "log",
-      ...tips,
-      `--max-count=${limit}`,
+      // A resolved hash replaces the walk entirely — the user asked for one
+      // commit, so widening from it would bury the thing they typed.
+      ...(directHit ? [directHit, "--max-count=1"] : walkArgs),
+      ...(directHit ? [] : [`--max-count=${limit + 1}`]),
+      ...(searching && offset > 0 && !directHit ? [`--skip=${offset}`] : []),
+      // Date order keeps the rows in the order a reader expects while still
+      // never placing a parent above its child, which is what the lane
+      // assignment relies on.
+      "--date-order",
+      ...searchArgs,
       "--decorate=short",
-      "--format=%x1e%H%x00%P%x00%h%x00%s%x00%an%x00%ar%x00%D",
+      "--format=%x1e%H%x00%P%x00%h%x00%s%x00%an%x00%ar%x00%D%x00%ae",
     ]),
     mainBranch
       ? runGitRepoAsync(resolved.repoRoot, [
@@ -48,8 +121,25 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
   ]);
   if (log.status !== 0) return gitFail(log, "Log failed");
 
-  const commits = parseGraphLog(log.stdout || "");
+  const parsedCommits = parseGraphLog(log.stdout || "");
+  const commits = parsedCommits.slice(0, limit);
   const graph = layoutCommitGraph(commits);
+
+  /*
+   * Two paging strategies, because the walks are different shapes.
+   *
+   * An unfiltered walk pages from the open frontier — the parents it referenced
+   * but did not reach. That is the set of lanes still hanging off the bottom of
+   * the page, so continuing from it resumes exactly where the graph stopped.
+   *
+   * A filtered walk cannot: the parent of a matching commit is usually not
+   * itself a match, so the frontier is neither the next results nor a bounded
+   * set. There the offset is the honest cursor, since the filtered walk is a
+   * single ordered sequence and skipping into it is well defined.
+   */
+  const nextTips = searching ? [] : openBoundary(commits);
+  const nextOffset = searching && parsedCommits.length > limit ? offset + commits.length : null;
+  const hasMore = searching ? nextOffset !== null : nextTips.length > 0;
   const counts =
     mainAheadBehind.status === 0
       ? parseLeftRightCount(mainAheadBehind.stdout)
@@ -66,6 +156,13 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
   return NextResponse.json({
     commits: graph,
     count: graph.length,
+    hasMore,
+    nextTips,
+    nextOffset,
+    /** True when the result is a filtered view rather than the whole graph. */
+    searching,
+    /** Set when the query resolved to a single commit rather than a text match. */
+    directHit: directHit ? true : undefined,
     currentBranch,
     mainBranch,
     mainShort,

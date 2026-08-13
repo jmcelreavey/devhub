@@ -15,11 +15,13 @@ import type { AiToolsMeta, SkillListItem, SkillOrigin } from "@/lib/skills/api-t
 import { isReadOnlySkillOrigin } from "@/lib/skills/api-types";
 import {
   devhubSharedSkillsDir,
+  devhubVendorSkillsDir,
   listSkillDirNames,
   readSkillDescription,
   resolveSkillDirUnder,
   skillMdPath,
 } from "@/lib/skills/shared";
+import { readSkillProvenance } from "@/lib/skills/provenance";
 
 export type { SkillOrigin, SkillListItem } from "@/lib/skills/api-types";
 
@@ -36,6 +38,7 @@ export interface SkillCatalogEntry {
 
 export interface SkillCatalogMeta {
   devhubDir: string;
+  vendorDir: string;
   aiToolsDir: string | null;
   aiToolsAvailable: boolean;
 }
@@ -45,6 +48,7 @@ export function skillCatalogMeta(repoRoot: string): SkillCatalogMeta {
   const aiToolsAvailable = isAiToolsSyncEnabled() && isAiToolsAvailable();
   return {
     devhubDir,
+    vendorDir: devhubVendorSkillsDir(repoRoot),
     aiToolsDir: aiToolsAvailable ? aiToolsSkillsDir() : null,
     aiToolsAvailable,
   };
@@ -66,9 +70,16 @@ export function buildAiToolsMeta(_repoRoot: string): AiToolsMeta {
  * the repo.
  */
 export function upstreamOnlySkillNames(repoRoot: string): Set<string> {
-  const { devhubDir, aiToolsDir, aiToolsAvailable } = skillCatalogMeta(repoRoot);
+  const { devhubDir, vendorDir, aiToolsDir, aiToolsAvailable } = skillCatalogMeta(repoRoot);
   const devhub = new Set(listSkillDirNames(devhubDir));
   const names = new Set<string>();
+
+  // Vendored skills are externally owned too: collect must not copy them back
+  // into skills/shared, which would fork them from upstream and quietly relicense
+  // Apache-2.0 code into the MIT tree.
+  for (const name of listSkillDirNames(vendorDir)) {
+    if (!devhub.has(name)) names.add(name);
+  }
 
   if (aiToolsAvailable && aiToolsDir) {
     for (const sourceName of listSkillDirNames(aiToolsDir)) {
@@ -91,13 +102,22 @@ export function upstreamOnlySkillNames(repoRoot: string): Set<string> {
   return names;
 }
 
-/** Skills to copy during sync (devhub wins on name collision). */
+/**
+ * Skills to copy during sync.
+ *
+ * Precedence: core (skills/shared) > vendor > ai-tools > plugins, first wins on
+ * name collision. Vendor sits directly below core so a same-named skill in
+ * skills/shared shadows the vendored one — that is the supported way to change
+ * vendored behaviour without editing files the next re-vendor will overwrite.
+ */
 export function buildMergedSkillCatalog(repoRoot: string): SkillCatalogEntry[] {
-  const { devhubDir, aiToolsDir, aiToolsAvailable } = skillCatalogMeta(repoRoot);
+  const { devhubDir, vendorDir, aiToolsDir, aiToolsAvailable } = skillCatalogMeta(repoRoot);
   const devhubNames = listSkillDirNames(devhubDir);
   const devhubNameSet = new Set(devhubNames);
+  const vendorNames = listSkillDirNames(vendorDir);
   const aiToolsNames = aiToolsAvailable && aiToolsDir ? listSkillDirNames(aiToolsDir) : [];
   const aiToolsNameSet = new Set(aiToolsNames.map(aiToolsSkillCatalogName));
+  const vendorNameSet = new Set(vendorNames);
 
   const entries: SkillCatalogEntry[] = [];
   const seenAiToolsCatalogNames = new Set<string>();
@@ -107,13 +127,20 @@ export function buildMergedSkillCatalog(repoRoot: string): SkillCatalogEntry[] {
       name,
       origin: "devhub",
       dir: path.join(devhubDir, name),
-      overridesUpstream: aiToolsNameSet.has(name),
+      overridesUpstream: aiToolsNameSet.has(name) || vendorNameSet.has(name),
     });
+  }
+
+  for (const name of vendorNames) {
+    if (devhubNameSet.has(name)) continue;
+    const dir = resolveSkillDirUnder(vendorDir, name);
+    if (!dir) continue;
+    entries.push({ name, origin: "vendor", dir });
   }
 
   for (const name of aiToolsNames) {
     const catalogName = aiToolsSkillCatalogName(name);
-    if (devhubNameSet.has(catalogName)) continue;
+    if (devhubNameSet.has(catalogName) || vendorNameSet.has(catalogName)) continue;
     if (seenAiToolsCatalogNames.has(catalogName)) continue;
     seenAiToolsCatalogNames.add(catalogName);
     const dir = resolveSkillDirUnder(aiToolsDir!, name);
@@ -153,18 +180,30 @@ export function filterSkillCatalog(
 
 export function catalogOriginCounts(catalog: SkillCatalogEntry[]): {
   devhub: number;
+  vendor: number;
   aiTools: number;
   plugins: number;
 } {
   let devhub = 0;
+  let vendor = 0;
   let aiTools = 0;
   let plugins = 0;
   for (const e of catalog) {
-    if (e.origin === "ai-tools") aiTools++;
+    if (e.origin === "vendor") vendor++;
+    else if (e.origin === "ai-tools") aiTools++;
     else if (e.origin.startsWith("plugin:")) plugins++;
     else devhub++;
   }
-  return { devhub, aiTools, plugins };
+  return { devhub, vendor, aiTools, plugins };
+}
+
+/** Catalog entries sourced from skills/vendor, for provenance validation. */
+export function vendorCatalogEntries(
+  catalog: SkillCatalogEntry[],
+): Array<{ name: string; dir: string }> {
+  return catalog
+    .filter((e) => e.origin === "vendor")
+    .map((e) => ({ name: e.name, dir: e.dir }));
 }
 
 export interface SkillCatalogContext {
@@ -179,13 +218,21 @@ export function createSkillCatalogContext(repoRoot: string): SkillCatalogContext
 }
 
 export function listSkillsFromCatalog(entries: SkillCatalogEntry[]): SkillListItem[] {
-  return entries.map((entry) => ({
-    name: entry.name,
-    description: readSkillDescription(entry.dir),
-    source: entry.origin,
-    readOnly: isReadOnlySkillOrigin(entry.origin),
-    overridesUpstream: entry.overridesUpstream,
-  }));
+  return entries.map((entry) => {
+    // Only read provenance for sources where it carries an obligation. Every
+    // skills/shared skill is MIT with the repo, so parsing 22 files to
+    // rediscover that on each Skills page load buys nothing.
+    const provenance = entry.origin === "vendor" ? readSkillProvenance(entry.dir) : null;
+    return {
+      name: entry.name,
+      description: readSkillDescription(entry.dir),
+      source: entry.origin,
+      readOnly: isReadOnlySkillOrigin(entry.origin),
+      overridesUpstream: entry.overridesUpstream,
+      license: provenance?.license ?? null,
+      sourceUrl: provenance?.source ?? null,
+    };
+  });
 }
 
 export function listSkillsForApi(repoRoot: string): SkillListItem[] {

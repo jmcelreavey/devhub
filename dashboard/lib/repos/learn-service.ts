@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { isNotesAiConfigured } from "@/lib/notes-ai/config";
 import { getGitHead, scanRepoContext, type RepoContext } from "@/lib/repos/context";
 import { generateRepoLearnArtifacts } from "@/lib/repos/learn-ai";
@@ -25,9 +26,16 @@ export interface RepoLearnLoadResult {
   message?: string;
 }
 
-export async function loadRepoLearn(repoPath: string, refresh: boolean): Promise<RepoLearnLoadResult> {
-  const context = await scanRepoContext(repoPath);
+export async function loadRepoLearn(
+  repoPath: string,
+  refresh: boolean,
+  scope?: { id: string; label: string; paths: string[] },
+): Promise<RepoLearnLoadResult> {
+  const context = await scanRepoContext(repoPath, scope);
   const gitHead = await getGitHead(repoPath);
+  const scopeKey = scope
+    ? `${scope.id}-${createHash("sha1").update(scope.paths.join("\n")).digest("hex").slice(0, 8)}`
+    : undefined;
   const aiConfigured = isNotesAiConfigured();
 
   if (!aiConfigured) {
@@ -42,7 +50,7 @@ export async function loadRepoLearn(repoPath: string, refresh: boolean): Promise
   }
 
   if (!refresh) {
-    const cached = readRepoLearnCache(context.repoName, gitHead);
+    const cached = readRepoLearnCache(context.repoName, gitHead, scopeKey);
     if (cached) {
       return {
         context,
@@ -59,7 +67,7 @@ export async function loadRepoLearn(repoPath: string, refresh: boolean): Promise
   }
 
   try {
-    const generated = await generateCachedRepoLearnArtifacts(context, gitHead);
+    const generated = await generateCachedRepoLearnArtifacts(context, gitHead, scopeKey);
     return {
       context,
       gitHead,
@@ -79,8 +87,12 @@ export async function loadRepoLearn(repoPath: string, refresh: boolean): Promise
   }
 }
 
-function generateCachedRepoLearnArtifacts(context: RepoContext, gitHead: string): Promise<RepoLearnArtifactsResponse> {
-  const key = `${context.repoName}:${gitHead}`;
+function generateCachedRepoLearnArtifacts(
+  context: RepoContext,
+  gitHead: string,
+  scopeKey?: string,
+): Promise<RepoLearnArtifactsResponse> {
+  const key = `${context.repoName}:${gitHead}:${scopeKey ?? "all"}`;
   const existing = inFlightGenerations.get(key);
   if (existing) return existing;
 
@@ -93,6 +105,7 @@ function generateCachedRepoLearnArtifacts(context: RepoContext, gitHead: string)
       generatedAt,
       briefMarkdown: generated.briefMarkdown,
       packFiles: generated.packFiles,
+      scopeKey,
     });
     return {
       ...generated,

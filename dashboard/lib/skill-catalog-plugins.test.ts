@@ -51,7 +51,7 @@ describe("buildMergedSkillCatalog with plugins", () => {
     const catalog = buildMergedSkillCatalog(repoRoot);
     expect(catalog.map((e) => e.name)).toEqual(["create-pr"]);
     expect(catalog[0].origin).toBe("devhub");
-    expect(catalogOriginCounts(catalog)).toEqual({ devhub: 1, aiTools: 0, plugins: 0 });
+    expect(catalogOriginCounts(catalog)).toEqual({ devhub: 1, vendor: 0, aiTools: 0, plugins: 0 });
   });
 
   it("merges plugin skills, marks them read-only, and lets core win on collisions", () => {
@@ -68,7 +68,7 @@ describe("buildMergedSkillCatalog with plugins", () => {
     // collision: core kept, plugin copy dropped
     expect(byName["shared-skill"].origin).toBe("devhub");
     expect(byName["shared-skill"].dir).toContain(path.join("skills", "shared"));
-    expect(catalogOriginCounts(catalog)).toEqual({ devhub: 2, aiTools: 0, plugins: 1 });
+    expect(catalogOriginCounts(catalog)).toEqual({ devhub: 2, vendor: 0, aiTools: 0, plugins: 1 });
 
     const list = listSkillsFromCatalog(catalog);
     expect(list.find((s) => s.name === "bi-iam")?.readOnly).toBe(true);

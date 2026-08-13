@@ -173,6 +173,41 @@ function noteRows(tree: TreeNode[] | undefined): PickRow[] {
     .map((f) => f.row);
 }
 
+function diagramRows(tree: TreeNode[] | undefined): PickRow[] {
+  if (!tree?.length) return [];
+  const files: { row: PickRow; modified: number }[] = [];
+
+  const walk = (nodes: TreeNode[]) => {
+    for (const node of nodes) {
+      if (node.type === "file") {
+        if (!isDiagramStoragePath(node.path)) continue;
+        const id = node.path.replace(/\.json$/i, "");
+        const title = node.name.replace(/\.json$/i, "");
+        const folder = id.includes("/")
+          ? id.split("/").slice(1, -1).join("/") || "Diagrams"
+          : "Diagrams";
+        files.push({
+          row: {
+            id,
+            title,
+            meta: folder,
+            overrides: { label: title },
+          },
+          modified: node.modified ?? 0,
+        });
+      } else if (node.children?.length) {
+        walk(node.children);
+      }
+    }
+  };
+  walk(tree);
+
+  return files
+    .sort((a, b) => b.modified - a.modified || a.row.title.localeCompare(b.row.title))
+    .slice(0, NOTE_RECENT_FALLBACK)
+    .map((f) => f.row);
+}
+
 function prRows(data: GithubPrsApiPayload | undefined): PickRow[] {
   if (!data?.configured) return [];
   const all: GithubPrRow[] = [
@@ -280,6 +315,19 @@ const KIND_CONFIG = {
     pasteLabel: "Vault path",
     pastePlaceholder: "task-notes/2026-07-28-…",
   }),
+  diagram: defineKind<TreeNode[]>({
+    label: "Diagram",
+    endpoint: "/api/tree",
+    toRows: diagramRows,
+    searchLabel: "Search diagrams",
+    searchPlaceholder: "Search diagrams…",
+    hint: "Recent diagrams. Select one, then Add link.",
+    loadingText: "Loading diagrams…",
+    emptyText: "No diagrams found. Paste a vault path below.",
+    errorText: "Couldn't load diagrams. Paste a vault path below.",
+    pasteLabel: "Diagram path",
+    pastePlaceholder: "diagrams/Acme/Widget/…",
+  }),
   repo: defineKind<ReposApiPayload>({
     label: "Repo",
     endpoint: "/api/repos",
@@ -305,8 +353,8 @@ const KIND_CONFIG = {
     loadingText: "Loading your tickets…",
     emptyText: "No tickets in the cached list. Paste an issue key below.",
     errorText: "Couldn't load tickets. Paste an issue key below.",
-    pasteLabel: "Issue key",
-    pastePlaceholder: "PTF-1234",
+    pasteLabel: "Issue key or URL",
+    pastePlaceholder: "PTF-1234 or https://…/browse/PTF-1234",
   }),
   task: defineKind<TaskHistoryDay[]>({
     label: "Task",
@@ -360,7 +408,7 @@ export function EntityLinkDialog({
   onClose,
   onSave,
   title = "Link to…",
-  description = "Link a calendar event, PR, note, repo, Jira issue, or task.",
+  description = "Link a calendar event, PR, note, diagram, repo, Jira issue, or task.",
   defaultKind = "calendar",
   excludeTaskId,
 }: EntityLinkDialogProps) {

@@ -1,6 +1,6 @@
 ---
-title: Sharing notes and docs
-description: Publish a note or doc as a secret Gist, or as a one-time link that self-destructs.
+title: Sharing notes, docs, and diagrams
+description: Publish a note, doc, or diagram as a secret Gist, or as a one-time link that self-destructs.
 order: 8
 icon: Share2
 tags: [workflow]
@@ -9,9 +9,9 @@ related:
   - integrations/github
 ---
 
-# Sharing Notes and Docs
+# Sharing Notes, Docs, and Diagrams
 
-DevHub has two ways to hand someone a note without committing it to git. They behave
+DevHub has two ways to hand someone a note, doc, or diagram without committing it to git. They behave
 differently on purpose:
 
 | | **Share** (live link) | **One-time** |
@@ -39,13 +39,17 @@ Publishing uses `gh gist create` / `gh gist edit` under the hood. DevHub does no
 
 Open any note or doc. The **Share** control in the editor header:
 
-1. Converts the current content to markdown (BlockNote notes → **portable GitHub markdown** via `blocksToPortableMarkdown` — toggles become `<details>`, DevHub `::directives` are humanized or dropped, bold/italic/code survive; docs use the on-disk `.md` file).
+1. Converts the current content to markdown (BlockNote notes → **portable GitHub markdown** via `blocksToPortableMarkdown` — toggles become `<details>`, DevHub `::directives` are humanized or dropped, bold/italic/code survive; docs use the on-disk `.md` file; diagrams become a markdown wrapper around a **tldraw JSON snapshot**).
 2. Creates a **secret** gist (unlisted, but readable by anyone with the URL).
 3. Copies the gist URL to your clipboard.
 
 If the note is already live, clicking **Share** again (or **Update** on the **Live links** page) overwrites the gist with the current content.
 
 Empty notes cannot be published.
+
+### Diagrams
+
+Open a diagram in the editor. **Share** / **One-time** sit next to Copy location — same live / stale / Update / unshare UX as notes. The gist is markdown containing the tldraw JSON (not a rendered PNG/SVG). MCP: `share_publish` / `share_one_time` with `vault: "notes"` and `path: "diagrams/..."`.
 
 ### Live Links Registry
 

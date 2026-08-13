@@ -280,7 +280,7 @@ function TreeNode({
       )}
       <button
         type="button"
-        title="Copy reference"
+        title="Copy location"
         className="shrink-0 rounded p-0.5 reveal-on-hover"
         style={{ color: copied ? "var(--success)" : "var(--text-muted)" }}
         onClick={handleCopyRef}
@@ -290,7 +290,7 @@ function TreeNode({
         ) : (
           <ClipboardCopy size={12} strokeWidth={2.5} aria-hidden />
         )}
-        <span className="sr-only">Copy reference</span>
+        <span className="sr-only">Copy location</span>
       </button>
       <HoverTip label={deleting ? "Deleting…" : `Delete ${label}`}>
         <button

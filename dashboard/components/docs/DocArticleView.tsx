@@ -69,7 +69,7 @@ export function DocArticleView({ detail }: { detail: DocDetail }) {
         </div>
 
         <article className="docs-article">
-          <DocContent nodes={detail.nodes} />
+          <DocContent nodes={detail.nodes} docPath={detail.slug} />
         </article>
 
         <DocRelations

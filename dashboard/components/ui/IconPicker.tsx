@@ -844,6 +844,7 @@ export function LogoIcon({
         alt=""
         aria-hidden
         unoptimized
+        priority
         width={bottlePx}
         height={bottlePx}
         style={{

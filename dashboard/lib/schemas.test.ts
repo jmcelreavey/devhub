@@ -53,6 +53,29 @@ describe("TaskPatchSchema", () => {
     const r = TaskPatchSchema.safeParse({ id: "abc", status: "unknown" });
     expect(r.success).toBe(false);
   });
+
+  it("accepts diagram link kind", () => {
+    const r = TaskPatchSchema.safeParse({
+      id: "abc",
+      links: [
+        {
+          kind: "diagram",
+          id: "diagrams/Acme/overview",
+          label: "overview",
+          href: "/diagrams/Acme/overview",
+        },
+      ],
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("rejects unknown link kind", () => {
+    const r = TaskPatchSchema.safeParse({
+      id: "abc",
+      links: [{ kind: "widget", id: "x", label: "x" }],
+    });
+    expect(r.success).toBe(false);
+  });
 });
 
 describe("TaskDeleteSchema", () => {

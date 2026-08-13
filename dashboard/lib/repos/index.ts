@@ -30,6 +30,11 @@ export interface RepoInfo {
   remote: string | null;
   dirtyCount: number;
   unpushedCount: number;
+  /**
+   * Last git activity (`.git/logs/HEAD` mtime), else clone-path mtime.
+   * Used to put recently touched clones first on /repos.
+   */
+  mtimeMs: number;
   /** DevHub private mirror has a reusable upstart script for this repo. */
   hasUpstart: boolean;
   /** Absolute path to the DevHub-managed upstart script (may not exist yet). */
@@ -52,9 +57,85 @@ export interface GithubRepoInfo {
   localRepoName: string | null;
 }
 
-function readHead(repoPath: string): string | null {
+/**
+ * The directory holding this checkout's git metadata.
+ *
+ * In an ordinary clone that is `<repo>/.git`. In a **worktree** `.git` is a
+ * *file* containing `gitdir: /path/to/main/.git/worktrees/<name>`, so reading
+ * `<repo>/.git/HEAD` throws — and every caller below treated that as "detached
+ * HEAD, no remote". A worktree was therefore listed as a high-risk repo whose
+ * commits were about to be lost, which is both wrong and alarming.
+ */
+function resolveGitDir(repoPath: string): string | null {
+  const dotGit = path.join(repoPath, ".git");
   try {
-    const head = fs.readFileSync(path.join(repoPath, ".git", "HEAD"), "utf-8").trim();
+    const stat = fs.statSync(dotGit);
+    if (stat.isDirectory()) return dotGit;
+    if (!stat.isFile()) return null;
+    const pointer = fs.readFileSync(dotGit, "utf-8").trim();
+    const match = /^gitdir:\s*(.+)$/m.exec(pointer);
+    if (!match?.[1]) return null;
+    const target = match[1].trim();
+    return path.isAbsolute(target) ? target : path.resolve(repoPath, target);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Last activity in this clone. `.git/logs/HEAD` mtime is the cheap honest
+ * proxy (same one health scoring uses for staleness) — worktree-aware via
+ * resolveGitDir. Clone-path mtime is the fallback when the HEAD log is missing.
+ */
+export function repoMtimeMs(repoPath: string): number {
+  const gitDir = resolveGitDir(repoPath);
+  if (gitDir) {
+    try {
+      return fs.statSync(path.join(gitDir, "logs", "HEAD")).mtimeMs;
+    } catch {
+      // Fall through to the clone directory.
+    }
+  }
+  try {
+    return fs.statSync(repoPath).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+/** Newest git activity first; name is the tie-breaker. */
+export function compareReposByMtime(
+  a: { name: string; mtimeMs: number },
+  b: { name: string; mtimeMs: number },
+): number {
+  return b.mtimeMs - a.mtimeMs || a.name.localeCompare(b.name);
+}
+
+/**
+ * The main repository's git directory.
+ *
+ * A worktree's own gitdir holds its HEAD but not the shared config, which lives
+ * in the main one — `.git/worktrees/<name>` sits inside it, and `commondir`
+ * names it explicitly.
+ */
+function resolveCommonDir(repoPath: string): string | null {
+  const gitDir = resolveGitDir(repoPath);
+  if (!gitDir) return null;
+  try {
+    const commonPath = path.join(gitDir, "commondir");
+    if (!fs.existsSync(commonPath)) return gitDir;
+    const target = fs.readFileSync(commonPath, "utf-8").trim();
+    return path.isAbsolute(target) ? target : path.resolve(gitDir, target);
+  } catch {
+    return gitDir;
+  }
+}
+
+function readHead(repoPath: string): string | null {
+  const gitDir = resolveGitDir(repoPath);
+  if (!gitDir) return null;
+  try {
+    const head = fs.readFileSync(path.join(gitDir, "HEAD"), "utf-8").trim();
     if (head.startsWith("ref: refs/heads/")) return head.slice("ref: refs/heads/".length);
     return head.slice(0, 8); // detached HEAD
   } catch {
@@ -63,8 +144,12 @@ function readHead(repoPath: string): string | null {
 }
 
 function readRemote(repoPath: string): string | null {
+  // The common dir, not `<repo>/.git`: a worktree shares the main repository's
+  // config, so reading its own gitdir would report "no remote".
+  const commonDir = resolveCommonDir(repoPath);
+  if (!commonDir) return null;
   try {
-    const config = fs.readFileSync(path.join(repoPath, ".git", "config"), "utf-8");
+    const config = fs.readFileSync(path.join(commonDir, "config"), "utf-8");
     const match = config.match(/url\s*=\s*(.+)/);
     if (!match) return null;
     const url = match[1].trim();
@@ -165,6 +250,7 @@ export async function listRepos(): Promise<RepoInfo[]> {
           upstartPath: safeUpstartScriptPath(e.name),
           dirtyCount,
           unpushedCount,
+          mtimeMs: repoMtimeMs(repoPath),
           health: scoreRepoHealth(
             collectRepoSignals(repoPath, { dirtyCount, unpushedCount, remote, branch }),
           ),
@@ -172,7 +258,7 @@ export async function listRepos(): Promise<RepoInfo[]> {
       })
   );
 
-  return repos.sort((a, b) => a.name.localeCompare(b.name));
+  return repos.sort(compareReposByMtime);
 }
 
 interface GhApiRepo {

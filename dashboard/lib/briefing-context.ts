@@ -148,6 +148,11 @@ export function contextForPrompt(ctx: BriefingContext): Record<string, unknown> 
           })),
         }
       : null,
+    ownedRepoAttention: (ctx.ownedRepoAttention ?? []).slice(0, 5).map((row) => ({
+      repo: row.repo.fullName,
+      score: row.attention.score,
+      reasons: row.attention.reasons.slice(0, 3),
+    })),
   };
 }
 
@@ -184,6 +189,7 @@ export const BRIEFING_DATA_SHAPE = `window.__BRIEFING__ = {
     tasksThatFit: number,        // how many plausibly fit the gaps, not how many exist
     recentFailures: [{ script, exitCode?, when }]   // background runs that failed
   },
+  ownedRepoAttention: [{ repo: string, score: number, reasons: string[] }],
   summary: string
 };
 // Same-origin: the canvas may also call fetch('/api/briefing/data?refresh=1')

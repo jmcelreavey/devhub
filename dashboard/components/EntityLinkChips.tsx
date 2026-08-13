@@ -10,7 +10,7 @@
  * should not re-echo the full task title.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Calendar,
@@ -19,7 +19,9 @@ import {
   FolderGit2,
   GitPullRequest,
   ListTodo,
+  PenTool,
   Ticket,
+  X,
 } from "lucide-react";
 import type { EntityKind, EntityRef } from "@/lib/entity-note";
 import { defaultHrefForRef } from "@/lib/entity-note";
@@ -31,6 +33,7 @@ interface EntityLinksPayload {
 
 const KIND_ICON: Record<EntityKind, typeof FileText> = {
   note: FileText,
+  diagram: PenTool,
   task: ListTodo,
   calendar: Calendar,
   meeting: Calendar,
@@ -54,6 +57,10 @@ function stripKey(text: string, key: string | undefined): string {
   return clean.replace(new RegExp(`\\b${escaped}\\b`, "gi"), " ").replace(/\s+/g, " ").trim();
 }
 
+function refKey(ref: EntityRef): string {
+  return `${ref.kind}:${ref.id}`;
+}
+
 /** Short chip text — avoid repeating the host title / ticket key. */
 export function chipDisplayLabel(
   ref: EntityRef,
@@ -75,6 +82,12 @@ export function chipDisplayLabel(
     if (label.includes("/")) label = label.split("/").pop() || label;
     if (label.length > NOTE_LABEL_MAX) return `${label.slice(0, NOTE_LABEL_MAX - 1)}…`;
     return label || "Note";
+  }
+
+  if (ref.kind === "diagram") {
+    if (label.includes("/")) label = label.split("/").pop() || label;
+    if (label.length > NOTE_LABEL_MAX) return `${label.slice(0, NOTE_LABEL_MAX - 1)}…`;
+    return label || "Diagram";
   }
 
   if (
@@ -103,6 +116,11 @@ export function EntityLinkChips({
   showNotes = true,
   /** When set, hide jira chips for this key (host already shows a copy badge). */
   suppressJiraKey,
+  /**
+   * When set, seed refs (task.links / host-owned edges) get a remove control.
+   * Note-derived / reverse links stay read-only.
+   */
+  onRemoveSeed,
   className,
 }: {
   kind: EntityKind;
@@ -116,13 +134,19 @@ export function EntityLinkChips({
   seed?: EntityRef[];
   showNotes?: boolean;
   suppressJiraKey?: string;
+  onRemoveSeed?: (ref: EntityRef) => void | Promise<void>;
   className?: string;
 }) {
   const seedKey = JSON.stringify(seed ?? []);
+  const seedKeys = useMemo(
+    () => new Set((JSON.parse(seedKey) as EntityRef[]).map(refKey)),
+    [seedKey],
+  );
   const [data, setData] = useState<EntityLinksPayload | null>(
     seed?.length ? { notes: [], related: seed } : null,
   );
   const [expanded, setExpanded] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -154,7 +178,7 @@ export function EntityLinkChips({
   const chips: EntityRef[] = [];
   const seen = new Set<string>();
   for (const ref of [...(showNotes ? (data?.notes ?? []) : []), ...(data?.related ?? [])]) {
-    const key = `${ref.kind}:${ref.id}`;
+    const key = refKey(ref);
     if (seen.has(key)) continue;
     if (ref.kind === kind && ref.id === id) continue;
     if (
@@ -162,7 +186,11 @@ export function EntityLinkChips({
       ref.kind === "jira" &&
       ref.id.toUpperCase() === suppressJiraKey.toUpperCase()
     ) {
-      continue;
+      // Host already shows JiraKeyChip — hide the hop chip unless it's a
+      // seed link the user can remove (otherwise they'd be stuck with it).
+      if (!(onRemoveSeed && seedKeys.has(refKey(ref)))) {
+        continue;
+      }
     }
     seen.add(key);
     chips.push(ref);
@@ -173,6 +201,28 @@ export function EntityLinkChips({
   const hidden = expanded ? 0 : Math.max(0, chips.length - CHIP_LIMIT);
   const visible = hidden > 0 ? chips.slice(0, CHIP_LIMIT) : chips;
 
+  const removeSeed = async (ref: EntityRef) => {
+    if (!onRemoveSeed || removing) return;
+    const key = refKey(ref);
+    setRemoving(key);
+    const previous = data;
+    setData((prev) =>
+      prev
+        ? {
+            notes: prev.notes,
+            related: prev.related.filter((r) => refKey(r) !== key),
+          }
+        : prev,
+    );
+    try {
+      await onRemoveSeed(ref);
+    } catch {
+      setData(previous);
+    } finally {
+      setRemoving(null);
+    }
+  };
+
   return (
     <ul className={`entity-link-chips ${className ?? ""}`.trim()} aria-label="Linked entities">
       {visible.map((ref) => {
@@ -180,6 +230,7 @@ export function EntityLinkChips({
         const target = defaultHrefForRef(ref);
         const text = chipDisplayLabel(ref, { suppressJiraKey, hostLabel: label });
         const external = !!target && /^https?:\/\//i.test(target);
+        const removable = !!onRemoveSeed && seedKeys.has(refKey(ref));
         const inner = (
           <>
             <Icon size={10} aria-hidden />
@@ -188,7 +239,7 @@ export function EntityLinkChips({
           </>
         );
         return (
-          <li key={`${ref.kind}:${ref.id}`}>
+          <li key={refKey(ref)} className={removable ? "entity-link-chip-item" : undefined}>
             {target ? (
               <Link
                 href={target}
@@ -207,6 +258,21 @@ export function EntityLinkChips({
                 {inner}
               </span>
             )}
+            {removable ? (
+              <button
+                type="button"
+                className="entity-link-chip-remove"
+                aria-label={`Remove ${text} link`}
+                disabled={removing === refKey(ref)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  void removeSeed(ref);
+                }}
+              >
+                <X size={10} aria-hidden />
+              </button>
+            ) : null}
           </li>
         );
       })}

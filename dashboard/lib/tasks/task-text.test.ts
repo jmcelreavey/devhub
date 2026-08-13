@@ -3,6 +3,7 @@ import {
   escapeRegExp,
   stripLinkedJiraKeyFromText,
   rewriteTaskKey,
+  textWithJiraLinkPromotion,
   parseMarkdownLinks,
   detectBareUrl,
   clearedLineForToday,
@@ -65,6 +66,41 @@ describe("rewriteTaskKey", () => {
 
   it("replaces every occurrence", () => {
     expect(rewriteTaskKey("ABC-1 then ABC-1", "ABC-1", "X-9")).toBe("X-9 then X-9");
+  });
+});
+
+
+describe("textWithJiraLinkPromotion", () => {
+  it("prepends the first jira link key when the task has none", () => {
+    expect(
+      textWithJiraLinkPromotion("fix login", undefined, [
+        { kind: "jira", id: "ABC-9", label: "ABC-9" },
+      ]),
+    ).toBe("ABC-9 fix login");
+  });
+
+  it("leaves text alone when already jira-associated", () => {
+    expect(
+      textWithJiraLinkPromotion("ABC-1 fix login", "ABC-1", [
+        { kind: "jira", id: "XYZ-2", label: "XYZ-2" },
+      ]),
+    ).toBe("ABC-1 fix login");
+  });
+
+  it("does not duplicate a key already present in the title", () => {
+    expect(
+      textWithJiraLinkPromotion("abc-9 fix login", undefined, [
+        { kind: "jira", id: "ABC-9", label: "ABC-9" },
+      ]),
+    ).toBe("abc-9 fix login");
+  });
+
+  it("no-ops without jira links", () => {
+    expect(
+      textWithJiraLinkPromotion("fix login", undefined, [
+        { kind: "pr", id: "org/repo#1", label: "PR" },
+      ]),
+    ).toBe("fix login");
   });
 });
 

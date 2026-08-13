@@ -27,3 +27,22 @@ describe("repos_git_show", () => {
     });
   });
 });
+
+describe("repos_git_log", () => {
+  it("forwards the pagination offset", async () => {
+    const handlers = new Map<string, (args: Record<string, unknown>) => Promise<unknown>>();
+    const server = {
+      registerTool: (
+        name: string,
+        _config: unknown,
+        handler: (args: Record<string, unknown>) => Promise<unknown>,
+      ) => handlers.set(name, handler),
+    } as unknown as McpServer;
+    const get = vi.fn().mockResolvedValue({ commits: [] });
+    registerReposTools(server, { dashboard: { get } } as unknown as Context);
+
+    await handlers.get("repos_git_log")?.({ name: "demo", limit: 25, offset: 50 });
+
+    expect(get).toHaveBeenCalledWith("/api/repos/demo/git/log", { limit: 25, offset: 50 });
+  });
+});

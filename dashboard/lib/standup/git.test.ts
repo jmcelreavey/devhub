@@ -86,14 +86,47 @@ describe("gitLogLinesLocalMidnightWindow", () => {
     expect(all.lines.length).toBe(3);
 
     const aliceOnly = await gitLogLinesLocalMidnightWindow(repo, since, until, 10, {
-      authorMatch: "alice@example.com",
+      authorMatches: ["alice@example.com"],
     });
     expect(aliceOnly.lines.sort()).toEqual(["alice work A", "alice work C"].sort());
 
     const noMatch = await gitLogLinesLocalMidnightWindow(repo, since, until, 10, {
-      authorMatch: "carol@example.com",
+      authorMatches: ["carol@example.com"],
     });
     expect(noMatch.lines).toEqual([]);
+  });
+
+  it("matches every address one person commits under", async () => {
+    // The reason authorMatches is a list: filtering on the locally configured
+    // address alone dropped this person's other identity from their own standup.
+    const repo = await gitInitRepo();
+    await commit(repo, "from work", { email: "alice@work.com", name: "Alice" });
+    await commit(repo, "from home", { email: "alice@home.com", name: "Alice" });
+    await commit(repo, "someone else", { email: "bob@example.com", name: "Bob" });
+
+    const both = await gitLogLinesLocalMidnightWindow(
+      repo,
+      "2026-01-01 00:00:00",
+      "2030-12-31 23:59:00",
+      10,
+      { authorMatches: ["alice@work.com", "alice@home.com"] },
+    );
+    expect(both.lines.sort()).toEqual(["from home", "from work"].sort());
+  });
+
+  it("treats an empty match list as no author filter", async () => {
+    const repo = await gitInitRepo();
+    await commit(repo, "a", { email: "a@example.com" });
+    await commit(repo, "b", { email: "b@example.com" });
+
+    const out = await gitLogLinesLocalMidnightWindow(
+      repo,
+      "2026-01-01 00:00:00",
+      "2030-12-31 23:59:00",
+      10,
+      { authorMatches: [] },
+    );
+    expect(out.lines.length).toBe(2);
   });
 
   it("marks results as truncated when maxLines is exceeded", async () => {

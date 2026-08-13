@@ -3,6 +3,11 @@ import type { calendar_v3 } from "googleapis";
 import { readDashboardEnvLocalFile, resolveEnvValue } from "@/lib/dashboard-env-local";
 import { hasSavedCalendarSelection, readCalendarSelection } from "@/lib/calendar-selection";
 
+export interface CalendarPerson {
+  email?: string;
+  displayName?: string;
+}
+
 export interface CalendarEvent {
   id: string;
   title: string;
@@ -15,6 +20,8 @@ export interface CalendarEvent {
   htmlLink?: string;
   /** Attendee email addresses, if any. */
   attendees?: string[];
+  /** Event organizer when Google returned one. */
+  organizer?: CalendarPerson;
   /** Source calendar ID (for merged multi-calendar views). */
   calendarId?: string;
   /** Human-readable calendar name. */
@@ -132,6 +139,12 @@ function toEvent(
     conferenceUrl: e.conferenceData?.entryPoints?.[0]?.uri ?? undefined,
     htmlLink: e.htmlLink ?? undefined,
     attendees: e.attendees?.map((a) => a.email ?? "").filter(Boolean),
+    organizer: (() => {
+      const email = e.organizer?.email?.trim() || undefined;
+      const displayName = e.organizer?.displayName?.trim() || undefined;
+      if (!email && !displayName) return undefined;
+      return { email, displayName };
+    })(),
     calendarId,
     calendarName: meta?.calendarName,
     calendarColor: meta?.calendarColor,

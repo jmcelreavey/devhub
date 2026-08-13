@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Flame, Loader2, Copy, Check, X } from "lucide-react";
 import { useToast } from "@/lib/hooks/use-toast";
 import { copyTextToClipboard } from "@/lib/clipboard";
@@ -20,6 +20,10 @@ interface Props {
   path: string;
   /** Called after a successful publish so a list elsewhere can refresh. */
   onCreated?: () => void;
+  /** Hide the Flame trigger — open via `open` / `onOpenChange` (e.g. overflow menu). */
+  hideTrigger?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 interface Created {
@@ -35,9 +39,24 @@ interface Created {
  * that destroys itself. Folding them into one control produced a menu where
  * half the actions were disabled half the time.
  */
-export function OneTimeShareButton({ vaultId, path, onCreated }: Props) {
+export function OneTimeShareButton({
+  vaultId,
+  path,
+  onCreated,
+  hideTrigger = false,
+  open: openProp,
+  onOpenChange,
+}: Props) {
   const toast = useToast();
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = openProp ?? uncontrolledOpen;
+  const setOpen = useCallback(
+    (next: boolean) => {
+      onOpenChange?.(next);
+      if (openProp === undefined) setUncontrolledOpen(next);
+    },
+    [onOpenChange, openProp],
+  );
   const [busy, setBusy] = useState(false);
   const [expire, setExpire] = useState<Expiry>("1day");
   const [withPassword, setWithPassword] = useState(true);
@@ -62,7 +81,7 @@ export function OneTimeShareButton({ vaultId, path, onCreated }: Props) {
       document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [open, busy]);
+  }, [open, busy, setOpen]);
 
   const reset = () => {
     setCreated(null);
@@ -100,21 +119,30 @@ export function OneTimeShareButton({ vaultId, path, onCreated }: Props) {
   };
 
   return (
-    <div className="relative shrink-0" ref={containerRef}>
-      <button
-        type="button"
-        onClick={() => (open ? reset() : setOpen(true))}
-        title="Create a one-time link that self-destructs when opened"
-        className="btn btn-ghost text-xs flex items-center gap-1"
-        aria-expanded={open}
-      >
-        <Flame size={14} aria-hidden />
-        One-time
-      </button>
+    <div
+      className={
+        hideTrigger
+          ? "pointer-events-none absolute right-0 top-0 h-full w-0 overflow-visible"
+          : "relative shrink-0"
+      }
+      ref={containerRef}
+    >
+      {!hideTrigger ? (
+        <button
+          type="button"
+          onClick={() => (open ? reset() : setOpen(true))}
+          title="Create a one-time link that self-destructs when opened"
+          className="btn btn-ghost text-xs flex items-center gap-1"
+          aria-expanded={open}
+        >
+          <Flame size={14} aria-hidden />
+          One-time
+        </button>
+      ) : null}
 
       {open ? (
         <div
-          className="card absolute right-0 z-50 mt-1"
+          className="card absolute right-0 z-50 mt-1 pointer-events-auto"
           style={{ top: "100%", width: 320, padding: 12 }}
           role="dialog"
           aria-label="Create a one-time link"

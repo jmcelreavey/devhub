@@ -10,6 +10,7 @@ import { parseGithubPrUrl } from "@/lib/entity-links/parse-pr";
 import { PrRowActions } from "@/components/PrRowActions";
 import { FetchError, EmptyState, SkeletonRows } from "@/components";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
+import { PersonChip } from "@/components/PersonChip";
 
 type PrTab = "authored" | "reviews" | "recent";
 
@@ -27,8 +28,18 @@ function PrTitleCard({ row, children }: { row: GithubPrRow; children: ReactNode 
         className="flex min-w-0 flex-1 flex-col gap-0.5 no-underline text-text"
       >
         <span className="text-sm font-medium leading-snug break-words">{row.title}</span>
-        <span className="font-mono text-[11px] text-text-muted">
-          {row.repo}#{row.number}
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="font-mono text-[11px] text-text-muted">
+            {row.repo}#{row.number}
+          </span>
+          {row.author ? (
+            <PersonChip
+              name={row.author.login}
+              email={`${row.author.login}@users.noreply.github.com`}
+              avatarUrl={row.author.avatarUrl}
+              size={16}
+            />
+          ) : null}
         </span>
       </a>
       {children}

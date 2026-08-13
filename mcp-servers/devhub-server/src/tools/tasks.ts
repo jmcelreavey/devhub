@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Context } from "../context.ts";
+import { escapeHtml, uiResult, widgetDocument } from "../ui.ts";
 
 export function registerTasksTools(server: McpServer, ctx: Context): void {
   const { tasksStorage } = ctx;
@@ -25,14 +26,25 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
         const jira = t.jiraKey ? ` [${t.jiraKey}]` : "";
         return `- [${status}] ${t.text}${jira}${due}`;
       });
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Tasks for ${target} (${day.completed}/${day.total} done, ${day.abandoned} abandoned, ${day.moved} moved):\n${lines.join("\n")}`,
-          },
-        ],
-      };
+      const summary = `Tasks for ${target} (${day.completed}/${day.total} done, ${day.abandoned} abandoned, ${day.moved} moved):\n${lines.join("\n")}`;
+
+      // Proof of the MCP-UI seam. The text above is unchanged and is what every
+      // client still receives; the widget is attached only when the client-side
+      // opt-in is on. See ../ui.ts for why this is one tool and not twenty.
+      const items = day.tasks
+        .map((t) => {
+          const meta = [t.jiraKey, t.due ? `due ${t.due}` : null].filter(Boolean).join(" · ");
+          return `<li${t.done ? ' class="done"' : ""}><span>${escapeHtml(t.text)}</span>${
+            meta ? `<span class="meta">${escapeHtml(meta)}</span>` : ""
+          }</li>`;
+        })
+        .join("\n");
+      const html = widgetDocument(
+        `Tasks for ${target}`,
+        `<h2>${escapeHtml(target)} — ${day.completed}/${day.total} done</h2>\n<ul>\n${items}\n</ul>`,
+      );
+
+      return uiResult(summary, html, `ui://devhub/tasks/${target}`);
     },
   );
 
@@ -49,7 +61,7 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
         links: z
           .array(
             z.object({
-              kind: z.enum(["task", "meeting", "pr", "note", "calendar", "jira", "repo"]),
+              kind: z.enum(["task", "meeting", "pr", "note", "diagram", "calendar", "jira", "repo"]),
               id: z.string(),
               label: z.string(),
               href: z.string().optional(),
@@ -106,7 +118,7 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
         links: z
           .array(
             z.object({
-              kind: z.enum(["task", "meeting", "pr", "note", "calendar", "jira", "repo"]),
+              kind: z.enum(["task", "meeting", "pr", "note", "diagram", "calendar", "jira", "repo"]),
               id: z.string(),
               label: z.string(),
               href: z.string().optional(),

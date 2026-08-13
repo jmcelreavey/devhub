@@ -18,6 +18,9 @@ import {
   writeSnapshot,
 } from "./snapshots";
 import type { CapabilityDiff, CapabilitySnapshot, RepoScan } from "./types";
+import { resolveOwnedRepos } from "@/lib/ownership/owned-repos";
+import { deriveDomains } from "@/lib/repos/domains";
+import { loadKnowledgeGaps } from "@/lib/ownership/service";
 
 export interface ScanOptions {
   /** Also probe accessible GitHub repos that aren't cloned locally. */
@@ -43,15 +46,32 @@ export async function runScan(opts: ScanOptions = {}): Promise<ScanResult> {
 
   // 1. Local clones — full scans (best signal, zero API cost).
   const local = await listRepos();
+  const ownedByPath = new Map((await resolveOwnedRepos().catch(() => [])).flatMap((repo) =>
+    repo.localPath ? [[repo.localPath, repo] as const] : [],
+  ));
   const localResults = await Promise.allSettled(local.map((r) => scanLocalRepo(r.path)));
-  localResults.forEach((res, i) => {
+  for (let i = 0; i < localResults.length; i += 1) {
+    const res = localResults[i]!;
     if (res.status === "fulfilled") {
+      const owned = ownedByPath.get(local[i].path);
+      if (owned) {
+        try {
+          const domains = await deriveDomains(owned.localPath!, owned.domains);
+          res.value.ownership = {
+            fullName: owned.fullName,
+            domains,
+            gaps: await loadKnowledgeGaps(owned, domains),
+          };
+        } catch (error) {
+          warnings.push(`ownership context failed for ${local[i].name}: ${String(error).slice(0, 120)}`);
+        }
+      }
       scans.push(res.value);
       scannedLocalNames.add(local[i].name);
     } else {
       warnings.push(`local scan failed for ${local[i].name}: ${String(res.reason).slice(0, 120)}`);
     }
-  });
+  }
 
   // 2. Un-cloned GitHub repos — adaptive remote probe.
   if (opts.includeGithub) {

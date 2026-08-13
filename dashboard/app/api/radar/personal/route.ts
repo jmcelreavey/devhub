@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { withErrorHandler } from "@/lib/api-utils";
 import { getNotesDir } from "@/lib/content/dirs";
+import { loadOwnershipSummary, type OwnershipSummaryRow } from "@/lib/ownership/service";
 
 export type RadarRing = "adopt" | "trial" | "assess" | "hold";
 
@@ -16,6 +17,7 @@ export interface PersonalRadarPayload {
   exists: boolean;
   items: PersonalRadarItem[];
   markdown: string;
+  ownedRepoAttention: OwnershipSummaryRow[];
 }
 
 const RINGS: RadarRing[] = ["adopt", "trial", "assess", "hold"];
@@ -42,6 +44,9 @@ export const GET = withErrorHandler(async () => {
   const exists = fs.existsSync(abs);
   const markdown = exists ? fs.readFileSync(abs, "utf-8") : "";
   const items = exists ? parsePersonalRadar(markdown) : [];
-  const payload: PersonalRadarPayload = { path: rel, exists, items, markdown };
+  const ownedRepoAttention = (await loadOwnershipSummary())
+    .filter((row) => !row.error && row.attention.score > 0)
+    .sort((a, b) => b.attention.score - a.attention.score);
+  const payload: PersonalRadarPayload = { path: rel, exists, items, markdown, ownedRepoAttention };
   return NextResponse.json(payload);
 }, "radar/personal");

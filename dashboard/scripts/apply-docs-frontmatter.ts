@@ -148,7 +148,21 @@ const META: Record<string, DocFrontmatter> = {
     icon: "Database",
     order: 9,
     tags: ["architecture", "notes"],
-    related: ["architecture/notes-system", "architecture/token-budget"],
+    related: ["architecture/notes-system", "architecture/token-budget", "architecture/recall"],
+  },
+  "architecture/recall": {
+    title: "Recall",
+    description:
+      "The derived memory layer — an append-only event spine, hybrid retrieval over every content source, and a graph built from co-occurrence rather than hand-written links.",
+    icon: "Sparkles",
+    order: 10,
+    tags: ["architecture", "notes", "mcp"],
+    related: [
+      "architecture/memory",
+      "architecture/notes-system",
+      "architecture/mcp-server",
+      "architecture/token-budget",
+    ],
   },
   "architecture/token-budget": {
     title: "Token budget",

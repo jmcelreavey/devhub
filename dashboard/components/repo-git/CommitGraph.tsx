@@ -1,33 +1,91 @@
 "use client";
 
+import type { MouseEvent } from "react";
+import { lookupByEmail } from "@/lib/people/identity";
 import { laneColor, type GraphLaneCommit } from "@/lib/repos/git-graph";
+import { CommitAvatar } from "./CommitAvatar";
 
 interface CommitGraphProps {
   commits: GraphLaneCommit[];
   selectedHash?: string | null;
   onSelect?: (hash: string) => void;
+  onContextMenu?: (event: MouseEvent<HTMLButtonElement>, commit: GraphLaneCommit) => void;
   /** Full or short hashes of commits ahead of upstream — lightly marked in the list. */
   unpushedHashes?: Set<string>;
   /** Refs treated as the default branch (e.g. main, origin/main) for chip tone. */
   mainRefNames?: string[];
+  /**
+   * Author email → the resolved identity for it. Keyed on every address a
+   * person commits under, so one human renders as one contributor.
+   */
+  identityByEmail?: Record<string, { avatarUrl: string | null; displayName: string }>;
 }
 
 const ROW_H = 32;
 const LANE_W = 14;
 const PAD_X = 10;
 const NODE_R = 4;
+/** Vertical distance an elbow takes to change lane. Kept under one row so a
+ *  branch that lives for a single commit still reads as a corner, not a wedge. */
+const ELBOW = ROW_H * 0.8;
 
 function isMainRef(ref: string, mainRefNames: string[]): boolean {
   const normalized = ref.replace(/^HEAD -> /, "").trim();
   return mainRefNames.some((name) => normalized === name || normalized.endsWith(`/${name}`));
 }
 
+function laneX(lane: number): number {
+  return PAD_X + lane * LANE_W + LANE_W / 2;
+}
+
+/**
+ * Route one edge as elbow → vertical → elbow.
+ *
+ * The previous version used a single cubic with control points a fixed 0.55 of
+ * a row below the child, so an edge spanning thirty rows rendered as a slack
+ * diagonal across the whole rail instead of a corner. Corners are now placed
+ * relative to the endpoints, and the straight middle carries whatever distance
+ * is left — which is what makes a lane readable as one continuous line.
+ */
+function edgePath(
+  childX: number,
+  childY: number,
+  travelX: number,
+  parentX: number,
+  parentY: number,
+): string {
+  const span = parentY - childY;
+  // Both corners have to fit in the gap between the two nodes.
+  const corner = Math.max(4, Math.min(ELBOW, span / (travelX === childX || travelX === parentX ? 1 : 2)));
+
+  const parts: string[] = [`M ${childX} ${childY}`];
+  let y = childY;
+
+  if (travelX !== childX) {
+    const to = Math.min(childY + corner, parentY);
+    parts.push(`C ${childX} ${childY + corner * 0.6}, ${travelX} ${to - corner * 0.6}, ${travelX} ${to}`);
+    y = to;
+  }
+
+  if (parentX !== travelX) {
+    const from = Math.max(parentY - corner, y);
+    if (from > y) parts.push(`L ${travelX} ${from}`);
+    parts.push(`C ${travelX} ${from + corner * 0.6}, ${parentX} ${parentY - corner * 0.6}, ${parentX} ${parentY}`);
+  } else if (parentY > y) {
+    parts.push(`L ${travelX} ${parentY}`);
+  }
+
+  return parts.join(" ");
+}
+
 export function CommitGraph({
   commits,
   selectedHash,
   onSelect,
+  onContextMenu,
   unpushedHashes,
   mainRefNames = [],
+  identityByEmail,
 }: CommitGraphProps) {
   if (commits.length === 0) {
     return (
@@ -41,48 +99,32 @@ export function CommitGraph({
   const graphW = PAD_X * 2 + maxLanes * LANE_W;
   const height = commits.length * ROW_H;
 
-  // Parent hash → first row index where it appears as a node (walking top→bottom).
-  const rowByHash = new Map(commits.map((c, i) => [c.hash, i]));
-
   return (
     <div className="repo-git-graph">
       <div className="repo-git-graph-rail" style={{ width: graphW }}>
         <svg width={graphW} height={height} aria-hidden>
           {commits.map((c, i) => {
-            const x = PAD_X + c.lane * LANE_W + LANE_W / 2;
+            const x = laneX(c.lane);
             const y = i * ROW_H + ROW_H / 2;
             return (
               <g key={`edges-${c.hash}`}>
                 {c.parentLanes.map((p) => {
-                  const parentRow = rowByHash.get(p.hash);
-                  const x2 = PAD_X + p.lane * LANE_W + LANE_W / 2;
-                  const y2 = parentRow !== undefined
-                    ? parentRow * ROW_H + ROW_H / 2
-                    : (i + 1) * ROW_H + ROW_H / 2;
-                  const color = laneColor(p.lane === c.lane ? c.lane : p.lane);
-                  if (x === x2) {
-                    return (
-                      <line
-                        key={`${c.hash}-${p.hash}`}
-                        x1={x}
-                        y1={y}
-                        x2={x2}
-                        y2={y2}
-                        stroke={color}
-                        strokeWidth={1.5}
-                        opacity={0.75}
-                      />
-                    );
-                  }
-                  const midY = y + ROW_H * 0.55;
+                  const travelX = laneX(p.lane);
+                  // A parent below the loaded window has no row to aim at. Run
+                  // the line off the bottom edge rather than stopping it a few
+                  // pixels down, which used to leave an unexplained stub.
+                  const offPage = p.row === null || p.row <= i;
+                  const parentX = offPage ? travelX : laneX(commits[p.row!]!.lane);
+                  const parentY = offPage ? height : p.row! * ROW_H + ROW_H / 2;
                   return (
                     <path
                       key={`${c.hash}-${p.hash}`}
-                      d={`M ${x} ${y} C ${x} ${midY}, ${x2} ${midY}, ${x2} ${y2}`}
+                      d={edgePath(x, y, travelX, parentX, parentY)}
                       fill="none"
-                      stroke={color}
-                      strokeWidth={1.5}
-                      opacity={0.75}
+                      stroke={laneColor(p.color)}
+                      strokeWidth={1.75}
+                      strokeLinecap="round"
+                      opacity={0.9}
                     />
                   );
                 })}
@@ -90,21 +132,41 @@ export function CommitGraph({
             );
           })}
           {commits.map((c, i) => {
-            const x = PAD_X + c.lane * LANE_W + LANE_W / 2;
+            const x = laneX(c.lane);
             const y = i * ROW_H + ROW_H / 2;
             const selected = selectedHash === c.hash;
+            const color = laneColor(c.color);
             return (
               <circle
                 key={`node-${c.hash}`}
                 cx={x}
                 cy={y}
-                r={NODE_R}
-                fill={laneColor(c.lane)}
-                stroke={selected ? "var(--text)" : "var(--bg-surface)"}
-                strokeWidth={selected ? 2 : 1.5}
+                r={c.isHead ? NODE_R + 1.5 : NODE_R}
+                // Merges read as rings so a two-parent commit is identifiable
+                // without tracing its edges back.
+                fill={c.isMerge ? "var(--bg-surface)" : color}
+                stroke={selected ? "var(--text)" : color}
+                strokeWidth={c.isMerge || selected ? 2 : 1.5}
               />
             );
           })}
+          {commits.map((c, i) =>
+            // A second, wider ring marks the checked-out commit. Nothing
+            // distinguished HEAD before, so on a branch whose name resembles its
+            // neighbours there was no way to tell where you were standing.
+            c.isHead ? (
+              <circle
+                key={`head-${c.hash}`}
+                cx={laneX(c.lane)}
+                cy={i * ROW_H + ROW_H / 2}
+                r={NODE_R + 4}
+                fill="none"
+                stroke={laneColor(c.color)}
+                strokeWidth={1.25}
+                opacity={0.7}
+              />
+            ) : null,
+          )}
         </svg>
       </div>
       {/*
@@ -140,6 +202,9 @@ export function CommitGraph({
           const selected = selectedHash === c.hash;
           const unpushed = unpushedHashes?.has(c.hash) || unpushedHashes?.has(c.shortHash);
           const onMain = mainRefNames.length > 0 && c.refs.some((ref) => isMainRef(ref, mainRefNames));
+          const identity = identityByEmail
+            ? lookupByEmail(identityByEmail, c.authorEmail)
+            : undefined;
           return (
             <button
               key={c.hash}
@@ -148,29 +213,61 @@ export function CommitGraph({
               data-selected={selected || undefined}
               data-unpushed={unpushed || undefined}
               data-on-main={onMain || undefined}
+              data-head={c.isHead || undefined}
               style={{ height: ROW_H }}
               onClick={() => onSelect?.(c.hash)}
+              onContextMenu={(event) => onContextMenu?.(event, c)}
             >
-              <span className="repo-git-graph-hash font-mono">{c.shortHash}</span>
+              <span
+                className="repo-git-graph-hash font-mono"
+                style={{ color: laneColor(c.color) }}
+              >
+                {c.shortHash}
+              </span>
               <span className="repo-git-graph-subject truncate" title={c.subject}>
                 {c.subject}
               </span>
-              {c.refs.length > 0 && (
-                <span className="repo-git-graph-refs">
-                  {c.refs.slice(0, 3).map((ref) => (
+              {/*
+                Rendered even when empty. Skipping the element dropped a grid
+                cell, so on a commit with no refs the author column slid left
+                into the refs track and the whole right-hand edge went ragged.
+              */}
+              <span className="repo-git-graph-refs">
+                {c.refs.length > 0 &&
+                  c.refs.slice(0, 3).map((ref) => (
                     <span
                       key={ref}
                       className="repo-git-ref-chip"
-                      data-tone={isMainRef(ref, mainRefNames) ? "main" : undefined}
+                      data-tone={
+                        ref === c.headBranch
+                          ? "head"
+                          : isMainRef(ref, mainRefNames)
+                            ? "main"
+                            : undefined
+                      }
+                      title={ref === c.headBranch ? `${ref} — checked out` : ref}
                     >
                       {ref}
                     </span>
                   ))}
+              </span>
+              <span className="repo-git-graph-author">
+                <CommitAvatar
+                  author={c.author}
+                  email={c.authorEmail}
+                  resolvedUrl={identity?.avatarUrl ?? undefined}
+                  title={c.authorEmail ? `${c.author} <${c.authorEmail}>` : c.author}
+                />
+                <span className="repo-git-graph-meta">
+                  {/*
+                    The identity's name rather than the commit's, so a person who
+                    commits as "jmc" from one machine and "John McElreavey" from
+                    another reads as one contributor down the column. The commit's
+                    own name and address stay in the avatar tooltip.
+                  */}
+                  <span className="truncate">{identity?.displayName || c.author}</span>
+                  <span className="repo-git-graph-date">{c.relativeDate}</span>
                 </span>
-              )}
-              <span className="repo-git-graph-meta">
-                <span className="truncate">{c.author}</span>
-                <span className="repo-git-graph-date">{c.relativeDate}</span>
               </span>
             </button>
           );

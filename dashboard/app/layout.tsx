@@ -39,6 +39,9 @@ const displayFont = Instrument_Sans({
   subsets: ["latin"],
   variable: "--font-display-loaded",
   display: "swap",
+  // BI branding replaces this face with Garnett, so a global preload creates a
+  // needless warning and request on every whitelabelled page.
+  preload: false,
 });
 
 export const metadata: Metadata = {

@@ -149,9 +149,10 @@ Rules to know:
 
 - The materialiser **refuses to overwrite a git-tracked core path** — pick paths core
   doesn't already own. (If you're extracting from core, `git rm` them from core first.)
-- A page needs a sidebar entry. Today nav entries are gated stubs in core `lib/nav.ts`
-  (generic plugin-contributed nav is a future enhancement) — add one there, or gate your
-  page behind an existing nav gate.
+- A page needs a sidebar entry. Declare it under `dashboard.nav` in `devhub-plugin.json`
+  (e.g. `{ href: "/ops", label: "Ops", icon: "ops", group: "bi" }`). Core materialises
+  these into the sidebar / ⌘K. Prefer an existing group (`bi`, `library`, `system`) so
+  the item lands under the right section header.
 
 ## 5a. (Optional) Overlay a core stub (single file)
 

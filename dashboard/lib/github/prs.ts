@@ -11,6 +11,11 @@ import {
   type SearchIssuesResponse,
 } from "@/lib/github/search-types";
 
+export interface GithubPrAuthor {
+  login: string;
+  avatarUrl?: string;
+}
+
 export interface GithubPrRow {
   number: number;
   title: string;
@@ -18,6 +23,8 @@ export interface GithubPrRow {
   repo: string;
   /** ISO timestamp from Search API `updated_at` when available. */
   updatedAt?: string;
+  /** PR author from the Search API `user` field. */
+  author?: GithubPrAuthor;
 }
 
 export interface RecentlyReviewedPr extends GithubPrRow {
@@ -38,6 +45,16 @@ const MAX_REPOS = 100;
 const MAX_LIST = 30;
 const SEARCH_PER_PAGE = 100;
 
+function authorFromSearchItem(item: SearchIssueItem): GithubPrAuthor | undefined {
+  const login = item.user?.login?.trim();
+  if (!login) return undefined;
+  const avatarUrl = item.user?.avatar_url?.trim();
+  return {
+    login,
+    ...(avatarUrl ? { avatarUrl } : {}),
+  };
+}
+
 function rowFromSearchItem(item: SearchIssueItem): GithubPrRow {
   return {
     number: item.number ?? 0,
@@ -45,6 +62,7 @@ function rowFromSearchItem(item: SearchIssueItem): GithubPrRow {
     url: item.html_url ?? "",
     repo: parseRepoFullNameFromApiUrl(item.repository_url),
     updatedAt: item.updated_at,
+    author: authorFromSearchItem(item),
   };
 }
 
@@ -154,6 +172,7 @@ export async function fetchRecentlyReviewedPrs(
       title: it.title ?? "",
       url,
       repo: parseRepoFullNameFromApiUrl(it.repository_url),
+      author: authorFromSearchItem(it),
       prState,
       reviewedAt: it.updated_at ?? "",
     });

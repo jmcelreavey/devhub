@@ -84,6 +84,7 @@ See [API Routes](../reference/api-routes.md) for request/response details.
 | Agent               | Focus                                       |
 | ------------------- | ------------------------------------------- |
 | `repo-navigator`    | Read-only codebase orientation and handoffs |
+| `repo-owner`        | Owned-repo triage, obligations, and gaps    |
 | `devhub-specialist` | DevHub repo, sync, notes MCP                |
 | `ci-investigator`   | Single failing PR CI check                  |
 

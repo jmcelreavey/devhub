@@ -614,6 +614,10 @@ export default function SetupPage() {
       (!pathsForm.reposDir || !!pathChecks.reposDir?.ok) &&
       (!pathsForm.repoRoot || !!pathChecks.repoRoot?.ok));
 
+  // Agent CLI is marked configured (a default always exists) so the rail shows
+  // a check — but Next used to skip save() and drop the model back to 4.5.
+  const saveBeforeNext = !step.configured || step.id === "agent";
+
   return (
     <div className="page-wrapper h-full min-h-0 overflow-y-auto">
       <div className="w-full min-w-0 max-w-full">
@@ -917,11 +921,11 @@ export default function SetupPage() {
                 </button>
               ) : (
                 <button
-                  onClick={() => (step.configured ? goNext() : void save())}
+                  onClick={() => (saveBeforeNext ? void save() : goNext())}
                   disabled={saving || !pathsValid}
                   className="btn btn-primary"
                 >
-                  {saving ? "Saving..." : step.configured ? "Next" : "Save & Continue"}
+                  {saving ? "Saving..." : saveBeforeNext ? "Save & Continue" : "Next"}
                   {!saving && <ChevronRight size={14} />}
                 </button>
               )}

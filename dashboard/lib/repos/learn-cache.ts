@@ -15,20 +15,22 @@ export interface RepoLearnCache {
   generatedAt: string;
   briefMarkdown: string;
   packFiles: RepoLearnPackFile[];
+  scopeKey?: string;
 }
 
-function cacheFile(repoName: string): string {
-  return path.join(getNotesDir(), ".cache", "repo-learn", `${repoName}.json`);
+function cacheFile(repoName: string, scopeKey?: string): string {
+  const suffix = scopeKey ? `--${scopeKey.replace(/[^a-z0-9_-]+/gi, "-")}` : "";
+  return path.join(getNotesDir(), ".cache", "repo-learn", `${repoName}${suffix}.json`);
 }
 
-export function readRepoLearnCache(repoName: string, gitHead: string): RepoLearnCache | null {
-  const cached = safeReadJSON<RepoLearnCache | null>(cacheFile(repoName), null);
-  if (!cached || cached.gitHead !== gitHead) return null;
+export function readRepoLearnCache(repoName: string, gitHead: string, scopeKey?: string): RepoLearnCache | null {
+  const cached = safeReadJSON<RepoLearnCache | null>(cacheFile(repoName, scopeKey), null);
+  if (!cached || cached.gitHead !== gitHead || cached.scopeKey !== scopeKey) return null;
   return cached;
 }
 
 export async function writeRepoLearnCache(entry: RepoLearnCache): Promise<void> {
-  const file = cacheFile(entry.repoName);
+  const file = cacheFile(entry.repoName, entry.scopeKey);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   await writeAtomic(file, JSON.stringify(entry));
 }

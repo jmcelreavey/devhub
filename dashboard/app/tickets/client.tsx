@@ -9,6 +9,7 @@ import { priorityIcon } from "@/components/jira/JiraWidget";
 import { JiraStatusPill } from "@/components/jira/JiraStatusPill";
 import { FetchError, EmptyState, SkeletonRows } from "@/components";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
+import { PersonChip } from "@/components/PersonChip";
 
 interface JiraResponse {
   tickets?: JiraTicket[];
@@ -49,8 +50,18 @@ function TicketCard({ ticket }: { ticket: JiraTicket }) {
           <p className="text-sm text-text">
             {ticket.summary}
           </p>
-          <p className="text-xs mt-1 text-text-subtle">
-            {ticket.project} ({ticket.projectKey}) · {ticket.priority}
+          <p className="text-xs mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-text-subtle">
+            <span>
+              {ticket.project} ({ticket.projectKey}) · {ticket.priority}
+            </span>
+            {ticket.assignee ? (
+              <PersonChip
+                name={ticket.assignee.displayName}
+                email={ticket.assignee.email}
+                avatarUrl={ticket.assignee.avatarUrl}
+                size={16}
+              />
+            ) : null}
           </p>
         </div>
         <a

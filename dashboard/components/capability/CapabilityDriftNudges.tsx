@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FlaskConical, X } from "lucide-react";
+import { LabSlot, useLab, useLabRecords } from "@/components/capability/LabInline";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useCallback, useMemo, useState } from "react";
 
@@ -16,6 +17,7 @@ interface DriftEntry {
 
 interface RadarPayload {
   diff?: { drift?: DriftEntry[] };
+  aiConfigured?: boolean;
 }
 
 const DISMISS_KEY = "devhub.capability-drift.dismissed";
@@ -30,9 +32,10 @@ function readDismissed(): Set<string> {
   }
 }
 
-/** Capability drift → Today nudges with lab links. */
+/** Capability drift → Today nudges that kick off a lab build/rebuild. */
 export function CapabilityDriftNudges() {
   const { data } = useLive<RadarPayload>("/api/capability/radar", { refreshInterval: 0 });
+  const { bySignal } = useLabRecords();
   const [dismissed, setDismissed] = useState<Set<string>>(() =>
     typeof window === "undefined" ? new Set() : readDismissed(),
   );
@@ -68,34 +71,75 @@ export function CapabilityDriftNudges() {
       </div>
       <ul className="space-y-1.5">
         {drift.map((d) => (
-          <li key={d.id} className="flex items-start justify-between gap-2 text-xs text-text-subtle">
-            <div className="min-w-0">
-              <span className="text-text">{d.label}</span>
-              <span className="ml-1.5 text-text-muted">
-                {d.daysSinceMine != null ? `${d.daysSinceMine}d since you touched it` : "growing untouched"}
-                {d.repoDelta > 0 ? ` · +${d.repoDelta} repos` : ""}
-              </span>
-              <div className="mt-0.5">
-                <Link href={`/radar?signal=${encodeURIComponent(d.id)}`} className="text-accent underline-offset-2 hover:underline">
-                  Open on Radar
-                </Link>
-                {" · "}
-                <Link href={`/radar?lab=${encodeURIComponent(d.id)}`} className="text-accent underline-offset-2 hover:underline">
-                  Propose lab
-                </Link>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="hub-icon-btn shrink-0"
-              aria-label={`Dismiss ${d.label}`}
-              onClick={() => dismiss(d.id)}
-            >
-              <X size={12} />
-            </button>
-          </li>
+          <DriftNudgeRow
+            key={d.id}
+            d={d}
+            built={!!bySignal.get(d.id)}
+            aiConfigured={data?.aiConfigured ?? false}
+            onDismiss={() => dismiss(d.id)}
+          />
         ))}
       </ul>
     </section>
+  );
+}
+
+function DriftNudgeRow({
+  d,
+  built,
+  aiConfigured,
+  onDismiss,
+}: {
+  d: DriftEntry;
+  built: boolean;
+  aiConfigured: boolean;
+  onDismiss: () => void;
+}) {
+  // Always force-rebuild via regenerate — Propose should replace an existing lab.
+  const labState = useLab(d.id, undefined, built);
+
+  return (
+    <li className="text-xs text-text-subtle">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <span className="text-text">{d.label}</span>
+          <span className="ml-1.5 text-text-muted">
+            {d.daysSinceMine != null ? `${d.daysSinceMine}d since you touched it` : "growing untouched"}
+            {d.repoDelta > 0 ? ` · +${d.repoDelta} repos` : ""}
+          </span>
+          <div className="mt-0.5">
+            <Link
+              href={`/radar?signal=${encodeURIComponent(d.id)}`}
+              className="text-accent underline-offset-2 hover:underline"
+            >
+              Open on Radar
+            </Link>
+            {" · "}
+            <button
+              type="button"
+              className="text-accent underline-offset-2 hover:underline disabled:opacity-60"
+              disabled={labState.loading}
+              onClick={() => void labState.regenerate()}
+            >
+              {labState.loading ? "Building…" : "Propose lab"}
+            </button>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="hub-icon-btn shrink-0"
+          aria-label={`Dismiss ${d.label}`}
+          onClick={onDismiss}
+        >
+          <X size={12} />
+        </button>
+      </div>
+      {labState.loading && !labState.lab && (
+        <p className="mt-1.5 text-[11px] text-text-muted">
+          OpenCode is building this lab in the terminal — it appears here once registered.
+        </p>
+      )}
+      <LabSlot state={labState} aiConfigured={aiConfigured} />
+    </li>
   );
 }

@@ -29,6 +29,7 @@ import { fetchDynamicFeeds, type FeedResult } from "@/lib/briefing-feeds";
 import { runLast30DaysForInterests } from "@/lib/last30days-runner";
 import { buildDayPlan, type DayPlan } from "@/lib/briefing/day-plan";
 import { todayISO } from "@/lib/utils";
+import { loadOwnershipSummary, type OwnershipSummaryRow } from "@/lib/ownership/service";
 
 export interface BriefingContext {
   date: string;
@@ -50,6 +51,8 @@ export interface BriefingContext {
    * Optional so a cached context written before this field existed still parses.
    */
   dayPlan?: DayPlan;
+  /** Ranked repository obligations that currently need the owner's attention. */
+  ownedRepoAttention?: OwnershipSummaryRow[];
   /** Plain-text one-liner, kept for the home-screen widget + focus view. */
   summary: string;
 }
@@ -89,8 +92,9 @@ export async function assembleBriefingContext(
     settle(fetchOnThisDay(new Date(), 12), [] as OnThisDayItem[]),
     settle(fetchInterestSnippets(prefs.interests, prefs.newsRegion), [] as InterestSnippet[]),
     settle(fetchDynamicFeeds(10), [] as FeedResult[]),
+    settle(loadOwnershipSummary(), [] as OwnershipSummaryRow[]),
   ]);
-  const [[weather, news, events, github, hackerNews, gaming, onThisDay, interests, feeds]] =
+  const [[weather, news, events, github, hackerNews, gaming, onThisDay, interests, feeds, ownership]] =
     await Promise.all([sources, researchRun]);
 
   const research = loadResearchCards(prefs.interests);
@@ -130,6 +134,9 @@ export async function assembleBriefingContext(
     research,
     feeds,
     dayPlan,
+    ownedRepoAttention: ownership
+      .filter((row) => !row.error && row.attention.score > 0)
+      .sort((a, b) => b.attention.score - a.attention.score),
     summary: buildBriefingSummary(forSummary),
   };
 }

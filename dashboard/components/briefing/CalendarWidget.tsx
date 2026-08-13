@@ -7,6 +7,7 @@ import { formatTime } from "@/lib/utils";
 import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
 import { CreateMeetingNoteButton } from "@/components/CreateMeetingNoteButton";
 import { EntityLinkChips } from "@/components/EntityLinkChips";
+import { PersonChip } from "@/components/PersonChip";
 
 interface CalendarResponse {
   events?: CalendarEvent[];
@@ -184,6 +185,14 @@ export function CalendarWidget({ collapsed = false, collapsedSummary, onToggle }
                 >
                   {e.title}
                 </span>
+                {e.organizer?.displayName || e.organizer?.email ? (
+                  <PersonChip
+                    name={e.organizer.displayName || e.organizer.email || ""}
+                    email={e.organizer.email}
+                    size={14}
+                    className="hidden sm:inline-flex max-w-[8rem] shrink-0"
+                  />
+                ) : null}
                 {e.conferenceUrl && (
                   <a
                     href={e.conferenceUrl}

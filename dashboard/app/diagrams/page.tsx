@@ -45,6 +45,12 @@ import {
 import { renameNoteFile } from "@/lib/notes/path";
 import { broadcastNoteAutosaveInvalidation } from "@/lib/notes/autosave-invalidation";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
+import { DiagramsLandingPage } from "@/components/diagrams/DiagramsLandingPage";
+import { CopyLocationButton } from "@/components/ui/CopyLocationButton";
+import {
+  diagramBrowseModelFromTree,
+  writeLastDiagramFolder,
+} from "@/lib/diagrams/diagram-browse";
 
 const TldrawThumbnail = dynamic(
   () => import("@/components/diagrams/TldrawThumbnail").then((mod) => mod.TldrawThumbnail),
@@ -130,6 +136,15 @@ function DiagramsIndexInner() {
   );
   const crumbs = useMemo(() => diagramBreadcrumbs(folder), [folder]);
   const folderMissing = loaded && folder !== "" && entries === null;
+
+  const browseModel = useMemo(
+    () => diagramBrowseModelFromTree(diagramsTree),
+    [diagramsTree],
+  );
+
+  useEffect(() => {
+    if (folder) writeLastDiagramFolder(folder);
+  }, [folder]);
 
   function goToFolder(relPath: string) {
     router.push(diagramFolderHref(relPath));
@@ -247,6 +262,101 @@ function DiagramsIndexInner() {
   // Show actions on tap (mobile) and on hover (desktop).
   const actionBtn =
     "hub-icon-btn reveal-on-hover transition-opacity";
+
+  if (loaded && !folder && !folderMissing) {
+    return (
+      <div className="page-wrapper">
+        <BootScreen state={boot} />
+        {creatingFolder ? (
+          <div className="card p-4 mb-4 flex items-center gap-2">
+            <Folder size={14} className="text-text-subtle" aria-hidden />
+            <input
+              ref={folderInputRef}
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void handleCreateFolder();
+                if (e.key === "Escape") {
+                  setCreatingFolder(false);
+                  setNewFolderName("");
+                }
+              }}
+              placeholder="folder-name"
+              className="input flex-1 text-sm"
+              autoComplete="off"
+            />
+            <button type="button" onClick={() => void handleCreateFolder()} className="btn btn-primary text-xs">
+              Create
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setCreatingFolder(false);
+                setNewFolderName("");
+              }}
+              className="btn btn-ghost text-xs"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : null}
+        {creating ? (
+          <div className="card p-4 mb-4 flex items-center gap-2">
+            <PenTool size={14} className="text-text-subtle" aria-hidden />
+            <input
+              ref={createInputRef}
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void handleCreateDiagram();
+                if (e.key === "Escape") {
+                  setCreating(false);
+                  setNewName("");
+                }
+              }}
+              placeholder="my-diagram"
+              className="input flex-1 text-sm"
+              autoComplete="off"
+            />
+            <button type="button" onClick={() => void handleCreateDiagram()} className="btn btn-primary text-xs">
+              Create
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setCreating(false);
+                setNewName("");
+              }}
+              className="btn btn-ghost text-xs"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : null}
+        <DiagramsLandingPage
+          areas={browseModel.areas}
+          recent={browseModel.recent}
+          total={browseModel.total}
+          onNewDiagram={() => {
+            setCreating(true);
+            setNewName("");
+          }}
+          onNewFolder={() => {
+            setCreatingFolder(true);
+            setNewFolderName("");
+          }}
+        />
+        {moving && (
+          <MoveDiagramModal
+            itemName={moving.name}
+            targets={moveTargets}
+            onMove={(rel) => void handleMove(rel)}
+            onClose={() => setMoving(null)}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="page-wrapper">
@@ -460,6 +570,7 @@ function DiagramsIndexInner() {
                   inputClassName="min-w-0 flex-1 bg-transparent border-none outline-none text-xs"
                   title="Double-click to rename"
                 />
+                <CopyLocationButton path={d.path} size={11} stopPropagation className={actionBtn} />
                 <button
                   type="button"
                   onClick={() => setMoving({ storagePath: d.path, name: d.name, isDir: false })}

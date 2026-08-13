@@ -10,6 +10,8 @@ export interface RepoInfo {
   dirtyCount: number;
   remote: string | null;
   unpushedCount?: number;
+  /** Last git activity; optional on payloads cached before this field existed. */
+  mtimeMs?: number;
   hasUpstart?: boolean;
   /** Absolute path to the DevHub-managed upstart script (may not exist yet). */
   upstartPath?: string;
@@ -69,10 +71,16 @@ export interface BranchesApiPayload {
   unpushedCommits: UnpushedCommitInfo[];
 }
 
-/** HTTP 409 body when stash pop/apply leaves conflicts. */
+/** HTTP 409 body when stash pop/apply — or a branch merge — leaves conflicts. */
 export interface StashConflictPayload {
   code: "stash_conflict";
-  action: "checkout" | "stash-apply" | "sync-main";
+  action:
+    | "checkout"
+    | "stash-apply"
+    | "sync-main"
+    | "merge-branch"
+    | "cherry-pick"
+    | "revert";
   branch?: string;
   switched: boolean;
   conflictFiles: string[];
@@ -105,6 +113,7 @@ export interface RepoContextPayload {
   recentCommits: string[];
   languageBreakdown: { extension: string; count: number }[];
   openCodePrompt: string;
+  scope?: { id: string; label: string; paths: string[] };
 }
 
 export interface RepoLearnPackFileMeta {
@@ -128,4 +137,5 @@ export interface RepoLearnApiPayload {
   artifacts: RepoLearnArtifactsPayload | null;
   code?: "not_configured" | "error";
   message?: string;
+  ownership?: import("@/lib/ownership/types").RepoOwnershipEvidence;
 }

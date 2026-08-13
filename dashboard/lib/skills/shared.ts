@@ -10,10 +10,21 @@ export const SKILL_MD = "SKILL.md";
 export const SKILL_SLUG = /^[a-z0-9][a-z0-9_-]{0,62}$/;
 
 export const READ_ONLY_UPSTREAM_SKILL_ERROR =
-  "Upstream and plugin skills are read-only in DevHub — edit them in their source repo (ai-tools or the plugin).";
+  "Upstream, vendored and plugin skills are read-only in DevHub — edit them in their source repo (ai-tools, skills/vendor upstream, or the plugin).";
 
 export function devhubSharedSkillsDir(repoRoot: string): string {
   return path.join(repoRoot, "skills", "shared");
+}
+
+/**
+ * Third-party skills copied in from upstream projects under their own licence.
+ *
+ * Separate from skills/shared because the licence boundary needs to be visible
+ * without opening files: everything under skills/shared is MIT with the repo,
+ * everything here is not.
+ */
+export function devhubVendorSkillsDir(repoRoot: string): string {
+  return path.join(repoRoot, "skills", "vendor");
 }
 
 /** List skill folder names under a parent that contains `<name>/SKILL.md`. */

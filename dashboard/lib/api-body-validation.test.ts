@@ -43,7 +43,6 @@ const UNVALIDATED_ALLOWLIST = new Set<string>([
   "persona/route.ts",
   "repos/[name]/branches/route.ts",
   "repos/[name]/git/commit-message/route.ts",
-  "repos/[name]/git/conflicts/route.ts",
   "repos/[name]/git/stage/route.ts",
   "repos/[name]/git/stash/route.ts",
   "repos/[name]/learn/tutor/route.ts",

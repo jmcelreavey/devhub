@@ -23,7 +23,7 @@ describe("repo Git workspace UI", () => {
     expect(html).toBe('<div class="repo-git-workspace"></div>');
   });
 
-  it("offers whole-hunk staging without selectable staging lines", () => {
+  it("offers whole-hunk staging and marks the individually stageable lines", () => {
     const lines: DiffLine[] = [
       { type: "hunk", text: "@@ -1 +1 @@" },
       { type: "del", text: "-old" },
@@ -36,8 +36,22 @@ describe("repo Git workspace UI", () => {
     );
 
     expect((html.match(/aria-label="Stage hunk"/g) ?? []).length).toBe(2);
+    // Only the three changed lines are selectable — a context line cannot be
+    // staged on its own, so making it look interactive would be a lie.
+    expect((html.match(/repo-git-diff-selectable/g) ?? []).length).toBe(3);
+  });
+
+  it("does not offer line selection when staging is unavailable", () => {
+    // A read-only diff (commit detail, range compare) has no staging target.
+    const html = renderToStaticMarkup(
+      <GitDiffView
+        lines={[
+          { type: "hunk", text: "@@ -1 +1 @@" },
+          { type: "add", text: "+new" },
+        ]}
+      />,
+    );
     expect(html).not.toContain("repo-git-diff-selectable");
-    expect(html).not.toContain("Stage lines");
   });
 
   it("uses the native dialog element for hook failures", () => {

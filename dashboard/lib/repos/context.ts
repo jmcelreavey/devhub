@@ -46,6 +46,7 @@ export interface RepoContext {
   languageBreakdown: { extension: string; count: number }[];
   snippets: RepoSnippet[];
   openCodePrompt: string;
+  scope?: { id: string; label: string; paths: string[] };
 }
 
 interface ScannedFile {
@@ -62,9 +63,12 @@ export async function getGitHead(repoPath: string): Promise<string> {
   }
 }
 
-export async function scanRepoContext(repoPath: string): Promise<RepoContext> {
+export async function scanRepoContext(
+  repoPath: string,
+  scope?: { id: string; label: string; paths: string[] },
+): Promise<RepoContext> {
   const repoName = path.basename(repoPath);
-  const files = scanRepoFiles(repoPath);
+  const files = scanRepoFiles(repoPath, scope);
   const snippets = readUsefulSnippets(repoPath, files);
   const manifests = findManifests(files);
   const docs = findDocs(files);
@@ -76,7 +80,7 @@ export async function scanRepoContext(repoPath: string): Promise<RepoContext> {
   const languageBreakdown = languageCounts(files);
   const testCommands = detectTestCommands(scripts, packageManager, files);
   const runCommands = detectRunCommands(scripts, packageManager, files);
-  const recentCommits = await getRecentCommits(repoPath);
+  const recentCommits = await getRecentCommits(repoPath, scope?.paths);
   const headline = buildHeadline(primaryStack, keyDirectories, docs, manifests);
 
   return {
@@ -95,7 +99,8 @@ export async function scanRepoContext(repoPath: string): Promise<RepoContext> {
     recentCommits,
     languageBreakdown,
     snippets,
-    openCodePrompt: buildOpenCodePrompt(repoName),
+    openCodePrompt: buildOpenCodePrompt(repoName, scope?.label),
+    scope,
   };
 }
 
@@ -128,9 +133,9 @@ export function buildNotebookImportReadme(repoName: string): string {
   ].join("\n");
 }
 
-export function buildOpenCodePrompt(repoName: string): string {
+export function buildOpenCodePrompt(repoName: string, scope?: string): string {
   return [
-    `You are helping me get up to speed on the ${repoName} codebase.`,
+    `You are helping me get up to speed on ${scope ? `the ${scope} domain in ` : ""}the ${repoName} codebase.`,
     "Read the repo first, then produce:",
     "1. a concise architecture map with the important files/directories;",
     "2. exact run/test/build commands and setup gotchas;",
@@ -156,10 +161,11 @@ export function compactContextForModel(context: RepoContext): Record<string, unk
     runCommands: context.runCommands,
     recentCommits: context.recentCommits,
     languageBreakdown: context.languageBreakdown,
+    scope: context.scope,
   };
 }
 
-function scanRepoFiles(repoPath: string): ScannedFile[] {
+function scanRepoFiles(repoPath: string, scope?: { paths: string[] }): ScannedFile[] {
   const out: ScannedFile[] = [];
   const queue = [repoPath];
 
@@ -183,7 +189,10 @@ function scanRepoFiles(repoPath: string): ScannedFile[] {
         continue;
       }
       if (!entry.isFile()) continue;
-      out.push({ relativePath, extension: path.extname(entry.name).toLowerCase() || "[none]" });
+      const inScope = !scope || !relativePath.includes("/") || scope.paths.some((prefix) =>
+        prefix === "." || relativePath === prefix || relativePath.startsWith(`${prefix}/`),
+      );
+      if (inScope) out.push({ relativePath, extension: path.extname(entry.name).toLowerCase() || "[none]" });
     }
   }
 
@@ -360,9 +369,11 @@ function detectRunCommands(
   return unique(commands).slice(0, 8);
 }
 
-async function getRecentCommits(repoPath: string): Promise<string[]> {
+async function getRecentCommits(repoPath: string, scopePaths?: string[]): Promise<string[]> {
   try {
-    const { stdout } = await execFileAsync("git", ["-C", repoPath, "log", "--oneline", "-5"], { timeout: 5_000 });
+    const scopedPaths = scopePaths?.filter((prefix) => prefix !== ".") ?? [];
+    const args = ["-C", repoPath, "log", "--oneline", "-5", ...(scopedPaths.length ? ["--", ...scopedPaths] : [])];
+    const { stdout } = await execFileAsync("git", args, { timeout: 5_000 });
     return stdout.trim().split("\n").filter(Boolean);
   } catch {
     return [];

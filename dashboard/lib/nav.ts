@@ -1,6 +1,6 @@
 import { PLUGIN_NAV_ITEMS, PLUGIN_SECTION_TABS } from "./plugin-nav.generated";
 
-export type NavGroup = "workspace" | "library" | "system";
+export type NavGroup = "workspace" | "library" | "bi" | "system";
 
 export type NavGate = "always" | "calendar" | "github" | "jira" | "datadog" | "bi" | "chamber" | "opencode" | "claude";
 
@@ -18,20 +18,57 @@ export interface NavItem {
 export const NAV_GROUPS: { id: NavGroup; label: string }[] = [
   { id: "workspace", label: "Workspace" },
   { id: "library", label: "Library" },
+  { id: "bi", label: "BI" },
   { id: "system", label: "System" },
 ];
 
+/** Empty bucket map for grouping sidebar destinations. */
+export function emptyNavGroups(): Record<NavGroup, NavItem[]> {
+  return { workspace: [], library: [], bi: [], system: [] };
+}
+
 /**
- * Single source of truth for the side nav — 12 destinations (2026-06 IA,
- * see docs/codebase-review-2026-06-09.md). Merged concepts:
+ * Bucket core + plugin destinations for the sidebar / mobile drawer.
+ * Plugin items land first within each group so a plugin can own the top of its
+ * section (e.g. Ops before Datadog under BI).
+ */
+export function groupSidebarNav(
+  core: NavItem[],
+  plugin: NavItem[],
+  opts?: { includeDesktopOnly?: boolean; setup?: SetupGateStatus | null },
+): Record<NavGroup, NavItem[]> {
+  const includeDesktopOnly = opts?.includeDesktopOnly ?? true;
+  const setup = opts?.setup ?? null;
+  const applicable = (items: NavItem[]) =>
+    filterNavBySetup(
+      items.filter((i) => includeDesktopOnly || !i.desktopOnly),
+      setup,
+    );
+
+  const coreMap = emptyNavGroups();
+  const pluginMap = emptyNavGroups();
+  for (const item of applicable(plugin)) pluginMap[item.group].push(item);
+  for (const item of applicable(core)) coreMap[item.group].push(item);
+
+  const merged = emptyNavGroups();
+  for (const g of NAV_GROUPS) {
+    merged[g.id] = [...pluginMap[g.id], ...coreMap[g.id]];
+  }
+  return merged;
+}
+
+/**
+ * Single source of truth for the side nav. Merged concepts:
  *
  * - Work        = Tasks + Tickets (tabs on /work)
  * - Library     = Notes / Docs / Diagrams (tabs over /notes…)
- * - System      = Status / Ops / Datadog / Actions / Setup (tabs over /status…)
+ * - BI          = Ops (plugin) / Datadog — first-class items under a BI group
+ * - System      = Status / Logs / Actions / Setup (tabs over /status…)
  * - Search page → ⌘K palette
  *
  * Plugin pages (e.g. /ops) come from `PLUGIN_NAV_ITEMS` (materialised from plugin
- * manifests) — not hand stubs here.
+ * manifests) and are merged into the sidebar via `groupSidebarNav` — not hand
+ * stubs here.
  *
  * The `gate` field controls visibility based on /api/setup/status — pages
  * the user can't actually use yet stay hidden until their integration is
@@ -46,8 +83,12 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/review", label: "Review", icon: "review", group: "workspace", desktopOnly: true },
 
   { href: "/notes", label: "Library", icon: "notes", group: "library" },
+  { href: "/recall", label: "Recall", icon: "recall", group: "library" },
   { href: "/skills", label: "Agents", icon: "skills", group: "library" },
   { href: "/repos", label: "Repos", icon: "repos", group: "library", desktopOnly: true },
+  { href: "/own", label: "Own", icon: "own", group: "library", gate: "github" },
+
+  { href: "/datadog", label: "Datadog", icon: "datadog", group: "bi", gate: "datadog" },
 
   { href: "/status", label: "System", icon: "status", group: "system" },
   { href: "/chamber", label: "Chamber", icon: "chamber", group: "system", gate: "chamber" },
@@ -73,7 +114,6 @@ export const LEGACY_NAV_ITEMS: NavItem[] = [
   { href: "/diagrams", label: "Diagrams", icon: "diagrams", group: "library" },
   { href: "/docs", label: "Docs", icon: "docs", group: "library" },
   { href: "/shared", label: "Live links", icon: "shared", group: "library", gate: "github" },
-  { href: "/datadog", label: "Datadog", icon: "datadog", group: "system", gate: "datadog" },
   { href: "/actions", label: "Actions", icon: "actions", group: "system", desktopOnly: true },
   { href: "/logs", label: "Logs", icon: "status", group: "system", desktopOnly: true },
   { href: "/setup", label: "Setup", icon: "setup", group: "system" },
@@ -121,7 +161,6 @@ export const SECTION_TABS: Record<string, SectionTab[]> = {
     [
       { href: "/status", label: "Status" },
       { href: "/logs", label: "Logs", desktopOnly: true },
-      { href: "/datadog", label: "Datadog", gate: "datadog" },
       { href: "/actions", label: "Actions", desktopOnly: true },
       { href: "/setup", label: "Setup" },
     ],

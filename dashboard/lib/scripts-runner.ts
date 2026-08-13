@@ -28,6 +28,7 @@ import {
 import { validateRepo } from "./validate";
 import { pullCore } from "./pull-core";
 import { runDigest } from "./capability/digest";
+import { runOwnershipBrief } from "./ownership/brief";
 
 type Emit = (line: string) => void;
 
@@ -77,6 +78,22 @@ export interface ScriptCatalogEntry {
 }
 
 const ACTIONS: Record<string, ActionDef> = {
+  ownership_brief: {
+    label: "Ownership Brief (morning)",
+    description: "Summarize obligations, inbound changes, and knowledge gaps across owned repos.",
+    timeoutMs: 180_000,
+    mutates: true,
+    effects: [
+      "Reads GitHub and local git evidence for repos marked owned",
+      "Writes today's ownership brief cache",
+      "Saves a browsable note under notes/learnings/ownership-briefs",
+    ],
+    cmd: "dashboard: runOwnershipBrief (TypeScript)",
+    run: async (emit) => {
+      await runOwnershipBrief({ emit });
+      return 0;
+    },
+  },
   capability_digest: {
     label: "Capability Digest (weekly)",
     description: "Scan repos and write a 'what changed this week' evolution digest.",

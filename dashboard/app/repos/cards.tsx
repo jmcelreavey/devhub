@@ -14,6 +14,8 @@ import {
   MoreHorizontal,
   Rocket,
   Search,
+  Shield,
+  ShieldCheck,
   TerminalSquare,
   Trash2,
 } from "lucide-react";
@@ -46,6 +48,10 @@ interface LocalRepoCardProps {
   onClaudeDesktop: () => void | Promise<void>;
   onRemove: (name: string) => void;
   onRefreshLocal: () => void;
+  ownershipFullName: string | null;
+  owned: boolean;
+  ownershipBusy: string | null;
+  onToggleOwned: (fullName: string, owned: boolean) => void;
 }
 
 interface GithubRepoCardProps {
@@ -55,6 +61,9 @@ interface GithubRepoCardProps {
   cloning: string | null;
   onCursor: (name: string) => void;
   onClone: (fullName: string) => void;
+  owned: boolean;
+  ownershipBusy: string | null;
+  onToggleOwned: (fullName: string, owned: boolean) => void;
 }
 
 export function SearchCard({
@@ -204,6 +213,10 @@ export function LocalRepoCard({
   onClaudeDesktop,
   onRemove,
   onRefreshLocal,
+  ownershipFullName,
+  owned,
+  ownershipBusy,
+  onToggleOwned,
 }: LocalRepoCardProps) {
   const [upstartMenuOpen, setUpstartMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -252,6 +265,21 @@ export function LocalRepoCard({
             )}
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
+            {ownershipFullName && (
+              <HoverTip label={owned ? "Stop owning this repo" : "Own this repo"}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={smallButtonStyle}
+                  aria-label={owned ? `Stop owning ${ownershipFullName}` : `Own ${ownershipFullName}`}
+                  aria-pressed={owned}
+                  disabled={ownershipBusy !== null}
+                  onClick={() => onToggleOwned(ownershipFullName, !owned)}
+                >
+                  {owned ? <ShieldCheck size={13} className="text-accent" /> : <Shield size={13} />}
+                </button>
+              </HoverTip>
+            )}
             <div ref={upstartMenuRef} className="relative inline-flex">
               <HoverTip
                 label={
@@ -582,6 +610,9 @@ export function GithubRepoCard({
   cloning,
   onCursor,
   onClone,
+  owned,
+  ownershipBusy,
+  onToggleOwned,
 }: GithubRepoCardProps) {
   return (
     <div className="card" style={{ padding: "12px 14px" }}>
@@ -603,6 +634,17 @@ export function GithubRepoCard({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={smallButtonStyle}
+            aria-label={owned ? `Stop owning ${repo.fullName}` : `Own ${repo.fullName}`}
+            aria-pressed={owned}
+            disabled={ownershipBusy !== null}
+            onClick={() => onToggleOwned(repo.fullName, !owned)}
+          >
+            {owned ? <ShieldCheck size={13} className="text-accent" /> : <Shield size={13} />}
+          </button>
           <a href={repo.url} target="_blank" rel="noopener noreferrer" className="btn btn-ghost" style={smallButtonStyle} aria-label={`Open ${repo.fullName} on GitHub`}>
             <ExternalLink size={12} />
           </a>

@@ -1,23 +1,35 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Copy,
   CornerDownLeft,
   Download,
+  GitBranch,
+  GitCommitHorizontal,
   GitMerge,
   Layers,
+  LogOut,
   RefreshCw,
+  Rewind,
   RotateCcw,
   Search,
+  Tag,
   Upload,
 } from "lucide-react";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
-import { useConfirm } from "@/components/shell/ConfirmDialog";
+import { ContextMenu, useContextMenu, type ContextMenuGroup } from "@/components/shell/ContextMenu";
+import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { useStoredFraction } from "@/lib/hooks/use-stored-state";
 import { useToast } from "@/lib/hooks/use-toast";
-import type { DiffLine } from "@/lib/repos/git-parsers";
-import type { GraphLaneCommit } from "@/lib/repos/git-graph";
+import type { GitHookFailurePayload } from "@/lib/git/hook-failure";
+import type { StashConflictPayload } from "@/app/repos/types";
+import type { DiffLine, GraphCommitRaw } from "@/lib/repos/git-parsers";
+import { lookupByEmail } from "@/lib/people/identity";
+import { layoutCommitGraph, type GraphLaneCommit } from "@/lib/repos/git-graph";
+import { CommitAvatar } from "./CommitAvatar";
 import { CommitContextChips } from "./CommitContextChips";
 import { CommitGraph } from "./CommitGraph";
 import { DiffMaximizeModal } from "./DiffMaximizeModal";
@@ -68,10 +80,33 @@ interface BranchRelation {
    */
   upstream: string | null;
   behindUpstream: number;
+  /** Commits on HEAD that the upstream doesn't have — what Push would send. */
+  aheadUpstream: number;
+}
+
+/** Subset of `Person` the history view needs; the rest is for other surfaces. */
+interface RepoPerson {
+  key: string;
+  displayName: string;
+  emails: string[];
+  githubLogin: string | null;
+  avatarUrl: string | null;
+}
+
+interface PeoplePayload {
+  people?: RepoPerson[];
+  githubConfigured?: boolean;
 }
 
 interface LogPayload {
   commits: GraphLaneCommit[];
+  hasMore?: boolean;
+  /** Open frontier of the page — the tips the next page walks from. */
+  nextTips?: string[];
+  /** Offset cursor, used instead of the frontier when the walk is filtered. */
+  nextOffset?: number | null;
+  /** True when this result is a filtered view rather than the whole graph. */
+  searching?: boolean;
   currentBranch?: string;
   mainBranch?: string | null;
   mainShort?: string | null;
@@ -84,6 +119,10 @@ interface LogPayload {
 export function HistoryPanel({
   repoName,
   onMutate,
+  onConflict,
+  onHookFailure,
+  pushing = false,
+  onPush,
   focusUnpushed = false,
   onFocusUnpushedConsumed,
   focusCommit = null,
@@ -91,6 +130,12 @@ export function HistoryPanel({
 }: {
   repoName: string;
   onMutate: () => void;
+  /** Shared with the other tabs so a sync conflict lands in the same place. */
+  onConflict?: (c: StashConflictPayload) => Promise<void>;
+  onHookFailure?: (f: GitHookFailurePayload) => void;
+  /** Workspace-level push state, so History shows the same spinner as the header. */
+  pushing?: boolean;
+  onPush?: () => void;
   focusUnpushed?: boolean;
   onFocusUnpushedConsumed?: () => void;
   /** Select this commit on arrival — used by Blame's "Open in History". */
@@ -99,17 +144,32 @@ export function HistoryPanel({
 }) {
   const toast = useToast();
   const confirm = useConfirm();
+  const prompt = usePrompt();
+  const commitMenu = useContextMenu<GraphLaneCommit>();
   const [commits, setCommits] = useState<GraphLaneCommit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [nextTips, setNextTips] = useState<string[]>([]);
+  /** Offset cursor, used only for filtered walks where the frontier is meaningless. */
+  const [nextOffset, setNextOffset] = useState<number | null>(null);
+  const [searching, setSearching] = useState(false);
+  /** All branches, or just HEAD and the default remote tip. */
+  const [scope, setScope] = useState<"all" | "current">("all");
+  const historyGeneration = useRef(0);
   const [selected, setSelected] = useState<string | null>(null);
   /** Set while an externally focused commit should survive filter recalculation. */
   const [pinnedHash, setPinnedHash] = useState<string | null>(null);
   const [acting, setActing] = useState<string | null>(null);
-  const [authorFilter, setAuthorFilter] = useState("");
+  /** Person key, not a display name — one person may commit under several names. */
+  const [authorKey, setAuthorKey] = useState("");
+  /** What the box shows; `search` is the debounced value the walk actually uses. */
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [unpushedOnly, setUnpushedOnly] = useState(false);
   const [unpushedHashes, setUnpushedHashes] = useState<Set<string>>(() => new Set());
   const [relation, setRelation] = useState<BranchRelation | null>(null);
+  const [people, setPeople] = useState<RepoPerson[]>([]);
   const [detail, setDetail] = useState<CommitShowPayload | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -122,14 +182,53 @@ export function HistoryPanel({
   const stackHistory = useMediaQuery("(max-width: 900px)");
   const stackDetail = useMediaQuery("(max-width: 720px)");
 
+  /**
+   * The repo's whole contributor list, not the authors of the loaded page.
+   *
+   * Deriving it from `commits` meant the dropdown grew as you paged, so the set
+   * of people you could filter by depended on how far you had scrolled.
+   */
+  const authorFilter = useMemo(
+    () => people.find((p) => p.key === authorKey) ?? null,
+    [people, authorKey],
+  );
+
+  /**
+   * Query string for the log walk.
+   *
+   * Search and the author filter run on the server. They used to filter the
+   * loaded page in the browser, which meant typing a ticket number found
+   * nothing unless that commit happened to be in the last 80 — and said so by
+   * showing an empty list, indistinguishable from "no such commit".
+   */
+  const logQuery = useCallback(
+    (extra?: { offset?: number; tips?: string[] }) => {
+      const params = new URLSearchParams({ limit: "80" });
+      if (scope === "current") params.set("scope", "current");
+      if (search.trim()) params.set("q", search.trim());
+      for (const email of authorFilter?.emails ?? []) params.append("author", email);
+      if (extra?.offset) params.set("offset", String(extra.offset));
+      if (extra?.tips?.length) params.set("tips", extra.tips.join(","));
+      return `/git/log?${params.toString()}`;
+    },
+    [scope, search, authorFilter],
+  );
+
   const refresh = useCallback(async () => {
+    const generation = ++historyGeneration.current;
     setLoading(true);
+    setLoadingMore(false);
     try {
       const [logJson, branchJson] = await Promise.all([
-        fetchGitJson<LogPayload>(repoApi(repoName, "/git/log?limit=80")),
+        fetchGitJson<LogPayload>(repoApi(repoName, logQuery())),
         fetchGitJson<BranchesPayload>(repoApi(repoName, "/branches")).catch(() => null),
       ]);
+      if (generation !== historyGeneration.current) return;
       setCommits(logJson.commits ?? []);
+      setHasMore(Boolean(logJson.hasMore));
+      setNextTips(logJson.nextTips ?? []);
+      setNextOffset(logJson.nextOffset ?? null);
+      setSearching(Boolean(logJson.searching));
       setSelected((prev) => prev ?? logJson.commits?.[0]?.hash ?? null);
       setRelation({
         currentBranch: logJson.currentBranch ?? branchJson?.currentBranch ?? "HEAD",
@@ -143,6 +242,7 @@ export function HistoryPanel({
         mergedIntoMain: logJson.mergedIntoMain ?? false,
         upstream: branchJson?.upstream ?? null,
         behindUpstream: branchJson?.behind ?? 0,
+        aheadUpstream: branchJson?.ahead ?? 0,
       });
 
       if (branchJson) {
@@ -154,16 +254,120 @@ export function HistoryPanel({
         setUnpushedHashes(next);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "History failed");
+      if (generation === historyGeneration.current) {
+        toast.error(err instanceof Error ? err.message : "History failed");
+      }
     } finally {
-      setLoading(false);
+      if (generation === historyGeneration.current) setLoading(false);
     }
-  }, [repoName, toast]);
+  }, [repoName, toast, logQuery]);
+
+  useEffect(() => {
+    // Deliberately not awaited with the log. This is one network call behind
+    // `gh`, and the commit list must not wait on it — avatars arrive late and
+    // swap in over the initials, which is the same thing that happens when
+    // Gravatar is slow.
+    //
+    // Guarded by the effect's own lifetime rather than by historyGeneration.
+    // This map is keyed on the repo and outlives any single refresh, and the
+    // generation counter cannot express that: this effect runs before the one
+    // that calls refresh(), so it captured the pre-increment value and threw
+    // every result away.
+    let live = true;
+    void fetchGitJson<PeoplePayload>(repoApi(repoName, "/git/people"))
+      .then((json) => {
+        if (!live) return;
+        setPeople(json.people ?? []);
+      })
+      .catch(() => {
+        // No GitHub remote, no `gh`, or rate-limited. Gravatar and initials
+        // still cover the column, so there is nothing worth telling the user.
+      });
+    return () => {
+      live = false;
+    };
+  }, [repoName]);
+
+  /**
+   * email → the identity to draw for it. Built from people rather than raw
+   * accounts so every address one person commits under resolves to the same
+   * avatar and name — otherwise they render as two contributors on one screen.
+   */
+  const identityByEmail = useMemo(() => {
+    const index: Record<string, { avatarUrl: string | null; displayName: string }> = {};
+    for (const person of people) {
+      const ident = { avatarUrl: person.avatarUrl, displayName: person.displayName };
+      for (const email of person.emails) {
+        const key = email.trim().toLowerCase();
+        if (key) index[key] = ident;
+      }
+    }
+    return index;
+  }, [people]);
+
+  const loadMore = useCallback(async () => {
+    // Two cursor styles: the frontier continues a full-ancestry walk, the offset
+    // continues a filtered one. Which is live depends on whether a filter is on.
+    const cursor = searching
+      ? nextOffset !== null
+        ? { offset: nextOffset }
+        : null
+      : nextTips.length > 0
+        ? { tips: nextTips }
+        : null;
+    if (loadingMore || !hasMore || !cursor) return;
+    const generation = historyGeneration.current;
+    setLoadingMore(true);
+    try {
+      const page = await fetchGitJson<LogPayload>(repoApi(repoName, logQuery(cursor)));
+      if (generation !== historyGeneration.current) return;
+      setCommits((current) => {
+        const byHash = new Map<string, GraphCommitRaw>();
+        for (const commit of [...current, ...(page.commits ?? [])]) {
+          byHash.set(commit.hash, {
+            hash: commit.hash,
+            shortHash: commit.shortHash,
+            parents: commit.parents,
+            subject: commit.subject,
+            author: commit.author,
+            authorEmail: commit.authorEmail,
+            relativeDate: commit.relativeDate,
+            refs: commit.refs,
+            isHead: commit.isHead,
+            headBranch: commit.headBranch,
+          });
+        }
+        return layoutCommitGraph([...byHash.values()]);
+      });
+      setHasMore(Boolean(page.hasMore));
+      setNextTips(page.nextTips ?? []);
+      setNextOffset(page.nextOffset ?? null);
+    } catch (err) {
+      if (generation === historyGeneration.current) {
+        toast.error(err instanceof Error ? err.message : "Could not load older commits");
+      }
+    } finally {
+      if (generation === historyGeneration.current) setLoadingMore(false);
+    }
+  }, [hasMore, loadingMore, nextTips, nextOffset, searching, repoName, toast, logQuery]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch log on mount / repo change
     void refresh();
   }, [refresh]);
+
+  /**
+   * Debounce the text box before it reaches `refresh`.
+   *
+   * `search` now feeds a subprocess rather than an array filter, so firing on
+   * every keystroke would queue a `git log --grep` per character. The author and
+   * scope controls are discrete choices and go straight through.
+   */
+  useEffect(() => {
+    if (searchInput === search) return;
+    const timer = setTimeout(() => setSearch(searchInput), 250);
+    return () => clearTimeout(timer);
+  }, [searchInput, search]);
 
   useEffect(() => {
     if (!focusUnpushed) return;
@@ -171,33 +375,31 @@ export function HistoryPanel({
     onFocusUnpushedConsumed?.();
   }, [focusUnpushed, onFocusUnpushedConsumed]);
 
-  const authors = useMemo(() => {
-    const set = new Set<string>();
-    for (const c of commits) {
-      if (c.author.trim()) set.add(c.author);
-    }
-    return [...set].sort((a, b) => a.localeCompare(b));
-  }, [commits]);
-
   const isUnpushed = useCallback(
     (c: GraphLaneCommit) => unpushedHashes.has(c.hash) || unpushedHashes.has(c.shortHash),
     [unpushedHashes],
   );
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return commits.filter((c) => {
-      if (unpushedOnly && !isUnpushed(c)) return false;
-      if (authorFilter && c.author !== authorFilter) return false;
-      if (!q) return true;
-      return (
-        c.subject.toLowerCase().includes(q) ||
-        c.hash.toLowerCase().includes(q) ||
-        c.shortHash.toLowerCase().includes(q) ||
-        c.author.toLowerCase().includes(q)
-      );
-    });
-  }, [commits, authorFilter, search, unpushedOnly, isUnpushed]);
+  /**
+   * Only the unpushed filter remains client-side, and it belongs there: it is a
+   * question about local state the server walk does not model. Message search
+   * and author both moved to `git log`, so they cover the whole history rather
+   * than whatever happens to be loaded.
+   */
+  const filtered = useMemo(
+    () => (unpushedOnly ? commits.filter(isUnpushed) : commits),
+    [commits, unpushedOnly, isUnpushed],
+  );
+
+  /**
+   * Lay the graph out over exactly the rows that get drawn.
+   *
+   * The filtered list used to be handed to CommitGraph carrying lanes computed
+   * over the *unfiltered* set, so with any filter active every parent resolved
+   * to a row that was no longer rendered and each edge degraded to a stub — the
+   * graph lost its lines precisely when you were searching through it.
+   */
+  const graphRows = useMemo(() => layoutCommitGraph(filtered), [filtered]);
 
   useEffect(() => {
     // A commit focused from Blame owns the selection: it is routinely older than
@@ -214,7 +416,8 @@ export function HistoryPanel({
   useEffect(() => {
     if (!focusCommit) return;
     // Clear filters so the commit is visible if it *is* in the loaded log.
-    setAuthorFilter(""); // eslint-disable-line react-hooks/set-state-in-effect -- external navigation into a specific commit
+    setAuthorKey(""); // eslint-disable-line react-hooks/set-state-in-effect -- external navigation into a specific commit
+    setSearchInput("");
     setSearch("");
     setUnpushedOnly(false);
     setSelectedFile(null);
@@ -325,6 +528,50 @@ export function HistoryPanel({
     }
   }
 
+  /**
+   * Sync with main, from History.
+   *
+   * It already lived on the Branches tab, which meant the screen that tells you
+   * you're behind main was not the screen that could do anything about it.
+   */
+  async function syncWithMain() {
+    const target = relation?.mainBranch ?? "main";
+    const ok = await confirm({
+      title: `Sync with ${target}?`,
+      message: `Stashes any local work, fetches ${target}, merges it into ${
+        relation?.currentBranch ?? "this branch"
+      }, pushes, then restores the stash. Conflicts open in the Conflicts tab.`,
+      confirmLabel: "Sync",
+    });
+    if (!ok) return;
+    setActing("sync-main");
+    try {
+      const result = await postGitAction<{ message?: string }>(repoApi(repoName, "/branches"), {
+        action: "sync-main",
+      });
+      if (!result.ok) {
+        if (result.kind === "conflict") {
+          await onConflict?.(result.conflict);
+          onMutate();
+          await refresh();
+          return;
+        }
+        if (result.kind === "hook") {
+          onHookFailure?.(result.hook);
+          return;
+        }
+        throw new Error(result.message);
+      }
+      toast.success(`Synced with ${target}`);
+      onMutate();
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setActing(null);
+    }
+  }
+
   async function undo() {
     await confirmedBranchesAction({
       actingKey: "undo",
@@ -374,11 +621,214 @@ export function HistoryPanel({
     });
   }
 
+  const runCommitAction = useCallback(
+    async (action: string, commit: GraphLaneCommit, name?: string) => {
+      setActing(action);
+      try {
+        const result = await postGitAction<{ backupBranch?: string | null }>(
+          repoApi(repoName, "/git/commit-action"),
+          { action, commit: commit.hash, name },
+        );
+        if (!result.ok) {
+          if (result.kind === "conflict") {
+            await onConflict?.(result.conflict);
+            onMutate();
+            await refresh();
+            return;
+          }
+          throw new Error(result.kind === "error" ? result.message : result.kind);
+        }
+        const labels: Record<string, string> = {
+          "cherry-pick": `Cherry-picked ${commit.shortHash}`,
+          revert: `Reverted ${commit.shortHash}`,
+          tag: `Created tag ${name}`,
+          "checkout-detached": `Checked out ${commit.shortHash} (detached)`,
+          "reset-to-commit": `Reset to ${commit.shortHash}`,
+          "branch-from-commit": `Created branch ${name}`,
+        };
+        toast.success(labels[action] ?? "Done");
+        if (result.json.backupBranch) {
+          toast.info(`Backup branch: ${result.json.backupBranch}`, { duration: 9000 });
+        }
+        setSelectedFile(null);
+        onMutate();
+        await refresh();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Commit action failed");
+      } finally {
+        setActing(null);
+      }
+    },
+    [onConflict, onMutate, refresh, repoName, toast],
+  );
+
+  const confirmCommitAction = useCallback(
+    async (
+      action: string,
+      commit: GraphLaneCommit,
+      title: string,
+      message: string,
+      confirmLabel: string,
+    ) => {
+      const ok = await confirm({ title, message, confirmLabel, variant: "danger" });
+      if (ok) await runCommitAction(action, commit);
+    },
+    [confirm, runCommitAction],
+  );
+
+  const commitMenuGroups = useMemo((): ContextMenuGroup[] => {
+    const commit = commitMenu.target;
+    if (!commit) return [];
+    const busy = acting !== null;
+    const isHead = commit.refs.some((ref) => /^HEAD(?: ->|$)/.test(ref));
+    const isMerge = commit.parentLanes.length > 1;
+    const mergeReason = isMerge ? "Merge commits need a mainline parent" : undefined;
+
+    return [
+      {
+        id: "apply",
+        label: "Apply",
+        items: [
+          {
+            id: "cherry-pick",
+            label: "Cherry-pick",
+            description: "Apply this commit to the current branch",
+            icon: <GitCommitHorizontal size={12} />,
+            disabled: busy || isHead || isMerge,
+            disabledReason: isHead ? "Already at HEAD" : mergeReason,
+            onSelect: () =>
+              void confirmCommitAction(
+                "cherry-pick",
+                commit,
+                `Cherry-pick ${commit.shortHash}?`,
+                `Applies “${commit.subject}” to the current branch. Conflicts open in the Conflicts tab.`,
+                "Cherry-pick",
+              ),
+          },
+          {
+            id: "revert",
+            label: "Revert",
+            description: "Create a new commit that undoes this one",
+            icon: <RotateCcw size={12} />,
+            disabled: busy || isMerge,
+            disabledReason: mergeReason,
+            onSelect: () =>
+              void confirmCommitAction(
+                "revert",
+                commit,
+                `Revert ${commit.shortHash}?`,
+                `Creates a new commit that reverses “${commit.subject}”. Existing history is not rewritten.`,
+                "Revert",
+              ),
+          },
+        ],
+      },
+      {
+        id: "create",
+        label: "Create",
+        items: [
+          {
+            id: "branch",
+            label: "New branch from here…",
+            icon: <GitBranch size={12} />,
+            disabled: busy,
+            onSelect: () =>
+              void (async () => {
+                const name = await prompt({
+                  title: `New branch from ${commit.shortHash}`,
+                  message: commit.subject,
+                  input: { placeholder: "feature/my-work" },
+                  confirmLabel: "Create",
+                });
+                if (name?.trim()) await runCommitAction("branch-from-commit", commit, name.trim());
+              })(),
+          },
+          {
+            id: "tag",
+            label: "Create tag…",
+            icon: <Tag size={12} />,
+            disabled: busy,
+            onSelect: () =>
+              void (async () => {
+                const name = await prompt({
+                  title: `Tag ${commit.shortHash}`,
+                  message: commit.subject,
+                  input: { placeholder: "v1.2.3" },
+                  confirmLabel: "Create tag",
+                });
+                if (name?.trim()) await runCommitAction("tag", commit, name.trim());
+              })(),
+          },
+        ],
+      },
+      {
+        id: "move",
+        label: "Move HEAD",
+        items: [
+          {
+            id: "checkout-detached",
+            label: "Check out detached",
+            description: "Inspect this revision without moving a branch",
+            icon: <LogOut size={12} />,
+            disabled: busy || isHead,
+            disabledReason: isHead ? "Already at HEAD" : undefined,
+            onSelect: () =>
+              void confirmCommitAction(
+                "checkout-detached",
+                commit,
+                `Check out ${commit.shortHash} detached?`,
+                "HEAD will point directly at this commit. Create or check out a branch before committing new work.",
+                "Check out",
+              ),
+          },
+          {
+            id: "reset",
+            label: "Reset current branch to here",
+            description: "Hard reset; DevHub creates a backup branch first",
+            icon: <Rewind size={12} />,
+            danger: true,
+            disabled: busy || isHead,
+            disabledReason: isHead ? "Already at HEAD" : undefined,
+            onSelect: () =>
+              void confirmCommitAction(
+                "reset-to-commit",
+                commit,
+                `Reset to ${commit.shortHash}?`,
+                "Moves the current branch here with git reset --hard. Requires a clean tree and creates a backup branch first.",
+                "Hard reset",
+              ),
+          },
+        ],
+      },
+      {
+        id: "copy",
+        items: [
+          {
+            id: "copy-sha",
+            label: "Copy SHA",
+            icon: <Copy size={12} />,
+            onSelect: () => void copyTextToClipboard(commit.hash).then(() => toast.success("SHA copied")),
+          },
+          {
+            id: "copy-message",
+            label: "Copy commit message",
+            icon: <Copy size={12} />,
+            onSelect: () =>
+              void copyTextToClipboard(commit.subject).then(() => toast.success("Commit message copied")),
+          },
+        ],
+      },
+    ];
+  }, [acting, commitMenu.target, confirmCommitAction, prompt, runCommitAction, toast]);
+
   if (loading && commits.length === 0) return <SkeletonRows count={8} height={32} />;
 
   const selectedCommit = commits.find((c) => c.hash === selected) ?? null;
   const hasFilters = Boolean(authorFilter || search.trim() || unpushedOnly);
   const detailForSelection = detail && selected && detail.hash === selected ? detail : null;
+  const detailIdentity = detailForSelection
+    ? lookupByEmail(identityByEmail, detailForSelection.authorEmail)
+    : undefined;
   const activeFile = selectedFile ?? detailForSelection?.path ?? null;
   const canResetStashAhead =
     Boolean(detailForSelection) &&
@@ -417,18 +867,40 @@ export function HistoryPanel({
           </button>
         )}
         <div className="repo-git-spacer" />
+        {/*
+          Scope toggle. The walk covers every ref by default, which is what makes
+          side branches visible at all; a repo with hundreds of refs can want the
+          narrow view back, and until now the only way to ask for it was to edit
+          the query string by hand.
+        */}
+        <button
+          type="button"
+          className="btn btn-ghost"
+          data-active={scope === "all" || undefined}
+          aria-pressed={scope === "all"}
+          onClick={() => setScope((s) => (s === "all" ? "current" : "all"))}
+          title={
+            scope === "all"
+              ? "Showing every branch — click for this branch and main only"
+              : "Showing this branch and main — click for every branch"
+          }
+        >
+          <GitBranch size={11} />
+          {scope === "all" ? "All branches" : "This branch"}
+        </button>
         <label className="repo-git-filter">
           <span className="sr-only">Author</span>
           <select
             className="input repo-git-filter-select"
-            value={authorFilter}
-            onChange={(e) => setAuthorFilter(e.target.value)}
+            value={authorKey}
+            onChange={(e) => setAuthorKey(e.target.value)}
             aria-label="Filter by author"
           >
             <option value="">All authors</option>
-            {authors.map((a) => (
-              <option key={a} value={a}>
-                {a}
+            {people.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.displayName}
+                {p.emails.length > 1 ? ` (${p.emails.length} addresses)` : ""}
               </option>
             ))}
           </select>
@@ -439,23 +911,32 @@ export function HistoryPanel({
           <input
             className="input repo-git-filter-input"
             type="search"
-            placeholder="Search message or hash…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search all history or paste a hash…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             aria-label="Search commits"
           />
         </label>
       </div>
       {hasFilters && (
         <div className="repo-git-filter-meta">
-          Showing {filtered.length} of {commits.length} commit{commits.length === 1 ? "" : "s"}
+          {/*
+            Says what was searched, not just how many rows survived. The old
+            wording counted against the loaded page, so an empty result read as
+            "no such commit" when it meant "not in the last 80".
+          */}
+          {searching
+            ? `${filtered.length} match${filtered.length === 1 ? "" : "es"} across all history`
+            : `Showing ${filtered.length} of ${commits.length} commit${commits.length === 1 ? "" : "s"}`}
+          {authorFilter ? ` · ${authorFilter.displayName}` : ""}
           {unpushedOnly ? " · unpushed" : ""}
           <button
             type="button"
             className="btn btn-ghost"
             style={{ padding: "2px 6px" }}
             onClick={() => {
-              setAuthorFilter("");
+              setAuthorKey("");
+              setSearchInput("");
               setSearch("");
               setUnpushedOnly(false);
               setPinnedHash(null);
@@ -469,8 +950,12 @@ export function HistoryPanel({
         <BranchRelationStrip
           relation={relation}
           acting={acting}
+          pushing={pushing}
+          unpushedCount={unpushedHashes.size}
           onFetch={() => void incoming("fetch")}
           onPull={() => void incoming("pull")}
+          onSync={() => void syncWithMain()}
+          onPush={onPush}
         />
       ) : null}
       <RepoSplit
@@ -484,7 +969,7 @@ export function HistoryPanel({
         primary={
           <div className="repo-git-history-list">
             <CommitGraph
-              commits={filtered}
+              commits={graphRows}
               selectedHash={selected}
               onSelect={(hash) => {
                 setSelectedFile(null);
@@ -492,7 +977,14 @@ export function HistoryPanel({
                 // Any deliberate click hands the selection back to the filters.
                 setPinnedHash(null);
               }}
+              onContextMenu={(event, commit) => {
+                setSelectedFile(null);
+                setSelected(commit.hash);
+                setPinnedHash(null);
+                commitMenu.openAt(event, commit);
+              }}
               unpushedHashes={unpushedHashes}
+              identityByEmail={identityByEmail}
               mainRefNames={
                 relation?.mainShort
                   ? [relation.mainShort, `origin/${relation.mainShort}`, relation.mainBranch].filter(
@@ -501,6 +993,19 @@ export function HistoryPanel({
                   : []
               }
             />
+            {hasMore && (
+              <div style={{ display: "flex", justifyContent: "center", padding: 8 }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={loadingMore}
+                  onClick={() => void loadMore()}
+                >
+                  {loadingMore && <RefreshCw size={11} className="animate-spin" />}
+                  {loadingMore ? "Loading…" : "Load older commits"}
+                </button>
+              </div>
+            )}
           </div>
         }
         secondary={
@@ -512,72 +1017,90 @@ export function HistoryPanel({
             ) : detailForSelection ? (
               <>
                 <div className="repo-git-commit-meta">
-                  <div className="repo-git-commit-meta-top">
-                    <span className="repo-git-graph-hash font-mono">{detailForSelection.shortHash}</span>
-                    {selectedCommit && isUnpushed(selectedCommit) && (
-                      <span className="repo-git-ref-chip" data-tone="warning">
-                        unpushed
-                      </span>
-                    )}
-                    {detailForSelection.parents[0] && (
-                      <span className="text-xs text-text-subtle">
-                        parent {detailForSelection.parents[0].slice(0, 7)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="repo-git-commit-subject">{detailForSelection.subject}</div>
-                  {detailForSelection.body ? (
-                    <pre className="repo-git-commit-body">{detailForSelection.body}</pre>
-                  ) : null}
-                  <CommitContextChips repoName={repoName} commit={detailForSelection.hash} />
-                  <div className="repo-git-commit-byline">
-                    <span>{detailForSelection.author}</span>
-                    {detailForSelection.authorEmail ? (
-                      <span className="text-text-subtle">
-                        &lt;{detailForSelection.authorEmail}&gt;
-                      </span>
-                    ) : null}
-                    <span className="text-text-subtle">
-                      {detailForSelection.relativeDate}
-                      {detailForSelection.date
-                        ? ` · ${detailForSelection.date.slice(0, 19).replace("T", " ")}`
-                        : ""}
-                    </span>
-                  </div>
-                  {canResetStashAhead && (
-                    <div className="repo-git-commit-meta-actions">
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        disabled={acting !== null}
-                        title={`Stash ${detailForSelection.aheadCount} commit${
-                          detailForSelection.aheadCount === 1 ? "" : "s"
-                        } ahead, then reset HEAD to this commit`}
-                        onClick={() => void resetStashAhead()}
-                      >
-                        {acting === "reset-stash" ? (
-                          <RefreshCw size={11} className="animate-spin" />
-                        ) : (
-                          <Layers size={11} />
-                        )}
-                        Stash ahead & reset
-                        <span className="repo-git-commit-meta-actions-count">
-                          {detailForSelection.aheadCount}
+                  <div className="repo-git-commit-meta-main">
+                    <div className="repo-git-commit-meta-top">
+                      <span className="repo-git-graph-hash font-mono">{detailForSelection.shortHash}</span>
+                      {selectedCommit && isUnpushed(selectedCommit) && (
+                        <span className="repo-git-ref-chip" data-tone="warning">
+                          unpushed
                         </span>
-                      </button>
+                      )}
+                      {detailForSelection.parents[0] && (
+                        <span className="text-xs text-text-subtle">
+                          parent {detailForSelection.parents[0].slice(0, 7)}
+                        </span>
+                      )}
                     </div>
-                  )}
-                  {pinnedHash && !commits.some((c) => c.hash === pinnedHash) && (
-                    <div className="repo-git-commit-meta-note">
-                      Opened from Blame — this commit is older than the loaded history, so it
-                      isn&apos;t highlighted in the list.
+                    <div className="repo-git-commit-subject">{detailForSelection.subject}</div>
+                    {detailForSelection.body ? (
+                      <pre className="repo-git-commit-body">{detailForSelection.body}</pre>
+                    ) : null}
+                    <CommitContextChips repoName={repoName} commit={detailForSelection.hash} />
+                    <div className="repo-git-commit-byline">
+                      <span>
+                        {detailIdentity?.displayName || detailForSelection.author}
+                      </span>
+                      {detailForSelection.authorEmail ? (
+                        <span className="text-text-subtle">
+                          &lt;{detailForSelection.authorEmail}&gt;
+                        </span>
+                      ) : null}
+                      <span className="text-text-subtle">
+                        {detailForSelection.relativeDate}
+                        {detailForSelection.date
+                          ? ` · ${detailForSelection.date.slice(0, 19).replace("T", " ")}`
+                          : ""}
+                      </span>
                     </div>
-                  )}
-                  {showDivergedNote && (
-                    <div className="repo-git-commit-meta-note">
-                      Not an ancestor of HEAD — stash-ahead reset is unavailable for diverged history.
-                    </div>
-                  )}
+                    {canResetStashAhead && (
+                      <div className="repo-git-commit-meta-actions">
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          disabled={acting !== null}
+                          title={`Stash ${detailForSelection.aheadCount} commit${
+                            detailForSelection.aheadCount === 1 ? "" : "s"
+                          } ahead, then reset HEAD to this commit`}
+                          onClick={() => void resetStashAhead()}
+                        >
+                          {acting === "reset-stash" ? (
+                            <RefreshCw size={11} className="animate-spin" />
+                          ) : (
+                            <Layers size={11} />
+                          )}
+                          Stash ahead & reset
+                          <span className="repo-git-commit-meta-actions-count">
+                            {detailForSelection.aheadCount}
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                    {pinnedHash && !commits.some((c) => c.hash === pinnedHash) && (
+                      <div className="repo-git-commit-meta-note">
+                        Opened from Blame — this commit is older than the loaded history, so it
+                        isn&apos;t highlighted in the list.
+                      </div>
+                    )}
+                    {showDivergedNote && (
+                      <div className="repo-git-commit-meta-note">
+                        Not an ancestor of HEAD — stash-ahead reset is unavailable for diverged history.
+                      </div>
+                    )}
+                  </div>
+                  <div className="repo-git-commit-meta-avatar">
+                    <CommitAvatar
+                      author={detailIdentity?.displayName || detailForSelection.author}
+                      email={detailForSelection.authorEmail}
+                      size={56}
+                      enlargeable
+                      resolvedUrl={detailIdentity?.avatarUrl ?? undefined}
+                      title={
+                        detailForSelection.authorEmail
+                          ? `${detailForSelection.author} <${detailForSelection.authorEmail}>`
+                          : detailForSelection.author
+                      }
+                    />
+                  </div>
                 </div>
                 <RepoSplit
                   className="repo-git-history-detail-grid"
@@ -660,6 +1183,13 @@ export function HistoryPanel({
           </div>
         }
       />
+      <ContextMenu
+        open={Boolean(commitMenu.target)}
+        position={commitMenu.position}
+        groups={commitMenuGroups}
+        onClose={commitMenu.close}
+        label={commitMenu.target ? `Actions for ${commitMenu.target.shortHash}` : "Commit actions"}
+      />
       <DiffMaximizeModal
         maximized={diffMaximized}
         canOpen={Boolean(activeFile)}
@@ -707,13 +1237,21 @@ export function HistoryPanel({
 function BranchRelationStrip({
   relation,
   acting,
+  pushing,
+  unpushedCount,
   onFetch,
   onPull,
+  onSync,
+  onPush,
 }: {
   relation: BranchRelation;
   acting: string | null;
+  pushing: boolean;
+  unpushedCount: number;
   onFetch: () => void;
   onPull: () => void;
+  onSync: () => void;
+  onPush?: () => void;
 }) {
   const main = relation.mainShort ?? "main";
   const ahead = relation.aheadMain;
@@ -841,6 +1379,52 @@ function BranchRelationStrip({
               <CornerDownLeft size={11} aria-hidden />
             )}
             {relation.behindUpstream > 0 ? `Pull ${relation.behindUpstream}` : "Pull"}
+          </button>
+        ) : null}
+        {/* Push and Sync used to be reachable only from the Branches tab, so the
+            screen showing "11 ahead of main" offered no way to act on it. */}
+        {onPush &&
+        !(relation.aheadUpstream > 0 && relation.behindUpstream > 0) &&
+        (unpushedCount > 0 || relation.aheadUpstream > 0 || pushing) ? (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            data-active={!pushing || undefined}
+            disabled={acting !== null || pushing}
+            onClick={onPush}
+            title={
+              pushing
+                ? "Push in progress…"
+                : relation.upstream
+                  ? `Push to ${relation.upstream}`
+                  : "Push and start tracking origin — this branch has no upstream yet"
+            }
+          >
+            {pushing ? (
+              <RefreshCw size={11} className="animate-spin" aria-hidden />
+            ) : (
+              <Upload size={11} aria-hidden />
+            )}
+            {pushing
+              ? "Pushing…"
+              : `Push ${Math.max(unpushedCount, relation.aheadUpstream) || ""}`.trim()}
+          </button>
+        ) : null}
+        {!relation.onMain && behind > 0 ? (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            data-active
+            disabled={acting !== null}
+            onClick={onSync}
+            title={`Stash local work, merge ${relation.mainBranch ?? main}, push, then restore the stash`}
+          >
+            {acting === "sync-main" ? (
+              <RefreshCw size={11} className="animate-spin" aria-hidden />
+            ) : (
+              <GitMerge size={11} aria-hidden />
+            )}
+            Sync {behind}
           </button>
         ) : null}
       </div>

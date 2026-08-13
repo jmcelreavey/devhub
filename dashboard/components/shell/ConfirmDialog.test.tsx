@@ -103,3 +103,50 @@ describe("usePrompt", () => {
     await waitFor(() => expect(onResult).toHaveBeenCalledWith(null));
   });
 });
+
+describe("consecutive prompts", () => {
+  /** Two prompts back to back, the shape of "name it, now give me a URL". */
+  function ChainHarness({ onResult }: { onResult: (values: (string | null)[]) => void }) {
+    const prompt = usePrompt();
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          void (async () => {
+            const first = await prompt({ title: "Remote name" });
+            const second = await prompt({ title: "Remote URL" });
+            onResult([first, second]);
+          })();
+        }}
+      >
+        trigger
+      </button>
+    );
+  }
+
+  it("opens the second prompt empty rather than holding the first answer", async () => {
+    // Regression: `pending` going null and straight back reconciled as the same
+    // component, so the input kept its state and the second answer was appended
+    // to the first — "upstream" + a URL arrived as one string.
+    const user = userEvent.setup();
+    const onResult = vi.fn();
+    render(
+      <ConfirmProvider>
+        <ChainHarness onResult={onResult} />
+      </ConfirmProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "trigger" }));
+    await screen.findByText("Remote name");
+    await user.keyboard("upstream{Enter}");
+
+    await screen.findByText("Remote URL");
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    expect(input.value).toBe("");
+
+    await user.keyboard("https://example.test/x.git{Enter}");
+    await waitFor(() =>
+      expect(onResult).toHaveBeenCalledWith(["upstream", "https://example.test/x.git"]),
+    );
+  });
+});

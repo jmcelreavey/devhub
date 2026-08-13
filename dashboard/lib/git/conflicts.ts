@@ -11,6 +11,15 @@ export interface GitConflictFile {
   status?: string;
 }
 
+export interface GitConflictSides {
+  base: string | null;
+  ours: string | null;
+  theirs: string | null;
+  binary: boolean;
+}
+
+export type GitConflictOperation = "merge" | "cherry-pick" | "revert" | "rebase";
+
 const UNMERGED_XY = new Set(["UU", "AA", "DD", "AU", "UA", "DU", "UD"]);
 const MARKER_START = /^<<<<<<< /m;
 
@@ -79,6 +88,36 @@ export function readConflictFileContent(repoRoot: string, filePath: string): str
   }
 }
 
+function readConflictStage(repoRoot: string, filePath: string, stage: 1 | 2 | 3): string | null {
+  const result = runGitRepo(repoRoot, ["show", `:${stage}:${filePath}`]);
+  return result.status === 0 ? result.stdout : null;
+}
+
+export function readConflictSides(repoRoot: string, filePath: string): GitConflictSides {
+  const base = readConflictStage(repoRoot, filePath, 1);
+  const ours = readConflictStage(repoRoot, filePath, 2);
+  const theirs = readConflictStage(repoRoot, filePath, 3);
+  return {
+    base,
+    ours,
+    theirs,
+    binary: [base, ours, theirs].some((content) => content?.includes("\0")),
+  };
+}
+
+export function detectConflictOperation(repoRoot: string): GitConflictOperation | null {
+  const gitPath = (name: string) => {
+    const result = runGitRepo(repoRoot, ["rev-parse", "--git-path", name]);
+    const value = result.status === 0 ? result.stdout.trim() : "";
+    return value && !path.isAbsolute(value) ? path.join(repoRoot, value) : value;
+  };
+  if (fs.existsSync(gitPath("CHERRY_PICK_HEAD"))) return "cherry-pick";
+  if (fs.existsSync(gitPath("REVERT_HEAD"))) return "revert";
+  if (fs.existsSync(gitPath("rebase-merge")) || fs.existsSync(gitPath("rebase-apply"))) return "rebase";
+  if (fs.existsSync(gitPath("MERGE_HEAD"))) return "merge";
+  return null;
+}
+
 export function resolveConflictFile(
   repoRoot: string,
   filePath: string,
@@ -105,4 +144,38 @@ export function resolveConflictFile(
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+export function deleteConflictFile(
+  repoRoot: string,
+  filePath: string,
+): { ok: true } | { ok: false; error: string } {
+  if (filePath.includes("..") || path.isAbsolute(filePath)) {
+    return { ok: false, error: "Invalid path" };
+  }
+  const remove = runGitRepo(repoRoot, ["rm", "--", filePath]);
+  return remove.status === 0
+    ? { ok: true }
+    : { ok: false, error: remove.stderr.trim() || "git rm failed" };
+}
+
+export function resolveConflictSide(
+  repoRoot: string,
+  filePath: string,
+  side: "base" | "ours" | "theirs",
+): { ok: true } | { ok: false; error: string } {
+  if (filePath.includes("..") || path.isAbsolute(filePath)) {
+    return { ok: false, error: "Invalid path" };
+  }
+  const stage = side === "base" ? 1 : side === "ours" ? 2 : 3;
+  const sides = readConflictSides(repoRoot, filePath);
+  if (sides[side] === null) return deleteConflictFile(repoRoot, filePath);
+  const checkout = runGitRepo(repoRoot, ["checkout-index", "--force", `--stage=${stage}`, "--", filePath]);
+  if (checkout.status !== 0) {
+    return { ok: false, error: checkout.stderr.trim() || `Could not take ${side}` };
+  }
+  const add = runGitRepo(repoRoot, ["add", "--", filePath]);
+  return add.status === 0
+    ? { ok: true }
+    : { ok: false, error: add.stderr.trim() || "git add failed" };
 }

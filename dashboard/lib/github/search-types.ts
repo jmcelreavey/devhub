@@ -10,7 +10,7 @@ export interface SearchIssueItem {
   title?: string;
   number?: number;
   state?: string;
-  user?: { login?: string };
+  user?: { login?: string; avatar_url?: string };
   repository_url?: string;
   created_at?: string;
   updated_at?: string;

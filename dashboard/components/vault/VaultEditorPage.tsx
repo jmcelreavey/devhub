@@ -9,18 +9,21 @@ import {
   BookOpen,
   Check,
   ChevronRight,
+  ClipboardCopy,
   Code2,
   FileCheck2,
+  Flame,
   FolderInput,
   Link2,
   ListChecks,
   Loader2,
+  MoreHorizontal,
   Save,
   Trash2,
 } from "lucide-react";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { useToast } from "@/lib/hooks/use-toast";
 import { MoveVaultPathModal } from "@/components/MoveVaultPathModal";
-import { HoverTip } from "@/components/ui/HoverTip";
 import { useConfirm } from "@/components/shell/ConfirmDialog";
 import { useLive } from "@/lib/hooks/use-fetch";
 import type { MasterList } from "@/lib/checklists/types";
@@ -97,6 +100,7 @@ export function VaultEditorPage({
   /** Bumped when ## Links are written outside the editor so BlockNote remounts. */
   const [editorEpoch, setEditorEpoch] = useState(0);
   const [linkOpen, setLinkOpen] = useState(false);
+  const [oneTimeOpen, setOneTimeOpen] = useState(false);
   const [cursorDraft, setCursorDraft] = useState<{ notePath: string; repoName: string } | null>(null);
   const [applyingCursorDraft, setApplyingCursorDraft] = useState(false);
   const isNotes = vaultId === "notes";
@@ -513,8 +517,11 @@ export function VaultEditorPage({
   return (
     <div className="page-wrapper">
       <VaultEditorNav vaultId={vaultId} />
-      <div className="page-header" style={{ marginBottom: "12px", alignItems: "flex-start" }}>
-        <div className="min-w-0 overflow-hidden">
+      <div
+        className="page-header"
+        style={{ marginBottom: "12px", alignItems: "flex-start" }}
+      >
+        <div className="min-w-0 flex-1 overflow-hidden">
           {pathParts.length > 1 ? (
             <nav
               className="flex items-center gap-1 flex-wrap mb-1 text-xs text-text-subtle"
@@ -579,7 +586,7 @@ export function VaultEditorPage({
             </nav>
           )}
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+        <div className="relative flex flex-nowrap items-center justify-end gap-2 shrink-0">
           <div className="text-xs text-text-subtle">
             {status === "saving" && (
               <span className="flex items-center gap-1 text-warning">
@@ -618,99 +625,142 @@ export function VaultEditorPage({
           {!isNew && (
             <>
               <ShareControls vaultId={vaultId} path={filePath} />
-              <OneTimeShareButton vaultId={vaultId} path={filePath} />
-              {isNotes && !isNew && blocks ? (
+              {isNotes && blocks ? (
                 <button
                   type="button"
                   className="btn btn-ghost text-xs flex items-center gap-1 shrink-0"
+                  title="Add link"
+                  aria-label="Add link"
                   onClick={() => {
                     window.dispatchEvent(new Event("devhub:dismiss-hovertips"));
                     setLinkOpen(true);
                   }}
                 >
                   <Link2 size={14} aria-hidden />
-                  Add link
+                  Link
                 </button>
               ) : null}
-              {isNotes && linkedRepos.length > 0 ? (
-                <LaunchMenu
-                  label="Open with"
-                  icon={<Code2 size={14} aria-hidden />}
-                  buttonClassName="btn btn-ghost text-xs flex items-center gap-1 shrink-0"
-                  disabled={status === "saving" || status === "error" || applyingCursorDraft}
-                  items={linkedRepos.map((repo) => ({
-                    id: repo,
-                    label: linkedRepos.length === 1 ? "Cursor" : `Cursor · ${repo}`,
-                    description: `Open this note with ${repo}`,
-                    icon: <Code2 size={14} aria-hidden />,
+              <LaunchMenu
+                label="More"
+                icon={<MoreHorizontal size={14} aria-hidden />}
+                buttonClassName="btn btn-ghost text-xs flex items-center gap-1 shrink-0"
+                disabled={status === "saving" || deleting}
+                items={[
+                  {
+                    id: "one-time",
+                    label: "One-time link",
+                    description: "Burn-after-reading PrivateBin share",
+                    icon: <Flame size={14} aria-hidden />,
+                    onSelect: () => setOneTimeOpen(true),
+                  },
+                  ...(isNotes && linkedRepos.length > 0
+                    ? linkedRepos.map((repo) => ({
+                        id: `open-cursor-${repo}`,
+                        label:
+                          linkedRepos.length === 1
+                            ? "Open with Cursor"
+                            : `Open with Cursor · ${repo}`,
+                        description: `Open this note with ${repo}`,
+                        icon: <Code2 size={14} aria-hidden />,
+                        onSelect: async () => {
+                          const result = await openRepoInCursor(repo, toast, filePath);
+                          if (result?.writable) {
+                            setCursorDraft({ notePath: filePath, repoName: repo });
+                          } else if (result) {
+                            setCursorDraft(null);
+                            toast.info(
+                              "Opened a read-only Markdown copy; rich blocks prevent safe write-back.",
+                            );
+                          }
+                        },
+                      }))
+                    : []),
+                  ...(isNotes && cursorDraftRepo
+                    ? [
+                        {
+                          id: "apply-cursor",
+                          label: applyingCursorDraft ? "Applying…" : "Apply Cursor changes",
+                          description: `Update this note from the ${cursorDraftRepo} Markdown copy`,
+                          icon: applyingCursorDraft ? (
+                            <Loader2 size={14} className="animate-spin" aria-hidden />
+                          ) : (
+                            <FileCheck2 size={14} aria-hidden />
+                          ),
+                          onSelect: () => {
+                            void handleApplyCursorDraft();
+                          },
+                        },
+                        {
+                          id: "delete-cursor",
+                          label: "Delete working copy",
+                          description:
+                            "Keep the DevHub note and remove the persistent Markdown copy",
+                          icon: <Trash2 size={14} aria-hidden />,
+                          danger: true,
+                          onSelect: () => {
+                            void handleDeleteCursorDraft();
+                          },
+                        },
+                      ]
+                    : []),
+                  ...(isNotes && !folderMaster
+                    ? [
+                        {
+                          id: "create-checklist",
+                          label: "Create checklist",
+                          description: `For ${createMasterScope || "this note"}`,
+                          icon: <ListChecks size={14} aria-hidden />,
+                          onSelect: () => {
+                            router.push(
+                              notesChecklistsHref({
+                                notePath: filePath,
+                                scope: createMasterScope ?? "",
+                              }),
+                            );
+                          },
+                        },
+                      ]
+                    : []),
+                  {
+                    id: "copy-location",
+                    label: "Copy location",
+                    description: filePath,
+                    icon: <ClipboardCopy size={14} aria-hidden />,
                     onSelect: async () => {
-                      const result = await openRepoInCursor(repo, toast, filePath);
-                      if (result?.writable) setCursorDraft({ notePath: filePath, repoName: repo });
-                      else if (result) {
-                        setCursorDraft(null);
-                        toast.info("Opened a read-only Markdown copy; rich blocks prevent safe write-back.");
+                      try {
+                        await copyTextToClipboard(filePath);
+                        toast.success("Location copied");
+                      } catch {
+                        toast.error("Could not copy to clipboard.");
                       }
                     },
-                  }))}
-                />
-              ) : null}
-              {isNotes && cursorDraftRepo ? (
-                <LaunchMenu
-                  label="Apply Cursor changes"
-                  icon={<FileCheck2 size={14} aria-hidden />}
-                  buttonClassName="btn btn-ghost text-xs flex items-center gap-1 shrink-0"
-                  disabled={status === "saving" || status === "error" || applyingCursorDraft}
-                  items={[
-                    {
-                      id: "apply",
-                      label: applyingCursorDraft ? "Applying…" : "Apply changes",
-                      description: `Update this note from the ${cursorDraftRepo} Markdown copy`,
-                      icon: applyingCursorDraft
-                        ? <Loader2 size={14} className="animate-spin" aria-hidden />
-                        : <FileCheck2 size={14} aria-hidden />,
-                      onSelect: handleApplyCursorDraft,
+                  },
+                  {
+                    id: "move",
+                    label: "Move",
+                    description: `Move ${headerLabel}`,
+                    icon: <FolderInput size={14} aria-hidden />,
+                    onSelect: () => setMoveModalOpen(true),
+                  },
+                  {
+                    id: "delete",
+                    label: deleting ? "Deleting…" : "Delete",
+                    description: `Delete ${headerLabel}`,
+                    icon: <Trash2 size={14} aria-hidden />,
+                    danger: true,
+                    onSelect: () => {
+                      void handleDelete();
                     },
-                    {
-                      id: "delete",
-                      label: "Delete working copy",
-                      description: "Keep the DevHub note and remove the persistent Markdown copy",
-                      icon: <Trash2 size={14} aria-hidden />,
-                      danger: true,
-                      onSelect: handleDeleteCursorDraft,
-                    },
-                  ]}
-                />
-              ) : null}
-              {isNotes && !folderMaster ? (
-                <Link
-                  href={notesChecklistsHref({ notePath: filePath, scope: createMasterScope ?? "" })}
-                  className="btn btn-ghost text-xs flex items-center gap-1 shrink-0"
-                  title={`Create checklist for ${createMasterScope || "this note"}`}
-                >
-                  <ListChecks size={14} aria-hidden />
-                  Create checklist
-                </Link>
-              ) : null}
-              <button
-                type="button"
-                title={`Move ${headerLabel}`}
-                onClick={() => setMoveModalOpen(true)}
-                className="btn btn-ghost text-xs flex items-center gap-1 shrink-0"
-              >
-                <FolderInput size={14} aria-hidden />
-                Move
-              </button>
-              <HoverTip label={deleting ? "Deleting…" : `Delete ${headerLabel}`}>
-                <button
-                  type="button"
-                  disabled={deleting}
-                  onClick={handleDelete}
-                  className="btn btn-danger-ghost text-xs flex items-center gap-1 shrink-0"
-                >
-                  <Trash2 size={14} aria-hidden />
-                  {deleting ? "Deleting…" : "Delete"}
-                </button>
-              </HoverTip>
+                  },
+                ]}
+              />
+              <OneTimeShareButton
+                vaultId={vaultId}
+                path={filePath}
+                hideTrigger
+                open={oneTimeOpen}
+                onOpenChange={setOneTimeOpen}
+              />
             </>
           )}
         </div>
@@ -767,7 +817,7 @@ export function VaultEditorPage({
           open={linkOpen}
           onClose={() => setLinkOpen(false)}
           defaultKind="calendar"
-          description="Link a calendar event, PR, repo, task, or Jira issue to this note."
+          description="Link a calendar event, PR, note, diagram, repo, task, or Jira issue to this note."
           onSave={async (ref) => {
             const md = blocksToText(blocks);
             const nextRefs = mergeEntityRefs(parseEntityLinksFromMarkdown(md), [ref]);

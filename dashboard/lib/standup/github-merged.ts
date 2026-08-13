@@ -28,8 +28,7 @@ export interface StandupMergedPr {
   state: PrState;
 }
 
-/** `gh api user` login — used for standup PR sections. */
-export async function getGithubLogin(): Promise<string | null> {
+const getCachedGithubLogin = ttlCache(async (): Promise<string | null> => {
   try {
     const { stdout } = await execGh(["api", "user", "-q", ".login"]);
     const login = stdout.trim();
@@ -37,6 +36,11 @@ export async function getGithubLogin(): Promise<string | null> {
   } catch {
     return null;
   }
+}, 5 * 60_000);
+
+/** `gh api user` login — shared by standup and owned-repo PR views. */
+export async function getGithubLogin(): Promise<string | null> {
+  return getCachedGithubLogin();
 }
 
 /** Cached so repeated standup refreshes don't re-scan the disk + archived check. */

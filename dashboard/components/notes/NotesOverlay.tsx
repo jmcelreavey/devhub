@@ -8,17 +8,15 @@ import {
   FileText,
   RefreshCw,
   Plus,
-  Check,
-  ClipboardCopy,
 } from "lucide-react";
 import { NewNotePathModal } from "@/components/NewNotePathModal";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/lib/hooks/use-toast";
-import { copyTextToClipboard } from "@/lib/clipboard";
 import { isDiagramStoragePath } from "@/lib/diagram-utils";
 import { isMobileViewport } from "@/lib/hooks/use-is-mobile";
 import { notesApiPathFromSlug, notesPageHref } from "@/lib/notes/path";
 import { SidePanel } from "@/components/shell/SidePanel";
+import { CopyLocationButton } from "@/components/ui/CopyLocationButton";
 import { FileTree } from "@/components/FileTree";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { HoverTip } from "@/components/ui/HoverTip";
@@ -39,36 +37,6 @@ interface FileGroup {
 interface NoteOverlayProps {
   open: boolean;
   onClose: () => void;
-}
-
-function CopyRefButton({ path }: { path: string }) {
-  const [copied, setCopied] = useState(false);
-  const handleClick = (e: { stopPropagation: () => void }) => {
-    e.stopPropagation();
-    copyTextToClipboard(path).then(
-      () => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      },
-      () => {},
-    );
-  };
-  return (
-    <button
-      type="button"
-      title={`Copy reference: ${path}`}
-      className="shrink-0 rounded p-0.5 reveal-on-hover transition-opacity"
-      style={{ color: copied ? "var(--success)" : "var(--text-subtle)" }}
-      onClick={handleClick}
-    >
-      {copied ? (
-        <Check size={11} aria-hidden />
-      ) : (
-        <ClipboardCopy size={11} aria-hidden />
-      )}
-      <span className="sr-only">Copy reference</span>
-    </button>
-  );
 }
 
 export function NotesOverlay({ open, onClose }: NoteOverlayProps) {
@@ -259,6 +227,7 @@ export function NotesOverlay({ open, onClose }: NoteOverlayProps) {
                 aria-hidden
               />
             </button>
+            <CopyLocationButton path={activeNote.path} size={14} />
             <button
               type="button"
               onClick={openFullPage}
@@ -391,7 +360,7 @@ export function NotesOverlay({ open, onClose }: NoteOverlayProps) {
                       </div>
                     </div>
                   </button>
-                  <CopyRefButton path={refPath} />
+                  <CopyLocationButton path={refPath} size={11} stopPropagation />
                 </div>
               );
             })}

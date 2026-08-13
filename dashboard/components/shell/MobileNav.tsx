@@ -6,11 +6,12 @@ import { NavLink } from "@/components/shell/NavLink";
 import {
   NAV_ITEMS,
   NAV_GROUPS,
-  filterNavBySetup,
+  groupSidebarNav,
   type NavGroup,
   type NavItem,
   type SetupGateStatus,
 } from "@/lib/nav";
+import { PLUGIN_NAV_ITEMS } from "@/lib/plugin-nav.generated";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useNavBadges, countForItem, unseenForItem } from "@/lib/hooks/use-nav-badges";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
@@ -18,17 +19,6 @@ import { AccentPicker } from "@/components/shell/AccentPicker";
 import { FocusTimer } from "@/components/tasks/FocusTimer";
 
 type GroupedNav = Record<NavGroup, NavItem[]>;
-
-/** Filter by setup gates, drop desktop-only pages, and bucket by section. */
-function groupNav(items: NavItem[], setup: SetupGateStatus | null): GroupedNav {
-  const visible = filterNavBySetup(
-    items.filter((i) => !i.desktopOnly),
-    setup,
-  );
-  const map: GroupedNav = { workspace: [], library: [], system: [] };
-  for (const item of visible) map[item.group].push(item);
-  return map;
-}
 
 export function MobileNav() {
   const [open, setOpen] = useState(false);
@@ -53,10 +43,14 @@ export function MobileNav() {
     return () => window.removeEventListener("devhub:mobile-nav-open", onOpen);
   }, []);
 
-  // Mirror the desktop sidebar exactly: the curated NAV_ITEMS, grouped by
-  // section. Legacy destinations stay reachable at their URLs / via search.
-  const coreGrouped = useMemo(
-    () => groupNav(NAV_ITEMS, setup ?? null),
+  // Mirror the desktop sidebar: core NAV_ITEMS + plugin contributions, grouped
+  // by section. Legacy destinations stay reachable at their URLs / via search.
+  const coreGrouped: GroupedNav = useMemo(
+    () =>
+      groupSidebarNav(NAV_ITEMS, PLUGIN_NAV_ITEMS, {
+        includeDesktopOnly: false,
+        setup: setup ?? null,
+      }),
     [setup],
   );
 

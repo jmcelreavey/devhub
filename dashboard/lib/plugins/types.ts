@@ -31,13 +31,13 @@ export interface PluginNavItem {
   href: string;
   label: string;
   icon: string;
-  group: "workspace" | "library" | "system";
+  group: "workspace" | "library" | "bi" | "system";
   /** Defaults to the plugin's top-level `navGate` when omitted. */
   gate?: string;
   desktopOnly?: boolean;
   shortcut?: string;
-  /** When set, also appears in that section's top-bar tabs (Library / System). */
-  section?: "library" | "system";
+  /** When set, also appears in that section's top-bar tabs (Library / System / BI). */
+  section?: "library" | "system" | "bi";
 }
 
 /**

@@ -1,4 +1,11 @@
+import { pickAtlassianAvatarUrl, rememberAtlassianAvatar } from "@/lib/jira/avatars";
 import { getResolvedJiraEnv, authHeader, apiBase, jsonHeaders, type ResolvedJira } from "@/lib/jira/env";
+
+export interface JiraPerson {
+  displayName: string;
+  email?: string;
+  avatarUrl?: string;
+}
 
 export interface JiraTicket {
   key: string;
@@ -11,6 +18,8 @@ export interface JiraTicket {
   url: string;
   /** ISO 8601 from Jira `updated` — closest standard signal for “recently active / assigned work”. */
   updatedAt: string;
+  /** Assignee when Jira returned one (always present for assignee=currentUser() queries). */
+  assignee?: JiraPerson;
 }
 
 /** Standup slice: still assigned to you, with `updated` in the given local calendar window. */
@@ -24,6 +33,12 @@ interface JiraNamedField {
   key?: string;
 }
 
+interface JiraAssigneeField {
+  displayName?: string;
+  emailAddress?: string;
+  avatarUrls?: { "16x16"?: string; "24x24"?: string; "32x32"?: string; "48x48"?: string };
+}
+
 interface JiraIssueFields {
   summary?: string;
   status?: JiraNamedField;
@@ -32,6 +47,22 @@ interface JiraIssueFields {
   project?: JiraNamedField;
   updated?: string;
   resolution?: JiraNamedField | null;
+  assignee?: JiraAssigneeField | null;
+}
+
+function mapJiraAssignee(fields: JiraIssueFields): JiraPerson | undefined {
+  const a = fields.assignee;
+  const displayName = a?.displayName?.trim();
+  if (!displayName) return undefined;
+  const email = a?.emailAddress?.trim();
+  const avatarUrl = pickAtlassianAvatarUrl(a?.avatarUrls) ?? undefined;
+  // Warm the shared email → Atlassian map so git identity can reuse it.
+  rememberAtlassianAvatar(email, avatarUrl);
+  return {
+    displayName,
+    ...(email ? { email } : {}),
+    ...(avatarUrl ? { avatarUrl } : {}),
+  };
 }
 
 interface JiraIssue {
@@ -56,7 +87,7 @@ export async function getMyTickets(): Promise<JiraTicket[]> {
     },
     body: JSON.stringify({
       jql: "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
-      fields: ["summary", "status", "priority", "issuetype", "project", "updated"],
+      fields: ["summary", "status", "priority", "issuetype", "project", "updated", "assignee"],
       maxResults: 100,
     }),
   });
@@ -78,6 +109,7 @@ export async function getMyTickets(): Promise<JiraTicket[]> {
     projectKey: issue.fields.project?.key ?? "",
     url: `https://${j.domain}/browse/${issue.key}`,
     updatedAt: issue.fields.updated ?? "",
+    assignee: mapJiraAssignee(issue.fields),
   }));
 }
 
@@ -106,7 +138,7 @@ export async function getMyAssignedTicketsTouchedInRange(
     },
     body: JSON.stringify({
       jql,
-      fields: ["summary", "status", "priority", "issuetype", "project", "updated", "resolution"],
+      fields: ["summary", "status", "priority", "issuetype", "project", "updated", "resolution", "assignee"],
       maxResults: 50,
     }),
   });
@@ -134,6 +166,7 @@ export async function getMyAssignedTicketsTouchedInRange(
       projectKey: issue.fields.project?.key ?? "",
       url: `https://${j.domain}/browse/${issue.key}`,
       updatedAt: issue.fields.updated ?? "",
+      assignee: mapJiraAssignee(issue.fields),
       resolutionName,
     };
   });

@@ -51,7 +51,7 @@ When allowlisted script runs failed since your last visit, Today shows a dismiss
 
 ## Navigation (2026-06 IA)
 
-The sidebar is driven by `dashboard/lib/nav.ts` — thirteen primary destinations grouped into **Workspace**, **Library**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag.
+The sidebar is driven by `dashboard/lib/nav.ts` — primary destinations grouped into **Workspace**, **Library**, **BI**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`.
 
 | Sidebar  | Route       | Notes                                                                                  |
 | -------- | ----------- | -------------------------------------------------------------------------------------- |
@@ -64,7 +64,9 @@ The sidebar is driven by `dashboard/lib/nav.ts` — thirteen primary destination
 | Library  | `/notes`    | Top-bar tabs: Notes, Docs, Radar, Appraisal, Research, Diagrams, Live links (gated)      |
 | Agents   | `/skills`   | Skills, persona, MCP catalog                                                           |
 | Repos    | `/repos`    | Desktop nav only                                                                       |
-| System   | `/status`   | Top-bar tabs: Status, Logs (desktop), Datadog (gated), Actions (desktop), Setup; plugin tabs (e.g. Ops) insert before Setup when enabled |
+| Ops      | `/ops`      | BI group; from BI plugin (`gate: bi`)                                                  |
+| Datadog  | `/datadog`  | BI group; gated on `datadog`                                                           |
+| System   | `/status`   | Top-bar tabs: Status, Logs (desktop), Actions (desktop), Setup                          |
 | Chamber  | `/chamber`  | Gated on `chamber`                                                                     |
 | OpenCode | `/opencode` | Gated on `opencode`                                                                    |
 | Claude   | `/claude`   | Gated on `claude`; desktop nav only                                                    |
@@ -79,11 +81,11 @@ The sidebar is driven by `dashboard/lib/nav.ts` — thirteen primary destination
 | Jira    | Ticket list (same as `/tickets`) | Jira routes; tab hidden until Jira is configured |
 | History | Per-day task summaries           | `GET /api/tasks/history?includeTasks=1`          |
 
-**Library** and **System** use `SectionTabs` in the top bar when you land on any sibling route (for example `/docs` or `/setup`). Gated tabs (Ops, Datadog, Live links) appear only when setup enables them. **System** also includes a **Logs** tab (desktop only) for live tail of shell, sidecar, and renderer logs.
+**Library** and **System** use `SectionTabs` in the top bar when you land on any sibling route (for example `/docs` or `/setup`). Gated tabs (Live links) appear only when setup enables them. **System** also includes a **Logs** tab (desktop only) for live tail of shell, sidecar, and renderer logs. **BI** is a sidebar group (Ops from the BI plugin, Datadog from core) — first-class items, not System tabs.
 
 ### Legacy routes
 
-Older URLs still work and remain reachable via **⌘K** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/appraisal`, `/one-on-one`, `/radar`, `/research`, `/tasks`, `/tickets`, `/search`, `/learnings`, `/diagrams`, `/docs`, `/shared`, `/ops`, `/datadog`, `/actions`, `/setup`. They no longer have permanent sidebar slots — Library section tabs cover `/radar`, `/appraisal`, and `/research`; `/learnings` stays palette-only.
+Older URLs still work and remain reachable via **⌘K** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/appraisal`, `/one-on-one`, `/radar`, `/research`, `/tasks`, `/tickets`, `/search`, `/learnings`, `/diagrams`, `/docs`, `/shared`, `/actions`, `/setup`. They no longer have permanent sidebar slots — Library section tabs cover `/radar`, `/appraisal`, and `/research`; `/learnings` stays palette-only. `/ops` (plugin) and `/datadog` live under the **BI** sidebar group.
 
 On mobile, the bottom shelf uses **Work** (`/work`) instead of separate Tasks/Tickets entries.
 

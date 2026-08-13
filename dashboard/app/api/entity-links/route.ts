@@ -7,8 +7,8 @@ import { isSafeNotePath } from "@/lib/entity-links/build-ref";
 
 const QuerySchema = z
   .object({
-    kind: z.enum(["task", "meeting", "pr", "note", "calendar", "jira", "repo"]),
-    id: z.string().min(1).max(200),
+    kind: z.enum(["task", "meeting", "pr", "note", "diagram", "calendar", "jira", "repo"]),
+    id: z.string().min(1).max(400),
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     label: z.string().max(200).optional(),
     href: z.string().max(1000).optional(),
@@ -16,10 +16,10 @@ const QuerySchema = z
     prRepo: z.string().max(200).optional(),
     prNumber: z.coerce.number().int().positive().optional(),
   })
-  // A note id is a vault path that becomes a filename server-side.
-  .refine((q) => q.kind !== "note" || isSafeNotePath(q.id), {
+  // Note / diagram ids are vault paths that become filenames server-side.
+  .refine((q) => (q.kind !== "note" && q.kind !== "diagram") || isSafeNotePath(q.id), {
     path: ["id"],
-    message: "id must be a vault-relative note path",
+    message: "id must be a vault-relative path",
   });
 
 export const GET = withErrorHandler(async (req: Request) => {

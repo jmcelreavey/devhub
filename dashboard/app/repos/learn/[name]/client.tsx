@@ -15,7 +15,17 @@ import type { ReposApiPayload } from "../../types";
  * panel skims, with room to breathe. Reached via the panel's "Expand" button,
  * the persistent learn dock, or directly at /repos/learn/<repo>.
  */
-export function LearnScreen({ name, focusLab }: { name: string; focusLab?: string }) {
+export function LearnScreen({
+  name,
+  focusLab,
+  domain,
+  ownedRepo,
+}: {
+  name: string;
+  focusLab?: string;
+  domain?: string;
+  ownedRepo?: string;
+}) {
   const toast = useToast();
   const { data, error, isLoading, mutate } = useLive<ReposApiPayload>("/api/repos", { refreshInterval: 0 });
   const repo = data?.repos.find((r) => r.name === name) ?? null;
@@ -23,7 +33,7 @@ export function LearnScreen({ name, focusLab }: { name: string; focusLab?: strin
   return (
     <div className="page-wrapper">
       <PageHeader
-        title={`Learn ${name}`}
+        title={`Learn ${name}${domain ? ` · ${domain}` : ""}`}
         subtitle={repo ? <span className="font-mono">{repo.path}</span> : "Repo learning pack"}
         actions={
           <span className="flex items-center gap-1.5">
@@ -59,7 +69,7 @@ export function LearnScreen({ name, focusLab }: { name: string; focusLab?: strin
         {error ? (
           <FetchError message={error.message} onRetry={() => void mutate()} />
         ) : repo ? (
-          <LearnContent repo={repo} focusLab={focusLab} variant="page" />
+          <LearnContent repo={repo} focusLab={focusLab} domain={domain} ownedRepo={ownedRepo} variant="page" />
         ) : !isLoading ? (
           <EmptyState
             icon={<GraduationCap size={32} />}

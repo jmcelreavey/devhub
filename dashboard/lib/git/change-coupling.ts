@@ -38,6 +38,10 @@ const MIN_SUPPORT = 5;
 /** Under this ratio it isn't a habit, it's noise. */
 const MIN_CONFIDENCE = 0.6;
 
+/** History window. Far enough back to be evidence, near enough to be current. */
+const COMMIT_LIMIT = 800;
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
 export interface CouplingIndex {
   /** Commits (post-filtering) each file appears in. */
   fileCounts: Map<string, number>;
@@ -46,6 +50,8 @@ export interface CouplingIndex {
   /** Commits actually considered. */
   commitsAnalysed: number;
 }
+
+const cache = new Map<string, { index: CouplingIndex; built: number }>();
 
 const pairKey = (a: string, b: string) => (a < b ? `${a}\0${b}` : `${b}\0${a}`);
 
@@ -68,6 +74,36 @@ export function buildCouplingIndex(commits: CouplingCommit[]): CouplingIndex {
   }
 
   return { fileCounts, pairCounts, commitsAnalysed };
+}
+
+export async function loadCouplingIndex(repoRoot: string, cacheKey: string): Promise<CouplingIndex | null> {
+  const hit = cache.get(cacheKey);
+  if (hit && Date.now() - hit.built < CACHE_TTL_MS) return hit.index;
+
+  const { runGitRepoAsync } = await import("@/lib/git/repo-local");
+  const log = await runGitRepoAsync(
+    repoRoot,
+    ["log", `--max-count=${COMMIT_LIMIT}`, "--name-only", "--no-merges", "--pretty=format:%x00%H"],
+    { timeout: 30_000 },
+  );
+  if (log.status !== 0) return null;
+
+  const commits: CouplingCommit[] = [];
+  let current: string[] | null = null;
+  for (const line of log.stdout.split("\n")) {
+    if (line.startsWith("\0")) {
+      if (current) commits.push({ files: current });
+      current = [];
+      continue;
+    }
+    const filePath = line.trim();
+    if (filePath && current) current.push(filePath);
+  }
+  if (current) commits.push({ files: current });
+
+  const index = buildCouplingIndex(commits);
+  cache.set(cacheKey, { index, built: Date.now() });
+  return index;
 }
 
 /**

@@ -1,0 +1,398 @@
+/**
+ * Cowork sync target — builds an installable `.plugin` bundle.
+ *
+ * Cowork is deliberately NOT in `TOOL_DIRS`. Every other tool in this repo is a
+ * copy target: drop `<skill>/` into `~/<tool>/skills/` and the tool picks it up.
+ * Cowork has no equivalent directory. Its three on-disk skill locations are all
+ * derived state, not inputs:
+ *
+ *   ~/Library/Application Support/Claude/local-agent-mode-sessions/
+ *     skills-plugin/<account>/<org>/skills   server-synced cache, overwritten on login
+ *     <account>/<org>/rpm/plugin_<serverId>/ installed plugins, owned by the account
+ *     <account>/<org>/local_<uuid>/.claude/  per-session state; no skills dir at all
+ *
+ * Writing into any of them either gets clobbered or is scoped to one session. The
+ * only durable path into Cowork is a `.plugin` bundle the user installs, which is
+ * what this module produces.
+ *
+ * The practical consequence: do NOT add "cowork" to `TOOL_DIRS`. `verifySync()`
+ * iterates that same map and checks `<root>/<skill>/SKILL.md`, so a cowork entry
+ * would report every skill healthy while Cowork saw none of them.
+ */
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import crypto from "node:crypto";
+import AdmZip from "adm-zip";
+import { formatAgentForTool } from "@/lib/agent/sync-format";
+import {
+  buildMergedSkillCatalog,
+  catalogOriginCounts,
+  filterSkillCatalog,
+} from "@/lib/skill-catalog";
+import { copySkillForSync } from "@/lib/sync/skills";
+import { resolveAgentSources } from "@/lib/sync/agents";
+import {
+  listSharedMcpServerNames,
+  pluginMcpServers,
+  readCatalogMcpServer,
+  substitutePlaceholder,
+  substituteRepoRoot,
+  type Json,
+  type SharedMcpServer,
+} from "@/lib/sync/mcp";
+import { listPersonalMcpServerNames } from "@/lib/mcp/personal";
+import { safeRemovePath } from "@/lib/server-utils";
+
+export const COWORK_PLUGIN_NAME = "devhub-cowork";
+
+/**
+ * MCP servers never written into the Cowork bundle.
+ *
+ * `lean-ctx` runs in shadow mode: it reroutes native read/search/shell calls to its
+ * own `ctx_*` tools. Harmless in Claude Code, but in Cowork it lands in front of the
+ * file tools that Cowork's own workflows depend on.
+ *
+ * `figma` ships with Cowork as a first-party plugin; a duplicate shadows the working one.
+ */
+export const COWORK_EXCLUDED_SERVERS = ["lean-ctx", "figma"];
+
+/** Written into the staging dir so an unchanged rebuild can skip rezipping. */
+const CONTENT_HASH_FILE = ".content-hash";
+
+export interface BuildCoworkPluginOptions {
+  dryRun?: boolean;
+  /** Limit to specific skill names. Empty/omitted = all. */
+  skills?: string[];
+  excludeSkills?: string[];
+  excludeAgents?: string[];
+  /** Added to COWORK_EXCLUDED_SERVERS rather than replacing it. */
+  excludeServers?: string[];
+  /** Defaults to `<repoRoot>/.devhub/cowork` (gitignored). */
+  outDir?: string;
+  emit: (line: string) => void;
+  repoRoot: string;
+}
+
+export interface CoworkBuildResult {
+  code: number;
+  skills: number;
+  agents: number;
+  servers: number;
+  /** Absolute path to the built bundle, or null on failure / dry run. */
+  bundlePath: string | null;
+  /** True when the staged content matched the previous build and zipping was skipped. */
+  unchanged: boolean;
+}
+
+export function coworkOutDir(repoRoot: string, outDir?: string): string {
+  return outDir ?? path.join(repoRoot, ".devhub", "cowork");
+}
+
+export function coworkBundlePath(repoRoot: string, outDir?: string): string {
+  return path.join(coworkOutDir(repoRoot, outDir), `${COWORK_PLUGIN_NAME}.plugin`);
+}
+
+function stagingDir(repoRoot: string, outDir?: string): string {
+  return path.join(coworkOutDir(repoRoot, outDir), COWORK_PLUGIN_NAME);
+}
+
+/**
+ * Hash every staged file path + content. Used to skip rezipping on a no-op sync,
+ * since this build runs on every `updateAndSync`.
+ */
+function hashTree(root: string): string {
+  const hash = crypto.createHash("sha256");
+  const walk = (dir: string, rel: string) => {
+    const entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      const abs = path.join(dir, entry.name);
+      const relPath = path.posix.join(rel, entry.name);
+      if (relPath === CONTENT_HASH_FILE) continue;
+      if (entry.isDirectory()) {
+        hash.update(`d:${relPath}\n`);
+        walk(abs, relPath);
+      } else if (entry.isSymbolicLink()) {
+        hash.update(`l:${relPath}:${fs.readlinkSync(abs)}\n`);
+      } else {
+        hash.update(`f:${relPath}\n`);
+        hash.update(fs.readFileSync(abs));
+      }
+    }
+  };
+  walk(root, "");
+  return hash.digest("hex");
+}
+
+function writePluginManifest(stage: string): void {
+  const manifest = {
+    name: COWORK_PLUGIN_NAME,
+    version: "1.0.0",
+    description:
+      "DevHub shared skills, agents, and MCP servers, packaged for Claude Cowork. Generated by lib/sync/cowork.ts — do not edit by hand.",
+    author: { name: "DevHub" },
+    keywords: ["devhub", "skills", "generated"],
+  };
+  fs.mkdirSync(path.join(stage, ".claude-plugin"), { recursive: true });
+  fs.writeFileSync(
+    path.join(stage, ".claude-plugin", "plugin.json"),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    "utf-8",
+  );
+}
+
+function writeReadme(stage: string, skills: number, agents: number, servers: string[]): void {
+  const lines = [
+    `# ${COWORK_PLUGIN_NAME}`,
+    "",
+    "Generated by `dashboard/lib/sync/cowork.ts` on every DevHub sync. Do not edit by hand —",
+    "changes are overwritten. Edit the sources under `skills/shared`, `agents/shared`, and",
+    "`mcp/shared` instead, then re-run sync.",
+    "",
+    `- ${skills} skill(s)`,
+    `- ${agents} agent(s)`,
+    `- ${servers.length} MCP server(s): ${servers.join(", ") || "none"}`,
+    "",
+    "## Installing",
+    "",
+    "Cowork has no directory to sync into — skills reach it only through an installed",
+    "plugin. Attach the `.plugin` file in a Cowork chat and press Install.",
+    "",
+    "## Caveats",
+    "",
+    "MCP server paths are absolute and point at repos on this machine. If a repo moves, or",
+    "`node_modules` is cleaned (the stdio servers need `node_modules/.bin/tsx`), rebuild and",
+    "reinstall.",
+    "",
+    "Skills that shell out to `kubectl`, `aws`, `tailscale`, `mongosh`, or `terraform` will",
+    "load in Cowork but fail when they run: Cowork's bash is a sandboxed Linux container",
+    "without that tooling or the credentials. They work through a host-shell MCP.",
+    "",
+  ];
+  fs.writeFileSync(path.join(stage, "README.md"), lines.join("\n"), "utf-8");
+}
+
+/** Resolve catalog MCP servers into a plain `.mcp.json` map, honouring both placeholders. */
+function buildMcpServerMap(
+  repoRoot: string,
+  home: string,
+  excluded: Set<string>,
+  emit: (line: string) => void,
+): Record<string, Json> {
+  const pluginServerMap = pluginMcpServers(home, emit);
+  const names = [
+    ...new Set([
+      ...listSharedMcpServerNames(repoRoot),
+      ...pluginServerMap.keys(),
+      ...listPersonalMcpServerNames(home),
+    ]),
+  ]
+    .filter((n) => !excluded.has(n))
+    .sort();
+
+  const servers: Record<string, Json> = {};
+  for (const name of names) {
+    const resolved = readCatalogMcpServer(repoRoot, home, name, pluginServerMap);
+    if (!resolved) {
+      emit(`  SKIP (unreadable): ${name}`);
+      continue;
+    }
+    const { server, source } = resolved;
+    if (server.enabled === false) {
+      emit(`  SKIP (disabled): ${name}`);
+      continue;
+    }
+
+    let json = substituteRepoRoot(
+      {
+        ...(server.command ? { command: server.command } : {}),
+        ...(server.args ? { args: server.args } : {}),
+        ...(server.env ? { env: server.env } : {}),
+        ...(server.type ? { type: server.type } : {}),
+        ...(server.url ? { url: server.url } : {}),
+        ...(server.headers ? { headers: server.headers } : {}),
+      } as Json,
+      repoRoot,
+    );
+    if (source === "plugin" && resolved.pluginPath) {
+      json = substitutePlaceholder(json, "PLUGIN_ROOT", resolved.pluginPath);
+    }
+
+    const entry = json as SharedMcpServer;
+    if (!entry.command && !entry.url) {
+      emit(`  SKIP (no command or url): ${name}`);
+      continue;
+    }
+    servers[name] = json;
+    emit(`  BUNDLED: ${name} (${source})`);
+  }
+  return servers;
+}
+
+export async function buildCoworkPlugin(
+  opts: BuildCoworkPluginOptions,
+): Promise<CoworkBuildResult> {
+  const { emit, repoRoot } = opts;
+  const fail = (): CoworkBuildResult => ({
+    code: 1,
+    skills: 0,
+    agents: 0,
+    servers: 0,
+    bundlePath: null,
+    unchanged: false,
+  });
+
+  const home = os.homedir();
+  const catalog = filterSkillCatalog(buildMergedSkillCatalog(repoRoot), opts);
+  const agentSources = resolveAgentSources(repoRoot, home, emit);
+  const excludedAgents = new Set((opts.excludeAgents ?? []).map((s) => s.trim()).filter(Boolean));
+  const agentNames = [...agentSources.keys()].filter((n) => !excludedAgents.has(n)).sort();
+  const excludedServers = new Set([
+    ...COWORK_EXCLUDED_SERVERS,
+    ...(opts.excludeServers ?? []).map((s) => s.trim()).filter(Boolean),
+  ]);
+
+  const { devhub, aiTools, plugins } = catalogOriginCounts(catalog);
+  const pluginPart = plugins > 0 ? `, ${plugins} plugin` : "";
+  emit(
+    `Building Cowork plugin: ${catalog.length} skill(s) (${devhub} DevHub, ${aiTools} ai-tools${pluginPart}), ${agentNames.length} agent(s)...`,
+  );
+  emit(`Excluding MCP servers: ${[...excludedServers].sort().join(", ")}`);
+
+  const bundle = coworkBundlePath(repoRoot, opts.outDir);
+  if (opts.dryRun) {
+    emit("(DRY RUN — no changes will be made)");
+    emit(`  WOULD BUILD: ${bundle}`);
+    return { code: 0, skills: catalog.length, agents: agentNames.length, servers: 0, bundlePath: null, unchanged: false };
+  }
+
+  const stage = stagingDir(repoRoot, opts.outDir);
+  const previousHash = fs.existsSync(path.join(stage, CONTENT_HASH_FILE))
+    ? fs.readFileSync(path.join(stage, CONTENT_HASH_FILE), "utf-8").trim()
+    : null;
+
+  try {
+    safeRemovePath(stage);
+    fs.mkdirSync(path.join(stage, "skills"), { recursive: true });
+    fs.mkdirSync(path.join(stage, "agents"), { recursive: true });
+  } catch (e) {
+    emit(`ERROR: Could not prepare staging dir ${stage} (${e instanceof Error ? e.message : String(e)})`);
+    return fail();
+  }
+
+  let skillCount = 0;
+  for (const entry of catalog) {
+    try {
+      // Reused so ai-tools frontmatter gets the same name rewrite as every other target.
+      copySkillForSync(entry, path.join(stage, "skills", entry.name));
+      skillCount++;
+    } catch (e) {
+      emit(`  FAILED: ${entry.name} (${e instanceof Error ? e.message : String(e)})`);
+    }
+  }
+
+  let agentCount = 0;
+  for (const name of agentNames) {
+    const src = agentSources.get(name)?.file;
+    if (!src) continue;
+    try {
+      const raw = fs.readFileSync(src, "utf-8");
+      fs.writeFileSync(path.join(stage, "agents", `${name}.md`), formatAgentForTool(raw, "claude"), "utf-8");
+      agentCount++;
+    } catch (e) {
+      emit(`  FAILED: ${name} (${e instanceof Error ? e.message : String(e)})`);
+    }
+  }
+
+  const servers = buildMcpServerMap(repoRoot, home, excludedServers, emit);
+  fs.writeFileSync(
+    path.join(stage, ".mcp.json"),
+    `${JSON.stringify({ mcpServers: servers }, null, 2)}\n`,
+    "utf-8",
+  );
+
+  writePluginManifest(stage);
+  writeReadme(stage, skillCount, agentCount, Object.keys(servers));
+
+  const hash = hashTree(stage);
+  fs.writeFileSync(path.join(stage, CONTENT_HASH_FILE), `${hash}\n`, "utf-8");
+
+  const result: CoworkBuildResult = {
+    code: 0,
+    skills: skillCount,
+    agents: agentCount,
+    servers: Object.keys(servers).length,
+    bundlePath: bundle,
+    unchanged: false,
+  };
+
+  if (previousHash === hash && fs.existsSync(bundle)) {
+    emit(`Cowork bundle unchanged — skipping rezip (${bundle}).`);
+    return { ...result, unchanged: true };
+  }
+
+  try {
+    const zip = new AdmZip();
+    zip.addLocalFolder(stage, "", (entry) => path.basename(entry) !== ".DS_Store");
+    fs.mkdirSync(path.dirname(bundle), { recursive: true });
+    zip.writeZip(bundle);
+  } catch (e) {
+    emit(`ERROR: Could not write ${bundle} (${e instanceof Error ? e.message : String(e)})`);
+    return fail();
+  }
+
+  emit(
+    `Built ${bundle} — ${skillCount} skill(s), ${agentCount} agent(s), ${result.servers} MCP server(s).`,
+  );
+  emit("Install: attach this .plugin file in a Cowork chat and press Install.");
+  return result;
+}
+
+/**
+ * Confirm the built bundle is structurally sound.
+ *
+ * Separate from `verifySync()` on purpose — that one walks `TOOL_DIRS` looking for
+ * `<root>/<skill>/SKILL.md` on disk, which is meaningless for a zip.
+ */
+export interface VerifyCoworkResult {
+  ok: boolean;
+  skills: number;
+  problems: string[];
+}
+
+export function verifyCoworkPlugin(repoRoot: string, outDir?: string): VerifyCoworkResult {
+  const bundle = coworkBundlePath(repoRoot, outDir);
+  const problems: string[] = [];
+  if (!fs.existsSync(bundle)) {
+    return { ok: false, skills: 0, problems: [`Bundle not found: ${bundle}`] };
+  }
+
+  let names: string[];
+  try {
+    names = new AdmZip(bundle).getEntries().map((e) => e.entryName);
+  } catch (e) {
+    return { ok: false, skills: 0, problems: [`Unreadable zip: ${e instanceof Error ? e.message : String(e)}`] };
+  }
+
+  if (!names.includes(".claude-plugin/plugin.json")) problems.push("Missing .claude-plugin/plugin.json");
+  if (!names.includes(".mcp.json")) problems.push("Missing .mcp.json");
+
+  const skillDirs = new Set(
+    names.filter((n) => n.startsWith("skills/")).map((n) => n.split("/")[1]).filter(Boolean),
+  );
+  for (const dir of skillDirs) {
+    if (!names.includes(`skills/${dir}/SKILL.md`)) problems.push(`Skill missing SKILL.md: ${dir}`);
+  }
+
+  return { ok: problems.length === 0, skills: skillDirs.size, problems };
+}
+
+/** Copy the built bundle somewhere convenient (e.g. ~/Desktop) for attaching to a Cowork chat. */
+export function exportCoworkBundle(repoRoot: string, destDir: string, outDir?: string): string | null {
+  const bundle = coworkBundlePath(repoRoot, outDir);
+  if (!fs.existsSync(bundle)) return null;
+  fs.mkdirSync(destDir, { recursive: true });
+  const dest = path.join(destDir, path.basename(bundle));
+  fs.copyFileSync(bundle, dest);
+  return dest;
+}

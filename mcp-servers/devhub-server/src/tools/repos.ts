@@ -441,12 +441,14 @@ export function registerReposTools(server: McpServer, ctx: Context): void {
       inputSchema: {
         name: nameSchema,
         limit: z.number().int().min(5).max(100).optional().describe("Max commits (default 40)"),
+        offset: z.number().int().min(0).optional().describe("Commits to skip for pagination"),
       },
     },
-    async ({ name, limit }) =>
+    async ({ name, limit, offset }) =>
       withDashboardErrors(async () => {
         const data = await dashboard.get(repoPath(name, "/git/log"), {
           limit: limit ?? 40,
+          offset: offset ?? 0,
         });
         return { content: [{ type: "text", text: jsonText(data) }] };
       }),

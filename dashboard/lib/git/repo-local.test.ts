@@ -6,6 +6,7 @@ import {
   GIT_MAX_BUFFER_BYTES,
   GIT_NETWORK_TIMEOUT_MS,
   isGitNetworkCommand,
+  remoteWebUrl,
   runGitRepo,
   runGitRepoAsync,
 } from "@/lib/git/repo-local";
@@ -59,5 +60,31 @@ describe("isGitNetworkCommand", () => {
     });
     expect(asyncResult.status).not.toBe(0);
     expect(asyncResult.stderr).toMatch(/output exceeded.*32-byte limit/i);
+  });
+});
+
+describe("remoteWebUrl", () => {
+  it("converts the remote shapes a repo is actually cloned with", () => {
+    expect(remoteWebUrl("git@github.com:acme/widgets.git")).toBe("https://github.com/acme/widgets");
+    expect(remoteWebUrl("ssh://git@github.com/acme/widgets.git")).toBe(
+      "https://github.com/acme/widgets",
+    );
+    expect(remoteWebUrl("ssh://git@ssh.github.com:443/acme/widgets")).toBe(
+      "https://ssh.github.com/acme/widgets",
+    );
+    expect(remoteWebUrl("https://github.com/acme/widgets.git")).toBe(
+      "https://github.com/acme/widgets",
+    );
+    expect(remoteWebUrl("http://git.internal/acme/widgets")).toBe(
+      "https://git.internal/acme/widgets",
+    );
+    expect(remoteWebUrl("https://token:secret@github.com/acme/widgets.git")).toBe(
+      "https://github.com/acme/widgets",
+    );
+  });
+
+  it("returns null when there is nothing browsable", () => {
+    expect(remoteWebUrl(null)).toBeNull();
+    expect(remoteWebUrl("/srv/git/widgets.git")).toBeNull();
   });
 });

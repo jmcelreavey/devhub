@@ -8,9 +8,10 @@ import { isDesktop } from "@/lib/desktop/bridge";
 
 /**
  * Top-bar tab strip for merged destinations (2026-06 IA): when the current
- * route belongs to the Library (/notes, /docs, …) or System (/status, /ops,
- * …) families, show its sibling pages as tabs. Gated tabs only appear when
- * their integration is configured — same source of truth as the sidebar.
+ * route belongs to the Library (/notes, /docs, …) or System (/status, /logs,
+ * …) families, show its sibling pages as tabs. BI destinations (Ops, Datadog)
+ * are first-class sidebar items under the BI group — no top-bar strip. Gated
+ * tabs only appear when their integration is configured.
  */
 export function SectionTabs() {
   const pathname = usePathname();

@@ -125,6 +125,7 @@ export function buildHunkPatch(
   hunkIndex: number,
   filePath: string,
   selectedBodyIndexes?: number[],
+  reverse = false,
 ): string | null {
   const hunk = fileDiff.hunks[hunkIndex];
   if (!hunk) return null;
@@ -144,14 +145,25 @@ export function buildHunkPatch(
         rebuilt.push(line);
         continue;
       }
-      if (line.startsWith("+")) {
+      /*
+       * An unselected change line has to be accounted for on whichever side
+       * already exists in the target, and which side that is flips with the
+       * direction of the patch.
+       *
+       * Staging (forward, applied to the index): an unselected addition is not
+       * in the index yet, so it is omitted; an unselected deletion is still
+       * there, so it becomes context.
+       *
+       * Unstaging (reverse): the diff being read is the staged one, so an
+       * unselected addition *is* in the index and must appear as context, while
+       * an unselected deletion is already gone and must be omitted. Reversing
+       * these was silently corrupting line-level unstaging — the reverse apply
+       * either failed or removed a line the user had not selected.
+       */
+      const keepAsContext = reverse ? "+" : "-";
+      if (line.startsWith("+") || line.startsWith("-")) {
         if (selected.has(i)) rebuilt.push(line);
-        // unselected additions are omitted (not applied)
-        continue;
-      }
-      if (line.startsWith("-")) {
-        if (selected.has(i)) rebuilt.push(line);
-        else rebuilt.push(` ${line.slice(1)}`); // keep as context so patch applies
+        else if (line.startsWith(keepAsContext)) rebuilt.push(` ${line.slice(1)}`);
         continue;
       }
       // context
@@ -216,7 +228,13 @@ export async function stageDiffHunk(opts: {
   reverse: boolean;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const parsed = parseFileDiff(opts.rawDiff);
-  const patch = buildHunkPatch(parsed, opts.hunkIndex, opts.filePath, opts.lineIndexes);
+  const patch = buildHunkPatch(
+    parsed,
+    opts.hunkIndex,
+    opts.filePath,
+    opts.lineIndexes,
+    opts.reverse,
+  );
   if (!patch) return { ok: false, error: "Hunk not found" };
   return applyCachedPatch(opts.repoRoot, patch, opts.reverse);
 }

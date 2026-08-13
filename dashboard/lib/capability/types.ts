@@ -47,6 +47,8 @@ export interface RepoScan {
   signals: DetectedSignal[];
   /** Personal exposure per signal id → ISO date you last touched its files. */
   lastTouchedByMe: Record<string, string | null>;
+  /** Ownership domains and familiarity, present for locally owned repos. */
+  ownership?: import("@/lib/ownership/types").RepoOwnershipEvidence;
 }
 
 export interface SignalRollup {

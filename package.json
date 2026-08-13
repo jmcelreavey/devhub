@@ -21,6 +21,8 @@
     "typecheck": "npm run typecheck --prefix ./dashboard",
     "test": "npm run test --prefix ./dashboard",
     "doctor": "npm run doctor --prefix ./dashboard",
+    "skills:verify-vendor": "npm run skills:verify-vendor --prefix ./dashboard",
+    "skills:demos": "bash scripts/skill-evals/record-demos.sh",
     "docs:diagrams": "npm run docs:diagrams --prefix ./dashboard",
     "setup": "npm run setup --prefix ./dashboard",
     "clean": "npm run clean --prefix ./dashboard",

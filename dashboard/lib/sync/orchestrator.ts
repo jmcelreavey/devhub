@@ -11,6 +11,7 @@ import { withPersistedLog } from "@/lib/git/hook-failure-persist";
 import { runGitRepo } from "@/lib/git/repo-local";
 import { syncSkills, verifySync } from "@/lib/sync/skills";
 import { syncAgents } from "@/lib/sync/agents";
+import { buildCoworkPlugin, verifyCoworkPlugin } from "@/lib/sync/cowork";
 import { syncPersona } from "@/lib/sync/persona";
 import { syncOpencodeConfig } from "@/lib/sync/opencode-config";
 import { collectSkills } from "@/lib/collect/skills";
@@ -372,6 +373,26 @@ export async function updateAndSync(opts: OrchestratorOptions): Promise<number> 
   if (!opts.dryRun) {
     emit("Verifying skill sync health...");
     await verifySync({ emit, repoRoot });
+  }
+
+  // 4b. Build the Cowork bundle. Cowork is a build target, not a copy target — it has
+  // no directory to sync into, so it sits outside TOOL_DIRS and verifySync. A failure
+  // here is non-fatal: every other tool has already been synced by this point.
+  emit("Building Cowork plugin bundle...");
+  try {
+    const cowork = await buildCoworkPlugin({ emit, repoRoot, dryRun: opts.dryRun });
+    if (cowork.code === 0 && !opts.dryRun && !cowork.unchanged) {
+      const check = verifyCoworkPlugin(repoRoot);
+      if (check.ok) {
+        emit(`Cowork bundle health OK — ${check.skills} skill(s) verified in the bundle.`);
+      } else {
+        emit("=== Cowork Bundle Warnings ===");
+        for (const problem of check.problems) emit(`  ${problem}`);
+      }
+    }
+  } catch (e) {
+    emit(`WARNING: Cowork bundle build failed (${e instanceof Error ? e.message : String(e)}).`);
+    emit("WARNING: Other sync targets were unaffected.");
   }
 
   // 5. Sync persona

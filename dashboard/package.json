@@ -18,6 +18,7 @@
     "prestart": "tsx scripts/run-action.ts sync_plugins && tsx scripts/health-check.ts && tsx scripts/ensure-peers-current.ts",
     "restart": "tsx scripts/restart.ts",
     "doctor": "tsx scripts/doctor.ts",
+    "skills:verify-vendor": "tsx scripts/verify-vendor-skills.ts",
     "briefing:research": "tsx scripts/run-last30days-interests.ts",
     "clean": "rm -rf .next .next-verify output",
     "lint": "eslint --max-warnings 0",

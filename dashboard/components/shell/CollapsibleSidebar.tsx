@@ -8,11 +8,11 @@ import { NavLaunchMenu } from "@/components/shell/NavLaunchMenu";
 import {
   NAV_ITEMS,
   NAV_GROUPS,
-  filterNavBySetup,
-  type NavGroup,
+  groupSidebarNav,
   type NavItem,
   type SetupGateStatus,
 } from "@/lib/nav";
+import { PLUGIN_NAV_ITEMS } from "@/lib/plugin-nav.generated";
 import { IconPicker } from "@/components/ui/IconPicker";
 import { BRAND_LABEL } from "@/lib/brand-mark";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -55,18 +55,20 @@ export function CollapsibleSidebar() {
   const toggle = () => setCollapsed((prev) => !prev);
 
   const { grouped, hiddenCount } = useMemo(() => {
-    const applicable = NAV_ITEMS.filter((i) => !i.desktopOnly || isDesktop);
-    const visible = filterNavBySetup(applicable, setup ?? null);
-    const map: Record<NavGroup, NavItem[]> = {
-      workspace: [],
-      library: [],
-      system: [],
-    };
-    for (const item of visible) map[item.group].push(item);
+    const coreApplicable = NAV_ITEMS.filter((i) => !i.desktopOnly || isDesktop);
+    const pluginApplicable = PLUGIN_NAV_ITEMS.filter((i) => !i.desktopOnly || isDesktop);
+    const groupedNav = groupSidebarNav(NAV_ITEMS, PLUGIN_NAV_ITEMS, {
+      includeDesktopOnly: isDesktop,
+      setup: setup ?? null,
+    });
+    const visibleCount = NAV_GROUPS.reduce((n, g) => n + groupedNav[g.id].length, 0);
     // Sections gated off don't just look absent - to a new user they look like
     // features DevHub doesn't have. One quiet line makes them discoverable
     // without turning the sidebar into an advertisement for things you can't use.
-    return { grouped: map, hiddenCount: applicable.length - visible.length };
+    return {
+      grouped: groupedNav,
+      hiddenCount: coreApplicable.length + pluginApplicable.length - visibleCount,
+    };
   }, [isDesktop, setup]);
 
   const width = collapsed ? 44 : 232;

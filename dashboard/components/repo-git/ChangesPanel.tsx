@@ -306,7 +306,9 @@ export function ChangesPanel({
         lineIndexes: opts.lineIndexes,
       });
       if (!result.ok) throw new Error(result.kind === "error" ? result.message : result.kind);
-      toast.success(selected.staged ? "Unstaged hunk" : "Staged hunk");
+      const count = opts.lineIndexes?.length ?? 0;
+      const what = count > 0 ? `${count} line${count === 1 ? "" : "s"}` : "hunk";
+      toast.success(selected.staged ? `Unstaged ${what}` : `Staged ${what}`);
       onMutate();
       await refresh();
     } catch (err) {

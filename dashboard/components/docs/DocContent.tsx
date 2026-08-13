@@ -10,6 +10,7 @@ import {
   OctagonAlert,
 } from "lucide-react";
 import { DocCodeBlock } from "@/components/docs/DocCodeBlock";
+import { resolveDocAssets } from "@/lib/docs/asset-src";
 import { DocMermaid } from "@/components/docs/DocMermaid";
 import type {
   CalloutVariant,
@@ -215,10 +216,15 @@ function NodeView({ node }: { node: DocNode }): ReactNode {
   }
 }
 
-export function DocContent({ nodes }: { nodes: DocNode[] }) {
+export function DocContent({ nodes, docPath }: { nodes: DocNode[]; docPath?: string }) {
+  // Resolved once here rather than per-<img> during render. This is a Server
+  // Component, so a React context is not available — and a whole-tree pass is
+  // the better shape regardless: it keeps the renderer a pure function of its
+  // nodes and confines path knowledge to one call.
+  const resolved = resolveDocAssets(nodes, docPath);
   return (
     <>
-      {nodes.map((node, i) => (
+      {resolved.map((node, i) => (
         <NodeView key={i} node={node} />
       ))}
     </>

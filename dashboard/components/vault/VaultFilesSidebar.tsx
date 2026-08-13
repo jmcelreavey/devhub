@@ -45,6 +45,8 @@ export function VaultFilesSidebar({
   onNew,
   title = "FILES",
   searchPlaceholder = "Search…",
+  storageId,
+  newLabel,
   children,
 }: {
   vault: VaultId;
@@ -54,13 +56,19 @@ export function VaultFilesSidebar({
   /** Panel label. Docs use "DOCS" since they browse a nav, not a file tree. */
   title?: string;
   searchPlaceholder?: string;
+  /** Persist collapse/width under a different id (e.g. diagrams reuses notes vault). */
+  storageId?: string;
+  /** Override vault.itemLabel in New button titles. */
+  newLabel?: string;
   /** Replaces the raw file tree. Docs pass a section-grouped nav instead. */
   children?: ReactNode;
 }) {
   const vault = getVaultClient(vaultId);
-  const collapsedKey = `${vaultId}-files-sidebar-collapsed`;
-  const widthKey = `${vaultId}-files-sidebar-width`;
-  const storageEvent = `devhub:${vaultId}-files-sidebar-storage`;
+  const persistId = storageId ?? vaultId;
+  const itemLabel = newLabel ?? vault.itemLabel;
+  const collapsedKey = `${persistId}-files-sidebar-collapsed`;
+  const widthKey = `${persistId}-files-sidebar-width`;
+  const storageEvent = `devhub:${persistId}-files-sidebar-storage`;
   const usePersistedBool = createPersistedBoolStore(storageEvent);
 
   const isMobile = useIsMobile();
@@ -137,8 +145,8 @@ export function VaultFilesSidebar({
             type="button"
             onClick={onNew}
             className="flex items-center justify-center rounded p-1.5 text-accent"
-            title={`New ${vault.itemLabel}`}
-            aria-label={`New ${vault.itemLabel}`}
+            title={`New ${itemLabel}`}
+            aria-label={`New ${itemLabel}`}
           >
             <Plus size={14} strokeWidth={2.5} aria-hidden />
           </button>
@@ -155,7 +163,7 @@ export function VaultFilesSidebar({
                 onClick={onNew}
                 className="text-xs px-1.5 py-0.5 rounded"
                 style={{ color: "var(--accent)", background: "var(--bg-elevated)" }}
-                title={`New ${vault.itemLabel}`}
+                title={`New ${itemLabel}`}
               >
                 <Plus size={12} aria-hidden />
               </button>

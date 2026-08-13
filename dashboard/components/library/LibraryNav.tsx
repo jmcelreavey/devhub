@@ -19,6 +19,8 @@ export interface LibraryNavGroup {
   /** Collapsed even when it is the active group. */
   secondary?: boolean;
   deletable?: boolean;
+  /** Overrides `${basePath}/${id}` for the group heading link. */
+  href?: string;
   items: LibraryNavItem[];
 }
 
@@ -98,6 +100,7 @@ export function LibraryNav({
   noun = "items",
   deletingGroup,
   onDeleteGroup,
+  activeGroupId,
 }: {
   groups: LibraryNavGroup[];
   search: string;
@@ -110,17 +113,22 @@ export function LibraryNav({
   noun?: string;
   deletingGroup?: string | null;
   onDeleteGroup?: (group: LibraryNavGroup) => void;
+  /** When set, wins over pathname-derived active group (e.g. diagrams `?folder=`). */
+  activeGroupId?: string | null;
 }) {
   const pathname = usePathname();
   const query = search.trim().toLowerCase();
 
   const activeGroup = useMemo(() => {
+    if (activeGroupId != null && activeGroupId !== "") {
+      return groups.some((group) => group.id === activeGroupId) ? activeGroupId : null;
+    }
     const match = groups.find((group) => group.items.some((item) => item.href === pathname));
     if (match) return match.id;
     // Area index pages (/docs/guides) have no item of their own.
     const fromPath = pathname.replace(new RegExp(`^${basePath}/?`), "").split("/")[0];
     return groups.some((group) => group.id === fromPath) ? fromPath : null;
-  }, [groups, pathname, basePath]);
+  }, [activeGroupId, groups, pathname, basePath]);
 
   const subscribe = useCallback(
     (onChange: () => void) => subscribeManual(storageKey, onChange),
@@ -182,7 +190,7 @@ export function LibraryNav({
                 <ChevronDown size={11} className="lib-nav-chevron" aria-hidden />
               </button>
               <Link
-                href={`${basePath}/${group.id}`}
+                href={group.href ?? `${basePath}/${group.id}`}
                 className="lib-nav-heading"
                 data-active={group.id === activeGroup}
               >

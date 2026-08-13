@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const EntityRefSchema = z.object({
-  kind: z.enum(["task", "meeting", "pr", "note", "calendar", "jira", "repo"]),
+  kind: z.enum(["task", "meeting", "pr", "note", "diagram", "calendar", "jira", "repo"]),
   id: z.string().min(1).max(200),
   label: z.string().min(1).max(200),
   href: z.string().max(1000).optional(),

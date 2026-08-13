@@ -981,16 +981,32 @@ a:focus-visible {
 /* ─── Toast ─── */
 .toast-stack {
   position: fixed;
+  top: auto;
+  left: auto;
   bottom: 16px;
   right: 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  /* Above git workspace modal (260) + hook dialog (280). Was 200 (= --z-overlay),
-     which buried push success/error toasts under the open modal — looked like silence. */
+  /* z-index only orders the normal layer. The git workspace is a modal <dialog>,
+     which paints in the *top* layer along with its scrim, so no z-index could
+     lift a plain div above it — push toasts were rendering behind the modal and
+     looked like silence. ToastProvider shows this stack as a popover, which
+     enters the same top layer; the z-index below is the non-popover fallback.
+     Above git workspace modal (260) + hook dialog (280). */
   z-index: var(--z-toast);
   max-width: calc(100vw - 32px);
   pointer-events: none;
+  /* Beat the UA popover defaults (inset: 0, auto margins, border, padding,
+     canvas background) without losing the fallback layout above. */
+  width: auto;
+  height: auto;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  overflow: visible;
 }
 .toast {
   pointer-events: auto;
@@ -2366,6 +2382,20 @@ body[data-grid-resizing="true"] * {
 .task-row:hover .task-row-content,
 .task-row:focus-within .task-row-content {
   padding-right: var(--task-action-space);
+}
+
+/* Wrap at rest (2-line cap). Hover padding may shrink width; clamp so
+   action pills cannot force a 3rd line. 1-line titles that still fit
+   beside Review/meta are not ellipsized. */
+.task-row-title {
+  min-width: 0;
+  flex: 1 1 min(100%, 12rem);
+  overflow-wrap: break-word;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 /* Right-aligned meta cluster (Jira status pill, due date, timer readout). Anchored
@@ -4653,6 +4683,98 @@ body.sortable-dragging * {
   z-index: var(--z-dropdown);
 }
 
+/* ── Right-click context menus ── */
+.context-menu {
+  /* Popover top-layer when open; inset/margin reset beats UA popover defaults. */
+  position: fixed;
+  inset: unset;
+  margin: 0;
+  z-index: var(--z-prompt);
+  display: flex;
+  min-width: 236px;
+  max-width: 320px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid color-mix(in oklab, var(--border) 70%, var(--text) 30%);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text);
+  box-shadow:
+    0 18px 42px rgba(0, 0, 0, 0.58),
+    0 0 0 1px color-mix(in oklab, var(--bg-overlay) 55%, transparent);
+}
+.context-menu:not(:popover-open)[hidden] {
+  display: none;
+}
+.context-menu-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.context-menu-divider {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+}
+.context-menu-group-label {
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+.context-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
+}
+.context-menu-item:hover:not(:disabled) {
+  background: var(--bg-overlay);
+  color: var(--text);
+}
+.context-menu-item:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+.context-menu-item[data-danger="true"] .context-menu-label {
+  color: var(--danger, #c44);
+}
+.context-menu-item:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
+  outline-offset: -2px;
+  color: var(--text);
+}
+.context-menu-icon {
+  display: inline-flex;
+  margin-top: 2px;
+  color: var(--text-subtle);
+}
+.context-menu-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+.context-menu-label {
+  font-size: 12px;
+  line-height: 1.3;
+}
+.context-menu-description {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-subtle);
+}
+
 /* ── Generic launcher dropdowns ── */
 .launch-menu-wrap {
   position: relative;
@@ -6185,6 +6307,101 @@ body[data-motion="off"] .evolution-arrow {
   color: var(--accent);
   white-space: nowrap;
 }
+.repo-git-branch-hint {
+  padding: 2px 2px 6px;
+  font-size: 10.5px;
+  color: var(--text-subtle);
+}
+/* Branch filter box. Deliberately not `.repo-git-filter`: that one grows to
+   fill a horizontal toolbar, and this panel is a flex column. */
+.repo-git-branch-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  margin: 0 2px 4px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-surface);
+  color: var(--text-subtle);
+}
+.repo-git-branch-filter input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 5px 0;
+  font-size: 11px;
+  color: var(--text);
+}
+.repo-git-branch-filter input:focus {
+  outline: none;
+}
+.repo-git-branch-filter:focus-within {
+  border-color: color-mix(in oklab, var(--accent) 55%, var(--border));
+}
+/* Family header inside a branch list — `feature/`, `PTF-`, and so on. Sticky so
+   the group you are scrolled into stays named. */
+.repo-git-branch-group {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 50%, transparent);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+.repo-git-branch-group-count {
+  font-weight: 400;
+  letter-spacing: 0;
+  opacity: 0.7;
+}
+/* A reflog entry nothing points at any more. Marked rather than merely listed,
+   because it is the one kind that disappears if it is not acted on. */
+.repo-git-branch-row[data-unreachable] {
+  box-shadow: inset 2px 0 0 color-mix(in oklab, var(--warning) 70%, transparent);
+}
+/* Line-level staging. Only changed lines are clickable — context lines cannot be
+   staged independently, so making them look interactive would be a lie. */
+.repo-git-diff-selectable {
+  cursor: pointer;
+}
+.repo-git-diff-selectable:hover {
+  filter: brightness(1.15);
+}
+.repo-git-diff-line[data-selected] {
+  box-shadow: inset 3px 0 0 var(--accent);
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+}
+/* Floats over the diff rather than sitting above it. Inserted in flow, the bar
+   appeared on the first click and pushed every following line down by its own
+   height — so the second line you went to click had already moved. */
+.repo-git-diff-selection-bar {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border: 1px solid color-mix(in oklab, var(--accent) 45%, var(--border));
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.35);
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+}
 .repo-git-branch-list {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm, 6px);
@@ -6281,9 +6498,21 @@ body[data-repo-git-split-dragging] {
   overflow: hidden;
 }
 .repo-git-commit-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
   padding: 10px 12px 8px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+.repo-git-commit-meta-main {
+  min-width: 0;
+  flex: 1;
+}
+.repo-git-commit-meta-avatar {
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 .repo-git-commit-meta-top {
   display: flex;
@@ -6306,6 +6535,12 @@ body[data-repo-git-split-dragging] {
   color: var(--text-muted);
   white-space: pre-wrap;
   line-height: 1.4;
+  /* Squash/merge bodies used to grow the header until the files pane had
+     nowhere to go. Cap the message so the file list stays on screen. */
+  max-height: min(9.5rem, 22vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .repo-git-commit-byline {
   display: flex;
@@ -6440,7 +6675,7 @@ button.conflict-path-row:not(:disabled):active {
 }
 .repo-git-graph-row {
   display: grid;
-  grid-template-columns: 4.2rem minmax(0, 1fr) auto minmax(6.5rem, 9rem);
+  grid-template-columns: 4.2rem minmax(0, 1fr) auto minmax(8rem, 10.5rem);
   align-items: center;
   gap: 8px;
   width: 100%;
@@ -6481,6 +6716,16 @@ button.conflict-path-row:not(:disabled):active {
   gap: 4px;
   flex-wrap: wrap;
 }
+/* Grid rather than a right-aligned flex row: with flex the avatar's position
+   followed the length of the author's name, so the column read as ragged dots
+   instead of a rail your eye can scan down. */
+.repo-git-graph-author {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
 .repo-git-graph-meta {
   display: flex;
   flex-direction: column;
@@ -6490,6 +6735,49 @@ button.conflict-path-row:not(:disabled):active {
   font-size: 10px;
   min-width: 0;
   line-height: 1.25;
+}
+/* The initials disc sits in the box itself and the remote image covers it, so
+   an avatar that 404s or never loads leaves something readable rather than a
+   hole. Both layers share the box, which is why there is no layout shift. */
+.repo-git-avatar {
+  position: relative;
+  flex-shrink: 0;
+  display: block;
+  border-radius: 50%;
+  overflow: hidden;
+  user-select: none;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.25);
+}
+.repo-git-avatar svg {
+  display: block;
+}
+.repo-git-avatar-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+button.repo-git-avatar-zoom {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+  color: inherit;
+  font: inherit;
+}
+button.repo-git-avatar-zoom:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+}
+.repo-git-avatar-full {
+  display: block;
+  width: min(28rem, 100%);
+  max-height: min(70vh, 32rem);
+  margin-inline: auto;
+  object-fit: contain;
+  border-radius: 8px;
 }
 .repo-git-graph-date {
   white-space: nowrap;
@@ -6520,6 +6808,79 @@ button.conflict-path-row:not(:disabled):active {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  overflow: auto;
+}
+.repo-git-conflict-sides {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid var(--border);
+}
+.repo-git-conflict-side {
+  min-width: 0;
+  border-right: 1px solid var(--border);
+}
+.repo-git-conflict-side:last-child {
+  border-right: 0;
+}
+.repo-git-conflict-side > div {
+  padding: 6px 8px;
+  color: var(--text-subtle);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border);
+}
+.repo-git-conflict-side pre {
+  min-height: 72px;
+  max-height: 180px;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  color: var(--text);
+  background: var(--bg);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+.repo-git-conflict-note {
+  padding: 6px 10px;
+  color: var(--warning);
+  font-size: 11px;
+  border-bottom: 1px solid var(--border);
+}
+.repo-git-conflict-whole-actions,
+.repo-git-conflict-hunk {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  color: var(--text-subtle);
+  font-size: 11px;
+  border-bottom: 1px solid var(--border);
+}
+.repo-git-conflict-hunks {
+  background: color-mix(in srgb, var(--warning) 5%, var(--bg-surface));
+}
+.repo-git-conflict-hunk > span {
+  min-width: 70px;
+  color: var(--warning);
+  font-weight: 600;
+}
+.repo-git-conflict-footer {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 900px) {
+  .repo-git-conflict-sides {
+    grid-template-columns: 1fr;
+  }
+  .repo-git-conflict-side {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
 }
 .repo-git-conflict-textarea {
   flex: 1;
@@ -6574,7 +6935,9 @@ button.conflict-path-row:not(:disabled):active {
   color: var(--text-subtle);
   cursor: pointer;
   opacity: 0;
-  transition: opacity var(--dur-quick) var(--ease-swift), color var(--dur-quick) var(--ease-swift);
+  transition:
+    opacity var(--dur-quick) var(--ease-swift),
+    color var(--dur-quick) var(--ease-swift);
 }
 .repo-git-blame-history-item:hover .repo-git-blame-history-open,
 .repo-git-blame-history-open:focus-visible {
@@ -6689,7 +7052,10 @@ button.repo-git-blame-history-row {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm, 6px);
   background: var(--bg-elevated, var(--bg-surface));
-  box-shadow: var(--shadow-md, 0 8px 24px color-mix(in oklab, #000 18%, transparent));
+  box-shadow: var(
+    --shadow-md,
+    0 8px 24px color-mix(in oklab, #000 18%, transparent)
+  );
 }
 .repo-git-blame-suggestion {
   display: flex;
@@ -7542,6 +7908,9 @@ ul.docs-list ul.docs-list {
 .entity-link-chip[data-kind="note"] {
   --chip-tint: var(--accent);
 }
+.entity-link-chip[data-kind="diagram"] {
+  --chip-tint: var(--info);
+}
 .entity-link-chip[data-kind="pr"] {
   --chip-tint: var(--success);
 }
@@ -7584,6 +7953,57 @@ button.entity-link-chip-more {
   cursor: pointer;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+}
+
+/* Seed-owned hop links (task.links) can be removed without opening a dialog. */
+.entity-link-chip-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  max-width: 14rem;
+}
+
+.entity-link-chip-item .entity-link-chip {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+  max-width: 12rem;
+}
+
+.entity-link-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 100%;
+  min-height: 18px;
+  padding: 0;
+  border: 1px solid var(--border-muted);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    color var(--dur-quick) var(--ease-swift),
+    border-color var(--dur-quick) var(--ease-swift),
+    background var(--dur-quick) var(--ease-swift);
+}
+
+.entity-link-chip-remove:hover:not(:disabled) {
+  color: var(--danger, #c44);
+  border-color: color-mix(in oklab, var(--danger, #c44) 35%, transparent);
+  background: color-mix(in oklab, var(--danger, #c44) 12%, transparent);
+}
+
+.entity-link-chip-remove:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--danger, #c44) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.entity-link-chip-remove:disabled {
+  opacity: 0.5;
+  cursor: wait;
 }
 
 .entity-rel-kind {
@@ -8646,7 +9066,6 @@ body[data-motion="off"] .lib-card-icon {
   opacity: 0.3;
 }
 
-
 /* Open PR affordance on local repo cards */
 .repo-open-pr-link {
   display: inline-flex;
@@ -8879,6 +9298,21 @@ body[data-motion="off"] .lib-card-icon {
   background: color-mix(in oklab, var(--success) 16%, transparent);
   color: var(--success);
 }
-.repo-git-graph-row[data-on-main]:not([data-selected]) {
+/* The checked-out branch. Previously it rendered identically to every other
+   ref, so on a repo with several similarly-named branches there was nothing on
+   screen saying which one you were standing on. Filled rather than tinted
+   because it has to win against whatever else is on the row. */
+.repo-git-ref-chip[data-tone="head"] {
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 45%, transparent);
+}
+.repo-git-graph-row[data-on-main]:not([data-selected]):not([data-head]) {
   box-shadow: inset 2px 0 0 color-mix(in oklab, var(--success) 65%, transparent);
+}
+/* HEAD outranks the on-main and unpushed markers on the same edge. */
+.repo-git-graph-row[data-head]:not([data-selected]) {
+  box-shadow: inset 2px 0 0 var(--accent);
+  background: color-mix(in oklab, var(--accent) 7%, transparent);
 }

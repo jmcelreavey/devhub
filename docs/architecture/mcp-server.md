@@ -103,6 +103,12 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 | Share      | `share_list`, `share_publish`, `share_one_time`, `share_revoke` — parity with the editor **Share** / **One-time** buttons; registry stays in the dashboard process                                                                                                                                                                                            |
 | Workspace  | `skills_list`, `skills_read`, `context_pack`, `collections_list`, `jobs_list`, `jobs_get`, `research_list`, `radar_personal`, `persona_list`, `learnings_list`, `agents_list`, `briefing_tasks` — read-only GET proxies for dashboard areas that had no MCP coverage                                                                                           |
 | Datadog    | `datadog_oncall`, `datadog_recent_alerts`, `datadog_investigate`                                                                                                                                                                                                                                                                                              |
+| Recall     | `recall`, `recall_graph`, `recall_remember`, `recall_index`                                                                                                                                                                                                                                                                                                   |
+
+`recall` is the one an agent should reach for first. `search` answers "which
+files contain these words"; `recall` answers "what do I already know about
+this", returning ranked, budgeted, cited passages drawn from notes, docs, task
+history and the event spine together. See [Recall](recall.md).
 
 BI-specific MCP tools are contributed by the private BI plugin as a separate server; they are not part of the core DevHub server.
 
@@ -341,3 +347,32 @@ The server is scoped to configured local directories plus documented dashboard
 routes. It is not a general filesystem API.
 
 Keep secrets out of notes and docs unless you intentionally want them committed in this private mirror. Public/template backports must still respect the personal-data boundary in `CONTRIBUTING.md`. Dashboard integrations may use local secrets from `.env.local` or configured credential stores, but MCP responses should still be treated as local developer data.
+
+## Rendered results (MCP-UI seam)
+
+Every tool answers with `{ type: "text" }`, so a task list arrives as markdown
+the model re-reads and reformats and the user cannot click. MCP-UI clients can
+render an HTML resource inline instead.
+
+`src/ui.ts` is the seam. It is **off unless `DEVHUB_MCP_UI=1`**, and when on,
+`uiResult()` emits the text answer *first* and attaches the resource beside it:
+
+```ts
+return uiResult(summary, html, `ui://devhub/tasks/${target}`);
+```
+
+That ordering is the whole compatibility story. Client support is uneven, and a
+tool returning only a UI resource is broken in every client that cannot render
+it — so non-supporting clients keep seeing exactly what they see today. The
+`text` argument is required rather than optional for the same reason: making it
+easy to omit guarantees somebody eventually ships a tool that renders nowhere.
+
+**One tool is wired (`tasks_list`), deliberately.** Converting twenty tools to a
+rendering contract nobody has exercised against a real client is how you end up
+with twenty tools to revise.
+
+Widgets are self-contained documents: no scripts, no external references, no
+network, and everything interpolated goes through `escapeHtml`. The client
+renders this in *its* trust context, so a widget steerable by note content would
+be a content-injection vector into the client. Styling adapts via
+`prefers-color-scheme` because the host theme is not queryable.

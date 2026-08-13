@@ -104,10 +104,15 @@ describe("parseGraphLog + layout", () => {
     );
     expect(commits).toHaveLength(2);
     expect(commits[0]?.refs).toContain("main");
+    // "HEAD -> main" used to be flattened away; the decoration is now readable.
+    expect(commits[0]?.isHead).toBe(true);
+    expect(commits[0]?.headBranch).toBe("main");
+    expect(commits[0]?.refs).not.toContain("HEAD");
+    expect(commits[1]?.isHead).toBe(false);
     const layout = layoutCommitGraph(commits);
     expect(layout[0]?.lane).toBe(0);
     expect(layout[0]?.parentLanes[0]?.lane).toBe(0);
-    expect(laneColor(0)).toContain("accent");
+    expect(laneColor(0)).toMatch(/^#[0-9a-f]{6}$/);
   });
 });
 

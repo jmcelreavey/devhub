@@ -20,9 +20,22 @@ interface ConfirmOptions {
   };
 }
 
-type PendingConfirm =
+/**
+ * Each request carries an `id`.
+ *
+ * The dialog seeds its input from `defaultValue` with `useState`, which only
+ * reads on mount. Two prompts in a row — "name?" then "URL?" — set `pending`
+ * to null and straight back again, and React reconciles that as the same
+ * component rather than a remount, so the second prompt opened still holding
+ * the first one's answer and typing appended to it. Keying on the id makes each
+ * request a distinct instance, which is what it always was conceptually.
+ */
+type PendingConfirm = { id: number } & (
   | (ConfirmOptions & { kind: "confirm"; resolve: (ok: boolean) => void })
-  | (ConfirmOptions & { kind: "prompt"; resolve: (value: string | null) => void });
+  | (ConfirmOptions & { kind: "prompt"; resolve: (value: string | null) => void })
+);
+
+let nextPendingId = 0;
 
 interface ConfirmContextValue {
   request: (opts: ConfirmOptions) => Promise<boolean>;
@@ -36,13 +49,13 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
 
   const request = useCallback((opts: ConfirmOptions): Promise<boolean> => {
     return new Promise<boolean>((resolve) => {
-      setPending({ ...opts, kind: "confirm", resolve });
+      setPending({ ...opts, id: (nextPendingId += 1), kind: "confirm", resolve });
     });
   }, []);
 
   const requestString = useCallback((opts: ConfirmOptions): Promise<string | null> => {
     return new Promise<string | null>((resolve) => {
-      setPending({ ...opts, kind: "prompt", resolve });
+      setPending({ ...opts, id: (nextPendingId += 1), kind: "prompt", resolve });
     });
   }, []);
 
@@ -73,6 +86,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       {children}
       {pending && (
         <ConfirmDialogView
+          key={pending.id}
           pending={pending}
           onConfirm={closeConfirm}
           onPrompt={closePrompt}

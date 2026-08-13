@@ -19,8 +19,10 @@ import { registerReposTools } from "./tools/repos.ts";
 import { registerDatadogTools } from "./tools/datadog.ts";
 import { registerCapabilityTools } from "./tools/capability.ts";
 import { registerSessionTools } from "./tools/sessions.ts";
+import { registerRecallTools } from "./tools/recall.ts";
 import { registerShareTools } from "./tools/share.ts";
 import { registerWorkspaceTools } from "./tools/workspace.ts";
+import { registerOwnershipTools } from "./tools/ownership.ts";
 
 const server = new McpServer({
   name: "devhub",
@@ -47,9 +49,11 @@ registerAssetsTools(server, ctx);
 registerSearchTools(server, ctx);
 registerScriptsTools(server, ctx);
 registerReposTools(server, ctx);
+registerOwnershipTools(server, ctx);
 registerDatadogTools(server, ctx);
 registerCapabilityTools(server, ctx);
 registerSessionTools(server, ctx);
+registerRecallTools(server, ctx);
 registerShareTools(server, ctx);
 registerWorkspaceTools(server, ctx);
 

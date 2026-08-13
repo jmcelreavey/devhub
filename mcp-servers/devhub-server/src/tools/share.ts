@@ -42,7 +42,7 @@ const vaultParam = z
 const pathParam = z
   .string()
   .min(1)
-  .describe("Vault-relative path without extension (e.g. 'learnings/tools', 'daily/2026-08-05')");
+  .describe("Vault-relative path without extension (e.g. 'learnings/tools', 'daily/2026-08-05', 'diagrams/Acme/flow')");
 
 function relative(ms: number): string {
   const diff = ms - Date.now();
@@ -101,7 +101,7 @@ export function registerShareTools(server: McpServer, ctx: Context): void {
     "share_publish",
     {
       description:
-        "Publish a note or doc as a secret GitHub Gist — a stable, updatable link. Re-running on an already-shared note pushes the current content to the same URL. Use share_one_time instead when the content should self-destruct after one read. Requires `gh` authenticated.",
+        "Publish a note, doc, or diagram (notes vault path under diagrams/) as a secret GitHub Gist — a stable, updatable link. Re-running on an already-shared path pushes the current content to the same URL. Use share_one_time instead when the content should self-destruct after one read. Requires `gh` authenticated.",
       inputSchema: { vault: vaultParam, path: pathParam },
     },
     async ({ vault, path }) =>
@@ -122,7 +122,7 @@ export function registerShareTools(server: McpServer, ctx: Context): void {
     "share_one_time",
     {
       description:
-        "Publish a note or doc as a one-time link: encrypted client-side, destroyed by the server the first time it is opened. Returns the link and, by default, a generated password. NOTE: both come back in this same tool result, so treat the whole result as sensitive — pass the link and password to the recipient over two different channels, never in one message.",
+        "Publish a note, doc, or diagram (notes vault path under diagrams/) as a one-time link: encrypted client-side, destroyed by the server the first time it is opened. Returns the link and, by default, a generated password. NOTE: both come back in this same tool result, so treat the whole result as sensitive — pass the link and password to the recipient over two different channels, never in one message.",
       inputSchema: {
         vault: vaultParam,
         path: pathParam,
