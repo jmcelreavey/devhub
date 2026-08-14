@@ -179,7 +179,8 @@ It asserts every vendored skill declares `license`, `author`, `version` and
 `source` in frontmatter, and that no script imports networking modules, calls
 `urlopen`, shells out to `curl`/`wget`, or pulls in anything outside the Python
 stdlib. `lib/skills/vendor-audit.ts` holds the logic and is unit-tested,
-including against the real vendored scripts.
+including against the real vendored scripts when `skills/vendor/` is present
+(the suite skips those integration cases in checkouts without vendor content).
 
 **It is a grep, not a sandbox.** A script determined to hide a network call —
 base64, `getattr` indirection, an exotic shell-out — will get past it. It raises
@@ -201,9 +202,10 @@ repository and asserts on its JSON. They're vitest files, so they run in
 npm test --prefix dashboard -- lib/skills/vendor-evals.test.ts
 ```
 
-They need `python3`. Without it they **skip rather than fail** — the vendored
-skills are Python, DevHub isn't, and a contributor shouldn't get a red suite
-they can't act on.
+They need `python3` and a populated `skills/vendor/` tree (the public template
+checkout may omit vendor content). Without either, the suite **skips rather than
+fails** — the vendored skills are Python, DevHub isn't, and a contributor
+shouldn't get a red suite they can't act on.
 
 ### The fixture
 

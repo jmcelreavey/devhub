@@ -260,7 +260,7 @@ See [Capability Radar plan](../archive/capability-radar-plan.md) for scan archit
 | Surface | Route / tool | Behavior |
 | ------- | ------------ | -------- |
 | Recall page | `/recall` | Query UI with budget and keyword↔vector blend; optional graph view of co-occurring sources |
-| API | `GET /api/recall?q=` | JSON hits plus `grade` (`strong` / `weak` / `none`); `format=markdown` adds a pre-rendered block for clipboard or agents |
+| API | `GET /api/recall?q=` | JSON hits plus `grade.verdict` (`answerable` / `weak` / `no-evidence`); `format=markdown` adds a pre-rendered block for clipboard or agents |
 | Index | `POST /api/recall/index` | Rebuild the gitignored index under `notes/.index/recall/` (safe to delete anytime) |
 | MCP | `recall`, `recall_graph`, `recall_remember`, `recall_index` | Agent-facing retrieval and event append |
 

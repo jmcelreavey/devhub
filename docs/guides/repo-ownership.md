@@ -47,7 +47,27 @@ At-a-glance health for repository hygiene — default branch protection, require
 
 ### Inbound PR radar
 
-Open pull requests targeting the owned repo, grouped by team. Teams come from `CODEOWNERS` / domain mapping when present; otherwise DevHub infers groups from commit churn and labels them **inferred**. Each row links to GitHub and supports blast-radius lookup for touched paths.
+Open pull requests targeting the owned repo, grouped by team. Each row links to GitHub and supports blast-radius lookup for touched paths.
+
+**Domains** partition the repo for gap scoring and path attribution (`lib/repos/domains.ts`):
+
+1. **Overrides** — when `.devhub/ownership/<owner>__<name>.json` defines custom domains.
+2. **Workspaces** — `package.json` workspace packages when there are 2–20 of them.
+3. **CODEOWNERS** — path prefixes from `.github/CODEOWNERS` / `CODEOWNERS` / `docs/CODEOWNERS`, plus uncovered top-level directories.
+4. **Directory scan** — `apps/`, `packages/`, `services/`, or `src/` children when dense enough; otherwise top-level folders (dot-directories and `node_modules` excluded). A **Root** fallback catches unmapped files.
+
+`domainForPath` picks the **longest matching prefix** so `src/api` wins over `src`.
+
+**Teams** resolve in authority order (`lib/ownership/teams.ts`):
+
+| Tier | Source | Notes |
+| ---- | ------ | ----- |
+| Overrides | `.devhub/ownership/*.json` | Explicit team → domain mapping |
+| CODEOWNERS | `@org/team` entries | Bare `@person` owners are individuals, not teams |
+| Churn inference | 90-day git history | Authors with ≥40% of commits in one domain; labels prefixed `~` (e.g. `~src/api`) |
+| Unknown | — | Single bucket when nothing else matches |
+
+Churn inference needs at least three commits behind a domain before it surfaces a group.
 
 ### Knowledge gaps
 

@@ -127,6 +127,8 @@ Features:
 - **Calendar** — Week view with Google Calendar integration (optional)
 - **Tickets** — Jira Cloud tickets with status filters (optional)
 - **Notes** — BlockNote editor, file tree, search overlay, folder-scoped **master checklists** (shared task blocks across notes), optional **in-editor AI** via z.ai (`/ai`, selection toolbar — see env vars below)
+- **Recall** — Hybrid retrieval over notes, docs, learnings, task history, and an append-only event spine (`/recall`; see `docs/architecture/recall.md`)
+- **Own** — Repo ownership radar for repositories you mark accountable for — inbound PRs, obligations, knowledge gaps, catch-up digests (`/own`, GitHub-gated; see `docs/guides/repo-ownership.md`)
 - **Chamber** — OpenChamber iframe integration (uses the shared OpenCode server on `1338`)
 - **OpenCode** — OpenCode web UI iframe on port `1338`
 - **Terminal** — in-app PoC terminal backed by a local PTY peer on port `1339`
