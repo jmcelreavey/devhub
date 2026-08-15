@@ -23,7 +23,9 @@ The sidebar entry is gated on GitHub (`gh auth login`); it appears once `GET /ap
 | **Own** index (`/own`) | Enter `owner/repository` and click **Own repo**, or remove with **Stop owning** |
 | **Repos** (`/repos`) | Toggle **Owned** on a card when the checkout has a GitHub remote |
 
-Ownership is stored in `.devhub/ownership/repos.json` under the DevHub checkout (`version: 1`, `repos[]` with `fullName` and `addedAt`). You do not need to edit this file by hand. Removing ownership only updates DevHub — it does not change GitHub permissions.
+Ownership is stored in `.devhub/ownership/repos.json` under the DevHub checkout (`version: 1`, `repos[]` with `fullName`, `addedAt`, and optional `domains` / `teams` overrides). You do not need to edit this file by hand. Removing ownership only updates DevHub — it does not change GitHub permissions.
+
+Per-repo familiarity (`learned[domainId] → ISO timestamp`) lives in `.devhub/ownership/<owner>__<name>.json` — familiarity only, not domain or team definitions.
 
 A local clone is helpful for blast-radius and digest panels but not required to list a repo; panels degrade gracefully when the repo is not in the sibling scan directory.
 
@@ -51,10 +53,10 @@ Open pull requests targeting the owned repo, grouped by team. Each row links to 
 
 **Domains** partition the repo for gap scoring and path attribution (`lib/repos/domains.ts`):
 
-1. **Overrides** — when `.devhub/ownership/<owner>__<name>.json` defines custom domains.
+1. **Overrides** — optional `domains[]` on the repo entry in `repos.json` (`id`, `label`, `paths[]`).
 2. **Workspaces** — `package.json` workspace packages when there are 2–20 of them.
 3. **CODEOWNERS** — path prefixes from `.github/CODEOWNERS` / `CODEOWNERS` / `docs/CODEOWNERS`, plus uncovered top-level directories.
-4. **Directory scan** — `apps/`, `packages/`, `services/`, or `src/` children when dense enough; otherwise top-level folders (dot-directories and `node_modules` excluded). A **Root** fallback catches unmapped files.
+4. **Directory scan** — `apps/`, `packages/`, `services/`, or `src/` children when dense enough; otherwise top-level folders (dot-directories like `.github` / `.vscode` and `node_modules` excluded from the scan — they still map via CODEOWNERS or the **Root** fallback). A **Root** fallback catches unmapped files.
 
 `domainForPath` picks the **longest matching prefix** so `src/api` wins over `src`.
 
@@ -62,7 +64,7 @@ Open pull requests targeting the owned repo, grouped by team. Each row links to 
 
 | Tier | Source | Notes |
 | ---- | ------ | ----- |
-| Overrides | `.devhub/ownership/*.json` | Explicit team → domain mapping |
+| Overrides | `teams[]` on the repo entry in `repos.json` | Explicit team → domain mapping |
 | CODEOWNERS | `@org/team` entries | Bare `@person` owners are individuals, not teams |
 | Churn inference | 90-day git history | Authors with ≥40% of commits in one domain; labels prefixed `~` (e.g. `~src/api`) |
 | Unknown | — | Single bucket when nothing else matches |
@@ -71,13 +73,17 @@ Churn inference needs at least three commits behind a domain before it surfaces 
 
 ### Knowledge gaps
 
-A ranked queue of domains where inbound churn is high and your familiarity is low. Scores combine path-level change impact with whether you have opened or learned those areas before. **Learn** deep-links into Repo Learning with the domain pre-selected.
+A ranked queue of domains where inbound churn is high and your familiarity is low (top eight by score). **Learn** deep-links into Repo Learning with the domain pre-selected; opening a learn pack records familiarity via `POST /api/own/<owner>/<name>/gaps` with `{ action: "learn-opened", domainId }`.
 
-Familiarity progress is persisted per repo in `.devhub/ownership/<owner>__<name>.json` (`learned` path → ISO timestamp).
+**Scoring** (`lib/ownership/service.ts`):
+
+- `inboundChurn` — weighted commit count over 90 days (`weight = max(0.1, 1 - ageDays/100)` per commit touching the domain).
+- `familiarity` — capped at `0.7` from your authored commits in the domain, PRs you reviewed there (`gh pr list --search reviewed-by:@me`), and whether you opened the learn pack (`learned[domainId]`).
+- `score = inboundChurn × (1 - familiarity)` — high churn with low familiarity ranks first.
 
 ### Catch-up digest
 
-Summarises what landed since your last watermark (or a **Recent** window). Generate a digest, read the markdown summary, then **Mark caught up** to save `headSha` via `POST /api/own/<owner>/<name>/brief`. The watermark prevents re-surfacing the same commits on the next visit.
+Summarises what landed since your last watermark (or a **Recent** window). `POST /api/own/<owner>/<name>/digest` with `{ generate: true }` (and optional `sinceSha` / `headSha`) runs AI summarisation when configured; results cache under `notes/.cache/ownership/digests/`. **Mark caught up** saves `headSha` via `POST /api/own/<owner>/<name>/brief`. The watermark prevents re-surfacing the same commits on the next visit.
 
 ## API and MCP
 
@@ -85,9 +91,9 @@ Summarises what landed since your last watermark (or a **Recent** window). Gener
 | ----- | ------- |
 | `GET/POST/DELETE /api/own` | List, add, remove owned repos |
 | `GET /api/own/<owner>/<name>/brief` | Core panels (query `panels=core` for the fast subset) |
-| `GET /api/own/<owner>/<name>/gaps` | Knowledge gap ranking |
-| `GET /api/own/<owner>/<name>/digest` | Catch-up digest (`?since=recent` optional) |
-| `POST /api/own/<owner>/<name>/blast` | Co-change companions and historical reviewers for paths |
+| `GET/POST /api/own/<owner>/<name>/gaps` | Knowledge gap ranking; `POST { action: "learn-opened", domainId }` records familiarity |
+| `GET/POST /api/own/<owner>/<name>/digest` | Catch-up digest (`?since=recent` or explicit SHA); `POST` generates AI summary |
+| `POST /api/own/<owner>/<name>/blast` | Co-change companions and historical reviewers for paths (truncates at 300 paths; returns `truncated`, `analysedPaths`) |
 
 MCP tools: `owned_repos`, `repo_owner_brief`, `repo_pr_radar`, `repo_who_owns`, `repo_knowledge_gaps`. See [MCP server — Triage owned repos](../architecture/mcp-server.md#triage-owned-repos-from-an-agent).
 

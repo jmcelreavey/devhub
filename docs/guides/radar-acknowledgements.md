@@ -67,6 +67,18 @@ Acknowledgements for signals that no longer exist are pruned automatically, so
 the file doesn't grow forever and a signal that disappears and returns isn't
 suppressed at a watermark nobody remembers setting.
 
+## Capability drift acknowledgements
+
+The capability scan diff (`added`, `spread`, `drift`) uses the same watermark
+store and **Seen** / **Undo** controls as Release Radar. Magnitude is repo count:
+for `added` and `spread` rows it is `toRepoCount` or `repos.length`; for
+`drift` rows it is `repoCount`. A row hides while at or below the acknowledged
+count and resurfaces when it spreads further.
+
+`GET /api/capability/radar` partitions each bucket into visible rows plus
+`diff.acknowledged` and `acknowledgedCount`. Acknowledge with
+`POST /api/radar/acknowledge` using `kind: "capability"` and the signal `id`.
+
 ## Dependency divergence
 
 The new panel answers: **where do my repos disagree with each other about a

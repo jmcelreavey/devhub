@@ -144,8 +144,8 @@ would otherwise emit 780 edges describing a shared release, not a relationship.
 
 | Surface | Entry point |
 | ------- | ----------- |
-| UI | `/recall` — query, budget and keyword↔vector sliders, per-signal score breakdown |
-| API | `GET /api/recall`, `/api/recall/graph`, `POST /api/recall/index`, `/api/recall/events`, `/api/recall/ingest` |
+| UI | `/recall` — query, budget and keyword↔vector sliders, per-signal score breakdown (`grade.verdict` is API/MCP-only today) |
+| API | `GET /api/recall`, `GET /api/recall/index`, `GET /api/recall/graph`, `POST /api/recall/index`, `POST /api/recall/ingest`, `GET/POST /api/recall/events` |
 | MCP | `recall`, `recall_graph`, `recall_remember`, `recall_index` |
 
 `recall` is the thing an agent should call first when it has a question.
@@ -230,13 +230,21 @@ idempotent: every event carries a deterministic id derived from its content, so
 `POST /api/recall/ingest` is safe to run from a schedule or a git hook and a
 re-run writes nothing.
 
+Body fields: `allRepos` (also scan sibling checkouts), `limit` (commits per repo, 1–2000), `since` (git `--since`, e.g. `6.months`), `reindex` (rebuild index when events are written — defaults `true`). The DevHub checkout is always ingested regardless of `allRepos`.
+
+`POST /api/recall/index` accepts `{ kinds?, clear? }` to restrict or wipe before rebuild. `GET /api/recall/index` returns manifest, `stale`, and event count for the panel.
+
+`GET/POST /api/recall/events`: list with `limit` (1–2000), `since`, `kinds`; append one event or `{ events: [...] }` with optional `id` for idempotent re-emit.
+
+`GET /api/recall/graph`: `entity=<kind:id>` for a neighbourhood; omit for the full graph (300-node cap). `minWeight` filters weak edges. Used by MCP `recall_graph`, not the `/recall` UI.
+
 Git is the first source because it is the highest signal for the lowest cost —
 commit messages already contain the ticket keys, PR numbers and intent the
 graph needs, and reading them costs one subprocess.
 
 ## Performance
 
-Measured against the real vault — 443 note, 160 learning, 764 doc, 79 task and
+Measured against the real vault — 443 note, 160 learning, 764 doc, 79 task, diagram, and
 532 event chunks, 1,980 total:
 
 | Operation | Time |

@@ -51,7 +51,7 @@ When allowlisted script runs failed since your last visit, Today shows a dismiss
 
 ## Navigation (2026-06 IA)
 
-The sidebar is driven by `dashboard/lib/nav.ts` — primary destinations grouped into **Workspace**, **Library**, **BI**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`.
+The sidebar is driven by `dashboard/lib/nav.ts` — **16** core sidebar destinations in `NAV_ITEMS` (plugin items such as Ops merge in separately), grouped into **Workspace**, **Library**, **BI**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`.
 
 | Sidebar  | Route       | Notes                                                                                  |
 | -------- | ----------- | -------------------------------------------------------------------------------------- |
@@ -84,6 +84,8 @@ The sidebar is driven by `dashboard/lib/nav.ts` — primary destinations grouped
 | History | Per-day task summaries           | `GET /api/tasks/history?includeTasks=1`          |
 
 **Library** and **System** use `SectionTabs` in the top bar when you land on any sibling route (for example `/docs` or `/setup`). Gated tabs (Live links) appear only when setup enables them. **System** also includes a **Logs** tab (desktop only) for live tail of shell, sidecar, and renderer logs. **BI** is a sidebar group (Ops from the BI plugin, Datadog from core) — first-class items, not System tabs.
+
+**Diagrams** (`/diagrams`, Library tab) opens a browse-by-folder landing page — recent diagrams plus folder cards (`lib/diagrams/diagram-browse.ts`). Click a card or recent item to open the tldraw editor at `/diagrams/[...path]`.
 
 ### Legacy routes
 
@@ -241,7 +243,7 @@ Stable path conventions, `## Links` format, API, and MCP tools: [Notes System �
 
 | Surface         | Route / tool                                                                                                                      | Behavior                                                                                                                                                                |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Capability scan | `GET /api/capability/radar`, MCP `capability_radar`                                                                               | Latest snapshot, diff (added/spread/removed), knowledge-drift rows from repo analysis                                                                                   |
+| Capability scan | `GET /api/capability/radar`, MCP `capability_radar`                                                                               | Latest snapshot, diff (added/spread/removed/drift), knowledge-drift rows. **Seen** / **Undo** on drift rows uses the same watermark store as Release Radar — rows hide at or below the acknowledged magnitude and resurface when they spread further. |
 | Personal strip  | `GET /api/radar/personal`                                                                                                         | Parses `notes/radar/personal-radar.md` into adopt / trial / assess / hold items                                                                                         |
 | Scan action     | `POST /api/capability/scan`, MCP `capability_scan`                                                                                | Full scan; writes dated snapshot under `notes/.cache/capability/`                                                                                                       |
 | Weekly digest   | `POST /api/capability/digest`, job `capability_digest`                                                                            | Generate or return digest markdown                                                                                                                                      |
@@ -255,12 +257,14 @@ See [Capability Radar plan](../archive/capability-radar-plan.md) for scan archit
 
 ## Recall
 
-**Library → Recall** (`/recall`) is the interactive face of the derived memory layer described in [Recall](recall.md). It ranks passages from notes, docs, learnings, task history, and the append-only event spine with hybrid BM25 + vector fusion, a token budget slider, and per-hit score breakdown.
+**Library → Recall** (`/recall`) is the interactive face of the derived memory layer described in [Recall](recall.md). It ranks passages from notes, docs, learnings, diagrams, task history, and the append-only event spine with hybrid BM25 + vector fusion, a token budget slider, and per-hit score breakdown.
 
 | Surface | Route / tool | Behavior |
 | ------- | ------------ | -------- |
-| Recall page | `/recall` | Query UI with budget and keyword↔vector blend; optional graph view of co-occurring sources |
+| Recall page | `/recall` | Query UI with budget and keyword↔vector blend; per-signal score breakdown. `grade.verdict` is API/MCP-only today — the UI does not surface it yet. |
+| Index status | `GET /api/recall/index` | Manifest, staleness flag, and event count for the panel header |
 | API | `GET /api/recall?q=` | JSON hits plus `grade.verdict` (`answerable` / `weak` / `no-evidence`); `format=markdown` adds a pre-rendered block for clipboard or agents |
+| Graph | `GET /api/recall/graph?entity=` | Entity neighbourhood lookup (MCP `recall_graph`); not shown in the `/recall` UI |
 | Index | `POST /api/recall/index` | Rebuild the gitignored index under `notes/.index/recall/` (safe to delete anytime) |
 | MCP | `recall`, `recall_graph`, `recall_remember`, `recall_index` | Agent-facing retrieval and event append |
 
@@ -387,7 +391,7 @@ Press **`?`** while the Repo Git workspace is focused for its **context shortcut
 
 **Commit context** joins git history to local reasoning: `GET /api/repos/<name>/git/commit-context?commit=` parses the commit subject/body for PR numbers and Jira keys, then matches review notes under `notes/pr-reviews/` (`pr` = same PR, `ticket` = same Jira key, `related` = same ticket in a different repo). Chips appear on History commit detail and Blame. Hosted git cannot do this — the notes never leave your machine. See [GitHub integration — Review notes in Git history](../integrations/github.md#review-notes-in-git-history).
 
-**Commit avatars** resolve through a trusted CDN allowlist (`lib/people/avatar-trust.ts`): GitHub (`avatars.githubusercontent.com` and `users.noreply.github.com` addresses), Atlassian/Jira avatars, then Gravatar when available. `GET /api/repos/<name>/git/people` merges contributor identities across email aliases; History and the commit graph load avatars from that map. Email-only surfaces (calendar organizers, Jira tickets) fall back to `GET /api/people/avatar?email=`. Untrusted URLs are rejected — initials render instead. Click an avatar to open a full-resolution variant when the host supports it.
+**Commit avatars** resolve through a trusted CDN allowlist (`lib/people/avatar-trust.ts`). For commit history, `GET /api/repos/<name>/git/people` merges contributor identities across email aliases (GitHub login first, then display-name heuristic); History and the commit graph load avatars from that map with client-side GitHub noreply and Gravatar fallbacks (`lib/people/identity.ts`). Email-only surfaces (calendar organizers, Jira tickets) use `GET /api/people/avatar?email=` for Jira/Atlassian avatars only. Untrusted URLs are rejected — initials render instead. Click an avatar to open a full-resolution variant when the host supports it.
 
 When the checkout is on a feature branch with an open GitHub PR, the workspace header and `/repos` cards show a compact PR link plus rolled-up CI state (`passing` / `failing` / `pending`) from `GET /api/repos/<name>/pr` (requires `gh auth login`; skipped on the repo's default branch).
 
