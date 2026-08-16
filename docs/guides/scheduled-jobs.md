@@ -30,6 +30,7 @@ They are not a system cron replacement. If DevHub is closed, jobs do not run.
 | --------------------- | --------------------------------------- |
 | Update and sync       | Keeps local tools fresh                 |
 | Validate              | Finds breakage early                    |
+| Ownership brief       | Morning snapshot of owned-repo obligations and gaps (cron `0 7 * * *` is a common choice) |
 | Capability digest     | Weekly tech-coverage scan + digest note |
 | Push unpushed commits | Useful only if your workflow expects it |
 

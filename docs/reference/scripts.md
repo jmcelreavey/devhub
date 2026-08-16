@@ -137,7 +137,13 @@ Attach via **View → Attach to Dev Server…** or record the checkout during de
 | `collect_opencode_config`   | Collect OpenCode Config | yes     | —                                                            |
 | `collect_local_persona`     | Collect Persona         | yes     | `personaTool` (required), `personaSources[]`                 |
 
-### Validation
+### Ownership
+
+| ID                | Label                      | Mutates | Notes |
+| ----------------- | -------------------------- | ------- | ----- |
+| `ownership_brief` | Ownership Brief (morning)  | yes     | Loads every repo marked owned (`GET /api/own` state), builds a markdown summary (obligations, open PRs, stale branches, top knowledge gap per repo), writes `notes/.cache/ownership/briefs/<YYYY-MM-DD>.json`, and saves a browsable BlockNote note at `notes/learnings/ownership-briefs/<YYYY-MM-DD>.json`. Requires `gh auth login` for GitHub-backed panels; partial failures are listed in the brief. See [Repo ownership](../guides/repo-ownership.md#morning-ownership-brief). |
+
+### Validation and digests
 
 | ID                  | Label                    | Mutates |
 | ------------------- | ------------------------ | ------- |

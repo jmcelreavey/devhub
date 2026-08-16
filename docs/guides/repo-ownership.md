@@ -85,6 +85,28 @@ A ranked queue of domains where inbound churn is high and your familiarity is lo
 
 Summarises what landed since your last watermark (or a **Recent** window). `POST /api/own/<owner>/<name>/digest` with `{ generate: true }` (and optional `sinceSha` / `headSha`) runs AI summarisation when configured; results cache under `notes/.cache/ownership/digests/`. **Mark caught up** saves `headSha` via `POST /api/own/<owner>/<name>/brief`. The watermark prevents re-surfacing the same commits on the next visit.
 
+## Morning ownership brief
+
+The **`ownership_brief`** action (`POST /api/scripts` with `{ script: "ownership_brief" }`) is the batch counterpart to opening `/own` every morning. It walks every repo in `.devhub/ownership/repos.json`, loads the same obligation and PR-radar panels the UI uses, and writes:
+
+| Output | Path |
+| ------ | ---- |
+| Cache (structured) | `notes/.cache/ownership/briefs/<YYYY-MM-DD>.json` — `{ id, createdAt, markdown, repos, failures[] }` |
+| Browsable note | `notes/learnings/ownership-briefs/<YYYY-MM-DD>.json` — BlockNote blocks for the vault |
+
+The markdown lists per-repo CI health, open PR count (with unattended count), stale branches, bot PRs, unassigned issues, and the highest-scoring knowledge gap when one exists. Repos that fail to load appear under **Partial data**; the action still completes.
+
+Schedule it from **Actions → Scheduled jobs** (see [Scheduled jobs](scheduled-jobs.md)) or run on demand from the Actions page. GitHub must be configured; there is no separate MCP tool — agents can trigger the same action via `POST /api/scripts` when the dashboard is running.
+
+## Cross-surface attention strip
+
+`loadOwnershipSummary()` ranks owned repos by an attention score derived from obligation health and inbound PR state (`lib/ownership/obligations.ts`). Repos with `attention.score > 0` surface outside `/own`:
+
+- **Radar** (`GET /api/radar/personal`) — **Owned repositories** rows under the personal radar strip, linking into `/own/<owner>/<name>`.
+- **Morning briefing** (`GET /api/dashboard/morning-briefing`, `/api/briefing/data`) — `ownedRepoAttention[]` in the assembled context (top five by score) for the Today widget and AI canvas.
+
+This is a lightweight nudge, not a full brief — use `ownership_brief` or the per-repo digest for detail.
+
 ## API and MCP
 
 | Route | Purpose |

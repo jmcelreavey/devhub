@@ -232,9 +232,9 @@ re-run writes nothing.
 
 Body fields: `allRepos` (also scan sibling checkouts), `limit` (commits per repo, 1–2000), `since` (git `--since`, e.g. `6.months`), `reindex` (rebuild index when events are written — defaults `true`). The DevHub checkout is always ingested regardless of `allRepos`.
 
-`POST /api/recall/index` accepts `{ kinds?, clear? }` to restrict or wipe before rebuild. `GET /api/recall/index` returns manifest, `stale`, and event count for the panel.
+`POST /api/recall/index` accepts `{ kinds?, clear? }` to restrict or wipe before rebuild (`requireDashboardAuth` — rebuilds walk the whole vault). `GET /api/recall/index` returns manifest, `stale`, and event count for the panel.
 
-`GET/POST /api/recall/events`: list with `limit` (1–2000), `since`, `kinds`; append one event or `{ events: [...] }` with optional `id` for idempotent re-emit.
+`GET/POST /api/recall/events`: `GET` lists with `limit` (1–2000), `since`, `kinds`; `POST` appends one event or `{ events: [...] }` with optional `id` for idempotent re-emit (`requireDashboardAuth` on POST).
 
 `GET /api/recall/graph`: `entity=<kind:id>` for a neighbourhood; omit for the full graph (300-node cap). `minWeight` filters weak edges. Used by MCP `recall_graph`, not the `/recall` UI.
 
