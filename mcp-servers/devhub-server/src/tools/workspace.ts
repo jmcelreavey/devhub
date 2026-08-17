@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Context } from "../context.ts";
 import { withDashboardErrors } from "../dashboard-client.ts";
+import { listWidgetHtml, uiResult } from "../ui.ts";
 
 /**
  * Read-side coverage for dashboard areas that had no MCP tools: skills,
@@ -161,12 +162,31 @@ export function registerWorkspaceTools(server: McpServer, ctx: Context): void {
 
   readTool("research_list", "List research runs and their results.", "/api/research", "Research", 60_000);
 
-  readTool(
+  server.registerTool(
     "radar_personal",
-    "Personal radar: what DevHub thinks is currently worth your attention.",
-    "/api/radar/personal",
-    "Personal radar",
-    60_000,
+    {
+      description: "Personal radar: what DevHub thinks is currently worth your attention.",
+    },
+    async () =>
+      withDashboardErrors(async () => {
+        const data = await dashboard.get<{
+          items?: Array<{ ring?: string; text?: string }>;
+          ownedRepoAttention?: Array<{ repo?: { fullName?: string }; attention?: { score?: number } }>;
+        }>("/api/radar/personal", undefined, 60_000);
+        const text = render("Personal radar", data);
+        const items = [
+          ...(data.items ?? []).map((item) => ({
+            label: item.text || "(empty)",
+            meta: item.ring,
+          })),
+          ...(data.ownedRepoAttention ?? []).slice(0, 8).map((row) => ({
+            label: row.repo?.fullName || "owned repo",
+            meta: `attention ${row.attention?.score ?? 0}`,
+          })),
+        ];
+        const html = items.length ? listWidgetHtml("Personal radar", "Worth your attention", items) : null;
+        return uiResult(text, html, "ui://devhub/radar/personal");
+      }),
   );
 
   readTool(

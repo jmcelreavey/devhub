@@ -1,131 +1,187 @@
 "use client";
 
-import type { ComponentType, MouseEvent } from "react";
-import { CircleCheck, MessageSquare, ScanSearch } from "lucide-react";
-import type { LucideProps } from "lucide-react";
+import {
+  CircleCheck,
+  ExternalLink,
+  FileText,
+  GitPullRequest,
+  Link2,
+  MessageSquare,
+  ScanSearch,
+  UserPlus,
+} from "lucide-react";
 import type { GithubPrRow } from "@/lib/github/prs";
-import { buildSlackMessage, copyWithToast } from "@/lib/pr-slack";
+import { buildSlackMessage, copyTextAndToast } from "@/lib/pr-slack";
 import { agentReviewCommand, openTerminal } from "@/lib/terminal-launch";
 import { notifyPrReviewNoteWatch, prReviewNotePath } from "@/lib/pr-review-notes";
-import { buildPrNoteMarkdown, prEntityId, prNotePath } from "@/lib/pr-note";
-import { EntityNoteAction } from "@/components/EntityNoteAction";
-import { EntityLinkChips } from "@/components/EntityLinkChips";
-import { PR_ACTION_BASE, PR_ACTION_SIZE, type PrActionSize } from "@/components/pr-row-action-style";
-import { useToast } from "@/lib/hooks/use-toast";
+import { buildPrNoteMarkdown, prNotePath } from "@/lib/pr-note";
+import { createOrOpenVaultNote } from "@/lib/create-vault-note";
+import { openPrInCursor } from "@/lib/open-in-cursor-client";
+import { openInBrowser } from "@/lib/desktop/bridge";
+import type { ContextMenuGroup, ContextMenuItem } from "@/components/shell/ContextMenu";
+import type { useToast } from "@/lib/hooks/use-toast";
+import { jiraBrowseUrl, jiraKeyFromText } from "@/lib/utils";
 
-/**
- * One shared action row for a PR — Slack/Review plus the shared entity→note
- * FileText affordance (same EntityNoteAction as tasks/calendar).
- */
 export type PrRowKind = "authored" | "reviews" | "reviewed";
 
-function PrActionButton({
-  icon: Icon,
-  label,
-  title,
-  size,
-  onClick,
-}: {
-  icon: ComponentType<LucideProps>;
-  label: string;
-  title: string;
-  size: PrActionSize;
-  onClick: (e: MouseEvent) => void;
-}) {
-  const s = PR_ACTION_SIZE[size];
-  return (
-    <button type="button" onClick={onClick} title={title} aria-label={title} className={`${PR_ACTION_BASE} ${s.btn}`}>
-      <Icon size={s.icon} aria-hidden />
-      <span>{label}</span>
-    </button>
-  );
+function copyUrlItems(
+  row: GithubPrRow,
+  toast: ReturnType<typeof useToast>,
+): ContextMenuItem[] {
+  const jiraKey = jiraKeyFromText(row.title);
+  const items: ContextMenuItem[] = [
+    {
+      id: "copy-pr-url",
+      label: "Copy PR URL",
+      icon: <Link2 size={12} />,
+      onSelect: () => void copyTextAndToast(row.url, "PR URL", toast),
+    },
+  ];
+  if (jiraKey) {
+    items.push({
+      id: "copy-jira-url",
+      label: "Copy Jira URL",
+      description: jiraKey,
+      icon: <Link2 size={12} />,
+      onSelect: () => void copyTextAndToast(jiraBrowseUrl(jiraKey), "Jira URL", toast),
+    });
+  }
+  return items;
 }
 
-export function PrRowActions({
+export function buildPrRowMenuGroups({
   row,
   kind,
-  size = "md",
+  toast,
+  openNote,
+  onRequestReview,
 }: {
   row: GithubPrRow;
   kind: PrRowKind;
-  size?: PrActionSize;
-}) {
-  const toast = useToast();
-  const notePath = prNotePath({ repo: row.repo, number: row.number });
-  // Keep legacy path helper in sync for the agent CLI watch event.
+  toast: ReturnType<typeof useToast>;
+  openNote: () => void | Promise<void>;
+  onRequestReview?: () => void;
+}): ContextMenuGroup[] {
   const watchPath = prReviewNotePath(row);
+  const notePath = prNotePath({ repo: row.repo, number: row.number });
+  const openGithub = {
+    id: "github",
+    label: "Open on GitHub",
+    icon: <ExternalLink size={12} />,
+    onSelect: () => void openInBrowser(row.url),
+  };
+  const openCursor = {
+    id: "cursor",
+    label: "Open in Cursor",
+    description: "Stash if dirty, check out this PR's branch",
+    icon: <GitPullRequest size={12} />,
+    onSelect: () => {
+      void openPrInCursor(row.repo, row.number, toast);
+    },
+  };
+  const noteItem = {
+    id: "note",
+    label: kind === "authored" ? "Open review note" : "Open note",
+    icon: <FileText size={12} />,
+    onSelect: () => void openNote(),
+  };
 
-  return (
-    <div className="flex min-w-0 flex-col items-end gap-1">
-      <div className="flex flex-wrap items-center justify-end gap-1">
-        {kind === "authored" && (
-          <PrActionButton
-            icon={MessageSquare}
-            label="Copy request"
-            title="Copy a Slack message asking for review"
-            size={size}
-            onClick={copyWithToast(buildSlackMessage(row, "awaiting"), "Slack message", toast)}
-          />
-        )}
+  if (kind === "authored") {
+    return [
+      {
+        id: "authored",
+        items: [
+          openGithub,
+          ...copyUrlItems(row, toast),
+          openCursor,
+          {
+            id: "request-review",
+            label: "Request review…",
+            icon: <UserPlus size={12} />,
+            onSelect: () => onRequestReview?.(),
+          },
+          {
+            id: "slack-request",
+            label: "Copy Slack request",
+            icon: <MessageSquare size={12} />,
+            onSelect: () => void copyTextAndToast(buildSlackMessage(row, "awaiting"), "Slack message", toast),
+          },
+          noteItem,
+        ],
+      },
+    ];
+  }
 
-        {kind === "reviews" && (
-          <PrActionButton
-            icon={ScanSearch}
-            label="Review"
-            title="Explain & review this PR with your agent CLI"
-            size={size}
-            onClick={async () => {
+  if (kind === "reviews") {
+    return [
+      {
+        id: "reviews",
+        items: [
+          {
+            id: "agent-review",
+            label: "Review with agent",
+            description: "Explain & review this PR in the terminal",
+            icon: <ScanSearch size={12} />,
+            onSelect: async () => {
               openTerminal({
                 label: `review ${row.repo}#${row.number}`,
                 command: await agentReviewCommand(row.url, watchPath || notePath),
               });
               notifyPrReviewNoteWatch(row);
-              toast.info("Reviewing in the terminal - a note link appears here when it's saved.");
-            }}
-          />
-        )}
+              toast.info("Reviewing in the terminal — a note glyph appears here when it's saved.");
+            },
+          },
+          openCursor,
+          openGithub,
+          ...copyUrlItems(row, toast),
+          noteItem,
+        ],
+      },
+    ];
+  }
 
-        {kind === "reviewed" && (
-          <>
-            <PrActionButton
-              icon={CircleCheck}
-              label="Copy approved"
-              title="Copy a Slack “reviewed - approved” message"
-              size={size}
-              onClick={copyWithToast(buildSlackMessage(row, "reviewed-approved"), "Slack message", toast)}
-            />
-            <PrActionButton
-              icon={MessageSquare}
-              label="Copy reviewed"
-              title="Copy a Slack “reviewed” message"
-              size={size}
-              onClick={copyWithToast(buildSlackMessage(row, "reviewed"), "Slack message", toast)}
-            />
-          </>
-        )}
+  return [
+    {
+      id: "reviewed",
+      items: [
+        {
+          id: "copy-approved",
+          label: "Copy approved",
+          icon: <CircleCheck size={12} />,
+          onSelect: () =>
+            void copyTextAndToast(buildSlackMessage(row, "reviewed-approved"), "Slack message", toast),
+        },
+        {
+          id: "copy-reviewed",
+          label: "Copy reviewed",
+          icon: <MessageSquare size={12} />,
+          onSelect: () => void copyTextAndToast(buildSlackMessage(row, "reviewed"), "Slack message", toast),
+        },
+        openCursor,
+        openGithub,
+        ...copyUrlItems(row, toast),
+      ],
+    },
+  ];
+}
 
-        <EntityNoteAction
-          path={notePath}
-          markdown={buildPrNoteMarkdown({
-            repo: row.repo,
-            number: row.number,
-            title: row.title,
-            url: row.url,
-          })}
-          entityLabel={`${row.repo}#${row.number}`}
-          variant={size === "sm" ? "icon" : "button"}
-          errorMessage="Couldn't open PR note."
-        />
-      </div>
-      <EntityLinkChips
-        kind="pr"
-        id={prEntityId(row)}
-        label={`${row.repo}#${row.number}`}
-        href={row.url}
-        prRepo={row.repo}
-        prNumber={row.number}
-        showNotes={false}
-      />
-    </div>
-  );
+export async function openPrRowNote(
+  row: GithubPrRow,
+  push: (href: string) => void,
+  toast: ReturnType<typeof useToast>,
+): Promise<void> {
+  try {
+    const result = await createOrOpenVaultNote({
+      path: prNotePath({ repo: row.repo, number: row.number }),
+      markdown: buildPrNoteMarkdown({
+        repo: row.repo,
+        number: row.number,
+        title: row.title,
+        url: row.url,
+      }),
+    });
+    push(result.href);
+  } catch {
+    toast.error("Couldn't open PR note.");
+  }
 }

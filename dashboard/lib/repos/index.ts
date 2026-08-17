@@ -22,6 +22,7 @@ let cachedAccessibleRepos:
   | null = null;
 
 import { collectRepoSignals, scoreRepoHealth, type RepoHealth } from "@/lib/repos/health";
+import { isSafeRemoteUrl } from "@/lib/repos/remote-parsers";
 
 export interface RepoInfo {
   name: string;
@@ -184,7 +185,8 @@ async function getDirtyCount(repoPath: string): Promise<number> {
 
 function sanitizeRepoDirName(name: string): string {
   const trimmed = name.trim();
-  if (!/^[a-zA-Z0-9_.-]+$/.test(trimmed) || trimmed.includes("..")) {
+  // Leading dash would be an option if this ever lands next to git flags.
+  if (!/^[a-zA-Z0-9_.-]+$/.test(trimmed) || trimmed.includes("..") || trimmed.startsWith("-")) {
     throw new Error("Invalid local repo name");
   }
   return trimmed;
@@ -388,6 +390,57 @@ export async function cloneGithubRepo(fullName: string): Promise<{ name: string;
   ]);
 
   return { name: sanitizedRepoName, path: destinationPath };
+}
+
+/** Last path segment of a clone URL, minus `.git`. Default folder name. */
+export function dirNameFromCloneUrl(url: string): string {
+  const trimmed = url.trim().replace(/\/+$/, "");
+  const withoutGit = trimmed.replace(/\.git$/i, "");
+  const slash = withoutGit.lastIndexOf("/");
+  const colon = withoutGit.lastIndexOf(":");
+  const cut = Math.max(slash, colon);
+  return cut === -1 ? withoutGit : withoutGit.slice(cut + 1);
+}
+
+export async function cloneRemoteRepo(
+  url: string,
+  name?: string,
+): Promise<{ name: string; path: string }> {
+  if (!isSafeRemoteUrl(url)) {
+    throw new Error("Invalid remote URL");
+  }
+  const requested = (name?.trim() || dirNameFromCloneUrl(url)).trim();
+  const sanitizedName = sanitizeRepoDirName(requested);
+  const destinationPath = resolveDirectChild(getReposScanDir(), sanitizedName);
+
+  if (fs.existsSync(destinationPath)) {
+    throw new Error(`Local folder already exists: ${sanitizedName}`);
+  }
+
+  await execFileAsync("/usr/bin/git", ["clone", "--", url.trim(), destinationPath], {
+    timeout: 300_000,
+  });
+
+  return { name: sanitizedName, path: destinationPath };
+}
+
+export async function initLocalRepo(name: string): Promise<{ name: string; path: string }> {
+  const sanitizedName = sanitizeRepoDirName(name);
+  const destinationPath = resolveDirectChild(getReposScanDir(), sanitizedName);
+
+  if (fs.existsSync(destinationPath)) {
+    throw new Error(`Local folder already exists: ${sanitizedName}`);
+  }
+
+  fs.mkdirSync(destinationPath);
+  try {
+    await execFileAsync("/usr/bin/git", ["-C", destinationPath, "init"]);
+  } catch (error) {
+    fs.rmSync(destinationPath, { recursive: true, force: true });
+    throw error;
+  }
+
+  return { name: sanitizedName, path: destinationPath };
 }
 
 export function deleteLocalRepo(name: string): { name: string; path: string } {

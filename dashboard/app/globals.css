@@ -513,7 +513,9 @@ h3,
     opacity: 0;
   }
   .group:hover .reveal-on-hover,
+  .group:focus-within .reveal-on-hover,
   .group\/item:hover .reveal-on-hover,
+  .group\/item:focus-within .reveal-on-hover,
   .reveal-on-hover:has(:focus-visible),
   .reveal-on-hover:focus-visible {
     opacity: 1;
@@ -2373,20 +2375,11 @@ body[data-grid-resizing="true"] * {
 }
 
 .task-row {
-  /* Reserves room on hover for the absolute action cluster (timer, Jira, open,
-     edit, abandon, delete). Wide enough for the full 6-icon set. */
-  --task-action-space: 9.25rem;
   position: relative;
 }
 
-.task-row:hover .task-row-content,
-.task-row:focus-within .task-row-content {
-  padding-right: var(--task-action-space);
-}
-
-/* Wrap at rest (2-line cap). Hover padding may shrink width; clamp so
-   action pills cannot force a 3rd line. 1-line titles that still fit
-   beside Review/meta are not ellipsized. */
+/* Wrap at rest (2-line cap). The kebab column is always reserved in-flow, so
+   hover must not change title width. */
 .task-row-title {
   min-width: 0;
   flex: 1 1 min(100%, 12rem);
@@ -2464,22 +2457,10 @@ body[data-motion="off"] .task-timer-dot {
 }
 
 .task-row-actions {
-  position: absolute;
-  right: 0.5rem;
-  top: 0.375rem;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(6px);
-  transition:
-    opacity var(--dur-fast) var(--ease-swift),
-    transform var(--dur-base) var(--ease-swift);
-}
-
-.task-row:hover .task-row-actions,
-.task-row:focus-within .task-row-actions {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateX(0);
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-start;
+  gap: 2px;
 }
 
 .task-icon-action {
@@ -2497,31 +2478,12 @@ body[data-motion="off"] .task-timer-dot {
   color: var(--text);
 }
 
-body[data-motion="off"] .task-row-content,
-body[data-motion="off"] .task-row-actions {
-  transition: none;
-}
-
 @media (max-width: 520px) {
   .task-add-row {
     flex-wrap: wrap;
   }
   .task-add-row .task-add-text {
     flex-basis: 100%;
-  }
-}
-
-@media (hover: none) {
-  .task-row-actions {
-    position: static;
-    opacity: 1;
-    pointer-events: auto;
-    transform: none;
-  }
-
-  .task-row:hover .task-row-content,
-  .task-row:focus-within .task-row-content {
-    padding-right: 0;
   }
 }
 
@@ -4696,6 +4658,10 @@ body.sortable-dragging * {
   flex-direction: column;
   gap: 2px;
   padding: 6px;
+  /* max-height is set in JS when the menu is taller than the viewport. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid color-mix(in oklab, var(--border) 70%, var(--text) 30%);
   border-radius: 8px;
   background: var(--bg-surface);
@@ -4773,6 +4739,130 @@ body.sortable-dragging * {
   font-size: 10.5px;
   line-height: 1.35;
   color: var(--text-subtle);
+}
+
+.context-menu:popover-open,
+.context-menu:not([hidden]) {
+  animation: context-menu-in var(--dur-base) var(--ease-swift);
+}
+@keyframes context-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .context-menu:popover-open,
+  .context-menu:not([hidden]) {
+    animation: none;
+  }
+}
+body[data-motion="off"] .context-menu:popover-open,
+body[data-motion="off"] .context-menu:not([hidden]) {
+  animation: none;
+}
+
+.row-menu-kebab {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+.row-menu-kebab:hover,
+.row-menu-kebab:focus-visible {
+  color: var(--accent);
+  background: var(--bg-muted);
+}
+@media (pointer: coarse) {
+  .row-menu-kebab {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+.section-menu-hint {
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-subtle);
+  opacity: 0.7;
+}
+
+.reviewer-facepile {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.reviewer-facepile-item {
+  position: relative;
+  box-shadow: 0 0 0 1.5px var(--bg-surface);
+  border-radius: 999px;
+}
+.reviewer-facepile-item + .reviewer-facepile-item {
+  margin-left: -4px;
+}
+
+.row-note-glyph {
+  display: inline-flex;
+  color: var(--accent);
+  opacity: 0.85;
+}
+.row-note-glyph:hover,
+.row-note-glyph:focus-visible {
+  opacity: 1;
+}
+
+.pr-row {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 8px;
+}
+.pr-row-title {
+  color: var(--text);
+  font-weight: 500;
+  line-height: 1.35;
+  text-decoration: none;
+}
+.pr-row-title:hover {
+  text-decoration: underline;
+}
+.pr-row-meta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  color: var(--text-muted);
+}
+.pr-row-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-muted);
+}
+.pr-row-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
 }
 
 /* ── Generic launcher dropdowns ── */
@@ -4901,6 +4991,20 @@ body.sortable-dragging * {
   .btn:active {
     scale: 0.96;
   }
+}
+
+/* Full-width left-aligned rows: kill center-origin scale (sideways bounce).
+   Compact chrome keeps the global 0.96 press; these rows dim like `.hub-icon-btn`.
+   Scale kill is unconditional so `data-motion="off"` (transitions only) still
+   won't bounce. */
+.row-select {
+  scale: 1;
+}
+button.row-select:not(:disabled):active,
+[role="button"].row-select:active,
+.row-select:active {
+  scale: 1;
+  opacity: 0.85;
 }
 
 /* ───────────────────────────────────────────────────────────
@@ -6630,6 +6734,7 @@ body[data-repo-git-split-dragging] {
    `filter: brightness(0.96)` on `:active` still applies. Scale kill is
    unconditional so `data-motion="off"` (transitions only) still won't bounce. */
 button.repo-git-graph-row:not(:disabled):active,
+.repo-git-graph-row:active,
 button.repo-git-commit-file:not(:disabled):active,
 button.repo-unpushed-badge:not(:disabled):active,
 button.repo-git-file-main:not(:disabled):active,
@@ -6675,7 +6780,7 @@ button.conflict-path-row:not(:disabled):active {
 }
 .repo-git-graph-row {
   display: grid;
-  grid-template-columns: 4.2rem minmax(0, 1fr) auto minmax(8rem, 10.5rem);
+  grid-template-columns: 4.2rem minmax(0, 1fr) auto minmax(8rem, 10.5rem) 28px;
   align-items: center;
   gap: 8px;
   width: 100%;
@@ -6703,6 +6808,11 @@ button.conflict-path-row:not(:disabled):active {
   outline: 2px solid color-mix(in oklab, var(--accent) 55%, transparent);
   outline-offset: -2px;
   z-index: 1;
+}
+.repo-git-graph-kebab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .repo-git-graph-hash {
   color: var(--accent);
@@ -8473,6 +8583,17 @@ button.entity-link-chip-more {
   font-weight: 550;
 }
 
+.lib-nav-item {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.lib-nav-item .lib-nav-link {
+  flex: 1;
+  min-width: 0;
+}
+
 .lib-nav-empty {
   padding: var(--space-2);
   font-size: 12px;
@@ -8908,6 +9029,20 @@ body[data-motion="off"] .lib-card-icon {
   color: var(--text-subtle);
 }
 
+.lib-recent-item,
+.lib-section-item {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 2px;
+}
+
+.lib-recent-item .lib-recent-row,
+.lib-section-item .lib-section-row {
+  flex: 1;
+  min-width: 0;
+}
+
 /* ---------------------------------------------------------- section page */
 
 .lib-section-icon-lg {
@@ -8939,6 +9074,40 @@ body[data-motion="off"] .lib-card-icon {
 }
 
 .lib-section-row:hover {
+  background: var(--bg-elevated);
+}
+
+.lib-row-menu-host {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.lib-row-menu-host .lib-recent-row,
+.lib-row-menu-host .lib-section-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.lib-row-menu-host:hover .lib-recent-row,
+.lib-row-menu-host:hover .lib-section-row {
+  background: var(--bg-elevated);
+}
+
+.lib-row-menu-host {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.lib-row-menu-host .lib-recent-row,
+.lib-row-menu-host .lib-section-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.lib-row-menu-host:hover .lib-recent-row,
+.lib-row-menu-host:hover .lib-section-row {
   background: var(--bg-elevated);
 }
 

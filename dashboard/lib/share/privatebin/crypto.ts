@@ -58,9 +58,7 @@ export function base58Encode(bytes: Buffer): string {
 }
 
 /** Server-enforced lifetime. Keys must match the instance's configured options. */
-export type PasteExpiry = "5min" | "10min" | "1hour" | "1day" | "1week" | "1month";
-
-export const PASTE_EXPIRY_OPTIONS: readonly PasteExpiry[] = [
+export const PASTE_EXPIRY_OPTIONS = [
   "5min",
   "10min",
   "1hour",
@@ -68,6 +66,8 @@ export const PASTE_EXPIRY_OPTIONS: readonly PasteExpiry[] = [
   "1week",
   "1month",
 ] as const;
+
+export type PasteExpiry = (typeof PASTE_EXPIRY_OPTIONS)[number];
 
 /** Milliseconds each expiry key corresponds to, for local bookkeeping only. */
 export const PASTE_EXPIRY_MS: Record<PasteExpiry, number> = {

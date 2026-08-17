@@ -15,7 +15,14 @@ import { EmptyState, FetchError, LoadingLine, SearchInput } from "@/components";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
 import { formatShortDate } from "@/lib/format-date";
-import { RECALL_SOURCE_KINDS, type RecallResult, type RecallSourceKind } from "@/lib/recall/types";
+import {
+  RECALL_EVENT_KINDS,
+  RECALL_SOURCE_KINDS,
+  type RecallEvent,
+  type RecallEventKind,
+  type RecallResult,
+  type RecallSourceKind,
+} from "@/lib/recall/types";
 
 interface IndexStatus {
   manifest: {
@@ -68,6 +75,7 @@ export default function RecallPage() {
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<"index" | "ingest" | null>(null);
+  const [eventKinds, setEventKinds] = useState<RecallEventKind[]>([]);
 
   const toast = useToast();
   const {
@@ -75,6 +83,15 @@ export default function RecallPage() {
     isLoading: statusLoading,
     mutate: mutateStatus,
   } = useLive<IndexStatus>("/api/recall/index");
+  const eventsUrl =
+    eventKinds.length > 0
+      ? `/api/recall/events?limit=50&kinds=${eventKinds.join(",")}`
+      : "/api/recall/events?limit=50";
+  const {
+    data: spine,
+    isLoading: eventsLoading,
+    mutate: mutateEvents,
+  } = useLive<{ events: RecallEvent[] }>(eventsUrl);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const run = useCallback(
@@ -142,6 +159,7 @@ export default function RecallPage() {
             : `${label}: ${payload.written ?? 0} new event(s)`,
         );
         await mutateStatus();
+        await mutateEvents();
         if (input.trim()) await run(input, { budget, alpha, kinds });
       } catch (err) {
         toast.error(err instanceof Error ? err.message : `${label} failed`);
@@ -149,11 +167,15 @@ export default function RecallPage() {
         setBusy(null);
       }
     },
-    [alpha, budget, input, kinds, mutateStatus, run, toast],
+    [alpha, budget, input, kinds, mutateEvents, mutateStatus, run, toast],
   );
 
   const toggleKind = (kind: RecallSourceKind): void => {
     setKinds((prev) => (prev.includes(kind) ? prev.filter((k) => k !== kind) : [...prev, kind]));
+  };
+
+  const toggleEventKind = (kind: RecallEventKind): void => {
+    setEventKinds((prev) => (prev.includes(kind) ? prev.filter((k) => k !== kind) : [...prev, kind]));
   };
 
   const toggleExpanded = (id: string): void => {
@@ -461,6 +483,106 @@ export default function RecallPage() {
           )}
         </>
       )}
+
+      <EventSpine
+        events={spine?.events ?? []}
+        loading={eventsLoading && spine === undefined}
+        activeKinds={eventKinds}
+        onToggleKind={toggleEventKind}
+      />
     </div>
+  );
+}
+
+function formatEventTime(ts: string): string {
+  const ms = Date.parse(ts);
+  if (!Number.isFinite(ms)) return ts;
+  return new Date(ms).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function EventSpine({
+  events,
+  loading,
+  activeKinds,
+  onToggleKind,
+}: {
+  events: RecallEvent[];
+  loading: boolean;
+  activeKinds: RecallEventKind[];
+  onToggleKind: (kind: RecallEventKind) => void;
+}) {
+  return (
+    <section className="mt-10">
+      <div className="flex items-baseline justify-between gap-3 mb-3 flex-wrap">
+        <div>
+          <div className="text-sm font-medium text-text">Event spine</div>
+          <div className="text-xs text-text-subtle">
+            Newest first. The durable log recall ranks over, not a search result.
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {RECALL_EVENT_KINDS.map((kind) => {
+            const active = activeKinds.includes(kind);
+            return (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => onToggleKind(kind)}
+                className="badge"
+                style={{
+                  cursor: "pointer",
+                  background: active ? "var(--accent-dim)" : "transparent",
+                  color: active ? "var(--accent)" : "var(--text-subtle)",
+                  border: "1px solid var(--border)",
+                }}
+                aria-pressed={active}
+              >
+                {kind}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {loading ? (
+        <LoadingLine message="Loading events…" />
+      ) : events.length === 0 ? (
+        <EmptyState
+          icon={<GitCommitHorizontal size={28} />}
+          title="No events yet"
+          subtitle="Ingest git, or record something with recall_remember. This list is the spine, not the index."
+        />
+      ) : (
+        <div className="flex flex-col gap-2">
+          {events.map((event) => (
+            <div key={event.id} className="card card-body py-2.5 px-3.5">
+              <div className="flex items-start gap-2.5">
+                <span className="badge badge-muted shrink-0 mt-0.5">{event.kind}</span>
+                <div className="min-w-0 flex-1">
+                  {event.url ? (
+                    <Link href={event.url} className="text-sm text-text hover:underline">
+                      {event.title}
+                    </Link>
+                  ) : (
+                    <div className="text-sm text-text">{event.title}</div>
+                  )}
+                  {event.body ? (
+                    <div className="text-xs text-text-muted line-clamp-2 mt-0.5">{event.body}</div>
+                  ) : null}
+                  <div className="text-[11px] text-text-subtle mt-1 font-mono">
+                    {event.source} · {formatEventTime(event.ts)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

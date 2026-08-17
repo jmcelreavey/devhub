@@ -17,6 +17,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Context } from "../context.ts";
 import { withDashboardErrors } from "../dashboard-client.ts";
+import { listWidgetHtml, uiResult } from "../ui.ts";
 
 interface RecallManifest {
   builtAt: string;
@@ -67,7 +68,17 @@ export function registerRecallTools(server: McpServer, ctx: Context): void {
           },
         );
         const markdown = data.markdown ?? `No recall hits for "${query}".`;
-        return { content: [{ type: "text", text: markdown }] };
+        const hits = (data.result?.hits ?? []) as Array<{
+          chunk?: { title?: string; sourceKind?: string };
+        }>;
+        const items = hits.map((hit) => ({
+          label: hit.chunk?.title || "(untitled)",
+          meta: hit.chunk?.sourceKind,
+        }));
+        const html = items.length
+          ? listWidgetHtml("Recall", `${items.length} passages for ${query}`, items)
+          : null;
+        return uiResult(markdown, html, `ui://devhub/recall/${encodeURIComponent(query)}`);
       }),
   );
 
@@ -132,7 +143,7 @@ export function registerRecallTools(server: McpServer, ctx: Context): void {
     "recall_remember",
     {
       description:
-        "Append a durable event to the DevHub memory spine — a decision, a gotcha, a resolved failure, anything a future session should not have to rediscover. Cheaper and lower-ceremony than writing a learning note, and immediately retrievable via `recall`. Pass a stable `id` to make re-emitting safe.",
+        "Append a durable event to the DevHub memory spine — a decision, a gotcha, a resolved failure, anything a future session should not have to rediscover. Cheaper and lower-ceremony than writing a learning note. The next `recall` query rebuilds if the spine is newer than the index, so the event is retrievable without an explicit `recall_index`. Pass a stable `id` to make re-emitting safe.",
       inputSchema: {
         title: z.string().describe("One line. Lead with the outcome, not the preamble."),
         body: z.string().optional().describe("Detail — the failure output, the reasoning, the fix"),
@@ -162,7 +173,7 @@ export function registerRecallTools(server: McpServer, ctx: Context): void {
     "recall_index",
     {
       description:
-        "Inspect or rebuild the recall index. Call with `rebuild: true` after bulk-importing notes; normal edits are picked up automatically on the next query.",
+        "Inspect or rebuild the recall index. Call with `rebuild: true` after bulk-importing notes. Normal edits are picked up automatically: the next `recall` query rebuilds if sources are newer than the last build.",
       inputSchema: {
         rebuild: z.boolean().optional().describe("Rebuild rather than just report status"),
         ingest: z

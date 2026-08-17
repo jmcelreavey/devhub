@@ -17,6 +17,7 @@ export function InlineNoteRename({
   inputClassName,
   title = "Click to rename",
   onEditingChange,
+  editRequest = 0,
 }: {
   noteSlug: string;
   displayName: string;
@@ -32,6 +33,8 @@ export function InlineNoteRename({
   style?: CSSProperties;
   inputClassName?: string;
   title?: string;
+  /** Bump to start a rename from a context menu. */
+  editRequest?: number;
 }) {
   const toast = useToast();
   const [renaming, setRenaming] = useState(false);
@@ -47,6 +50,18 @@ export function InlineNoteRename({
   useEffect(() => {
     onEditingChange?.(renaming);
   }, [renaming, onEditingChange]);
+
+  // `editRequest` is a bump counter, so this is the "adjusting state when a prop
+  // changes" case: compare against the last one seen during render rather than
+  // reacting in an effect, which would render once with the old state first.
+  const [seenEditRequest, setSeenEditRequest] = useState(editRequest);
+  if (editRequest !== seenEditRequest) {
+    setSeenEditRequest(editRequest);
+    if (editRequest && !disabled) {
+      setRenaming(true);
+      setValue(renameBase);
+    }
+  }
 
   const cancel = () => {
     setRenaming(false);

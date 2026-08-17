@@ -11,7 +11,9 @@ import { runGitRepoAsync } from "@/lib/git/repo-local";
 import { getNotesDir } from "@/lib/notes/dir";
 import { getGithubLogin } from "@/lib/standup/github-merged";
 import { pMap } from "@/lib/p-limit";
+import { ttlCached, type TtlPromiseEntry } from "@/lib/ttl-cache";
 import { codeownersForPath, deriveDomains, domainForPath, readCodeowners } from "./domains";
+import { prRadarCounts } from "./index-view";
 import { attentionSummary, type AttentionSummary } from "./obligations";
 import { readLearnedDomains, resolveOwnedRepo, resolveOwnedRepos } from "./owned-repos";
 import { deriveTeams, needsChurnInference, teamForDomains } from "./teams";
@@ -185,21 +187,15 @@ async function unassignedIssues(fullName: string): Promise<number> {
   return (JSON.parse(stdout) as { total_count?: number }).total_count ?? 0;
 }
 
-const obligationCache = new Map<string, { expiresAt: number; value: Promise<RepoObligations> }>();
+const obligationCache = new Map<string, TtlPromiseEntry<RepoObligations>>();
 
 export function loadObligations(
   repo: ResolvedOwnedRepo,
   prs: RepoPrRadarRow[],
 ): Promise<RepoObligations> {
-  const key = repo.fullName.toLowerCase();
-  const cached = obligationCache.get(key);
-  if (cached && cached.expiresAt > Date.now()) return cached.value;
-  const value = loadObligationsUncached(repo, prs).catch((error: unknown) => {
-    obligationCache.delete(key);
-    throw error;
-  });
-  obligationCache.set(key, { expiresAt: Date.now() + OBLIGATION_TTL_MS, value });
-  return value;
+  return ttlCached(obligationCache, repo.fullName.toLowerCase(), OBLIGATION_TTL_MS, () =>
+    loadObligationsUncached(repo, prs),
+  );
 }
 
 async function loadObligationsUncached(
@@ -249,19 +245,14 @@ async function recentCommits(repoRoot: string, rangeArgs: string[]): Promise<Par
  * churn-based team inference so a page load walks the log once, not twice.
  */
 const ACTIVITY_TTL_MS = 5 * 60_000;
-const activityCache = new Map<string, { expiresAt: number; commits: Promise<ParsedCommit[]> }>();
+const activityCache = new Map<string, TtlPromiseEntry<ParsedCommit[]>>();
 
 function loadRepoActivity(repo: ResolvedOwnedRepo): Promise<ParsedCommit[]> {
   if (!repo.localPath) return Promise.resolve([]);
-  const key = repo.fullName.toLowerCase();
-  const cached = activityCache.get(key);
-  if (cached && cached.expiresAt > Date.now()) return cached.commits;
-  const commits = recentCommits(repo.localPath, ["--since=90 days ago", "--all"]).catch((error: unknown) => {
-    activityCache.delete(key);
-    throw error;
-  });
-  activityCache.set(key, { expiresAt: Date.now() + ACTIVITY_TTL_MS, commits });
-  return commits;
+  const repoRoot = repo.localPath;
+  return ttlCached(activityCache, repo.fullName.toLowerCase(), ACTIVITY_TTL_MS, () =>
+    recentCommits(repoRoot, ["--since=90 days ago", "--all"]),
+  );
 }
 
 export function domainContributions(commits: ParsedCommit[], domains: RepoDomain[]): DomainContribution[] {
@@ -273,24 +264,13 @@ export function domainContributions(commits: ParsedCommit[], domains: RepoDomain
       return domain ? [domain.id] : [];
     }));
     for (const domainId of touched) {
-      const key = `${commit.email}${domainId}`;
+      const key = `${commit.email}\0${domainId}`;
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
   }
   return [...counts].map(([key, commitCount]) => {
-    // Keys are `${email}${domainId}` with no delimiter — resolve by suffix against
-    // known domain ids (longest match first so `api` beats `a` if both exist).
-    const sorted = [...domains].sort((a, b) => b.id.length - a.id.length);
-    for (const domain of sorted) {
-      if (key.endsWith(domain.id)) {
-        return {
-          author: key.slice(0, key.length - domain.id.length),
-          domainId: domain.id,
-          commits: commitCount,
-        };
-      }
-    }
-    return { author: key, domainId: "", commits: commitCount };
+    const [author = "", domainId = ""] = key.split("\0");
+    return { author, domainId, commits: commitCount };
   });
 }
 
@@ -313,9 +293,9 @@ export async function resolveTeams(repo: ResolvedOwnedRepo, domains: RepoDomain[
  * Familiarity discounts a domain's churn; it must never cancel it.
  *
  * The first version was linear and capped at 1.0, so six reviews scored a
- * domain as fully familiar and `churn × (1 − familiarity)` collapsed to exactly
+ * domain as fully familiar and `churn Ã (1 â familiarity)` collapsed to exactly
  * zero. On a real repo that removed the two busiest domains from the ledger
- * altogether — 265 commits of `deployments` scored 0 while a 2-commit dotfile
+ * altogether â 265 commits of `deployments` scored 0 while a 2-commit dotfile
  * directory ranked third.
  *
  * So: each signal saturates on its own curve, the total is capped below 1, and
@@ -472,7 +452,7 @@ export async function loadRepoDigest(
 /**
  * Upper bound on paths fed to `git log`. Large refactors and grouped dependency
  * bumps blow past any small limit, and rejecting those PRs outright is worse
- * than analysing the first N files — so we truncate and say so.
+ * than analysing the first N files â so we truncate and say so.
  */
 export const MAX_BLAST_PATHS = 300;
 
@@ -539,15 +519,18 @@ export interface OwnershipSummaryRow {
   repo: ResolvedOwnedRepo;
   obligations: RepoObligations;
   openPrs: number;
+  reviewRequested: number;
+  unattended: number;
   attention: AttentionSummary;
   error: string | null;
   warning?: string | null;
 }
 
-let summaryCache: { expiresAt: number; value: Promise<OwnershipSummaryRow[]> } | null = null;
+const SUMMARY_TTL_MS = 60_000;
+const summaryCache = new Map<string, TtlPromiseEntry<OwnershipSummaryRow[]>>();
 
 export function invalidateOwnershipSummary(): void {
-  summaryCache = null;
+  summaryCache.clear();
 }
 
 /**
@@ -559,13 +542,7 @@ export function invalidateOwnershipSummary(): void {
  * repos you own.
  */
 export async function loadOwnershipSummary(): Promise<OwnershipSummaryRow[]> {
-  if (summaryCache && summaryCache.expiresAt > Date.now()) return summaryCache.value;
-  const value = loadOwnershipSummaryUncached().catch((error: unknown) => {
-    summaryCache = null;
-    throw error;
-  });
-  summaryCache = { expiresAt: Date.now() + 60_000, value };
-  return value;
+  return ttlCached(summaryCache, "all", SUMMARY_TTL_MS, loadOwnershipSummaryUncached);
 }
 
 async function loadOwnershipSummaryUncached(): Promise<OwnershipSummaryRow[]> {
@@ -583,7 +560,7 @@ async function loadOwnershipSummaryUncached(): Promise<OwnershipSummaryRow[]> {
       return {
         repo,
         obligations,
-        openPrs: prs.length,
+        ...prRadarCounts(prs),
         attention: attentionSummary(obligations, prs),
         error: null,
         warning,
@@ -600,6 +577,8 @@ async function loadOwnershipSummaryUncached(): Promise<OwnershipSummaryRow[]> {
         repo,
         obligations,
         openPrs: 0,
+        reviewRequested: 0,
+        unattended: 0,
         attention: { score: 0, reasons: [] },
         error: error instanceof Error ? error.message : "Could not load this repository.",
       };

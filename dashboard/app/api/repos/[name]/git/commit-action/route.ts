@@ -6,7 +6,7 @@ import { isSafeCommitRef } from "@/lib/git/ref-safety";
 import { runGitRepoAsync } from "@/lib/git/repo-local";
 import type { StashConflictPayload } from "@/app/repos/types";
 import { isSafeBranchName } from "../../branches/parsers";
-import { gitFail, withScannedRepo, type RepoParams } from "../_shared";
+import { backupBranchName, gitFail, withScannedRepo, type RepoParams } from "../_shared";
 
 const BodySchema = z.object({
   action: z.enum([
@@ -20,14 +20,6 @@ const BodySchema = z.object({
   commit: z.string().min(1).max(128),
   name: z.string().min(1).max(255).optional(),
 });
-
-function backupBranchName(): string {
-  return `devhub/backup-${new Date()
-    .toISOString()
-    .replace(/[-:]/g, "")
-    .replace(/\.\d+Z$/, "")
-    .replace("T", "-")}`;
-}
 
 function operationConflict(
   action: "cherry-pick" | "revert",

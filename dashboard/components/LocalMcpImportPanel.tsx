@@ -104,7 +104,7 @@ export function LocalMcpImportPanel({ onImported }: Props) {
       <div
         role="button"
         tabIndex={0}
-        className="w-full flex items-center justify-between text-left"
+        className="row-select w-full flex items-center justify-between text-left"
         style={{ color: "inherit", cursor: "pointer", padding: 0 }}
         onClick={toggleOpen}
         onKeyDown={(e) => {

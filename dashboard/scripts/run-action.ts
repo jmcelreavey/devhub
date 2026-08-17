@@ -45,7 +45,12 @@ async function runSync(repoRoot: string, dryRun: boolean): Promise<number> {
     // target — see lib/sync/cowork.ts. Non-fatal: every other tool is already synced.
     () =>
       buildCoworkPlugin({ emit, repoRoot, dryRun })
-        .then((r) => r.code)
+        .then((r) => {
+          if (r.code !== 0) {
+            emit(`WARNING: Cowork bundle build failed (exit ${r.code}).`);
+          }
+          return 0;
+        })
         .catch((e: unknown) => {
           emit(`WARNING: Cowork bundle build failed (${e instanceof Error ? e.message : String(e)}).`);
           return 0;

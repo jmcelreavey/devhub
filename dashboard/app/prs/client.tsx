@@ -1,66 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type { FormEvent } from "react";
 import { GitPullRequest, RefreshCw } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import type { GithubPrsApiPayload, GithubPrRow, RecentlyReviewedPr } from "@/lib/github/prs";
 import { useMarkPrsSeen } from "@/lib/hooks/use-sidebar-counts";
 import { parseGithubPrUrl } from "@/lib/entity-links/parse-pr";
-import { PrRowActions } from "@/components/PrRowActions";
+import { PrRow } from "@/components/PrRow";
 import { FetchError, EmptyState, SkeletonRows } from "@/components";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
-import { PersonChip } from "@/components/PersonChip";
 
 type PrTab = "authored" | "reviews" | "recent";
 
 const EMPTY_PR_ROWS: GithubPrRow[] = [];
 const EMPTY_RECENTLY_REVIEWED: RecentlyReviewedPr[] = [];
 
-function PrTitleCard({ row, children }: { row: GithubPrRow; children: ReactNode }) {
-  return (
-    <div className="card flex items-center gap-3" style={{ padding: "10px 14px" }}>
-      <GitPullRequest size={16} style={{ color: "var(--accent)", flexShrink: 0 }} aria-hidden />
-      <a
-        href={row.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex min-w-0 flex-1 flex-col gap-0.5 no-underline text-text"
-      >
-        <span className="text-sm font-medium leading-snug break-words">{row.title}</span>
-        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-          <span className="font-mono text-[11px] text-text-muted">
-            {row.repo}#{row.number}
-          </span>
-          {row.author ? (
-            <PersonChip
-              name={row.author.login}
-              email={`${row.author.login}@users.noreply.github.com`}
-              avatarUrl={row.author.avatarUrl}
-              size={16}
-            />
-          ) : null}
-        </span>
-      </a>
-      {children}
-    </div>
-  );
-}
-
 function PrCard({ row, mode }: { row: GithubPrRow; mode: "authored" | "reviews" }) {
-  return (
-    <PrTitleCard row={row}>
-      <PrRowActions row={row} kind={mode} size="md" />
-    </PrTitleCard>
-  );
+  return <PrRow row={row} kind={mode} density="comfortable" />;
 }
 
 function RecentlyReviewedCard({ row }: { row: RecentlyReviewedPr }) {
-  return (
-    <PrTitleCard row={row}>
-      <PrRowActions row={row} kind="reviewed" size="md" />
-    </PrTitleCard>
-  );
+  return <PrRow row={row} kind="reviewed" density="comfortable" />;
 }
 
 export default function PrsPage() {

@@ -31,6 +31,20 @@ interface EntityNoteActionProps {
   errorMessage?: string;
 }
 
+export function useVaultNoteExists(path: string): boolean {
+  const [exists, setExists] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void vaultNoteExists(path).then((ok) => {
+      if (live) setExists(ok);
+    });
+    return () => {
+      live = false;
+    };
+  }, [path]);
+  return exists;
+}
+
 export function EntityNoteAction({
   path,
   markdown,

@@ -15,6 +15,7 @@ import {
   buildMergedSkillCatalog,
   catalogOriginCounts,
   listSkillsFromCatalog,
+  resolveCatalogSkillName,
   upstreamOnlySkillNames,
   vendorCatalogEntries,
 } from "./skill-catalog";
@@ -149,5 +150,34 @@ describe("vendor provenance validation", () => {
     const entries = vendorCatalogEntries(buildMergedSkillCatalog(repoRoot));
     expect(entries).toEqual([]);
     expect(validateVendorProvenance(entries)).toEqual([]);
+  });
+});
+
+describe("root-level third-party skills", () => {
+  it("includes skills/<name> in the catalog as read-only vendor origin", () => {
+    writeSkill("shared", "rubber-duck", core("rubber-duck"));
+    const rootDir = path.join(repoRoot, "skills", "frontend-design");
+    fs.mkdirSync(rootDir, { recursive: true });
+    fs.writeFileSync(path.join(rootDir, "SKILL.md"), core("frontend-design"));
+
+    const catalog = buildMergedSkillCatalog(repoRoot);
+    const byName = Object.fromEntries(catalog.map((e) => [e.name, e]));
+    expect(byName["frontend-design"].origin).toBe("vendor");
+    expect(path.basename(path.dirname(byName["frontend-design"].dir))).toBe("skills");
+
+    const list = listSkillsFromCatalog(catalog);
+    expect(list.find((s) => s.name === "frontend-design")?.readOnly).toBe(true);
+    expect(vendorCatalogEntries(catalog).map((e) => e.name)).not.toContain("frontend-design");
+    expect(upstreamOnlySkillNames(repoRoot).has("frontend-design")).toBe(true);
+  });
+});
+
+describe("resolveCatalogSkillName", () => {
+  it("matches unprefixed local names to devhub- prefixed catalog names", () => {
+    const names = new Set(["devhub-repo-ownership", "rubber-duck"]);
+    expect(resolveCatalogSkillName("repo-ownership", names)).toBe("devhub-repo-ownership");
+    expect(resolveCatalogSkillName("devhub-repo-ownership", names)).toBe("devhub-repo-ownership");
+    expect(resolveCatalogSkillName("rubber-duck", names)).toBe("rubber-duck");
+    expect(resolveCatalogSkillName("missing", names)).toBeNull();
   });
 });

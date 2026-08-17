@@ -107,6 +107,7 @@ export async function GET() {
     chamber: peerServices.chamber,
     opencode: peerServices.opencode,
     claude: peerServices.claude,
+    cursor: peerServices.cursor,
     allowLanNetwork,
     hasOpenchamberUiPassword,
     envPath: ".env.local",

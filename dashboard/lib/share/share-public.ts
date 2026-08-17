@@ -56,13 +56,22 @@ export function shareExpiresAt(share: Pick<ShareRecord, "createdAt">): number {
  * and it tells nobody — so this record is a local receipt, not a status.
  */
 export interface OneTimeRecord {
-  /** Local id. Not the paste id, so the registry alone cannot open the paste. */
+  /**
+   * Local receipt id — our handle for revoke, not the paste id.
+   * The registry is a secret store (see `url`). The passphrase is the only
+   * secret that is never written here.
+   */
   id: string;
   vault: VaultId;
   /** Decoded vault slug (no extension) the link was made from. */
   path: string;
   title: string;
-  /** Full URL including the key fragment. This is the secret. */
+  /**
+   * Full PrivateBin URL, key fragment included. Re-copy needs that fragment —
+   * without it the paste is ciphertext you cannot decrypt — so this registry
+   * is a secret store, not a public index. The passphrase is the only thing
+   * we never persist.
+   */
   url: string;
   pasteId: string;
   /** Lets us revoke before first read. Useless afterwards. */

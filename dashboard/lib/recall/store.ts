@@ -14,12 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { writeAtomicNow, safeReadJSON } from "@/lib/atomic-write";
 import { Bm25Index } from "./bm25";
-import {
-  buildCorpus,
-  corpusFingerprints,
-  sourcesNewestMtime,
-  type BuildCorpusOptions,
-} from "./corpus";
+import { buildCorpus, sourcesNewestMtime, type BuildCorpusOptions } from "./corpus";
 import { dequantise, getEmbedder, quantise } from "./embed";
 import { chunksFile, indexDir, manifestFile, RECALL_INDEX_VERSION } from "./paths";
 import { tokenize } from "./tokenize";
@@ -62,8 +57,9 @@ export function readManifest(): RecallIndexManifest | null {
  * measured full build is fast enough that the bookkeeping to make it partial
  * would be the larger source of bugs, and a partially-stale index is a much
  * worse failure mode than a slow rebuild — it returns confidently wrong
- * results with no signal that anything is off. `isStale()` exists so callers
- * can *skip* a rebuild; that's the cheap half of the same idea.
+ * results with no signal that anything is off. `loadIndex()` calls `isStale()`
+ * so the cheap half of that idea is automatic: skip when current, rebuild when
+ * sources have moved.
  */
 export function buildIndex(options: BuildCorpusOptions = {}): RecallIndexManifest {
   const startedAt = Date.now();
@@ -88,7 +84,6 @@ export function buildIndex(options: BuildCorpusOptions = {}): RecallIndexManifes
     chunkCount: chunks.length,
     bySource,
     dims: embedder.dims,
-    fingerprints: corpusFingerprints(chunks),
     embedder: embedder.id,
     tookMs: Date.now() - startedAt,
   };
@@ -127,14 +122,15 @@ export function isStale(): boolean {
   return sourcesNewestMtime() > Date.parse(manifest.builtAt);
 }
 
-/** Load the index, building it first if absent. Returns null if it can't be built. */
+/** Load the index, rebuilding when missing or stale. Returns null if it can't be built. */
 export function loadIndex(options: { autoBuild?: boolean } = {}): LoadedIndex | null {
   const { autoBuild = true } = options;
 
-  let manifest = readManifest();
-  if ((!manifest || !fs.existsSync(chunksFile())) && autoBuild) {
-    manifest = buildIndex();
+  if (autoBuild && isStale()) {
+    buildIndex();
   }
+
+  const manifest = readManifest();
   if (!manifest) return null;
 
   const key = memoKey(manifest);
@@ -159,7 +155,7 @@ export function loadIndex(options: { autoBuild?: boolean } = {}): LoadedIndex | 
   return index;
 }
 
-/** Drop the process-local memo. Called after an append so the next read is fresh. */
+/** Drop the process-local memo. Not a rebuild — the next `loadIndex()` decides that. */
 export function invalidateMemo(): void {
   memo = null;
 }

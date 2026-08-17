@@ -1,11 +1,19 @@
 "use client";
 
-import { FlaskConical, RefreshCw } from "lucide-react";
+import { ClipboardCopy, Code2, Copy, FileText, FlaskConical, RefreshCw } from "lucide-react";
 import { FetchError, PageHeader } from "@/components";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 import { SimpleMarkdown } from "@/components/ui/SimpleMarkdown";
+import {
+  ContextMenu,
+  RowMenuKebab,
+  useContextMenu,
+  type ContextMenuGroup,
+} from "@/components/shell/ContextMenu";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 interface ResearchCard {
@@ -22,6 +30,124 @@ interface ResearchPayload {
   researchDir: string;
   files: { name: string; mtimeMs: number; size: number }[];
   cards: ResearchCard[];
+}
+
+const icon = { size: 12 as const };
+
+function researchNoteHref(sourcePath: string): string {
+  const stem = sourcePath.replace(/\.md$/i, "");
+  return `/notes/research/${stem}`;
+}
+
+function ResearchItem({ card }: { card: ResearchCard }) {
+  const router = useRouter();
+  const toast = useToast();
+  const menu = useContextMenu<"row">();
+  const path = card.sourcePath ? `research/${card.sourcePath}` : null;
+  const groups: ContextMenuGroup[] = [
+    {
+      id: "open",
+      items: [
+        {
+          id: "open",
+          label: "Open",
+          icon: <FileText {...icon} aria-hidden />,
+          disabled: !card.sourcePath,
+          disabledReason: card.sourcePath ? undefined : "This digest has no source file.",
+          onSelect: () => {
+            if (card.sourcePath) router.push(researchNoteHref(card.sourcePath));
+          },
+        },
+        {
+          id: "cursor",
+          label: "Open in Cursor",
+          icon: <Code2 {...icon} aria-hidden />,
+          disabled: true,
+          disabledReason: "Open in Cursor is for notes linked to a repo.",
+          onSelect: () => undefined,
+        },
+      ],
+    },
+    {
+      id: "file",
+      items: [
+        {
+          id: "copy",
+          label: "Copy path",
+          icon: <ClipboardCopy {...icon} aria-hidden />,
+          disabled: !path,
+          disabledReason: path ? undefined : "This digest has no source file.",
+          onSelect: () => {
+            if (!path) return;
+            void copyTextToClipboard(path).then(
+              () => toast.success("Location copied"),
+              () => toast.error("Could not copy to clipboard."),
+            );
+          },
+        },
+        {
+          id: "summary",
+          label: "Copy summary",
+          icon: <Copy {...icon} aria-hidden />,
+          onSelect: () => {
+            void copyTextToClipboard(card.summary).then(
+              () => toast.success("Summary copied"),
+              () => toast.error("Could not copy to clipboard."),
+            );
+          },
+        },
+      ],
+    },
+  ];
+
+  return (
+    <article className="card card-body group" {...menu.bindRow("row")}>
+      <div className="mb-1 flex items-center gap-1.5">
+        <div className="min-w-0 flex-1 flex items-center gap-1.5 text-sm font-semibold text-text">
+          <FlaskConical size={13} aria-hidden />
+          {card.title}
+        </div>
+        <RowMenuKebab
+          label={`Actions for ${card.title}`}
+          onOpen={(x, y) => menu.openAtPoint(x, y, "row")}
+        />
+      </div>
+      {card.updatedAt ? (
+        <div className="mb-2 text-[11px] text-text-muted">
+          {new Date(card.updatedAt).toLocaleString()}
+        </div>
+      ) : null}
+      <SimpleMarkdown text={card.summary} compact />
+      {card.signals && card.signals.length > 0 ? (
+        <ul className="mt-2 space-y-1 text-xs text-text-subtle">
+          {card.signals.slice(0, 5).map((s) => (
+            <li key={s.title}>
+              {s.url ? (
+                <a
+                  href={s.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent"
+                  onContextMenu={(event) => event.preventDefault()}
+                >
+                  {s.title}
+                </a>
+              ) : (
+                s.title
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <ContextMenu
+        open={menu.target !== null}
+        position={menu.position}
+        groups={groups}
+        onClose={menu.close}
+        label={`${card.title} actions`}
+      />
+    </article>
+  );
 }
 
 export default function ResearchClient() {
@@ -90,33 +216,7 @@ export default function ResearchClient() {
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
               {data.cards.map((c) => (
-                <article key={c.sourcePath ?? c.title} className="card card-body">
-                  <div className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-text">
-                    <FlaskConical size={13} aria-hidden />
-                    {c.title}
-                  </div>
-                  {c.updatedAt ? (
-                    <div className="mb-2 text-[11px] text-text-muted">
-                      {new Date(c.updatedAt).toLocaleString()}
-                    </div>
-                  ) : null}
-                  <SimpleMarkdown text={c.summary} compact />
-                  {c.signals && c.signals.length > 0 ? (
-                    <ul className="mt-2 space-y-1 text-xs text-text-subtle">
-                      {c.signals.slice(0, 5).map((s) => (
-                        <li key={s.title}>
-                          {s.url ? (
-                            <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-accent">
-                              {s.title}
-                            </a>
-                          ) : (
-                            s.title
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </article>
+                <ResearchItem key={c.sourcePath ?? c.title} card={c} />
               ))}
             </div>
           )}

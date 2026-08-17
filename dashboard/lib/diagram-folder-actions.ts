@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  createEmptyDiagram,
+  createUniqueDiagramStoragePath,
   diagramFolderStoragePath,
   diagramParentFolder,
   stripDiagramsPrefix,
@@ -18,6 +20,24 @@ import { broadcastNoteAutosaveInvalidation } from "@/lib/notes/autosave-invalida
 async function errorMessage(res: Response, fallback: string): Promise<string> {
   const data = (await res.json().catch(() => ({}))) as { error?: string };
   return data.error ?? fallback;
+}
+
+/** Create an empty diagram inside `relFolder`. Returns the storage path. */
+export async function createDiagramInFolder(
+  relFolder: string,
+  name?: string,
+): Promise<string> {
+  const base =
+    name?.trim().replace(/\\/g, "/").split("/").pop() ||
+    (createUniqueDiagramStoragePath().split("/").pop() ?? `diagram-${Date.now()}`);
+  const filePath = `${diagramFolderStoragePath(relFolder)}/${base}`;
+  const res = await fetch(`/api/notes/${toNotesApiPath(filePath)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content: createEmptyDiagram() }),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, "Could not create diagram"));
+  return filePath;
 }
 
 /** Create an empty folder inside `relFolder`. */

@@ -114,6 +114,7 @@ function DiagramsShellInner({
           storageKey="devhub:diagrams-nav-open"
           label="Diagrams"
           noun="diagrams"
+          kind="diagrams"
           activeGroupId={activeGroupId}
         />
       </VaultFilesSidebar>

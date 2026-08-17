@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cloneGithubRepo } from "@/lib/repos";
+import { cloneGithubRepo, cloneRemoteRepo } from "@/lib/repos";
 import { parseBody } from "@/lib/api-utils";
 import { RepoCloneSchema } from "@/lib/schemas";
 
 export async function POST(req: NextRequest) {
   const parsed = await parseBody(req, RepoCloneSchema);
   if (!parsed.ok) return parsed.response;
-  const fullName = parsed.data.fullName;
 
   try {
-    const cloned = await cloneGithubRepo(fullName);
+    const cloned =
+      "fullName" in parsed.data
+        ? await cloneGithubRepo(parsed.data.fullName)
+        : await cloneRemoteRepo(parsed.data.url, parsed.data.name);
     return NextResponse.json({ ok: true, repo: cloned });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

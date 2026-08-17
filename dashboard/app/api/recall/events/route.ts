@@ -35,7 +35,7 @@ const EventSchema = z.object({
   body: z.string().max(20_000).optional(),
   source: z.string().min(1).max(120),
   url: z.string().url().optional(),
-  ts: z.string().datetime().optional(),
+  ts: z.string().datetime({ offset: true }).optional(),
   id: z.string().min(1).max(200).optional(),
   refs: z
     .array(
@@ -69,9 +69,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const inputs = "events" in parsed.data ? parsed.data.events : [parsed.data];
   const written = appendEvents(inputs as Parameters<typeof appendEvents>[0]);
 
-  // New events change the corpus, so the memoised index is now behind. The
-  // next query rebuilds from disk rather than serving a set that can't contain
-  // what was just written.
+  // Drop the in-memory index only. That is not a rebuild — the next query's
+  // loadIndex() sees a newer spine via isStale() and rebuilds from sources.
   if (written.length > 0) invalidateMemo();
 
   return NextResponse.json({

@@ -72,6 +72,7 @@ export interface BranchesPayload {
   behindMain: number;
   /** https base for the origin remote, for "Open on GitHub". Null when unparseable. */
   remoteWebUrl?: string | null;
+  remotes?: { name: string; fetchUrl: string; pushUrl: string }[];
 }
 
 export type CommitMode = "commit-and-push" | "commit-only";
@@ -123,7 +124,11 @@ export function parseStashConflict(body: string): StashConflictPayload | null {
               ? "cherry-pick"
               : json.action === "revert"
                 ? "revert"
-              : "checkout",
+                : json.action === "pull-rebase"
+                  ? "pull-rebase"
+                  : json.action === "pull-merge"
+                    ? "pull-merge"
+                    : "checkout",
       branch: typeof json.branch === "string" ? json.branch : undefined,
       switched: Boolean(json.switched),
       conflictFiles: Array.isArray(json.conflictFiles)

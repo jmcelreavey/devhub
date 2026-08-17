@@ -2,14 +2,31 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Globe, Copy, Trash2, ExternalLink, RefreshCw, AlertTriangle, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  Globe,
+  Trash2,
+  ExternalLink,
+  RefreshCw,
+  AlertTriangle,
+  ClipboardCopy,
+  FileText,
+} from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { useConfirm } from "@/components/shell/ConfirmDialog";
+import {
+  ContextMenu,
+  RowMenuKebab,
+  useContextMenu,
+  type ContextMenuGroup,
+} from "@/components/shell/ContextMenu";
 import { OneTimeLinksSection } from "@/components/OneTimeLinksSection";
 import { getVaultClient } from "@/lib/vault/vault-client";
 import { shareExpiresAt, type ShareRecord, type ShareStatus } from "@/lib/share/share-public";
+
+const icon = { size: 12 as const };
 
 function noteHref(share: ShareRecord): string {
   return getVaultClient(share.vault).paths.pageHref(share.path);
@@ -20,6 +37,131 @@ function expiryLabel(share: ShareRecord, now = Date.now()): string {
   const days = Math.ceil((shareExpiresAt(share) - now) / (24 * 60 * 60 * 1000));
   if (days <= 0) return "Expires today";
   return `Expires in ${days} day${days === 1 ? "" : "s"}`;
+}
+
+function LiveLinkRow({
+  share,
+  busy,
+  onUpdate,
+  onRemove,
+}: {
+  share: ShareStatus;
+  busy: boolean;
+  onUpdate: () => void;
+  onRemove: () => void;
+}) {
+  const router = useRouter();
+  const toast = useToast();
+  const menu = useContextMenu<"row">();
+  const href = noteHref(share);
+  const canUpdate = share.stale && !share.missing;
+  const groups: ContextMenuGroup[] = [
+    {
+      id: "open",
+      items: [
+        {
+          id: "open",
+          label: "Open",
+          icon: <FileText {...icon} aria-hidden />,
+          onSelect: () => router.push(href),
+        },
+        {
+          id: "gist",
+          label: "Open gist",
+          icon: <ExternalLink {...icon} aria-hidden />,
+          onSelect: () => {
+            window.open(share.url, "_blank", "noopener,noreferrer");
+          },
+        },
+      ],
+    },
+    {
+      id: "file",
+      items: [
+        {
+          id: "copy",
+          label: "Copy link",
+          icon: <ClipboardCopy {...icon} aria-hidden />,
+          onSelect: () => {
+            void copyTextToClipboard(share.url).then(
+              () => toast.success("Link copied."),
+              () => toast.error("Could not copy link."),
+            );
+          },
+        },
+        {
+          id: "update",
+          label: busy ? "Updating…" : "Update",
+          description: "Push current content to the live link",
+          icon: <RefreshCw {...icon} aria-hidden />,
+          disabled: busy || !canUpdate,
+          disabledReason: canUpdate ? undefined : "Source is up to date.",
+          onSelect: onUpdate,
+        },
+      ],
+    },
+    {
+      id: "danger",
+      items: [
+        {
+          id: "remove",
+          label: "Remove",
+          icon: <Trash2 {...icon} aria-hidden />,
+          danger: true,
+          disabled: busy,
+          onSelect: onRemove,
+        },
+      ],
+    },
+  ];
+
+  return (
+    <div className="card group flex items-center gap-3" style={{ padding: "10px 12px" }} {...menu.bindRow("row")}>
+      {share.stale ? (
+        <AlertTriangle
+          size={15}
+          style={{ color: share.missing ? "var(--danger)" : "var(--warning)", flexShrink: 0 }}
+          aria-hidden
+        />
+      ) : (
+        <Globe size={15} style={{ color: "var(--success)", flexShrink: 0 }} aria-hidden />
+      )}
+      <div className="min-w-0 flex-1">
+        <Link
+          href={href}
+          className="text-sm font-medium hover:underline no-underline"
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          {share.title}
+        </Link>
+        <div className="text-xs truncate text-text-subtle">
+          {share.vault} · {share.path}
+        </div>
+      </div>
+      {share.missing ? (
+        <span className="badge text-xs shrink-0 text-danger">Source deleted</span>
+      ) : share.stale ? (
+        <span className="badge text-xs shrink-0 text-warning">Stale</span>
+      ) : null}
+      <span
+        className="badge badge-muted text-xs shrink-0"
+        title={`Published ${new Date(share.createdAt).toLocaleString()}`}
+      >
+        {expiryLabel(share)}
+      </span>
+      <RowMenuKebab
+        label={`Actions for ${share.title}`}
+        onOpen={(x, y) => menu.openAtPoint(x, y, "row")}
+      />
+      <ContextMenu
+        open={menu.target !== null}
+        position={menu.position}
+        groups={groups}
+        onClose={menu.close}
+        label={`${share.title} actions`}
+      />
+    </div>
+  );
 }
 
 export default function SharedClient() {
@@ -137,91 +279,13 @@ export default function SharedClient() {
       ) : (
         <div className="space-y-2">
           {shares.map((share) => (
-            <div
+            <LiveLinkRow
               key={share.key}
-              className="card group flex items-center gap-3"
-              style={{ padding: "10px 12px" }}
-            >
-              {share.stale ? (
-                <AlertTriangle
-                  size={15}
-                  style={{ color: share.missing ? "var(--danger)" : "var(--warning)", flexShrink: 0 }}
-                  aria-hidden
-                />
-              ) : (
-                <Globe size={15} style={{ color: "var(--success)", flexShrink: 0 }} aria-hidden />
-              )}
-              <div className="min-w-0 flex-1">
-                <Link href={noteHref(share)} className="text-sm font-medium hover:underline no-underline">
-                  {share.title}
-                </Link>
-                <div className="text-xs truncate text-text-subtle">
-                  {share.vault} · {share.path}
-                </div>
-              </div>
-              {share.missing ? (
-                <span className="badge text-xs shrink-0 text-danger">
-                  Source deleted
-                </span>
-              ) : share.stale ? (
-                <span className="badge text-xs shrink-0 text-warning">
-                  Stale
-                </span>
-              ) : null}
-              <span
-                className="badge badge-muted text-xs shrink-0"
-                title={`Published ${new Date(share.createdAt).toLocaleString()}`}
-              >
-                {expiryLabel(share)}
-              </span>
-              {share.stale && !share.missing ? (
-                <button
-                  type="button"
-                  disabled={busyKey === share.key}
-                  onClick={() => pushUpdate(share)}
-                  className="btn btn-ghost text-xs flex items-center gap-1 shrink-0 text-warning"
-                  title="Push current content to the live link"
-                >
-                  {busyKey === share.key ? (
-                    <Loader2 size={13} className="animate-spin" aria-hidden />
-                  ) : (
-                    <RefreshCw size={13} aria-hidden />
-                  )}
-                  Update
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => {
-                  void copyTextToClipboard(share.url).then(
-                    () => toast.success("Link copied."),
-                    () => toast.error("Could not copy link."),
-                  );
-                }}
-                className="btn btn-ghost text-xs flex items-center justify-center px-1.5 shrink-0"
-                aria-label="Copy link"
-              >
-                <Copy size={13} aria-hidden />
-              </button>
-              <a
-                href={share.url}
-                target="_blank"
-                rel="noreferrer"
-                className="btn btn-ghost text-xs flex items-center justify-center px-1.5 shrink-0 no-underline"
-                aria-label="Open gist"
-              >
-                <ExternalLink size={13} aria-hidden />
-              </a>
-              <button
-                type="button"
-                disabled={busyKey === share.key}
-                onClick={() => removeOne(share)}
-                className="btn btn-danger-ghost text-xs flex items-center justify-center px-1.5 shrink-0"
-                aria-label="Remove from live"
-              >
-                <Trash2 size={13} aria-hidden />
-              </button>
-            </div>
+              share={share}
+              busy={busyKey === share.key}
+              onUpdate={() => void pushUpdate(share)}
+              onRemove={() => void removeOne(share)}
+            />
           ))}
         </div>
       )}

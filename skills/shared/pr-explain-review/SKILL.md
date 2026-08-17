@@ -210,7 +210,10 @@ section layout — it's what the dashboard note view is tuned for.
 The H1 is **just the PR title** (no `repo#number` prefix). Directly under it,
 put a small sub-header line that links to the PR — the `repo#number` as the
 link text. Keep it a normal line (not a heading) so it reads as a small link,
-not a second title. Then the metadata as a short bullet block.
+not a second title. Then the metadata as a short bullet block. End the header with a
+`## Links` section: a **PR** link (`owner/repo#n` → GitHub URL) and a **Repo**
+line (the local clone folder name, no slashes). The dashboard uses those to
+open the PR branch in Cursor.
 
 ```markdown
 # <title>
@@ -223,6 +226,11 @@ not a second title. Then the metadata as a short bullet block.
 - **Author:** <author>
 - **Size:** +<additions>/-<deletions> across <n> files
 - **State:** <open / draft / …>
+
+## Links
+
+**PR:** [<repo>#<number>](<PR url>)
+**Repo:** <local clone folder name>
 
 ## At A Glance
 One or two sentences: what changes and whether it's safe to ship.

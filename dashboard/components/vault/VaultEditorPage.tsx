@@ -14,6 +14,7 @@ import {
   FileCheck2,
   Flame,
   FolderInput,
+  GitPullRequest,
   Link2,
   ListChecks,
   Loader2,
@@ -62,8 +63,10 @@ import {
   applyCursorNoteDraft,
   deleteCursorNoteDraft,
   getCursorNoteDraft,
+  openPrInCursor,
   openRepoInCursor,
 } from "@/lib/open-in-cursor-client";
+import { parseGithubPrRef } from "@/lib/entity-links/parse-pr";
 import {
   mergeEntityRefs,
   parseEntityLinksFromMarkdown,
@@ -117,7 +120,15 @@ export function VaultEditorPage({
   const isNewRef = useRef(isNew);
   const allMastersRef = useRef(allMasters);
   const pendingLegacyMigrationRef = useRef(false);
-  /** Raw frontmatter block for the doc being edited; re-prepended on save. */
+  /**
+   * Raw frontmatter block for the doc being edited; re-prepended on save.
+   *
+   * Mirrored into state because the title is derived from it during render, and
+   * a ref read there would not re-derive when the doc changes. The ref stays the
+   * save path's source of truth: saves are debounced, and a state read through a
+   * stale closure would write back the previous doc's frontmatter. Same
+   * state-plus-ref shape as isNewRef / allMastersRef above.
+   */
   const docFrontmatterRef = useRef("");
   const [docFrontmatter, setDocFrontmatter] = useState("");
 
@@ -159,8 +170,8 @@ export function VaultEditorPage({
     docFrontmatterRef.current = "";
     let cancelled = false;
     setLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
-    setDocFrontmatter("");
     setError(null);
+    setDocFrontmatter("");
     setIsNew(false);
     setEditorEpoch(0);
     fetch(`${apiPrefix}/${paths.apiPathFromSlug(filePath)}`)
@@ -474,6 +485,21 @@ export function VaultEditorPage({
       .filter((ref) => ref.kind === "repo")
       .map((ref) => ref.id);
   }, [blocks]);
+  const linkedPrs = useMemo(() => {
+    if (!blocks?.length) return [];
+    const seen = new Set<string>();
+    const prs: { repo: string; number: number; label: string }[] = [];
+    for (const ref of parseEntityLinksFromMarkdown(blocksToText(blocks))) {
+      if (ref.kind !== "pr") continue;
+      const parsed = parseGithubPrRef(ref.href || ref.id);
+      if (!parsed) continue;
+      const key = `${parsed.repo}#${parsed.number}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      prs.push({ ...parsed, label: ref.label || key });
+    }
+    return prs;
+  }, [blocks]);
 
   useEffect(() => {
     if (!isNotes || isNew || linkedRepos.length === 0) return;
@@ -666,6 +692,31 @@ export function VaultEditorPage({
                           const result = await openRepoInCursor(repo, toast, filePath);
                           if (result?.writable) {
                             setCursorDraft({ notePath: filePath, repoName: repo });
+                          } else if (result) {
+                            setCursorDraft(null);
+                            toast.info(
+                              "Opened a read-only Markdown copy; rich blocks prevent safe write-back.",
+                            );
+                          }
+                        },
+                      }))
+                    : []),
+                  ...(isNotes && linkedPrs.length > 0
+                    ? linkedPrs.map((pr) => ({
+                        id: `open-pr-cursor-${pr.repo}-${pr.number}`,
+                        label:
+                          linkedPrs.length === 1
+                            ? "Open PR in Cursor"
+                            : `Open PR in Cursor · ${pr.label}`,
+                        description: `Stash if dirty, check out ${pr.label}, open in Cursor`,
+                        icon: <GitPullRequest size={14} aria-hidden />,
+                        onSelect: async () => {
+                          const result = await openPrInCursor(pr.repo, pr.number, toast, filePath);
+                          if (result?.writable) {
+                            setCursorDraft({
+                              notePath: filePath,
+                              repoName: result.localRepoName,
+                            });
                           } else if (result) {
                             setCursorDraft(null);
                             toast.info(

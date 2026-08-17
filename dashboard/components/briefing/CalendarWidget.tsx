@@ -1,13 +1,11 @@
 "use client";
 
-import { Calendar, Clock, Video, AlertCircle } from "lucide-react";
+import { Calendar, Clock, AlertCircle } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import type { CalendarEvent } from "@/lib/google-calendar";
 import { formatTime } from "@/lib/utils";
 import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
-import { CreateMeetingNoteButton } from "@/components/CreateMeetingNoteButton";
-import { EntityLinkChips } from "@/components/EntityLinkChips";
-import { PersonChip } from "@/components/PersonChip";
+import { CalendarEventRow, eventJoinIsUrgent } from "@/components/briefing/CalendarEventRow";
 
 interface CalendarResponse {
   events?: CalendarEvent[];
@@ -122,14 +120,12 @@ export function CalendarWidget({ collapsed = false, collapsedSummary, onToggle }
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Join meeting"
-              className="shrink-0"
+              className="urgency-pulse inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium shrink-0"
+              style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
             >
-              <Video size={11} className="text-accent" aria-hidden />
+              Join
             </a>
           )}
-          <span className="ml-auto shrink-0">
-            <CreateMeetingNoteButton event={now} compact />
-          </span>
         </div>
       )}
 
@@ -146,7 +142,7 @@ export function CalendarWidget({ collapsed = false, collapsedSummary, onToggle }
           >
             in {timeUntil(next.start)}
           </span>
-          {next.conferenceUrl && isImminent(next.start) && (
+          {next.conferenceUrl && eventJoinIsUrgent(next) && (
             <a
               href={next.conferenceUrl}
               target="_blank"
@@ -154,12 +150,9 @@ export function CalendarWidget({ collapsed = false, collapsedSummary, onToggle }
               className="urgency-pulse inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium shrink-0"
               style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
             >
-              <Video size={11} aria-hidden /> Join
+              Join
             </a>
           )}
-          <span className="ml-auto shrink-0">
-            <CreateMeetingNoteButton event={next} compact />
-          </span>
         </div>
       )}
 
@@ -170,53 +163,9 @@ export function CalendarWidget({ collapsed = false, collapsedSummary, onToggle }
       )}
 
       {!collapsed ? (
-        <div className="space-y-1 mt-1">
+        <div className="space-y-0.5 mt-1">
           {events.slice(0, 5).map((e) => (
-            <div key={e.id} className="space-y-0.5">
-              <div className="group flex items-center gap-2 text-xs">
-                <span style={{ color: "var(--text-subtle)", minWidth: "44px" }}>
-                  {e.isAllDay ? "All day" : `${formatTime(e.start)}`}
-                </span>
-                <span
-                  className="min-w-0 truncate"
-                  style={{
-                    color: isHappeningNow(e.start, e.end) ? "var(--accent)" : "var(--text-muted)",
-                  }}
-                >
-                  {e.title}
-                </span>
-                {e.organizer?.displayName || e.organizer?.email ? (
-                  <PersonChip
-                    name={e.organizer.displayName || e.organizer.email || ""}
-                    email={e.organizer.email}
-                    size={14}
-                    className="hidden sm:inline-flex max-w-[8rem] shrink-0"
-                  />
-                ) : null}
-                {e.conferenceUrl && (
-                  <a
-                    href={e.conferenceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="Join meeting"
-                  >
-                    <Video size={10} className="text-accent" aria-hidden />
-                  </a>
-                )}
-                <span className="ml-auto flex items-center gap-1 shrink-0">
-                  <CreateMeetingNoteButton event={e} compact />
-                </span>
-              </div>
-              <EntityLinkChips
-                kind="calendar"
-                id={e.id}
-                date={(e.start || "").slice(0, 10)}
-                label={e.title}
-                meetingTitle={e.title}
-                href={e.htmlLink}
-                className="ml-[52px]"
-              />
-            </div>
+            <CalendarEventRow key={e.id} event={e} density="compact" />
           ))}
         </div>
       ) : null}

@@ -66,3 +66,30 @@ export function ttlCacheByKey<K, V>(
     return value;
   };
 }
+
+export interface TtlPromiseEntry<T> {
+  expiresAt: number;
+  value: Promise<T>;
+}
+
+/**
+ * Keyed in-flight TTL cache. Failed promises are evicted so the next call retries.
+ *
+ * Use this when the loader closes over extra arguments (repo + PRs) that are
+ * not part of the cache key. `ttlCacheByKey` only receives the key.
+ */
+export function ttlCached<T>(
+  cache: Map<string, TtlPromiseEntry<T>>,
+  key: string,
+  ms: number,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const hit = cache.get(key);
+  if (hit && hit.expiresAt > Date.now()) return hit.value;
+  const value = fn().catch((error: unknown) => {
+    cache.delete(key);
+    throw error;
+  });
+  cache.set(key, { expiresAt: Date.now() + ms, value });
+  return value;
+}

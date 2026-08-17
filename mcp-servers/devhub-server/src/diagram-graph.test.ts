@@ -1,6 +1,15 @@
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createTLSchema } from "@tldraw/tlschema";
 import { describe, expect, it } from "vitest";
 import { buildGraphRecords, layoutGraph, type GraphSpec } from "./diagram-graph.ts";
+
+describe("source encoding", () => {
+  it("does not contain raw NUL bytes", () => {
+    const buf = fs.readFileSync(fileURLToPath(new URL("./diagram-graph.ts", import.meta.url)));
+    expect(buf.includes(0)).toBe(false);
+  });
+});
 
 const spec: GraphSpec = {
   title: "Job Search Agent",

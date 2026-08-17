@@ -3,7 +3,12 @@ import path from "node:path";
 
 function isIgnoredMeaningfulFile(filePath: string): boolean {
   const base = path.basename(filePath);
-  return base === ".DS_Store" || base.endsWith(".pyc") || filePath.split(path.sep).includes("__pycache__");
+  return (
+    base === ".DS_Store" ||
+    base.endsWith(".pyc") ||
+    base.endsWith(".bak") ||
+    filePath.split(path.sep).includes("__pycache__")
+  );
 }
 
 export function filesEqual(left: string, right: string): boolean {
@@ -29,8 +34,16 @@ export function treesEqual(left: string, right: string): boolean {
     if (leftStat.isFile() || rightStat.isFile()) return filesEqual(left, right);
     if (!leftStat.isDirectory() || !rightStat.isDirectory()) return false;
 
-    const leftEntries = fs.readdirSync(left, { withFileTypes: true }).map((entry) => entry.name).sort();
-    const rightEntries = fs.readdirSync(right, { withFileTypes: true }).map((entry) => entry.name).sort();
+    const leftEntries = fs
+      .readdirSync(left, { withFileTypes: true })
+      .map((entry) => entry.name)
+      .filter((name) => !isIgnoredMeaningfulFile(path.join(left, name)))
+      .sort();
+    const rightEntries = fs
+      .readdirSync(right, { withFileTypes: true })
+      .map((entry) => entry.name)
+      .filter((name) => !isIgnoredMeaningfulFile(path.join(right, name)))
+      .sort();
     if (leftEntries.length !== rightEntries.length) return false;
     for (let i = 0; i < leftEntries.length; i++) {
       if (leftEntries[i] !== rightEntries[i]) return false;

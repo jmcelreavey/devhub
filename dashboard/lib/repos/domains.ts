@@ -197,11 +197,25 @@ export async function deriveDomains(
   })), rules, files);
 }
 
+function longestMatchingPrefix(paths: string[], filePath: string): number {
+  let best = -1;
+  for (const prefix of paths) {
+    if (prefix === "." || filePath === prefix || filePath.startsWith(`${prefix}/`)) {
+      best = Math.max(best, prefix.length);
+    }
+  }
+  return best;
+}
+
 export function domainForPath(domains: RepoDomain[], filePath: string): RepoDomain | null {
-  return domains
-    .filter((domain) => domain.paths.some((prefix) =>
-      prefix === "." || filePath === prefix || filePath.startsWith(`${prefix}/`),
-    ))
-    .sort((a, b) => Math.max(...b.paths.map((prefix) => prefix.length)) - Math.max(...a.paths.map((prefix) => prefix.length)))[0]
-    ?? null;
+  let best: RepoDomain | null = null;
+  let bestLength = -1;
+  for (const domain of domains) {
+    const length = longestMatchingPrefix(domain.paths, filePath);
+    if (length > bestLength) {
+      best = domain;
+      bestLength = length;
+    }
+  }
+  return best;
 }

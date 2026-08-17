@@ -6,9 +6,11 @@
  * A vendored skill is code someone else wrote that DevHub copies into
  * `~/.claude/skills` and four sibling directories, where an agent runs it with
  * your shell, your files and your credentials. It gets reviewed once on the way
- * in. The risk is the *second* import: `npm run skills:vendor` refetches from
- * upstream, the diff is 900 lines of Python, and "it's just a version bump" is
- * exactly how a network call gets waved through.
+ * in. The risk is the *second* import: re-vendor is copy-from-upstream (sparse
+ * clone, eyeball the Python, `cp` into `skills/vendor/`, then
+ * `npm run skills:verify-vendor`) — see `docs/guides/vendored-skills.md`. The
+ * diff is 900 lines of Python, and "it's just a version bump" is exactly how a
+ * network call gets waved through.
  *
  * So the two properties `skills/vendor/NOTICE.md` claims — offline, and stdlib
  * only — are checked by code instead of by memory.

@@ -1,19 +1,16 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
-import { Ticket, ExternalLink, AlertCircle } from "lucide-react";
+import { useMemo } from "react";
+import { Ticket, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useLive } from "@/lib/hooks/use-fetch";
-import { useToast } from "@/lib/hooks/use-toast";
 import type { JiraTicket } from "@/lib/jira/client";
 import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
 import { type SeverityTone } from "@/components/ui/Severity";
 import { JiraStatusPill } from "@/components/jira/JiraStatusPill";
+import { JiraTicketRow } from "@/components/jira/JiraTicketRow";
 import { useGridSize } from "@/lib/hooks/use-grid-size";
-import { copyTextToClipboard } from "@/lib/clipboard";
-import { openInBrowser } from "@/lib/desktop/bridge";
 import { QueueRow } from "@/components/ui/QueueRow";
-import { HoverTip } from "@/components/ui/HoverTip";
 import { PersonChip } from "@/components/PersonChip";
 
 interface JiraResponse {
@@ -58,34 +55,14 @@ export function priorityIcon(priority: string): string {
   return "⚪";
 }
 
-function formatUpdatedShort(iso: string): string {
-  if (!iso) return "-";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
 export function JiraWidget({ collapsed = false, collapsedSummary, onToggle }: JiraWidgetProps) {
   const { data, error, isLoading } = useLive<JiraResponse>("/api/jira/tickets");
-  const toast = useToast();
   const gridSize = useGridSize("jira");
 
   const sortedTickets = useMemo(() => {
     const list = data?.tickets ?? [];
     return [...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }, [data?.tickets]);
-
-  const copyKey = useCallback(
-    async (key: string) => {
-      try {
-        await copyTextToClipboard(key);
-        toast.success(`Copied ${key}`);
-      } catch {
-        toast.error("Couldn't copy to clipboard.");
-      }
-    },
-    [toast],
-  );
 
   if (isLoading) {
     return (
@@ -179,56 +156,12 @@ export function JiraWidget({ collapsed = false, collapsedSummary, onToggle }: Ji
                 <div
                   key={t.key}
                   role="listitem"
-                  className="group relative jira-widget-ticket-row flex items-start gap-2 px-4 py-2.5 text-sm"
+                  className="jira-widget-ticket-row"
                   style={{
                     borderTop: i === 0 ? "none" : "1px solid var(--border-muted)",
                   }}
                 >
-                  <HoverTip label={`Copy ${t.key}`} pos="top" className="mt-0.5">
-                    <button
-                      type="button"
-                      className="jira-widget-key font-mono text-xs shrink-0 px-1.5 py-0.5 rounded"
-                      style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
-                      onClick={() => void copyKey(t.key)}
-                      aria-label={`Copy issue key ${t.key}`}
-                    >
-                      {t.key}
-                    </button>
-                  </HoverTip>
-                  <span
-                    className="flex-1 min-w-[8rem] break-words leading-snug text-text"
-                    title={t.summary}
-                  >
-                    {t.summary}
-                  </span>
-                  <span className="jira-widget-meta flex shrink-0 items-center gap-2">
-                    {t.assignee ? (
-                      <PersonChip
-                        name={t.assignee.displayName}
-                        email={t.assignee.email}
-                        avatarUrl={t.assignee.avatarUrl}
-                        size={16}
-                        className="hidden sm:inline-flex max-w-[9rem]"
-                      />
-                    ) : null}
-                    <JiraStatusPill ticketKey={t.key} status={t.status} />
-                    <span
-                      className="text-[11px] shrink-0 tabular-nums text-right pt-0.5 text-text-subtle"
-                      title={t.updatedAt ? `Updated ${new Date(t.updatedAt).toLocaleString()}` : undefined}
-                    >
-                      {formatUpdatedShort(t.updatedAt)}
-                    </span>
-                    <HoverTip label={`Open ${t.key} in Jira`} pos="top-end" className="mt-0.5">
-                      <button
-                        type="button"
-                        className="shrink-0 rounded p-1 transition-colors jira-widget-open text-text-subtle"
-                        onClick={() => void openInBrowser(t.url)}
-                        aria-label={`Open ${t.key} in Jira`}
-                      >
-                        <ExternalLink size={11} aria-hidden />
-                      </button>
-                    </HoverTip>
-                  </span>
+                  <JiraTicketRow ticket={t} density="compact" />
                 </div>
               ))}
             </div>

@@ -94,6 +94,13 @@ describe("normalizeDiagramFolder", () => {
     expect(normalizeDiagramFolder("")).toBe("");
     expect(normalizeDiagramFolder(null)).toBe("");
   });
+  it("strips . and .. segments", () => {
+    expect(normalizeDiagramFolder("..")).toBe("");
+    expect(normalizeDiagramFolder("../secret")).toBe("secret");
+    expect(normalizeDiagramFolder("Acme/../Reports")).toBe("Acme/Reports");
+    expect(normalizeDiagramFolder("Acme/./Reports")).toBe("Acme/Reports");
+    expect(normalizeDiagramFolder("./Acme")).toBe("Acme");
+  });
 });
 
 describe("diagramFolderStoragePath", () => {

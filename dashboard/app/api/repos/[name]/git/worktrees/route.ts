@@ -74,6 +74,9 @@ export async function POST(req: NextRequest, { params }: RepoParams) {
     case "remove": {
       const target = body.data.path?.trim();
       if (!target) return NextResponse.json({ error: "No worktree given" }, { status: 400 });
+      if (target.startsWith("-")) {
+        return NextResponse.json({ error: "Invalid worktree path" }, { status: 400 });
+      }
       // Refuse the main working tree here rather than letting git refuse it, so
       // the message names the reason.
       if (target.replace(/\/+$/, "") === rp.replace(/\/+$/, "")) {
@@ -86,6 +89,7 @@ export async function POST(req: NextRequest, { params }: RepoParams) {
         "worktree",
         "remove",
         ...(force ? ["--force"] : []),
+        "--",
         target,
       ]);
       if (result.status !== 0) {
@@ -114,7 +118,10 @@ export async function POST(req: NextRequest, { params }: RepoParams) {
     case "unlock": {
       const target = body.data.path?.trim();
       if (!target) return NextResponse.json({ error: "No worktree given" }, { status: 400 });
-      const result = await runGitRepoAsync(rp, ["worktree", action, target]);
+      if (target.startsWith("-")) {
+        return NextResponse.json({ error: "Invalid worktree path" }, { status: 400 });
+      }
+      const result = await runGitRepoAsync(rp, ["worktree", action, "--", target]);
       if (result.status !== 0) return gitFail(result, `Could not ${action} the worktree`);
       return NextResponse.json({ ok: true });
     }

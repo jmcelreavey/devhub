@@ -3,16 +3,15 @@ import {
   fetchMyGithubPrs,
   fetchRecentlyReviewedPrs,
   isRepoArchived,
-  type GithubPrsApiPayload,
+  readGithubPrsListCache,
+  writeGithubPrsListCache,
   type GithubPrRow,
 } from "@/lib/github/prs";
+import { attachRequestedReviewers } from "@/lib/github/request-reviewers";
 import { isGithubCliAuthenticated, mapGithubCliError } from "@/lib/gh-exec";
 import { getGithubLogin } from "@/lib/standup/github-merged";
 
 export const dynamic = "force-dynamic";
-
-let cache: { data: GithubPrsApiPayload; ts: number } | null = null;
-const TTL_MS = 2 * 60 * 1000;
 
 export async function GET() {
   const configured = await isGithubCliAuthenticated();
@@ -20,8 +19,9 @@ export async function GET() {
     return NextResponse.json({ configured: false, authored: [], reviews: [], recentlyReviewed: [] });
   }
 
-  if (cache && Date.now() - cache.ts < TTL_MS) {
-    return NextResponse.json({ ...cache.data, cached: true, configured: true });
+  const cached = readGithubPrsListCache();
+  if (cached) {
+    return NextResponse.json({ ...cached, cached: true, configured: true });
   }
 
   try {
@@ -36,7 +36,7 @@ export async function GET() {
     );
     const filterArchived = (rows: GithubPrRow[]) => rows.filter((r) => !archivedSet.has(r.repo));
 
-    const filteredAuthored = filterArchived(authored);
+    const filteredAuthored = await attachRequestedReviewers(filterArchived(authored));
     const filteredReviews = filterArchived(reviews);
 
     const excludeUrls = new Set([
@@ -57,7 +57,7 @@ export async function GET() {
       recentlyReviewed,
       cached: false,
     };
-    cache = { data: payload, ts: Date.now() };
+    writeGithubPrsListCache(payload);
     return NextResponse.json(payload);
   } catch (error) {
     console.error("[api:github:prs]", error);

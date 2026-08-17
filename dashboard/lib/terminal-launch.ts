@@ -198,6 +198,40 @@ export async function agentRepoDxAuditCommand(repoName: string, context?: string
  * from — without this the review note lands in the wrong place. Guarded so a
  * machine without the selected CLI prints a hint instead of erroring.
  */
+export async function agentSkillCommand(
+  skill: string,
+  instruction: string,
+  missingAction: string,
+): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  return guardedCliCommand(
+    cli.binary,
+    cli.run(`Use the ${skill} skill. ${instruction}`),
+    cli.missing(missingAction),
+  );
+}
+
+export async function agentLocalCommitReviewCommand(
+  repoName: string,
+  hash: string,
+  subject: string,
+): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  const date = new Date().toISOString().slice(0, 10);
+  const notePath = `reviews/${repoName}-${date}`;
+  const parts = [
+    `Use the pr-explain-review skill to explain and review local commit ${hash} ("${subject}") in the ${repoName} repo. This is not a GitHub PR — review the commit and its parent window in the local git history.`,
+    `Write the report to DevHub notes via the notes MCP (notes_write). Notes MCP path: ${notePath}.`,
+    `Include a Repo entity link for ${repoName} in the note's ## Links section.`,
+    `Finish with a terminal summary, then exit.`,
+  ];
+  return guardedCliCommand(
+    cli.binary,
+    withDevhubNotesEnv(cli.run(parts.join(" "))),
+    cli.missing("run local commit reviews from the terminal"),
+  );
+}
+
 export async function agentReviewCommand(prUrl: string, notePath?: string): Promise<string> {
   const cli = await activeAgentCliSpec();
   const parts = [`Use the pr-explain-review skill to explain and review this GitHub PR: ${prUrl}`];
@@ -412,6 +446,14 @@ export function claudeCliCommand(): string {
     "claude",
     "claude",
     "Claude CLI not found. Use the Claude app option or install Claude Code.",
+  );
+}
+
+export function cursorCliCommand(): string {
+  return guardedCliCommand(
+    "cursor-agent",
+    "cursor-agent",
+    "Cursor CLI not found. Use the Cursor app option or install cursor-agent.",
   );
 }
 

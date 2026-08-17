@@ -2,7 +2,9 @@ import Link from "next/link";
 import { ArrowRight, BookOpen, Clock, Folder } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { DocIcon } from "@/components/docs/doc-icons";
+import { DocRow, DocRowLink } from "@/components/docs/DocRow";
 import { NewDocButton } from "@/components/docs/NewDocButton";
+import { SectionMenuHint } from "@/components/shell/ContextMenu";
 import { ROOT_SECTION_ID } from "@/lib/docs/doc-sections";
 import type { DocSectionGroup, DocSummary } from "@/lib/docs/doc-types";
 
@@ -171,17 +173,20 @@ export function DocsLandingPage({
             <h2 className="lib-areas-title">
               <Clock size={12} aria-hidden />
               Recently updated
+              <SectionMenuHint />
             </h2>
             <ul className="lib-recent">
               {recent.map((doc) => (
                 <li key={doc.slug}>
-                  <Link href={doc.href} className="lib-recent-row">
-                    <DocIcon name={doc.icon} size={13} className="lib-card-icon" aria-hidden />
-                    <span className="lib-recent-title">{doc.title}</span>
-                    <span className="lib-recent-meta">
-                      {DATE_FORMAT.format(new Date(doc.modified))}
-                    </span>
-                  </Link>
+                  <DocRow doc={doc} className="lib-recent-item">
+                    <DocRowLink href={doc.href} className="lib-recent-row">
+                      <DocIcon name={doc.icon} size={13} className="lib-card-icon" aria-hidden />
+                      <span className="lib-recent-title">{doc.title}</span>
+                      <span className="lib-recent-meta">
+                        {DATE_FORMAT.format(new Date(doc.modified))}
+                      </span>
+                    </DocRowLink>
+                  </DocRow>
                 </li>
               ))}
             </ul>

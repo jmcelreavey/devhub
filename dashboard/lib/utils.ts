@@ -25,6 +25,10 @@ export function formatDayLabel(dateIso: string): string {
 
 export const JIRA_KEY_RE = /\b([A-Z][A-Z0-9]+-\d+)\b/;
 
+export function jiraKeyFromText(text: string): string | null {
+  return text.match(JIRA_KEY_RE)?.[1] ?? null;
+}
+
 const DEFAULT_JIRA_DOMAIN = "your-domain.atlassian.net";
 
 /**

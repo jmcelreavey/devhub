@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   Clock,
   Timer,
-  ExternalLink,
   GitPullRequest,
   EyeOff,
   Eye,
@@ -481,16 +480,6 @@ export function TodayFocusView() {
                     >
                       {id}
                     </span>
-                    <a
-                      href={r.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-ghost shrink-0"
-                      style={{ fontSize: 11, padding: "1px 8px" }}
-                      aria-label={`Open ${id}`}
-                    >
-                      <ExternalLink size={10} aria-hidden /> Open
-                    </a>
                     <button
                       type="button"
                       onClick={() => skipPr(id)}
@@ -580,7 +569,9 @@ export function TodayFocusView() {
                       className="hidden sm:inline-flex max-w-[7rem] shrink-0"
                     />
                   ) : null}
-                  <JiraStatusPill ticketKey={t.key} status={t.status} />
+                  <span className="hidden shrink-0 sm:inline-flex">
+                    <JiraStatusPill ticketKey={t.key} status={t.status} />
+                  </span>
                 </div>
               ))}
             </div>

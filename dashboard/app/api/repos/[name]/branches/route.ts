@@ -399,8 +399,16 @@ export async function POST(req: NextRequest, { params }: Params) {
           : ["checkout", body.branch],
       );
       if (out.status !== 0) {
+        // Auto-stash already ran — pop it so a failed checkout doesn't leave
+        // a clean tree and a hidden stash the user never asked for.
+        if (stashed) {
+          await runGitRepoAsync(rp, ["stash", "pop", "stash@{0}"]);
+        }
         return NextResponse.json(
-          { error: out.stderr.trim() || out.stdout.trim() || "Checkout failed" },
+          {
+            error: out.stderr.trim() || out.stdout.trim() || "Checkout failed",
+            stashed,
+          },
           { status: 500 },
         );
       }
@@ -623,7 +631,9 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     case "set-upstream": {
       if (!isSafeBranchName(body.branch)) return invalidBranch();
-      const remoteRef = `origin/${body.branch}`;
+      const remote =
+        body.remote && isSafeRemoteName(body.remote) ? body.remote : "origin";
+      const remoteRef = `${remote}/${body.branch}`;
       const exists = await runGitRepoAsync(rp, ["rev-parse", "--verify", "--quiet", remoteRef]);
       if (exists.status !== 0) {
         return NextResponse.json(
@@ -867,6 +877,79 @@ export async function POST(req: NextRequest, { params }: Params) {
       });
     }
 
+    case "pull-rebase":
+    case "pull-merge": {
+      const upstream = await resolveUpstream(rp);
+      if (!upstream) {
+        return NextResponse.json(
+          { error: "No upstream branch — set upstream or push with -u first." },
+          { status: 400 },
+        );
+      }
+      const pull = await runGitRepoAsync(
+        rp,
+        body.action === "pull-rebase" ? ["pull", "--rebase"] : ["pull", "--no-rebase"],
+        { timeout: 120_000 },
+      );
+      if (pull.status !== 0) {
+        const error = pullFailureMessage(pull.stderr, pull.stdout);
+        if (detectUnmergedFiles(rp).length || looksLikeStashConflict(pull.stderr, pull.stdout)) {
+          return stashConflictResponse(
+            body.action === "pull-merge" ? "pull-merge" : "pull-rebase",
+            rp,
+            error,
+            { switched: false, stashed: false },
+          );
+        }
+        if (body.action === "pull-rebase") {
+          await runGitRepoAsync(rp, ["rebase", "--abort"]);
+        }
+        return NextResponse.json({ error }, { status: 500 });
+      }
+      const rebaseMsg = (pull.stdout || "").trim();
+      return NextResponse.json({
+        ok: true,
+        alreadyUpToDate: /already up to date/i.test(rebaseMsg),
+        message: rebaseMsg || undefined,
+      });
+    }
+
+    case "prune-backup-branches": {
+      const current = await currentBranchName(rp);
+      const listed = await runGitRepoAsync(rp, [
+        "for-each-ref",
+        "--format=%(refname:short)%00%(committerdate:unix)",
+        "refs/heads/devhub/backup-*",
+      ]);
+      if (listed.status !== 0) {
+        return NextResponse.json(
+          { error: listed.stderr.trim() || listed.stdout.trim() || "Could not list backup branches" },
+          { status: 500 },
+        );
+      }
+      const backups: { name: string; timestamp: number }[] = [];
+      for (const line of listed.stdout.split("\n")) {
+        if (!line) continue;
+        const nul = line.indexOf("\0");
+        const name = nul === -1 ? line : line.slice(0, nul);
+        const timestamp = nul === -1 ? 0 : Number(line.slice(nul + 1));
+        if (!name.startsWith("devhub/backup-")) continue;
+        backups.push({ name, timestamp: Number.isFinite(timestamp) ? timestamp : 0 });
+      }
+      backups.sort((a, b) => b.timestamp - a.timestamp);
+      const cutoff = Math.floor(Date.now() / 1000) - 14 * 24 * 60 * 60;
+      const newest = new Set(backups.slice(0, 10).map((b) => b.name));
+      const deleted: string[] = [];
+      for (const backup of backups) {
+        if (backup.name === current) continue;
+        if (newest.has(backup.name) || backup.timestamp >= cutoff) continue;
+        if (!isSafeBranchName(backup.name)) continue;
+        const del = await runGitRepoAsync(rp, ["branch", "-D", "--", backup.name]);
+        if (del.status === 0) deleted.push(backup.name);
+      }
+      return NextResponse.json({ ok: true, deleted, kept: backups.length - deleted.length });
+    }
+
     case "sync-main": {
       const current = await runGitRepoAsync(rp, ["rev-parse", "--abbrev-ref", "HEAD"]);
       const currentBranch = current.stdout.trim();
@@ -924,9 +1007,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       if (!body.branch || typeof body.branch !== "string") {
         return NextResponse.json({ error: "Missing branch name" }, { status: 400 });
       }
-      if (!/^[A-Za-z0-9._/-]+$/.test(body.branch) || body.branch.includes("..")) {
-        return NextResponse.json({ error: "Invalid branch name" }, { status: 400 });
-      }
+      if (!isSafeBranchName(body.branch)) return invalidBranch();
       const create = await runGitRepoAsync(rp, ["checkout", "-b", body.branch]);
       if (create.status !== 0) {
         return NextResponse.json(
@@ -941,11 +1022,12 @@ export async function POST(req: NextRequest, { params }: Params) {
       if (!body.branch || typeof body.branch !== "string") {
         return NextResponse.json({ error: "Missing branch name" }, { status: 400 });
       }
+      if (!isSafeBranchName(body.branch)) return invalidBranch();
       const current = runGitRepo(rp, ["rev-parse", "--abbrev-ref", "HEAD"]);
       if ((current.stdout || "").trim() === body.branch) {
         return NextResponse.json({ error: "Cannot delete the current branch" }, { status: 400 });
       }
-      const del = await runGitRepoAsync(rp, ["branch", body.force ? "-D" : "-d", body.branch]);
+      const del = await runGitRepoAsync(rp, ["branch", body.force ? "-D" : "-d", "--", body.branch]);
       if (del.status !== 0) {
         return NextResponse.json(
           { error: del.stderr.trim() || del.stdout.trim() || "Delete branch failed" },
@@ -959,7 +1041,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       // Soft reset — keep changes staged.
       const log = await runGitRepoAsync(rp, ["rev-list", "--count", "HEAD"]);
       const count = Number((log.stdout || "").trim());
-      if (!Number.isFinite(count) || count < 1) {
+      if (!Number.isFinite(count) || count < 2) {
         return NextResponse.json({ error: "Nothing to undo" }, { status: 400 });
       }
       const reset = await runGitRepoAsync(rp, ["reset", "--soft", "HEAD~1"]);

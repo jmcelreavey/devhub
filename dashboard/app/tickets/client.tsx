@@ -1,15 +1,14 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Ticket, ExternalLink, RefreshCw } from "lucide-react";
+import { Ticket, RefreshCw } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import type { JiraTicket } from "@/lib/jira/client";
 import { useMarkTicketsSeen } from "@/lib/hooks/use-sidebar-counts";
 import { priorityIcon } from "@/components/jira/JiraWidget";
-import { JiraStatusPill } from "@/components/jira/JiraStatusPill";
+import { JiraTicketRow } from "@/components/jira/JiraTicketRow";
 import { FetchError, EmptyState, SkeletonRows } from "@/components";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
-import { PersonChip } from "@/components/PersonChip";
 
 interface JiraResponse {
   tickets?: JiraTicket[];
@@ -29,49 +28,17 @@ function ticketMatchesStatusFilter(status: string, filter: string): boolean {
 
 function TicketCard({ ticket }: { ticket: JiraTicket }) {
   return (
-    <div className="card" style={{ padding: "10px 14px" }}>
-      <div className="flex items-start gap-3">
-        <span className="text-xs mt-0.5" aria-hidden>
+    <div className="card" style={{ padding: "8px 10px" }}>
+      <div className="flex items-start gap-2">
+        <span className="text-xs mt-1.5" aria-hidden>
           {priorityIcon(ticket.priority)}
         </span>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span
-              className="font-mono text-xs font-medium px-1.5 py-0.5 rounded"
-              style={{ background: "var(--bg-elevated)", color: "var(--accent)" }}
-            >
-              {ticket.key}
-            </span>
-            <JiraStatusPill ticketKey={ticket.key} status={ticket.status} />
-            <span className="text-xs text-text-subtle">
-              {ticket.issuetype}
-            </span>
-          </div>
-          <p className="text-sm text-text">
-            {ticket.summary}
-          </p>
-          <p className="text-xs mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-text-subtle">
-            <span>
-              {ticket.project} ({ticket.projectKey}) · {ticket.priority}
-            </span>
-            {ticket.assignee ? (
-              <PersonChip
-                name={ticket.assignee.displayName}
-                email={ticket.assignee.email}
-                avatarUrl={ticket.assignee.avatarUrl}
-                size={16}
-              />
-            ) : null}
+        <div className="min-w-0 flex-1">
+          <JiraTicketRow ticket={ticket} density="comfortable" />
+          <p className="px-1 text-xs text-text-subtle">
+            {ticket.project} ({ticket.projectKey}) · {ticket.priority} · {ticket.issuetype}
           </p>
         </div>
-        <a
-          href={ticket.url}
-          target="_blank"
-          rel="noopener noreferrer" className="text-text-subtle"
-          aria-label={`Open ${ticket.key} in Jira`}
-        >
-          <ExternalLink size={14} aria-hidden />
-        </a>
       </div>
     </div>
   );

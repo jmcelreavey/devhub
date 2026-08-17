@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { claudeDesktopMcpConfigPath } from "@/lib/mcp/claude-desktop-paths";
 import {
   reverseSubstituteRepoRoot,
   substituteRepoRoot,
@@ -85,6 +86,54 @@ describe("syncMcpServers", () => {
     expect(opencode.mcp.notes.enabled).toBe(true);
     expect(opencode.mcp.notes.command).toEqual([`${repo}/bin/notes`, "--port", "9"]);
     expect(opencode.mcp.notes.env).toEqual({ NOTES_DIR: `${repo}/notes` });
+  });
+
+  it("writes stdio entries to the Claude desktop app config, separately from the CLI", async () => {
+    const { repo, home, lines } = makeTempRepo();
+    writeJson(path.join(repo, "mcp", "shared", "notes.json"), {
+      command: "REPO_ROOT/bin/notes",
+      args: ["--port", "9"],
+      env: { NOTES_DIR: "REPO_ROOT/notes" },
+    });
+
+    await syncMcpServers({ emit: (l) => lines.push(l), repoRoot: repo, prune: true });
+
+    const desktopPath = claudeDesktopMcpConfigPath(home);
+    // The desktop app has its own file — syncing the CLI target alone leaves it empty,
+    // which is what made DevHub servers invisible to the app and to Cowork.
+    expect(desktopPath).not.toBe(path.join(home, ".claude.json"));
+
+    const desktop = JSON.parse(fs.readFileSync(desktopPath, "utf-8"));
+    expect(desktop.mcpServers.notes.command).toBe(`${repo}/bin/notes`);
+    expect(desktop.mcpServers.notes.args).toEqual(["--port", "9"]);
+    expect(desktop.mcpServers.notes.env).toEqual({ NOTES_DIR: `${repo}/notes` });
+  });
+
+  it("keeps the desktop app's own settings and skips remote servers it configures elsewhere", async () => {
+    const { repo, home, lines } = makeTempRepo();
+    writeJson(path.join(repo, "mcp", "shared", "notes.json"), { command: "REPO_ROOT/bin/notes" });
+    writeJson(path.join(repo, "mcp", "shared", "figma.json"), {
+      type: "remote",
+      url: "https://mcp.figma.com/mcp",
+    });
+    const desktopPath = claudeDesktopMcpConfigPath(home);
+    writeJson(desktopPath, {
+      mcpServers: {},
+      coworkUserFilesPath: "/Users/me/files",
+      preferences: { theme: "dark" },
+    });
+
+    await syncMcpServers({ emit: (l) => lines.push(l), repoRoot: repo, prune: true });
+
+    const desktop = JSON.parse(fs.readFileSync(desktopPath, "utf-8"));
+    expect(desktop.coworkUserFilesPath).toBe("/Users/me/files");
+    expect(desktop.preferences).toEqual({ theme: "dark" });
+    expect(desktop.mcpServers.notes.command).toBe(`${repo}/bin/notes`);
+    expect(desktop.mcpServers.figma).toBeUndefined();
+
+    // Remote servers still reach the tools that read them from a config file.
+    const cursor = JSON.parse(fs.readFileSync(path.join(home, ".cursor/mcp.json"), "utf-8"));
+    expect(cursor.mcpServers.figma).toEqual({ url: "https://mcp.figma.com/mcp" });
   });
 
   it("preserves other top-level keys when mergeRest is on (claude/opencode)", async () => {

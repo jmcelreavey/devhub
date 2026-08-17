@@ -106,11 +106,14 @@ export function StashPanel({
   }, [selected, repoName, toast, contextMode]);
 
   async function act(action: string, ref?: string, message?: string) {
-    if (action === "drop" && ref) {
+    if ((action === "drop" || action === "pop") && ref) {
+      const dropping = action === "drop";
       const ok = await confirm({
-        title: `Drop ${ref}?`,
-        message: "This permanently removes the stash entry.",
-        confirmLabel: "Drop",
+        title: dropping ? `Drop ${ref}?` : `Pop ${ref}?`,
+        message: dropping
+          ? "git stash drop. Permanently removes the stash entry without applying it."
+          : "git stash pop. Applies the stash, then deletes the stash entry. Conflicts open in the Conflicts tab.",
+        confirmLabel: dropping ? "Drop" : "Pop",
         variant: "danger",
       });
       if (!ok) return;

@@ -43,11 +43,11 @@ sequenceDiagram
 
 The server has two tool tiers:
 
-| Tier              | Source Of Truth                           | Dashboard Required | Tool Groups                                                                                                                                                  |
-| ----------------- | ----------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Filesystem-backed | Local files under configured content dirs | No                 | Notes, docs, tasks, diagrams, appraisal, DX audit                                                                                                            |
+| Tier              | Source Of Truth                           | Dashboard Required | Tool Groups                                                                                                                                                                          |
+| ----------------- | ----------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Filesystem-backed | Local files under configured content dirs | No                 | Notes, docs, tasks, diagrams, appraisal, DX audit                                                                                                                                    |
 | Dashboard-backed  | DevHub HTTP routes on `DEVHUB_BASE_URL`   | Yes                | Status, briefing, calendar, work/PRs/Jira, assets, search, scripts, repos (list/open/reveal/clone/learn + full git workspace), capability, sessions, share, workspace reads, Datadog |
-| Script-backed     | Local shell scripts under `REPO_ROOT`     | No (runs detached) | `repo_ship`, `repo_ship_status`                                                                                                                              |
+| Script-backed     | Local shell scripts under `REPO_ROOT`     | No (runs detached) | `repo_ship`, `repo_ship_status`                                                                                                                                                      |
 
 Filesystem-backed tools call the vault/storage layer directly and work headless.
 Dashboard-backed tools proxy through `DashboardClient`, defaulting to
@@ -83,7 +83,7 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 
 | Group      | Tools                                                                                                                                                                                                                                                                                                                                                         |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Notes      | `notes_list`, `notes_read`, `notes_write`, `notes_write_asset`, `notes_append`, `notes_search`, `notes_delete`, `notes_create_meeting`, `notes_create_task`, `notes_create_pr`, `entity_links_read`, `notes_cursor_open`, `notes_cursor_apply`, `notes_cursor_delete`                                                                                        |
+| Notes      | `notes_list`, `notes_read`, `notes_write`, `notes_write_asset`, `notes_append`, `notes_search`, `notes_delete`, `notes_create_meeting`, `notes_create_task`, `notes_create_pr`, `entity_links_read`, `notes_cursor_open`, `notes_cursor_apply`, `notes_cursor_delete`                                                                                         |
 | Docs       | `docs_list`, `docs_read`, `docs_write`, `docs_append`, `docs_search`, `docs_delete`                                                                                                                                                                                                                                                                           |
 | Tasks      | `tasks_list`, `tasks_create`, `tasks_update`, `tasks_delete`, `tasks_history`                                                                                                                                                                                                                                                                                 |
 | Diagrams   | `diagrams_list`, `diagrams_read`, `diagrams_create`, `diagrams_update`, `diagrams_add_note`, `diagrams_delete`, `diagrams_rename`                                                                                                                                                                                                                             |
@@ -94,14 +94,14 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 | Status     | `status_services`, `status_git`, `status_mcp`, `services_restart`                                                                                                                                                                                                                                                                                             |
 | Briefing   | `briefing_get`                                                                                                                                                                                                                                                                                                                                                |
 | Calendar   | `calendar_week`, `calendar_list`                                                                                                                                                                                                                                                                                                                              |
-| Work       | `prs_list`, `jira_tickets`, `jira_ticket_get`, `standup_markdown`, `tasks_weekly`, `jira_ticket_transition`                                                                                                                                                                                                                                                   |
+| Work       | `prs_list`, `prs_request_reviewers`, `prs_open_in_cursor`, `jira_tickets`, `jira_ticket_get`, `standup_markdown`, `tasks_weekly`, `jira_ticket_transition`                                                                                                                                                                                                    |
 | Assets     | `assets_list`                                                                                                                                                                                                                                                                                                                                                 |
 | Search     | `search`                                                                                                                                                                                                                                                                                                                                                      |
 | Scripts    | `scripts_list`, `scripts_run`, `scripts_run_status`, `scripts_history`                                                                                                                                                                                                                                                                                        |
 | Repos      | `repos_list`, `repos_open`, `repos_reveal`, `repos_clone`, `repo_learn`, `repos_git_status`, `repos_git_stage`, `repos_git_discard`, `repos_git_stage_hunk`, `repos_git_diff`, `repos_git_stash`, `repos_git_branches`, `repos_git_branch`, `repos_git_commit`, `repos_git_push`, `repos_git_log`, `repos_git_show`, `repos_git_blame`, `repos_git_conflicts` |
 | Sessions   | `sessions_recap`                                                                                                                                                                                                                                                                                                                                              |
 | Share      | `share_list`, `share_publish`, `share_one_time`, `share_revoke` — parity with the editor **Share** / **One-time** buttons; registry stays in the dashboard process                                                                                                                                                                                            |
-| Workspace  | `skills_list`, `skills_read`, `context_pack`, `collections_list`, `jobs_list`, `jobs_get`, `research_list`, `radar_personal`, `persona_list`, `learnings_list`, `agents_list`, `briefing_tasks` — read-only GET proxies for dashboard areas that had no MCP coverage                                                                                           |
+| Workspace  | `skills_list`, `skills_read`, `context_pack`, `collections_list`, `jobs_list`, `jobs_get`, `research_list`, `radar_personal`, `persona_list`, `learnings_list`, `agents_list`, `briefing_tasks` — read-only GET proxies for dashboard areas that had no MCP coverage                                                                                          |
 | Datadog    | `datadog_oncall`, `datadog_recent_alerts`, `datadog_investigate`                                                                                                                                                                                                                                                                                              |
 | Recall     | `recall`, `recall_graph`, `recall_remember`, `recall_index`                                                                                                                                                                                                                                                                                                   |
 | Ownership  | `owned_repos`, `repo_owner_brief`, `repo_pr_radar`, `repo_who_owns`, `repo_knowledge_gaps` — dashboard-backed proxies for `/api/own/*`                                                                                                                                                                                                                        |
@@ -115,7 +115,7 @@ BI-specific MCP tools are contributed by the private BI plugin as a separate ser
 
 **Scope notes:** `notes_list` and `notes_search` cover the workspace slice only — `daily/` journals plus root-level `.json` scratch notes. Structured areas like `learnings/` need explicit paths via `notes_read`. `calendar_list` returns Google Calendar **accounts and selection state**, not events (use `calendar_week` for the week grid).
 
-Dashboard-backed tools that mutate runtime or external state require `confirm: true` (for example `services_restart`, mutating `scripts_run` entries, `repos_git_stage`, `repos_git_commit`, `repos_git_push`, `repos_git_branch`, and `jira_ticket_transition`). Long-running actions return a `runId`; poll the matching status tool, such as `scripts_run_status`, until the run exits. MCP cannot stream the dashboard's live run log.
+Dashboard-backed tools that mutate runtime or external state require `confirm: true` (for example `services_restart`, mutating `scripts_run` entries, `repos_git_stage`, `repos_git_commit`, `repos_git_push`, `repos_git_branch`, `prs_request_reviewers`, `prs_open_in_cursor`, and `jira_ticket_transition`). Long-running actions return a `runId`; poll the matching status tool, such as `scripts_run_status`, until the run exits. MCP cannot stream the dashboard's live run log.
 
 All `repos_git_*` tools proxy the Repo Git workspace HTTP routes (`/api/repos/<name>/git/*` and `/branches`) — they do not shell out to `git` directly from the MCP process. Start the dashboard before using them.
 
@@ -192,7 +192,7 @@ Cross-entity edges use the shared `EntityRef` contract in `shared/entity-note/`.
 
 1. `notes_create_task` — scaffold `task-notes/YYYY-MM-DD-<taskId>` with `::task-ref` and Work href (same as the task-row **Note** action). Pass `overwrite: true` to rewrite an existing note.
 2. `notes_create_meeting` — scaffold `meetings/YYYY-MM-DD-<slug>` with calendar backrefs (same as the calendar **Note** button).
-3. `notes_create_pr` — scaffold `pr-reviews/<repo-slug>-<n>` with a PR EntityRef (same as the PR row note action).
+3. `notes_create_pr` — scaffold `pr-reviews/<repo-slug>-<n>` with PR + repo EntityRefs (same as the PR row note action). `notes_write` on `pr-reviews/` upserts those links via the same `shared/pr-note` helper.
 4. `entity_links_read` — parse `## Links` from an existing note path.
 5. `tasks_create` — optional `withNote: true` and/or `links: EntityRef[]` on the new task.
 6. `tasks_update` — pass `links` to replace hop-around refs on an existing task.
@@ -244,6 +244,14 @@ The dashboard route redacts secrets (tokens, env values, URL credentials) before
 5. `repos_git_push` with `confirm: true` to push the current branch to `origin` (no `remote`/`branch` args — use `repos_git_branch` with `action: "push"` for non-default remotes).
 
 For branch checkout, pull, fetch, and undo, use `repos_git_branches` (read) and `repos_git_branch` (mutate). Stash, log, show, blame, and conflict resolution have matching `repos_git_*` tools that proxy the same routes as the Repo Git workspace UI.
+
+### Request reviewers or open a PR in Cursor
+
+These proxy the same GitHub PR routes as the `/prs` row actions. Start the dashboard first.
+
+1. `prs_list` — authored + review-requested queues.
+2. `prs_request_reviewers` with `repo` + `number` — lists currently requested and suggested GitHub logins. Pass `reviewers: ["login"]` and `confirm: true` to request.
+3. `prs_open_in_cursor` with `repo` + `number` and `confirm: true` — stashes dirty work in the local clone, `gh pr checkout`, then launches Cursor. Optional `notePath` opens a notes working copy alongside. `repos_open` only opens the current branch.
 
 **Not exposed as MCP tools** (dashboard UI / direct HTTP only): `GET /api/repos/<name>/git/commit-context`, `.../git/coupling`, `.../git/range`, `.../git/reflog`, `.../git/remotes`, `.../git/worktrees`, `POST .../git/commit-action`. Agents can call these via `DEVHUB_BASE_URL` when needed; there is no matching `repos_git_*` registrar yet.
 
@@ -368,7 +376,7 @@ the model re-reads and reformats and the user cannot click. MCP-UI clients can
 render an HTML resource inline instead.
 
 `src/ui.ts` is the seam. It is **off unless `DEVHUB_MCP_UI=1`**, and when on,
-`uiResult()` emits the text answer *first* and attaches the resource beside it:
+`uiResult()` emits the text answer _first_ and attaches the resource beside it:
 
 ```ts
 return uiResult(summary, html, `ui://devhub/tasks/${target}`);
@@ -386,6 +394,6 @@ with twenty tools to revise.
 
 Widgets are self-contained documents: no scripts, no external references, no
 network, and everything interpolated goes through `escapeHtml`. The client
-renders this in *its* trust context, so a widget steerable by note content would
+renders this in _its_ trust context, so a widget steerable by note content would
 be a content-injection vector into the client. Styling adapts via
 `prefers-color-scheme` because the host theme is not queryable.

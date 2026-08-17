@@ -14,9 +14,8 @@
 /coverage
 .ux-review/
 
-# next.js
-/.next/
-/.next-verify/
+# next.js — DEVHUB_DIST_DIR can name any dist dir, so match the prefix.
+/.next*/
 /out/
 
 # production

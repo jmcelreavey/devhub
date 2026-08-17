@@ -266,11 +266,9 @@ export function buildCorpus(options: BuildCorpusOptions = {}): RecallChunk[] {
  * a few milliseconds over a vault of a few hundred files and can be called on
  * every query to answer "is the index behind?".
  *
- * The earlier attempt compared the *manifest's* stored fingerprints against
- * its own `builtAt`, which is structurally incapable of noticing a new file:
- * a source that didn't exist at build time has no fingerprint to be newer
- * than. Staleness has to be measured against the filesystem, not against a
- * record of the filesystem.
+ * Staleness is measured against the filesystem, not against a stored record
+ * of it. A fingerprint written at build time cannot notice a file that did
+ * not exist then — which is why the manifest does not keep fingerprints.
  */
 export function sourcesNewestMtime(): number {
   let newest = 0;
@@ -302,20 +300,3 @@ export function sourcesNewestMtime(): number {
   return newest;
 }
 
-/**
- * `sourceId → mtime` fingerprints, so a rebuild can detect a no-op.
- *
- * Floored to whole milliseconds because `fs.Stats.mtimeMs` is fractional while
- * `Date.parse(manifest.builtAt)` is not. Without the floor, a build that
- * completes inside the same millisecond as the last file write records a
- * fingerprint *newer* than its own `builtAt`, and `isStale()` reports a
- * freshly-built index as stale — forever, on every subsequent call.
- */
-export function corpusFingerprints(chunks: readonly RecallChunk[]): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const chunk of chunks) {
-    const key = `${chunk.sourceKind}:${chunk.sourceId}`;
-    out[key] = Math.max(out[key] ?? 0, Math.floor(chunk.ts));
-  }
-  return out;
-}

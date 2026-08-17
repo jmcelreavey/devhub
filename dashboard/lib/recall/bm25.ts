@@ -28,6 +28,7 @@ export class Bm25Index {
   private readonly docFreq = new Map<string, number>();
   private readonly termFreqs = new Map<string, Map<string, number>>();
   private readonly lengths = new Map<string, number>();
+  private totalLength = 0;
   private avgLength = 0;
   private docCount = 0;
 
@@ -43,8 +44,8 @@ export class Bm25Index {
       this.docFreq.set(term, (this.docFreq.get(term) ?? 0) + 1);
     }
     this.docCount += 1;
-    const total = [...this.lengths.values()].reduce((sum, n) => sum + n, 0);
-    this.avgLength = this.docCount === 0 ? 0 : total / this.docCount;
+    this.totalLength += doc.tokens.length;
+    this.avgLength = this.docCount === 0 ? 0 : this.totalLength / this.docCount;
   }
 
   get size(): number {

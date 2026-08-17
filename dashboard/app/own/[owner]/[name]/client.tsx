@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   AlertTriangle,
   BookOpen,
+  Brain,
   Check,
   ExternalLink,
   GitPullRequest,
@@ -16,6 +17,14 @@ import { EmptyState, FetchError, PageHeader } from "@/components";
 import { LabMarkdown } from "@/components/capability/LabMarkdown";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
+import {
+  PR_RADAR_FILTERS,
+  filterPrRadar,
+  presentRepoOwners,
+  prRadarFilterCounts,
+  type PrRadarFilter,
+} from "@/lib/ownership/brief-view";
+import { catchUpLabel } from "@/lib/ownership/index-view";
 import { obligationCells, attentionSummary } from "@/lib/ownership/obligations";
 import type {
   KnowledgeGap,
@@ -26,6 +35,7 @@ import type {
   ResolvedOwnedRepo,
 } from "@/lib/ownership/types";
 import type { CatchUpWindow } from "@/lib/catch-up";
+import { ownedRepoLearnHref } from "../../owned-repo-menu";
 
 interface BlastPayload {
   domains: { label: string; changedFiles: number }[];
@@ -103,12 +113,22 @@ export default function OwnerRepoPage({ owner, name }: { owner: string; name: st
     <div className="page-wrapper">
       <PageHeader
         title={fullName}
-        subtitle="Inbound change, review risk, knowledge gaps, and what landed while you were away."
+        subtitle={data
+          ? `${data.repo.localPath ? "Local clone" : "GitHub-only"} · ${catchUpLabel(data.repo.lastVisited)}`
+          : "Inbound change, review risk, knowledge gaps, and what landed while you were away."}
         actions={data ? (
           <span className="flex items-center gap-1.5">
             <a className="btn btn-ghost text-xs max-sm:min-h-11" href={data.repo.url} target="_blank" rel="noreferrer">
               GitHub <ExternalLink size={12} />
             </a>
+            {data.repo.localPath ? (
+              <Link
+                href={ownedRepoLearnHref(data.repo)}
+                className="btn btn-ghost text-xs max-sm:min-h-11"
+              >
+                <Brain size={12} /> Learn
+              </Link>
+            ) : null}
             <button
               type="button"
               className="btn btn-ghost max-sm:min-h-11 max-sm:min-w-11"
@@ -143,6 +163,7 @@ export default function OwnerRepoPage({ owner, name }: { owner: string; name: st
 
           <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.65fr)]">
             <div className="space-y-4 xl:order-2">
+              <Owners brief={data} />
               <KnowledgeGaps
                 repo={data.repo}
                 gaps={gaps.data?.gaps ?? null}
@@ -253,15 +274,50 @@ function Obligations({ brief }: { brief: OwnerBrief }) {
 }
 
 function PrRadar({ brief, owner, name }: { brief: OwnerBrief; owner: string; name: string }) {
+  const [filter, setFilter] = useState<PrRadarFilter>("all");
+  const counts = useMemo(() => prRadarFilterCounts(brief.prs), [brief.prs]);
+  const visible = useMemo(() => filterPrRadar(brief.prs, filter), [brief.prs, filter]);
   const grouped = new Map<string, RepoPrRadarRow[]>();
-  for (const pr of brief.prs) grouped.set(pr.team, [...(grouped.get(pr.team) ?? []), pr]);
+  for (const pr of visible) grouped.set(pr.team, [...(grouped.get(pr.team) ?? []), pr]);
   const inferred = new Set(brief.teams.filter((team) => team.source === "churn").map((team) => team.label));
+  const emptyCopy: Record<PrRadarFilter, string> = {
+    all: "No open pull requests.",
+    review: "Nothing waiting on you.",
+    unattended: "No unattended pull requests.",
+    stale: "No stale pull requests.",
+  };
 
   return (
-    <section className="card card-body">
-      <PanelTitle title="Inbound PR radar" detail={`${brief.prs.length} open`} />
-      {brief.prs.length === 0 ? (
-        <p className="mt-3 text-sm text-text-subtle">No open pull requests.</p>
+    <section id="prs" className="card card-body">
+      <PanelTitle title="Inbound PR radar" detail={`${visible.length}/${brief.prs.length} open`} />
+      {brief.prs.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter pull requests">
+          {PR_RADAR_FILTERS.map((chip) => {
+            const count = counts[chip.id];
+            const active = filter === chip.id;
+            return (
+              <button
+                key={chip.id}
+                type="button"
+                className={`badge ${active ? "badge-accent" : count === 0 ? "badge-muted" : "badge-warning"}`}
+                style={{
+                  cursor: "pointer",
+                  border: active ? "1px solid var(--accent)" : "1px solid transparent",
+                  fontSize: 11,
+                  padding: "3px 8px",
+                }}
+                aria-pressed={active}
+                onClick={() => setFilter(chip.id)}
+              >
+                {chip.label}
+                <span style={{ opacity: 0.85, marginLeft: 4 }}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {visible.length === 0 ? (
+        <p className="mt-3 text-sm text-text-subtle">{emptyCopy[filter]}</p>
       ) : [...grouped].map(([team, prs]) => (
         <div key={team} className="mt-4">
           <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
@@ -281,6 +337,58 @@ function PrRadar({ brief, owner, name }: { brief: OwnerBrief; owner: string; nam
   );
 }
 
+
+function Owners({ brief }: { brief: OwnerBrief }) {
+  const owners = presentRepoOwners(brief.domains, brief.teams);
+  return (
+    <section id="owners" className="card card-body">
+      <PanelTitle
+        title="Who owns what"
+        detail={owners.declared.length
+          ? `${owners.declared.length} declared`
+          : owners.inferred.length
+            ? "inferred"
+            : "none"}
+      />
+      {owners.declared.length === 0 && owners.inferred.length === 0 && (
+        <p className="mt-3 text-xs text-text-subtle">
+          {brief.repo.localPath
+            ? "No CODEOWNERS in this clone. Ownership here is the mark you made in DevHub."
+            : "Clone the repo to read CODEOWNERS."}
+        </p>
+      )}
+      {owners.declared.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {owners.declared.map((row) => (
+            <div key={row.domainId} className="text-xs">
+              <div className="font-medium text-text">{row.label}</div>
+              <div className="text-[11px] text-text-subtle">{row.codeowners.join(", ")}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {owners.inferred.length > 0 && (
+        <div className="mt-3 space-y-2">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+            Also active here
+            <span className="badge badge-muted ml-1.5 normal-case" title="Grouped from commit history, not CODEOWNERS">
+              inferred
+            </span>
+          </div>
+          {owners.inferred.map((row) => (
+            <div key={row.id} className="text-xs">
+              <div className="font-medium text-text">{row.label}</div>
+              <div className="text-[11px] text-text-subtle">
+                {row.members.join(", ") || row.domainLabels.join(", ") || "No members listed"}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function KnowledgeGaps({
   repo,
   gaps,
@@ -295,7 +403,7 @@ function KnowledgeGaps({
   onRetry: () => void;
 }) {
   return (
-    <section className="card card-body">
+    <section id="gaps" className="card card-body">
       <PanelTitle title="Knowledge gaps" detail="churn × unfamiliarity" />
       {loading && <div className="mt-3 space-y-2">{[1, 2, 3].map((row) => <div key={row} className="skeleton h-9 rounded" />)}</div>}
       {error && (
@@ -390,7 +498,7 @@ function CatchUp({
   }
 
   return (
-    <section className="card card-body">
+    <section id="catch-up" className="card card-body">
       <PanelTitle
         title={digestWindow === "recent" ? "Recent history" : "Since I last looked"}
         detail={`${commits.length} commits`}
@@ -509,6 +617,7 @@ function PrRow({ pr, owner, name }: { pr: RepoPrRadarRow; owner: string; name: s
             <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-text-subtle">
               <span>{pr.author.login}</span><span>·</span><span>{pr.domains.join(", ") || "unmapped"}</span>
               {pr.isDraft && <span className="badge badge-muted">draft</span>}
+              {pr.review.mineRequested && <span className="badge badge-warning">waiting on you</span>}
               {pr.review.nobodyLooking && <span className="badge badge-warning">nobody looking</span>}
               {pr.stale && <span className="badge badge-warning">stale</span>}
               {pr.uncoveredPaths.length > 0 && <span className="badge badge-muted">no CODEOWNER</span>}

@@ -21,6 +21,17 @@ Optional shared/team skills can live in an **ai-tools** checkout under `skills/`
 
 Each skill should have a clear name and a `SKILL.md` file that explains when and how to use it.
 
+
+| Tool | User skill root |
+| ---- | --------------- |
+| Claude | `~/.claude/skills` |
+| Codex | `~/.codex/skills` |
+| OpenCode | `~/.opencode/skills`, `~/.config/opencode/skills` |
+| Cursor | `~/.cursor/skills` and `~/.agents/skills` |
+
+Cursor Customize → Skills lists `~/.agents/skills` as **User**. `~/.cursor/skills-cursor` is Cursor's internal builtin store — never a sync target.
+
+
 Configure `AI_TOOLS_ROOT` if your clone is not at `~/Developer/ai-tools`. Set `AI_TOOLS_SYNC=0` to sync DevHub skills only. Set `AI_TOOLS_REFRESH_ON_SYNC=0` if you want sync to skip upstream fetch (airplane mode). Set `AI_TOOLS_BRANCH` to override the default branch (normally resolved via `gh`). Requires `gh auth login` for upstream refresh.
 
 Example:

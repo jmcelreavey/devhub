@@ -12,7 +12,6 @@ import {
   GitCompare,
   GitMerge,
   Link2,
-  MoreVertical,
   Pencil,
   Plus,
   RefreshCw,
@@ -22,7 +21,12 @@ import {
   Upload,
 } from "lucide-react";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
-import { ContextMenu, useContextMenu, type ContextMenuGroup } from "@/components/shell/ContextMenu";
+import {
+  ContextMenu,
+  RowMenuKebab,
+  useContextMenu,
+  type ContextMenuGroup,
+} from "@/components/shell/ContextMenu";
 import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
 import { groupBranches } from "@/lib/repos/branch-grouping";
 import { RemotesSection } from "./RemotesSection";
@@ -56,6 +60,9 @@ const ACTION_SUCCESS_LABELS: Record<string, (branch?: unknown) => string> = {
   "reset-to-branch": (branch) => `Reset to ${branch}`,
   "checkout-remote": (branch) => `Switched to ${branch}`,
   "sync-main": () => "Synced with main",
+  "pull-rebase": () => "Pulled with rebase",
+  "pull-merge": () => "Pulled with merge",
+  "prune-backup-branches": () => "Pruned backup branches",
 };
 
 export function BranchesPanel({
@@ -79,6 +86,7 @@ export function BranchesPanel({
   const [compareBranch, setCompareBranch] = useState<string | null>(null);
   const [branchQuery, setBranchQuery] = useState("");
   const menu = useContextMenu<BranchInfo>();
+  const remoteMenu = useContextMenu<RemoteBranchInfo>();
 
   // Filter and group both lists. A team repo runs to dozens of branches and
   // this was a flat list, so the only way to find one was to read every row.
@@ -296,18 +304,63 @@ export function BranchesPanel({
   );
 
   const resetCurrentTo = useCallback(
-    async (branch: string, current: string) => {
+    async (branch: string, current: string, mode: "soft" | "mixed" | "hard") => {
+      const copy =
+        mode === "soft"
+          ? `Moves ${current} to ${branch} with git reset --soft: HEAD moves, index and working tree stay. Creates a backup branch first.`
+          : mode === "mixed"
+            ? `Moves ${current} to ${branch} with git reset --mixed: HEAD and index move, working tree stays. Creates a backup branch first.`
+            : `Moves ${current} to ${branch} with git reset --hard: commits only on ${current} stop being reachable by name, and the working tree is replaced. Requires a clean tree; DevHub takes a backup branch first.`;
       const ok = await confirm({
-        title: `Reset ${current} to ${branch}?`,
-        message: `Moves ${current} to ${branch} with git reset --hard: commits only on ${current} stop being reachable by name, and the working tree is replaced. Requires a clean tree; DevHub takes a backup branch first.`,
-        confirmLabel: "Hard reset",
+        title: `${mode === "hard" ? "Hard" : mode === "soft" ? "Soft" : "Mixed"} reset ${current} to ${branch}?`,
+        message: copy,
+        confirmLabel: `${mode[0]!.toUpperCase()}${mode.slice(1)} reset`,
         variant: "danger",
       });
       if (!ok) return;
-      await act("reset-to-branch", { branch, mode: "hard" });
+      await act("reset-to-branch", { branch, mode });
     },
     [act, confirm],
   );
+
+  const pullWith = useCallback(
+    async (action: "pull-rebase" | "pull-merge") => {
+      const ok = await confirm({
+        title: action === "pull-rebase" ? "Pull with rebase?" : "Pull with merge?",
+        message:
+          action === "pull-rebase"
+            ? "git pull --rebase. Replays your local commits on top of upstream. No merge commit. Conflicts open in the Conflicts tab."
+            : "git pull --no-rebase. Merges upstream into this branch. Conflicts open in the Conflicts tab.",
+        confirmLabel: action === "pull-rebase" ? "Rebase pull" : "Merge pull",
+        variant: action === "pull-rebase" ? "danger" : undefined,
+      });
+      if (ok) await act(action);
+    },
+    [act, confirm],
+  );
+
+  const pruneBackups = useCallback(async () => {
+    const ok = await confirm({
+      title: "Prune backup branches?",
+      message:
+        "Deletes `devhub/backup-*` branches except the newest 10 and anything from the last 14 days. Never deletes the current branch.",
+      confirmLabel: "Prune backups",
+      variant: "danger",
+    });
+    if (ok) await act("prune-backup-branches");
+  }, [act, confirm]);
+
+  const syncWithMain = useCallback(async () => {
+    const target = data?.mainBranch ?? "main";
+    const ok = await confirm({
+      title: `Sync with ${target}?`,
+      message: `Stashes any local work, fetches ${target}, merges it into ${
+        data?.currentBranch ?? "this branch"
+      }, pushes, then restores the stash. Conflicts open in the Conflicts tab.`,
+      confirmLabel: "Sync",
+    });
+    if (ok) await act("sync-main");
+  }, [act, confirm, data?.mainBranch, data?.currentBranch]);
 
   const copyName = useCallback(
     async (branch: string) => {
@@ -421,9 +474,26 @@ export function BranchesPanel({
           },
           {
             id: "pull",
-            label: "Pull",
+            label: "Pull (fast-forward)",
             description: isCurrent ? "git pull --ff-only" : undefined,
             icon: <ArrowDownToLine size={12} />,
+            disabled: !isCurrent || busy || !data.upstream || data.behind === 0 || (data.ahead > 0 && data.behind > 0),
+            disabledReason: !isCurrent
+              ? "Check the branch out to pull it"
+              : !data.upstream
+                ? "No upstream configured"
+                : data.behind === 0
+                  ? "Already up to date"
+                  : data.ahead > 0 && data.behind > 0
+                    ? "Diverged — use rebase or merge pull"
+                    : undefined,
+            onSelect: () => void act("pull"),
+          },
+          {
+            id: "pull-rebase",
+            label: "Pull with rebase",
+            description: "git pull --rebase — replay local commits on upstream",
+            icon: <CornerDownLeft size={12} />,
             disabled: !isCurrent || busy || !data.upstream || data.behind === 0,
             disabledReason: !isCurrent
               ? "Check the branch out to pull it"
@@ -432,17 +502,40 @@ export function BranchesPanel({
                 : data.behind === 0
                   ? "Already up to date"
                   : undefined,
-            onSelect: () => void act("pull"),
+            onSelect: () => void pullWith("pull-rebase"),
+          },
+          {
+            id: "pull-merge",
+            label: "Pull with merge",
+            description: "git pull --no-rebase — merge upstream into this branch",
+            icon: <GitMerge size={12} />,
+            disabled: !isCurrent || busy || !data.upstream || data.behind === 0,
+            disabledReason: !isCurrent
+              ? "Check the branch out to pull it"
+              : !data.upstream
+                ? "No upstream configured"
+                : data.behind === 0
+                  ? "Already up to date"
+                  : undefined,
+            onSelect: () => void pullWith("pull-merge"),
           },
           {
             id: "set-upstream",
-            label: `Track origin/${branch.name}`,
+            label: `Track ${data.remotes?.[0]?.name ?? "origin"}/${branch.name}`,
             description: branch.upstream ? `Currently ${branch.upstream}` : undefined,
             icon: <Link2 size={12} />,
-            disabled: busy || branch.upstream === `origin/${branch.name}`,
+            disabled:
+              busy ||
+              branch.upstream === `${data.remotes?.[0]?.name ?? "origin"}/${branch.name}`,
             disabledReason:
-              branch.upstream === `origin/${branch.name}` ? "Already tracking it" : undefined,
-            onSelect: () => void act("set-upstream", { branch: branch.name }),
+              branch.upstream === `${data.remotes?.[0]?.name ?? "origin"}/${branch.name}`
+                ? "Already tracking it"
+                : undefined,
+            onSelect: () =>
+              void act("set-upstream", {
+                branch: branch.name,
+                remote: data.remotes?.[0]?.name,
+              }),
           },
           {
             id: "force-push-with-lease",
@@ -518,9 +611,29 @@ export function BranchesPanel({
             onSelect: () => void renameBranch(branch.name),
           },
           {
+            id: "reset-soft",
+            label: `Soft reset ${current} to here`,
+            description: "Move HEAD only — keep index and working tree",
+            icon: <Rewind size={12} />,
+            danger: true,
+            disabled: isCurrent || busy,
+            disabledReason: isCurrent ? "That is the current branch" : undefined,
+            onSelect: () => void resetCurrentTo(branch.name, current, "soft"),
+          },
+          {
+            id: "reset-mixed",
+            label: `Mixed reset ${current} to here`,
+            description: "Move HEAD and index — keep working tree",
+            icon: <Rewind size={12} />,
+            danger: true,
+            disabled: isCurrent || busy,
+            disabledReason: isCurrent ? "That is the current branch" : undefined,
+            onSelect: () => void resetCurrentTo(branch.name, current, "mixed"),
+          },
+          {
             id: "reset",
-            label: `Reset ${current} to here`,
-            description: "Hard reset — discards commits only on the current branch",
+            label: `Hard reset ${current} to here`,
+            description: "Replace working tree; discards commits only on the current branch",
             icon: <Rewind size={12} />,
             danger: true,
             disabled: isCurrent || busy || dirty,
@@ -529,7 +642,7 @@ export function BranchesPanel({
               : dirty
                 ? "Commit or stash your changes first"
                 : undefined,
-            onSelect: () => void resetCurrentTo(branch.name, current),
+            onSelect: () => void resetCurrentTo(branch.name, current, "hard"),
           },
           {
             id: "delete",
@@ -570,9 +683,69 @@ export function BranchesPanel({
     deleteBranch,
     forceDeleteBranch,
     forcePushWithLease,
+    pullWith,
     copyName,
     openOnGitHub,
     openPullRequest,
+  ]);
+
+  const remoteMenuGroups = useMemo((): ContextMenuGroup[] => {
+    const branch = remoteMenu.target;
+    if (!branch || !data) return [];
+    const busy = acting !== null;
+    const hasRemote = Boolean(data.remoteWebUrl);
+    return [
+      {
+        id: "move",
+        items: [
+          {
+            id: "checkout",
+            label: branch.trackedLocalName
+              ? `Check out ${branch.trackedLocalName}`
+              : `Check out ${branch.localName}`,
+            icon: <Download size={12} />,
+            disabled: busy,
+            onSelect: () =>
+              branch.trackedLocalName
+                ? void checkoutBranch(branch.trackedLocalName)
+                : void checkoutRemoteBranch(branch),
+          },
+          {
+            id: "compare",
+            label: `Compare with ${data.currentBranch}`,
+            icon: <GitCompare size={12} />,
+            onSelect: () => setCompareBranch(branch.name),
+          },
+        ],
+      },
+      {
+        id: "copy",
+        items: [
+          {
+            id: "copy",
+            label: "Copy name",
+            icon: <Copy size={12} />,
+            onSelect: () => void copyName(branch.name),
+          },
+          {
+            id: "github",
+            label: "Open on GitHub",
+            icon: <ExternalLink size={12} />,
+            disabled: !hasRemote,
+            disabledReason: hasRemote ? undefined : "No browsable origin remote",
+            onSelect: () => openOnGitHub(branch.localName),
+          },
+        ],
+      },
+    ];
+  }, [
+    remoteMenu.target,
+    data,
+    acting,
+    checkoutBranch,
+    checkoutRemoteBranch,
+    copyName,
+    openOnGitHub,
   ]);
 
   if (loading && !data) return <SkeletonRows count={5} height={28} />;
@@ -580,14 +753,18 @@ export function BranchesPanel({
   const behind = data?.behind ?? 0;
   const ahead = data?.ahead ?? 0;
   const hasUpstream = Boolean(data?.upstream);
+  const diverged = ahead > 0 && behind > 0;
   const canPull = hasUpstream && behind > 0;
+  const canFfPull = canPull && !diverged;
   const pullTitle = !hasUpstream
     ? "No upstream configured"
     : behind === 0
       ? ahead > 0
         ? "Nothing to pull — local is ahead of upstream"
         : "Already up to date"
-      : `Pull ${behind} commit${behind === 1 ? "" : "s"} from ${data?.upstream} (fast-forward only)`;
+      : diverged
+        ? `Diverged from ${data?.upstream} — fast-forward pull will fail. Use rebase or merge.`
+        : `Pull ${behind} commit${behind === 1 ? "" : "s"} from ${data?.upstream} (fast-forward only)`;
   const behindMain = data?.behindMain ?? 0;
 
   return (
@@ -600,13 +777,37 @@ export function BranchesPanel({
         <button
           type="button"
           className="btn btn-ghost"
-          disabled={acting !== null || !canPull}
+          disabled={acting !== null || !canFfPull}
           title={pullTitle}
           onClick={() => void act("pull")}
         >
           {acting === "pull" ? <RefreshCw size={11} className="animate-spin" /> : <CornerDownLeft size={11} />}
-          {behind > 0 ? `Pull ${behind}` : "Pull"}
+          {behind > 0 && !diverged ? `Pull ${behind}` : "Pull"}
         </button>
+        {diverged && (
+          <>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={acting !== null}
+              title="git pull --rebase — replay local commits on upstream"
+              onClick={() => void pullWith("pull-rebase")}
+            >
+              {acting === "pull-rebase" ? <RefreshCw size={11} className="animate-spin" /> : <CornerDownLeft size={11} />}
+              Pull rebase
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={acting !== null}
+              title="git pull --no-rebase — merge upstream into this branch"
+              onClick={() => void pullWith("pull-merge")}
+            >
+              {acting === "pull-merge" ? <RefreshCw size={11} className="animate-spin" /> : <GitMerge size={11} />}
+              Pull merge
+            </button>
+          </>
+        )}
         {(ahead > 0 || pushing) && behind === 0 && (
           <button
             type="button"
@@ -623,11 +824,21 @@ export function BranchesPanel({
           <Plus size={11} /> New branch
         </button>
         {behindMain > 0 && (
-          <button type="button" className="btn btn-ghost" disabled={acting !== null} title={`Stash local work, merge ${data?.mainBranch}, push, and restore the stash`} onClick={() => void act("sync-main")}>
+          <button type="button" className="btn btn-ghost" disabled={acting !== null} title={`Stash local work, merge ${data?.mainBranch}, push, and restore the stash`} onClick={() => void syncWithMain()}>
             {acting === "sync-main" ? <RefreshCw size={11} className="animate-spin" /> : <GitMerge size={11} />}
             Sync {behindMain}
           </button>
         )}
+        <button
+          type="button"
+          className="btn btn-ghost"
+          disabled={acting !== null}
+          title="Delete old devhub/backup-* branches, keeping the newest 10 or last 14 days"
+          onClick={() => void pruneBackups()}
+        >
+          {acting === "prune-backup-branches" ? <RefreshCw size={11} className="animate-spin" /> : <Trash2 size={11} />}
+          Prune backups
+        </button>
         <div className="repo-git-spacer" />
         <span className="text-xs text-text-subtle">
           on <span className="text-accent">{data?.currentBranch}</span>
@@ -658,7 +869,7 @@ export function BranchesPanel({
           aria-label="Filter branches"
         />
       </label>
-      <div className="repo-git-branch-hint">Right-click a branch for merge, rebase, rename and more.</div>
+      <div className="repo-git-branch-hint">Right-click or ⋮ a branch for merge, rebase, rename and more.</div>
       <div className="repo-git-branch-list">
         {localGroups.length === 0 && branchQuery.trim() && (
           <div className="repo-git-empty-sm">No local branch matches “{branchQuery.trim()}”.</div>
@@ -674,9 +885,9 @@ export function BranchesPanel({
             {group.items.map((b) => (
           <div
             key={b.name}
-            className="repo-git-branch-row"
+            className="repo-git-branch-row group"
             data-current={b.current || undefined}
-            onContextMenu={(e) => menu.openAt(e, b)}
+            {...menu.bindRow(b)}
           >
             <button
               type="button"
@@ -689,27 +900,10 @@ export function BranchesPanel({
               {b.current && <span className="repo-git-ref-chip">current</span>}
               {!b.upstream && <span className="repo-git-ref-chip" data-tone="warning">local only</span>}
             </button>
-            <button
-              type="button"
-              className="btn btn-ghost repo-git-icon-btn"
-              aria-label={`Actions for ${b.name}`}
-              title={`Actions for ${b.name}`}
-              onClick={(e) => menu.openAt(e, b)}
-            >
-              <MoreVertical size={10} />
-            </button>
-            {!b.current && (
-              <button
-                type="button"
-                className="btn btn-ghost repo-git-icon-btn"
-                data-danger
-                aria-label={`Delete branch ${b.name}`}
-                disabled={acting !== null}
-                onClick={() => void deleteBranch(b.name)}
-              >
-                <Trash2 size={10} />
-              </button>
-            )}
+            <RowMenuKebab
+              label={`Actions for ${b.name}`}
+              onOpen={(x, y) => menu.openAtPoint(x, y, b)}
+            />
           </div>
             ))}
           </div>
@@ -728,7 +922,11 @@ export function BranchesPanel({
                   </div>
                 )}
                 {group.items.map((branch) => (
-              <div key={branch.name} className="repo-git-branch-row">
+              <div
+                key={branch.name}
+                className="repo-git-branch-row group"
+                {...remoteMenu.bindRow(branch)}
+              >
                 <button
                   type="button"
                   className="repo-git-branch-main"
@@ -754,6 +952,10 @@ export function BranchesPanel({
                 >
                   <GitCompare size={10} />
                 </button>
+                <RowMenuKebab
+                  label={`Actions for ${branch.name}`}
+                  onOpen={(x, y) => remoteMenu.openAtPoint(x, y, branch)}
+                />
               </div>
                 ))}
               </div>
@@ -768,6 +970,13 @@ export function BranchesPanel({
         groups={menuGroups}
         onClose={menu.close}
         label={menu.target ? `Actions for ${menu.target.name}` : "Branch actions"}
+      />
+      <ContextMenu
+        open={Boolean(remoteMenu.target)}
+        position={remoteMenu.position}
+        groups={remoteMenuGroups}
+        onClose={remoteMenu.close}
+        label={remoteMenu.target ? `Actions for ${remoteMenu.target.name}` : "Remote branch actions"}
       />
       {compareBranch && (
         <RangeCompareModal

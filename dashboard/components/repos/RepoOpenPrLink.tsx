@@ -109,6 +109,7 @@ export function RepoOpenPrLink({
           rel="noopener noreferrer"
           className="repo-open-pr-link"
           data-checks={pr.checks !== "none" ? pr.checks : undefined}
+          onContextMenu={(event) => event.preventDefault()}
           title={[
             pr.title ? `${pr.title} — open PR` : `Open PR #${pr.number}`,
             pr.checks !== "none"

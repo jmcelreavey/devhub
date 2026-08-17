@@ -12,4 +12,4 @@ export * from "@/lib/entity-note";
 export { buildTaskNoteMarkdown, taskEntityRefs, taskNotePath } from "@/lib/task-note";
 export { buildMeetingNoteMarkdown, meetingEntityRefs, meetingNotePath } from "@/lib/meeting-note";
 export { buildPrNoteMarkdown, prEntityId, prEntityRefs, prNotePath } from "@/lib/pr-note";
-export { parseGithubPrUrl } from "@/lib/entity-links/parse-pr";
+export { parseGithubPrRef, parseGithubPrUrl } from "@/lib/entity-links/parse-pr";

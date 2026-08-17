@@ -3,12 +3,29 @@
 import { useCallback, useEffect, useState, type HTMLAttributes } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Check, ClipboardCopy, GripVertical, Plus, Trash2 } from "lucide-react";
+import { GripVertical } from "lucide-react";
 import { useToast } from "@/lib/hooks/use-toast";
-import { copyTextToClipboard } from "@/lib/clipboard";
-import { HoverTip } from "@/components/ui/HoverTip";
-import { useConfirm } from "@/components/shell/ConfirmDialog";
+import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
+import {
+  ContextMenu,
+  RowMenuKebab,
+  useContextMenu,
+} from "@/components/shell/ContextMenu";
 import { InlineNoteRename } from "@/components/InlineNoteRename";
+import { OneTimeShareButton } from "@/components/OneTimeShareButton";
+import {
+  buildVaultFileMenuGroups,
+  buildVaultFolderMenuGroups,
+} from "@/components/vault/vaultRowMenus";
+import {
+  copyVaultLocation,
+  copyVaultMarkdown,
+  createVaultFolder,
+  duplicateVaultFile,
+  openLinkedNoteInCursor,
+  renameVaultFolder,
+  shareVaultGist,
+} from "@/lib/vault/vault-file-actions";
 import { SortableList, SortableDragProvider } from "@/components/ui/SortableList";
 import { filterNotesSidebarTree } from "@/lib/notes/tree-sidebar-filter";
 import { getVaultClient, type VaultClientConfig } from "@/lib/vault/vault-client";
@@ -44,13 +61,17 @@ function TreeNode({
 }) {
   const [open, setOpen] = useState(depth < 1);
   const [deleting, setDeleting] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [editingLabel, setEditingLabel] = useState(false);
+  const [editRequest, setEditRequest] = useState(0);
+  const [oneTimeOpen, setOneTimeOpen] = useState(false);
+  const menu = useContextMenu<"row">();
   const pathname = usePathname();
   const router = useRouter();
   const showToast = useToast();
   const confirm = useConfirm();
+  const prompt = usePrompt();
   const { paths, apiPrefix, pagePrefix, itemLabel, newItemEvent } = vault;
+  const vaultId = vault.id;
   const extRe = new RegExp(`${vault.extension.replace(".", "\\.")}$`, "i");
 
   const rowStyle = {
@@ -63,9 +84,7 @@ function TreeNode({
   if (entry.type === "dir") {
     const folderPath = entry.path.replace(/\\/g, "/");
 
-    const handleDeleteFolder = async (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
+    const handleDeleteFolder = async () => {
       const ok = await confirm({
         title: "Delete folder",
         message: `Delete folder "${entry.name}" and every ${itemLabel} inside it? This cannot be undone.`,
@@ -98,11 +117,68 @@ function TreeNode({
       }
     };
 
+    const handleNewFolder = async () => {
+      const name = await prompt({
+        title: "New folder",
+        message: `Create a folder inside \"${entry.name}\".`,
+        confirmLabel: "Create",
+        input: { placeholder: "folder-name" },
+      });
+      const trimmed = name?.trim().replace(/\\/g, "/").split("/").pop() ?? "";
+      if (!trimmed) return;
+      try {
+        await createVaultFolder(vaultId, `${folderPath}/${trimmed}`);
+        showToast.success("Folder created.");
+        onTreeChange?.();
+      } catch (err) {
+        showToast.error(err instanceof Error ? err.message : "Could not create folder.");
+      }
+    };
+
+    const handleRenameFolder = async () => {
+      const name = await prompt({
+        title: "Rename folder",
+        confirmLabel: "Rename",
+        input: { defaultValue: entry.name },
+      });
+      const trimmed = name?.trim().replace(/\\/g, "/").split("/").pop() ?? "";
+      if (!trimmed || trimmed === entry.name) return;
+      const parent = folderPath.includes("/") ? folderPath.slice(0, folderPath.lastIndexOf("/")) : "";
+      const newPath = parent ? `${parent}/${trimmed}` : trimmed;
+      try {
+        await renameVaultFolder(vaultId, folderPath, newPath);
+        showToast.success("Renamed.");
+        onTreeChange?.();
+      } catch (err) {
+        showToast.error(err instanceof Error ? err.message : "Could not rename folder.");
+      }
+    };
+
+    const folderMenuGroups = buildVaultFolderMenuGroups({
+      itemLabel,
+      deleting,
+      onNewItem: () => {
+        window.dispatchEvent(
+          new CustomEvent(newItemEvent, { detail: { folder: entry.path } }),
+        );
+      },
+      onNewFolder: () => void handleNewFolder(),
+      onCopyPath: () => {
+        void copyVaultLocation(folderPath).then(
+          () => showToast.success("Location copied"),
+          () => showToast.error("Could not copy to clipboard."),
+        );
+      },
+      onRename: () => void handleRenameFolder(),
+      onDelete: () => void handleDeleteFolder(),
+    });
+
     return (
       <div>
         <div
           className="group flex min-w-0 max-w-full items-center gap-0.5 pr-1"
           style={rowStyle}
+          {...menu.bindRow("row")}
         >
           <TreeDragHandle
             label={entry.name}
@@ -116,33 +192,18 @@ function TreeNode({
             <span>{open ? "▾" : "▸"}</span>
             <span className="truncate">{entry.name}</span>
           </button>
-          <button
-            type="button"
-            title={`New ${itemLabel} in ${entry.name}`}
-            className="shrink-0 rounded p-0.5 reveal-on-hover text-accent"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              window.dispatchEvent(
-                new CustomEvent(newItemEvent, { detail: { folder: entry.path } }),
-              );
-            }}
-          >
-            <Plus size={12} strokeWidth={2.5} aria-hidden />
-            <span className="sr-only">New {itemLabel} in {entry.name}</span>
-          </button>
-          <HoverTip label={deleting ? "Deleting…" : `Delete folder ${entry.name}`}>
-            <button
-              type="button"
-              disabled={deleting}
-              className="shrink-0 rounded p-0.5 reveal-on-hover disabled:opacity-30 disabled:pointer-events-none text-danger"
-              onClick={handleDeleteFolder}
-            >
-              <Trash2 size={12} strokeWidth={2.5} aria-hidden />
-              <span className="sr-only">Delete folder {entry.name}</span>
-            </button>
-          </HoverTip>
+          <RowMenuKebab
+            label={`Actions for ${entry.name}`}
+            onOpen={(x, y) => menu.openAtPoint(x, y, "row")}
+          />
         </div>
+        <ContextMenu
+          open={menu.target !== null}
+          position={menu.position}
+          groups={folderMenuGroups}
+          onClose={menu.close}
+          label={`${entry.name} actions`}
+        />
         {open && entry.children && (
           <div className="min-w-0">
             <TreeLevel
@@ -195,27 +256,14 @@ function TreeNode({
         onEditingChange={setEditingLabel}
         onRenamed={handleRenamed}
         renameFile={vault.paths.renameFile}
+        editRequest={editRequest}
         className="truncate min-w-0 flex-1"
         title={linkActive ? "Click to rename" : "Double-click to rename"}
       />
     </>
   );
 
-  const handleCopyRef = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    try {
-      await copyTextToClipboard(slug);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      showToast.error("Could not copy to clipboard.");
-    }
-  };
-
-  const handleDelete = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleDelete = async () => {
     const ok = await confirm({
       title: `Delete ${itemLabel}`,
       message: `Delete "${label}"? This cannot be undone.`,
@@ -245,10 +293,66 @@ function TreeNode({
     }
   };
 
+  const openFile = () => {
+    if (onSelect) {
+      onSelect(slug);
+      return;
+    }
+    router.push(href);
+  };
+
+  const fileMenuGroups = buildVaultFileMenuGroups({
+    itemLabel,
+    kind: vaultId,
+    deleting,
+    onOpen: openFile,
+    onOpenInCursor:
+      vaultId === "notes"
+        ? () => {
+            void openLinkedNoteInCursor(slug, showToast).catch((err) => {
+              showToast.error(err instanceof Error ? err.message : "Could not open in Cursor.");
+            });
+          }
+        : undefined,
+    onCopyLocation: () => {
+      void copyVaultLocation(slug).then(
+        () => showToast.success("Location copied"),
+        () => showToast.error("Could not copy to clipboard."),
+      );
+    },
+    onCopyMarkdown: () => {
+      void copyVaultMarkdown(vaultId, slug).then(
+        () => showToast.success("Markdown copied"),
+        (err) => showToast.error(err instanceof Error ? err.message : "Could not copy markdown."),
+      );
+    },
+    onShare: () => {
+      void shareVaultGist(vaultId, slug).then(
+        () => showToast.success("Live — link copied"),
+        (err) => showToast.error(err instanceof Error ? err.message : "Could not publish."),
+      );
+    },
+    onOneTime: () => setOneTimeOpen(true),
+    onRename: () => setEditRequest((n) => n + 1),
+    onDuplicate: () => {
+      void duplicateVaultFile(vaultId, slug).then(
+        (next) => {
+          showToast.success("Duplicated.");
+          onTreeChange?.();
+          if (!onSelect) router.push(paths.pageHref(next));
+        },
+        (err) => showToast.error(err instanceof Error ? err.message : "Could not duplicate."),
+      );
+    },
+    onDelete: () => void handleDelete(),
+  });
+
   return (
+    <>
     <div
       className="group flex min-w-0 max-w-full items-center gap-0.5 pr-1"
       style={rowStyle}
+      {...(editingLabel ? {} : menu.bindRow("row"))}
     >
       {!editingLabel && (
         <TreeDragHandle
@@ -274,36 +378,33 @@ function TreeNode({
           className={sharedLinkClass}
           style={sharedLinkStyle}
           onClick={editingLabel ? (e) => e.preventDefault() : undefined}
+          onContextMenu={(e) => e.preventDefault()}
         >
           {inner}
         </Link>
       )}
-      <button
-        type="button"
-        title="Copy location"
-        className="shrink-0 rounded p-0.5 reveal-on-hover"
-        style={{ color: copied ? "var(--success)" : "var(--text-muted)" }}
-        onClick={handleCopyRef}
-      >
-        {copied ? (
-          <Check size={12} strokeWidth={2.5} aria-hidden />
-        ) : (
-          <ClipboardCopy size={12} strokeWidth={2.5} aria-hidden />
-        )}
-        <span className="sr-only">Copy location</span>
-      </button>
-      <HoverTip label={deleting ? "Deleting…" : `Delete ${label}`}>
-        <button
-          type="button"
-          disabled={deleting}
-          className="shrink-0 rounded p-0.5 reveal-on-hover disabled:opacity-30 disabled:pointer-events-none text-danger"
-          onClick={handleDelete}
-        >
-          <Trash2 size={12} strokeWidth={2.5} aria-hidden />
-          <span className="sr-only">Delete {label}</span>
-        </button>
-      </HoverTip>
+      {!editingLabel && (
+        <RowMenuKebab
+          label={`Actions for ${label}`}
+          onOpen={(x, y) => menu.openAtPoint(x, y, "row")}
+        />
+      )}
     </div>
+    <ContextMenu
+      open={menu.target !== null}
+      position={menu.position}
+      groups={fileMenuGroups}
+      onClose={menu.close}
+      label={`${label} actions`}
+    />
+    <OneTimeShareButton
+      vaultId={vaultId}
+      path={slug}
+      hideTrigger
+      open={oneTimeOpen}
+      onOpenChange={setOneTimeOpen}
+    />
+    </>
   );
 }
 

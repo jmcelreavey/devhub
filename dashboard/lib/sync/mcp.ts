@@ -20,6 +20,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { claudeDesktopMcpConfigPath } from "@/lib/mcp/claude-desktop-paths";
 import { cursorMcpConfigPath, cursorMcpLegacyConfigPath } from "@/lib/mcp/cursor-paths";
 import { listPersonalMcpServerNames, readPersonalMcpServer } from "@/lib/mcp/personal";
 import { pluginAssetDirs } from "@/lib/plugins/registry";
@@ -61,6 +62,14 @@ export interface McpToolTarget {
   toTool: (server: SharedMcpServer) => Json;
   /** Tool-specific entry -> canonical transform (null if shape is unknown). */
   fromTool: (entry: Json) => SharedMcpServer | null;
+  /**
+   * Skip url-based (remote) servers for this tool. The Claude desktop app takes
+   * remote MCP servers through its own Connectors UI rather than this file, so a
+   * remote entry here is at best a duplicate of a connector the user already has,
+   * and at worst an unrecognized entry — the same failure mode as the Cursor note
+   * above.
+   */
+  skipRemote?: boolean;
 }
 
 function stdioToTool(server: SharedMcpServer): Json {
@@ -179,10 +188,22 @@ function opencodeFromTool(entry: Json): SharedMcpServer | null {
 export const MCP_TOOL_TARGETS: McpToolTarget[] = [
   {
     id: "claude",
-    label: "Claude",
+    label: "Claude Code",
     configPath: (home) => path.join(home, ".claude.json"),
     topKey: "mcpServers",
     mergeRest: true,
+    toTool: stdioToTool,
+    fromTool: sharedFromTool,
+  },
+  {
+    // The desktop app, not the CLI — separate config file, and the only route
+    // into Cowork sessions, which proxy the desktop app's servers to the cloud.
+    id: "claude-desktop",
+    label: "Claude desktop",
+    configPath: claudeDesktopMcpConfigPath,
+    topKey: "mcpServers",
+    mergeRest: true,
+    skipRemote: true,
     toTool: stdioToTool,
     fromTool: sharedFromTool,
   },
@@ -455,6 +476,10 @@ export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<numbe
         continue;
       }
       const { server, source } = resolved;
+      if (tool.skipRemote && server.url) {
+        emit(`  SKIP (remote server, not configured via this file): ${name}`);
+        continue;
+      }
       let substitutedJson = substituteRepoRoot(
         {
           ...(server.command ? { command: server.command } : {}),

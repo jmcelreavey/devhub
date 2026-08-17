@@ -8,13 +8,19 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { Bot, Monitor, Play, TerminalSquare } from "lucide-react";
+import { Bot, Code2, Monitor, Play, TerminalSquare } from "lucide-react";
 import { useLaunchChamberDesktop } from "@/lib/launch/chamber";
 import { useLaunchOpenCodeDesktop } from "@/lib/launch/opencode";
 import { useLaunchClaudeDesktop } from "@/lib/launch/claude";
-import { claudeCliCommand, opencodeCliCommand, openTerminal } from "@/lib/terminal-launch";
+import { useLaunchCursorDesktop } from "@/lib/launch/cursor";
+import {
+  claudeCliCommand,
+  cursorCliCommand,
+  opencodeCliCommand,
+  openTerminal,
+} from "@/lib/terminal-launch";
 
-type LaunchIcon = "chamber" | "opencode" | "claude";
+type LaunchIcon = "chamber" | "opencode" | "claude" | "cursor";
 
 interface LaunchEntry {
   /**
@@ -39,6 +45,10 @@ const ENTRIES: Record<LaunchIcon, LaunchEntry> = {
     cli: { label: "Claude", command: claudeCliCommand },
     appDescription: "Launch the native Claude desktop app.",
   },
+  cursor: {
+    cli: { label: "Cursor", command: cursorCliCommand },
+    appDescription: "Launch the Cursor Agent IDE.",
+  },
 };
 
 const TRIGGER_STYLE: CSSProperties = {
@@ -58,17 +68,25 @@ const TRIGGER_STYLE: CSSProperties = {
   zIndex: "var(--z-base)",
 };
 
+function desktopIcon(icon: LaunchIcon) {
+  if (icon === "claude") return <Bot size={13} />;
+  if (icon === "cursor") return <Code2 size={13} />;
+  return <Monitor size={13} />;
+}
+
 /**
  * Launcher for the System sidebar rows. The visible trigger is the same small
- * play glyph as before. Tools with a real interactive CLI (OpenCode, Claude)
- * open a portal menu offering the terminal drawer or the native desktop app —
- * mirroring the launch menu on the Repos screen. OpenChamber, whose CLI only
- * starts a server, keeps a single button that launches its desktop app.
+ * play glyph as before. Tools with a real interactive CLI (OpenCode, Claude,
+ * Cursor) open a portal menu offering the terminal drawer or the native
+ * desktop app — mirroring the launch menu on the Repos screen. OpenChamber,
+ * whose CLI only starts a server, keeps a single button that launches its
+ * desktop app.
  */
 export function NavLaunchMenu({ icon, label }: { icon: LaunchIcon; label: string }) {
   const launchChamber = useLaunchChamberDesktop();
   const launchOpenCode = useLaunchOpenCodeDesktop();
   const launchClaude = useLaunchClaudeDesktop();
+  const launchCursor = useLaunchCursorDesktop();
 
   const [open, setOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties | undefined>();
@@ -76,8 +94,12 @@ export function NavLaunchMenu({ icon, label }: { icon: LaunchIcon; label: string
   const menuRef = useRef<HTMLDivElement>(null);
 
   const entry = ENTRIES[icon];
-  const launchApp =
-    icon === "chamber" ? launchChamber : icon === "opencode" ? launchOpenCode : launchClaude;
+  const launchApp = {
+    chamber: launchChamber,
+    opencode: launchOpenCode,
+    claude: launchClaude,
+    cursor: launchCursor,
+  }[icon];
 
   function updateMenuPosition() {
     const rect = triggerRef.current?.getBoundingClientRect();
@@ -197,9 +219,7 @@ export function NavLaunchMenu({ icon, label }: { icon: LaunchIcon; label: string
                 void launchApp();
               }}
             >
-              <span className="launch-menu-icon">
-                {icon === "claude" ? <Bot size={13} /> : <Monitor size={13} />}
-              </span>
+              <span className="launch-menu-icon">{desktopIcon(icon)}</span>
               <span className="launch-menu-copy">
                 <span className="launch-menu-label">Desktop app</span>
                 <span className="launch-menu-description">{entry.appDescription}</span>

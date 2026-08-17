@@ -51,10 +51,16 @@ function extraAllowedDevOriginsFromEnv(): string[] {
 const desktopBuild = process.env.DEVHUB_DESKTOP_BUILD === "1";
 /** Isolate `npm run verify` / pre-push builds from a live `next-server` `.next` dir. */
 const verifyBuild = process.env.DEVHUB_VERIFY_BUILD === "1";
+/** Second local instance (e.g. PORT=1347) — keep it off the live `.next` cache. */
+const isolatedDist = process.env.DEVHUB_DIST_DIR?.trim();
 
 const nextConfig: NextConfig = {
   ...(desktopBuild ? ({ output: "standalone" } as const) : {}),
-  ...(verifyBuild ? ({ distDir: ".next-verify" } as const) : {}),
+  ...(verifyBuild
+    ? ({ distDir: ".next-verify" } as const)
+    : isolatedDist
+      ? ({ distDir: isolatedDist } as const)
+      : {}),
   /**
    * Pin the default so a corrupted/partial config merge cannot blow up as
    * `TypeError: generate is not a function` inside Next's generateBuildId.
@@ -74,7 +80,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: process.env.DEVHUB_SKIP_NEXT_TYPECHECK === "true",
   },
   /** @blocknote/xl-ai/server is tagged "use client"; keep it out of the App Route bundle. */
-  serverExternalPackages: ["@blocknote/xl-ai", "@blocknote/core"],
+  serverExternalPackages: ["@blocknote/xl-ai", "@blocknote/core", "adm-zip"],
   allowedDevOrigins: [...DEFAULT_ALLOWED_DEV_ORIGINS, ...extraAllowedDevOriginsFromEnv()],
   outputFileTracingExcludes: {
     "/*": ["./next.config.ts"],
@@ -150,7 +156,8 @@ const nextConfig: NextConfig = {
       config.externals = [
         ...prior,
         ({ request }: { request?: string }, callback: (err?: Error | null, result?: string) => void) => {
-          if (request?.startsWith("node:")) {
+          // `adm-zip` uses bare require("path"); webpack then fails compiling instrumentation.
+          if (request?.startsWith("node:") || request === "adm-zip") {
             callback(null, `commonjs ${request}`);
             return;
           }

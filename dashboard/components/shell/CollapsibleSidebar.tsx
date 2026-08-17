@@ -178,7 +178,10 @@ function NavSection({
         );
         if (
           !collapsed &&
-          (item.icon === "chamber" || item.icon === "opencode" || item.icon === "claude")
+          (item.icon === "chamber" ||
+            item.icon === "opencode" ||
+            item.icon === "claude" ||
+            item.icon === "cursor")
         ) {
           return (
             <div key={item.href} style={{ position: "relative" }}>

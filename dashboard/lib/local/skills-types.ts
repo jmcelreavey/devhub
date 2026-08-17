@@ -9,7 +9,10 @@ export interface LocalSkillSource {
 
 export type LocalCatalogStatus = "new" | "local-newer" | "repo-newer" | "changed" | "in-sync";
 
-export function canImportLocalCandidate(candidate: Pick<LocalSkillImportCandidate, "status">): boolean {
+export function canImportLocalCandidate(
+  candidate: Pick<LocalSkillImportCandidate, "status" | "blockedFromCatalog">,
+): boolean {
+  if (candidate.blockedFromCatalog) return false;
   return candidate.status === "new" || candidate.status === "local-newer" || candidate.status === "changed";
 }
 
@@ -39,4 +42,9 @@ export interface LocalSkillImportCandidate {
   localMtimeMs: number | null;
   /** Auto "Collect all" skips these; explicit import from UI still allowed. */
   excludedFromAutoCollect: boolean;
+  /**
+   * Vendor, plugin, ai-tools, root-level, and tool-bundled skills must not be
+   * forked into skills/shared. The Skills page hides Add for these.
+   */
+  blockedFromCatalog: boolean;
 }

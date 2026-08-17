@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, ChevronRight } from "lucide-react";
 import { DocIcon } from "@/components/docs/doc-icons";
+import { DocRow, DocRowLink } from "@/components/docs/DocRow";
 import type { DocSectionMeta } from "@/lib/docs/doc-sections";
 import type { DocSummary } from "@/lib/docs/doc-types";
 
@@ -49,20 +50,22 @@ export function DocsSectionPage({
         <ol className="lib-section-list">
           {docs.map((doc, i) => (
             <li key={doc.slug}>
-              <Link href={doc.href} className="lib-section-row">
-                <span className="lib-section-row-num">{String(i + 1).padStart(2, "0")}</span>
-                <span className="min-w-0">
-                  <span className="lib-section-row-title">
-                    <DocIcon name={doc.icon} size={13} className="lib-card-icon" aria-hidden />
-                    {doc.title}
+              <DocRow doc={doc} className="lib-section-item">
+                <DocRowLink href={doc.href} className="lib-section-row">
+                  <span className="lib-section-row-num">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="min-w-0">
+                    <span className="lib-section-row-title">
+                      <DocIcon name={doc.icon} size={13} className="lib-card-icon" aria-hidden />
+                      {doc.title}
+                    </span>
+                    {doc.description ? (
+                      <span className="lib-section-row-desc">{doc.description}</span>
+                    ) : null}
                   </span>
-                  {doc.description ? (
-                    <span className="lib-section-row-desc">{doc.description}</span>
-                  ) : null}
-                </span>
-                <span className="lib-section-row-meta">{doc.readingMinutes} min</span>
-                <ChevronRight size={14} className="text-text-subtle shrink-0" aria-hidden />
-              </Link>
+                  <span className="lib-section-row-meta">{doc.readingMinutes} min</span>
+                  <ChevronRight size={14} className="text-text-subtle shrink-0" aria-hidden />
+                </DocRowLink>
+              </DocRow>
             </li>
           ))}
         </ol>

@@ -7,7 +7,9 @@ import {
   parseGraphLog,
   parsePorcelainStatus,
   parseStashList,
+  parseUnifiedContext,
   parseUnifiedDiff,
+  parseNameStatus,
 } from "@/lib/repos/git-parsers";
 import { layoutCommitGraph, laneColor } from "@/lib/repos/git-graph";
 
@@ -154,5 +156,25 @@ describe("parseUnifiedDiff + glyph", () => {
   it("builds status glyph", () => {
     expect(fileStatusGlyph({ path: "a", indexStatus: "M", worktreeStatus: "M", staged: true, unstaged: true, untracked: false })).toBe("MM");
     expect(fileStatusGlyph({ path: "a", indexStatus: "?", worktreeStatus: "?", staged: false, unstaged: true, untracked: true })).toBe("??");
+  });
+});
+
+describe("parseUnifiedContext", () => {
+  it("defaults to 3, full to a huge window, and clamps junk", () => {
+    expect(parseUnifiedContext(null, false)).toBe(3);
+    expect(parseUnifiedContext("", false)).toBe(3);
+    expect(parseUnifiedContext("nope", false)).toBe(3);
+    expect(parseUnifiedContext("12", false)).toBe(12);
+    expect(parseUnifiedContext("-4", false)).toBe(0);
+    expect(parseUnifiedContext("3", true)).toBe(999_999);
+  });
+});
+
+describe("parseNameStatus", () => {
+  it("keeps the new path for renames", () => {
+    expect(parseNameStatus("M\tsrc/a.ts\nR100\told.ts\tnew.ts\n")).toEqual([
+      { status: "M", path: "src/a.ts" },
+      { status: "R100", path: "new.ts" },
+    ]);
   });
 });

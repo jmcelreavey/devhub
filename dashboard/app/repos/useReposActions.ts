@@ -115,6 +115,69 @@ export function useReposActions(opts: {
     });
   }
 
+  async function cloneFromUrl() {
+    const url = await prompt({
+      title: "Clone from URL",
+      message: "Clones into the repos scan folder. HTTPS, SSH, or a local path.",
+      input: { placeholder: "git@github.com:org/repo.git" },
+      confirmLabel: "Clone",
+    });
+    if (!url?.trim()) return;
+    const name = await prompt({
+      title: "Folder name",
+      message: "Optional. Leave blank to use the repo name from the URL.",
+      input: { placeholder: "my-repo" },
+      confirmLabel: "Clone",
+    });
+    if (name === null) return;
+    const trimmedUrl = url.trim();
+    setCloning(trimmedUrl);
+    try {
+      const res = await fetch("/api/repos/clone", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: trimmedUrl,
+          ...(name.trim() ? { name: name.trim() } : {}),
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await mutateLocal();
+      toast.success("Cloned into the scan folder");
+    } catch (e) {
+      console.error("clone from url:", e);
+      toast.error("Couldn't clone that URL.");
+    } finally {
+      setCloning(null);
+    }
+  }
+
+  async function initRepo() {
+    const name = await prompt({
+      title: "New repository",
+      message: "Creates an empty git repo in the scan folder.",
+      input: { placeholder: "my-project" },
+      confirmLabel: "Create",
+    });
+    if (!name?.trim()) return;
+    setCloning(name.trim());
+    try {
+      const res = await fetch("/api/repos/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim() }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await mutateLocal();
+      toast.success(`Created ${name.trim()}`);
+    } catch (e) {
+      console.error("init repo:", e);
+      toast.error(`Couldn't create ${name.trim()}.`);
+    } finally {
+      setCloning(null);
+    }
+  }
+
   async function cloneRepo(fullName: string) {
     setCloning(fullName);
     try {
@@ -167,6 +230,8 @@ export function useReposActions(opts: {
     openUpstart,
     openDxAudit,
     cloneRepo,
+    cloneFromUrl,
+    initRepo,
     removeRepo,
     launchClaudeDesktop,
   };

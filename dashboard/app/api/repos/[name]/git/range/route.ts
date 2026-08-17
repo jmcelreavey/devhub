@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { resolveDefaultRemoteBranch, runGitRepoAsync } from "@/lib/git/repo-local";
 import { isSafeRepoRelPath } from "@/lib/git/ref-safety";
-import { parseUnifiedDiff } from "@/lib/repos/git-parsers";
+import { parseNameStatus, parseUnifiedContext, parseUnifiedDiff } from "@/lib/repos/git-parsers";
 import { gitFail, withScannedRepo, type RepoParams } from "../_shared";
 
 /**
@@ -19,31 +19,6 @@ function isSafeRangeRef(ref: string): boolean {
   // caller smuggle a second range in. Also blocks the `.lock`-style traversals.
   if (ref.includes("..")) return false;
   return !ref.startsWith("-") && !ref.endsWith("/");
-}
-
-function parseUnifiedContext(raw: string | null, full: boolean): number {
-  if (full) return 999_999;
-  if (raw == null || raw === "") return 3;
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return 3;
-  return Math.min(999_999, Math.max(0, Math.floor(n)));
-}
-
-function parseNameStatus(stdout: string): { path: string; status: string }[] {
-  return stdout
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const tab = line.indexOf("\t");
-      if (tab < 0) return { status: "M", path: line };
-      const parts = line.slice(tab + 1).split("\t");
-      return {
-        status: line.slice(0, tab).trim(),
-        path: (parts[parts.length - 1] || "").trim(),
-      };
-    })
-    .filter((f) => f.path);
 }
 
 export async function GET(req: NextRequest, { params }: RepoParams) {
@@ -75,6 +50,16 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
   // Merge-base range (`...`): shows what HEAD added, not what it's missing from
   // base. That's what a reviewer means by "the changes on this branch".
   const range = `${baseParam}...${headParam}`;
+
+  if (req.nextUrl.searchParams.get("format") === "patch") {
+    const patch = await runGitRepoAsync(repoRoot, ["diff", range], { timeout: 30_000 });
+    if (patch.status !== 0) return gitFail(patch, "Range diff failed");
+    return NextResponse.json({
+      base: baseParam,
+      head: headParam,
+      patch: patch.stdout || "",
+    });
+  }
 
   const [files, counts, diff] = await Promise.all([
     runGitRepoAsync(repoRoot, ["diff", "--name-status", range], { timeout: 30_000 }),

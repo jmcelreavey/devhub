@@ -52,6 +52,7 @@ export function scanLocalAgentImportCandidates(repoRoot: string): LocalSkillImpo
         repoMtimeMs: classification.repoMtimeMs,
         localMtimeMs: classification.localMtimeMs,
         excludedFromAutoCollect: false,
+        blockedFromCatalog: false,
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));

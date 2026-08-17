@@ -1,5 +1,5 @@
 ---
-name: repo-ownership
+name: devhub-repo-ownership
 description: Use when triaging an owned repository, catching up on inbound changes, deciding review versus delegation, identifying path owners, or choosing the next domain to learn.
 metadata:
   short-description: Triage an owned repo

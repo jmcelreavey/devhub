@@ -21,9 +21,9 @@ node_modules.host/
 *.lock
 /package-lock.json
 
-# Next.js dashboard build artifacts
-dashboard/.next/
-dashboard/.next-verify/
+# Next.js dashboard build artifacts. DEVHUB_DIST_DIR (next.config.ts) lets any
+# instance pick its own dist dir, so match the prefix rather than chasing names.
+dashboard/.next*/
 dashboard/.env.local
 dashboard/output/
 

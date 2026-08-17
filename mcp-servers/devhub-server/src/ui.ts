@@ -19,10 +19,10 @@
  * is required rather than optional — making it easy to omit would guarantee
  * somebody eventually ships a tool that renders nowhere.
  *
- * One tool (`tasks_today`) is wired as proof. The rest stay text until this has
- * been used against a real client, because converting twenty tools to a
- * rendering contract nobody has exercised is how you end up with twenty tools
- * to revise.
+ * `tasks_list`, `recall`, `radar_personal`, `capability_radar` and `prs_list`
+ * attach a widget when `DEVHUB_MCP_UI=1`. Everything else stays text until a
+ * real client has exercised this seam — converting twenty tools to a rendering
+ * contract nobody has used is how you end up with twenty tools to revise.
  *
  * ## Security
  *
@@ -137,4 +137,21 @@ export function widgetDocument(title: string, body: string): string {
 ${body}
 </body>
 </html>`;
+}
+
+export interface WidgetListItem {
+  label: string;
+  meta?: string;
+  done?: boolean;
+}
+
+/** Same list chrome as the tasks widget, for other tools to reuse. */
+export function listWidgetHtml(title: string, heading: string, items: WidgetListItem[]): string {
+  const lis = items
+    .map((item) => {
+      const meta = item.meta ? `<span class="meta">${escapeHtml(item.meta)}</span>` : "";
+      return `<li${item.done ? ' class="done"' : ""}><span>${escapeHtml(item.label)}</span>${meta}</li>`;
+    })
+    .join("\n");
+  return widgetDocument(title, `<h2>${escapeHtml(heading)}</h2>\n<ul>\n${lis}\n</ul>`);
 }

@@ -41,6 +41,7 @@ export function PersonChip({
   size = 18,
   className,
   nameClassName,
+  avatarOnly = false,
 }: {
   name: string;
   email?: string;
@@ -48,6 +49,8 @@ export function PersonChip({
   size?: number;
   className?: string;
   nameClassName?: string;
+  /** Avatar with no name — facepiles, dense meta. */
+  avatarOnly?: boolean;
 }) {
   const label = name.trim() || email.trim();
   const [atlassian, setAtlassian] = useState<{ email: string; url: string | null } | null>(
@@ -85,7 +88,7 @@ export function PersonChip({
         resolvedUrl={avatarUrl ?? atlassianUrl ?? undefined}
         title={email ? `${label} <${email}>` : label}
       />
-      {label ? (
+      {!avatarOnly && label ? (
         <span
           className={["min-w-0 truncate", nameClassName ?? "text-[11px] leading-tight text-text-muted"]
             .filter(Boolean)

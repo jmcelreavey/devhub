@@ -165,8 +165,6 @@ export interface RecallIndexManifest {
   bySource: Record<string, number>;
   /** Vector dimensionality. */
   dims: number;
-  /** `sourceId → mtimeMs` so a rebuild can skip untouched files. */
-  fingerprints: Record<string, number>;
   /** Which embedder produced the vectors; a change forces a full rebuild. */
   embedder: string;
   tookMs: number;

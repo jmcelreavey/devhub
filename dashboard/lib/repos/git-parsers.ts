@@ -246,6 +246,33 @@ export function parseFileHistory(stdout: string): FileHistoryCommit[] {
     });
 }
 
+/** Unified context lines for `git show`/`git diff -U`. Default 3; `full` → whole file. */
+export function parseUnifiedContext(raw: string | null, full: boolean): number {
+  if (full) return 999_999;
+  if (raw == null || raw === "") return 3;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 3;
+  return Math.min(999_999, Math.max(0, Math.floor(n)));
+}
+
+/** Parse `git diff --name-status` / `git diff-tree --name-status`. Renames keep the new path. */
+export function parseNameStatus(stdout: string): { path: string; status: string }[] {
+  return stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const tab = line.indexOf("\t");
+      if (tab === -1) return { status: "M", path: line };
+      const status = line.slice(0, tab).trim() || "M";
+      const rest = line.slice(tab + 1);
+      const parts = rest.split("\t");
+      const filePath = (parts[parts.length - 1] || rest).trim();
+      return { status, path: filePath };
+    })
+    .filter((f) => f.path);
+}
+
 /** Split unified diff into file hunks for rendering. */
 export interface DiffLine {
   type: "meta" | "hunk" | "add" | "del" | "ctx";

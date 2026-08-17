@@ -113,4 +113,15 @@ describe("descriptionFromFrontmatter", () => {
     expect(descriptionFromFrontmatter("")).toBeNull();
     expect(descriptionFromFrontmatter("# Only a heading\n")).toBeNull();
   });
+
+  it("ignores a description key in the markdown body when frontmatter exists", () => {
+    expect(
+      descriptionFromFrontmatter("---\nname: foo\n---\n\ndescription: this is body not frontmatter\n"),
+    ).toBeNull();
+  });
+
+  it("does not YAML-scan the whole file when there is no frontmatter", () => {
+    const buried = Array.from({ length: 50 }, (_, i) => `# heading ${i}`).join("\n");
+    expect(descriptionFromFrontmatter(`${buried}\ndescription: buried in the body\n`)).toBeNull();
+  });
 });

@@ -2,12 +2,21 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Context } from "../context.ts";
 import { withDashboardErrors } from "../dashboard-client.ts";
+import { listWidgetHtml, uiResult } from "../ui.ts";
 
 interface PrRow {
   number: number;
   title: string;
   url: string;
   repo: string;
+}
+
+interface GithubLogin {
+  login: string;
+}
+
+function fmtLogins(users: GithubLogin[] = []): string {
+  return users.length ? users.map((u) => u.login).join(", ") : "(none)";
 }
 
 interface JiraTicket {
@@ -24,7 +33,7 @@ export function registerWorkTools(server: McpServer, ctx: Context): void {
     "prs_list",
     {
       description:
-        "List my open GitHub PRs (authored + awaiting my review) via the dashboard. Requires the dashboard running and the GitHub CLI authenticated.",
+        "List my open GitHub PRs (authored + awaiting my review) via the dashboard. Request reviewers with prs_request_reviewers; stash+checkout a PR into Cursor with prs_open_in_cursor. Requires the dashboard running and the GitHub CLI authenticated.",
     },
     async () =>
       withDashboardErrors(async () => {
@@ -48,7 +57,134 @@ export function registerWorkTools(server: McpServer, ctx: Context): void {
           `\nAwaiting my review (${data.reviews?.length ?? 0}):`,
           fmt(data.reviews),
         ];
-        return { content: [{ type: "text", text: out.join("\n") }] };
+        const items = [
+          ...(data.authored ?? []).map((p) => ({
+            label: `${p.repo}#${p.number} ${p.title}`,
+            meta: "authored",
+          })),
+          ...(data.reviews ?? []).map((p) => ({
+            label: `${p.repo}#${p.number} ${p.title}`,
+            meta: "review",
+          })),
+        ];
+        const html = items.length ? listWidgetHtml("Pull requests", "Open PRs", items) : null;
+        return uiResult(out.join("\n"), html, "ui://devhub/prs");
+      }),
+  );
+
+  server.registerTool(
+    "prs_request_reviewers",
+    {
+      description:
+        "Request GitHub reviewers on a PR you can modify. Omit reviewers to list currently requested + suggested logins (GET /api/github/prs/reviewers). Pass reviewers plus confirm:true to POST. Proxies the dashboard — does not call gh api itself. Requires the dashboard running and gh auth.",
+      inputSchema: {
+        repo: z.string().describe("owner/repo, e.g. acme/widgets"),
+        number: z.number().int().positive().describe("PR number"),
+        reviewers: z
+          .array(z.string())
+          .optional()
+          .describe("GitHub logins to request. Omit to list current/suggested reviewers."),
+        confirm: z.boolean().optional().describe("Required true to actually request reviewers"),
+      },
+    },
+    async ({ repo, number, reviewers, confirm }) =>
+      withDashboardErrors(async () => {
+        if (!reviewers?.length) {
+          const data = await dashboard.get<{
+            requested?: GithubLogin[];
+            suggested?: GithubLogin[];
+          }>("/api/github/prs/reviewers", { repo, number });
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  `${repo}#${number}\n` +
+                  `Requested: ${fmtLogins(data.requested)}\n` +
+                  `Suggested: ${fmtLogins(data.suggested)}\n\n` +
+                  `Request with prs_request_reviewers(repo, number, reviewers: [...], confirm: true).`,
+              },
+            ],
+          };
+        }
+        if (!confirm) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Would request review from ${reviewers.join(", ")} on ${repo}#${number}. Re-run with confirm: true.`,
+              },
+            ],
+            isError: true,
+          };
+        }
+        const data = await dashboard.post<{ ok?: boolean; requested?: GithubLogin[] }>(
+          "/api/github/prs/reviewers",
+          { repo, number, reviewers },
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Requested review on ${repo}#${number}: ${fmtLogins(data.requested)}.`,
+            },
+          ],
+        };
+      }),
+  );
+
+  server.registerTool(
+    "prs_open_in_cursor",
+    {
+      description:
+        "Open a PR in Cursor: stash dirty work in the local clone, gh pr checkout, then launch Cursor on that repo (same as the PR row Open in Cursor action). Optional notePath also opens a notes working copy. Mutates git — requires confirm:true. Requires the dashboard running. repos_open only opens the current branch.",
+      inputSchema: {
+        repo: z.string().describe("owner/repo, e.g. acme/widgets"),
+        number: z.number().int().positive().describe("PR number"),
+        notePath: z
+          .string()
+          .optional()
+          .describe("Optional notes-relative path (e.g. pr-reviews/acme-widgets-9) to open alongside"),
+        confirm: z.boolean().optional().describe("Required true to stash/checkout and launch Cursor"),
+      },
+    },
+    async ({ repo, number, notePath, confirm }) =>
+      withDashboardErrors(async () => {
+        if (!confirm) {
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  `Would stash dirty work in the local clone of ${repo}, check out PR #${number}, and open it in Cursor` +
+                  (notePath ? ` with note ${notePath}` : "") +
+                  `. Re-run with confirm: true.`,
+              },
+            ],
+            isError: true,
+          };
+        }
+        const data = await dashboard.post<{
+          ok?: boolean;
+          localRepoName?: string;
+          branch?: string;
+          stashed?: boolean;
+          alreadyOnBranch?: boolean;
+          writable?: boolean;
+        }>("/api/github/prs/open-in-cursor", { repo, number, notePath }, 120_000);
+        const bits = [
+          data.alreadyOnBranch ? "already on branch" : `checked out ${data.branch ?? "PR branch"}`,
+          data.stashed ? "stashed local changes" : null,
+          data.localRepoName ? `repo ${data.localRepoName}` : null,
+        ].filter(Boolean);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Opened ${repo}#${number} in Cursor (${bits.join("; ")}).`,
+            },
+          ],
+        };
       }),
   );
 

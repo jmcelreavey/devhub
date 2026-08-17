@@ -31,10 +31,9 @@
  *
  * ## Upgrading
  *
- * `Embedder` is the seam. Set `RECALL_EMBEDDER=remote` with the `AI_BASE_URL` /
- * `AI_API_KEY` that notes-AI already uses and `remoteEmbedder()` takes over.
- * The manifest records which embedder built the index, and `store.ts` forces a
- * full rebuild when it changes — so switching is one env var, not a migration.
+ * `Embedder` is the seam. The manifest records which embedder built the index,
+ * and `store.ts` forces a full rebuild when it changes. Only the hashed-trigram
+ * embedder ships today.
  */
 
 export interface Embedder {

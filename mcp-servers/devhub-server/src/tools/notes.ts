@@ -15,7 +15,7 @@ import {
   taskNotePath,
   type TaskNoteSource,
 } from "../../../../shared/task-note/index.ts";
-import { buildPrNoteMarkdown, prNotePath } from "../../../../shared/pr-note/index.ts";
+import { buildPrNoteMarkdown, prNotePath, withPrReviewEntityLinks } from "../../../../shared/pr-note/index.ts";
 import { parseEntityLinksFromMarkdown } from "../../../../shared/entity-note/index.ts";
 import type { EntityRef } from "../../../../shared/entity-note/index.ts";
 
@@ -75,7 +75,8 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
   server.registerTool(
     "notes_write",
     {
-      description: "Create or update a note. Accepts markdown text, converts to structured format internally.",
+      description:
+        "Create or update a note. Accepts markdown text, converts to structured format internally. Paths under pr-reviews/ auto-upsert a ## Links section with PR + repo EntityRefs (same shared/pr-note helper as notes_create_pr).",
       inputSchema: {
         path: z.string().describe("Relative path for the note (e.g. 'learnings/tools')"),
         content: z.string().describe("Markdown content to write"),
@@ -83,7 +84,10 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
     },
     async ({ path: filePath, content }) => {
       const existing = storage.read(filePath);
-      const blocks = textToBlocks(content);
+      const markdown = filePath.replace(/^\/+/, "").startsWith("pr-reviews/")
+        ? withPrReviewEntityLinks(content)
+        : content;
+      const blocks = textToBlocks(markdown);
       storage.write(filePath, blocks);
       const action = existing ? "Updated" : "Created";
       return { content: [{ type: "text", text: `${action}: ${filePath}` }] };
@@ -370,7 +374,7 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
     "notes_create_pr",
     {
       description:
-        "Create a PR review note under pr-reviews/<repo>-<n> with a ## Links EntityRef back to the PR (same contract as the PR row FileText action). Leaves an existing note alone unless overwrite is true.",
+        "Create a PR review note under pr-reviews/<repo>-<n> with ## Links EntityRefs back to the PR and its repo (same contract as the PR row FileText action). Leaves an existing note alone unless overwrite is true.",
       inputSchema: {
         repo: z.string().describe("owner/repo"),
         number: z.number().int().positive(),

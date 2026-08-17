@@ -4,6 +4,8 @@ import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { Clock, Folder, PenTool, Plus } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { DiagramRecentRow } from "@/components/diagrams/DiagramCards";
+import { SectionMenuHint } from "@/components/shell/ContextMenu";
 import {
   DIAGRAM_ROOT_AREA_ID,
   readLastDiagramFolder,
@@ -54,12 +56,14 @@ export function DiagramsLandingPage({
   total,
   onNewDiagram,
   onNewFolder,
+  onChanged,
 }: {
   areas: DiagramAreaGroup[];
   recent: DiagramSummary[];
   total: number;
   onNewDiagram: () => void;
   onNewFolder: () => void;
+  onChanged?: () => void;
 }) {
   const resumeFolder = useSyncExternalStore(
     () => () => {},
@@ -140,11 +144,16 @@ export function DiagramsLandingPage({
             <h2 className="lib-areas-title">
               <Clock size={12} aria-hidden />
               Picking up where you left off
+              <SectionMenuHint />
             </h2>
             <ul className="lib-recent">
               {recent.map((d) => (
-                <li key={d.path}>
-                  <Link href={d.href} className="lib-recent-row">
+                <DiagramRecentRow
+                  key={d.path}
+                  file={{ path: d.path, name: d.name, modified: d.modified }}
+                  onChanged={onChanged ?? (() => {})}
+                >
+                  <Link href={d.href} className="lib-recent-row" onContextMenu={(event) => event.preventDefault()}>
                     <PenTool size={13} className="lib-card-icon" aria-hidden />
                     <span className="lib-recent-title">{d.name}</span>
                     <span className="lib-recent-meta">
@@ -153,7 +162,7 @@ export function DiagramsLandingPage({
                         : d.area || "Top level"}
                     </span>
                   </Link>
-                </li>
+                </DiagramRecentRow>
               ))}
             </ul>
           </section>

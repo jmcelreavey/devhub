@@ -3,6 +3,8 @@ import { Clock, Folder, ListChecks, NotebookPen, PenTool, Plus } from "lucide-re
 import { EmptyState } from "@/components/ui/EmptyState";
 import { DocIcon } from "@/components/docs/doc-icons";
 import { NewNoteButton } from "@/components/notes/NewNoteButton";
+import { NoteListRow } from "@/components/notes/NoteListRow";
+import { SectionMenuHint } from "@/components/shell/ContextMenu";
 import { ROOT_AREA_ID } from "@/lib/notes/note-areas";
 import type { NoteAreaGroup, NoteSummary } from "@/lib/notes/note-index";
 
@@ -121,11 +123,12 @@ export function NotesLandingPage({
             <h2 className="lib-areas-title">
               <Clock size={12} aria-hidden />
               Picking up where you left off
+              <SectionMenuHint className="ml-auto font-normal normal-case tracking-normal" />
             </h2>
             <ul className="lib-recent">
               {recent.map((note) => (
                 <li key={note.slug}>
-                  <Link href={note.href} className="lib-recent-row">
+                  <NoteListRow note={note} className="lib-recent-row">
                     {note.isDiagram ? (
                       <PenTool size={13} className="lib-card-icon" aria-hidden />
                     ) : (
@@ -135,7 +138,7 @@ export function NotesLandingPage({
                     <span className="lib-recent-meta">
                       {DATE_FORMAT.format(new Date(note.modified))}
                     </span>
-                  </Link>
+                  </NoteListRow>
                 </li>
               ))}
             </ul>

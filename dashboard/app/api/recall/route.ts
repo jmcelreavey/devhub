@@ -60,7 +60,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const grade = gradeRecall(result);
 
   if (format === "markdown") {
-    return NextResponse.json({ markdown: formatRecallMarkdown(result), result, grade });
+    return NextResponse.json({ markdown: formatRecallMarkdown(result, grade), result, grade });
   }
   return NextResponse.json({ ...result, grade });
 }, "recall");

@@ -18,7 +18,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import {
   dashboardDir,
@@ -65,35 +65,62 @@ function emptyContentTree() {
   return dir;
 }
 
-function buildNext() {
+async function buildNext() {
   log("building Next (standalone)");
   const content = emptyContentTree();
   try {
-    execFileSync(
-      process.execPath,
-      [require.resolve("next/dist/bin/next", { paths: [dashboardDir] }), "build", "--webpack"],
-      {
-        cwd: dashboardDir,
-        stdio: "inherit",
-        env: {
-          ...process.env,
-          DEVHUB_DESKTOP_BUILD: "1",
-          // tsc already ran in `verify`; Next's second full-program pass is the
-          // one that OOMs CI at the default heap size.
-          DEVHUB_SKIP_NEXT_TYPECHECK: "true",
-          NODE_ENV: undefined,
-          NODE_OPTIONS:
-            "--max-old-space-size=4096 --no-deprecation --disable-warning=ExperimentalWarning",
-          // Prerender against nothing. See emptyContentTree().
-          NOTES_DIR: path.join(content, "notes"),
-          TASKS_DIR: path.join(content, "tasks"),
-          COLLECTIONS_DIR: path.join(content, "collections"),
-          UPSTARTS_DIR: path.join(content, "upstarts"),
-          DOCS_DIR: path.join(content, "docs"),
-          DEVHUB_REPOS_DIR: path.join(content, "repos"),
+    await new Promise((resolve, reject) => {
+      const child = spawn(
+        process.execPath,
+        [require.resolve("next/dist/bin/next", { paths: [dashboardDir] }), "build", "--webpack"],
+        {
+          cwd: dashboardDir,
+          env: {
+            ...process.env,
+            DEVHUB_DESKTOP_BUILD: "1",
+            // tsc already ran in `verify`; Next's second full-program pass is the
+            // one that OOMs CI at the default heap size.
+            DEVHUB_SKIP_NEXT_TYPECHECK: "true",
+            NODE_ENV: undefined,
+            NODE_OPTIONS:
+              "--max-old-space-size=4096 --no-deprecation --disable-warning=ExperimentalWarning",
+            // Prerender against nothing. See emptyContentTree().
+            NOTES_DIR: path.join(content, "notes"),
+            TASKS_DIR: path.join(content, "tasks"),
+            COLLECTIONS_DIR: path.join(content, "collections"),
+            UPSTARTS_DIR: path.join(content, "upstarts"),
+            DOCS_DIR: path.join(content, "docs"),
+            DEVHUB_REPOS_DIR: path.join(content, "repos"),
+          },
         },
-      },
-    );
+      );
+      // Pipe through so the Tauri sidecar log still streams, AND keep a copy
+      // for the thrown Error. inherit-stdio left stdout/stderr null on the
+      // Error object, so Rebuild failures showed only "Command failed".
+      const chunks = [];
+      const tee = (stream, write) => {
+        stream.on("data", (buf) => {
+          write(buf);
+          chunks.push(buf);
+        });
+      };
+      tee(child.stdout, (buf) => process.stdout.write(buf));
+      tee(child.stderr, (buf) => process.stderr.write(buf));
+      child.on("error", reject);
+      child.on("close", (code, signal) => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
+        const output = Buffer.concat(chunks).toString("utf8").trim();
+        const why = signal ? `signal ${signal}` : `exit ${code}`;
+        reject(
+          new Error(
+            `next build --webpack failed (${why})\n${output || "(no compiler output captured)"}`,
+          ),
+        );
+      });
+    });
   } finally {
     fs.rmSync(content, { recursive: true, force: true });
   }
@@ -380,7 +407,7 @@ function assertStaged() {
 
 export async function stageDashboard({ build = true } = {}) {
   fs.mkdirSync(stagingDir, { recursive: true });
-  if (build) buildNext();
+  if (build) await buildNext();
   stageServer();
   await stageServices();
   assertStaged();

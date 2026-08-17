@@ -2,23 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Copy,
   CornerDownLeft,
   Download,
   GitBranch,
-  GitCommitHorizontal,
   GitMerge,
   Layers,
-  LogOut,
   RefreshCw,
-  Rewind,
   RotateCcw,
   Search,
-  Tag,
   Upload,
 } from "lucide-react";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
-import { ContextMenu, useContextMenu, type ContextMenuGroup } from "@/components/shell/ContextMenu";
+import { ContextMenu, useContextMenu } from "@/components/shell/ContextMenu";
 import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
@@ -37,7 +32,11 @@ import { DiffToolbar, DIFF_CONTEXT_LINES, type DiffContextMode } from "./DiffToo
 import { GitDiffView } from "./GitDiffView";
 import { RangeCompareButton, RangeCompareModal } from "./RangeCompareModal";
 import { RepoFileOpenMenu } from "./RepoFileOpenMenu";
+import { WhyExistsAction } from "./WhyExistsAction";
 import { RepoSplit } from "./SplitResize";
+import { shareGitShowPatch } from "./shareGitPatch";
+import { buildCommitMenuGroups } from "./commitMenuGroups";
+import { agentLocalCommitReviewCommand, openTerminal } from "@/lib/terminal-launch";
 import {
   fetchGitJson,
   postGitAction,
@@ -118,6 +117,7 @@ interface LogPayload {
 
 export function HistoryPanel({
   repoName,
+  repoPath,
   onMutate,
   onConflict,
   onHookFailure,
@@ -129,6 +129,7 @@ export function HistoryPanel({
   onFocusCommitConsumed,
 }: {
   repoName: string;
+  repoPath: string;
   onMutate: () => void;
   /** Shared with the other tabs so a sync conflict lands in the same place. */
   onConflict?: (c: StashConflictPayload) => Promise<void>;
@@ -504,18 +505,46 @@ export function HistoryPanel({
    * reachable from the Branches tab, so History could tell you it was behind
    * and then offer nothing to do about it.
    */
-  async function incoming(action: "fetch" | "pull") {
+  async function incoming(action: "fetch" | "pull" | "pull-rebase" | "pull-merge") {
+    if (action === "pull-rebase" || action === "pull-merge") {
+      const ok = await confirm({
+        title: action === "pull-rebase" ? "Pull with rebase?" : "Pull with merge?",
+        message:
+          action === "pull-rebase"
+            ? "git pull --rebase. Replays your local commits on top of upstream. No merge commit. Conflicts open in the Conflicts tab."
+            : "git pull --no-rebase. Merges upstream into this branch. Conflicts open in the Conflicts tab.",
+        confirmLabel: action === "pull-rebase" ? "Rebase pull" : "Merge pull",
+        variant: action === "pull-rebase" ? "danger" : undefined,
+      });
+      if (!ok) return;
+    }
     setActing(action);
     try {
       const result = await postGitAction<{ alreadyUpToDate?: boolean; message?: string }>(
         repoApi(repoName, "/branches"),
         { action },
       );
-      if (!result.ok) throw new Error(result.kind === "error" ? result.message : result.kind);
+      if (!result.ok) {
+        if (result.kind === "conflict") {
+          await onConflict?.(result.conflict);
+          onMutate();
+          await refresh();
+          return;
+        }
+        if (result.kind === "hook") {
+          onHookFailure?.(result.hook);
+          return;
+        }
+        throw new Error(result.message);
+      }
       if (action === "fetch") {
         toast.success("Fetched — remote refs updated");
       } else if (result.json.alreadyUpToDate) {
         toast.success(result.json.message || "Already up to date — nothing to pull.");
+      } else if (action === "pull-rebase") {
+        toast.success("Pulled with rebase");
+      } else if (action === "pull-merge") {
+        toast.success("Pulled with merge");
       } else {
         toast.success(result.json.message?.split("\n")[0] || "Pulled");
       }
@@ -676,150 +705,42 @@ export function HistoryPanel({
     [confirm, runCommitAction],
   );
 
-  const commitMenuGroups = useMemo((): ContextMenuGroup[] => {
-    const commit = commitMenu.target;
-    if (!commit) return [];
-    const busy = acting !== null;
-    const isHead = commit.refs.some((ref) => /^HEAD(?: ->|$)/.test(ref));
-    const isMerge = commit.parentLanes.length > 1;
-    const mergeReason = isMerge ? "Merge commits need a mainline parent" : undefined;
-
-    return [
-      {
-        id: "apply",
-        label: "Apply",
-        items: [
-          {
-            id: "cherry-pick",
-            label: "Cherry-pick",
-            description: "Apply this commit to the current branch",
-            icon: <GitCommitHorizontal size={12} />,
-            disabled: busy || isHead || isMerge,
-            disabledReason: isHead ? "Already at HEAD" : mergeReason,
-            onSelect: () =>
-              void confirmCommitAction(
-                "cherry-pick",
-                commit,
-                `Cherry-pick ${commit.shortHash}?`,
-                `Applies “${commit.subject}” to the current branch. Conflicts open in the Conflicts tab.`,
-                "Cherry-pick",
-              ),
-          },
-          {
-            id: "revert",
-            label: "Revert",
-            description: "Create a new commit that undoes this one",
-            icon: <RotateCcw size={12} />,
-            disabled: busy || isMerge,
-            disabledReason: mergeReason,
-            onSelect: () =>
-              void confirmCommitAction(
-                "revert",
-                commit,
-                `Revert ${commit.shortHash}?`,
-                `Creates a new commit that reverses “${commit.subject}”. Existing history is not rewritten.`,
-                "Revert",
-              ),
-          },
-        ],
-      },
-      {
-        id: "create",
-        label: "Create",
-        items: [
-          {
-            id: "branch",
-            label: "New branch from here…",
-            icon: <GitBranch size={12} />,
-            disabled: busy,
-            onSelect: () =>
-              void (async () => {
-                const name = await prompt({
-                  title: `New branch from ${commit.shortHash}`,
-                  message: commit.subject,
-                  input: { placeholder: "feature/my-work" },
-                  confirmLabel: "Create",
-                });
-                if (name?.trim()) await runCommitAction("branch-from-commit", commit, name.trim());
-              })(),
-          },
-          {
-            id: "tag",
-            label: "Create tag…",
-            icon: <Tag size={12} />,
-            disabled: busy,
-            onSelect: () =>
-              void (async () => {
-                const name = await prompt({
-                  title: `Tag ${commit.shortHash}`,
-                  message: commit.subject,
-                  input: { placeholder: "v1.2.3" },
-                  confirmLabel: "Create tag",
-                });
-                if (name?.trim()) await runCommitAction("tag", commit, name.trim());
-              })(),
-          },
-        ],
-      },
-      {
-        id: "move",
-        label: "Move HEAD",
-        items: [
-          {
-            id: "checkout-detached",
-            label: "Check out detached",
-            description: "Inspect this revision without moving a branch",
-            icon: <LogOut size={12} />,
-            disabled: busy || isHead,
-            disabledReason: isHead ? "Already at HEAD" : undefined,
-            onSelect: () =>
-              void confirmCommitAction(
-                "checkout-detached",
-                commit,
-                `Check out ${commit.shortHash} detached?`,
-                "HEAD will point directly at this commit. Create or check out a branch before committing new work.",
-                "Check out",
-              ),
-          },
-          {
-            id: "reset",
-            label: "Reset current branch to here",
-            description: "Hard reset; DevHub creates a backup branch first",
-            icon: <Rewind size={12} />,
-            danger: true,
-            disabled: busy || isHead,
-            disabledReason: isHead ? "Already at HEAD" : undefined,
-            onSelect: () =>
-              void confirmCommitAction(
-                "reset-to-commit",
-                commit,
-                `Reset to ${commit.shortHash}?`,
-                "Moves the current branch here with git reset --hard. Requires a clean tree and creates a backup branch first.",
-                "Hard reset",
-              ),
-          },
-        ],
-      },
-      {
-        id: "copy",
-        items: [
-          {
-            id: "copy-sha",
-            label: "Copy SHA",
-            icon: <Copy size={12} />,
-            onSelect: () => void copyTextToClipboard(commit.hash).then(() => toast.success("SHA copied")),
-          },
-          {
-            id: "copy-message",
-            label: "Copy commit message",
-            icon: <Copy size={12} />,
-            onSelect: () =>
-              void copyTextToClipboard(commit.subject).then(() => toast.success("Commit message copied")),
-          },
-        ],
-      },
-    ];
-  }, [acting, commitMenu.target, confirmCommitAction, prompt, runCommitAction, toast]);
+  const commitMenuGroups = useMemo(
+    () =>
+      // `runCommitAction` reaches `refresh`, which reads `historyGeneration.current`
+      // for its stale-response guard, so the compiler treats both action callbacks as
+      // ref-readers and cannot prove `buildCommitMenuGroups` does not call one during
+      // render. It does not: it returns [] for a null commit and otherwise only wraps
+      // them in `onSelect` closures that fire on click. Revisit if that builder ever
+      // starts invoking a callback while constructing the menu.
+      // eslint-disable-next-line react-hooks/refs
+      buildCommitMenuGroups(commitMenu.target, {
+        busy: acting !== null,
+        confirmCommitAction,
+        prompt,
+        runCommitAction,
+        onCopySha: (commit) =>
+          void copyTextToClipboard(commit.hash).then(() => toast.success("SHA copied")),
+        onCopyMessage: (commit) =>
+          void copyTextToClipboard(commit.subject).then(() => toast.success("Commit message copied")),
+        onSharePatch: (commit) =>
+          void shareGitShowPatch(repoName, commit.hash).then(
+            (msg) => toast.success(msg),
+            (err: unknown) => toast.error(err instanceof Error ? err.message : "Share failed"),
+          ),
+        onReview: (commit) => {
+          void (async () => {
+            openTerminal({
+              cwd: repoPath,
+              label: `review · ${commit.shortHash}`,
+              command: await agentLocalCommitReviewCommand(repoName, commit.hash, commit.subject),
+            });
+            toast.info("Review running in the terminal.");
+          })();
+        },
+      }),
+    [acting, commitMenu.target, confirmCommitAction, prompt, repoName, repoPath, runCommitAction, toast],
+  );
 
   if (loading && commits.length === 0) return <SkeletonRows count={8} height={32} />;
 
@@ -954,6 +875,8 @@ export function HistoryPanel({
           unpushedCount={unpushedHashes.size}
           onFetch={() => void incoming("fetch")}
           onPull={() => void incoming("pull")}
+          onPullRebase={() => void incoming("pull-rebase")}
+          onPullMerge={() => void incoming("pull-merge")}
           onSync={() => void syncWithMain()}
           onPush={onPush}
         />
@@ -977,11 +900,12 @@ export function HistoryPanel({
                 // Any deliberate click hands the selection back to the filters.
                 setPinnedHash(null);
               }}
-              onContextMenu={(event, commit) => {
+              rowBind={(commit) => commitMenu.bindRow(commit)}
+              onKebabOpen={(x, y, commit) => commitMenu.openAtPoint(x, y, commit)}
+              onContextMenu={(_event, commit) => {
                 setSelectedFile(null);
                 setSelected(commit.hash);
                 setPinnedHash(null);
-                commitMenu.openAt(event, commit);
               }}
               unpushedHashes={unpushedHashes}
               identityByEmail={identityByEmail}
@@ -1153,12 +1077,20 @@ export function HistoryPanel({
                           maximizeDisabled={!activeFile}
                           openSlot={
                             activeFile && detailForSelection ? (
-                              <RepoFileOpenMenu
-                                repoName={repoName}
-                                filePath={activeFile}
-                                commit={detailForSelection.hash}
-                                disabled={detailLoading}
-                              />
+                              <>
+                                <WhyExistsAction
+                                  repoPath={repoPath}
+                                  repoName={repoName}
+                                  filePath={activeFile}
+                                  disabled={detailLoading}
+                                />
+                                <RepoFileOpenMenu
+                                  repoName={repoName}
+                                  filePath={activeFile}
+                                  commit={detailForSelection.hash}
+                                  disabled={detailLoading}
+                                />
+                              </>
                             ) : null
                           }
                         />
@@ -1204,12 +1136,20 @@ export function HistoryPanel({
         onModeChange={setContextMode}
         openSlot={
           activeFile && detailForSelection ? (
-            <RepoFileOpenMenu
-              repoName={repoName}
-              filePath={activeFile}
-              commit={detailForSelection.hash}
-              disabled={detailLoading}
-            />
+            <>
+              <WhyExistsAction
+                repoPath={repoPath}
+                repoName={repoName}
+                filePath={activeFile}
+                disabled={detailLoading}
+              />
+              <RepoFileOpenMenu
+                repoName={repoName}
+                filePath={activeFile}
+                commit={detailForSelection.hash}
+                disabled={detailLoading}
+              />
+            </>
           ) : null
         }
       >
@@ -1241,6 +1181,8 @@ function BranchRelationStrip({
   unpushedCount,
   onFetch,
   onPull,
+  onPullRebase,
+  onPullMerge,
   onSync,
   onPush,
 }: {
@@ -1250,6 +1192,8 @@ function BranchRelationStrip({
   unpushedCount: number;
   onFetch: () => void;
   onPull: () => void;
+  onPullRebase: () => void;
+  onPullMerge: () => void;
   onSync: () => void;
   onPush?: () => void;
 }) {
@@ -1359,27 +1303,71 @@ function BranchRelationStrip({
           Fetch
         </button>
         {relation.upstream ? (
-          <button
-            type="button"
-            className="btn btn-ghost"
-            data-active={relation.behindUpstream > 0 || undefined}
-            disabled={acting !== null || relation.behindUpstream === 0}
-            onClick={onPull}
-            title={
-              relation.behindUpstream > 0
-                ? `git pull --ff-only — bring in ${relation.behindUpstream} commit${
-                    relation.behindUpstream === 1 ? "" : "s"
-                  } from ${relation.upstream}`
-                : `Up to date with ${relation.upstream}`
-            }
-          >
-            {acting === "pull" ? (
-              <RefreshCw size={11} className="animate-spin" aria-hidden />
-            ) : (
-              <CornerDownLeft size={11} aria-hidden />
-            )}
-            {relation.behindUpstream > 0 ? `Pull ${relation.behindUpstream}` : "Pull"}
-          </button>
+          <>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              data-active={relation.behindUpstream > 0 && relation.aheadUpstream === 0 || undefined}
+              disabled={
+                acting !== null ||
+                relation.behindUpstream === 0 ||
+                (relation.aheadUpstream > 0 && relation.behindUpstream > 0)
+              }
+              onClick={onPull}
+              title={
+                relation.aheadUpstream > 0 && relation.behindUpstream > 0
+                  ? `Diverged from ${relation.upstream} — fast-forward pull will fail. Use rebase or merge.`
+                  : relation.behindUpstream > 0
+                    ? `git pull --ff-only — bring in ${relation.behindUpstream} commit${
+                        relation.behindUpstream === 1 ? "" : "s"
+                      } from ${relation.upstream}`
+                    : `Up to date with ${relation.upstream}`
+              }
+            >
+              {acting === "pull" ? (
+                <RefreshCw size={11} className="animate-spin" aria-hidden />
+              ) : (
+                <CornerDownLeft size={11} aria-hidden />
+              )}
+              {relation.behindUpstream > 0 && relation.aheadUpstream === 0
+                ? `Pull ${relation.behindUpstream}`
+                : "Pull"}
+            </button>
+            {relation.aheadUpstream > 0 && relation.behindUpstream > 0 ? (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  data-active
+                  disabled={acting !== null}
+                  onClick={onPullRebase}
+                  title="git pull --rebase — replay local commits on upstream"
+                >
+                  {acting === "pull-rebase" ? (
+                    <RefreshCw size={11} className="animate-spin" aria-hidden />
+                  ) : (
+                    <CornerDownLeft size={11} aria-hidden />
+                  )}
+                  Pull rebase
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  data-active
+                  disabled={acting !== null}
+                  onClick={onPullMerge}
+                  title="git pull --no-rebase — merge upstream into this branch"
+                >
+                  {acting === "pull-merge" ? (
+                    <RefreshCw size={11} className="animate-spin" aria-hidden />
+                  ) : (
+                    <GitMerge size={11} aria-hidden />
+                  )}
+                  Pull merge
+                </button>
+              </>
+            ) : null}
+          </>
         ) : null}
         {/* Push and Sync used to be reachable only from the Branches tab, so the
             screen showing "11 ahead of main" offered no way to act on it. */}

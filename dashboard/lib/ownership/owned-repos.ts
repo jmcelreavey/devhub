@@ -8,6 +8,7 @@ import {
 } from "@/lib/repos/resolution";
 import { runGitRepoAsync } from "@/lib/git/repo-local";
 import { execGh } from "@/lib/gh-exec";
+import { ttlCached, type TtlPromiseEntry } from "@/lib/ttl-cache";
 import type { OwnedRepo, ResolvedOwnedRepo } from "./types";
 
 interface OwnershipFile {
@@ -145,21 +146,15 @@ export async function recordLearnedDomain(fullName: string, domainId: string): P
  * add/remove is still reflected immediately.
  */
 const RESOLVE_TTL_MS = 60_000;
-let resolvedCache: { expiresAt: number; value: Promise<ResolvedOwnedRepo[]> } | null = null;
+const resolvedCache = new Map<string, TtlPromiseEntry<ResolvedOwnedRepo[]>>();
 
 export function invalidateResolvedRepos(): void {
-  resolvedCache = null;
+  resolvedCache.clear();
   invalidateLocalRepoResolution();
 }
 
 export function resolveOwnedRepos(): Promise<ResolvedOwnedRepo[]> {
-  if (resolvedCache && resolvedCache.expiresAt > Date.now()) return resolvedCache.value;
-  const value = resolveOwnedReposUncached().catch((error: unknown) => {
-    resolvedCache = null;
-    throw error;
-  });
-  resolvedCache = { expiresAt: Date.now() + RESOLVE_TTL_MS, value };
-  return value;
+  return ttlCached(resolvedCache, "all", RESOLVE_TTL_MS, resolveOwnedReposUncached);
 }
 
 async function resolveOwnedReposUncached(): Promise<ResolvedOwnedRepo[]> {

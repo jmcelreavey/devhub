@@ -473,6 +473,7 @@ export function RepoGitWorkspace({
                   {tab === "history" && (
                     <HistoryPanel
                       repoName={repoName}
+                      repoPath={repoPath}
                       onMutate={onMutate}
                       onConflict={offerAiConflict}
                       onHookFailure={showHookFailure}

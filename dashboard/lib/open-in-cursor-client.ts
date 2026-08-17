@@ -6,6 +6,8 @@
 
 interface ToastLike {
   error: (message: string) => void;
+  success?: (message: string) => void;
+  info?: (message: string) => void;
 }
 
 export async function getCursorNoteDraft(name: string, notePath: string): Promise<{
@@ -40,6 +42,58 @@ export async function openRepoInCursor(
     return { writable: body.writable === true };
   } catch (error) {
     toast.error(error instanceof Error ? error.message : `Couldn't open ${name} in Cursor.`);
+    return null;
+  }
+}
+
+export interface OpenPrInCursorResult {
+  writable: boolean;
+  branch: string;
+  stashed: boolean;
+  alreadyOnBranch: boolean;
+  localRepoName: string;
+}
+
+/** Stash if dirty, check out the PR branch, then open the clone in Cursor. */
+export async function openPrInCursor(
+  repo: string,
+  number: number,
+  toast: ToastLike,
+  notePath?: string,
+): Promise<OpenPrInCursorResult | null> {
+  try {
+    const res = await fetch("/api/github/prs/open-in-cursor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repo, number, notePath }),
+    });
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      writable?: boolean;
+      branch?: string;
+      stashed?: boolean;
+      alreadyOnBranch?: boolean;
+      localRepoName?: string;
+    };
+    if (!res.ok) throw new Error(body.error || `Couldn't open ${repo}#${number} in Cursor.`);
+    const result: OpenPrInCursorResult = {
+      writable: body.writable === true,
+      branch: body.branch || "",
+      stashed: body.stashed === true,
+      alreadyOnBranch: body.alreadyOnBranch === true,
+      localRepoName: body.localRepoName || "",
+    };
+    const branch = result.branch ? ` ${result.branch}` : "";
+    if (result.alreadyOnBranch) {
+      toast.success?.(`Already on${branch}. Opened in Cursor.`);
+    } else if (result.stashed) {
+      toast.success?.(`Stashed local changes, checked out${branch}, opened in Cursor.`);
+    } else {
+      toast.success?.(`Checked out${branch}. Opened in Cursor.`);
+    }
+    return result;
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : `Couldn't open ${repo}#${number} in Cursor.`);
     return null;
   }
 }

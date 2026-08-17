@@ -35,6 +35,41 @@ export interface DiagramIndex {
 
 export const DIAGRAM_ROOT_AREA_ID = "__root__";
 
+/** Group summaries into area cards. FS / tree walks stay with the caller. */
+export function groupDiagramsByArea(
+  diagrams: DiagramSummary[],
+  areaMetas: Array<{ id: string; folderCount: number }>,
+): DiagramAreaGroup[] {
+  const byArea = new Map<string, DiagramSummary[]>();
+  for (const d of diagrams) {
+    const key = d.area || DIAGRAM_ROOT_AREA_ID;
+    const list = byArea.get(key) ?? [];
+    list.push(d);
+    byArea.set(key, list);
+  }
+
+  const byModified = (list: DiagramSummary[]) =>
+    list.slice().sort((a, b) => b.modified - a.modified);
+
+  const areas: DiagramAreaGroup[] = areaMetas.map((meta) => ({
+    id: meta.id,
+    label: meta.id,
+    diagrams: byModified(byArea.get(meta.id) ?? []),
+    folderCount: meta.folderCount,
+  }));
+
+  const rootDiagrams = byArea.get(DIAGRAM_ROOT_AREA_ID);
+  if (rootDiagrams && rootDiagrams.length > 0) {
+    areas.push({
+      id: DIAGRAM_ROOT_AREA_ID,
+      label: "Top level",
+      diagrams: byModified(rootDiagrams),
+      folderCount: 0,
+    });
+  }
+  return areas;
+}
+
 /** Derive the same area/recent shape from a client `/api/tree` diagrams subtree. */
 export function diagramBrowseModelFromTree(diagramsTree: DiagramTreeEntry[]): {
   areas: DiagramAreaGroup[];
@@ -68,28 +103,16 @@ export function diagramBrowseModelFromTree(diagramsTree: DiagramTreeEntry[]): {
     .map((e) => e.name)
     .sort((a, b) => a.localeCompare(b));
 
-  const areas: DiagramAreaGroup[] = topFolders.map((id) => {
-    const folder = diagramsTree.find((e) => e.type === "dir" && e.name === id);
-    const folderCount = (folder?.children ?? []).filter((c) => c.type === "dir").length;
-    return {
-      id,
-      label: id,
-      diagrams: diagrams
-        .filter((d) => d.area === id)
-        .sort((a, b) => b.modified - a.modified),
-      folderCount,
-    };
-  });
-
-  const rootDiagrams = diagrams.filter((d) => !d.area);
-  if (rootDiagrams.length > 0) {
-    areas.push({
-      id: DIAGRAM_ROOT_AREA_ID,
-      label: "Top level",
-      diagrams: rootDiagrams.sort((a, b) => b.modified - a.modified),
-      folderCount: 0,
-    });
-  }
+  const areas = groupDiagramsByArea(
+    diagrams,
+    topFolders.map((id) => {
+      const folder = diagramsTree.find((e) => e.type === "dir" && e.name === id);
+      return {
+        id,
+        folderCount: (folder?.children ?? []).filter((c) => c.type === "dir").length,
+      };
+    }),
+  );
 
   const recent = diagrams.slice().sort((a, b) => b.modified - a.modified).slice(0, 6);
   return { areas, recent, total: diagrams.length };

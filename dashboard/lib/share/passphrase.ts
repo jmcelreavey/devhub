@@ -89,17 +89,7 @@ export function passphraseEntropyBits(
   return words * Math.log2(listSize);
 }
 
-/**
- * Uniform random index in `[0, max)` via rejection sampling.
- *
- * `randomInt % max` would bias toward low indices whenever `max` does not
- * divide the range evenly, which it does not here.
- */
-function randomIndex(max: number): number {
-  return crypto.randomInt(0, max);
-}
-
 /** A space-separated passphrase, e.g. `harbor thistle cobalt ...`. */
 export function generatePassphrase(words = PASSPHRASE_WORDS): string {
-  return Array.from({ length: words }, () => WORDS[randomIndex(WORDS.length)]).join(" ");
+  return Array.from({ length: words }, () => WORDS[crypto.randomInt(0, WORDS.length)]).join(" ");
 }

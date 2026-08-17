@@ -51,7 +51,7 @@ export interface IngestResult {
  * writing the same commit every five minutes. Hashing the content rather than
  * using the SHA alone means an amended commit correctly registers as new.
  */
-function eventId(source: string, key: string): string {
+export function eventId(source: string, key: string): string {
   return createHash("sha1").update(`${source}:${key}`).digest("hex").slice(0, 24);
 }
 
@@ -71,7 +71,7 @@ interface ParsedCommit {
   body: string;
 }
 
-function parseGitLog(stdout: string): ParsedCommit[] {
+export function parseGitLog(stdout: string): ParsedCommit[] {
   return stdout
     .split(RECORD)
     .map((record) => record.trim())
@@ -203,24 +203,3 @@ export async function ingestGit(options: IngestOptions = {}): Promise<IngestResu
   return results;
 }
 
-/**
- * Turn note files into `note` events.
- *
- * Notes are already indexed as chunks, so this is not about retrieval — it is
- * about the *timeline*. "What was I working on the week that broke" is a
- * question the chunk index cannot answer and an ordered event log answers for
- * free.
- */
-export function noteEvents(
-  entries: ReadonlyArray<{ path: string; mtimeMs: number; title: string }>,
-): AppendEventInput[] {
-  return entries.map((entry) => ({
-    id: eventId("note", `${entry.path}:${Math.round(entry.mtimeMs)}`),
-    kind: "note" as const,
-    ts: new Date(entry.mtimeMs).toISOString(),
-    title: entry.title,
-    source: "notes",
-    url: `/notes/${entry.path}`,
-    refs: [{ kind: "note" as const, id: entry.path, label: entry.title, href: `/notes/${entry.path}` }],
-  }));
-}

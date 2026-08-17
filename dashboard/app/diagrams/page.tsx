@@ -6,18 +6,15 @@ import dynamic from "next/dynamic";
 import {
   ChevronRight,
   Folder,
-  FolderInput,
   FolderPlus,
   PenTool,
   Plus,
-  Trash2,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/lib/hooks/use-toast";
-import { useConfirm } from "@/components/shell/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { InlineNoteRename } from "@/components/InlineNoteRename";
 import { MoveDiagramModal, type MoveDiagramTarget } from "@/components/diagrams/MoveDiagramModal";
+import { DiagramFileCard, DiagramFolderCard } from "@/components/diagrams/DiagramCards";
 import {
   collectDiagramFolderRelPaths,
   createEmptyDiagram,
@@ -32,21 +29,14 @@ import {
   stripDiagramsPrefix,
   toDiagramRoutePath,
   toNotesApiPath,
-  type DiagramFile,
-  type DiagramFolder,
   type DiagramTreeEntry,
 } from "@/lib/diagram-utils";
 import {
   createDiagramFolder,
-  deleteDiagramFolder,
   moveDiagramEntry,
-  renameDiagramFolder,
 } from "@/lib/diagram-folder-actions";
-import { renameNoteFile } from "@/lib/notes/path";
-import { broadcastNoteAutosaveInvalidation } from "@/lib/notes/autosave-invalidation";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 import { DiagramsLandingPage } from "@/components/diagrams/DiagramsLandingPage";
-import { CopyLocationButton } from "@/components/ui/CopyLocationButton";
 import {
   diagramBrowseModelFromTree,
   writeLastDiagramFolder,
@@ -89,8 +79,6 @@ function DiagramsIndexInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const toast = useToast();
-  const confirm = useConfirm();
-
   const folder = normalizeDiagramFolder(searchParams.get("folder"));
 
   const [tree, setTree] = useState<DiagramTreeEntry[]>([]);
@@ -192,42 +180,6 @@ function DiagramsIndexInner() {
     }
   }
 
-  async function handleDeleteDiagram(file: DiagramFile) {
-    const ok = await confirm({
-      title: "Delete diagram",
-      message: `Delete "${file.name}"? This cannot be undone.`,
-      confirmLabel: "Delete",
-      variant: "danger",
-    });
-    if (!ok) return;
-    broadcastNoteAutosaveInvalidation(file.path);
-    try {
-      const r = await fetch(`/api/notes/${toNotesApiPath(file.path)}`, { method: "DELETE" });
-      if (!r.ok) throw new Error("delete failed");
-      toast.success("Diagram deleted.");
-      await reload();
-    } catch {
-      toast.error("Couldn't delete diagram.");
-    }
-  }
-
-  async function handleDeleteFolder(f: DiagramFolder) {
-    const ok = await confirm({
-      title: "Delete folder",
-      message: `Delete folder "${f.name}" and every diagram inside it? This cannot be undone.`,
-      confirmLabel: "Delete",
-      variant: "danger",
-    });
-    if (!ok) return;
-    try {
-      await deleteDiagramFolder(f.storagePath);
-      toast.success("Folder deleted.");
-      await reload();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't delete folder.");
-    }
-  }
-
   const moveTargets: MoveDiagramTarget[] = useMemo(() => {
     if (!moving) return [];
     const movingRel = moving.isDir ? stripDiagramsPrefix(moving.storagePath) : "";
@@ -259,9 +211,6 @@ function DiagramsIndexInner() {
   }
 
   const isEmpty = folders.length === 0 && files.length === 0;
-  // Show actions on tap (mobile) and on hover (desktop).
-  const actionBtn =
-    "hub-icon-btn reveal-on-hover transition-opacity";
 
   if (loaded && !folder && !folderMissing) {
     return (
@@ -345,6 +294,7 @@ function DiagramsIndexInner() {
             setCreatingFolder(true);
             setNewFolderName("");
           }}
+          onChanged={() => void reload()}
         />
         {moving && (
           <MoveDiagramModal
@@ -510,87 +460,23 @@ function DiagramsIndexInner() {
       ) : (
         <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(148px,1fr))]">
           {folders.map((f) => (
-            <div key={f.storagePath} className="card p-3 flex flex-col gap-2 group">
-              <button
-                type="button"
-                onClick={() => goToFolder(f.relPath)}
-                className="w-full aspect-square rounded flex items-center justify-center"
-                style={{ background: "var(--bg)" }}
-                title={`Open ${f.name}`}
-                aria-label={`Open folder ${f.name}`}
-              >
-                <Folder size={36} className="text-text-subtle" aria-hidden />
-              </button>
-              <div className="flex items-center gap-1">
-                <InlineNoteRename
-                  noteSlug={f.storagePath}
-                  displayName={f.name}
-                  active={false}
-                  onRenamed={() => void reload()}
-                  renameFile={renameDiagramFolder}
-                  className="text-xs font-medium truncate flex-1 text-text"
-                  inputClassName="min-w-0 flex-1 bg-transparent border-none outline-none text-xs"
-                  title="Double-click to rename"
-                />
-                <button
-                  type="button"
-                  onClick={() => setMoving({ storagePath: f.storagePath, name: f.name, isDir: true })}
-                  className={actionBtn}
-                  title="Move"
-                  aria-label={`Move ${f.name}`}
-                >
-                  <FolderInput size={11} aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleDeleteFolder(f)}
-                  className={actionBtn}
-                  title="Delete folder"
-                  aria-label={`Delete folder ${f.name}`}
-                >
-                  <Trash2 size={11} aria-hidden />
-                </button>
-              </div>
-            </div>
+            <DiagramFolderCard
+              key={f.storagePath}
+              folder={f}
+              onOpen={() => goToFolder(f.relPath)}
+              onChanged={() => void reload()}
+              onMove={() => setMoving({ storagePath: f.storagePath, name: f.name, isDir: true })}
+            />
           ))}
 
           {files.map((d) => (
-            <div key={d.path} className="card p-3 flex flex-col gap-2 group">
-              <Link href={toDiagramRoutePath(d.path)} className="block">
-                <DiagramCardThumbnail storagePath={d.path} loader={loadDiagramData} />
-              </Link>
-              <div className="flex items-center gap-1">
-                <InlineNoteRename
-                  noteSlug={d.path}
-                  displayName={d.name}
-                  active={false}
-                  onRenamed={() => void reload()}
-                  renameFile={renameNoteFile}
-                  className="text-xs font-medium truncate flex-1 text-text"
-                  inputClassName="min-w-0 flex-1 bg-transparent border-none outline-none text-xs"
-                  title="Double-click to rename"
-                />
-                <CopyLocationButton path={d.path} size={11} stopPropagation className={actionBtn} />
-                <button
-                  type="button"
-                  onClick={() => setMoving({ storagePath: d.path, name: d.name, isDir: false })}
-                  className={actionBtn}
-                  title="Move"
-                  aria-label={`Move ${d.name}`}
-                >
-                  <FolderInput size={11} aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleDeleteDiagram(d)}
-                  className={actionBtn}
-                  title="Delete"
-                  aria-label={`Delete ${d.name}`}
-                >
-                  <Trash2 size={11} aria-hidden />
-                </button>
-              </div>
-            </div>
+            <DiagramFileCard
+              key={d.path}
+              file={d}
+              onChanged={() => void reload()}
+              onMove={() => setMoving({ storagePath: d.path, name: d.name, isDir: false })}
+              thumbnail={<DiagramCardThumbnail storagePath={d.path} loader={loadDiagramData} />}
+            />
           ))}
         </div>
       )}

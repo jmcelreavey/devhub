@@ -28,7 +28,7 @@
  * scalars in metadata) are cases no skill frontmatter has ever used.
  */
 import fs from "node:fs";
-import { skillMdPath } from "./shared";
+import { frontmatterBlock, skillMdPath, unquote } from "./shared";
 
 export interface SkillProvenance {
   /** SPDX-ish licence id, e.g. "Apache-2.0" or "MIT". */
@@ -45,29 +45,6 @@ export const EMPTY_PROVENANCE: SkillProvenance = {
   version: null,
   source: null,
 };
-
-/** Strip one layer of matching surrounding quotes. */
-function unquote(value: string): string {
-  const match = value.match(/^(['"])([\s\S]*)\1$/);
-  return match ? match[2] : value;
-}
-
-/** Extract the fenced `---` frontmatter block, or null when there isn't one. */
-function frontmatterBlock(content: string): string[] | null {
-  const lines = content.split("\n");
-  let start = -1;
-  for (let i = 0; i < lines.length; i += 1) {
-    if (lines[i].trim() === "") continue;
-    if (lines[i].trim() !== "---") return null;
-    start = i;
-    break;
-  }
-  if (start < 0) return null;
-  for (let i = start + 1; i < lines.length; i += 1) {
-    if (lines[i].trim() === "---") return lines.slice(start + 1, i);
-  }
-  return null;
-}
 
 /**
  * Read provenance fields from SKILL.md frontmatter.

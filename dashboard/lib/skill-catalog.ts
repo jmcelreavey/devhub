@@ -14,6 +14,7 @@ import { pluginAssetDirs } from "./plugins/registry";
 import type { AiToolsMeta, SkillListItem, SkillOrigin } from "@/lib/skills/api-types";
 import { isReadOnlySkillOrigin } from "@/lib/skills/api-types";
 import {
+  devhubRootSkillNames,
   devhubSharedSkillsDir,
   devhubVendorSkillsDir,
   listSkillDirNames,
@@ -41,6 +42,42 @@ export interface SkillCatalogMeta {
   vendorDir: string;
   aiToolsDir: string | null;
   aiToolsAvailable: boolean;
+}
+
+
+export const DEVHUB_SKILL_PREFIX = "devhub-";
+
+export function withDevhubSkillPrefix(name: string): string {
+  return name.startsWith(DEVHUB_SKILL_PREFIX) ? name : `${DEVHUB_SKILL_PREFIX}${name}`;
+}
+
+export function withoutDevhubSkillPrefix(name: string): string {
+  return name.startsWith(DEVHUB_SKILL_PREFIX) ? name.slice(DEVHUB_SKILL_PREFIX.length) : name;
+}
+
+/** Match a local tool-dir name to a catalog name, including `devhub-` aliases. */
+export function resolveCatalogSkillName(
+  localName: string,
+  catalogNames: Iterable<string>,
+): string | null {
+  const names = catalogNames instanceof Set ? catalogNames : new Set(catalogNames);
+  if (names.has(localName)) return localName;
+  const prefixed = withDevhubSkillPrefix(localName);
+  if (prefixed !== localName && names.has(prefixed)) return prefixed;
+  const unprefixed = withoutDevhubSkillPrefix(localName);
+  if (unprefixed !== localName && names.has(unprefixed)) return unprefixed;
+  return null;
+}
+
+export function isBlockedFromSharedCatalog(
+  entry: SkillCatalogEntry | undefined,
+  localName: string,
+  upstreamOnly: Set<string>,
+  autoCollectExcluded: Set<string>,
+): boolean {
+  if (entry && isReadOnlySkillOrigin(entry.origin)) return true;
+  if (entry) return false;
+  return upstreamOnly.has(localName) || autoCollectExcluded.has(localName);
 }
 
 export function skillCatalogMeta(repoRoot: string): SkillCatalogMeta {
@@ -78,6 +115,13 @@ export function upstreamOnlySkillNames(repoRoot: string): Set<string> {
   // into skills/shared, which would fork them from upstream and quietly relicense
   // Apache-2.0 code into the MIT tree.
   for (const name of listSkillDirNames(vendorDir)) {
+    if (!devhub.has(name)) names.add(name);
+  }
+
+  // Root-level skills (skills/<name>) are local installs of externally-owned skills, for the
+  // same reason. Without this, collect sees them as "not in skills/shared" and copies them in,
+  // duplicating each one and pushing it into the public seed that deliberately drops it.
+  for (const name of devhubRootSkillNames(repoRoot)) {
     if (!devhub.has(name)) names.add(name);
   }
 
@@ -138,9 +182,29 @@ export function buildMergedSkillCatalog(repoRoot: string): SkillCatalogEntry[] {
     entries.push({ name, origin: "vendor", dir });
   }
 
+  // Root-level skills/ (not shared/, not vendor/) are third-party installs that
+  // live in the private mirror. Surface them in the catalog as read-only so the
+  // Skills page does not offer "Add to catalog" and collect does not fork them
+  // into the MIT skills/shared tree.
+  const skillsRoot = path.join(repoRoot, "skills");
+  const rootNameSet = new Set<string>();
+  for (const name of devhubRootSkillNames(repoRoot)) {
+    if (devhubNameSet.has(name) || vendorNameSet.has(name)) continue;
+    const dir = resolveSkillDirUnder(skillsRoot, name);
+    if (!dir) continue;
+    rootNameSet.add(name);
+    entries.push({ name, origin: "vendor", dir });
+  }
+
   for (const name of aiToolsNames) {
     const catalogName = aiToolsSkillCatalogName(name);
-    if (devhubNameSet.has(catalogName) || vendorNameSet.has(catalogName)) continue;
+    if (
+      devhubNameSet.has(catalogName) ||
+      vendorNameSet.has(catalogName) ||
+      rootNameSet.has(catalogName)
+    ) {
+      continue;
+    }
     if (seenAiToolsCatalogNames.has(catalogName)) continue;
     seenAiToolsCatalogNames.add(catalogName);
     const dir = resolveSkillDirUnder(aiToolsDir!, name);
@@ -202,7 +266,7 @@ export function vendorCatalogEntries(
   catalog: SkillCatalogEntry[],
 ): Array<{ name: string; dir: string }> {
   return catalog
-    .filter((e) => e.origin === "vendor")
+    .filter((e) => e.origin === "vendor" && path.basename(path.dirname(e.dir)) === "vendor")
     .map((e) => ({ name: e.name, dir: e.dir }));
 }
 

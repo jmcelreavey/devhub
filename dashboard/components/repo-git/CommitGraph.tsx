@@ -1,15 +1,18 @@
 "use client";
 
-import type { MouseEvent } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 import { lookupByEmail } from "@/lib/people/identity";
 import { laneColor, type GraphLaneCommit } from "@/lib/repos/git-graph";
+import { RowMenuKebab, type RowMenuBind } from "@/components/shell/ContextMenu";
 import { CommitAvatar } from "./CommitAvatar";
 
 interface CommitGraphProps {
   commits: GraphLaneCommit[];
   selectedHash?: string | null;
   onSelect?: (hash: string) => void;
-  onContextMenu?: (event: MouseEvent<HTMLButtonElement>, commit: GraphLaneCommit) => void;
+  onContextMenu?: (event: MouseEvent<HTMLElement>, commit: GraphLaneCommit) => void;
+  onKebabOpen?: (x: number, y: number, commit: GraphLaneCommit) => void;
+  rowBind?: (commit: GraphLaneCommit) => RowMenuBind;
   /** Full or short hashes of commits ahead of upstream — lightly marked in the list. */
   unpushedHashes?: Set<string>;
   /** Refs treated as the default branch (e.g. main, origin/main) for chip tone. */
@@ -83,6 +86,8 @@ export function CommitGraph({
   selectedHash,
   onSelect,
   onContextMenu,
+  onKebabOpen,
+  rowBind,
   unpushedHashes,
   mainRefNames = [],
   identityByEmail,
@@ -171,8 +176,7 @@ export function CommitGraph({
       </div>
       {/*
         j/k (and arrows) move the selection. Listening on the container rather
-        than each row means it keeps working while focus sits on any row, and
-        the rows stay plain buttons.
+        than each row means it keeps working while focus sits on any row.
       */}
       <div
         className="repo-git-graph-rows"
@@ -194,7 +198,7 @@ export function CommitGraph({
           // Move focus with the selection so repeated presses keep working and
           // the row is scrolled into view for free.
           e.currentTarget
-            .querySelectorAll<HTMLButtonElement>(".repo-git-graph-row")
+            .querySelectorAll<HTMLElement>(".repo-git-graph-row")
             [nextIndex]?.focus();
         }}
       >
@@ -206,17 +210,32 @@ export function CommitGraph({
             ? lookupByEmail(identityByEmail, c.authorEmail)
             : undefined;
           return (
-            <button
+            <div
               key={c.hash}
-              type="button"
-              className="repo-git-graph-row"
+              role="button"
+              tabIndex={0}
+              className="repo-git-graph-row group"
               data-selected={selected || undefined}
               data-unpushed={unpushed || undefined}
               data-on-main={onMain || undefined}
               data-head={c.isHead || undefined}
               style={{ height: ROW_H }}
-              onClick={() => onSelect?.(c.hash)}
-              onContextMenu={(event) => onContextMenu?.(event, c)}
+              {...(rowBind?.(c) ?? {})}
+              onClick={(event) => {
+                rowBind?.(c)?.onClick(event);
+                if (event.defaultPrevented) return;
+                onSelect?.(c.hash);
+              }}
+              onContextMenu={(event) => {
+                rowBind?.(c)?.onContextMenu(event);
+                onContextMenu?.(event, c);
+              }}
+              onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+                rowBind?.(c)?.onKeyDown(event);
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                onSelect?.(c.hash);
+              }}
             >
               <span
                 className="repo-git-graph-hash font-mono"
@@ -269,7 +288,15 @@ export function CommitGraph({
                   <span className="repo-git-graph-date">{c.relativeDate}</span>
                 </span>
               </span>
-            </button>
+              <span className="repo-git-graph-kebab">
+                {onKebabOpen ? (
+                  <RowMenuKebab
+                    label={`Actions for ${c.shortHash}`}
+                    onOpen={(x, y) => onKebabOpen(x, y, c)}
+                  />
+                ) : null}
+              </span>
+            </div>
           );
         })}
       </div>

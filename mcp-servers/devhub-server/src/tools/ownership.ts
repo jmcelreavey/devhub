@@ -24,6 +24,26 @@ function text(value: unknown): { content: { type: "text"; text: string }[] } {
 
 const repoSchema = z.string().describe("Owned GitHub repo in owner/name form");
 
+/** Rank by the prefix that matched, not the longest path sitting on the domain. */
+export function owningDomainForPath<T extends { paths: string[] }>(
+  domains: T[],
+  filePath: string,
+): T | undefined {
+  let best: T | undefined;
+  let bestLength = -1;
+  for (const domain of domains) {
+    for (const prefix of domain.paths) {
+      if (prefix === "." || filePath === prefix || filePath.startsWith(`${prefix}/`)) {
+        if (prefix.length > bestLength) {
+          best = domain;
+          bestLength = prefix.length;
+        }
+      }
+    }
+  }
+  return best;
+}
+
 export function registerOwnershipTools(server: McpServer, ctx: Context): void {
   const { dashboard } = ctx;
 
@@ -69,11 +89,7 @@ export function registerOwnershipTools(server: McpServer, ctx: Context): void {
     },
     async ({ repo, path }) => withDashboardErrors(async () => {
       const brief = await dashboard.get<Brief>(ownershipPath(repo, "/brief"), undefined, 120_000);
-      const domain = brief.domains
-        .filter((candidate) => candidate.paths.some((prefix) =>
-          prefix === "." || path === prefix || path.startsWith(`${prefix}/`),
-        ))
-        .sort((a, b) => Math.max(...b.paths.map((prefix) => prefix.length)) - Math.max(...a.paths.map((prefix) => prefix.length)))[0];
+      const domain = owningDomainForPath(brief.domains, path);
       const team = brief.teams.find((candidate) => domain && candidate.domains.includes(domain.id));
       const blast = await dashboard.post(ownershipPath(repo, "/blast"), { paths: [path] }, 120_000);
       return text({ domain: domain ?? null, team: team ?? null, history: blast });

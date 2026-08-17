@@ -28,6 +28,7 @@ function localCandidate(
     repoMtimeMs: alreadyInRepo ? 50 : null,
     localMtimeMs: 100,
     excludedFromAutoCollect: false,
+    blockedFromCatalog: false,
   };
 }
 
@@ -87,6 +88,32 @@ describe("canDeleteRow", () => {
     expect(canDeleteRow(byName.shared)).toBe(true);
     expect(canDeleteRow(byName["bi-up"])).toBe(false);
     expect(canDeleteRow(byName["local-only"])).toBe(true);
+  });
+});
+
+describe("add visibility", () => {
+  it("does not offer add for vendor or plugin catalog skills", () => {
+    const rows = buildManagedCatalogRows(
+      [
+        skill("scope-creep-detector", "vendor"),
+        skill("bi-foo", "plugin:bi"),
+      ],
+      [
+        { ...localCandidate("scope-creep-detector", "new"), blockedFromCatalog: true },
+        { ...localCandidate("bi-foo", "new"), blockedFromCatalog: true },
+      ],
+    );
+    expect(rows.map((r) => r.name).sort()).toEqual(["bi-foo", "scope-creep-detector"]);
+    expect(rows.every((r) => r.kind === "catalog")).toBe(true);
+    expect(rows.every((r) => !canAddToCatalog(r))).toBe(true);
+  });
+
+  it("does not list blocked local-only skills as addable", () => {
+    const rows = buildManagedCatalogRows(
+      [],
+      [{ ...localCandidate("paseo", "new"), blockedFromCatalog: true }],
+    );
+    expect(rows).toHaveLength(0);
   });
 });
 

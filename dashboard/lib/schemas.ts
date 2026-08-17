@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PASTE_EXPIRY_OPTIONS } from "@/lib/share/privatebin/crypto";
 
 export const EntityRefSchema = z.object({
   kind: z.enum(["task", "meeting", "pr", "note", "diagram", "calendar", "jira", "repo"]),
@@ -186,11 +187,21 @@ export const BriefingTaskCreateSchema = z.object({
  * `lib/repos.ts` sanitises again before touching the filesystem — this is the
  * outer gate, not the only one.
  */
-export const RepoCloneSchema = z.object({
-  fullName: z
-    .string()
-    .trim()
-    .regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/, "fullName must look like owner/repo"),
+export const RepoCloneSchema = z.union([
+  z.object({
+    fullName: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/, "fullName must look like owner/repo"),
+  }),
+  z.object({
+    url: z.string().trim().min(1).max(2048),
+    name: z.string().trim().min(1).max(100).optional(),
+  }),
+]);
+
+export const RepoInitSchema = z.object({
+  name: z.string().trim().min(1).max(100),
 });
 
 // ─── Setup ───
@@ -213,15 +224,27 @@ export const ShareCreateSchema = z.object({
  * caller-supplied password would put it in the request body, the browser's
  * memory and any proxy log, for no benefit — nobody is typing a better one.
  */
-export const OneTimeShareCreateSchema = z.object({
-  vault: z.string(),
-  path: z.string().min(1),
-  password: z.boolean().default(true),
-  expire: z.enum(["5min", "10min", "1hour", "1day", "1week", "1month"]).default("1day"),
-});
+export const OneTimeShareCreateSchema = z.union([
+  z.object({
+    vault: z.string(),
+    path: z.string().min(1),
+    password: z.boolean().default(true),
+    expire: z.enum(PASTE_EXPIRY_OPTIONS).default("1day"),
+  }),
+  z.object({
+    markdown: z.string().min(1).max(1_000_000),
+    title: z.string().min(1).max(200),
+    password: z.boolean().default(true),
+    expire: z.enum(PASTE_EXPIRY_OPTIONS).default("1day"),
+  }),
+]);
 
 export const OneTimeShareDeleteSchema = z.object({
   id: z.string().min(1),
+});
+
+export const DiagramPreviewsSchema = z.object({
+  paths: z.array(z.string().min(1).max(500)).min(1).max(200),
 });
 
 /**

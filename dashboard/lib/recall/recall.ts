@@ -20,7 +20,7 @@ import { relatedRefsForHits } from "./graph";
 import { extractRefs } from "./refs";
 import { loadIndex } from "./store";
 import { estimateTokens, tokenize } from "./tokenize";
-import { gradeHeadline, gradeRecall } from "./grade";
+import { gradeHeadline, gradeRecall, type RecallGrade } from "./grade";
 import type { RecallChunk, RecallHit, RecallQuery, RecallResult } from "./types";
 
 /** How many candidates each retriever contributes before fusion. */
@@ -229,18 +229,6 @@ export function recall(input: RecallQuery): RecallResult {
   };
 }
 
-/**
- * `recall()` plus a verdict on whether the evidence supports an answer.
- *
- * Separate from `recall()` so ranking stays a pure function of the index and
- * the grader can be tested against hand-built results. Callers that only want
- * ranked chunks are unaffected.
- */
-export function recallGraded(query: RecallQuery) {
-  const result = recall(query);
-  return { result, grade: gradeRecall(result) };
-}
-
 const SOURCE_LABEL: Record<string, string> = {
   note: "Note",
   learning: "Learning",
@@ -258,8 +246,10 @@ const SOURCE_LABEL: Record<string, string> = {
  * user must be able to open the file and check. Uncited retrieved context is
  * indistinguishable from a hallucination at the point of use.
  */
-export function formatRecallMarkdown(result: RecallResult): string {
-  const grade = gradeRecall(result);
+export function formatRecallMarkdown(
+  result: RecallResult,
+  grade: RecallGrade = gradeRecall(result),
+): string {
 
   if (result.hits.length === 0) {
     return `No recall hits for "${result.query}".${

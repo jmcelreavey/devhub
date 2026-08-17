@@ -38,6 +38,7 @@ export default defineConfig({
       "../shared/markdown-convert/**/*.test.ts",
       "../shared/appraisal/**/*.test.ts",
       "../shared/meeting-note/**/*.test.ts",
+      "../shared/pr-note/**/*.test.ts",
       "../shared/entity-note/**/*.test.ts",
       "../mcp-servers/devhub-server/src/**/*.test.ts",
     ],

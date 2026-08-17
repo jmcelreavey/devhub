@@ -37,6 +37,16 @@ export function isClaudeConfigured(): boolean {
   return findInstalledApp("Claude", "claude") !== null;
 }
 
+/**
+ * True when Cursor is available locally — the `cursor-agent` CLI, the
+ * `cursor` CLI, or the native Cursor app. Gates the Cursor sidebar item
+ * so it only appears for people who actually have it.
+ */
+export function isCursorConfigured(): boolean {
+  if (commandOnPath("cursor-agent") || commandOnPath("cursor")) return true;
+  return findInstalledApp("Cursor", "cursor") !== null;
+}
+
 export function checkServicePort(port: number, host: string): Promise<boolean> {
   return new Promise((resolve) => {
     const req = http.get(`http://${host}:${port}`, { timeout: 2_000 }, (res) => {
@@ -68,6 +78,7 @@ export async function getPeerServiceGateStatus(): Promise<{
   chamber: boolean;
   opencode: boolean;
   claude: boolean;
+  cursor: boolean;
 }> {
   const [chamberActive, opencodeActive] = await Promise.all([
     isPeerServiceActive("openchamber"),
@@ -78,5 +89,6 @@ export async function getPeerServiceGateStatus(): Promise<{
   // and OpenCode is available too.
   const chamber = chamberActive || (isOpenChamberConfigured() && opencode);
   const claude = isClaudeConfigured();
-  return { chamber, opencode, claude };
+  const cursor = isCursorConfigured();
+  return { chamber, opencode, claude, cursor };
 }

@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Plus, Search, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { FileTree } from "@/components/FileTree";
 import { NotesViewToggle, type NotesPanelView } from "@/components/notes/NotesViewToggle";
+import { SectionMenuHint } from "@/components/shell/ContextMenu";
 import { ResizeHandle } from "@/components/shell/ResizeHandle";
 import { createPersistedBoolStore } from "@/lib/hooks/use-persisted-bool";
 import { useIsMobile } from "@/lib/hooks/use-is-mobile";
@@ -206,8 +207,11 @@ function NotesSidebarHeader({
       {showFileSearch ? (
         <>
           <div className="flex items-center justify-between px-3 pb-1">
-            <span className="text-xs font-semibold text-text-muted">
-              FILES
+            <span className="flex min-w-0 items-baseline gap-2">
+              <span className="text-xs font-semibold text-text-muted">
+                FILES
+              </span>
+              <SectionMenuHint />
             </span>
             <button
               type="button"

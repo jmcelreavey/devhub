@@ -27,6 +27,18 @@ export function devhubVendorSkillsDir(repoRoot: string): string {
   return path.join(repoRoot, "skills", "vendor");
 }
 
+/**
+ * Skills installed at the root of `skills/` — not under shared/ or vendor/.
+ *
+ * These are local installs of externally-owned skills. make-public-seed keeps only
+ * skills/shared and deletes the rest precisely because these are not ours to publish,
+ * so collect must treat them the same way it treats vendor/ and plugin skills.
+ */
+export function devhubRootSkillNames(repoRoot: string): string[] {
+  const root = path.join(repoRoot, "skills");
+  return listSkillDirNames(root).filter((name) => name !== "shared" && name !== "vendor");
+}
+
 /** List skill folder names under a parent that contains `<name>/SKILL.md`. */
 export function listSkillDirNames(skillsParentDir: string): string[] {
   if (!fs.existsSync(skillsParentDir)) return [];
@@ -57,9 +69,26 @@ const BLOCK_SCALAR_HEADER = /^(\s*)description:\s*([|>])[+-]?\d*\s*$/;
 const INLINE_DESCRIPTION = /^\s*description:\s*(.+?)\s*$/;
 
 /** Strip one layer of matching surrounding quotes, leaving inner apostrophes alone. */
-function unquote(value: string): string {
+export function unquote(value: string): string {
   const match = value.match(/^(['"])([\s\S]*)\1$/);
   return match ? match[2] : value;
+}
+
+/** Extract the fenced `---` frontmatter block, or null when there isn't one. */
+export function frontmatterBlock(content: string): string[] | null {
+  const lines = content.split("\n");
+  let start = -1;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (lines[i].trim() === "") continue;
+    if (lines[i].trim() !== "---") return null;
+    start = i;
+    break;
+  }
+  if (start < 0) return null;
+  for (let i = start + 1; i < lines.length; i += 1) {
+    if (lines[i].trim() === "---") return lines.slice(start + 1, i);
+  }
+  return null;
 }
 
 /**
@@ -105,21 +134,7 @@ function readBlockScalar(lines: string[], headerIndex: number, keyIndent: number
   return paragraphs.join("\n\n").trim();
 }
 
-/**
- * Extract a `description:` (or first prose line) from skill/agent markdown
- * frontmatter.
- *
- * Handles YAML block scalars. The previous implementation matched
- * `/^description:\s*(.+)/m` and so captured the *indicator* — 10 of 42 skills
- * reported their description as the literal string `">-"`, because a long
- * description is naturally written as `description: >-` with the prose on the
- * following indented lines. That is the field the skills page and any agent use
- * to decide whether a skill is relevant, so those skills were effectively
- * invisible.
- */
-export function descriptionFromFrontmatter(content: string): string | null {
-  const lines = content.split("\n");
-
+function descriptionFromLines(lines: string[]): string | null {
   for (let i = 0; i < lines.length; i += 1) {
     const block = lines[i].match(BLOCK_SCALAR_HEADER);
     if (block) {
@@ -134,8 +149,35 @@ export function descriptionFromFrontmatter(content: string): string | null {
       return value || null;
     }
   }
+  return null;
+}
 
-  const prose = lines.filter(Boolean);
+/**
+ * Extract a `description:` (or first prose line) from skill/agent markdown
+ * frontmatter.
+ *
+ * Handles YAML block scalars. The previous implementation matched
+ * `/^description:\s*(.+)/m` and so captured the *indicator* — 10 of 42 skills
+ * reported their description as the literal string `">-"`, because a long
+ * description is naturally written as `description: >-` with the prose on the
+ * following indented lines. That is the field the skills page and any agent use
+ * to decide whether a skill is relevant, so those skills were effectively
+ * invisible.
+ *
+ * Description keys are read from the fenced frontmatter block only. A
+ * `description:` in the markdown body is not a skill description.
+ */
+export function descriptionFromFrontmatter(content: string): string | null {
+  const block = frontmatterBlock(content);
+  if (block) {
+    const fromBlock = descriptionFromLines(block);
+    if (fromBlock) return fromBlock;
+  }
+
+  // No frontmatter: first prose line in a short prefix. Never YAML-scan the
+  // whole file — a `description:` in the body is not a skill description.
+  const prefix = content.split("\n", 40);
+  const prose = prefix.filter(Boolean);
   const nonHeader = prose.find((l) => !l.startsWith("#") && !l.startsWith("---") && !l.includes(":"));
   return nonHeader?.trim() ?? null;
 }

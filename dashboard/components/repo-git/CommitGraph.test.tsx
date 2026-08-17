@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { layoutCommitGraph } from "@/lib/repos/git-graph";
 import type { GraphCommitRaw } from "@/lib/repos/git-parsers";
@@ -48,5 +48,20 @@ describe("CommitGraph avatars", () => {
       const img = document.querySelector<HTMLImageElement>(".repo-git-avatar-img");
       expect(img?.src).toContain("avatars.githubusercontent.com/u/14058449");
     });
+  });
+
+  it("puts the kebab on the row container, not as the only contextmenu target", async () => {
+    const onKebabOpen = vi.fn();
+    const commits = layoutCommitGraph([raw("dev@example.com")]);
+    render(<CommitGraph commits={commits} onKebabOpen={onKebabOpen} />);
+
+    const row = document.querySelector(".repo-git-graph-row");
+    expect(row).toBeTruthy();
+    expect(row?.querySelector("[aria-label='Actions for 166e902']")).toBeTruthy();
+
+    fireEvent.contextMenu(row!, { clientX: 24, clientY: 48 });
+    // bindRow is optional here — the kebab is what History wires through onKebabOpen.
+    fireEvent.click(screen.getByRole("button", { name: "Actions for 166e902" }));
+    expect(onKebabOpen).toHaveBeenCalled();
   });
 });

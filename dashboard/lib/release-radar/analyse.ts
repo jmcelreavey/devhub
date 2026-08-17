@@ -50,7 +50,7 @@ export interface Advisory {
   spread: number;
   /** True when every declaring manifest is a devDependency. */
   devOnly: boolean;
-  /** Total repos declaring it, and the acknowledgement watermark. */
+  /** Total repos declaring it. The acknowledgement watermark is `behindRepos.length`. */
   repoCount: number;
 }
 

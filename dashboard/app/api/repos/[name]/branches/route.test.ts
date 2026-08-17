@@ -454,6 +454,201 @@ describe("POST /api/repos/[name]/branches", () => {
       error: expect.stringMatching(/would delete those changes/i),
     });
   });
+
+  it("pops the auto-stash if checkout fails after stashing", async () => {
+    const calls: string[] = [];
+    vi.mocked(runGitRepo).mockReturnValue({ status: 0, stdout: "", stderr: "" });
+    vi.mocked(runGitRepoAsync).mockImplementation(async (_repoRoot, args) => {
+      const command = args.join(" ");
+      calls.push(command);
+      if (command === "status --porcelain") {
+        return { status: 0, stdout: " M src/a.ts\n", stderr: "" };
+      }
+      if (args[0] === "stash" && args[1] === "push") {
+        return { status: 0, stdout: "Saved working directory\n", stderr: "" };
+      }
+      if (args[0] === "checkout") {
+        return { status: 1, stdout: "", stderr: "error: pathspec 'gone' did not match any file(s) known to git\n" };
+      }
+      if (command === "stash pop stash@{0}") {
+        return { status: 0, stdout: "", stderr: "" };
+      }
+      throw new Error(`Unexpected git command: ${command}`);
+    });
+
+    const response = await POST(request({ action: "checkout", branch: "feature/ok" }), params);
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringMatching(/pathspec|Checkout/i),
+      stashed: true,
+    });
+    expect(calls).toContain("stash pop stash@{0}");
+  });
+
+  it("discards the working tree with reset --hard and clean -fd", async () => {
+    vi.mocked(runGitRepoAsync).mockImplementation(async (_repoRoot, args) => {
+      if (args[0] === "reset" || args[0] === "clean") {
+        return { status: 0, stdout: "", stderr: "" };
+      }
+      throw new Error(`Unexpected git command: ${args.join(" ")}`);
+    });
+
+    const response = await POST(request({ action: "discard" }), params);
+
+    expect(response.status).toBe(200);
+    expect(runGitRepoAsync).toHaveBeenCalledWith("/tmp/test-repo", ["reset", "--hard", "HEAD"]);
+    expect(runGitRepoAsync).toHaveBeenCalledWith("/tmp/test-repo", ["clean", "-fd"]);
+  });
+
+  it("rejects delete-branch names that look like git flags", async () => {
+    for (const branch of ["-D", "--force", "-d"]) {
+      const response = await POST(request({ action: "delete-branch", branch, force: true }), params);
+      expect(response.status).toBe(400);
+    }
+    expect(runGitRepoAsync).not.toHaveBeenCalled();
+  });
+
+  it("passes -- before the branch name when deleting", async () => {
+    vi.mocked(runGitRepo).mockReturnValue({ status: 0, stdout: "main\n", stderr: "" });
+    vi.mocked(runGitRepoAsync).mockResolvedValue({ status: 0, stdout: "", stderr: "" });
+
+    const response = await POST(request({ action: "delete-branch", branch: "feature/old" }), params);
+
+    expect(response.status).toBe(200);
+    expect(runGitRepoAsync).toHaveBeenCalledWith("/tmp/test-repo", ["branch", "-d", "--", "feature/old"]);
+  });
+
+  it("refuses undo-commit when HEAD is the only commit", async () => {
+    vi.mocked(runGitRepoAsync).mockResolvedValue({ status: 0, stdout: "1\n", stderr: "" });
+
+    const response = await POST(request({ action: "undo-commit" }), params);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: "Nothing to undo" });
+    expect(runGitRepoAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("soft-resets HEAD~1 when there are at least two commits", async () => {
+    vi.mocked(runGitRepoAsync)
+      .mockResolvedValueOnce({ status: 0, stdout: "2\n", stderr: "" })
+      .mockResolvedValueOnce({ status: 0, stdout: "", stderr: "" });
+
+    const response = await POST(request({ action: "undo-commit" }), params);
+
+    expect(response.status).toBe(200);
+    expect(runGitRepoAsync).toHaveBeenNthCalledWith(2, "/tmp/test-repo", ["reset", "--soft", "HEAD~1"]);
+  });
+
+  it("rejects a non-hex reset-stash-ahead commit before calling git", async () => {
+    const response = await POST(request({ action: "reset-stash-ahead", commit: "HEAD~1" }), params);
+    expect(response.status).toBe(400);
+    expect(runGitRepoAsync).not.toHaveBeenCalled();
+  });
+
+  it("refuses reset-stash-ahead when the commit is not an ancestor of HEAD", async () => {
+    const target = "a".repeat(40);
+    const head = "b".repeat(40);
+    vi.mocked(runGitRepoAsync).mockImplementation(async (_repoRoot, args) => {
+      const command = args.join(" ");
+      if (command.startsWith("rev-parse --verify")) {
+        return { status: 0, stdout: `${target}\n`, stderr: "" };
+      }
+      if (command.startsWith("rev-parse --short")) {
+        return { status: 0, stdout: "aaaaaaa\n", stderr: "" };
+      }
+      if (command === "rev-parse HEAD") {
+        return { status: 0, stdout: `${head}\n`, stderr: "" };
+      }
+      if (args[0] === "merge-base") {
+        return { status: 1, stdout: "", stderr: "" };
+      }
+      throw new Error(`Unexpected git command: ${command}`);
+    });
+
+    const response = await POST(request({ action: "reset-stash-ahead", commit: target }), params);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringMatching(/not an ancestor/i),
+    });
+  });
+
+  it("tracks a non-origin remote when set-upstream is given one", async () => {
+    vi.mocked(runGitRepoAsync).mockImplementation(async (_repoRoot, args) => {
+      if (args[0] === "rev-parse" || args[0] === "branch") {
+        return { status: 0, stdout: "", stderr: "" };
+      }
+      throw new Error(`Unexpected git command: ${args.join(" ")}`);
+    });
+
+    const response = await POST(
+      request({ action: "set-upstream", branch: "feature/ok", remote: "upstream" }),
+      params,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      upstream: "upstream/feature/ok",
+    });
+    expect(runGitRepoAsync).toHaveBeenCalledWith("/tmp/test-repo", [
+      "branch",
+      "--set-upstream-to=upstream/feature/ok",
+      "feature/ok",
+    ]);
+  });
+
+  it("pulls with --rebase when asked", async () => {
+    vi.mocked(runGitRepoAsync).mockImplementation(async (_repoRoot, args) => {
+      if (args[0] === "rev-parse") {
+        return { status: 0, stdout: "origin/main\n", stderr: "" };
+      }
+      if (args[0] === "pull") {
+        return { status: 0, stdout: "Successfully rebased\n", stderr: "" };
+      }
+      throw new Error(`Unexpected git command: ${args.join(" ")}`);
+    });
+
+    const response = await POST(request({ action: "pull-rebase" }), params);
+
+    expect(response.status).toBe(200);
+    expect(runGitRepoAsync).toHaveBeenCalledWith("/tmp/test-repo", ["pull", "--rebase"], {
+      timeout: 120_000,
+    });
+  });
+
+  it("never deletes HEAD when pruning backup branches", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const old = now - 30 * 24 * 60 * 60;
+    const deleted: string[] = [];
+    vi.mocked(runGitRepoAsync).mockImplementation(async (_repoRoot, args) => {
+      const command = args.join(" ");
+      if (command === "rev-parse --abbrev-ref HEAD") {
+        return { status: 0, stdout: "devhub/backup-checked-out\n", stderr: "" };
+      }
+      if (args[0] === "for-each-ref") {
+        const lines = [
+          `devhub/backup-new\0${now}`,
+          ...Array.from({ length: 12 }, (_, i) => `devhub/backup-${i}\0${old}`),
+          `devhub/backup-checked-out\0${old}`,
+        ];
+        return { status: 0, stdout: `${lines.join("\n")}\n`, stderr: "" };
+      }
+      if (args[0] === "branch" && args[1] === "-D") {
+        deleted.push(args[3] ?? "");
+        return { status: 0, stdout: "", stderr: "" };
+      }
+      throw new Error(`Unexpected git command: ${command}`);
+    });
+
+    const response = await POST(request({ action: "prune-backup-branches" }), params);
+
+    expect(response.status).toBe(200);
+    expect(deleted).not.toContain("devhub/backup-checked-out");
+    expect(deleted).not.toContain("devhub/backup-new");
+    expect(deleted.length).toBeGreaterThan(0);
+  });
 });
 
 describe("isSafeBranchName", () => {

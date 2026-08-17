@@ -12,7 +12,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { appendEvent } from "./events";
 import { formatRecallMarkdown, recall } from "./recall";
-import { buildIndex, clearIndex, isStale, readManifest } from "./store";
+import { buildIndex, clearIndex, isStale, loadIndex, readManifest } from "./store";
 
 let tmp: string;
 const saved: Record<string, string | undefined> = {};
@@ -284,6 +284,29 @@ describe("index lifecycle", () => {
     await new Promise((resolve) => setTimeout(resolve, 12));
     writeNote("learnings/devhub/new-thing", ["# New", "Something learned today."]);
     expect(isStale()).toBe(true);
+  });
+
+  it("rebuilds on loadIndex when sources are newer than the manifest", async () => {
+    buildIndex();
+    const builtAt = readManifest()?.builtAt;
+    await new Promise((resolve) => setTimeout(resolve, 12));
+    writeNote("learnings/devhub/new-thing", ["# New", "Something learned today."]);
+    expect(isStale()).toBe(true);
+    const result = recall({ query: "Something learned today" });
+    expect(result.hits.some((h) => h.chunk.sourceId === "learnings/devhub/new-thing")).toBe(true);
+    expect(isStale()).toBe(false);
+    expect(readManifest()?.builtAt).not.toBe(builtAt);
+  });
+
+  it("does not rebuild when autoBuild is false", async () => {
+    buildIndex();
+    const builtAt = readManifest()?.builtAt;
+    await new Promise((resolve) => setTimeout(resolve, 12));
+    writeNote("learnings/devhub/new-thing", ["# New", "Something learned today."]);
+    expect(isStale()).toBe(true);
+    expect(loadIndex({ autoBuild: false })).not.toBeNull();
+    expect(isStale()).toBe(true);
+    expect(readManifest()?.builtAt).toBe(builtAt);
   });
 
   it("is safe to delete — the next query rebuilds it", () => {

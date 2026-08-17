@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Context } from "../context.ts";
 import { withDashboardErrors } from "../dashboard-client.ts";
+import { listWidgetHtml, uiResult } from "../ui.ts";
 
 interface Rollup {
   id: string;
@@ -68,7 +69,15 @@ export function registerCapabilityTools(server: McpServer, ctx: Context): void {
           "",
           changed.length ? changed.join("\n") : "No changes since the previous scan.",
         ].join("\n");
-        return { content: [{ type: "text", text }] };
+        const html = listWidgetHtml(
+          "Capability Radar",
+          `${data.snapshot.repoCount} repos`,
+          rolls.slice(0, 12).map((r) => ({
+            label: `${r.label} (${r.area})`,
+            meta: `${r.repos.length} repos`,
+          })),
+        );
+        return uiResult(text, html, "ui://devhub/capability/radar");
       }),
   );
 

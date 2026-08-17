@@ -1,10 +1,40 @@
 "use client";
 
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { ChevronDown, Trash2 } from "lucide-react";
-import { HoverTip } from "@/components/ui/HoverTip";
+import { usePathname, useRouter } from "next/navigation";
+import { ChevronDown } from "lucide-react";
+import { OneTimeShareButton } from "@/components/OneTimeShareButton";
+import {
+  ContextMenu,
+  RowMenuKebab,
+  useContextMenu,
+} from "@/components/shell/ContextMenu";
+import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
+import {
+  buildVaultFileMenuGroups,
+  buildVaultFolderMenuGroups,
+} from "@/components/vault/vaultRowMenus";
+import { useToast } from "@/lib/hooks/use-toast";
+import { toDiagramRoutePath, stripDiagramsPrefix } from "@/lib/diagram-utils";
+import { createDiagramFolder, createDiagramInFolder, deleteDiagramFolder } from "@/lib/diagram-folder-actions";
+import { ROOT_AREA_ID } from "@/lib/notes/note-areas";
+import { broadcastNoteAutosaveInvalidation } from "@/lib/notes/autosave-invalidation";
+import { getVaultClient } from "@/lib/vault/vault-client";
+import {
+  copyVaultLocation,
+  copyVaultMarkdown,
+  createVaultFolder,
+  duplicateVaultFile,
+  fileKindForRow,
+  openLinkedNoteInCursor,
+  renameVaultFolder,
+  shareVaultGist,
+  siblingRenamePath,
+  vaultFolderPath,
+  vaultIdForKind,
+  type VaultRowKind,
+} from "@/lib/vault/vault-file-actions";
 
 export interface LibraryNavItem {
   slug: string;
@@ -80,6 +110,13 @@ function writeManual(key: string, next: ManualState): void {
   window.dispatchEvent(new Event(changeEvent(key)));
 }
 
+function folderPathForGroup(kind: VaultRowKind, group: LibraryNavGroup): string {
+  if (kind === "notes" && group.id === ROOT_AREA_ID) return "";
+  return vaultFolderPath(kind, group.id);
+}
+
+type NavTarget = { type: "file"; item: LibraryNavItem } | { type: "folder"; group: LibraryNavGroup };
+
 /**
  * Grouped sidebar navigation for a content library.
  *
@@ -98,6 +135,7 @@ export function LibraryNav({
   storageKey,
   label,
   noun = "items",
+  kind = "notes",
   deletingGroup,
   onDeleteGroup,
   activeGroupId,
@@ -111,13 +149,23 @@ export function LibraryNav({
   /** Accessible name for the nav landmark. */
   label: string;
   noun?: string;
+  kind?: VaultRowKind;
   deletingGroup?: string | null;
   onDeleteGroup?: (group: LibraryNavGroup) => void;
   /** When set, wins over pathname-derived active group (e.g. diagrams `?folder=`). */
   activeGroupId?: string | null;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const prompt = usePrompt();
+  const menu = useContextMenu<NavTarget>();
+  const [oneTime, setOneTime] = useState<{ slug: string } | null>(null);
   const query = search.trim().toLowerCase();
+  const vaultId = vaultIdForKind(kind);
+  const vault = getVaultClient(vaultId);
+  const itemLabel = kind === "diagrams" ? "diagram" : vault.itemLabel;
 
   const activeGroup = useMemo(() => {
     if (activeGroupId != null && activeGroupId !== "") {
@@ -157,6 +205,222 @@ export function LibraryNav({
       .filter((group) => group.items.length > 0);
   }, [groups, query]);
 
+  const refresh = () => router.refresh();
+
+  const fileGroups = (() => {
+    if (menu.target?.type !== "file") return [];
+    const item = menu.target.item;
+    const rowKind = fileKindForRow(kind, item.slug, item.href);
+    return buildVaultFileMenuGroups({
+      itemLabel: rowKind === "diagrams" ? "diagram" : itemLabel,
+      kind: rowKind,
+      onOpen: () => router.push(item.href),
+      onOpenInCursor:
+        rowKind === "notes"
+          ? () => {
+              void openLinkedNoteInCursor(item.slug, toast).catch((err) => {
+                toast.error(err instanceof Error ? err.message : "Could not open in Cursor.");
+              });
+            }
+          : undefined,
+      cursorDisabledReason:
+        rowKind === "notes" ? undefined : "Open in Cursor is for notes linked to a repo.",
+      onCopyLocation: () => {
+        void copyVaultLocation(item.slug).then(
+          () => toast.success("Location copied"),
+          () => toast.error("Could not copy to clipboard."),
+        );
+      },
+      onCopyMarkdown: () => {
+        void copyVaultMarkdown(vaultId, item.slug).then(
+          () => toast.success("Markdown copied"),
+          (err) => toast.error(err instanceof Error ? err.message : "Could not copy markdown."),
+        );
+      },
+      onShare: () => {
+        void shareVaultGist(vaultId, item.slug).then(
+          () => toast.success("Live — link copied"),
+          (err) => toast.error(err instanceof Error ? err.message : "Could not publish."),
+        );
+      },
+      onOneTime: () => setOneTime({ slug: item.slug }),
+      onRename: () => {
+        void (async () => {
+          const name = await prompt({
+            title: `Rename ${itemLabel}`,
+            confirmLabel: "Rename",
+            input: { defaultValue: item.slug.split("/").pop() ?? item.slug },
+          });
+          const trimmed = name?.trim();
+          if (!trimmed) return;
+          try {
+            const newSlug = await vault.paths.renameFile(item.slug, trimmed);
+            toast.success("Renamed.");
+            if (pathname === item.href) {
+              router.push(
+                rowKind === "diagrams" ? toDiagramRoutePath(newSlug) : vault.paths.pageHref(newSlug),
+              );
+            }
+            refresh();
+          } catch (err) {
+            if (err instanceof Error && err.message === "unchanged") return;
+            toast.error(err instanceof Error ? err.message : "Could not rename.");
+          }
+        })();
+      },
+      onDuplicate: () => {
+        void duplicateVaultFile(vaultId, item.slug).then(
+          (next) => {
+            toast.success("Duplicated.");
+            refresh();
+            router.push(
+              rowKind === "diagrams" ? toDiagramRoutePath(next) : vault.paths.pageHref(next),
+            );
+          },
+          (err) => toast.error(err instanceof Error ? err.message : "Could not duplicate."),
+        );
+      },
+      onDelete: () => {
+        void (async () => {
+          const ok = await confirm({
+            title: `Delete ${rowKind === "diagrams" ? "diagram" : itemLabel}`,
+            message: `Delete "${item.title}"? This cannot be undone.`,
+            confirmLabel: "Delete",
+            variant: "danger",
+          });
+          if (!ok) return;
+          broadcastNoteAutosaveInvalidation(item.slug);
+          try {
+            const res = await fetch(`${vault.apiPrefix}/${vault.paths.apiPathFromSlug(item.slug)}`, {
+              method: "DELETE",
+            });
+            if (!res.ok) {
+              const data = (await res.json().catch(() => ({}))) as { error?: string };
+              throw new Error(data.error ?? res.statusText);
+            }
+            vault.paths.notifyTreeChanged();
+            if (pathname === item.href) router.push(vault.pagePrefix);
+            refresh();
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : `Could not delete ${itemLabel}.`);
+          }
+        })();
+      },
+    });
+  })();
+
+  const folderGroups = (() => {
+    if (menu.target?.type !== "folder") return [];
+    const group = menu.target.group;
+    const folderPath = folderPathForGroup(kind, group);
+    const diagramRel = kind === "diagrams" ? stripDiagramsPrefix(folderPath) : "";
+    return buildVaultFolderMenuGroups({
+      itemLabel,
+      deleting: deletingGroup === group.id,
+      onNewItem: () => {
+        if (kind === "diagrams") {
+          void createDiagramInFolder(diagramRel)
+            .then((filePath) => {
+              toast.success("Diagram created.");
+              refresh();
+              router.push(toDiagramRoutePath(filePath));
+            })
+            .catch((err) => toast.error(err instanceof Error ? err.message : "Could not create diagram."));
+          return;
+        }
+        window.dispatchEvent(
+          new CustomEvent(vault.newItemEvent, { detail: { folder: folderPath } }),
+        );
+      },
+      onNewFolder: () => {
+        void (async () => {
+          const name = await prompt({
+            title: "New folder",
+            message: folderPath
+              ? `Create a folder inside "${group.label}".`
+              : "Create a folder at the top level.",
+            confirmLabel: "Create",
+            input: { placeholder: "folder-name" },
+          });
+          const trimmed = name?.trim().replace(/\\/g, "/").split("/").pop() ?? "";
+          if (!trimmed) return;
+          try {
+            if (kind === "diagrams") {
+              await createDiagramFolder(diagramRel, trimmed);
+            } else {
+              const next = folderPath ? `${folderPath}/${trimmed}` : trimmed;
+              await createVaultFolder(vaultId, next);
+            }
+            toast.success("Folder created.");
+            refresh();
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Could not create folder.");
+          }
+        })();
+      },
+      onCopyPath: () => {
+        void copyVaultLocation(folderPath || group.id).then(
+          () => toast.success("Location copied"),
+          () => toast.error("Could not copy to clipboard."),
+        );
+      },
+      onRename: !folderPath
+        ? undefined
+        : () => {
+            void (async () => {
+              const name = await prompt({
+                title: "Rename folder",
+                confirmLabel: "Rename",
+                input: { defaultValue: group.label },
+              });
+              const trimmed = name?.trim().replace(/\\/g, "/").split("/").pop() ?? "";
+              if (!trimmed) return;
+              try {
+                await renameVaultFolder(vaultId, folderPath, siblingRenamePath(folderPath, trimmed));
+                toast.success("Renamed.");
+                refresh();
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Could not rename folder.");
+              }
+            })();
+          },
+      onDelete:
+        group.deletable && onDeleteGroup
+          ? () => onDeleteGroup(group)
+          : kind === "notes" || !folderPath
+            ? undefined
+            : () => {
+                void (async () => {
+                  const ok = await confirm({
+                    title: "Delete folder",
+                    message: `Delete folder "${group.label}" and everything inside it? This cannot be undone.`,
+                    confirmLabel: "Delete",
+                    variant: "danger",
+                  });
+                  if (!ok) return;
+                  try {
+                    if (kind === "diagrams") await deleteDiagramFolder(folderPath);
+                    else {
+                      const res = await fetch(
+                        `${vault.apiPrefix}/${vault.paths.apiPathFromSlug(folderPath)}?dir=1`,
+                        { method: "DELETE" },
+                      );
+                      if (!res.ok) {
+                        const data = (await res.json().catch(() => ({}))) as { error?: string };
+                        throw new Error(data.error ?? res.statusText);
+                      }
+                      vault.paths.notifyTreeChanged();
+                    }
+                    toast.success("Folder deleted.");
+                    refresh();
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Could not delete folder.");
+                  }
+                })();
+              },
+    });
+  })();
+
   if (filtered.length === 0) {
     // "No match" and "nothing to match against" are different failures, and
     // conflating them is how a broken content directory looked like a broken
@@ -179,7 +443,7 @@ export function LibraryNav({
           : (manual[group.id] ?? (group.id === activeGroup && !group.secondary));
         return (
           <div key={group.id} className="lib-nav-group">
-            <div className="lib-nav-heading-row">
+            <div className="lib-nav-heading-row group" {...menu.bindRow({ type: "folder", group })}>
               <button
                 type="button"
                 className="lib-nav-toggle"
@@ -193,37 +457,32 @@ export function LibraryNav({
                 href={group.href ?? `${basePath}/${group.id}`}
                 className="lib-nav-heading"
                 data-active={group.id === activeGroup}
+                onContextMenu={(event) => event.preventDefault()}
               >
                 {group.label}
                 <span className="lib-nav-count">{group.items.length}</span>
               </Link>
-              {group.deletable && onDeleteGroup ? (
-                <HoverTip
-                  label={deletingGroup === group.id ? "Deleting…" : `Delete folder ${group.label}`}
-                >
-                  <button
-                    type="button"
-                    className="lib-nav-delete reveal-on-hover"
-                    disabled={deletingGroup === group.id}
-                    onClick={() => onDeleteGroup(group)}
-                  >
-                    <Trash2 size={12} strokeWidth={2.5} aria-hidden />
-                    <span className="sr-only">Delete folder {group.label}</span>
-                  </button>
-                </HoverTip>
-              ) : null}
+              <RowMenuKebab
+                label={`Actions for ${group.label}`}
+                onOpen={(x, y) => menu.openAtPoint(x, y, { type: "folder", group })}
+              />
             </div>
             {open ? (
               <ul className="lib-nav-list">
                 {group.items.map((item) => (
-                  <li key={item.slug}>
+                  <li key={item.slug} className="lib-nav-item group" {...menu.bindRow({ type: "file", item })}>
                     <Link
                       href={item.href}
                       className="lib-nav-link"
                       data-active={pathname === item.href}
+                      onContextMenu={(event) => event.preventDefault()}
                     >
                       {item.title}
                     </Link>
+                    <RowMenuKebab
+                      label={`Actions for ${item.title}`}
+                      onOpen={(x, y) => menu.openAtPoint(x, y, { type: "file", item })}
+                    />
                   </li>
                 ))}
               </ul>
@@ -231,6 +490,30 @@ export function LibraryNav({
           </div>
         );
       })}
+      <ContextMenu
+        open={menu.target !== null}
+        position={menu.position}
+        groups={menu.target?.type === "file" ? fileGroups : folderGroups}
+        onClose={menu.close}
+        label={
+          menu.target?.type === "file"
+            ? `${menu.target.item.title} actions`
+            : menu.target
+              ? `${menu.target.group.label} actions`
+              : "Actions"
+        }
+      />
+      {oneTime ? (
+        <OneTimeShareButton
+          vaultId={vaultId}
+          path={oneTime.slug}
+          hideTrigger
+          open
+          onOpenChange={(open) => {
+            if (!open) setOneTime(null);
+          }}
+        />
+      ) : null}
     </nav>
   );
 }

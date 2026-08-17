@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withErrorHandler } from "@/lib/api-utils";
-import { buildGraph, neighbours } from "@/lib/recall/graph";
+import { buildGraph, capGraph, neighbours } from "@/lib/recall/graph";
 import { loadIndex } from "@/lib/recall/store";
 
 export const dynamic = "force-dynamic";
@@ -32,10 +32,11 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     });
   }
 
+  const capped = capGraph(graph);
   return NextResponse.json({
-    nodes: graph.nodes.slice(0, 300),
-    edges: graph.edges,
-    totalNodes: graph.nodes.length,
+    nodes: capped.nodes,
+    edges: capped.edges,
+    totalNodes: capped.totalNodes,
     indexBuiltAt: index.manifest.builtAt,
   });
 }, "recall.graph");

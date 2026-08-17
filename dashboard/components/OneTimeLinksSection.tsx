@@ -2,13 +2,23 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Flame, Copy, Trash2, Lock, Unlock } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Flame, ClipboardCopy, Trash2, Lock, Unlock, FileText } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { useConfirm } from "@/components/shell/ConfirmDialog";
+import {
+  ContextMenu,
+  RowMenuKebab,
+  SectionMenuHint,
+  useContextMenu,
+  type ContextMenuGroup,
+} from "@/components/shell/ContextMenu";
 import { getVaultClient } from "@/lib/vault/vault-client";
 import type { OneTimeRecord } from "@/lib/share/share-public";
+
+const icon = { size: 12 as const };
 
 /** "in 4 hours" / "in 3 days" — coarse on purpose; these are short-lived. */
 function remainingLabel(record: OneTimeRecord, now = Date.now()): string {
@@ -20,12 +30,114 @@ function remainingLabel(record: OneTimeRecord, now = Date.now()): string {
   return `Expires in ${days} day${days === 1 ? "" : "s"}`;
 }
 
+function OneTimeLinkRow({
+  record,
+  busy,
+  onRevoke,
+}: {
+  record: OneTimeRecord;
+  busy: boolean;
+  onRevoke: () => void;
+}) {
+  const router = useRouter();
+  const toast = useToast();
+  const menu = useContextMenu<"row">();
+  const href = getVaultClient(record.vault).paths.pageHref(record.path);
+  const groups: ContextMenuGroup[] = [
+    {
+      id: "open",
+      items: [
+        {
+          id: "open",
+          label: "Open",
+          icon: <FileText {...icon} aria-hidden />,
+          onSelect: () => router.push(href),
+        },
+      ],
+    },
+    {
+      id: "file",
+      items: [
+        {
+          id: "copy",
+          label: "Copy link",
+          icon: <ClipboardCopy {...icon} aria-hidden />,
+          onSelect: () => {
+            void copyTextToClipboard(record.url).then(
+              () => toast.success("Link copied."),
+              () => toast.error("Could not copy link."),
+            );
+          },
+        },
+      ],
+    },
+    {
+      id: "danger",
+      items: [
+        {
+          id: "revoke",
+          label: busy ? "Revoking…" : "Revoke",
+          icon: <Trash2 {...icon} aria-hidden />,
+          danger: true,
+          disabled: busy,
+          onSelect: onRevoke,
+        },
+      ],
+    },
+  ];
+
+  return (
+    <div className="card group flex items-center gap-3" style={{ padding: "10px 12px" }} {...menu.bindRow("row")}>
+      <Flame size={15} style={{ color: "var(--warning)", flexShrink: 0 }} aria-hidden />
+      <div className="min-w-0 flex-1">
+        <Link
+          href={href}
+          className="text-sm font-medium hover:underline no-underline"
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          {record.title}
+        </Link>
+        <div className="text-xs truncate text-text-subtle">
+          {record.vault} · {record.path}
+        </div>
+      </div>
+
+      <span
+        className="badge badge-muted text-xs shrink-0 flex items-center gap-1"
+        title={record.hasPassword ? "Password protected" : "No password — the link alone opens it"}
+      >
+        {record.hasPassword ? <Lock size={11} aria-hidden /> : <Unlock size={11} aria-hidden />}
+        {record.hasPassword ? "Password" : "Link only"}
+      </span>
+
+      <span
+        className="badge badge-muted text-xs shrink-0"
+        title={`Created ${new Date(record.createdAt).toLocaleString()}`}
+      >
+        {remainingLabel(record)}
+      </span>
+
+      <RowMenuKebab
+        label={`Actions for ${record.title}`}
+        onOpen={(x, y) => menu.openAtPoint(x, y, "row")}
+      />
+      <ContextMenu
+        open={menu.target !== null}
+        position={menu.position}
+        groups={groups}
+        onClose={menu.close}
+        label={`${record.title} actions`}
+      />
+    </div>
+  );
+}
+
 /**
  * One-time links on `/shared`.
  *
- * Note what is deliberately absent: no Stale badge, no Update button, no "open"
- * link. There is nothing to update — the paste is immutable — and opening it
- * from here would burn the recipient's only read.
+ * Note what is deliberately absent: no Stale badge, no Update button, no "open
+ * paste" action. There is nothing to update — the paste is immutable — and
+ * opening it from here would burn the recipient's only read.
  */
 export function OneTimeLinksSection() {
   const toast = useToast();
@@ -82,7 +194,10 @@ export function OneTimeLinksSection() {
     <div className="mt-8">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <div className="text-sm font-medium">One-time links</div>
+          <div className="text-sm font-medium flex items-center gap-2">
+            One-time links
+            <SectionMenuHint />
+          </div>
           <span className="badge badge-muted">{shares.length}</span>
         </div>
         <button
@@ -103,59 +218,12 @@ export function OneTimeLinksSection() {
 
       <div className="space-y-2">
         {shares.map((record) => (
-          <div key={record.id} className="card flex items-center gap-3" style={{ padding: "10px 12px" }}>
-            <Flame size={15} style={{ color: "var(--warning)", flexShrink: 0 }} aria-hidden />
-            <div className="min-w-0 flex-1">
-              <Link
-                href={getVaultClient(record.vault).paths.pageHref(record.path)}
-                className="text-sm font-medium hover:underline no-underline"
-              >
-                {record.title}
-              </Link>
-              <div className="text-xs truncate text-text-subtle">
-                {record.vault} · {record.path}
-              </div>
-            </div>
-
-            <span
-              className="badge badge-muted text-xs shrink-0 flex items-center gap-1"
-              title={record.hasPassword ? "Password protected" : "No password — the link alone opens it"}
-            >
-              {record.hasPassword ? <Lock size={11} aria-hidden /> : <Unlock size={11} aria-hidden />}
-              {record.hasPassword ? "Password" : "Link only"}
-            </span>
-
-            <span
-              className="badge badge-muted text-xs shrink-0"
-              title={`Created ${new Date(record.createdAt).toLocaleString()}`}
-            >
-              {remainingLabel(record)}
-            </span>
-
-            <button
-              type="button"
-              onClick={() => {
-                void copyTextToClipboard(record.url).then(
-                  () => toast.success("Link copied."),
-                  () => toast.error("Could not copy link."),
-                );
-              }}
-              className="btn btn-ghost text-xs flex items-center justify-center px-1.5 shrink-0"
-              aria-label="Copy link"
-            >
-              <Copy size={13} aria-hidden />
-            </button>
-
-            <button
-              type="button"
-              disabled={busyId === record.id}
-              onClick={() => revoke(record)}
-              className="btn btn-danger-ghost text-xs flex items-center justify-center px-1.5 shrink-0"
-              aria-label="Revoke link"
-            >
-              <Trash2 size={13} aria-hidden />
-            </button>
-          </div>
+          <OneTimeLinkRow
+            key={record.id}
+            record={record}
+            busy={busyId === record.id}
+            onRevoke={() => void revoke(record)}
+          />
         ))}
       </div>
     </div>

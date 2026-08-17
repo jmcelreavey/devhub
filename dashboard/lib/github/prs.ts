@@ -25,6 +25,8 @@ export interface GithubPrRow {
   updatedAt?: string;
   /** PR author from the Search API `user` field. */
   author?: GithubPrAuthor;
+  /** Users currently requested to review — authored rows only, when known. */
+  requestedReviewers?: GithubPrAuthor[];
 }
 
 export interface RecentlyReviewedPr extends GithubPrRow {
@@ -180,4 +182,20 @@ export async function fetchRecentlyReviewedPrs(
 
   out.sort((a, b) => b.reviewedAt.localeCompare(a.reviewedAt));
   return dedupeBy(out, "url").slice(0, MAX_RECENTLY_REVIEWED) as RecentlyReviewedPr[];
+}
+
+let listCache: { data: GithubPrsApiPayload; ts: number } | null = null;
+const LIST_CACHE_TTL_MS = 2 * 60 * 1000;
+
+export function readGithubPrsListCache(): GithubPrsApiPayload | null {
+  if (!listCache || Date.now() - listCache.ts >= LIST_CACHE_TTL_MS) return null;
+  return listCache.data;
+}
+
+export function writeGithubPrsListCache(data: GithubPrsApiPayload): void {
+  listCache = { data, ts: Date.now() };
+}
+
+export function invalidateGithubPrsCache(): void {
+  listCache = null;
 }

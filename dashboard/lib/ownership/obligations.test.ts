@@ -85,6 +85,18 @@ describe("attention weighting", () => {
     expect(summary.reasons[0]).toBe("1 pull request with nobody looking");
   });
 
+  it("ranks a review requested of you above unattended inbound", () => {
+    const summary = attentionSummary(obligations(), [
+      pr({ review: { mineRequested: true, reviewedBy: [], nobodyLooking: false, decision: null } }),
+      pr({
+        number: 2,
+        review: { mineRequested: false, reviewedBy: [], nobodyLooking: true, decision: null },
+      }),
+    ]);
+    expect(summary.reasons[0]).toBe("1 review requested of you");
+    expect(summary.reasons[1]).toBe("1 pull request with nobody looking");
+  });
+
   it("ignores drafts, which are not waiting on anyone", () => {
     const summary = attentionSummary(
       obligations(),
@@ -105,5 +117,15 @@ describe("attention weighting", () => {
     });
     const summary = attentionSummary(obligations(), [unattendedAndStale]);
     expect(summary.reasons).toEqual(["1 pull request with nobody looking"]);
+  });
+
+  it("does not also count a review-requested PR as stale", () => {
+    const summary = attentionSummary(obligations(), [
+      pr({
+        stale: true,
+        review: { mineRequested: true, reviewedBy: [], nobodyLooking: false, decision: null },
+      }),
+    ]);
+    expect(summary.reasons).toEqual(["1 review requested of you"]);
   });
 });

@@ -81,7 +81,7 @@ function AdvisoryRow({
         <AcknowledgeButton
           kind="release"
           id={a.id}
-          watermark={a.repoCount}
+          watermark={a.behindRepos.length}
           acknowledged={acknowledged}
           onDone={onChange}
         />

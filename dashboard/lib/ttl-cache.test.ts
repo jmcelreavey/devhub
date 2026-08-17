@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { ttlCache, ttlCacheByKey } from "./ttl-cache";
+import { ttlCache, ttlCacheByKey, ttlCached } from "./ttl-cache";
 import type { TtlCached } from "./ttl-cache";
 
 describe("ttlCache", () => {
@@ -98,6 +98,21 @@ describe("ttlCacheByKey", () => {
     pendingA.resolve("value-a");
     pendingB.resolve("value-b");
     await expect(Promise.all([a1, a2, b1])).resolves.toEqual(["value-a", "value-a", "value-b"]);
+  });
+});
+
+describe("ttlCached", () => {
+  it("evicts a failed promise so the next call retries", async () => {
+    const cache = new Map();
+    let attempts = 0;
+    const load = async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("transient");
+      return "ok";
+    };
+    await expect(ttlCached(cache, "k", 60_000, load)).rejects.toThrow("transient");
+    expect(await ttlCached(cache, "k", 60_000, load)).toBe("ok");
+    expect(attempts).toBe(2);
   });
 });
 

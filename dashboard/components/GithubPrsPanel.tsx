@@ -8,53 +8,31 @@ import type { GithubPrsApiPayload, GithubPrRow, RecentlyReviewedPr } from "@/lib
 import { HUB_STRIP_ICON_PX, hubStripSetupLinkClassName, hubStripSetupLinkStyle } from "@/lib/hub-strip";
 import { HubSignalStrip, HubStripHeading, hubStripInlineCodeClassName } from "@/components/shell/HubSignalStrip";
 import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
-import { PrRowActions, type PrRowKind } from "@/components/PrRowActions";
+import { PrRow, type PrRowKind } from "@/components/PrRow";
+import { SectionMenuHint } from "@/components/shell/ContextMenu";
 import { ConditionalList } from "@/components/ui/EmptyStateRow";
 import { useGridSize } from "@/lib/hooks/use-grid-size";
-import { PersonChip } from "@/components/PersonChip";
 
 const EMPTY_PR_ROWS: GithubPrRow[] = [];
 const EMPTY_RECENTLY_REVIEWED: RecentlyReviewedPr[] = [];
 
-function PrRowLink({ row, kind }: { row: GithubPrRow; kind?: PrRowKind }) {
+function PrRowLink({ row, kind }: { row: GithubPrRow; kind: PrRowKind }) {
   return (
     <li className="min-w-0">
-      <div className="flex items-center gap-1 rounded px-2 py-1.5 transition-colors hover:bg-[var(--bg-muted)]">
-        <a
-          href={row.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 no-underline text-text"
-        >
-          <span className="break-words text-sm font-medium leading-snug">{row.title}</span>
-          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span className="font-mono text-[11px] leading-tight text-text-muted">
-              {row.repo}#{row.number}
-            </span>
-            {row.author ? (
-              <PersonChip
-                name={row.author.login}
-                email={`${row.author.login}@users.noreply.github.com`}
-                avatarUrl={row.author.avatarUrl}
-                size={14}
-              />
-            ) : null}
-          </span>
-        </a>
-        {kind && <PrRowActions row={row} kind={kind} size="sm" />}
-      </div>
+      <PrRow row={row} kind={kind} density="compact" />
     </li>
   );
 }
 
-function SubList({ title, rows, kind }: { title: string; rows: GithubPrRow[]; kind?: PrRowKind }) {
+function SubList({ title, rows, kind }: { title: string; rows: GithubPrRow[]; kind: PrRowKind }) {
   return (
     <ConditionalList
       items={rows}
       renderList={(items) => (
         <div className="min-w-0 space-y-1">
-          <h3 className="text-[11px] font-semibold tracking-tight text-text-muted">
-            {title}
+          <h3 className="flex items-baseline justify-between gap-2 text-[11px] font-semibold tracking-tight text-text-muted">
+            <span>{title}</span>
+            <SectionMenuHint />
           </h3>
           <ul className="m-0 list-none space-y-0.5 p-0">
             {items.map((r) => (

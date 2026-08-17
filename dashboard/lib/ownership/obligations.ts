@@ -12,6 +12,7 @@ import { statusTone } from "@/lib/status";
  */
 export const ATTENTION_WEIGHTS = {
   failingCi: 10,
+  reviewRequested: 4,
   unattendedPr: 3,
   stalePr: 2,
   botPr: 0.5,
@@ -37,12 +38,20 @@ function plural(count: number, one: string, many = `${one}s`): string {
  * failing" is.
  */
 export function attentionSummary(obligations: RepoObligations, prs: RepoPrRadarRow[]): AttentionSummary {
-  const unattended = prs.filter((pr) => pr.review.nobodyLooking && !pr.isDraft).length;
-  const stalePrs = prs.filter((pr) => pr.stale && !pr.review.nobodyLooking && !pr.isDraft).length;
+  const live = prs.filter((pr) => !pr.isDraft);
+  const reviewRequested = live.filter((pr) => pr.review.mineRequested).length;
+  const unattended = live.filter((pr) => pr.review.nobodyLooking).length;
+  const stalePrs = live.filter(
+    (pr) => pr.stale && !pr.review.nobodyLooking && !pr.review.mineRequested,
+  ).length;
   const entries: { score: number; reason: string }[] = [
     {
       score: obligations.defaultBranchCi === "failing" ? ATTENTION_WEIGHTS.failingCi : 0,
       reason: "default branch CI is failing",
+    },
+    {
+      score: reviewRequested * ATTENTION_WEIGHTS.reviewRequested,
+      reason: `${plural(reviewRequested, "review requested of you")}`,
     },
     {
       score: unattended * ATTENTION_WEIGHTS.unattendedPr,

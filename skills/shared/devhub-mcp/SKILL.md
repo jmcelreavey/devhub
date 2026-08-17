@@ -30,6 +30,7 @@ errors. Tool **descriptions** are the source of truth for args; this skill carri
 (e.g. `learnings/engineering`) are intentionally out of list/search but reachable via
 `notes_read`/`notes_write`/`notes_append`/`notes_delete` with an explicit path.
 `notes_create_meeting` scaffolds `meetings/YYYY-MM-DD-<slug>` (same as the Today strip).
+`notes_create_pr` scaffolds `pr-reviews/<repo>-<n>` with PR + repo `## Links` EntityRefs; `notes_write` on `pr-reviews/` upserts the same links.
 `notes_write_asset` writes image bytes (jpg, png, gif, webp); reference them as
 `![caption](garden/project/assets/photo-1.jpg)`. Toggles: `::toggle <title>` … `::end-toggle`.
 
@@ -69,7 +70,9 @@ the latest audit as markdown; run new audits from the Repos page **DX Audit** bu
 - **Scripts/sync** — `scripts_list`, then `scripts_run` (mutating scripts need `confirm:true`;
   returns a `runId`), `scripts_run_status`, `scripts_history`. MCP can't stream — poll.
 - **Briefing/calendar** — `briefing_get`, `calendar_week`, `calendar_list`.
-- **Work** — `prs_list`, `jira_tickets`, `jira_ticket_get`, `jira_ticket_transition`
+- **Work** — `prs_list`, `prs_request_reviewers` (lists suggested, then requests with
+  `confirm`), `prs_open_in_cursor` (stash + `gh pr checkout` + launch Cursor; `confirm`),
+  `jira_tickets`, `jira_ticket_get`, `jira_ticket_transition`
   (lists transitions, then applies with `confirm`), `standup_markdown`, `tasks_weekly`.
 - **On-call** — `datadog_oncall`, `datadog_recent_alerts`, `datadog_investigate`
   (starts an OpenCode investigation session).

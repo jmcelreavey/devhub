@@ -4,6 +4,7 @@ import { getNotesDir } from "@/lib/content/dirs";
 import { DIAGRAMS_DIR, stripJsonExtension, toDiagramRoutePath } from "@/lib/diagram-utils";
 import {
   DIAGRAM_ROOT_AREA_ID,
+  groupDiagramsByArea,
   type DiagramAreaGroup,
   type DiagramIndex,
   type DiagramSummary,
@@ -76,14 +77,6 @@ export function getDiagramIndex(): DiagramIndex {
     .map(({ rel, mtime }) => toSummary(rel, mtime))
     .sort((a, b) => a.path.localeCompare(b.path));
 
-  const byArea = new Map<string, DiagramSummary[]>();
-  for (const d of diagrams) {
-    const key = d.area || DIAGRAM_ROOT_AREA_ID;
-    const list = byArea.get(key) ?? [];
-    list.push(d);
-    byArea.set(key, list);
-  }
-
   let areaIds: string[] = [];
   try {
     areaIds = fs
@@ -92,28 +85,13 @@ export function getDiagramIndex(): DiagramIndex {
       .map((e) => e.name)
       .sort((a, b) => a.localeCompare(b));
   } catch {
-    areaIds = [...byArea.keys()].filter((id) => id !== DIAGRAM_ROOT_AREA_ID).sort();
+    areaIds = [...new Set(diagrams.map((d) => d.area).filter((id) => id !== ""))].sort();
   }
 
-  const areas: DiagramAreaGroup[] = areaIds.map((id) => {
-    const list = (byArea.get(id) ?? []).slice().sort((a, b) => b.modified - a.modified);
-    return {
-      id,
-      label: id,
-      diagrams: list,
-      folderCount: countDirectFolders(absRoot, id),
-    };
-  });
-
-  const rootDiagrams = byArea.get(DIAGRAM_ROOT_AREA_ID);
-  if (rootDiagrams && rootDiagrams.length > 0) {
-    areas.push({
-      id: DIAGRAM_ROOT_AREA_ID,
-      label: "Top level",
-      diagrams: rootDiagrams.slice().sort((a, b) => b.modified - a.modified),
-      folderCount: 0,
-    });
-  }
+  const areas = groupDiagramsByArea(
+    diagrams,
+    areaIds.map((id) => ({ id, folderCount: countDirectFolders(absRoot, id) })),
+  );
 
   return { diagrams, areas, total: diagrams.length };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildGraph, neighbours, relatedRefsForHits } from "./graph";
+import { buildGraph, capGraph, neighbours, relatedRefsForHits } from "./graph";
 import type { RecallChunk } from "./types";
 
 const chunk = (id: string, refs: string[], ts = Date.now()): RecallChunk => ({
@@ -108,5 +108,22 @@ describe("relatedRefsForHits", () => {
 
   it("handles an empty hit list", () => {
     expect(relatedRefsForHits([])).toEqual([]);
+  });
+});
+
+describe("capGraph", () => {
+  it("drops edges that point at nodes outside the slice", () => {
+    const chunks = Array.from({ length: 5 }, (_, i) =>
+      chunk(`n${i}`, [`jira:T-${i}`, `jira:T-${i + 1}`]),
+    );
+    const graph = buildGraph(chunks);
+    const capped = capGraph(graph, 2);
+    expect(capped.nodes).toHaveLength(2);
+    expect(capped.totalNodes).toBe(graph.nodes.length);
+    const keep = new Set(capped.nodes.map((n) => n.key));
+    for (const edge of capped.edges) {
+      expect(keep.has(edge.from)).toBe(true);
+      expect(keep.has(edge.to)).toBe(true);
+    }
   });
 });

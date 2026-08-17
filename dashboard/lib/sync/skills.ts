@@ -17,8 +17,11 @@ import {
   buildMergedSkillCatalog,
   catalogOriginCounts,
   filterSkillCatalog,
+  vendorCatalogEntries,
   type SkillCatalogEntry,
 } from "@/lib/skill-catalog";
+import { formatProvenanceProblems, validateVendorProvenance } from "@/lib/skills/provenance";
+import { auditVendorSkillDir, formatVendorFindings } from "@/lib/skills/vendor-audit";
 import { devhubSharedSkillsDir, SKILL_MD } from "@/lib/skills/shared";
 import { copyTreeSync, safeRemovePath } from "@/lib/server-utils";
 
@@ -44,7 +47,9 @@ export const TOOL_DIRS: Record<string, string> = {
   "opencode-config": ".config/opencode/skills",
   "opencode-config-single": ".config/opencode/skill",
   cursor: ".cursor/skills",
-  "cursor-skills-cursor": ".cursor/skills-cursor",
+  // Agent Skills spec user root. Cursor Customize → Skills lists this, not skills-cursor
+  // (that folder is Cursor's internal builtins and must not be a sync target).
+  agents: ".agents/skills",
   "ai-skills": ".ai-skills",
   "config-ai": ".config/ai/skills",
 };
@@ -137,6 +142,36 @@ export function copySkillForSync(entry: SkillCatalogEntry, targetDir: string): v
   fs.writeFileSync(skillMd, rewriteAiToolsSkillFrontmatterName(content, entry.name), "utf-8");
 }
 
+function originSyncTag(origin: SkillCatalogEntry["origin"]): string {
+  if (origin === "ai-tools" || origin === "vendor") return origin;
+  if (origin.startsWith("plugin:")) return "plugin";
+  return "devhub";
+}
+
+function blockedVendorSkillNames(
+  catalog: SkillCatalogEntry[],
+  emit: (line: string) => void,
+): Set<string> {
+  const vendor = vendorCatalogEntries(catalog);
+  const blocked = new Set<string>();
+  const provenanceProblems = validateVendorProvenance(vendor);
+  if (provenanceProblems.length > 0) {
+    emit(formatProvenanceProblems(provenanceProblems));
+    for (const problem of provenanceProblems) blocked.add(problem.skill);
+  }
+  const findings = vendor.flatMap((entry) =>
+    auditVendorSkillDir(entry.dir, path.dirname(entry.dir)),
+  );
+  if (findings.length > 0) {
+    emit(formatVendorFindings(findings));
+    for (const finding of findings) {
+      const skill = finding.file.split(/[\\/]/)[0];
+      if (skill) blocked.add(skill);
+    }
+  }
+  return blocked;
+}
+
 export async function syncSkills(opts: SyncSkillsOptions): Promise<number> {
   const { emit, repoRoot } = opts;
   const devhubSkillsDir = devhubSharedSkillsDir(/*turbopackIgnore: true*/ repoRoot);
@@ -155,10 +190,11 @@ export async function syncSkills(opts: SyncSkillsOptions): Promise<number> {
 
   const fullCatalog = buildMergedSkillCatalog(repoRoot);
   const excluded = new Set((opts.excludeSkills ?? []).map((s) => s.trim()).filter(Boolean));
-  const catalog = filterSkillCatalog(fullCatalog, opts);
-  const pruneKeepNames = filterSkillCatalog(fullCatalog, { excludeSkills: opts.excludeSkills }).map(
-    (e) => e.name,
-  );
+  const blocked = blockedVendorSkillNames(filterSkillCatalog(fullCatalog, opts), emit);
+  const catalog = filterSkillCatalog(fullCatalog, opts).filter((entry) => !blocked.has(entry.name));
+  const pruneKeepNames = filterSkillCatalog(fullCatalog, { excludeSkills: opts.excludeSkills })
+    .filter((entry) => !blocked.has(entry.name))
+    .map((e) => e.name);
 
   const home = os.homedir();
   let toolEntries = Object.entries(TOOL_DIRS).map(
@@ -172,14 +208,16 @@ export async function syncSkills(opts: SyncSkillsOptions): Promise<number> {
     toolEntries = toolEntries.filter(([t]) => t === opts.tool);
   }
 
-  const { devhub: devhubCount, aiTools: upstreamCount, plugins: pluginCount } =
+  const { devhub: devhubCount, vendor: vendorCount, aiTools: upstreamCount, plugins: pluginCount } =
     catalogOriginCounts(catalog);
   if (excluded.size > 0) {
     emit(`Excluding from sync/prune: ${[...excluded].sort().join(", ")}`);
   }
-  const pluginPart = pluginCount > 0 ? `, ${pluginCount} plugin` : "";
+  const originParts = [`${devhubCount} DevHub`, `${upstreamCount} ai-tools`];
+  if (vendorCount > 0) originParts.push(`${vendorCount} vendor`);
+  if (pluginCount > 0) originParts.push(`${pluginCount} plugin`);
   emit(
-    `Syncing ${catalog.length} skill(s) (${devhubCount} DevHub, ${upstreamCount} ai-tools${pluginPart}) to ${toolEntries.length} target(s)...`,
+    `Syncing ${catalog.length} skill(s) (${originParts.join(", ")}) to ${toolEntries.length} target(s)...`,
   );
   if (opts.dryRun) emit("(DRY RUN — no changes will be made)");
 
@@ -189,7 +227,7 @@ export async function syncSkills(opts: SyncSkillsOptions): Promise<number> {
 
     for (const entry of catalog) {
       const dst = path.join(targetRoot, entry.name);
-      const tag = entry.origin === "ai-tools" ? "ai-tools" : "devhub";
+      const tag = originSyncTag(entry.origin);
       if (opts.dryRun) {
         emit(`  WOULD [${tag}]: ${entry.name} -> ${dst}`);
         syncedTotal++;
@@ -226,7 +264,7 @@ export async function syncSkills(opts: SyncSkillsOptions): Promise<number> {
   }
 
   emit(`Done. ${syncedTotal} skill(s) synced.`);
-  return 0;
+  return blocked.size > 0 ? 1 : 0;
 }
 
 export interface VerifySyncOptions {

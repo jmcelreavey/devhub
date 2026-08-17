@@ -2,7 +2,7 @@ import { PLUGIN_NAV_ITEMS, PLUGIN_SECTION_TABS } from "./plugin-nav.generated";
 
 export type NavGroup = "workspace" | "library" | "bi" | "system";
 
-export type NavGate = "always" | "calendar" | "github" | "jira" | "datadog" | "bi" | "chamber" | "opencode" | "claude";
+export type NavGate = "always" | "calendar" | "github" | "jira" | "datadog" | "bi" | "chamber" | "opencode" | "claude" | "cursor";
 
 export interface NavItem {
   href: string;
@@ -94,6 +94,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/chamber", label: "Chamber", icon: "chamber", group: "system", gate: "chamber" },
   { href: "/opencode", label: "OpenCode", icon: "opencode", group: "system", gate: "opencode" },
   { href: "/claude", label: "Claude", icon: "claude", group: "system", gate: "claude", desktopOnly: true },
+  { href: "/cursor", label: "Cursor", icon: "cursor", group: "system", gate: "cursor", desktopOnly: true },
 ];
 
 /**
@@ -177,6 +178,7 @@ export interface SetupGateStatus {
   chamber?: boolean;
   opencode?: boolean;
   claude?: boolean;
+  cursor?: boolean;
 }
 
 export function gateAllows(gate: NavGate | undefined, setup: SetupGateStatus | null): boolean {

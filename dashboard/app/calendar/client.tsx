@@ -2,15 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useState } from "react";
-import { Calendar, ChevronDown, ChevronUp, MapPin, RefreshCw, Settings2, Video } from "lucide-react";
+import { Calendar, ChevronDown, ChevronUp, RefreshCw, Settings2 } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import type { CalendarEvent, GoogleCalendarInfo } from "@/lib/google-calendar";
-import { CreateMeetingNoteButton } from "@/components/CreateMeetingNoteButton";
-import { EntityLinkChips } from "@/components/EntityLinkChips";
-import { formatTime, todayISO } from "@/lib/utils";
+import { CalendarEventRow } from "@/components/briefing/CalendarEventRow";
+import { todayISO } from "@/lib/utils";
 import { EmptyState, FetchError, PageHeader, SkeletonRows } from "@/components";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
-import { PersonChip } from "@/components/PersonChip";
 
 function isToday(dateStr: string): boolean {
   return dateStr === todayISO();
@@ -249,83 +247,13 @@ export default function CalendarPage() {
                 </p>
               )}
               {days[dateStr].map((e) => (
-                <div
+                <CalendarEventRow
                   key={e.id}
-                  className="flex items-start gap-3 py-2 text-sm"
-                  style={{ borderTop: "1px solid var(--border-muted)" }}
-                >
-                  <div
-                    className="shrink-0 text-xs font-mono"
-                    style={{ color: "var(--text-subtle)", minWidth: "50px" }}
-                  >
-                    {e.isAllDay ? (
-                      "All day"
-                    ) : (
-                      <>
-                        {formatTime(e.start)}
-                        <br />
-                        <span className="text-text-subtle">{formatTime(e.end)}</span>
-                      </>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium break-words leading-snug text-text">
-                      {e.title}
-                    </div>
-                    {e.organizer?.displayName || e.organizer?.email ? (
-                      <div className="mt-0.5">
-                        <PersonChip
-                          name={e.organizer.displayName || e.organizer.email || ""}
-                          email={e.organizer.email}
-                          size={16}
-                          className="max-w-[14rem]"
-                        />
-                      </div>
-                    ) : null}
-                    {multiCalendar && e.calendarName ? (
-                      <div className="text-xs flex items-center gap-1 mt-0.5 text-text-subtle">
-                        <span
-                          className="inline-block h-2 w-2 rounded-[var(--radius-sm)] shrink-0"
-                          style={{ background: e.calendarColor ?? "var(--accent)" }}
-                          aria-hidden
-                        />
-                        {e.calendarName}
-                      </div>
-                    ) : null}
-                    {e.location && (
-                      <div
-                        className="text-xs flex items-center gap-1 mt-0.5 text-text-subtle"
-                      >
-                        <MapPin size={10} aria-hidden /> {e.location}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1 self-start">
-                    <div className="flex items-center gap-1">
-                      {e.conferenceUrl && (
-                        <a
-                          href={e.conferenceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-ghost"
-                          style={{ fontSize: "11px", padding: "3px 6px" }}
-                          aria-label={`Join ${e.title}`}
-                        >
-                          <Video size={11} aria-hidden /> Join
-                        </a>
-                      )}
-                      <CreateMeetingNoteButton event={e} />
-                    </div>
-                    <EntityLinkChips
-                      kind="calendar"
-                      id={e.id}
-                      date={(e.start || "").slice(0, 10)}
-                      label={e.title}
-                      meetingTitle={e.title}
-                      href={e.htmlLink}
-                    />
-                  </div>
-                </div>
+                  event={e}
+                  density="comfortable"
+                  showChips
+                  showCalendarName={multiCalendar}
+                />
               ))}
             </div>
           </div>

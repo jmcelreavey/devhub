@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, ChevronRight, NotebookPen, PenTool } from "lucide-react";
 import { DocIcon } from "@/components/docs/doc-icons";
+import { NoteListRow } from "@/components/notes/NoteListRow";
+import { SectionMenuHint } from "@/components/shell/ContextMenu";
 import type { NoteAreaMeta } from "@/lib/notes/note-areas";
 import type { NoteSummary } from "@/lib/notes/note-index";
 
@@ -48,13 +50,14 @@ export function NotesAreaPage({
               <h1 className="lib-hero-title">{meta.label}</h1>
               {meta.description ? <p className="lib-hero-sub">{meta.description}</p> : null}
             </div>
+            <SectionMenuHint className="ml-auto mt-1 shrink-0" />
           </div>
         </header>
 
         <ul className="lib-section-list">
           {notes.map((note) => (
             <li key={note.slug}>
-              <Link href={note.href} className="lib-section-row">
+              <NoteListRow note={note} className="lib-section-row">
                 {note.isDiagram ? (
                   <PenTool size={14} className="lib-card-icon" aria-hidden />
                 ) : (
@@ -70,7 +73,7 @@ export function NotesAreaPage({
                   {DATE_FORMAT.format(new Date(note.modified))}
                 </span>
                 <ChevronRight size={14} className="text-text-subtle shrink-0" aria-hidden />
-              </Link>
+              </NoteListRow>
             </li>
           ))}
         </ul>

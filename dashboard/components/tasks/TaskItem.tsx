@@ -8,7 +8,8 @@
  * row is the piece other pages reach for on its own - /tasks renders TaskItem
  * without the list around it - so it earns its own module.
  */
-import { useState, useEffect, useRef, type HTMLAttributes, type ReactNode } from "react";
+import { useState, useEffect, useRef, type HTMLAttributes } from "react";
+import { useRouter } from "next/navigation";
 import { type Task } from "@/lib/tasks/types";
 import { renderTaskTextContent } from "@/components/tasks/TaskText";
 import { stripLinkedJiraKeyFromText } from "@/lib/tasks/task-text";
@@ -26,6 +27,8 @@ import {
   Pause,
   GripVertical,
   Ticket,
+  FileText,
+  Link2,
 } from "lucide-react";
 import { JiraKeyChip } from "@/components/jira/JiraKeyChip";
 import { JiraStatusPill } from "@/components/jira/JiraStatusPill";
@@ -35,10 +38,16 @@ import { useSecondTick } from "@/lib/tickers";
 import { formatDuration, jiraBrowseUrl, todayISO } from "@/lib/utils";
 import { openInBrowser } from "@/lib/desktop/bridge";
 import { buildTaskNoteMarkdown, taskNotePath } from "@/lib/task-note";
-import { EntityNoteAction } from "@/components/EntityNoteAction";
+import { createOrOpenVaultNote } from "@/lib/create-vault-note";
+import { useVaultNoteExists } from "@/components/EntityNoteAction";
 import { EntityLinkChips } from "@/components/EntityLinkChips";
 import { TaskLinkButton } from "@/components/TaskLinkButton";
-import { TaskOverflowMenu, type TaskOverflowAction } from "@/components/tasks/TaskOverflowMenu";
+import {
+  ContextMenu,
+  RowMenuKebab,
+  useContextMenu,
+  type ContextMenuGroup,
+} from "@/components/shell/ContextMenu";
 import { mutate } from "swr";
 import type { EntityRef } from "@/lib/entity-note";
 import { useToast } from "@/lib/hooks/use-toast";
@@ -82,8 +91,11 @@ export function TaskItem({
   isDropTarget?: boolean;
 }) {
   const toast = useToast();
+  const router = useRouter();
+  const menu = useContextMenu<Task>();
   const taskDate = date ?? todayISO();
   const [editing, setEditing] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
   const [editText, setEditText] = useState(task.text);
   const [showAbandon, setShowAbandon] = useState(false);
   const [abandonReason, setAbandonReason] = useState("");
@@ -147,49 +159,114 @@ export function TaskItem({
 
   const dueDateLabel = task.due ? new Date(task.due).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : null;
 
-  const overflowActions: TaskOverflowAction[] = [];
-  if (!isInactive && !task.done && onAddToJira) {
-    overflowActions.push({
-      id: "jira",
-      label: task.jiraKey ? "Update Jira ticket" : "Add to Jira",
-      icon: <Ticket size={12} aria-hidden />,
-      onSelect: onAddToJira,
-    });
-  }
-  if (!isInactive) {
-    overflowActions.push({
-      id: "edit",
-      label: "Edit task",
-      icon: <Pencil size={12} aria-hidden />,
-      onSelect: () => {
-        setEditing(true);
-        setEditText(task.text);
-      },
-    });
-  }
-  if (!isInactive && !task.done) {
-    overflowActions.push({
-      id: "abandon",
-      label: "Abandon task",
-      icon: <Ban size={12} aria-hidden />,
-      onSelect: () => setShowAbandon(true),
-    });
-  }
-  if (isAbandoned && onReactivate) {
-    overflowActions.push({
-      id: "reactivate",
-      label: "Reactivate task",
-      icon: <RotateCcw size={12} aria-hidden />,
-      onSelect: onReactivate,
-    });
-  }
-  overflowActions.push({
-    id: "delete",
-    label: "Delete task",
-    icon: <X size={12} aria-hidden />,
-    onSelect: onDelete,
-    danger: true,
-  });
+  const notePath = taskNotePath(noteSource);
+  const noteExists = useVaultNoteExists(notePath);
+
+  const openTaskNote = async () => {
+    try {
+      const result = await createOrOpenVaultNote({
+        path: notePath,
+        markdown: buildTaskNoteMarkdown(noteSource),
+      });
+      router.push(result.href);
+    } catch {
+      toast.error("Couldn't create task note.");
+    }
+  };
+
+  const menuGroups: ContextMenuGroup[] = [
+    {
+      id: "task",
+      items: [
+        {
+          id: "note",
+          label: noteExists ? "Open note" : "Create note",
+          icon: <FileText size={12} aria-hidden />,
+          onSelect: () => void openTaskNote(),
+        },
+        ...(onTimer && !isInactive
+          ? [
+              {
+                id: "timer",
+                label: task.timerStartedAt ? "Stop timer" : "Start timer",
+                icon: task.timerStartedAt ? <Pause size={12} aria-hidden /> : <Play size={12} aria-hidden />,
+                onSelect: onTimer,
+              },
+            ]
+          : []),
+        ...(!isInactive
+          ? [
+              {
+                id: "link",
+                label: "Link task",
+                icon: <Link2 size={12} aria-hidden />,
+                onSelect: () => setLinkOpen(true),
+              },
+            ]
+          : []),
+        ...(!isAbandoned && task.jiraKey
+          ? [
+              {
+                id: "open-jira",
+                label: "Open in Jira",
+                icon: <ExternalLink size={12} aria-hidden />,
+                onSelect: () => void openInBrowser(jiraBrowseUrl(task.jiraKey!)),
+              },
+            ]
+          : []),
+        ...(!isInactive
+          ? [
+              {
+                id: "edit",
+                label: "Edit",
+                icon: <Pencil size={12} aria-hidden />,
+                onSelect: () => {
+                  setEditing(true);
+                  setEditText(task.text);
+                },
+              },
+            ]
+          : []),
+        ...(!isInactive && !task.done && onAddToJira
+          ? [
+              {
+                id: "jira",
+                label: task.jiraKey ? "Update Jira ticket" : "Add to Jira",
+                icon: <Ticket size={12} aria-hidden />,
+                onSelect: onAddToJira,
+              },
+            ]
+          : []),
+        ...(isAbandoned && onReactivate
+          ? [
+              {
+                id: "reactivate",
+                label: "Reactivate",
+                icon: <RotateCcw size={12} aria-hidden />,
+                onSelect: onReactivate,
+              },
+            ]
+          : []),
+        ...(!isInactive && !task.done
+          ? [
+              {
+                id: "abandon",
+                label: "Abandon",
+                icon: <Ban size={12} aria-hidden />,
+                onSelect: () => setShowAbandon(true),
+              },
+            ]
+          : []),
+        {
+          id: "delete",
+          label: "Delete",
+          icon: <X size={12} aria-hidden />,
+          onSelect: onDelete,
+          danger: true,
+        },
+      ],
+    },
+  ];
 
   return (
     <div>
@@ -200,6 +277,7 @@ export function TaskItem({
           background: isDropTarget ? "var(--bg-elevated)" : undefined,
           outline: isDropTarget ? "1px solid var(--accent)" : undefined,
         }}
+        {...(!editing && !showAbandon ? menu.bindRow(task) : {})}
       >
         {dragHandleProps && !isInactive && !editing && !showAbandon && (
           <HoverTip label="Drag to reorder. Arrow keys also work." pos="top">
@@ -210,6 +288,7 @@ export function TaskItem({
               style={{ color: "var(--text-subtle)", cursor: "grab" }}
               aria-label={`Drag to reorder ${task.text}`}
               onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
             >
               <GripVertical size={14} aria-hidden />
             </button>
@@ -325,10 +404,7 @@ export function TaskItem({
             </span>
           )}
 
-          {/* Right-aligned meta: Jira status, due date, and the always-visible
-              timer readout. The timer *control* (play/pause) lives with the
-              other action icons in .task-row-actions so its spacing stays
-              consistent whether or not the task has a Jira link. */}
+          {/* Right-aligned meta: Jira status, due date, timer readout. */}
           {(showJiraStatus || (!!dueDateLabel && !task.done && !isAbandoned) || showTimerReadout) && (
             <div className="task-row-meta">
               {showJiraStatus && (
@@ -354,53 +430,15 @@ export function TaskItem({
 
         {!editing && !showAbandon && (
           <div className="task-row-actions flex items-start gap-0.5">
-            {onTimer && !isInactive && (
-              <TaskActionTip label={task.timerStartedAt ? "Stop timer" : "Start timer"}>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); onTimer(); }}
-                  aria-label={task.timerStartedAt ? "Stop timer" : "Start timer"}
-                  className="task-icon-action"
-                  data-running={task.timerStartedAt ? "true" : undefined}
-                >
-                  {task.timerStartedAt ? <Pause size={12} aria-hidden /> : <Play size={12} aria-hidden />}
-                </button>
-              </TaskActionTip>
-            )}
-            <EntityNoteAction
-              path={taskNotePath(noteSource)}
-              markdown={buildTaskNoteMarkdown(noteSource)}
-              entityLabel={task.text}
-              variant="task-icon"
-              tipClassName="task-action-tip"
-              errorMessage="Couldn't create task note."
+            {noteExists ? (
+              <span className="row-note-glyph mt-0.5" title="Note exists" aria-hidden>
+                <FileText size={12} />
+              </span>
+            ) : null}
+            <RowMenuKebab
+              label={`Actions for ${task.text}`}
+              onOpen={(x, y) => menu.openAtPoint(x, y, task)}
             />
-            {!isInactive && (
-              <TaskLinkButton
-                taskId={task.id}
-                date={taskDate}
-                existing={task.links}
-                onChanged={() => {
-                  void mutate("/api/tasks");
-                }}
-              />
-            )}
-            {!isAbandoned && task.jiraKey && (
-              <TaskActionTip label={`Open ${task.jiraKey} in Jira`}>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void openInBrowser(jiraBrowseUrl(task.jiraKey!));
-                  }}
-                  aria-label={`Open ${task.jiraKey} in Jira`}
-                  className="task-icon-action"
-                >
-                  <ExternalLink size={12} aria-hidden />
-                </button>
-              </TaskActionTip>
-            )}
-            <TaskOverflowMenu actions={overflowActions} />
           </div>
         )}
       </div>
@@ -437,6 +475,25 @@ export function TaskItem({
           />
         </div>
       )}
+
+      <TaskLinkButton
+        taskId={task.id}
+        date={taskDate}
+        existing={task.links}
+        open={linkOpen}
+        onOpenChange={setLinkOpen}
+        showTrigger={false}
+        onChanged={() => {
+          void mutate("/api/tasks");
+        }}
+      />
+      <ContextMenu
+        open={menu.target !== null}
+        position={menu.position}
+        groups={menuGroups}
+        onClose={menu.close}
+        label={`Task actions for ${task.text}`}
+      />
 
       {showAbandon && (
         <div
@@ -482,14 +539,6 @@ export function TaskItem({
         </div>
       )}
     </div>
-  );
-}
-
-function TaskActionTip({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <HoverTip label={label} pos="top-end" className="task-action-tip">
-      {children}
-    </HoverTip>
   );
 }
 

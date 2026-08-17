@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseGithubPrUrl } from "./parse-pr";
+import { parseGithubPrRef, parseGithubPrUrl } from "./parse-pr";
 
 describe("parseGithubPrUrl", () => {
   it("parses GitHub pull request URLs and ignores page suffixes", () => {
@@ -17,5 +17,26 @@ describe("parseGithubPrUrl", () => {
     "https://github.com/org/repo/pull/not-a-number",
   ])("rejects invalid PR URL %s", (url) => {
     expect(parseGithubPrUrl(url)).toBeNull();
+  });
+});
+
+describe("parseGithubPrRef", () => {
+  it("parses owner/repo#number ids", () => {
+    expect(parseGithubPrRef("acme/widgets#42")).toEqual({
+      repo: "acme/widgets",
+      number: 42,
+    });
+  });
+
+  it("parses GitHub pull request URLs", () => {
+    expect(parseGithubPrRef("https://github.com/acme/widgets/pull/9")).toEqual({
+      repo: "acme/widgets",
+      number: 9,
+    });
+  });
+
+  it("rejects junk", () => {
+    expect(parseGithubPrRef("not-a-pr")).toBeNull();
+    expect(parseGithubPrRef("acme/widgets#0")).toBeNull();
   });
 });

@@ -10,10 +10,14 @@ import {
   agentRepoUpstartDebugCommand,
   agentGitHookFailureCommand,
   agentGitSyncConflictCommand,
+  agentLocalCommitReviewCommand,
   agentReviewCommand,
+  agentSkillCommand,
   agentStashConflictCommand,
   agentCommitMessageCommand,
   agentStashMessageCommand,
+  claudeCliCommand,
+  cursorCliCommand,
 } from "./terminal-launch";
 
 const ORIGINAL_ENV = { ...process.env };
@@ -27,6 +31,33 @@ afterEach(() => {
 function useConfig(overrides: Partial<AgentCliConfig> = {}) {
   setAgentCliConfigCache({ ...AGENT_CLI_DEFAULTS, ...overrides });
 }
+
+describe("agentSkillCommand", () => {
+  it("pins the named vendored skill into a one-shot CLI run", async () => {
+    useConfig();
+    const command = await agentSkillCommand(
+      "commit-archaeologist",
+      "Explain why lib/foo.ts exists.",
+      "run commit-archaeologist",
+    );
+    expect(command).toContain("opencode run");
+    expect(command).toContain("commit-archaeologist");
+    expect(command).toContain("Explain why lib/foo.ts exists.");
+  });
+});
+
+describe("agentLocalCommitReviewCommand", () => {
+  it("writes reviews/<repo>-<date> with a Repo entity link, not a PR url", async () => {
+    useConfig();
+    process.env.NEXT_PUBLIC_REPO_ROOT = "/repo/devhub";
+    const command = await agentLocalCommitReviewCommand("devhub-private", "abc1234", "fix the thing");
+    expect(command).toContain("pr-explain-review");
+    expect(command).toContain("abc1234");
+    expect(command).toContain("Notes MCP path: reviews/devhub-private-");
+    expect(command).toContain("Repo entity link");
+    expect(command).not.toContain("github.com");
+  });
+});
 
 describe("agentReviewCommand (opencode)", () => {
   it("runs the pr-explain-review skill against the PR url", async () => {
@@ -243,5 +274,21 @@ describe("agentGitHookFailureCommand", () => {
     expect(command).toContain("cursor-agent '");
     expect(command).not.toContain("cursor-agent -p");
     expect(command).toContain("git-hook-fix");
+  });
+});
+
+describe("companion CLI launch commands", () => {
+  it("guards the Claude CLI so a missing binary prints a hint", () => {
+    const cmd = claudeCliCommand();
+    expect(cmd).toContain("command -v");
+    expect(cmd).toContain("claude");
+    expect(cmd).toContain("Claude CLI not found");
+  });
+
+  it("guards cursor-agent so a missing binary prints a hint", () => {
+    const cmd = cursorCliCommand();
+    expect(cmd).toContain("command -v");
+    expect(cmd).toContain("cursor-agent");
+    expect(cmd).toContain("Cursor CLI not found");
   });
 });

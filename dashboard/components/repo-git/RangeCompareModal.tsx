@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { GitCompare } from "lucide-react";
+import { GitCompare, Share2 } from "lucide-react";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { ModalShell } from "@/components/shell/ModalShell";
 import { useStoredFraction } from "@/lib/hooks/use-stored-state";
@@ -11,6 +11,7 @@ import { DiffToolbar, DIFF_CONTEXT_LINES, type DiffContextMode } from "./DiffToo
 import { GitDiffView } from "./GitDiffView";
 import { RepoSplit } from "./SplitResize";
 import { fetchGitJson, repoApi } from "./shared";
+import { shareGitRangePatch } from "./shareGitPatch";
 
 interface RangePayload {
   base: string;
@@ -54,6 +55,7 @@ export function RangeCompareModal({
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [contextMode, setContextMode] = useState<DiffContextMode>("default");
   const [listFr, setListFr] = useStoredFraction("devhub:repo-git:range-list-fr", 0.32);
+  const [sharing, setSharing] = useState(false);
 
   // The caller mounts this only while open, so each comparison starts with
   // fresh state — no reset-on-close effect needed.
@@ -153,6 +155,22 @@ export function RangeCompareModal({
                     <span className="text-text-subtle">Whole range — select a file to narrow</span>
                   )}
                   <DiffToolbar mode={contextMode} onModeChange={setContextMode} />
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={sharing}
+                    title="Share this diff for 24h as a one-time PrivateBin link"
+                    onClick={() => {
+                      setSharing(true);
+                      void shareGitRangePatch(repoName, data.base, data.head).then(
+                        (msg) => toast.success(msg),
+                        (err: unknown) => toast.error(err instanceof Error ? err.message : "Share failed"),
+                      ).finally(() => setSharing(false));
+                    }}
+                  >
+                    <Share2 size={11} aria-hidden />
+                    {sharing ? "Sharing…" : "Share 24h"}
+                  </button>
                 </div>
                 <div className="repo-git-diff-body repo-git-diff-body-static">
                   {loading ? (

@@ -72,7 +72,12 @@ export interface DiagramFile {
 
 /** Normalise a folder path relative to the diagrams root (no leading/trailing slashes). */
 export function normalizeDiagramFolder(relFolder: string | null | undefined): string {
-  return (relFolder ?? "").replace(/^\/+|\/+$/g, "").replace(/\/{2,}/g, "/");
+  return (relFolder ?? "")
+    .replace(/^\/+|\/+$/g, "")
+    .replace(/\/{2,}/g, "/")
+    .split("/")
+    .filter((segment) => segment !== "" && segment !== "." && segment !== "..")
+    .join("/");
 }
 
 /** Storage path for a folder relative to the diagrams root. */

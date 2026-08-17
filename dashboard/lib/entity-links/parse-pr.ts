@@ -24,3 +24,14 @@ export function parseGithubPrUrl(url: string): { repo: string; number: number } 
     return null;
   }
 }
+
+/** Accept a GitHub PR URL or an EntityRef id (`owner/repo#123`). */
+export function parseGithubPrRef(raw: string): { repo: string; number: number } | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const fromUrl = parseGithubPrUrl(trimmed);
+  if (fromUrl) return fromUrl;
+  const hash = trimmed.match(/^([\w.-]+\/[\w.-]+)#([1-9]\d*)$/);
+  if (hash) return parseGithubPrUrl(`https://github.com/${hash[1]}/pull/${hash[2]}`);
+  return parseGithubPrUrl(`https://github.com/${trimmed.replace("#", "/pull/")}`);
+}

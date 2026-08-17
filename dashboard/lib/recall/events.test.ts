@@ -89,6 +89,30 @@ describe("appendEvents", () => {
   it("handles an empty batch", () => {
     expect(appendEvents([])).toEqual([]);
   });
+
+  it("dedupes against ids in older shards, not just recent ones", () => {
+    appendEvents([
+      {
+        kind: "commit",
+        title: "old",
+        source: "t",
+        id: "ancient",
+        ts: "2020-01-15T00:00:00.000Z",
+      },
+    ]);
+    expect(
+      appendEvents([
+        {
+          kind: "commit",
+          title: "old again",
+          source: "t",
+          id: "ancient",
+          ts: "2026-06-01T00:00:00.000Z",
+        },
+      ]),
+    ).toHaveLength(0);
+    expect(countEvents()).toBe(1);
+  });
 });
 
 describe("readEvents", () => {
@@ -110,15 +134,65 @@ describe("readEvents", () => {
     expect(readEvents({ limit: 3 })).toHaveLength(3);
   });
 
+  it("orders by instant, not file order or lexicographic timestamps", () => {
+    // git log is newest-first; appendEvents writes in that order, so reverse
+    // file order would return oldest first. Offsets also break string compare:
+    // 08:00-04:00 (12:00 UTC) is later than 12:00+01:00 (11:00 UTC).
+    appendEvent({
+      kind: "commit",
+      title: "london-noon",
+      source: "git",
+      ts: "2026-06-01T12:00:00+01:00",
+      id: "lon",
+    });
+    appendEvent({
+      kind: "commit",
+      title: "ny-morning",
+      source: "git",
+      ts: "2026-06-01T08:00:00-04:00",
+      id: "nyc",
+    });
+    appendEvent({
+      kind: "commit",
+      title: "utc-dawn",
+      source: "git",
+      ts: "2026-06-01T10:00:00.000Z",
+      id: "utc",
+    });
+    expect(readEvents().map((e) => e.title)).toEqual(["ny-morning", "london-noon", "utc-dawn"]);
+  });
+
+  it("compares since as instants when offsets mix", () => {
+    appendEvent({
+      kind: "commit",
+      title: "before",
+      source: "git",
+      ts: "2026-06-01T12:00:00+01:00",
+      id: "before",
+    });
+    appendEvent({
+      kind: "commit",
+      title: "after",
+      source: "git",
+      ts: "2026-06-01T08:00:00-04:00",
+      id: "after",
+    });
+    expect(readEvents({ since: "2026-06-01T11:30:00.000Z" }).map((e) => e.title)).toEqual(["after"]);
+  });
+
   it("returns [] when nothing has ever been written", () => {
     expect(readEvents()).toEqual([]);
     expect(countEvents()).toBe(0);
   });
 
   it("survives a corrupt line mid-file", () => {
-    appendEvent({ kind: "manual", title: "good", source: "t" });
+    // Explicit timestamps: readEvents ties on equal instants and breaks them by id,
+    // which is a random UUID, so two events appended in the same millisecond come
+    // back in either order. On a fast run these two landed in the same millisecond
+    // and the assertion flipped. The subject here is the corrupt line, not ordering.
+    appendEvent({ kind: "manual", title: "good", source: "t", ts: "2026-08-01T10:00:00.000Z" });
     fs.appendFileSync(eventsFile(), "{ not json\n");
-    appendEvent({ kind: "manual", title: "also good", source: "t" });
+    appendEvent({ kind: "manual", title: "also good", source: "t", ts: "2026-08-01T10:00:01.000Z" });
     expect(readEvents().map((e) => e.title)).toEqual(["also good", "good"]);
   });
 });

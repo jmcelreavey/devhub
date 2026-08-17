@@ -130,7 +130,7 @@ export function OneTimeShareButton({
       {!hideTrigger ? (
         <button
           type="button"
-          onClick={() => (open ? reset() : setOpen(true))}
+          onClick={() => setOpen(!open)}
           title="Create a one-time link that self-destructs when opened"
           className="btn btn-ghost text-xs flex items-center gap-1"
           aria-expanded={open}

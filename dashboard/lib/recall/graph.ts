@@ -84,6 +84,20 @@ export function buildGraph(
   };
 }
 
+/** Slice the heaviest nodes and drop edges that would point off-screen. */
+export function capGraph(
+  graph: RecallGraph,
+  limit = 300,
+): { nodes: RecallGraph["nodes"]; edges: RecallGraph["edges"]; totalNodes: number } {
+  const nodes = graph.nodes.slice(0, limit);
+  const keep = new Set(nodes.map((n) => n.key));
+  return {
+    nodes,
+    edges: graph.edges.filter((edge) => keep.has(edge.from) && keep.has(edge.to)),
+    totalNodes: graph.nodes.length,
+  };
+}
+
 /** Entities adjacent to `key`, strongest first. */
 export function neighbours(
   graph: RecallGraph,

@@ -64,7 +64,8 @@ export function registerReposTools(server: McpServer, ctx: Context): void {
   server.registerTool(
     "repos_open",
     {
-      description: "Open a tracked repo in the editor (Cursor) on this machine. Requires the dashboard running.",
+      description:
+        "Open a tracked repo in the editor (Cursor) on this machine as-is (current branch, no checkout). To stash dirty work, check out a PR branch, then launch Cursor, use prs_open_in_cursor. Requires the dashboard running.",
       inputSchema: { name: nameSchema },
     },
     async ({ name }) =>

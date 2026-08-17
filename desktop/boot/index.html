@@ -592,11 +592,16 @@
         invoke("open_logs").catch(() => {});
       });
 
-      // `window.close()` rather than `plugin:process|exit`: the process plugin
-      // is not a dependency of this shell, so that invoke could only ever fail
-      // through to this. Closing the window runs the Destroyed handler, which
-      // is what actually stops the sidecar process group.
-      document.getElementById("quit").addEventListener("click", () => window.close());
+      // `quit_app` rather than `plugin:process|exit`: the process plugin is not a
+      // dependency of this shell. It closes the window on the Rust side, which runs
+      // the Destroyed handler — that is what actually stops the sidecar process group.
+      //
+      // This used to call `window.close()` directly, which is a no-op for a window the
+      // script did not open, so Quit did nothing at all. The fallback stays only for a
+      // webview with no bridge, where nothing better is available.
+      document.getElementById("quit").addEventListener("click", () => {
+        invoke("quit_app").catch(() => window.close());
+      });
     </script>
   </body>
 </html>

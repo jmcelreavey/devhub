@@ -73,6 +73,8 @@ On **Sync skills**, DevHub may fetch the ai-tools default branch into `~/.cache/
 
 **Prune:** off by default for skills, agents, and MCP. Enable prune to remove local entries that are no longer in the repo catalog (recognized shapes only).
 
+**Cursor skill paths:** Sync writes user skills to `~/.cursor/skills` and `~/.agents/skills` (the Agent Skills spec root Cursor Customize → Skills actually lists). Do not write catalog skills to `~/.cursor/skills-cursor` — that directory is Cursor's internal builtin store.
+
 **Cursor MCP path:** DevHub syncs to `~/.cursor/mcp.json` (where Cursor stores user MCP servers such as agentmemory). A legacy `~/.config/cursor/mcp.json` is merged on read and cleared after sync.
 
 **Personal MCP catalog:** Machine-local definitions under `~/.config/devhub/mcp-personal/` sync to every tool like `mcp/shared/` but are never committed — use for agentmemory, remote HTTP entries, or other per-machine setup.

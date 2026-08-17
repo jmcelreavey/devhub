@@ -7,10 +7,12 @@ const eslintConfig = defineConfig([
   ...nextTs,
   // Override default ignores of eslint-config-next.
   globalIgnores([
-    // Default ignores of eslint-config-next:
-    ".next/**",
-    // `npm run verify` isolates builds into `.next-verify` (see next.config.ts).
-    ".next-verify/**",
+    // Default ignores of eslint-config-next, widened to every dist dir
+    // next.config.ts can produce: `.next-verify` for `npm run verify`, and
+    // whatever DEVHUB_DIST_DIR names for a second local instance. Enumerating
+    // them meant one stray build dir (`.next-rebuild`, 3.5k files) walked into
+    // the lint run and OOM-crashed it at the 4 GB heap limit.
+    ".next*/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

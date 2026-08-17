@@ -4,7 +4,7 @@ import { withErrorHandler, parseBody } from "@/lib/api-utils";
 import { OneTimeShareCreateSchema, OneTimeShareDeleteSchema } from "@/lib/schemas";
 import { parseVaultId } from "@/lib/vault/vault-registry";
 import { createPaste, deletePaste } from "@/lib/share/privatebin/client";
-import { PASTE_EXPIRY_MS, type PasteExpiry } from "@/lib/share/privatebin/crypto";
+import { PASTE_EXPIRY_MS } from "@/lib/share/privatebin/crypto";
 import { generatePassphrase } from "@/lib/share/passphrase";
 import { readShareSource } from "@/lib/share/share-content";
 import {
@@ -23,6 +23,15 @@ export const GET = withErrorHandler(async () => {
   return NextResponse.json({ shares: listOneTimeShares() }, { headers: NO_STORE });
 }, "share.one-time.get");
 
+function gitSharePath(title: string): string {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
+  return `git-share/${slug || "diff"}`;
+}
+
 /**
  * Publish a note as a burn-after-reading link.
  *
@@ -30,23 +39,39 @@ export const GET = withErrorHandler(async () => {
  * first read, so "re-share" means a genuinely new link. Publishing the same
  * note twice deliberately produces two independent links rather than replacing
  * the first — the first may already be in someone's inbox.
+ *
+ * Also accepts raw markdown (git patches) so History can share a range without
+ * writing a vault note first.
  */
 export const POST = withErrorHandler(async (req: NextRequest) => {
   const parsed = await parseBody(req, OneTimeShareCreateSchema);
   if (!parsed.ok) return parsed.response;
 
-  const vault = parseVaultId(parsed.data.vault);
-  const sharePath = parsed.data.path;
-  const source = readShareSource(vault, sharePath);
-  if (!source) {
-    return NextResponse.json({ error: "Note not found" }, { status: 404 });
+  let title: string;
+  let markdown: string;
+  let vault: ReturnType<typeof parseVaultId>;
+  let sharePath: string;
+
+  if ("markdown" in parsed.data) {
+    title = parsed.data.title;
+    markdown = parsed.data.markdown;
+    vault = parseVaultId("notes");
+    sharePath = gitSharePath(title);
+  } else {
+    vault = parseVaultId(parsed.data.vault);
+    sharePath = parsed.data.path;
+    const source = readShareSource(vault, sharePath);
+    if (!source) {
+      return NextResponse.json({ error: "Note not found" }, { status: 404 });
+    }
+    title = source.title;
+    markdown = source.markdown;
   }
-  const { title, markdown } = source;
   if (!markdown.trim()) {
     return NextResponse.json({ error: "Nothing to share — the note is empty" }, { status: 400 });
   }
 
-  const expire = parsed.data.expire as PasteExpiry;
+  const expire = parsed.data.expire;
   const passphrase = parsed.data.password ? generatePassphrase() : "";
 
   try {

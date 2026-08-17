@@ -57,6 +57,7 @@ export function DocsShell({
             storageKey="devhub:docs-nav-open"
             label="Documentation"
             noun="docs"
+            kind="docs"
           />
         )}
       </VaultFilesSidebar>

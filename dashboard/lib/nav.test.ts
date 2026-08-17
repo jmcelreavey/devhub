@@ -13,8 +13,8 @@ import { PLUGIN_NAV_ITEMS } from "./plugin-nav.generated";
 const hrefs = (items: ReturnType<typeof filterNavBySetup>) => items.map((i) => i.href);
 
 describe("NAV_ITEMS (sidebar IA)", () => {
-  it("has exactly 16 core sidebar destinations", () => {
-    expect(NAV_ITEMS).toHaveLength(16);
+  it("has exactly 17 core sidebar destinations", () => {
+    expect(NAV_ITEMS).toHaveLength(17);
   });
 
   it("gives owned repositories a repo-centric destination", () => {
@@ -122,6 +122,13 @@ describe("filterNavBySetup", () => {
 
   it("shows Claude only when installed", () => {
     expect(hrefs(filterNavBySetup(NAV_ITEMS, { claude: true }))).toContain("/claude");
+  });
+  it("hides Cursor unless it is installed", () => {
+    expect(hrefs(filterNavBySetup(NAV_ITEMS, { cursor: false }))).not.toContain("/cursor");
+    expect(hrefs(filterNavBySetup(NAV_ITEMS, {}))).not.toContain("/cursor");
+  });
+  it("shows Cursor only when installed", () => {
+    expect(hrefs(filterNavBySetup(NAV_ITEMS, { cursor: true }))).toContain("/cursor");
   });
 });
 

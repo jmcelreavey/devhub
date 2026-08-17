@@ -80,7 +80,9 @@ export interface StashConflictPayload {
     | "sync-main"
     | "merge-branch"
     | "cherry-pick"
-    | "revert";
+    | "revert"
+    | "pull-rebase"
+    | "pull-merge";
   branch?: string;
   switched: boolean;
   conflictFiles: string[];

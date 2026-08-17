@@ -254,6 +254,26 @@ export default function ReposPage() {
                     ? "Repos already cloned next to this DevHub checkout."
                     : "Local clones. Type above to also search GitHub."
             }
+            actions={
+              <>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={actions.cloning !== null}
+                  onClick={() => void actions.cloneFromUrl()}
+                >
+                  Clone URL
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={actions.cloning !== null}
+                  onClick={() => void actions.initRepo()}
+                >
+                  New repo
+                </button>
+              </>
+            }
           />
 
           {filteredLocalRepos.map((repo) => (

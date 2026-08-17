@@ -143,6 +143,7 @@ function NotesShellInner({
             storageKey="devhub:notes-nav-open"
             label="Notes"
             noun="notes"
+            kind="notes"
             deletingGroup={deletingGroup}
             onDeleteGroup={deleteGroup}
           />

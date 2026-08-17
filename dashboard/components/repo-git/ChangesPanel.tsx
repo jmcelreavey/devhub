@@ -383,6 +383,18 @@ export function ChangesPanel({
     }
   }
 
+  async function undoLastCommit() {
+    const ok = await confirm({
+      title: "Undo last commit?",
+      message:
+        "Soft reset (git reset --soft HEAD~1). Changes stay staged. Does not touch the remote.",
+      confirmLabel: "Undo",
+      variant: "danger",
+    });
+    if (!ok) return;
+    await commitAction({ action: "undo-commit" });
+  }
+
   async function commitWithMode(mode: CommitMode) {
     setCommitMenuOpen(false);
     setCommitModePref(mode);
@@ -478,7 +490,7 @@ export function ChangesPanel({
           type="button"
           className="btn btn-ghost"
           disabled={acting !== null}
-          onClick={() => void commitAction({ action: "undo-commit" })}
+          onClick={() => void undoLastCommit()}
         >
           <RotateCcw size={11} /> Undo commit
         </button>

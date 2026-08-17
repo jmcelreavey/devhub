@@ -186,6 +186,18 @@ fn open_logs(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result
         })
 }
 
+/// Close the shell from the boot page's Quit button.
+///
+/// The page cannot do this itself. `window.close()` is a no-op for a window the
+/// script did not open, so Quit silently did nothing on the one screen where the
+/// app has not started and Quit is the only way out. Closing here runs the
+/// Destroyed handler, which stops the sidecar process group — the thing that
+/// keeps an orphaned Next server from holding port 1337 into the next launch.
+#[tauri::command]
+fn quit_app(window: tauri::Window) -> Result<(), String> {
+    window.close().map_err(|e| e.to_string())
+}
+
 /// Native folder picker for the setup wizard's "code folder" step.
 ///
 /// This is the one place the webview genuinely needs a native capability:
@@ -1768,6 +1780,7 @@ pub fn run() {
             renderer_log,
             retry_start,
             stop_conflicting_dev_server,
+            quit_app,
             updater::current_version,
             updater::check_update,
             updater::install_update,

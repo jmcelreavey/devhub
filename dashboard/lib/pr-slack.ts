@@ -1,21 +1,15 @@
 import type { MouseEvent } from "react";
 import type { GithubPrRow } from "@/lib/github/prs";
 import type { useToast } from "@/lib/hooks/use-toast";
-import { JIRA_KEY_RE } from "./utils";
+import { jiraBrowseUrl, jiraKeyFromText } from "./utils";
 import { copyTextToClipboard } from "./clipboard";
 
 export type SlackMessageKind = "awaiting" | "reviewed" | "reviewed-approved";
 
-const DEFAULT_JIRA_DOMAIN = "your-domain.atlassian.net";
-
-function getJiraDomain(): string {
-  return process.env.NEXT_PUBLIC_JIRA_DOMAIN?.trim() || DEFAULT_JIRA_DOMAIN;
-}
-
 export function buildSlackMessage(row: GithubPrRow, kind: SlackMessageKind): string {
   const repo = row.repo.split("/").pop() ?? row.repo;
-  const jiraKey = row.title.match(JIRA_KEY_RE)?.[1];
-  const jiraLine = jiraKey ? `JIRA: https://${getJiraDomain()}/browse/${jiraKey}` : null;
+  const jiraKey = jiraKeyFromText(row.title);
+  const jiraLine = jiraKey ? `JIRA: ${jiraBrowseUrl(jiraKey)}` : null;
   const lines: string[] = [];
   switch (kind) {
     case "awaiting":
@@ -33,15 +27,23 @@ export function buildSlackMessage(row: GithubPrRow, kind: SlackMessageKind): str
   return lines.join("\n");
 }
 
+export async function copyTextAndToast(
+  text: string,
+  label: string,
+  toast: ReturnType<typeof useToast>,
+): Promise<void> {
+  try {
+    await copyTextToClipboard(text);
+    toast.success(`Copied ${label}`);
+  } catch {
+    toast.error(`Couldn't copy ${label}.`);
+  }
+}
+
 export function copyWithToast(text: string, label: string, toast: ReturnType<typeof useToast>) {
   return async (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    try {
-      await copyTextToClipboard(text);
-      toast.success(`${label} copied.`);
-    } catch {
-      toast.error("Copy failed.");
-    }
+    await copyTextAndToast(text, label, toast);
   };
 }

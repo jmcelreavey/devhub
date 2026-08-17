@@ -109,10 +109,30 @@ export function appendEvent(input: AppendEventInput): RecallEvent {
   return event;
 }
 
+function collectEventIds(): Set<string> {
+  const ids = new Set<string>();
+  const dir = eventsDir();
+  if (!fs.existsSync(dir)) return ids;
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.endsWith(".ndjson")) continue;
+    let raw: string;
+    try {
+      raw = fs.readFileSync(path.join(dir, name), "utf-8");
+    } catch {
+      continue;
+    }
+    for (const line of raw.split("\n")) {
+      const event = parseEventLine(line);
+      if (event) ids.add(event.id);
+    }
+  }
+  return ids;
+}
+
 /** Append many, skipping ids already present. Returns only what was written. */
 export function appendEvents(inputs: readonly AppendEventInput[]): RecallEvent[] {
   if (inputs.length === 0) return [];
-  const existing = new Set(readEvents({ limit: 20_000 }).map((e) => e.id));
+  const existing = collectEventIds();
   const written: RecallEvent[] = [];
   for (const input of inputs) {
     if (input.id && existing.has(input.id)) continue;
@@ -130,20 +150,27 @@ export interface ReadEventsOptions {
   kinds?: RecallEventKind[];
 }
 
-/** Every event, newest first. */
+function eventTime(ts: string): number {
+  const ms = Date.parse(ts);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+/** Every event, newest first by instant — not file order, not lexicographic ts. */
 export function readEvents(options: ReadEventsOptions = {}): RecallEvent[] {
   const { limit = 500, since, kinds } = options;
   const dir = eventsDir();
   if (!fs.existsSync(dir)) return [];
 
-  // Descending filename order == descending month, so the newest shard is read
-  // first and `limit` can short-circuit before touching older files.
+  // Newest month first so `limit` can stop before opening older shards. Line
+  // order inside a shard is not chronological (git backfill appends `git log`,
+  // newest first), so each shard is fully parsed before we decide to stop.
   const shards = fs
     .readdirSync(dir)
     .filter((name) => name.endsWith(".ndjson"))
     .sort((a, b) => b.localeCompare(a));
 
   const kindFilter = kinds && kinds.length > 0 ? new Set(kinds) : null;
+  const sinceMs = since ? Date.parse(since) : Number.NaN;
   const out: RecallEvent[] = [];
 
   for (const shard of shards) {
@@ -153,18 +180,18 @@ export function readEvents(options: ReadEventsOptions = {}): RecallEvent[] {
     } catch {
       continue;
     }
-    const lines = raw.split("\n");
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const event = parseEventLine(lines[i]);
+    for (const line of raw.split("\n")) {
+      const event = parseEventLine(line);
       if (!event) continue;
-      if (since && event.ts < since) continue;
+      if (Number.isFinite(sinceMs) && eventTime(event.ts) < sinceMs) continue;
       if (kindFilter && !kindFilter.has(event.kind)) continue;
       out.push(event);
-      if (out.length >= limit) return out;
     }
+    if (out.length >= limit) break;
   }
 
-  return out;
+  out.sort((a, b) => eventTime(b.ts) - eventTime(a.ts) || a.id.localeCompare(b.id));
+  return out.slice(0, limit);
 }
 
 /** Count without materialising. Used by the status panel. */

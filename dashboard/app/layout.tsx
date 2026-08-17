@@ -29,6 +29,7 @@ import { NavProgress } from "@/components/shell/NavProgress";
 import { PersistentChamber } from "@/components/persistent/PersistentChamber";
 import { PersistentOpenCode } from "@/components/persistent/PersistentOpenCode";
 import { PersistentClaude } from "@/components/persistent/PersistentClaude";
+import { PersistentCursor } from "@/components/persistent/PersistentCursor";
 import { PersistentRepoLearnDock } from "@/components/persistent/PersistentRepoLearnDock";
 import { UiPrefsBootstrap } from "@/components/shell/UiPrefsBootstrap";
 import { KonamiGate } from "@/components/shell/KonamiGate";
@@ -165,6 +166,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                   <PersistentChamber />
                   <PersistentOpenCode />
                   <PersistentClaude />
+                  <PersistentCursor />
               </main>
             </div>
 
