@@ -1,5 +1,6 @@
 export { EmptyState } from "@/components/ui/EmptyState";
 export { FetchError } from "@/components/ui/FetchError";
+export { InlineSearch } from "@/components/ui/InlineSearch";
 export { SearchInput } from "@/components/ui/SearchInput";
 export { AsyncListSection } from "@/components/ui/AsyncListSection";
 export { SkeletonRows } from "@/components/ui/SkeletonRows";

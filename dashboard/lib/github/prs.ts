@@ -44,7 +44,12 @@ export interface GithubPrsApiPayload {
 }
 
 const MAX_REPOS = 100;
-const MAX_LIST = 30;
+/**
+ * Upper bound on rows kept per bucket. Was 30, which silently dropped PRs when a
+ * team review request fanned a single PR out across dozens of repos — the row
+ * existed in the search results but fell off the end of the slice.
+ */
+const MAX_LIST = 100;
 const SEARCH_PER_PAGE = 100;
 
 function authorFromSearchItem(item: SearchIssueItem): GithubPrAuthor | undefined {
@@ -57,7 +62,7 @@ function authorFromSearchItem(item: SearchIssueItem): GithubPrAuthor | undefined
   };
 }
 
-function rowFromSearchItem(item: SearchIssueItem): GithubPrRow {
+export function rowFromSearchItem(item: SearchIssueItem): GithubPrRow {
   return {
     number: item.number ?? 0,
     title: item.title ?? "",
@@ -104,11 +109,13 @@ export async function listGithubScanRepoFullNames(): Promise<string[]> {
   return filterOutArchivedRepos(all);
 }
 
-async function searchOpenPrs(query: string): Promise<SearchIssueItem[]> {
+const MAX_SEARCH_PAGES = 5;
+
+export async function searchIssues(query: string, limit: number): Promise<SearchIssueItem[]> {
   const allItems: SearchIssueItem[] = [];
   let page = 1;
 
-  while (allItems.length < MAX_LIST) {
+  while (allItems.length < limit && page <= MAX_SEARCH_PAGES) {
     const path = `/search/issues?per_page=${SEARCH_PER_PAGE}&page=${page}&q=${encodeURIComponent(query)}`;
     const { stdout } = await execGh(["api", path]);
     const data = JSON.parse(stdout) as SearchIssuesResponse;
@@ -119,6 +126,10 @@ async function searchOpenPrs(query: string): Promise<SearchIssueItem[]> {
   }
 
   return allItems;
+}
+
+async function searchOpenPrs(query: string): Promise<SearchIssueItem[]> {
+  return searchIssues(query, MAX_LIST);
 }
 
 /**

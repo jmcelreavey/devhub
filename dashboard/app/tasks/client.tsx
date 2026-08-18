@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { TaskItem } from "@/components/tasks/TaskList";
-import { FetchError, SkeletonRows } from "@/components";
+import { FetchError, InlineSearch, SkeletonRows } from "@/components";
 import { paletteCommandScore } from "@/lib/command-palette-score";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useLive } from "@/lib/hooks/use-fetch";
@@ -290,41 +290,16 @@ export default function TasksPage() {
       {error && <FetchError message="Couldn't load task history." />}
 
       <div className="card card-body mb-4 space-y-3">
-        <div
-        style={{
-          alignItems: "center",
-          display: "flex",
-          gap: 8,
-        }}
-      >
-        <Search size={15} style={{ color: "var(--accent)", flexShrink: 0 }} aria-hidden />
-        <label htmlFor="tasks-search" className="sr-only">Search tasks</label>
-        <input
+        <InlineSearch
           id="tasks-search"
-          type="text"
+          label="Search tasks"
           placeholder="Search tasks, Jira keys, dates, status…"
           value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
+          onChange={(next) => {
+            setQuery(next);
             setPage(1);
           }}
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none text-text"
         />
-        {query ? (
-          <button
-            type="button"
-            className="rounded p-1 transition-colors hover:bg-[var(--bg-muted)]"
-            onClick={() => {
-              setQuery("");
-              setPage(1);
-            }}
-            style={{ color: "var(--text-subtle)", flexShrink: 0 }}
-            aria-label="Clear task search"
-          >
-            <X size={14} aria-hidden />
-          </button>
-        ) : null}
-        </div>
 
         <div className="flex flex-wrap gap-1">
           {FILTERS.map((value) => (

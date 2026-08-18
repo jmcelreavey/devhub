@@ -120,10 +120,24 @@ export function clearedLineForToday(today = todayISO()): string {
   return CLEARED_LINES[seed % CLEARED_LINES.length];
 }
 
+/**
+ * Free-text task match: whitespace-separated terms are AND-ed, so
+ * "ptf login" narrows rather than falling over.
+ *
+ * Searches the task body, its Jira key, its due date, the abandon reason, and
+ * the labels/ids of anything linked to it (PRs, notes, calendar events).
+ */
 export function matchesTaskSearch(task: Task, query: string): boolean {
-  if (!query) return true;
-  const q = query.toLowerCase();
-  return (
-    task.text.toLowerCase().includes(q) || (!!task.jiraKey && task.jiraKey.toLowerCase().includes(q))
-  );
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+  const hay = [
+    task.text,
+    task.jiraKey ?? "",
+    task.due ?? "",
+    task.abandonReason ?? "",
+    ...(task.links ?? []).flatMap((link) => [link.kind, link.id, link.label]),
+  ]
+    .join("   ")
+    .toLowerCase();
+  return terms.every((t) => hay.includes(t));
 }

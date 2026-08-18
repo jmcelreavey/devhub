@@ -199,4 +199,33 @@ describe("matchesTaskSearch", () => {
   it("returns false when nothing matches", () => {
     expect(matchesTaskSearch(task(), "nonsense")).toBe(false);
   });
+
+  it("ANDs whitespace-separated terms", () => {
+    expect(matchesTaskSearch(task({ text: "Fix the login flow" }), "fix login")).toBe(true);
+    expect(matchesTaskSearch(task({ text: "Fix the login flow" }), "fix nonsense")).toBe(false);
+  });
+
+  it("matches on due date", () => {
+    expect(matchesTaskSearch(task({ due: "2026-08-20" }), "2026-08-20")).toBe(true);
+  });
+
+  it("matches on abandon reason", () => {
+    expect(matchesTaskSearch(task({ abandonReason: "superseded by PTF-9" }), "superseded")).toBe(
+      true,
+    );
+  });
+
+  it("matches on a linked entity label", () => {
+    const withLink = task({
+      links: [
+        {
+          kind: "pr",
+          id: "businessinsider/syndication-services#46",
+          label: "Add Meta feed delivery",
+        },
+      ],
+    });
+    expect(matchesTaskSearch(withLink, "meta feed")).toBe(true);
+    expect(matchesTaskSearch(withLink, "syndication-services#46")).toBe(true);
+  });
 });

@@ -10,6 +10,8 @@ import {
 import { attachRequestedReviewers } from "@/lib/github/request-reviewers";
 import { isGithubCliAuthenticated, mapGithubCliError } from "@/lib/gh-exec";
 import { getGithubLogin } from "@/lib/standup/github-merged";
+import { pMap } from "@/lib/p-limit";
+import { SUBPROCESS_CONCURRENCY } from "@/lib/standup/config";
 
 export const dynamic = "force-dynamic";
 
@@ -29,11 +31,11 @@ export async function GET() {
 
     const uniqueRepos = [...new Set([...authored, ...reviews].map((r) => r.repo))];
     const archivedSet = new Set<string>();
-    await Promise.all(
-      uniqueRepos.map(async (repo) => {
-        if (await isRepoArchived(repo)) archivedSet.add(repo);
-      }),
-    );
+    // Capped: one `gh repo view` subprocess per repo, and the buckets can now
+    // hold 100 rows each.
+    await pMap(uniqueRepos, SUBPROCESS_CONCURRENCY, async (repo) => {
+      if (await isRepoArchived(repo)) archivedSet.add(repo);
+    });
     const filterArchived = (rows: GithubPrRow[]) => rows.filter((r) => !archivedSet.has(r.repo));
 
     const filteredAuthored = await attachRequestedReviewers(filterArchived(authored));

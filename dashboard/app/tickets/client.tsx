@@ -7,7 +7,8 @@ import type { JiraTicket } from "@/lib/jira/client";
 import { useMarkTicketsSeen } from "@/lib/hooks/use-sidebar-counts";
 import { priorityIcon } from "@/components/jira/JiraWidget";
 import { JiraTicketRow } from "@/components/jira/JiraTicketRow";
-import { FetchError, EmptyState, SkeletonRows } from "@/components";
+import { FetchError, EmptyState, InlineSearch, SkeletonRows } from "@/components";
+import { filterTickets } from "@/lib/jira/ticket-search";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 
 interface JiraResponse {
@@ -48,6 +49,7 @@ export default function TicketsPage() {
   const { data, error, isLoading, mutate, isValidating } = useLive<JiraResponse>("/api/jira/tickets");
   const boot = useBootGate(data !== undefined || !!error);
   const [filter, setFilter] = useState<string>("All");
+  const [query, setQuery] = useState("");
 
   const tickets = useMemo(() => {
     const list = data?.tickets ?? [];
@@ -56,8 +58,9 @@ export default function TicketsPage() {
   useMarkTicketsSeen();
   const configured = data?.configured ?? false;
 
-  const filtered =
+  const byStatus =
     filter === "All" ? tickets : tickets.filter((t) => ticketMatchesStatusFilter(t.status, filter));
+  const filtered = filterTickets(byStatus, query);
 
   if (!isLoading && !error && !configured) {
     return (
@@ -124,6 +127,17 @@ export default function TicketsPage() {
         ))}
       </div>
 
+      <div className="card mb-4" style={{ padding: "8px 10px" }}>
+        <InlineSearch
+          id="tickets-search"
+          label="Search tickets"
+          placeholder="Search by key, summary, status, project or assignee…"
+          value={query}
+          onChange={setQuery}
+          hint={query.trim() ? `${filtered.length} of ${byStatus.length}` : undefined}
+        />
+      </div>
+
       {isLoading && !data && <SkeletonRows count={5} height={40} variant="list" />}
 
       <div className="space-y-2">
@@ -134,9 +148,15 @@ export default function TicketsPage() {
 
       {!isLoading && !error && filtered.length === 0 && configured && (
         <EmptyState
-          title={filter === "All" ? "No tickets assigned to you." : `No ${filter.toLowerCase()} tickets.`}
+          title={
+            query.trim()
+              ? `No tickets match \u201C${query.trim()}\u201D.`
+              : filter === "All"
+                ? "No tickets assigned to you."
+                : `No ${filter.toLowerCase()} tickets.`
+          }
           quips={
-            filter === "All"
+            !query.trim() && filter === "All"
               ? ["Suspiciously quiet.", "Enjoy it while it lasts.", "The board owes you nothing today."]
               : undefined
           }

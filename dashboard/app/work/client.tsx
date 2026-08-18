@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { ListTodo, Ticket, History } from "lucide-react";
 import { TaskList } from "@/components/tasks/TaskList";
+import { InlineSearch } from "@/components/ui/InlineSearch";
 import { useLive } from "@/lib/hooks/use-fetch";
 import type { SetupGateStatus } from "@/lib/nav";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
@@ -31,6 +32,7 @@ export default function WorkPage() {
   // Track the last URL tab so in-app ?tab= navigation switches tabs without an
   // effect (React "adjust state during render" pattern).
   const [seenParamTab, setSeenParamTab] = useState(paramTab);
+  const [taskQuery, setTaskQuery] = useState("");
   if (paramTab !== seenParamTab) {
     setSeenParamTab(paramTab);
     if (paramTab) setTab(paramTab);
@@ -69,8 +71,15 @@ export default function WorkPage() {
     <div className="page-wrapper">
       <BootScreen state={boot} />
       {tabs}
-      <section className="card card-body fade-rise" aria-label="Today's queue">
-        <TaskList />
+      <section className="card card-body fade-rise space-y-3" aria-label="Today's queue">
+        <InlineSearch
+          id="work-task-search"
+          label="Search tasks"
+          placeholder="Search tasks by text, Jira key, due date or link…"
+          value={taskQuery}
+          onChange={setTaskQuery}
+        />
+        <TaskList searchQuery={taskQuery} />
       </section>
     </div>
   );
