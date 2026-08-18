@@ -790,6 +790,44 @@ fn is_checkout_dev_process(command: &str, cwd: Option<&Path>, dashboard: &Path) 
         .any(|marker| command.contains(marker))
 }
 
+/// The packaged app's executable, as it appears in a process listing.
+///
+/// Matched against a listener's *ancestors* rather than the listener itself,
+/// because the listener's own argv gives nothing away: a packaged DevHub holds
+/// the port through `node …/server.js`, and Next rewrites the worker's argv to
+/// a bare `next-server (vX)`. The app bundle only ever shows up further up.
+const DESKTOP_APP_MARKER: &str = "DevHub.app/Contents/MacOS/";
+
+/// Command lines of a process and its ancestors, nearest first.
+///
+/// Bounded rather than looped to init: a ppid chain that cycles is a kernel
+/// bug, and hanging startup is a worse way to report one than giving up.
+fn ancestor_commands(pid: u32) -> Vec<String> {
+    const MAX_HOPS: usize = 8;
+    let mut commands = Vec::new();
+    let mut current = pid;
+    for _ in 0..MAX_HOPS {
+        if let Some(command) = process_command(current) {
+            commands.push(command);
+        }
+        match process_parent(current) {
+            Some(parent) if parent > 1 && parent != current => current = parent,
+            _ => break,
+        }
+    }
+    commands
+}
+
+/// Is this listener part of a running DevHub app rather than a checkout?
+///
+/// Pure over the ancestor command lines, so the classification is testable
+/// without an app bundle to spawn.
+fn is_desktop_app_chain(commands: &[String]) -> bool {
+    commands
+        .iter()
+        .any(|command| command.contains(DESKTOP_APP_MARKER))
+}
+
 /// Who is holding a port, in the terms an error message needs.
 struct PortHolder {
     pid: u32,
@@ -797,6 +835,21 @@ struct PortHolder {
     /// A DevHub dev service from the configured checkout — ours to offer to
     /// stop, rather than a stranger's process to refuse to touch.
     ours: bool,
+    /// A sidecar belonging to another running DevHub app. Also not ours to
+    /// stop, but for the opposite reason: that one has a window to quit from,
+    /// so the honest instruction is to go and quit it.
+    desktop_app: bool,
+}
+
+/// Which holder a message should be written about, best first.
+fn holder_rank(holder: &PortHolder) -> u8 {
+    if holder.ours {
+        2
+    } else if holder.desktop_app {
+        1
+    } else {
+        0
+    }
 }
 
 /// Every listener on `port`, classified.
@@ -811,7 +864,15 @@ fn describe_port_holders(port: u16, repo_root: Option<&Path>) -> Vec<PortHolder>
             let ours = dashboard.as_deref().is_some_and(|dashboard| {
                 is_checkout_dev_process(&command, cwd.as_deref(), dashboard)
             });
-            Some(PortHolder { pid, command, ours })
+            // Only worth the walk when the cheaper check said no: our own
+            // checkout's server is never also somebody's packaged app.
+            let desktop_app = !ours && is_desktop_app_chain(&ancestor_commands(pid));
+            Some(PortHolder {
+                pid,
+                command,
+                ours,
+                desktop_app,
+            })
         })
         .collect()
 }
@@ -822,10 +883,15 @@ fn describe_port_holders(port: u16, repo_root: Option<&Path>) -> Vec<PortHolder>
 /// — and `lsof` order is not meaningful. Reporting whichever came back first
 /// told the user their own dev server was "another program's process".
 fn describe_port_holder(port: u16, repo_root: Option<&Path>) -> Option<PortHolder> {
-    let holders = describe_port_holders(port, repo_root);
-    holders
+    describe_port_holders(port, repo_root)
         .into_iter()
-        .reduce(|best, next| if best.ours { best } else { next })
+        .reduce(|best, next| {
+            if holder_rank(&next) > holder_rank(&best) {
+                next
+            } else {
+                best
+            }
+        })
 }
 
 /// Say what is on the port, and what can be done about it.
@@ -836,28 +902,33 @@ fn describe_port_holder(port: u16, repo_root: Option<&Path>) -> Option<PortHolde
 /// checkout — DevHub's own dev helper, left behind by a `npm run dev` nobody
 /// remembered starting. Telling someone to go hunt down our mess by hand is not
 /// an error message, it is a shrug.
-fn port_conflict_message(port: u16, is_devhub: bool, holder: Option<&PortHolder>) -> String {
-    if is_devhub {
+fn port_conflict_message(port: u16, holder: Option<&PortHolder>) -> String {
+    // lsof is absent or told us nothing. Still better than silence.
+    let Some(holder) = holder else {
+        return format!(
+            "Port {port} is in use and DevHub could not identify the process holding it. Run `lsof -nP -iTCP:{port} -sTCP:LISTEN` to find it, quit it, then Retry."
+        );
+    };
+    if holder.ours {
+        return format!(
+            "Port {port} is held by a leftover DevHub development server (PID {}) from your checkout. \
+             DevHub can stop it and carry on, or you can attach to it instead from View → Attach to Dev Server…",
+            holder.pid
+        );
+    }
+    // Said only when a DevHub app really is running. It used to be said
+    // whenever the port answered, which pointed the user at a window that had
+    // closed an hour earlier.
+    if holder.desktop_app {
         return format!(
             "Another DevHub is already using port {port}. Quit it, or use the window that is already open."
         );
     }
-    match holder {
-        Some(holder) if holder.ours => format!(
-            "Port {port} is held by a leftover DevHub development server (PID {}) from your checkout. \
-             DevHub can stop it and carry on, or you can attach to it instead from View → Attach to Dev Server…",
-            holder.pid
-        ),
-        Some(holder) => format!(
-            "Port {port} is in use by PID {} ({}). DevHub will not stop another program's process — quit it, then Retry.",
-            holder.pid,
-            truncate_command(&holder.command)
-        ),
-        // lsof is absent or told us nothing. Still better than silence.
-        None => format!(
-            "Port {port} is in use and DevHub could not identify the process holding it. Run `lsof -nP -iTCP:{port} -sTCP:LISTEN` to find it, quit it, then Retry."
-        ),
-    }
+    format!(
+        "Port {port} is in use by PID {} ({}). DevHub will not stop another program's process — quit it, then Retry.",
+        holder.pid,
+        truncate_command(&holder.command)
+    )
 }
 
 /// Enough of a command line to recognise it, not enough to fill the dialog.
@@ -1203,22 +1274,22 @@ fn start_sidecar(app: &tauri::AppHandle) -> Result<(), String> {
     // Refuse to start into an occupied port and say what is there. Never kill
     // it: on a developer's machine port 1337 belongs to somebody's own server
     // at least as often as it belongs to us.
-    if let Some(conflict) = sidecar.check_ports() {
+    if let Some(port) = sidecar.check_ports() {
         let repo_root = dev_server_repo_root(app).ok();
-        let holder = describe_port_holder(conflict.port, repo_root.as_deref());
+        let holder = describe_port_holder(port, repo_root.as_deref());
         // On disk before the dialog: this is the line that explains a failed
         // start after the fact, and the full command line is too long to show.
         if let Some(holder) = holder.as_ref() {
             state.log.write_line(
                 "shell:startup",
                 &format!(
-                    "[startup] port {} held by pid={} ours={} command={}",
-                    conflict.port, holder.pid, holder.ours, holder.command
+                    "[startup] port {} held by pid={} ours={} app={} command={}",
+                    port, holder.pid, holder.ours, holder.desktop_app, holder.command
                 ),
             );
         }
-        let stoppable = !conflict.is_devhub && holder.as_ref().is_some_and(|h| h.ours);
-        let message = port_conflict_message(conflict.port, conflict.is_devhub, holder.as_ref());
+        let stoppable = holder.as_ref().is_some_and(|h| h.ours);
+        let message = port_conflict_message(port, holder.as_ref());
         fail_with_recovery(app, &message, stoppable);
         return Err(message);
     }
@@ -1321,10 +1392,7 @@ fn load_dashboard(app: &tauri::AppHandle, sidecar: &Sidecar) {
     }
 
     if let Err(err) = window.navigate(parsed) {
-        fail(
-            app,
-            &format!("Could not open the dashboard: {err}"),
-        );
+        fail(app, &format!("Could not open the dashboard: {err}"));
         return;
     }
     show_main_window(app);
@@ -1345,7 +1413,10 @@ fn load_dashboard(app: &tauri::AppHandle, sidecar: &Sidecar) {
             if let Some(state) = watch.try_state::<AppState>() {
                 state.log.write_line(
                     "shell:handoff",
-                    &format!("[handoff] webview is on {}", current.origin().ascii_serialization()),
+                    &format!(
+                        "[handoff] webview is on {}",
+                        current.origin().ascii_serialization()
+                    ),
                 );
             }
             return;
@@ -2287,8 +2358,9 @@ mod tests {
             pid: 84174,
             command: "node /repo/dashboard/node_modules/.bin/tsx scripts/lan-port-proxy.ts".into(),
             ours: true,
+            desktop_app: false,
         };
-        let message = port_conflict_message(1337, false, Some(&holder));
+        let message = port_conflict_message(1337, Some(&holder));
         assert!(
             message.contains("84174"),
             "must name the process: {message}"
@@ -2309,8 +2381,9 @@ mod tests {
             pid: 999,
             command: "/usr/local/bin/some-other-server --port 1337".into(),
             ours: false,
+            desktop_app: false,
         };
-        let message = port_conflict_message(1337, false, Some(&holder));
+        let message = port_conflict_message(1337, Some(&holder));
         assert!(message.contains("999"));
         assert!(message.contains("some-other-server"));
         assert!(
@@ -2321,7 +2394,7 @@ mod tests {
 
     #[test]
     fn an_unidentifiable_holder_still_gets_an_actionable_message() {
-        let message = port_conflict_message(1337, false, None);
+        let message = port_conflict_message(1337, None);
         assert!(
             message.contains("lsof"),
             "with no PID to name, hand over the command that finds it: {message}"
@@ -2331,12 +2404,63 @@ mod tests {
     #[test]
     fn a_second_devhub_is_reported_as_a_second_devhub() {
         let holder = PortHolder {
-            pid: 1,
-            command: "devhub-desktop".into(),
+            pid: 4242,
+            command: "node /Applications/DevHub.app/Contents/Resources/server/server.js".into(),
             ours: false,
+            desktop_app: true,
         };
-        let message = port_conflict_message(1337, true, Some(&holder));
+        let message = port_conflict_message(1337, Some(&holder));
         assert!(message.contains("Another DevHub"));
+        assert!(
+            !message.contains("will not stop"),
+            "a second app is quit from its own window, not refused as a stranger: {message}"
+        );
+    }
+
+    /// The orphan this classification exists for: `next start` outliving the
+    /// app that spawned it, still answering the health route.
+    ///
+    /// It was read as a second DevHub, so the user was told to quit a window
+    /// that had closed an hour earlier — and because the stop offer was gated
+    /// on *not* being a second DevHub, the one button that would have cleared
+    /// the port was hidden. Ownership is a property of the process.
+    #[test]
+    fn an_orphaned_checkout_server_is_owned_rather_than_mistaken_for_an_app() {
+        let holder = PortHolder {
+            pid: 76709,
+            command: "next-server (v16.2.6)".into(),
+            ours: true,
+            desktop_app: false,
+        };
+        let message = port_conflict_message(1337, Some(&holder));
+        assert!(
+            message.contains("leftover DevHub development server"),
+            "an orphan from our own checkout is ours to own: {message}"
+        );
+        assert!(
+            !message.contains("window that is already open"),
+            "there is no window: the app that spawned it is gone: {message}"
+        );
+    }
+
+    #[test]
+    fn a_sidecar_under_the_app_bundle_is_recognised_as_another_devhub() {
+        // The listener's own argv gives nothing away — the bundle is upstream.
+        assert!(is_desktop_app_chain(&[
+            "next-server (v16.2.6)".into(),
+            "node /Applications/DevHub.app/Contents/Resources/server/server.js".into(),
+            "/Applications/DevHub.app/Contents/MacOS/devhub-desktop".into(),
+        ]));
+    }
+
+    #[test]
+    fn an_ordinary_node_tree_is_not_another_devhub() {
+        assert!(!is_desktop_app_chain(&[
+            "next-server (v16.2.6)".into(),
+            "npm exec next start -p 1337 -H 0.0.0.0".into(),
+            "/bin/zsh".into(),
+        ]));
+        assert!(!is_desktop_app_chain(&[]));
     }
 
     #[test]
@@ -2345,8 +2469,9 @@ mod tests {
             pid: 1,
             command: "x".repeat(4000),
             ours: false,
+            desktop_app: false,
         };
-        let message = port_conflict_message(1337, false, Some(&holder));
+        let message = port_conflict_message(1337, Some(&holder));
         assert!(
             message.chars().count() < 400,
             "a dialog is not a log file: {} chars",
@@ -2361,24 +2486,44 @@ mod tests {
         let pick = |holders: Vec<PortHolder>| {
             holders
                 .into_iter()
-                .reduce(|best, next| if best.ours { best } else { next })
+                .reduce(|best, next| {
+                    if holder_rank(&next) > holder_rank(&best) {
+                        next
+                    } else {
+                        best
+                    }
+                })
                 .map(|h| h.pid)
         };
         let foreign = || PortHolder {
             pid: 1,
             command: "stranger".into(),
             ours: false,
+            desktop_app: false,
         };
         let mine = || PortHolder {
             pid: 2,
             command: "ours".into(),
             ours: true,
+            desktop_app: false,
+        };
+        let other_app = || PortHolder {
+            pid: 3,
+            command: "another devhub".into(),
+            ours: false,
+            desktop_app: true,
         };
 
         assert_eq!(pick(vec![foreign(), mine()]), Some(2));
         assert_eq!(pick(vec![mine(), foreign()]), Some(2));
         assert_eq!(pick(vec![foreign()]), Some(1));
         assert_eq!(pick(vec![]), None);
+        // A stranger sharing the port with a DevHub says less than the DevHub.
+        assert_eq!(pick(vec![foreign(), other_app()]), Some(3));
+        assert_eq!(pick(vec![other_app(), foreign()]), Some(3));
+        // Our own leftover still outranks it: only that one can be cleaned up.
+        assert_eq!(pick(vec![other_app(), mine()]), Some(2));
+        assert_eq!(pick(vec![mine(), other_app()]), Some(2));
     }
 
     /// A failure only advertises the stop button when the shell decided the

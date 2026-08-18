@@ -56,13 +56,6 @@ pub enum BootState {
     Stopping,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct PortConflict {
-    pub port: u16,
-    /// Whether the thing already listening answered our health check.
-    pub is_devhub: bool,
-}
-
 pub struct Sidecar {
     child: Arc<Mutex<Option<Child>>>,
     log: DesktopLog,
@@ -83,11 +76,18 @@ pub fn port_in_use(port: u16) -> bool {
     .is_ok()
 }
 
-/// Does the thing on this port claim to be *our* DevHub?
+/// Does the thing on this port claim to be *our* desktop DevHub?
 ///
 /// Requires the per-launch token, so a previous DevHub instance, another user's
 /// instance, or a malicious local server all fail this check. Without it a
 /// second launch would happily adopt whatever was listening.
+///
+/// `desktop: true` is required as well as `devhub: true`, and that is not
+/// belt-and-braces. The health route answers unauthenticated callers with
+/// `{devhub: true, desktop: false}` so a browser-mode dashboard can report
+/// itself — which means a bare `next start` from this checkout passed a check
+/// whose entire purpose was to be unforgeable. It read as "our DevHub is
+/// already up" to a shell that had never started it.
 pub fn health_check(port: u16, token: &str) -> bool {
     let Ok(mut stream) = TcpStream::connect_timeout(
         &SocketAddrV4::new(Ipv4Addr::LOCALHOST, port).into(),
@@ -121,7 +121,10 @@ pub fn health_check(port: u16, token: &str) -> bool {
             }
             status_ok = true;
         }
-        if status_ok && response.contains("\"devhub\":true") {
+        if status_ok
+            && response.contains("\"devhub\":true")
+            && response.contains("\"desktop\":true")
+        {
             return true;
         }
         // Next responds with chunked keep-alive connections. Waiting for EOF
@@ -143,22 +146,22 @@ impl Sidecar {
         }
     }
 
-    /// Refuse to start into an occupied port, and say who owns it.
+    /// Refuse to start into an occupied port.
     ///
-    /// Returning a conflict rather than resolving it is the point. The only
-    /// safe automatic resolution is "use a different port", and silently moving
-    /// the port breaks every bookmark and every integration callback URL. The
-    /// user gets told, with the two honest choices.
-    pub fn check_ports(&self) -> Option<PortConflict> {
-        for port in [self.port, self.terminal_port] {
-            if port_in_use(port) {
-                return Some(PortConflict {
-                    port,
-                    is_devhub: health_check(port, &self.token),
-                });
-            }
-        }
-        None
+    /// Returning the port rather than resolving it is the point. The only safe
+    /// automatic resolution is "use a different port", and silently moving the
+    /// port breaks every bookmark and every integration callback URL. The user
+    /// gets told, with the two honest choices.
+    ///
+    /// *Who* holds the port is left to the caller, which decides from the
+    /// process rather than from the reply. Asking the port was rule 2 breaking
+    /// itself: an orphaned checkout server answered "DevHub" convincingly
+    /// enough that the shell reported a second app, sent the user off to quit a
+    /// window that did not exist, and hid its own offer to clear the leftover.
+    pub fn check_ports(&self) -> Option<u16> {
+        [self.port, self.terminal_port]
+            .into_iter()
+            .find(|port| port_in_use(*port))
     }
 
     /// Spawn the supervisor in its own process group.
@@ -448,7 +451,7 @@ mod tests {
             for mut stream in listener.incoming().take(1).flatten() {
                 use std::io::Write;
                 let _ = stream.write_all(
-                    b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: keep-alive\r\n\r\nf\r\n{\"devhub\":true}\r\n",
+                    b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: keep-alive\r\n\r\n1e\r\n{\"devhub\":true,\"desktop\":true}\r\n",
                 );
                 std::thread::sleep(Duration::from_secs(2));
             }
@@ -468,12 +471,34 @@ mod tests {
                 use std::io::Write;
                 let _ = stream.write_all(b"HTTP/1.");
                 std::thread::sleep(Duration::from_millis(20));
-                let _ =
-                    stream.write_all(b"1 200 OK\r\nContent-Length: 15\r\n\r\n{\"devhub\":true}");
+                let _ = stream.write_all(
+                    b"1 200 OK\r\nContent-Length: 30\r\n\r\n{\"devhub\":true,\"desktop\":true}",
+                );
             }
         });
 
         assert!(health_check(port, "token"));
+    }
+
+    /// The exact shape that caused a stale `next start` to be adopted as the
+    /// app's own backend: a 200, and `devhub: true` in the body.
+    #[test]
+    fn health_check_rejects_a_browser_mode_dashboard() {
+        let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().take(1).flatten() {
+                use std::io::Write;
+                let _ = stream.write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 52\r\n\r\n{\"devhub\":true,\"desktop\":false,\"status\":\"browser\"}",
+                );
+            }
+        });
+
+        assert!(
+            !health_check(port, "token"),
+            "a dashboard that is not our desktop sidecar must not pass as one"
+        );
     }
 
     #[test]
@@ -483,7 +508,7 @@ mod tests {
         std::thread::spawn(move || {
             for mut stream in listener.incoming().take(1).flatten() {
                 use std::io::Write;
-                let _ = stream.write_all(b"{\"devhub\":true}");
+                let _ = stream.write_all(b"{\"devhub\":true,\"desktop\":true}");
             }
         });
 
