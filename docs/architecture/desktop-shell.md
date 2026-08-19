@@ -85,7 +85,11 @@ does any web page that can be made to fetch it.
   constant time, sets an `HttpOnly` `SameSite=Strict` cookie, and redirects to a
   clean URL so the token never reaches history or a `Referer` header.
 - **Health is authenticated.** Something answering on 1337 is not evidence that
-  DevHub is answering on 1337.
+  DevHub is answering on 1337. The shell's startup probe requires both
+  `devhub: true` and `desktop: true` in the health body — browser-mode
+  `npm run dev` returns `desktop: false`, and must not be mistaken for a running
+  packaged app. Port-conflict messages use the listener's **process ancestry**
+  (`lsof`), not the port's HTTP reply.
 - **The PTY requires cookie *and* exact origin.** `SameSite` is not reliably
   applied to WebSocket handshakes, so the origin is checked too — exactly, not
   by prefix (`http://127.0.0.1.evil.com` starts with `http://127.0.0.1`).

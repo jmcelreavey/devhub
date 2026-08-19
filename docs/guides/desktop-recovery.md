@@ -37,25 +37,37 @@ Each rotates at 2 MB and keeps one previous `.log.1` file.
 
 ## The port is in use
 
-> Port 1337 is in use by another program. DevHub will not stop it — quit that
-> program and try again.
+DevHub decides **who** holds a port from the listener's process tree (`lsof`),
+not from whatever the port answers with. A stale `next start` from your checkout
+used to claim `{ devhub: true }` and send you hunting for a second app window
+that did not exist — the shell now classifies holders as **yours** (this
+checkout's dev server), **another packaged app**, or **someone else's process**.
 
-Something else is listening. Most often a `npm run dev` from a checkout.
+> Port 1337 is held by a leftover DevHub development server (PID …) from your
+> checkout. DevHub can stop it and carry on, or you can attach to it instead
+> from View → Attach to Dev Server…
+
+A `npm run dev` or `next start` you left running from the linked checkout.
+Click **Try again** — DevHub offers to stop only listeners it has verified as
+*your* checkout's server, never a stranger's process.
+
+> Another DevHub is already using port 1337. Quit it, or use the window that is
+> already open.
+
+A packaged `DevHub.app` instance really is running (the listener's ancestor
+chain includes the app bundle). Use that window, or quit it first.
+
+> Port 1337 is in use by PID … (…). DevHub will not stop another program's
+> process — quit it, then Retry.
+
+Something else owns the port. Identify it manually when needed:
 
 ```bash
 lsof -nP -iTCP:1337 -sTCP:LISTEN
 ```
 
-Quit whatever that shows, then click **Try again**.
-
-DevHub deliberately does not kill it. On a developer's machine port 1337
-belongs to your own work at least as often as it belongs to DevHub, and a
-launcher that kills your build to start itself is worse than one that asks.
-
-> Another DevHub is already using port 1337.
-
-A second copy is running — that one answered an authenticated health check.
-Use the window that is already open, or quit it first.
+DevHub deliberately does not kill arbitrary listeners. On a developer's machine
+port 1337 belongs to your own work at least as often as it belongs to DevHub.
 
 ## It starts, then fails
 

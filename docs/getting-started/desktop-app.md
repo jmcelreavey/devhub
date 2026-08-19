@@ -138,13 +138,17 @@ nothing unexpected appears in your `git status`.
 
 ## When something goes wrong
 
-**"Port 1337 is in use by another program."** Something else is already
-listening — often a `npm run dev` you left running. DevHub will not kill it,
-because on a developer's machine that port belongs to your own work at least as
-often as it belongs to DevHub. Quit the other program and hit Retry.
+**"Port 1337 is held by a leftover DevHub development server…"** A `npm run dev`
+or `next start` from your linked checkout is still listening. DevHub can stop
+*only* that verified listener and continue, or you can attach to it from
+**View → Attach to Dev Server…** instead.
 
-**"Another DevHub is already using port 1337."** You have a second copy
-running. Use the window that is already open.
+**"Another DevHub is already using port 1337."** A packaged DevHub app is
+actually running (detected from the process tree, not from the port's reply).
+Use the window that is already open, or quit it first.
+
+**"Port 1337 is in use by PID …"** Some other program owns the port. DevHub will
+not kill it — quit that process and hit Retry.
 
 **The window shows a startup error.** Click **Open logs**. The last twenty lines
 are also shown in the window itself. Logs are at

@@ -83,6 +83,12 @@ The sidebar is driven by `dashboard/lib/nav.ts` — **16** core sidebar destinat
 | Jira    | Ticket list (same as `/tickets`) | Jira routes; tab hidden until Jira is configured |
 | History | Per-day task summaries           | `GET /api/tasks/history?includeTasks=1`          |
 
+All three tabs share the same borderless `InlineSearch` row. **Tasks** filters on
+body text, Jira key, due date, abandon reason, and linked-entity labels/ids.
+**Jira** filters on key, summary, status, priority, type, project, and assignee.
+**History** uses the same control for day summaries. Whitespace-separated terms
+are AND-ed on every tab.
+
 **Library** and **System** use `SectionTabs` in the top bar when you land on any sibling route (for example `/docs` or `/setup`). Gated tabs (Live links) appear only when setup enables them. **System** also includes a **Logs** tab (desktop only) for live tail of shell, sidecar, and renderer logs. **BI** is a sidebar group (Ops from the BI plugin, Datadog from core) — first-class items, not System tabs.
 
 **Diagrams** (`/diagrams`, Library tab) opens a browse-by-folder landing page — recent diagrams plus folder cards (`lib/diagrams/diagram-browse.ts`). Click a card or recent item to open the tldraw editor at `/diagrams/[...path]`.
@@ -216,7 +222,7 @@ Launch wiring lives in `dashboard/lib/terminal-launch.ts`. See [OpenCode and Ope
 
 ## Pull Request Reviews
 
-**PRs** (`/prs`, gated on `github`) and the Today GitHub panel read `GET /api/github/prs` — authored PRs, review-requested PRs, and recently reviewed PRs (archived repos filtered from active queues).
+**PRs** (`/prs`, gated on `github`) and the Today GitHub panel read `GET /api/github/prs` — authored PRs, review-requested PRs, and recently reviewed PRs (archived repos filtered from active queues; up to 100 rows per active bucket). The screen search box filters those buckets client-side or pins a pasted PR URL; unmatched phrases fall back to `GET /api/github/prs/search` (**Elsewhere on GitHub**). See [GitHub — Search and pin](../integrations/github.md#search-and-pin).
 
 The **Review** row action does **not** call a review API. It opens the terminal drawer and runs the configured Agent CLI with the `pr-explain-review` skill. The skill pulls conversation, inline review threads, and the linked Jira/GitHub ticket, then saves a note at `pr-reviews/<owner-repo-slug>-<pr-number>` via notes MCP. The **Notes** link polls `GET /api/notes/pr-reviews/<slug>` every few seconds until the note exists.
 

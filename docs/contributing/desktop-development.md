@@ -276,6 +276,10 @@ Practical consequences when adding a feature:
 - **Never LAN-proxy port 1339.** It is an unauthenticated PTY.
 - **Never kill a process merely because it owns a port.** Mode switching may
   stop only a listener verified as this checkout's DevHub development server.
+  Startup classifies holders via `lsof` + ancestor command lines (packaged app
+  bundle marker vs checkout dev markers), not via `GET /api/desktop/health` —
+  browser `next start` answers `{ devhub: true, desktop: false }` and must not
+  trigger "Another DevHub is already using port 1337".
 
 ## Testing
 

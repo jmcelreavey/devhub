@@ -74,7 +74,24 @@ The PR views are meant to answer:
 `/prs` and the Today GitHub PR panel both read `GET /api/github/prs`. The route uses
 the local GitHub CLI session, filters archived repositories out of authored/review
 queues, and keeps a short in-memory cache so the dashboard does not hammer `gh`
-on every render.
+on every render. Each active bucket (authored, review-requested) keeps up to **100**
+rows — raised from 30 so review requests buried under Dependabot floods are not
+silently dropped.
+
+### Search and pin
+
+The `/prs` search box is one control with two modes:
+
+| Input | Behavior |
+| ----- | -------- |
+| Free text | Filters all three tabs (authored, review-requested, recently reviewed) client-side on title, repo, `repo#number`, author, and requested reviewers. Whitespace-separated terms are AND-ed (`meta syndication` narrows). |
+| PR URL or `owner/repo#123` | Switches to **add** mode — pins the row at the top without leaving the page. |
+
+When a phrase matches nothing locally, **Elsewhere on GitHub** calls
+`GET /api/github/prs/search?q=` (debounced, min 2 chars). Results are scoped to
+your GitHub orgs unless the query already carries search qualifiers (`author:foo`,
+`repo:org/name`, etc.). Up to ten remote hits are shown, excluding PRs already in
+your buckets. Closed/merged PRs show a state badge.
 
 ### Row Actions
 
