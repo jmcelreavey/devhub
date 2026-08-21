@@ -66,6 +66,17 @@ When you complete or abandon a task that includes a Jira key, DevHub can prompt 
 
 The prompt is optional — you can dismiss it without changing Jira. Agents can use the MCP tool `jira_ticket_transition` for the same operation (see [MCP Server](../architecture/mcp-server.md)).
 
+## Ticket list and search
+
+Assigned tickets appear on **Work → Jira** (`/work`) and the legacy **`/tickets`** route (palette-only; same data). Both read `GET /api/jira/tickets` and sort by `updatedAt` descending.
+
+| Surface | Filters |
+| ------- | ------- |
+| `/tickets` | Status tabs: All, To Do, In Progress, In Review, Done — plus an `InlineSearch` row |
+| Work → Jira | Same status grouping inside the Work shell; shares the Work search row |
+
+Search matches key, summary, status, priority, type, project, and assignee. Whitespace-separated terms are AND-ed (`PTF auth` narrows). The search hint shows `{filtered} of {total}` while typing.
+
 ## Usage Tips
 
 - Keep task text clear even when it includes a ticket key.
