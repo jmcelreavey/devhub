@@ -1,12 +1,18 @@
-import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { withErrorHandler, parseBody } from "@/lib/api-utils";
 import { BriefingDesignSchema } from "@/lib/schemas";
-import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai/provider";
-import { isNotesAiConfigured } from "@/lib/notes-ai/config";
+import { generateAiText } from "@/lib/ai/generate";
+import { isAiConfigured } from "@/lib/ai/preference";
+
 import { buildBriefingContext, contextForPrompt, type BriefingContext } from "@/lib/briefing-context";
-import { readCanvas, saveCanvas, resetCanvas, generateCanvasHtml } from "@/lib/briefing-canvas";
+import {
+  readCanvas,
+  saveCanvas,
+  resetCanvas,
+  generateCanvasHtml,
+  canvasRegenFailureMessage,
+} from "@/lib/briefing-canvas";
 import { addFeed, type AddFeedInput, type DynamicFeed } from "@/lib/briefing-feeds";
 import { createResearchTask, type ResearchTask } from "@/lib/briefing-tasks";
 import {
@@ -93,15 +99,11 @@ function fallbackPlan(message: string): DesignPlan {
 }
 
 async function planDesign(message: string, history: ChatMessage[], ctx: BriefingContext): Promise<DesignPlan> {
-  if (!isNotesAiConfigured()) return fallbackPlan(message);
-  const model = getNotesAiModel();
-  if (!model) return fallbackPlan(message);
+  if (!isAiConfigured()) return fallbackPlan(message);
 
   try {
-    const result = await generateText({
-      model,
+    const result = await generateAiText({
       maxOutputTokens: 900,
-      ...getNotesAiCallOptions(),
       prompt: [
         "You are the controller for a bespoke personal briefing screen. The user chats to reshape it.",
         "Decide what their message means and return a plan as JSON ONLY, shape:",
@@ -191,6 +193,7 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
 
   // Redesign the canvas (also when new feeds arrived, so they actually surface).
   let canvasUpdated = false;
+  let canvasError: string | undefined;
   const wantRedesign = plan.redesign || addedFeeds.length > 0;
   if (wantRedesign) {
     if (addedFeeds.length > 0 || prefsChanged) ctx = await buildBriefingContext({ refresh: true });
@@ -204,28 +207,26 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     // custom aesthetic is chosen it sticks for later revisions until reset.
     const customAesthetic = plan.freshLook || canvas.customAesthetic === true;
     const baseHtml = plan.freshLook ? null : canvas.aiAuthored ? canvas.html : null;
-    const html = await generateCanvasHtml(instruction, contextForPrompt(ctx), baseHtml, theme, {
+    const generated = await generateCanvasHtml(instruction, contextForPrompt(ctx), baseHtml, theme, {
       customAesthetic,
     });
-    if (html) {
-      await saveCanvas(html, instruction, { customAesthetic });
+    if (generated.html) {
+      await saveCanvas(generated.html, instruction, { customAesthetic });
       canvasUpdated = true;
+    } else {
+      canvasError = generated.error;
     }
   }
 
   // Deterministic outcome line — never leave "did anything happen?" to the
-  // model's phrasing. Success states confirm; the failure note stays.
+  // model's phrasing. Success states confirm; failures include the real reason.
   const status: string[] = [];
   if (canvasUpdated) {
     status.push(
       `✓ Done — the canvas has been redrawn (rev ${readCanvas().revision}) and is live behind this dialog.`,
     );
   } else if (wantRedesign) {
-    status.push(
-      isNotesAiConfigured()
-        ? "(I couldn't regenerate the layout just now, so I kept the current one — try again in a moment.)"
-        : "(AI isn't configured, so I can't redraw the layout — set AI_API_KEY to enable custom designs.)",
-    );
+    status.push(canvasRegenFailureMessage({ configured: isAiConfigured(), error: canvasError }));
   }
   if (prefsChanged) status.push("Preferences saved.");
   const reply = [plan.reply, ...status].join(" ");

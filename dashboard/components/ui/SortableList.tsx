@@ -266,6 +266,8 @@ export function SortableList<T>({
   const handlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>, id: string) => {
       if (disabled || event.button !== 0) return;
+      // Don't let a parent bindRow long-press (touch/pen) start on the grip.
+      event.stopPropagation();
       // Keeps the press from starting a text selection or a native drag; the
       // threshold check in pointermove is what distinguishes a click.
       event.preventDefault();

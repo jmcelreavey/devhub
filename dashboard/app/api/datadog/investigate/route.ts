@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolveOpenCodePort } from "@/lib/opencode/command";
+import { ensureDevHubOpenCode } from "@/lib/opencode/listen";
 import {
   buildDatadogInvestigationPrompt,
   type DatadogInvestigationInput,
@@ -33,7 +33,7 @@ export const POST = withErrorHandler(async (req: Request) => {
     timestampMs: typeof body.timestampMs === "number" ? body.timestampMs : undefined,
   });
 
-  const base = `http://127.0.0.1:${resolveOpenCodePort()}`;
+  const base = `http://127.0.0.1:${await ensureDevHubOpenCode()}`;
   const headers = opencodeHeaders();
   const title = `Datadog: ${body.title ? body.title.slice(0, 60) : scope}`;
 
@@ -71,7 +71,7 @@ export const POST = withErrorHandler(async (req: Request) => {
     return NextResponse.json(
       {
         ok: false,
-        error: e instanceof Error ? e.message : "Could not reach OpenCode. Is it running on :1338?",
+        error: e instanceof Error ? e.message : "Could not reach OpenCode.",
       },
       { status: 502 },
     );

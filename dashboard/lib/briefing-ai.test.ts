@@ -1,17 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@/lib/notes-ai/config", () => ({
-  isNotesAiConfigured: vi.fn(() => false),
+vi.mock("@/lib/ai/preference", () => ({
+  isAiConfigured: vi.fn(() => false),
 }));
 
-vi.mock("@/lib/ai/provider", () => ({
-  getNotesAiModel: vi.fn(() => null),
-  getNotesAiCallOptions: vi.fn(() => ({})),
+vi.mock("@/lib/ai/generate", () => ({
+  tryGenerateAiText: vi.fn(async () => null),
+  generateAiText: vi.fn(),
 }));
 
-vi.mock("ai", () => ({
-  generateText: vi.fn(),
-}));
 
 describe("briefing-ai (AI unconfigured — all fallbacks)", () => {
   beforeEach(() => {

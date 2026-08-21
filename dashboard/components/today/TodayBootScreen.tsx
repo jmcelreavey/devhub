@@ -2,7 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { BRAND_BOTTLE_IMAGE_SRC, BRAND_LABEL } from "@/lib/brand-mark";
+import {
+  BRAND_BOTTLE_IMAGE_SRC,
+  BRAND_LABEL,
+  DEVHUB_BRAND_IMAGE,
+  HAS_PLUGIN_BRAND,
+} from "@/lib/brand-mark";
 
 export type BootState = "loading" | "leaving" | "done";
 
@@ -94,14 +99,25 @@ export function TodayBootScreen({ state }: { state: BootState }) {
       <div className="boot-mark">
         <span className="boot-ring" aria-hidden />
         <Image
-          src={BRAND_BOTTLE_IMAGE_SRC}
+          src={DEVHUB_BRAND_IMAGE}
           alt=""
           width={56}
           height={56}
           unoptimized
           priority
-          className="boot-logo"
+          className="boot-logo boot-logo-devhub"
         />
+        {HAS_PLUGIN_BRAND && (
+          <Image
+            src={BRAND_BOTTLE_IMAGE_SRC}
+            alt=""
+            width={56}
+            height={56}
+            unoptimized
+            priority
+            className="boot-logo boot-logo-plugin"
+          />
+        )}
       </div>
       {BRAND_LABEL && <div className="boot-title">{BRAND_LABEL}</div>}
       <div className="boot-line" aria-hidden>

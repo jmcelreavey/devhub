@@ -48,7 +48,7 @@ const FALLBACK_LIGHT_THEME: CanvasTheme = {
   muted: "#4f6171",
   subtle: "#637281",
   border: "#cfd8df",
-  accent: "#5d9e10",
+  accent: "#4c840c",
   accentFg: "#f7f8f9",
 };
 

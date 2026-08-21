@@ -98,7 +98,7 @@ A Next.js-based personal dev dashboard (default `http://localhost:1337`).
 > whitelisted scripts on your machine — set `DEVHUB_API_SECRET` (see `.env.example`)
 > if anything other than your browser talks to the dashboard.
 
-DevHub keeps the local services on `127.0.0.1` so the desktop app can always use `http://localhost:1337`. Use **Setup** (`/setup`) — checkbox _Allow access from other devices on my network_ — to add LAN access. LAN mode starts a small proxy on the detected physical LAN IPv4 and forwards ports `1337`, `1336` and `1338` back to localhost. Port `1339` (the terminal) is deliberately **not** proxied — it is an unauthenticated PTY, and exposing a shell to your network is not something LAN mode should do. The `auto` detector excludes Tailscale/VPN CGNAT addresses (`100.64.0.0/10`) by default.
+DevHub keeps the local services on `127.0.0.1` so the desktop app can always use `http://localhost:1337`. Use **Setup** (`/setup`) — checkbox _Allow access from other devices on my network_ — to add LAN access. LAN mode starts a small proxy on the detected physical LAN IPv4 and forwards ports `1337` and `1336` back to localhost. OpenCode is an ephemeral loopback instance (not 1338) and is not proxied. Port `1339` (the terminal) is deliberately **not** proxied — it is an unauthenticated PTY, and exposing a shell to your network is not something LAN mode should do. The `auto` detector excludes Tailscale/VPN CGNAT addresses (`100.64.0.0/10`) by default.
 
 **WSL2:** LAN traffic hits **Windows** first. DevHub exposes a LAN proxy inside Linux; you still need Windows to accept and route it.
 
@@ -117,7 +117,7 @@ Microsoft documents [Hyper-V firewall rules](https://learn.microsoft.com/en-us/w
 powershell.exe -ExecutionPolicy Bypass -File "\\wsl$\YOUR_DISTRO_NAME\home\YOU\dev\devhub\scripts\wsl\forward-devhub.ps1"
 ```
 
-That sets `netsh` portproxy for ports **1337**, **1336**, and **1338** plus a firewall rule. Re-run after reboot if your phone can’t connect anymore.
+That sets `netsh` portproxy for ports **1337** and **1336** plus a firewall rule. Re-run after reboot if your phone can’t connect anymore.
 
 `npm run dev` prints a WSL reminder when relevant.
 
@@ -129,8 +129,8 @@ Features:
 - **Notes** — BlockNote editor, file tree, search overlay, folder-scoped **master checklists** (shared task blocks across notes), optional **in-editor AI** via z.ai (`/ai`, selection toolbar — see env vars below)
 - **Recall** — Hybrid retrieval over notes, docs, learnings, task history, and an append-only event spine (`/recall`; see `docs/architecture/recall.md`)
 - **Own** — Repo ownership radar for repositories you mark accountable for — inbound PRs, obligations, knowledge gaps, catch-up digests (`/own`, GitHub-gated; see `docs/guides/repo-ownership.md`)
-- **Chamber** — OpenChamber iframe integration (uses the shared OpenCode server on `1338`)
-- **OpenCode** — OpenCode web UI iframe on port `1338`
+- **Chamber** — OpenChamber iframe on port `1336` (Chamber manages its own OpenCode)
+- **OpenCode** — OpenCode web UI iframe, lazy-started on an ephemeral loopback port (never 1338)
 - **Terminal** — in-app PoC terminal backed by a local PTY peer on port `1339`
 - **Datadog** — `/datadog` hub + Today strip (deep links to monitors by `@oncall-dad` / `@slack-dad-team-alerts` and today’s event stream) when `DATADOG_API_KEY` is set in `/setup`
 - **Status** — Git/repo health, services, MCP server processes, restarts; same **GitHub PRs** strip as Today
@@ -158,11 +158,7 @@ A starter `dashboard/.env.example` is checked in — copy to `dashboard/.env.loc
 | `DEVHUB_BIND_HOST` | `127.0.0.1` | Next.js listen address; keep localhost for the desktop app |
 | `DEVHUB_LAN_PROXY_HOST` | unset | Optional LAN proxy bind host. Use `auto` to pick a physical LAN IPv4 and exclude Tailscale CGNAT |
 | `OPENCHAMBER_HOST` | `127.0.0.1` | OpenChamber local bind address; LAN access is proxied when enabled |
-| `NEXT_PUBLIC_OPENCHAMBER_PORT` | `1336` | Port embedded in the Chamber iframe URL in the browser |
-| `OPENCODE_PORT` | `1338` | `opencode serve` listen port (shared by Chamber and the `/opencode` page) |
 | `TERMINAL_PORT` | `1339` | In-app terminal PTY WebSocket peer |
-| `OPENCODE_BIND_HOST` | `127.0.0.1` | `opencode serve --hostname` (legacy: `OPENCODE_HOST` when not a URL); LAN access is proxied when enabled |
-| `NEXT_PUBLIC_OPENCODE_PORT` | `1338` | Port embedded in the OpenCode iframe URL in the browser |
 
 **Google Calendar (optional):**
 | Var | Required | How to Get |

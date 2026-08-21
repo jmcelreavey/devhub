@@ -294,6 +294,7 @@ export default function StatusPage() {
   const [copiedLanUrl, setCopiedLanUrl] = useState(false);
   const [showQrCode, setShowQrCode] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [statusTab, setStatusTab] = useState<"sync" | "runtime" | "maintenance">("sync");
 
   const loadLatestSyncFailure = useCallback(async () => {
     const history = await fetch("/api/scripts/history")
@@ -759,6 +760,20 @@ export default function StatusPage() {
       )}
 
       <div className="flex flex-col gap-4">
+        <div className="hub-tabs self-start" role="tablist" aria-label="Status sections">
+          <button type="button" role="tab" aria-selected={statusTab === "sync"} className="hub-tab" data-active={statusTab === "sync" || undefined} onClick={() => setStatusTab("sync")}>
+            Sync
+          </button>
+          <button type="button" role="tab" aria-selected={statusTab === "runtime"} className="hub-tab" data-active={statusTab === "runtime" || undefined} onClick={() => setStatusTab("runtime")}>
+            Runtime
+          </button>
+          <button type="button" role="tab" aria-selected={statusTab === "maintenance"} className="hub-tab" data-active={statusTab === "maintenance" || undefined} onClick={() => setStatusTab("maintenance")}>
+            Maintenance
+          </button>
+        </div>
+
+        {statusTab === "sync" && (
+        <>
         {git && (
           <>
           <div className="card min-w-0 flex flex-col">
@@ -963,7 +978,11 @@ export default function StatusPage() {
           <div className="card-header"><span className="flex items-center gap-1.5"><History size={12} />Run history</span></div>
           <div className="card-body"><RecentRunsPanel /></div>
         </div>
+        </>
+        )}
 
+        {statusTab === "runtime" && (
+        <>
         {/* Services + MCP + BI: shared row on large screens */}
         <SectionLabel>Services &amp; Integrations</SectionLabel>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,0.9fr)] lg:items-stretch">
@@ -1039,7 +1058,11 @@ export default function StatusPage() {
 
         <InfraCard />
         </div>
+        </>
+        )}
 
+        {statusTab === "maintenance" && (
+        <>
         {/*
           Maintenance sits last on purpose. It is a minutes-long action nobody
           needs on arrival, and putting it above the service cards pushed the
@@ -1104,6 +1127,8 @@ export default function StatusPage() {
             </div>
           </div>
         </div>
+        </>
+        )}
 
       </div>
     </div>

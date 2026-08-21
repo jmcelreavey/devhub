@@ -22,14 +22,10 @@ const row: GithubPrRow = {
   title: "ABC-123 - Example change",
   url: "https://github.com/example-org/example-service/pull/123",
   author: { login: "you", avatarUrl: "https://example.com/you.png" },
-  requestedReviewers: [
-    { login: "gabe", avatarUrl: "https://example.com/gabe.png" },
-    { login: "jbern", avatarUrl: "https://example.com/jbern.png" },
-  ],
 };
 
 describe("PrRow", () => {
-  it("puts requested reviewers on the meta line, not the action column", () => {
+  it("keeps context on the meta line and every action behind the kebab", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
     render(<PrRow row={row} kind="authored" density="compact" />);
 
@@ -39,9 +35,6 @@ describe("PrRow", () => {
     expect(actions).toBeTruthy();
 
     expect(meta?.textContent).toContain("example-org/example-service#123");
-    expect(screen.getByLabelText("Requested: gabe, jbern")).toBeTruthy();
-    expect(meta?.querySelector('[aria-label="Requested: gabe, jbern"]')).toBeTruthy();
-    expect(actions?.querySelector('[aria-label="Requested: gabe, jbern"]')).toBeNull();
     expect(actions?.querySelector('[aria-label="Actions for example-org/example-service#123"]')).toBeTruthy();
 
     expect(screen.queryByRole("button", { name: /copy request/i })).toBeNull();

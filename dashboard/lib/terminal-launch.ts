@@ -1,11 +1,16 @@
 "use client";
 
-import { getAgentCliConfig, type AgentCliConfig } from "@/lib/agent/cli-config";
+import { getAgentCliConfig, type AgentCli, type AgentCliConfig } from "@/lib/agent/cli-config";
+import type { TerminalSessionKind } from "@/lib/terminal-meta";
 
 export interface TerminalLaunchOptions {
   cwd?: string;
   label?: string;
   command?: string;
+  kind?: TerminalSessionKind;
+  repoName?: string;
+  /** Prefer a dedicated Agent tab (default for kind agent|review). */
+  preferAgentTab?: boolean;
 }
 
 export interface TerminalTranscriptOptions {
@@ -61,6 +66,17 @@ function agentCliSpec(config: AgentCliConfig): AgentCliSpec {
       interactive: (prompt) => `cursor-agent ${shellQuote(prompt)} --model ${model}`,
       missing: (action) =>
         `Cursor CLI not found. Install cursor-agent (or switch the Agent CLI setting back to OpenCode) to ${action}.`,
+    };
+  }
+  if (config.cli === "chatgpt") {
+    const bin = `$(${chatgptBinExpr()})`;
+    return {
+      binary: "codex",
+      label: "ChatGPT",
+      run: (prompt) => `${bin} exec ${shellQuote(prompt)}`,
+      interactive: (prompt) => `${bin} ${shellQuote(prompt)}`,
+      missing: (action) =>
+        `ChatGPT / Codex CLI not found. Install the ChatGPT app (or Codex CLI) to ${action}.`,
     };
   }
   // Blank model → omit the flag so opencode.json's default model applies.
@@ -166,6 +182,22 @@ export async function agentRepoUpstartDebugCommand(
  * notes MCP — `REPO_ROOT`/`NOTES_DIR` are pinned like the review command so the
  * note lands in DevHub's notes no matter which repo the agent runs from.
  */
+export function agentRepoDxAuditPrompt(repoName: string, context?: string): { prompt: string; notePath: string } {
+  const date = new Date().toISOString().slice(0, 10);
+  const notePath = `reviews/dx-audit-${repoName}-${date}`;
+  const parts = [
+    `Use the dx-audit skill to audit developer experience in the ${repoName} repo.`,
+    `Write the report to DevHub notes via the notes MCP (notes_write). Notes MCP path: ${notePath}.`,
+    `Finish with a terminal summary (verdict + top 5 actions), then exit.`,
+  ];
+  const trimmed = context?.trim();
+  if (trimmed) {
+    const compact = trimmed.length > 300 ? `${trimmed.slice(0, 300)}...` : trimmed;
+    parts.push(`Live question/context from the user: ${compact}`);
+  }
+  return { prompt: parts.join(" "), notePath };
+}
+
 export async function agentRepoDxAuditCommand(repoName: string, context?: string): Promise<string> {
   const cli = await activeAgentCliSpec();
   const date = new Date().toISOString().slice(0, 10);
@@ -232,6 +264,16 @@ export async function agentLocalCommitReviewCommand(
   );
 }
 
+export function agentReviewPrompt(prUrl: string, notePath?: string): string {
+  const parts = [`Use the pr-explain-review skill to explain and review this GitHub PR: ${prUrl}`];
+  if (notePath) {
+    parts.push(
+      `Save the finished write-up as a well-formatted note with the notes MCP (notes_write). Notes MCP path: ${notePath}`,
+    );
+  }
+  return parts.join(" ");
+}
+
 export async function agentReviewCommand(prUrl: string, notePath?: string): Promise<string> {
   const cli = await activeAgentCliSpec();
   const parts = [`Use the pr-explain-review skill to explain and review this GitHub PR: ${prUrl}`];
@@ -252,6 +294,36 @@ export interface StashConflictLaunchOptions {
   /** Branch switched to when the conflict came from checkout + stash pop. */
   branch?: string;
   conflictFiles?: string[];
+}
+
+export function agentStashConflictPrompt(opts: StashConflictLaunchOptions): string {
+  const files = (opts.conflictFiles ?? []).slice(0, 8);
+  const filePart = files.length > 0 ? ` Conflicted files: ${files.join(", ")}.` : "";
+  const more =
+    (opts.conflictFiles?.length ?? 0) > files.length
+      ? ` (+${(opts.conflictFiles!.length - files.length)} more — check git status).`
+      : "";
+  const branchPart = opts.branch
+    ? ` after switching to ${opts.branch}`
+    : " after applying a stash";
+  return [
+    `Use the git-conflict-resolve skill.`,
+    `Resolve stash conflicts in ${opts.repoName}${branchPart}.${filePart}${more}`,
+    `Stage resolved files; do not commit unless asked.`,
+  ].join(" ");
+}
+
+export function agentGitSyncConflictPrompt(
+  opts: StashConflictLaunchOptions & { syncTarget: string; stashed?: boolean },
+): string {
+  const files = (opts.conflictFiles ?? []).slice(0, 8);
+  return [
+    "Use the git-conflict-resolve skill.",
+    `Finish syncing ${opts.branch ?? "the current branch"} with ${opts.syncTarget} in ${opts.repoName}.`,
+    files.length ? `Conflicted files: ${files.join(", ")}.` : "Check git status for conflicts.",
+    "Resolve and stage conflicts, complete the merge, push the current branch, and verify it is no longer behind main.",
+    opts.stashed ? "Preserve and restore the DevHub auto-stash; do not lose user work." : "",
+  ].filter(Boolean).join(" ");
 }
 
 /**
@@ -303,6 +375,18 @@ export interface GitHookFailureLaunchOptions {
   logPath?: string;
 }
 
+export function agentGitHookFailurePrompt(opts: GitHookFailureLaunchOptions): string {
+  const hook = opts.hook ?? "git hook";
+  const logHint = opts.logPath
+    ? ` Failure output: ${opts.logPath}.`
+    : " Re-run the failing git command or hook to see the output.";
+  return [
+    `Use the git-hook-fix skill.`,
+    `Fix the failing ${hook} in ${opts.repoName} (blocked ${opts.phase}).${logHint}`,
+    `Get the hook to pass; do not skip hooks (--no-verify / DEVHUB_SKIP_VERIFY) unless asked.`,
+  ].join(" ");
+}
+
 /**
  * Interactive agent session to fix a failing git hook. Short prompt for PTY
  * ~1024 byte limits — full output lives in the log file when available.
@@ -331,6 +415,13 @@ export async function agentGitHookFailureCommand(
  * One-shot: draft a conventional commit message from the staged diff and print it.
  * Short prompt for PTY limits — agent inspects `git diff --cached` itself.
  */
+export function agentCommitMessagePrompt(repoName: string): string {
+  return [
+    `In ${repoName}, inspect git diff --cached and print one conventional commit message.`,
+    `Subject ≤72 chars, imperative, no quotes or fences. Do not commit.`,
+  ].join(" ");
+}
+
 export async function agentCommitMessageCommand(repoName: string): Promise<string> {
   const cli = await activeAgentCliSpec();
   const prompt = [
@@ -347,6 +438,13 @@ export async function agentCommitMessageCommand(repoName: string): Promise<strin
 /**
  * One-shot: draft a short stash description from the working-tree diff and print it.
  */
+export function agentStashMessagePrompt(repoName: string): string {
+  return [
+    `In ${repoName}, inspect git status and git diff HEAD, then print one short stash description.`,
+    `One line ≤72 chars, plain language, no quotes or fences. Do not stash or commit.`,
+  ].join(" ");
+}
+
 export async function agentStashMessageCommand(repoName: string): Promise<string> {
   const cli = await activeAgentCliSpec();
   const prompt = [
@@ -367,6 +465,28 @@ export interface DiffSelectionLaunchOptions {
   lineHint?: string;
   context?: string;
   staged?: boolean;
+}
+
+export function agentDiffSelectionPrompt(opts: DiffSelectionLaunchOptions): string {
+  const side = opts.staged ? "staged" : "unstaged";
+  const ctx = opts.context?.trim();
+  const ctxPart = ctx
+    ? ` User context: ${ctx.length > 280 ? `${ctx.slice(0, 280)}...` : ctx}`
+    : "";
+  const snippet = opts.snippet.trim();
+  const maxSnippet = 320;
+  const snippetPart =
+    snippet.length > maxSnippet
+      ? ` Selection is large (${snippet.length} chars, ${opts.lineHint ?? "see file"}) — open ${opts.filePath} and inspect the ${side} diff.`
+      : ` Selection (${opts.lineHint ?? "diff"}):\n${snippet}`;
+  return [
+    `In ${opts.repoName}, help with a ${side} diff selection in ${opts.filePath}.`,
+    snippetPart,
+    ctxPart,
+    " Ask if intent is unclear. Do not commit unless asked.",
+  ]
+    .filter(Boolean)
+    .join("");
 }
 
 /**
@@ -455,6 +575,47 @@ export function cursorCliCommand(): string {
     "cursor-agent",
     "Cursor CLI not found. Use the Cursor app option or install cursor-agent.",
   );
+}
+
+/** Bare interactive TUI for the configured provider (Agent tab template). */
+export async function agentInteractiveSessionCommand(): Promise<{
+  command: string;
+  label: string;
+  cli: AgentCli;
+}> {
+  const config = await getAgentCliConfig();
+  const spec = agentCliSpec(config);
+  if (config.cli === "cursor") {
+    return { command: cursorCliCommand(), label: spec.label, cli: "cursor" };
+  }
+  if (config.cli === "chatgpt") {
+    return { command: chatgptCliCommand(), label: spec.label, cli: "chatgpt" };
+  }
+  return { command: opencodeCliCommand(), label: spec.label, cli: "opencode" };
+}
+
+/**
+ * ChatGPT.app ships a signed, notarized Codex CLI inside the bundle. Prefer it
+ * over `codex` on PATH: the npm `@openai/codex` package vendors an unsigned
+ * native binary that macOS quarantines ("codex was not opened because it
+ * contains malware") and empties out, leaving a wrapper on PATH that exits
+ * without running anything.
+ */
+const CHATGPT_APP_CODEX = "/Applications/ChatGPT.app/Contents/Resources/codex";
+
+function chatgptBinExpr(): string {
+  const bundled = shellQuote(CHATGPT_APP_CODEX);
+  return `if [ -x ${bundled} ]; then echo ${bundled}; elif command -v codex >/dev/null 2>&1; then echo codex; else echo chatgpt; fi`;
+}
+
+export function chatgptCliCommand(): string {
+  const bundled = shellQuote(CHATGPT_APP_CODEX);
+  const onPath = guardedCliCommand(
+    "codex",
+    "codex",
+    "Codex CLI not found. Install the ChatGPT app, or install the Codex CLI.",
+  );
+  return `if [ -x ${bundled} ]; then ${bundled}; else ${onPath}; fi`;
 }
 
 export function guardedCliCommand(binary: string, command: string, missingMessage: string): string {

@@ -186,7 +186,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Unknown repo" }, { status: 404 });
   }
 
-  const [branchResult, remoteBranchResult, stashResult, statusResult, upstream, mainBranch] =
+  const [branchResult, remoteBranchResult, stashResult, statusResult, upstream, mainBranch, tagsResult] =
     await Promise.all([
     // NUL-separated so branch metadata survives names with odd characters, and
     // so the context menu can tell "has an upstream" from "never pushed"
@@ -205,6 +205,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
     runGitRepoAsync(rp, ["status", "--porcelain"]),
     resolveUpstream(rp),
     resolveDefaultRemoteBranch(rp),
+    // Newest first, capped — the rail shows recent tags, not the full tag dump.
+    runGitRepoAsync(rp, ["tag", "--list", "--sort=-creatordate", "--format=%(refname:short)"]),
     ]);
   const [unpushedResult, aheadBehindResult, mainAheadBehindResult] = await Promise.all([
     runGitRepoAsync(rp, [
@@ -304,6 +306,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
         readOriginRemoteUrl(rp),
     ),
     remotes: parseRemotes(remotesResult.stdout || ""),
+    tags: (tagsResult.stdout || "")
+      .split("\n")
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .slice(0, 30),
   });
 }
 
@@ -522,6 +529,13 @@ export async function POST(req: NextRequest, { params }: Params) {
       const prep = prepareGitIndexWrite(rp);
       if (!prep.ok) return indexLockResponse(rp, prep.error);
 
+      // HEAD before the commit/amend — the client's one-click undo resets to it.
+      let headBefore: string | null = null;
+      if (!body.amend) {
+        const before = await runGitRepoAsync(rp, ["rev-parse", "HEAD"]);
+        headBefore = before.status === 0 ? (before.stdout || "").trim() || null : null;
+      }
+
       const commit = await runGitRepoAsync(rp, commitArgs);
       if (commit.status !== 0) {
         const gitError = commit.stderr.trim() || commit.stdout.trim() || "Commit failed";
@@ -536,7 +550,7 @@ export async function POST(req: NextRequest, { params }: Params) {
           { status: 500 },
         );
       }
-      return NextResponse.json({ ok: true, amended: Boolean(body.amend) });
+      return NextResponse.json({ ok: true, amended: Boolean(body.amend), headBefore });
     }
 
     case "push": {
@@ -677,6 +691,9 @@ export async function POST(req: NextRequest, { params }: Params) {
           { status: 400 },
         );
       }
+      // HEAD before the merge — the client's one-click undo resets to it.
+      const before = await runGitRepoAsync(rp, ["rev-parse", "HEAD"]);
+      const headBefore = before.status === 0 ? (before.stdout || "").trim() || null : null;
       const merge = await runGitRepoAsync(rp, ["merge", "--no-edit", body.branch], {
         timeout: 120_000,
       });
@@ -694,7 +711,13 @@ export async function POST(req: NextRequest, { params }: Params) {
         return NextResponse.json({ error }, { status: 500 });
       }
       const alreadyUpToDate = /already up to date/i.test(`${merge.stdout}\n${merge.stderr}`);
-      return NextResponse.json({ ok: true, branch: body.branch, current, alreadyUpToDate });
+      return NextResponse.json({
+        ok: true,
+        branch: body.branch,
+        current,
+        alreadyUpToDate,
+        headBefore: alreadyUpToDate ? null : headBefore,
+      });
     }
 
     case "rebase-branch": {
@@ -886,6 +909,12 @@ export async function POST(req: NextRequest, { params }: Params) {
           { status: 400 },
         );
       }
+      // HEAD before the merge pull — the client's one-click undo resets to it.
+      let headBefore: string | null = null;
+      if (body.action === "pull-merge") {
+        const before = await runGitRepoAsync(rp, ["rev-parse", "HEAD"]);
+        headBefore = before.status === 0 ? (before.stdout || "").trim() || null : null;
+      }
       const pull = await runGitRepoAsync(
         rp,
         body.action === "pull-rebase" ? ["pull", "--rebase"] : ["pull", "--no-rebase"],
@@ -907,10 +936,13 @@ export async function POST(req: NextRequest, { params }: Params) {
         return NextResponse.json({ error }, { status: 500 });
       }
       const rebaseMsg = (pull.stdout || "").trim();
+      const upToDate = /already up to date/i.test(rebaseMsg);
       return NextResponse.json({
         ok: true,
-        alreadyUpToDate: /already up to date/i.test(rebaseMsg),
+        alreadyUpToDate: upToDate,
         message: rebaseMsg || undefined,
+        headBefore:
+          body.action === "pull-merge" && !upToDate ? headBefore : null,
       });
     }
 

@@ -6,3 +6,6 @@
 export default function ChamberPage() {
   return null;
 }
+
+
+export const metadata = { title: "Chamber" };

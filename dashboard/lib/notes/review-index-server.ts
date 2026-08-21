@@ -64,6 +64,26 @@ export function getReviewNoteIndex(): ReviewNoteRef[] {
   return notes;
 }
 
+/**
+ * File activity (max of mtime / birthtime) keyed by vault-relative path,
+ * e.g. `pr-reviews/acme-app-1.json`. Stats only — does not parse note bodies.
+ */
+export function reviewNoteActivityByPath(): Map<string, number> {
+  const dir = reviewDirPath();
+  const { files } = fingerprint(dir);
+  const map = new Map<string, number>();
+  for (const name of files) {
+    try {
+      const st = fs.statSync(path.join(dir, name));
+      const birth = Number.isFinite(st.birthtimeMs) ? st.birthtimeMs : 0;
+      map.set(`${REVIEW_DIR}/${name}`, Math.max(st.mtimeMs, birth));
+    } catch {
+      // vanished mid-scan
+    }
+  }
+  return map;
+}
+
 /** Test seam — drops the memoised index. */
 export function resetReviewNoteIndexCache(): void {
   cache = null;

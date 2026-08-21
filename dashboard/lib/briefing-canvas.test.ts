@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { renderCanvasDocument } from "./briefing-canvas";
+import {
+  canvasRegenFailureMessage,
+  extractHtmlDocument,
+  renderCanvasDocument,
+} from "./briefing-canvas";
 import type { BriefingContext } from "./briefing-context";
 
 function ctx(overrides: Partial<BriefingContext> = {}): BriefingContext {
@@ -47,5 +51,46 @@ describe("renderCanvasDocument", () => {
     const out = renderCanvasDocument("<body><div>hi</div></body>", ctx());
     expect(out).toContain("window.__BRIEFING__=");
     expect(out.indexOf("<body>")).toBeLessThan(out.indexOf("window.__BRIEFING__="));
+  });
+});
+
+
+describe("canvasRegenFailureMessage", () => {
+  it("includes the real generation error", () => {
+    expect(canvasRegenFailureMessage({ configured: true, error: "Workspace Trust Required" })).toContain(
+      "Workspace Trust Required",
+    );
+    expect(canvasRegenFailureMessage({ configured: true })).not.toMatch(/try again in a moment/i);
+  });
+});
+
+describe("extractHtmlDocument", () => {
+  const doc = `<!doctype html>\n<html lang="en"><head><title>t</title></head><body>hi</body></html>`;
+
+  it("drops a commentary preamble before the doctype", () => {
+    // Observed verbatim: the model narrated the change, then emitted the page.
+    const reply = `Softening the backdrop and confirming the block stays out. Returning the full revised document.${doc}`;
+    expect(extractHtmlDocument(reply)).toBe(doc);
+  });
+
+  it("drops a sign-off after the closing tag", () => {
+    expect(extractHtmlDocument(`${doc}\n\nLet me know if you want it lighter.`)).toBe(doc);
+  });
+
+  it("still strips markdown fences", () => {
+    expect(extractHtmlDocument("```html\n" + doc + "\n```")).toBe(doc);
+  });
+
+  it("falls back to <html> when there is no doctype", () => {
+    const noDoctype = "<html><body>hi</body></html>";
+    expect(extractHtmlDocument(`Here you go: ${noDoctype}`)).toBe(noDoctype);
+  });
+
+  it("leaves a reply with no document alone", () => {
+    expect(extractHtmlDocument("I could not build that.")).toBe("I could not build that.");
+  });
+
+  it("returns a document that starts at the doctype", () => {
+    expect(extractHtmlDocument(`prose${doc}`).startsWith("<!doctype html>")).toBe(true);
   });
 });

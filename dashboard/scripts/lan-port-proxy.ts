@@ -82,7 +82,6 @@ async function main(): Promise<void> {
   const proxies: PortProxy[] = [
     { label: "dashboard", port: parsePort("PORT", 1337) },
     { label: "openchamber", port: parsePort("OPENCHAMBER_PORT", 1336) },
-    { label: "opencode", port: parsePort("OPENCODE_PORT", 1338) },
   ];
 
   for (const proxy of proxies) startProxy(proxy, host);

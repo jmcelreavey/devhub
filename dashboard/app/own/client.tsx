@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, Plus, ShieldCheck } from "lucide-react";
 import { EmptyState, FetchError, PageHeader } from "@/components";
 import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
+import { launchAgentJob } from "@/lib/agent-job";
 import {
   ContextMenu,
   RowMenuKebab,
@@ -308,13 +309,28 @@ export function OwnRepoCard({
           const upstartPath =
             local?.upstartPath?.trim() ||
             `${(process.env.NEXT_PUBLIC_REPO_ROOT ?? "").trim()}/upstarts/${clonedName}/upstart.sh`;
-          openTerminal({
-            cwd: clonedPath,
-            label: `Upstart · ${clonedName}`,
-            command: hasUpstart
-              ? repoUpstartCommand(upstartPath)
-              : await agentRepoUpstartCommand(clonedName, upstartPath, trimmedContext),
-          });
+          if (hasUpstart) {
+            openTerminal({
+              cwd: clonedPath,
+              label: `Upstart · ${clonedName}`,
+              kind: "upstart",
+              repoName: clonedName,
+              command: repoUpstartCommand(upstartPath),
+            });
+          } else {
+            await launchAgentJob({
+              title: `Upstart · ${clonedName}`,
+              kind: "upstart",
+              cwd: clonedPath,
+              repoName: clonedName,
+              promptText: `Use devhub-repo-upstart. Create ${upstartPath} for ${clonedName} in the DevHub private store (not .devhub/ in the target repo). Must run nvm use if .nvmrc, refresh deps, and start dev env. Do not just print instructions. Exit; terminal runs the script with cwd=${clonedName}.`,
+              promptCommand: await agentRepoUpstartCommand(clonedName, upstartPath, trimmedContext),
+              mode: "oneshot",
+              forceTerminal: true,
+              alreadyConfirmed: true,
+              reason: `Upstart · ${clonedName}`,
+            });
+          }
         })();
       },
       onClone: () => {
@@ -342,14 +358,21 @@ export function OwnRepoCard({
       onScopeCreep: () => {
         if (!clonedPath || !clonedName) return;
         void (async () => {
-          openTerminal({
+          const instruction = `Check the current working tree of ${clonedName} for scope creep against the branch intent.`;
+          await launchAgentJob({
+            title: `scope-creep · ${clonedName}`,
+            kind: "agent",
             cwd: clonedPath,
-            label: `scope-creep · ${clonedName}`,
-            command: await agentSkillCommand(
+            repoName: clonedName,
+            promptText: `Use the scope-creep-detector skill. ${instruction}`,
+            promptCommand: await agentSkillCommand(
               "scope-creep-detector",
-              `Check the current working tree of ${clonedName} for scope creep against the branch intent.`,
+              instruction,
               "run scope-creep-detector",
             ),
+            mode: "oneshot",
+            alreadyConfirmed: true,
+            reason: `Scope creep · ${clonedName}`,
           });
         })();
       },

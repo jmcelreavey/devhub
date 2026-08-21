@@ -13,6 +13,7 @@
 //! shell command, and the bridge routes require a cookie the shell sets once
 //! from a token only it knows.
 
+mod icon;
 mod logging;
 mod paths;
 mod selftest;
@@ -1478,11 +1479,14 @@ fn current_dashboard_origin(app: &tauri::AppHandle) -> Option<String> {
 }
 
 /// Stage a standalone dashboard from the checkout and install it into the
-/// packaged (or `desktop:dev` staging) server tree the shell actually serves.
+/// packaged (or `desktop:dev` staging) server *and* services trees the shell
+/// actually runs.
 ///
 /// `npm run build` alone only refreshes `dashboard/.next` in the checkout.
-/// Packaged mode keeps serving `Resources/server` from the last install, so
-/// Rebuild looked successful while the UI stayed on the previous bundle.
+/// Packaged mode keeps serving `Resources/server` from the last install, and
+/// keeps spawning OpenChamber/OpenCode from `Resources/services`, so Rebuild
+/// looked successful while the UI *and* the peer starter stayed on the
+/// previous bundle.
 fn run_dashboard_build(app: &tauri::AppHandle, repo_root: &Path) -> Result<(), String> {
     let paths = resolve_paths(app)?;
     let script = repo_root.join("desktop/scripts/rebuild-installed-server.mjs");
@@ -1497,9 +1501,10 @@ fn run_dashboard_build(app: &tauri::AppHandle, repo_root: &Path) -> Result<(), S
     menu_log(
         app,
         &format!(
-            "[menu] rebuild staging dashboard from {} into {}",
+            "[menu] rebuild staging dashboard from {} into {} (peers: {})",
             repo_root.display(),
-            paths.server_dir.display()
+            paths.server_dir.display(),
+            paths.services_dir.display()
         ),
     );
 
@@ -1509,6 +1514,7 @@ fn run_dashboard_build(app: &tauri::AppHandle, repo_root: &Path) -> Result<(), S
         .current_dir(repo_root)
         .env("PATH", &path)
         .env("DEVHUB_SERVER_DIR", &paths.server_dir)
+        .env("DEVHUB_SERVICES_DIR", &paths.services_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -1571,8 +1577,9 @@ fn run_dashboard_build(app: &tauri::AppHandle, repo_root: &Path) -> Result<(), S
 /// Relaunching rather than hand-restarting a server: the normal startup path
 /// already knows how to bring up whichever mode is selected, and reusing it
 /// means a rebuild cannot invent a third way for the shell to reach a running
-/// dashboard. The build step copies into Resources/server so packaged mode
-/// actually picks up the new UI.
+/// dashboard. The build step copies into Resources/server *and*
+/// Resources/services so packaged mode actually picks up the new UI and the
+/// current OpenChamber/OpenCode starter.
 fn rebuild_dashboard(app: &tauri::AppHandle) {
     let repo_root = match dev_server_repo_root(app) {
         Ok(root) => root,
@@ -1852,6 +1859,7 @@ pub fn run() {
             retry_start,
             stop_conflicting_dev_server,
             quit_app,
+            icon::set_desktop_icon,
             updater::current_version,
             updater::check_update,
             updater::install_update,

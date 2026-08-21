@@ -1,6 +1,9 @@
 import { DocsLandingPage } from "@/components/docs/DocsLandingPage";
 import { getDocIndex, getRecentDocs } from "@/lib/docs/doc-index";
 
+export const metadata = { title: "Docs" };
+
+
 /**
  * Never prerender. The docs tree is user content read from disk at request
  * time, and `DOCS_DIR` is only known at runtime — in the desktop app it comes

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
 import { FetchError, SkeletonRows } from "@/components";
+import { DailyRepCard } from "@/components/DailyRepCard";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { localCalendarDateISO } from "@/lib/local/calendar-date";
 import { jiraBrowseUrl } from "@/lib/utils";
@@ -93,6 +94,8 @@ export default function ReviewPage() {
 
       {error && <FetchError message="Couldn't load weekly review." />}
       {isLoading && !data && <SkeletonRows count={5} height={40} variant="list" />}
+
+      <DailyRepCard />
 
       {data && (
         <>

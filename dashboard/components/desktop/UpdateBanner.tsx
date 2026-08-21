@@ -192,9 +192,11 @@ export function UpdateBanner() {
                 background: "var(--accent)",
                 // Honest indeterminate: a fixed partial fill rather than an
                 // animated one, so it never implies progress it cannot know.
-                width: pct !== null ? `${pct}%` : "40%",
+                // scaleX instead of animating width (layout thrash).
                 opacity: pct !== null ? 1 : 0.6,
-                transition: "width 240ms cubic-bezier(.22,1,.36,1)",
+                transform: `scaleX(${pct !== null ? Math.min(pct, 100) / 100 : 0.4})`,
+                transformOrigin: "left center",
+                transition: "transform 240ms var(--ease-swift)",
               }}
             />
           </div>

@@ -32,7 +32,7 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
   const meta = await runGitRepoAsync(repoRoot, [
     "show",
     "-s",
-    "--format=%H%x00%h%x00%s%x00%b%x00%an%x00%ae%x00%aI%x00%ar%x00%P",
+    "--format=%H%x00%h%x00%s%x00%b%x00%an%x00%ae%x00%aI%x00%ar%x00%P%x00%G?",
     commit,
   ]);
   if (meta.status !== 0) return gitFail(meta, "Commit not found");
@@ -47,6 +47,7 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
     date = "",
     relativeDate = "",
     parentsRaw = "",
+    gpg = "",
   ] = (meta.stdout || "").trim().split("\0");
 
   const parents = parentsRaw.trim() ? parentsRaw.trim().split(/\s+/) : [];
@@ -147,5 +148,6 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
     isHead,
     isAncestorOfHead,
     aheadCount,
+    gpg: gpg || undefined,
   });
 }

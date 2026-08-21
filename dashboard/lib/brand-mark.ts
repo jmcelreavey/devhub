@@ -23,3 +23,29 @@ export const DEVHUB_BRAND_LABEL = DEFAULT_BRAND_LABEL;
 
 /** True when a branding plugin has supplied its own logo (i.e. we're whitelabelled). */
 export const HAS_PLUGIN_BRAND = PLUGIN_BRAND_LOGO != null;
+
+/** Matches IconPicker's `devhub-logo-icon` sentinels. */
+const LOGO_STORAGE_KEY = "devhub-logo-icon";
+const LOGO_PLUGIN_SENTINEL = "__bottle__";
+
+/**
+ * Blocking `<head>` script — same FOUC pattern as the theme bootstrap.
+ *
+ * SSR cannot read localStorage, so the boot overlay used to paint the plugin
+ * mark (BI) whenever a branding plugin was installed, then swap after hydrate.
+ * This runs during HTML parse, before body, and sets `data-logo` on `<html>`:
+ * `__bottle__` → plugin; anything else (including no key) → DevHub bottle.
+ */
+export function getLogoBootstrapInlineScript(): string {
+  const key = JSON.stringify(LOGO_STORAGE_KEY);
+  const pluginSentinel = JSON.stringify(LOGO_PLUGIN_SENTINEL);
+  const hasPlugin = PLUGIN_BRAND_LOGO != null;
+  return `(function(){try{var k=localStorage.getItem(${key});var root=document.documentElement;if(${hasPlugin}&&k===${pluginSentinel}){root.setAttribute("data-logo","plugin");}else{root.setAttribute("data-logo","devhub");}}catch(e){document.documentElement.setAttribute("data-logo","devhub");}})();`;
+}
+
+/** Keep `<html data-logo>` in sync after the user changes the picker (no reload). */
+export function applyLogoChoice(stored: string | null): void {
+  if (typeof document === "undefined") return;
+  const usePlugin = HAS_PLUGIN_BRAND && stored === LOGO_PLUGIN_SENTINEL;
+  document.documentElement.setAttribute("data-logo", usePlugin ? "plugin" : "devhub");
+}

@@ -280,7 +280,7 @@ export function TaskItem({
         {...(!editing && !showAbandon ? menu.bindRow(task) : {})}
       >
         {dragHandleProps && !isInactive && !editing && !showAbandon && (
-          <HoverTip label="Drag to reorder. Arrow keys also work." pos="top">
+          <HoverTip label="Drag to reorder." pos="top">
             <button
               type="button"
               {...dragHandleProps}
@@ -288,7 +288,13 @@ export function TaskItem({
               style={{ color: "var(--text-subtle)", cursor: "grab" }}
               aria-label={`Drag to reorder ${task.text}`}
               onClick={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => {
+                // Keep bindRow's long-press from starting on the grip, but still
+                // run SortableList's handler — a stopPropagation-only override
+                // replaces dragHandleProps.onPointerDown and kills reorder.
+                e.stopPropagation();
+                dragHandleProps.onPointerDown?.(e);
+              }}
             >
               <GripVertical size={14} aria-hidden />
             </button>

@@ -21,12 +21,12 @@ export interface GithubPrRow {
   title: string;
   url: string;
   repo: string;
+  /** ISO timestamp from Search API `created_at` when available. */
+  createdAt?: string;
   /** ISO timestamp from Search API `updated_at` when available. */
   updatedAt?: string;
   /** PR author from the Search API `user` field. */
   author?: GithubPrAuthor;
-  /** Users currently requested to review — authored rows only, when known. */
-  requestedReviewers?: GithubPrAuthor[];
 }
 
 export interface RecentlyReviewedPr extends GithubPrRow {
@@ -68,6 +68,7 @@ export function rowFromSearchItem(item: SearchIssueItem): GithubPrRow {
     title: item.title ?? "",
     url: item.html_url ?? "",
     repo: parseRepoFullNameFromApiUrl(item.repository_url),
+    createdAt: item.created_at,
     updatedAt: item.updated_at,
     author: authorFromSearchItem(item),
   };

@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
 import { notesChecklistsHref } from "@/lib/checklists/notes-url";
 
+export const metadata = { title: "Collections" };
+
+
 export default async function Page({
   searchParams,
 }: {

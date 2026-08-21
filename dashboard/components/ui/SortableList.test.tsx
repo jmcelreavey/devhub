@@ -255,6 +255,56 @@ describe("SortableList", () => {
     expect(onReorder).toHaveBeenCalledWith(["b", "a", "c"]);
   });
 
+  /*
+   * Task rows bind a context-menu long-press on the row, then stopPropagation
+   * on the grip so that press doesn't start. Replacing onPointerDown without
+   * calling through used to swallow SortableList's handler and kill reorder.
+   */
+  it("still reorders when the handle stops propagation and calls through", () => {
+    const onReorder = vi.fn();
+    render(
+      <SortableList
+        items={[
+          { id: "a", label: "Alpha" },
+          { id: "b", label: "Bravo" },
+          { id: "c", label: "Charlie" },
+        ]}
+        getId={(item) => item.id}
+        onReorder={(next) => onReorder(next.map((item) => item.id))}
+        renderItem={(item, { dragHandleProps }) => (
+          <div data-testid={`row-${item.id}`}>
+            <button
+              type="button"
+              aria-label={`Drag ${item.label}`}
+              {...dragHandleProps}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                dragHandleProps.onPointerDown?.(event);
+              }}
+            >
+              grip
+            </button>
+            <span>{item.label}</span>
+          </div>
+        )}
+      />,
+    );
+    const handle = grip("Alpha");
+
+    act(() => {
+      fireEvent.pointerDown(handle, ORIGIN);
+    });
+    pointAt("b");
+    act(() => {
+      fireEvent.pointerMove(handle, FAR);
+    });
+    act(() => {
+      fireEvent.pointerUp(handle, FAR);
+    });
+
+    expect(onReorder).toHaveBeenCalledWith(["b", "a", "c"]);
+  });
+
   it("does nothing when disabled", () => {
     const onReorder = vi.fn();
     render(

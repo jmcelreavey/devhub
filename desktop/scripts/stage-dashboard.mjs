@@ -326,16 +326,17 @@ async function stageServices() {
   log("bundled terminal-pty-server.cjs");
 
   /**
-   * The peer services — OpenChamber (1336) and OpenCode (1338).
+   * Peer boot — frees leftover OpenCode on 1338/4096. Chamber and OpenCode
+   * lazy-start from the dashboard; this bundle is what Rebuild Dashboard
+   * restages into the installed app.
    *
-   * Originally omitted, which meant the installed app served a dashboard whose
-   * Chamber and OpenCode pages were permanently empty: the ports were never
-   * listening because nothing started them. The dev script ran them through
-   * `concurrently`; the packaged app has to start them itself.
+   * Originally omitted, which meant the installed app never ran this script.
+   * The dev script runs it through `concurrently`; the packaged app has to
+   * start it itself.
    *
-   * Bundled with the same externals as the PTY server. Both peers are optional
-   * at runtime — they shell out to binaries the user may not have — so the
-   * supervisor treats a failure to start as a warning, not a fatal error.
+   * Bundled with the same externals as the PTY server. Optional at runtime —
+   * binaries the user may not have — so the supervisor treats a failure as a
+   * warning, not a fatal error.
    */
   await esbuild.build({
     entryPoints: [path.join(dashboardDir, "scripts", "start-peer-services.ts")],
@@ -378,6 +379,7 @@ function assertStaged() {
     [path.join(serverDir, ".next", "static"), "client assets"],
     [path.join(serverDir, ".next", "server"), "server chunks"],
     [path.join(servicesDir, "supervisor.mjs"), "sidecar supervisor"],
+    [path.join(servicesDir, "start-peer-services.mjs"), "peer boot (free pinned OpenCode ports)"],
     [path.join(servicesDir, "terminal-pty-server.cjs"), "terminal server"],
     [
       path.join(servicesDir, "node_modules", "node-pty", "prebuilds", `${os.platform()}-${os.arch()}`),

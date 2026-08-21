@@ -42,6 +42,8 @@ export interface GraphLaneCommit {
   parentLanes: GraphParentLink[];
   /** Total lane count for the whole layout (for SVG width). */
   activeLanes: number;
+  /** `%G?` verification status; "G" means a good signature. */
+  gpg?: string;
 }
 
 /**
@@ -182,6 +184,7 @@ export function layoutCommitGraph(commits: GraphCommitRaw[]): GraphLaneCommit[] 
       color,
       isMerge: c.parents.length > 1,
       parentLanes,
+      ...(c.gpg ? { gpg: c.gpg } : {}),
     });
   }
 

@@ -20,16 +20,20 @@ import { useStoredFraction } from "@/lib/hooks/use-stored-state";
 import { useToast } from "@/lib/hooks/use-toast";
 import {
   agentCommitMessageCommand,
+  agentCommitMessagePrompt,
   agentDiffSelectionCommand,
-  openTerminal,
+  agentDiffSelectionPrompt,
 } from "@/lib/terminal-launch";
+import { launchAgentJob } from "@/lib/agent-job";
 import { isGitNoisePath, looksLikeDirectoryPath, type DiffLine } from "@/lib/repos/git-parsers";
+import { recordUndo } from "@/lib/git/undo-stack";
 import { CouplingHints } from "./CouplingHints";
 import { DiffMaximizeModal } from "./DiffMaximizeModal";
 import { DiffToolbar, DIFF_CONTEXT_LINES, type DiffContextMode } from "./DiffToolbar";
 import { GitDiffView } from "./GitDiffView";
 import { RepoFileOpenMenu } from "./RepoFileOpenMenu";
 import { RepoSplit } from "./SplitResize";
+import { usePointerDrag } from "./usePointerDrag";
 import {
   fetchGitJson,
   IconBtn,
@@ -327,19 +331,29 @@ export function ChangesPanel({
       confirmLabel: "Open agent",
     });
     if (context === null) return;
-    openTerminal({
+    const opts = {
+      repoName,
+      filePath: selected.path,
+      snippet,
+      lineHint,
+      context: context.trim() || undefined,
+      staged: selected.staged,
+    };
+    // Interactive selection handoff — dedicated Agent tab via confirm/inject.
+    // OpenCode HTTP oneshot is a poor fit for "discuss this hunk".
+    await launchAgentJob({
+      title: `diff · ${repoName}`,
+      kind: "agent",
       cwd: repoPath,
-      label: `diff · ${repoName}`,
-      command: await agentDiffSelectionCommand({
-        repoName,
-        filePath: selected.path,
-        snippet,
-        lineHint,
-        context: context.trim() || undefined,
-        staged: selected.staged,
-      }),
+      repoName,
+      promptText: agentDiffSelectionPrompt(opts),
+      promptCommand: await agentDiffSelectionCommand(opts),
+      mode: "interactive",
+      forceTerminal: true,
+      reason: `Diff selection in ${selected.path}`,
+      alreadyConfirmed: true,
     });
-    toast.info("Agent opened in the terminal.");
+    toast.info("Agent tab ready — chat in the terminal.");
   }
 
   /**
@@ -351,7 +365,10 @@ export function ChangesPanel({
     const action = typeof extra.action === "string" ? extra.action : "commit";
     setActing(action);
     try {
-      const result = await postGitAction(repoApi(repoName, "/branches"), { action, ...extra });
+      const result = await postGitAction<{ headBefore?: string | null }>(
+        repoApi(repoName, "/branches"),
+        { action, ...extra },
+      );
       if (!result.ok) {
         if (result.kind === "conflict") {
           await onConflict(result.conflict);
@@ -368,6 +385,16 @@ export function ChangesPanel({
       toast.success(
         action === "undo-commit" ? "Undid last commit (soft)" : extra.amend ? "Amended" : "Committed",
       );
+      // A plain commit is undoable from the header chip — soft reset brings the
+      // changes back staged. Amend rewrites in place; no honest one-click undo.
+      if (action === "commit" && !extra.amend && result.json.headBefore) {
+        recordUndo(repoName, {
+          id: `commit:${result.json.headBefore}`,
+          label: `commit "${(typeof extra.message === "string" ? extra.message : "").split("\n")[0]?.slice(0, 48)}"`,
+          headBefore: result.json.headBefore,
+          kind: "soft",
+        });
+      }
       // Stay on Changes after commit/amend — modal stays open so header Push is usable.
       if (action === "commit") setMessage("");
       onMutate();
@@ -421,10 +448,15 @@ export function ChangesPanel({
           confirmLabel: "Open agent",
         });
         if (ok) {
-          openTerminal({
+          await launchAgentJob({
+            title: `commit msg · ${repoName}`,
+            kind: "agent",
             cwd: repoPath,
-            label: `commit msg · ${repoName}`,
-            command: await agentCommitMessageCommand(repoName),
+            repoName,
+            promptText: agentCommitMessagePrompt(repoName),
+            promptCommand: await agentCommitMessageCommand(repoName),
+            mode: "oneshot",
+            alreadyConfirmed: true,
           });
         }
         return;
@@ -439,6 +471,20 @@ export function ChangesPanel({
       setAiBusy(false);
     }
   }
+
+  /**
+   * Drag a file row between Staged and Unstaged. The sections carry
+   * data-drop-stage; dropping calls the same stage/unstage endpoint the +/−
+   * buttons use, so confirm flows and toasts stay in one place.
+   */
+  const fileDrag = usePointerDrag<{ path: string; from: "staged" | "unstaged" }>({
+    dropSelector: "[data-drop-stage]",
+    onDrop: (payload, target) => {
+      const to = target.getAttribute("data-drop-stage");
+      if (!to || to === payload.from) return;
+      void stageAction(to === "staged" ? "stage" : "unstage", payload.path);
+    },
+  });
 
   if (loading && !status) {
     return <SkeletonRows count={4} height={28} />;
@@ -538,6 +584,16 @@ export function ChangesPanel({
             files={stagedSplit.visible}
             selected={selected}
             selectStaged
+            dropStage="staged"
+            dropOver={fileDrag.state?.over?.getAttribute("data-drop-stage") === "staged"}
+            onRowDragStart={
+              fileDrag.dragging
+                ? undefined
+                : (event, file) => {
+                    if (event.pointerType !== "mouse") return;
+                    fileDrag.start(event, { path: file.path, from: "staged" });
+                  }
+            }
             onSelect={(path) => setSelected({ path, staged: true })}
             headerAction={
               <>
@@ -589,6 +645,16 @@ export function ChangesPanel({
             files={unstagedSplit.visible}
             selected={selected}
             selectStaged={false}
+            dropStage="unstaged"
+            dropOver={fileDrag.state?.over?.getAttribute("data-drop-stage") === "unstaged"}
+            onRowDragStart={
+              fileDrag.dragging
+                ? undefined
+                : (event, file) => {
+                    if (event.pointerType !== "mouse") return;
+                    fileDrag.start(event, { path: file.path, from: "unstaged" });
+                  }
+            }
             onSelect={(path) => setSelected({ path, staged: false })}
             headerAction={
               <>
@@ -874,6 +940,9 @@ function FileSection({
   onSelect,
   actions,
   headerAction,
+  dropStage,
+  dropOver = false,
+  onRowDragStart,
 }: {
   title: string;
   files: StatusFile[];
@@ -882,9 +951,17 @@ function FileSection({
   onSelect: (path: string) => void;
   actions: (path: string) => ReactNode;
   headerAction?: ReactNode;
+  /** Set when this section accepts dragged file rows. */
+  dropStage?: "staged" | "unstaged";
+  dropOver?: boolean;
+  onRowDragStart?: (event: React.PointerEvent, file: StatusFile) => void;
 }) {
   return (
-    <div className="repo-git-file-section">
+    <div
+      className="repo-git-file-section"
+      data-drop-stage={dropStage}
+      data-drop-over={dropOver || undefined}
+    >
       <div className="repo-git-section-label">
         <span>{title}</span>
         <span className="repo-git-section-label-end">
@@ -902,6 +979,8 @@ function FileSection({
               key={`${title}:${f.path}`}
               className="repo-git-file-row"
               data-active={active || undefined}
+              onPointerDown={onRowDragStart ? (event) => onRowDragStart(event, f) : undefined}
+              style={{ touchAction: onRowDragStart ? "none" : undefined }}
             >
               <button type="button" className="repo-git-file-main" onClick={() => onSelect(f.path)}>
                 <span className="repo-git-file-status">{f.status}</span>

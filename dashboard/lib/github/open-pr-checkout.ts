@@ -2,7 +2,7 @@ import { execGh } from "@/lib/gh-exec";
 import { detectUnmergedFiles } from "@/lib/git/conflicts";
 import { looksLikeIndexLockError, prepareGitIndexWrite } from "@/lib/git/index-lock";
 import { runGitRepoAsync } from "@/lib/git/repo-local";
-import { parseOwnerRepo } from "@/lib/github/request-reviewers";
+import { parseOwnerRepo } from "@/lib/github/repo-name";
 import { findScannedRepoByGithubFullName } from "@/lib/scanned-repo";
 
 export class OpenPrCheckoutError extends Error {

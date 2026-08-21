@@ -94,7 +94,7 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 | Status     | `status_services`, `status_git`, `status_mcp`, `services_restart`                                                                                                                                                                                                                                                                                             |
 | Briefing   | `briefing_get`                                                                                                                                                                                                                                                                                                                                                |
 | Calendar   | `calendar_week`, `calendar_list`                                                                                                                                                                                                                                                                                                                              |
-| Work       | `prs_list`, `prs_request_reviewers`, `prs_open_in_cursor`, `jira_tickets`, `jira_ticket_get`, `standup_markdown`, `tasks_weekly`, `jira_ticket_transition`                                                                                                                                                                                                    |
+| Work       | `prs_list`, `prs_open_in_cursor`, `jira_tickets`, `jira_ticket_get`, `standup_markdown`, `tasks_weekly`, `jira_ticket_transition`                                                                                                                                                                                                    |
 | Assets     | `assets_list`                                                                                                                                                                                                                                                                                                                                                 |
 | Search     | `search`                                                                                                                                                                                                                                                                                                                                                      |
 | Scripts    | `scripts_list`, `scripts_run`, `scripts_run_status`, `scripts_history`                                                                                                                                                                                                                                                                                        |
@@ -115,7 +115,7 @@ BI-specific MCP tools are contributed by the private BI plugin as a separate ser
 
 **Scope notes:** `notes_list` and `notes_search` cover the workspace slice only — `daily/` journals plus root-level `.json` scratch notes. Structured areas like `learnings/` need explicit paths via `notes_read`. `calendar_list` returns Google Calendar **accounts and selection state**, not events (use `calendar_week` for the week grid).
 
-Dashboard-backed tools that mutate runtime or external state require `confirm: true` (for example `services_restart`, mutating `scripts_run` entries, `repos_git_stage`, `repos_git_commit`, `repos_git_push`, `repos_git_branch`, `prs_request_reviewers`, `prs_open_in_cursor`, and `jira_ticket_transition`). Long-running actions return a `runId`; poll the matching status tool, such as `scripts_run_status`, until the run exits. MCP cannot stream the dashboard's live run log.
+Dashboard-backed tools that mutate runtime or external state require `confirm: true` (for example `services_restart`, mutating `scripts_run` entries, `repos_git_stage`, `repos_git_commit`, `repos_git_push`, `repos_git_branch`, `prs_open_in_cursor`, and `jira_ticket_transition`). Long-running actions return a `runId`; poll the matching status tool, such as `scripts_run_status`, until the run exits. MCP cannot stream the dashboard's live run log.
 
 All `repos_git_*` tools proxy the Repo Git workspace HTTP routes (`/api/repos/<name>/git/*` and `/branches`) — they do not shell out to `git` directly from the MCP process. Start the dashboard before using them.
 
@@ -228,7 +228,7 @@ Use `status_services`, `status_git`, and `status_mcp` when the dashboard is runn
 
 Use `sessions_recap` (or the `devhub-recap` skill) when you need **what happened** in an OpenCode run — commands, MCP calls, file changes, failures — without prompts or reasoning.
 
-1. Start the dashboard and ensure OpenCode is listening on `OPENCODE_PORT`.
+1. Start the dashboard and open `/opencode` (or trigger recap/Investigate) so DevHub can lazy-start OpenCode on an ephemeral loopback port.
 2. Call `sessions_recap` with `directory` set to the workspace path. Omit `sessionId` to pick the current busy root, then the latest root in that directory.
 3. Pass `includeChildren: true` only when subagent/child sessions matter.
 4. On `409`, multiple root sessions are busy — pass an explicit `sessionId`.
@@ -245,13 +245,12 @@ The dashboard route redacts secrets (tokens, env values, URL credentials) before
 
 For branch checkout, pull, fetch, and undo, use `repos_git_branches` (read) and `repos_git_branch` (mutate). Stash, log, show, blame, and conflict resolution have matching `repos_git_*` tools that proxy the same routes as the Repo Git workspace UI.
 
-### Request reviewers or open a PR in Cursor
+### Open a PR in Cursor
 
 These proxy the same GitHub PR routes as the `/prs` row actions. Start the dashboard first.
 
 1. `prs_list` — authored + review-requested queues.
-2. `prs_request_reviewers` with `repo` + `number` — lists currently requested and suggested GitHub logins. Pass `reviewers: ["login"]` and `confirm: true` to request.
-3. `prs_open_in_cursor` with `repo` + `number` and `confirm: true` — stashes dirty work in the local clone, `gh pr checkout`, then launches Cursor. Optional `notePath` opens a notes working copy alongside. `repos_open` only opens the current branch.
+2. `prs_open_in_cursor` with `repo` + `number` and `confirm: true` — stashes dirty work in the local clone, `gh pr checkout`, then launches Cursor. Optional `notePath` opens a notes working copy alongside. `repos_open` only opens the current branch.
 
 **Not exposed as MCP tools** (dashboard UI / direct HTTP only): `GET /api/repos/<name>/git/commit-context`, `.../git/coupling`, `.../git/range`, `.../git/reflog`, `.../git/remotes`, `.../git/worktrees`, `POST .../git/commit-action`. Agents can call these via `DEVHUB_BASE_URL` when needed; there is no matching `repos_git_*` registrar yet.
 

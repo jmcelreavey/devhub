@@ -35,7 +35,6 @@ function haystack(row: GithubPrRow): string {
     `#${row.number}`,
     String(row.number ?? ""),
     row.author?.login ?? "",
-    ...(row.requestedReviewers ?? []).map((r) => r.login),
   ];
   return parts.join("   ").toLowerCase();
 }

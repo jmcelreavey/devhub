@@ -6,7 +6,8 @@ import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
 import { useStoredFraction } from "@/lib/hooks/use-stored-state";
 import { useToast } from "@/lib/hooks/use-toast";
-import { agentStashMessageCommand, openTerminal } from "@/lib/terminal-launch";
+import { launchAgentJob } from "@/lib/agent-job";
+import { agentStashMessageCommand, agentStashMessagePrompt } from "@/lib/terminal-launch";
 import type { DiffLine } from "@/lib/repos/git-parsers";
 import { DiffMaximizeModal } from "./DiffMaximizeModal";
 import { DiffToolbar, DIFF_CONTEXT_LINES, type DiffContextMode } from "./DiffToolbar";
@@ -160,10 +161,15 @@ export function StashPanel({
         confirmLabel: "Open agent",
       });
       if (ok) {
-        openTerminal({
+        await launchAgentJob({
+          title: `stash msg · ${repoName}`,
+          kind: "agent",
           cwd: repoPath,
-          label: `stash msg · ${repoName}`,
-          command: await agentStashMessageCommand(repoName),
+          repoName,
+          promptText: agentStashMessagePrompt(repoName),
+          promptCommand: await agentStashMessageCommand(repoName),
+          mode: "oneshot",
+          alreadyConfirmed: true,
         });
         throw new Error("Drafting in agent CLI — paste the result here when ready.");
       }

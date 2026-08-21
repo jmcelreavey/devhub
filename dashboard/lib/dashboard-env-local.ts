@@ -54,11 +54,13 @@ export const DASHBOARD_MANAGED_ENV_KEYS = [
   "OKTA_PASSWORD",
   "BI_OPS_USER_EMAIL",
   "CAPI_REPO_PATH",
-  // Agent CLI handoff (which CLI runs one-shot jobs + model overrides)
+  // AI provider + agent CLI handoff
+  "DEVHUB_AI_PROVIDER",
   "DEVHUB_AGENT_CLI",
   "DEVHUB_AGENT_OPENCODE_MODEL",
   "DEVHUB_AGENT_CURSOR_MODEL",
 ] as const;
+
 
 export type DashboardManagedEnvKey = (typeof DASHBOARD_MANAGED_ENV_KEYS)[number];
 
@@ -81,10 +83,12 @@ const BI_PROCESS_KEYS = ["AWS_PROFILE", "OKTA_PASSWORD", "BI_OPS_USER_EMAIL", "C
 const CHAMBER_PROCESS_KEYS = ["OPENCHAMBER_HOST", "OPENCHAMBER_UI_PASSWORD"] as const;
 
 const AGENT_PROCESS_KEYS = [
+  "DEVHUB_AI_PROVIDER",
   "DEVHUB_AGENT_CLI",
   "DEVHUB_AGENT_OPENCODE_MODEL",
   "DEVHUB_AGENT_CURSOR_MODEL",
 ] as const;
+
 
 /** Copies the given managed keys from overrides into process.env (deleting when absent/blank). */
 function syncProcessEnvFromOverrides(keys: readonly string[], overrides: Map<string, string>): void {

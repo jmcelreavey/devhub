@@ -1,5 +1,5 @@
-import { generateText } from "ai";
-import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai/provider";
+import { generateAiText } from "@/lib/ai/generate";
+
 import {
   buildNotebookImportReadme,
   buildSnippetPackFiles,
@@ -105,30 +105,16 @@ export function buildTutorSystemPrompt(context: RepoContext): string {
 }
 
 export async function generateRepoLearnArtifacts(context: RepoContext): Promise<RepoLearnArtifacts> {
-  const model = getNotesAiModel();
-  if (!model) {
-    throw new Error("AI_API_KEY is not set.");
-  }
-
-  const callOptions = getNotesAiCallOptions();
-
   const [briefResult, packResult] = await Promise.all([
-    generateText({
-      model,
-      prompt: buildBriefPrompt(context),
-      ...callOptions,
-    }),
-    generateText({
-      model,
-      prompt: buildPackPrompt(context),
-      maxOutputTokens: 4096,
-      ...callOptions,
-    }),
+    generateAiText({ prompt: buildBriefPrompt(context) }),
+    generateAiText({ prompt: buildPackPrompt(context), maxOutputTokens: 4096 }),
   ]);
 
   const briefMarkdown = briefResult.text.trim();
   if (!briefMarkdown) {
-    throw new Error(`Brief generation returned empty (finish: ${briefResult.finishReason}).`);
+    throw new Error(
+      `Brief generation returned empty (provider: ${briefResult.provider}, finish: ${briefResult.finishReason ?? "unknown"}).`,
+    );
   }
   if (briefResult.finishReason === "length") {
     console.warn("[repo-learn-ai] Brief generation truncated; using partial brief.");
@@ -138,6 +124,7 @@ export async function generateRepoLearnArtifacts(context: RepoContext): Promise<
   if (packResult.finishReason === "length") {
     console.warn("[repo-learn-ai] Pack generation truncated; using partial sections.");
   }
+
   const readme: RepoLearnPackFile = {
     path: "README-import.md",
     content: buildNotebookImportReadme(context.repoName),

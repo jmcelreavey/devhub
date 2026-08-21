@@ -2,9 +2,13 @@
 /**
  * Stage the OS app icons the Tauri bundler ships.
  *
- * Plugin branding materialises `dashboard/public/plugin-desktop-icon.png` when a
- * branding plugin (e.g. devhub-bi) is enabled. Without one, we fall back to the
- * core DevHub bottle at `dashboard/public/icon-512.png`.
+ * The *bundled* Dock / Finder icon is always the core DevHub bottle
+ * (`dashboard/public/icon-512.png`). Plugin branding used to win this race
+ * whenever `plugin-desktop-icon.png` existed, so a BI-branded machine shipped
+ * a BI `.icns` and macOS's persistent Dock tile ignored every runtime reset.
+ *
+ * Plugin icons still exist — they land next to the bottle as `plugin.png` and
+ * the shell overlays them at runtime when the in-app logo is the plugin brand.
  *
  * Icons land under `desktop/staging/icons/` (gitignored) so a plugin-branded
  * build does not dirty the committed defaults in `src-tauri/icons/`.
@@ -20,6 +24,7 @@ export const iconsStagingDir = path.join(stagingDir, "icons");
 
 const PLUGIN_ICON = path.join(dashboardDir, "public", "plugin-desktop-icon.png");
 const DEFAULT_ICON = path.join(dashboardDir, "public", "icon-512.png");
+const PLUGIN_SIDECAR = path.join(iconsStagingDir, "plugin.png");
 const MARKER = path.join(iconsStagingDir, ".source.sha256");
 
 /** Required by tauri.conf.json `bundle.icon`. */
@@ -30,21 +35,45 @@ const PRUNE_DIRS = ["android", "ios"];
 const PRUNE_PREFIXES = ["Square", "StoreLogo"];
 
 /**
- * @returns {{ source: string, kind: "plugin" | "default" }}
+ * The file `cargo tauri icon` turns into the bundled `.icns`.
+ * Always the bottle — plugin branding is a runtime overlay, not the app tile.
+ *
+ * @returns {{ source: string, kind: "default" }}
  */
 export function resolveDesktopIconSource(
-  pluginIcon = PLUGIN_ICON,
+  _pluginIcon = PLUGIN_ICON,
   defaultIcon = DEFAULT_ICON,
 ) {
-  if (fs.existsSync(pluginIcon)) {
-    return { source: pluginIcon, kind: "plugin" };
-  }
   if (!fs.existsSync(defaultIcon)) {
     throw new Error(
-      `No desktop icon source. Expected plugin icon at ${pluginIcon} or default at ${defaultIcon}.`,
+      `No desktop icon source. Expected the core bottle at ${defaultIcon}.`,
     );
   }
   return { source: defaultIcon, kind: "default" };
+}
+
+/**
+ * Copy (or clear) the plugin PNG the running shell overlays on the Dock.
+ *
+ * @returns {"plugin" | "none"}
+ */
+export function stagePluginSidecar(
+  pluginIcon = PLUGIN_ICON,
+  dest = PLUGIN_SIDECAR,
+  fallback = DEFAULT_ICON,
+) {
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  if (fs.existsSync(pluginIcon)) {
+    fs.copyFileSync(pluginIcon, dest);
+    return "plugin";
+  }
+  // Always ship a sidecar so tauri.conf.json can list it. No plugin → bottle.
+  if (fs.existsSync(fallback)) {
+    fs.copyFileSync(fallback, dest);
+    return "none";
+  }
+  fs.rmSync(dest, { force: true });
+  return "none";
 }
 
 function digestFile(file) {
@@ -75,16 +104,18 @@ function assertRequired(outDir) {
 export function stageIcons({ force = false } = {}) {
   const { source, kind } = resolveDesktopIconSource();
   const digest = digestFile(source);
-  const markerValue = `${kind}:${digest}`;
+  const sidecar = stagePluginSidecar();
+  const markerValue = `${kind}:${digest}:sidecar=${sidecar}`;
 
   if (
     !force &&
     fs.existsSync(MARKER) &&
     fs.readFileSync(MARKER, "utf8").trim() === markerValue &&
-    REQUIRED.every((name) => fs.existsSync(path.join(iconsStagingDir, name)))
+    REQUIRED.every((name) => fs.existsSync(path.join(iconsStagingDir, name))) &&
+    (sidecar === "none" || fs.existsSync(PLUGIN_SIDECAR))
   ) {
-    process.stdout.write(`[stage-icons] cached (${kind})\n`);
-    return { kind, source, cached: true };
+    process.stdout.write(`[stage-icons] cached (${kind}, sidecar=${sidecar})\n`);
+    return { kind, source, sidecar, cached: true };
   }
 
   fs.mkdirSync(iconsStagingDir, { recursive: true });
@@ -101,13 +132,15 @@ export function stageIcons({ force = false } = {}) {
   }
 
   pruneJunk(iconsStagingDir);
+  // `cargo tauri icon` wiped the dir; restore the sidecar it is not responsible for.
+  const sidecarAfter = stagePluginSidecar();
   assertRequired(iconsStagingDir);
-  fs.writeFileSync(MARKER, `${markerValue}\n`, "utf8");
+  fs.writeFileSync(MARKER, `${kind}:${digest}:sidecar=${sidecarAfter}\n`, "utf8");
 
   process.stdout.write(
-    `[stage-icons] staged from ${kind} (${path.relative(repoRoot, source)})\n`,
+    `[stage-icons] staged from ${kind} (${path.relative(repoRoot, source)}), sidecar=${sidecarAfter}\n`,
   );
-  return { kind, source, cached: false };
+  return { kind, source, sidecar: sidecarAfter, cached: false };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

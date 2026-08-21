@@ -38,6 +38,7 @@ const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
     items: [
       { keys: ["j", "↓"], what: "Next commit", tab: "history" },
       { keys: ["k", "↑"], what: "Previous commit", tab: "history" },
+      { keys: ["/"], what: "Focus commit search", tab: "history" },
     ],
   },
   {

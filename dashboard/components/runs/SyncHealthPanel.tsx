@@ -33,7 +33,7 @@ export function SyncHealthPanel() {
         </div>
         <div className="flex items-center gap-2">
           <button type="button" className="btn btn-ghost text-xs" onClick={() => void mutate()}><RefreshCw size={12} />Refresh</button>
-          <Link href="/skills" className="btn btn-ghost text-xs">Agents<ArrowRight size={12} /></Link>
+          <Link href="/skills" className="btn btn-ghost text-xs">Skills<ArrowRight size={12} /></Link>
         </div>
       </div>
 

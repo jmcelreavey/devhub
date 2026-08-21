@@ -2,10 +2,10 @@
  * Server-side agent CLI handoff settings — which CLI runs one-shot terminal
  * jobs (PR review, DX audit, labs, repo upstart) and optional model overrides.
  *
- * Stored in `.env.local` under managed keys (`DEVHUB_AGENT_CLI`,
- * `DEVHUB_AGENT_OPENCODE_MODEL`, `DEVHUB_AGENT_CURSOR_MODEL`) so values can be
- * populated by the 1Password `devhub` item like every other managed config.
- * Read/written via `/api/agent-cli` and the setup wizard.
+ * Stored in `.env.local` under managed keys (`DEVHUB_AI_PROVIDER`,
+ * `DEVHUB_AGENT_CLI`, `DEVHUB_AGENT_OPENCODE_MODEL`, `DEVHUB_AGENT_CURSOR_MODEL`)
+ * so values can be populated by the 1Password `devhub` item like every other
+ * managed config. Read/written via `/api/agent-cli` and the setup wizard.
  */
 
 import { execSync } from "node:child_process";
@@ -14,7 +14,7 @@ import path from "node:path";
 import { readDashboardEnvLocalFile, resolveEnvValue } from "@/lib/dashboard-env-local";
 import { EXTRA_PATH_SEGMENTS } from "@/lib/process-env";
 
-export type AgentCli = "opencode" | "cursor";
+export type AgentCli = "opencode" | "cursor" | "chatgpt";
 
 /** Verify the exact slug with `cursor-agent --help` / the `/model` picker. */
 export const DEFAULT_CURSOR_AGENT_MODEL = "cursor-grok-4.5-high";
@@ -27,13 +27,31 @@ export interface AgentCliSettings {
 }
 
 export function normalizeAgentCli(raw: string | undefined): AgentCli {
-  return raw?.trim().toLowerCase() === "cursor" ? "cursor" : "opencode";
+  const v = raw?.trim().toLowerCase();
+  if (v === "cursor") return "cursor";
+  if (v === "chatgpt" || v === "codex") return "chatgpt";
+  return "opencode";
+}
+
+/**
+ * Map `DEVHUB_AI_PROVIDER` → launch CLI. Kept local to avoid a circular import
+ * with `lib/ai/preference` (which probes cursor-agent via this module).
+ */
+function agentCliFromAiProviderEnv(raw: string | undefined): AgentCli | null {
+  const v = raw?.trim().toLowerCase();
+  if (v === "cursor-cli" || v === "cursor") return "cursor";
+  if (v === "chatgpt-cli" || v === "chatgpt" || v === "codex") return "chatgpt";
+  if (v === "opencode") return "opencode";
+  return null;
 }
 
 export function readAgentCliSettings(): AgentCliSettings {
   const { overrides } = readDashboardEnvLocalFile();
+  const fromProvider = agentCliFromAiProviderEnv(
+    resolveEnvValue("DEVHUB_AI_PROVIDER", overrides),
+  );
   return {
-    cli: normalizeAgentCli(resolveEnvValue("DEVHUB_AGENT_CLI", overrides)),
+    cli: fromProvider ?? normalizeAgentCli(resolveEnvValue("DEVHUB_AGENT_CLI", overrides)),
     opencodeModel: resolveEnvValue("DEVHUB_AGENT_OPENCODE_MODEL", overrides) ?? "",
     cursorModel:
       resolveEnvValue("DEVHUB_AGENT_CURSOR_MODEL", overrides) ?? DEFAULT_CURSOR_AGENT_MODEL,

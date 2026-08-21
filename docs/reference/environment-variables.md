@@ -155,19 +155,17 @@ at sync time. See [Plugins](../architecture/plugins.md).
 
 ## OpenCode And OpenChamber
 
-See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md) for how the local peer ports work together.
+See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md). Do not configure companion ports; both UIs lazy-start.
 
 | Variable                                | Default                         | Purpose                                                                                                                                                                        |
 | --------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `OPENCHAMBER_PORT`                      | `1336`                          | OpenChamber daemon port                                                                                                                                                        |
+| `OPENCHAMBER_PORT`                      | `1336`                          | Internal default for the lazy `/chamber` tab. You do not need to set this.                                                                                                     |
 | `OPENCHAMBER_HOST`                      | `0.0.0.0`                       | OpenChamber bind host                                                                                                                                                          |
 | `OPENCHAMBER_UI_PASSWORD`               | —                               | UI password required to bind a LAN host on OpenChamber ≥1.13. Configure from `/setup`. Without it (or the override below) DevHub falls back to binding `127.0.0.1`.            |
 | `OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN` | `false`                         | Set `true` to expose OpenChamber over the LAN without a UI password (not recommended)                                                                                          |
-| `NEXT_PUBLIC_OPENCHAMBER_PORT`          | `1336`                          | Chamber iframe URL port in the browser                                                                                                                                         |
-| `OPENCODE_PORT`                         | `1338`                          | Shared `opencode serve` port                                                                                                                                                   |
-| `OPENCODE_BIND_HOST`                    | `0.0.0.0`                       | `opencode serve --hostname`                                                                                                                                                    |
+| `NEXT_PUBLIC_OPENCHAMBER_PORT`          | `1336`                          | Optional. Unset is fine — the Chamber iframe uses 1336.                                                                                                                        |
+| `OPENCODE_PORT`                         | unset                           | Do **not** set. A listener on 1338 makes OpenChamber.app attach as an external server Setup cannot restart.                                                                    |
 | `OPENCODE_SERVER_PASSWORD`              | —                               | When set, DevHub sends Basic auth (`opencode:<password>`) to the local OpenCode API — used by Datadog **Investigate**, PR review handoffs, and other dashboard→OpenCode calls  |
-| `NEXT_PUBLIC_OPENCODE_PORT`             | `1338`                          | OpenCode iframe URL port in the browser                                                                                                                                        |
 | `TERMINAL_PORT`                         | `1339`                          | In-app terminal PTY WebSocket peer (`dashboard/scripts/terminal-pty-server.ts`); localhost-only                                                                                |
 | `NEXT_PUBLIC_TERMINAL_PORT`             | `1339`                          | Browser-visible terminal port for the docked terminal iframe                                                                                                                   |
 | `DEVHUB_DEVELOPER_DIR`                  | `~/Developer`                   | Default shell cwd for the in-app terminal when a session does not pass `cwd`                                                                                                   |
@@ -184,7 +182,7 @@ See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md) for how the lo
 | `DEVHUB_SKIP_OPENCODE_UPDATE`           | —                               | Set to `1` to skip `opencode upgrade` on peer startup                                                                                                                          |
 | `DEVHUB_SKIP_OPENCHAMBER_UPDATE`        | —                               | Set to `1` to skip `openchamber update` on peer startup                                                                                                                        |
 
-Legacy `OPENCODE_HOST` is treated as a bind host when it is not a URL; prefer `OPENCODE_BIND_HOST`.
+Do not set `OPENCODE_HOST` or `OPENCODE_SKIP_START` either — Chamber Setup cannot restart an OpenCode process DevHub pinned.
 
 ## 1Password Fallback (Optional)
 

@@ -290,13 +290,10 @@ async function main() {
   });
 
   /**
-   * Peer services: OpenChamber (1336) and OpenCode (1338).
+   * Peer boot: free leftover OpenCode on 1338/4096. OpenChamber and OpenCode
+   * lazy-start from the dashboard tabs — always-on Chamber raced OpenChamber.app.
    *
-   * Started here because the packaged app has no `concurrently` to do it. They
-   * were missing from the first desktop builds entirely, which left the
-   * Chamber and OpenCode pages permanently blank — the ports were simply never
-   * listening.
-   *
+   * Started here because the packaged app has no `concurrently` to do it.
    * Deliberately not fatal. Both shell out to binaries the user may not have
    * installed, and "OpenCode is not installed" is a normal state for most
    * people, not a reason to refuse to start the dashboard.
@@ -314,7 +311,7 @@ async function main() {
     );
     peers.on("exit", (code) => {
       if (!stopping && code !== 0) {
-        log(`peer services exited (code ${code}) — OpenChamber/OpenCode unavailable`);
+        log(`peer services exited (code ${code}) — pinned OpenCode ports may still be occupied`);
       }
     });
   } else {

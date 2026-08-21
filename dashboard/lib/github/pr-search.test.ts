@@ -54,12 +54,6 @@ describe("matchesPrSearch", () => {
     expect(matchesPrSearch(row(), "lgcaobianco")).toBe(true);
   });
 
-  it("matches on a requested reviewer", () => {
-    expect(matchesPrSearch(row({ requestedReviewers: [{ login: "jmcelreavey" }] }), "jmcel")).toBe(
-      true,
-    );
-  });
-
   it("ANDs terms rather than ORing them", () => {
     expect(matchesPrSearch(row(), "meta nonsense")).toBe(false);
   });

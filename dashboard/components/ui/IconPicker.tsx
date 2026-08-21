@@ -12,12 +12,14 @@ import {
 } from "react";
 import Image from "next/image";
 import {
+  applyLogoChoice,
   BRAND_BOTTLE_IMAGE_SRC,
   BRAND_LABEL,
   DEVHUB_BRAND_IMAGE,
   DEVHUB_BRAND_LABEL,
   HAS_PLUGIN_BRAND,
 } from "@/lib/brand-mark";
+import { syncDesktopAppIcon } from "@/lib/desktop/app-icon";
 import { getSeasonalEntry, getCurrentSeasonalEntries } from "@/lib/seasonal";
 import {
   decodePinnedGlyph,
@@ -372,12 +374,16 @@ function getStoredIconName(): string {
 
 function setStoredIconName(name: string): void {
   localStorage.setItem(STORAGE_KEY, name);
+  applyLogoChoice(name);
   window.dispatchEvent(new Event(ICON_EVENT));
+  void syncDesktopAppIcon(name);
 }
 
 function resetStoredIconName(): void {
   localStorage.removeItem(STORAGE_KEY);
+  applyLogoChoice(null);
   window.dispatchEvent(new Event(ICON_EVENT));
+  void syncDesktopAppIcon(BOTTLE_VALUE);
 }
 
 function subscribeIcon(cb: () => void) {
@@ -827,6 +833,11 @@ export function LogoIcon({
       observer.disconnect();
     };
   }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    void syncDesktopAppIcon(stored);
+  }, [hydrated, stored]);
 
   const glyphProps = { markPixels: glyphMarkPx, emojiPixels: glyphEmojiPx };
 

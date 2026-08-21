@@ -301,9 +301,11 @@ export const SetupSaveSchema = z.object({
   bi: z.object({ capiRepoPath: z.string().max(4096).optional() }).optional(),
   agent: z
     .object({
+      provider: z.string().max(100).optional(),
       cli: z.string().max(100).optional(),
       opencodeModel: z.string().max(200).optional(),
       cursorModel: z.string().max(200).optional(),
     })
     .optional(),
+
 });

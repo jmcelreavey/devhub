@@ -64,7 +64,7 @@ When `ok: true`, the response includes `onCall` (boolean), `users[]` (roster), a
 | `scope` | `"oncall"`, `"team"`, or `"general"` (default) |
 | `title`, `status`, `tags`, `timestampMs` | Optional event context for the prompt |
 
-Requires OpenCode running on the local peer port (`1338` by default). When `OPENCODE_SERVER_PASSWORD` is set, DevHub sends Basic auth to the OpenCode API. Returns `{ ok: true, sessionId }` or `502` when OpenCode is unreachable.
+Requires OpenCode; DevHub lazy-starts an ephemeral loopback instance. When `OPENCODE_SERVER_PASSWORD` is set, DevHub sends Basic auth to the OpenCode API. Returns `{ ok: true, sessionId }` or `502` when OpenCode is unreachable.
 
 ## Links Vs API Data
 

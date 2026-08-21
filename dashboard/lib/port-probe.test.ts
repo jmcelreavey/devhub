@@ -1,6 +1,6 @@
 import net from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { canBindPort, canConnect, waitForPortListening } from "./port-probe";
+import { canBindPort, canConnect, parsePsEtime, waitForPortListening } from "./port-probe";
 
 describe("port-probe", () => {
   let server: net.Server | undefined;
@@ -35,5 +35,13 @@ describe("port-probe", () => {
     await new Promise<void>((resolve) => server!.listen(port, "127.0.0.1", resolve));
 
     expect(await waitPromise).toBe(true);
+  });
+});
+
+describe("parsePsEtime", () => {
+  it("parses mm:ss, hh:mm:ss, and dd-hh:mm:ss", () => {
+    expect(parsePsEtime("03:04")).toBe(3 * 60 + 4);
+    expect(parsePsEtime("01:02:03")).toBe(3600 + 2 * 60 + 3);
+    expect(parsePsEtime("2-01:02:03")).toBe(2 * 86400 + 3600 + 2 * 60 + 3);
   });
 });

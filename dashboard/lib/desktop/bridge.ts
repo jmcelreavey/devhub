@@ -185,6 +185,23 @@ export async function openLogs(): Promise<void> {
   }
 }
 
+/** Swap the running window / Dock icon. No-op in a browser. */
+export async function setDesktopIcon(
+  kind: "default" | "plugin",
+  png?: Uint8Array,
+): Promise<void> {
+  const api = tauri();
+  if (!api) return;
+  try {
+    await api.core.invoke("set_desktop_icon", {
+      kind,
+      png: png ? Array.from(png) : undefined,
+    });
+  } catch (error) {
+    console.warn("[bridge] set_desktop_icon failed", error);
+  }
+}
+
 /**
  * Subscribe to a shell event. Returns an unsubscribe function that is safe to
  * call in a browser, so effects can clean up without branching.

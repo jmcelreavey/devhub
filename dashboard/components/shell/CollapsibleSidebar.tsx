@@ -181,7 +181,8 @@ function NavSection({
           (item.icon === "chamber" ||
             item.icon === "opencode" ||
             item.icon === "claude" ||
-            item.icon === "cursor")
+            item.icon === "cursor" ||
+            item.icon === "chatgpt")
         ) {
           return (
             <div key={item.href} style={{ position: "relative" }}>

@@ -1,6 +1,14 @@
 "use client";
 
-import type { KeyboardEvent, MouseEvent } from "react";
+import {
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { lookupByEmail } from "@/lib/people/identity";
 import { laneColor, type GraphLaneCommit } from "@/lib/repos/git-graph";
 import { RowMenuKebab, type RowMenuBind } from "@/components/shell/ContextMenu";
@@ -22,6 +30,23 @@ interface CommitGraphProps {
    * person commits under, so one human renders as one contributor.
    */
   identityByEmail?: Record<string, { avatarUrl: string | null; displayName: string }>;
+  /**
+   * Working-tree summary pinned above HEAD as a synthetic row. Null/absent
+   * hides the row (clean tree or status not loaded yet).
+   */
+  wip?: { staged: number; unstaged: number } | null;
+  /** Click on the WIP row — the workspace jumps to the Changes tab. */
+  onOpenWip?: () => void;
+  /**
+   * Mouse-down starts dragging this commit (drag onto a branch chip/rail item
+   * to merge, rebase or cherry-pick). Mouse-only — touch keeps long-press.
+   */
+  onRowDragStart?: (event: ReactPointerEvent<HTMLDivElement>, commit: GraphLaneCommit) => void;
+}
+
+/** Refs you can drop a commit onto: local branches only. */
+export function isBranchDropTarget(ref: string, headBranch: string | null): boolean {
+  return !ref.startsWith("tag:") && !ref.startsWith("origin/") && ref !== headBranch;
 }
 
 const ROW_H = 32;
@@ -31,6 +56,8 @@ const NODE_R = 4;
 /** Vertical distance an elbow takes to change lane. Kept under one row so a
  *  branch that lives for a single commit still reads as a corner, not a wedge. */
 const ELBOW = ROW_H * 0.8;
+/** Rows rendered beyond the visible window, so scroll never shows a blank edge. */
+const OVERSCAN = 10;
 
 function isMainRef(ref: string, mainRefNames: string[]): boolean {
   const normalized = ref.replace(/^HEAD -> /, "").trim();
@@ -91,214 +118,367 @@ export function CommitGraph({
   unpushedHashes,
   mainRefNames = [],
   identityByEmail,
+  wip = null,
+  onOpenWip,
+  onRowDragStart,
 }: CommitGraphProps) {
-  if (commits.length === 0) {
+  if (commits.length === 0 && !wip) {
     return (
       <div className="repo-git-empty">
         No commits yet — history will show up once this repo has a tip.
       </div>
     );
   }
+  return (
+    <CommitGraphInner
+      commits={commits}
+      selectedHash={selectedHash}
+      onSelect={onSelect}
+      onContextMenu={onContextMenu}
+      onKebabOpen={onKebabOpen}
+      rowBind={rowBind}
+      unpushedHashes={unpushedHashes}
+      mainRefNames={mainRefNames}
+      identityByEmail={identityByEmail}
+      wip={wip}
+      onOpenWip={onOpenWip}
+      onRowDragStart={onRowDragStart}
+    />
+  );
+}
 
+/**
+ * Windowed rendering body.
+ *
+ * The scroller is the root `.repo-git-graph` (CSS owns `overflow: auto`), so
+ * virtualization only needs its scrollTop and clientHeight: render the rows and
+ * graph nodes inside [scrollTop - overscan, scrollTop + height + overscan],
+ * absolutely positioned in a spacer of the full height. DOM size is bounded by
+ * the window, not the history length — a 5k-commit page renders ~40 rows.
+ */
+function CommitGraphInner({
+  commits,
+  selectedHash,
+  onSelect,
+  onContextMenu,
+  onKebabOpen,
+  rowBind,
+  unpushedHashes,
+  mainRefNames = [],
+  identityByEmail,
+  wip,
+  onOpenWip,
+  onRowDragStart,
+}: CommitGraphProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportH, setViewportH] = useState(600);
+  const rafPending = useRef(false);
+
+  const onScroll = useCallback(() => {
+    if (rafPending.current) return;
+    rafPending.current = true;
+    requestAnimationFrame(() => {
+      rafPending.current = false;
+      const el = scrollRef.current;
+      if (el) setScrollTop(el.scrollTop);
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const measure = () => setViewportH(el.clientHeight || 600);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const hasWip = Boolean(wip);
+  const rowOffset = hasWip ? 1 : 0;
+  const totalRows = commits.length + rowOffset;
+  const totalH = totalRows * ROW_H;
+
+  const start = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN);
+  const end = Math.min(totalRows, Math.ceil((scrollTop + viewportH) / ROW_H) + OVERSCAN);
+
+  const y = (row: number) => row * ROW_H + ROW_H / 2;
   const maxLanes = Math.max(1, ...commits.map((c) => c.activeLanes));
   const graphW = PAD_X * 2 + maxLanes * LANE_W;
-  const height = commits.length * ROW_H;
+
+  const headCommit = commits.find((c) => c.isHead) ?? commits[0] ?? null;
+  const wipLane = headCommit ? headCommit.lane : 0;
+  const wipCount = wip ? wip.staged + wip.unstaged : 0;
+
+  // Visible slice of the graph nodes/edges. An edge is drawn when either of its
+  // endpoints is on-screen; the SVG clips the rest of the path.
+  const visibleCommits = commits
+    .map((c, i) => ({ c, i }))
+    .filter(({ i }) => {
+      const row = i + rowOffset;
+      return row >= start && row < end;
+    });
 
   return (
-    <div className="repo-git-graph">
-      <div className="repo-git-graph-rail" style={{ width: graphW }}>
-        <svg width={graphW} height={height} aria-hidden>
-          {commits.map((c, i) => {
-            const x = laneX(c.lane);
-            const y = i * ROW_H + ROW_H / 2;
-            return (
-              <g key={`edges-${c.hash}`}>
-                {c.parentLanes.map((p) => {
-                  const travelX = laneX(p.lane);
-                  // A parent below the loaded window has no row to aim at. Run
-                  // the line off the bottom edge rather than stopping it a few
-                  // pixels down, which used to leave an unexplained stub.
-                  const offPage = p.row === null || p.row <= i;
-                  const parentX = offPage ? travelX : laneX(commits[p.row!]!.lane);
-                  const parentY = offPage ? height : p.row! * ROW_H + ROW_H / 2;
-                  return (
-                    <path
-                      key={`${c.hash}-${p.hash}`}
-                      d={edgePath(x, y, travelX, parentX, parentY)}
-                      fill="none"
-                      stroke={laneColor(p.color)}
-                      strokeWidth={1.75}
-                      strokeLinecap="round"
-                      opacity={0.9}
-                    />
-                  );
-                })}
-              </g>
+    <div ref={scrollRef} className="repo-git-graph" onScroll={onScroll}>
+      <div className="repo-git-graph-canvas" style={{ height: totalH, minWidth: graphW + 320 }}>
+        <div className="repo-git-graph-rail" style={{ width: graphW, height: totalH }}>
+          <svg width={graphW} height={totalH} aria-hidden>
+            {hasWip && headCommit && (
+              <>
+                <path
+                  d={edgePath(
+                    laneX(wipLane),
+                    y(0),
+                    laneX(wipLane),
+                    laneX(headCommit.lane),
+                    // Stop at the HEAD node's rim, not its centre.
+                    y(commits.indexOf(headCommit) + rowOffset) - (NODE_R + 3),
+                  )}
+                  fill="none"
+                  stroke="var(--text-subtle, var(--text))"
+                  strokeWidth={1.5}
+                  strokeDasharray="3 3"
+                  opacity={0.55}
+                />
+                <circle
+                  cx={laneX(wipLane)}
+                  cy={y(0)}
+                  r={NODE_R}
+                  fill="var(--bg-surface)"
+                  stroke="var(--text-subtle, var(--text))"
+                  strokeWidth={1.5}
+                  strokeDasharray="2.5 2.5"
+                />
+              </>
+            )}
+            {visibleCommits.map(({ c, i }) => {
+              const x = laneX(c.lane);
+              const cy = y(i + rowOffset);
+              return (
+                <g key={`edges-${c.hash}`}>
+                  {c.parentLanes.map((p) => {
+                    const travelX = laneX(p.lane);
+                    // A parent below the loaded window has no row to aim at. Run
+                    // the line off the bottom edge rather than stopping it a few
+                    // pixels down, which used to leave an unexplained stub.
+                    const offPage = p.row === null || p.row <= i;
+                    const parentX = offPage ? travelX : laneX(commits[p.row!]!.lane);
+                    const parentY = offPage ? totalH : y(p.row! + rowOffset);
+                    return (
+                      <path
+                        key={`${c.hash}-${p.hash}`}
+                        d={edgePath(x, cy, travelX, parentX, parentY)}
+                        fill="none"
+                        stroke={laneColor(p.color)}
+                        strokeWidth={1.75}
+                        strokeLinecap="round"
+                        opacity={0.9}
+                      />
+                    );
+                  })}
+                </g>
+              );
+            })}
+            {visibleCommits.map(({ c, i }) => {
+              const x = laneX(c.lane);
+              const cy = y(i + rowOffset);
+              const selected = selectedHash === c.hash;
+              const color = laneColor(c.color);
+              return (
+                <circle
+                  key={`node-${c.hash}`}
+                  cx={x}
+                  cy={cy}
+                  r={c.isHead ? NODE_R + 1.5 : NODE_R}
+                  // Merges read as rings so a two-parent commit is identifiable
+                  // without tracing its edges back.
+                  fill={c.isMerge ? "var(--bg-surface)" : color}
+                  stroke={selected ? "var(--text)" : color}
+                  strokeWidth={c.isMerge || selected ? 2 : 1.5}
+                />
+              );
+            })}
+            {visibleCommits.map(({ c, i }) =>
+              // A second, wider ring marks the checked-out commit. Nothing
+              // distinguished HEAD before, so on a branch whose name resembles its
+              // neighbours there was no way to tell where you were standing.
+              c.isHead ? (
+                <circle
+                  key={`head-${c.hash}`}
+                  cx={laneX(c.lane)}
+                  cy={y(i + rowOffset)}
+                  r={NODE_R + 4}
+                  fill="none"
+                  stroke={laneColor(c.color)}
+                  strokeWidth={1.25}
+                  opacity={0.7}
+                />
+              ) : null,
+            )}
+          </svg>
+        </div>
+        {/*
+          j/k (and arrows) move the selection. Listening on the container rather
+          than each row means it keeps working while focus sits on any row.
+        */}
+        <div
+          className="repo-git-graph-rows"
+          onKeyDown={(e) => {
+            const delta =
+              e.key === "j" || e.key === "ArrowDown" ? 1
+              : e.key === "k" || e.key === "ArrowUp" ? -1
+              : 0;
+            if (delta === 0 || e.metaKey || e.ctrlKey || e.altKey) return;
+            e.preventDefault();
+            const current = commits.findIndex((c) => c.hash === selectedHash);
+            const nextIndex = Math.min(
+              commits.length - 1,
+              Math.max(0, (current < 0 ? 0 : current) + delta),
             );
-          })}
-          {commits.map((c, i) => {
-            const x = laneX(c.lane);
-            const y = i * ROW_H + ROW_H / 2;
-            const selected = selectedHash === c.hash;
-            const color = laneColor(c.color);
-            return (
-              <circle
-                key={`node-${c.hash}`}
-                cx={x}
-                cy={y}
-                r={c.isHead ? NODE_R + 1.5 : NODE_R}
-                // Merges read as rings so a two-parent commit is identifiable
-                // without tracing its edges back.
-                fill={c.isMerge ? "var(--bg-surface)" : color}
-                stroke={selected ? "var(--text)" : color}
-                strokeWidth={c.isMerge || selected ? 2 : 1.5}
-              />
-            );
-          })}
-          {commits.map((c, i) =>
-            // A second, wider ring marks the checked-out commit. Nothing
-            // distinguished HEAD before, so on a branch whose name resembles its
-            // neighbours there was no way to tell where you were standing.
-            c.isHead ? (
-              <circle
-                key={`head-${c.hash}`}
-                cx={laneX(c.lane)}
-                cy={i * ROW_H + ROW_H / 2}
-                r={NODE_R + 4}
-                fill="none"
-                stroke={laneColor(c.color)}
-                strokeWidth={1.25}
-                opacity={0.7}
-              />
-            ) : null,
-          )}
-        </svg>
-      </div>
-      {/*
-        j/k (and arrows) move the selection. Listening on the container rather
-        than each row means it keeps working while focus sits on any row.
-      */}
-      <div
-        className="repo-git-graph-rows"
-        onKeyDown={(e) => {
-          const delta =
-            e.key === "j" || e.key === "ArrowDown" ? 1
-            : e.key === "k" || e.key === "ArrowUp" ? -1
-            : 0;
-          if (delta === 0 || e.metaKey || e.ctrlKey || e.altKey) return;
-          e.preventDefault();
-          const current = commits.findIndex((c) => c.hash === selectedHash);
-          const nextIndex = Math.min(
-            commits.length - 1,
-            Math.max(0, (current < 0 ? 0 : current) + delta),
-          );
-          const next = commits[nextIndex];
-          if (!next) return;
-          onSelect?.(next.hash);
-          // Move focus with the selection so repeated presses keep working and
-          // the row is scrolled into view for free.
-          e.currentTarget
-            .querySelectorAll<HTMLElement>(".repo-git-graph-row")
-            [nextIndex]?.focus();
-        }}
-      >
-        {commits.map((c) => {
-          const selected = selectedHash === c.hash;
-          const unpushed = unpushedHashes?.has(c.hash) || unpushedHashes?.has(c.shortHash);
-          const onMain = mainRefNames.length > 0 && c.refs.some((ref) => isMainRef(ref, mainRefNames));
-          const identity = identityByEmail
-            ? lookupByEmail(identityByEmail, c.authorEmail)
-            : undefined;
-          return (
+            const next = commits[nextIndex];
+            if (!next) return;
+            onSelect?.(next.hash);
+            // Move focus with the selection so repeated presses keep working and
+            // the row is scrolled into view for free.
+            e.currentTarget
+              .querySelectorAll<HTMLElement>(".repo-git-graph-row:not(.repo-git-wip-row)")
+              [nextIndex]?.focus();
+          }}
+        >
+          {hasWip && (
             <div
-              key={c.hash}
               role="button"
               tabIndex={0}
-              className="repo-git-graph-row group"
-              data-selected={selected || undefined}
-              data-unpushed={unpushed || undefined}
-              data-on-main={onMain || undefined}
-              data-head={c.isHead || undefined}
-              style={{ height: ROW_H }}
-              {...(rowBind?.(c) ?? {})}
-              onClick={(event) => {
-                rowBind?.(c)?.onClick(event);
-                if (event.defaultPrevented) return;
-                onSelect?.(c.hash);
-              }}
-              onContextMenu={(event) => {
-                rowBind?.(c)?.onContextMenu(event);
-                onContextMenu?.(event, c);
-              }}
-              onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
-                rowBind?.(c)?.onKeyDown(event);
-                if (event.key !== "Enter" && event.key !== " ") return;
-                event.preventDefault();
-                onSelect?.(c.hash);
+              className="repo-git-graph-row repo-git-wip-row"
+              data-wip-count={wipCount || undefined}
+              style={{ top: 0, height: ROW_H }}
+              onClick={() => onOpenWip?.()}
+              onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
+                if (e.key !== "Enter" && e.key !== " ") return;
+                e.preventDefault();
+                onOpenWip?.();
               }}
             >
-              <span
-                className="repo-git-graph-hash font-mono"
-                style={{ color: laneColor(c.color) }}
-              >
-                {c.shortHash}
+              <span className="repo-git-wip-label font-mono">WIP</span>
+              <span className="repo-git-graph-subject truncate">
+                {wipCount === 0
+                  ? "Working tree clean — click to stage changes"
+                  : `${wipCount} changed file${wipCount === 1 ? "" : "s"}${wip && wip.staged > 0 ? ` · ${wip.staged} staged` : ""} — click to review`}
               </span>
-              <span className="repo-git-graph-subject truncate" title={c.subject}>
-                {c.subject}
-              </span>
-              {/*
-                Rendered even when empty. Skipping the element dropped a grid
-                cell, so on a commit with no refs the author column slid left
-                into the refs track and the whole right-hand edge went ragged.
-              */}
-              <span className="repo-git-graph-refs">
-                {c.refs.length > 0 &&
-                  c.refs.slice(0, 3).map((ref) => (
-                    <span
-                      key={ref}
-                      className="repo-git-ref-chip"
-                      data-tone={
-                        ref === c.headBranch
-                          ? "head"
-                          : isMainRef(ref, mainRefNames)
-                            ? "main"
-                            : undefined
-                      }
-                      title={ref === c.headBranch ? `${ref} — checked out` : ref}
-                    >
-                      {ref}
-                    </span>
-                  ))}
-              </span>
-              <span className="repo-git-graph-author">
-                <CommitAvatar
-                  author={c.author}
-                  email={c.authorEmail}
-                  resolvedUrl={identity?.avatarUrl ?? undefined}
-                  title={c.authorEmail ? `${c.author} <${c.authorEmail}>` : c.author}
-                />
-                <span className="repo-git-graph-meta">
-                  {/*
-                    The identity's name rather than the commit's, so a person who
-                    commits as "jmc" from one machine and "John McElreavey" from
-                    another reads as one contributor down the column. The commit's
-                    own name and address stay in the avatar tooltip.
-                  */}
-                  <span className="truncate">{identity?.displayName || c.author}</span>
-                  <span className="repo-git-graph-date">{c.relativeDate}</span>
-                </span>
-              </span>
-              <span className="repo-git-graph-kebab">
-                {onKebabOpen ? (
-                  <RowMenuKebab
-                    label={`Actions for ${c.shortHash}`}
-                    onOpen={(x, y) => onKebabOpen(x, y, c)}
-                  />
-                ) : null}
-              </span>
+              <span className="repo-git-graph-refs" />
+              <span className="repo-git-graph-author" />
+              <span className="repo-git-graph-kebab" />
             </div>
-          );
-        })}
+          )}
+          {commits.map((c, i) => {
+            const row = i + rowOffset;
+            if (row < start || row >= end) return null;
+            const selected = selectedHash === c.hash;
+            const unpushed = unpushedHashes?.has(c.hash) || unpushedHashes?.has(c.shortHash);
+            const onMain = mainRefNames.length > 0 && c.refs.some((ref) => isMainRef(ref, mainRefNames));
+            const identity = identityByEmail
+              ? lookupByEmail(identityByEmail, c.authorEmail)
+              : undefined;
+            return (
+              <div
+                key={c.hash}
+                role="button"
+                tabIndex={0}
+                className="repo-git-graph-row group"
+                data-selected={selected || undefined}
+                data-unpushed={unpushed || undefined}
+                data-on-main={onMain || undefined}
+                data-head={c.isHead || undefined}
+                style={{ top: row * ROW_H, height: ROW_H }}
+                {...(rowBind?.(c) ?? {})}
+                onPointerDown={(event) => {
+                  onRowDragStart?.(event, c);
+                  rowBind?.(c)?.onPointerDown(event);
+                }}
+                onClick={(event) => {
+                  rowBind?.(c)?.onClick(event);
+                  if (event.defaultPrevented) return;
+                  onSelect?.(c.hash);
+                }}
+                onContextMenu={(event) => {
+                  rowBind?.(c)?.onContextMenu(event);
+                  onContextMenu?.(event, c);
+                }}
+                onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+                  rowBind?.(c)?.onKeyDown(event);
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  onSelect?.(c.hash);
+                }}
+              >
+                <span
+                  className="repo-git-graph-hash font-mono"
+                  style={{ color: laneColor(c.color) }}
+                  title={c.gpg === "G" ? "Signed with a verified GPG signature" : undefined}
+                >
+                  {c.gpg === "G" ? "✓ " : ""}
+                  {c.shortHash}
+                </span>
+                <span className="repo-git-graph-subject truncate" title={c.subject}>
+                  {c.subject}
+                </span>
+                {/*
+                  Rendered even when empty. Skipping the element dropped a grid
+                  cell, so on a commit with no refs the author column slid left
+                  into the refs track and the whole right-hand edge went ragged.
+                */}
+                <span className="repo-git-graph-refs">
+                  {c.refs.length > 0 &&
+                    c.refs.slice(0, 3).map((ref) => (
+                      <span
+                        key={ref}
+                        className="repo-git-ref-chip"
+                        data-tone={
+                          ref === c.headBranch
+                            ? "head"
+                            : isMainRef(ref, mainRefNames)
+                              ? "main"
+                              : undefined
+                        }
+                        title={ref === c.headBranch ? `${ref} — checked out` : ref}
+                        data-drop-branch={isBranchDropTarget(ref, c.headBranch) ? ref : undefined}
+                      >
+                        {ref}
+                      </span>
+                    ))}
+                </span>
+                <span className="repo-git-graph-author">
+                  <CommitAvatar
+                    author={c.author}
+                    email={c.authorEmail}
+                    resolvedUrl={identity?.avatarUrl ?? undefined}
+                    title={c.authorEmail ? `${c.author} <${c.authorEmail}>` : c.author}
+                  />
+                  <span className="repo-git-graph-meta">
+                    {/*
+                      The identity's name rather than the commit's, so a person who
+                      commits as "jmc" from one machine and "John McElreavey" from
+                      another reads as one contributor down the column. The commit's
+                      own name and address stay in the avatar tooltip.
+                    */}
+                    <span className="truncate">{identity?.displayName || c.author}</span>
+                    <span className="repo-git-graph-date">{c.relativeDate}</span>
+                  </span>
+                </span>
+                <span className="repo-git-graph-kebab">
+                  {onKebabOpen ? (
+                    <RowMenuKebab
+                      label={`Actions for ${c.shortHash}`}
+                      onOpen={(x, y) => onKebabOpen(x, y, c)}
+                    />
+                  ) : null}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

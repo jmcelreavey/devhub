@@ -23,6 +23,7 @@ import { registerRecallTools } from "./tools/recall.ts";
 import { registerShareTools } from "./tools/share.ts";
 import { registerWorkspaceTools } from "./tools/workspace.ts";
 import { registerOwnershipTools } from "./tools/ownership.ts";
+import { registerTerminalTools } from "./tools/terminal.ts";
 
 const server = new McpServer({
   name: "devhub",
@@ -56,6 +57,7 @@ registerSessionTools(server, ctx);
 registerRecallTools(server, ctx);
 registerShareTools(server, ctx);
 registerWorkspaceTools(server, ctx);
+registerTerminalTools(server, ctx);
 
 async function main() {
   const transport = new StdioServerTransport();

@@ -2,17 +2,18 @@
 
 import {
   CircleCheck,
+  Dumbbell,
   ExternalLink,
   FileText,
   GitPullRequest,
   Link2,
   MessageSquare,
   ScanSearch,
-  UserPlus,
 } from "lucide-react";
 import type { GithubPrRow } from "@/lib/github/prs";
 import { buildSlackMessage, copyTextAndToast } from "@/lib/pr-slack";
-import { agentReviewCommand, openTerminal } from "@/lib/terminal-launch";
+import { launchAgentJob } from "@/lib/agent-job";
+import { agentReviewCommand, agentReviewPrompt } from "@/lib/terminal-launch";
 import { notifyPrReviewNoteWatch, prReviewNotePath } from "@/lib/pr-review-notes";
 import { buildPrNoteMarkdown, prNotePath } from "@/lib/pr-note";
 import { createOrOpenVaultNote } from "@/lib/create-vault-note";
@@ -54,13 +55,16 @@ export function buildPrRowMenuGroups({
   kind,
   toast,
   openNote,
-  onRequestReview,
+  repLocked = false,
+  openRep,
 }: {
   row: GithubPrRow;
   kind: PrRowKind;
   toast: ReturnType<typeof useToast>;
   openNote: () => void | Promise<void>;
-  onRequestReview?: () => void;
+  /** Today's unfinished daily rep is this PR — agent review stays locked until findings are saved. */
+  repLocked?: boolean;
+  openRep?: () => void;
 }): ContextMenuGroup[] {
   const watchPath = prReviewNotePath(row);
   const notePath = prNotePath({ repo: row.repo, number: row.number });
@@ -85,6 +89,39 @@ export function buildPrRowMenuGroups({
     icon: <FileText size={12} />,
     onSelect: () => void openNote(),
   };
+  const agentReview = {
+    id: "agent-review",
+    label: "Review with agent",
+    description: "Explain & review this PR (OpenCode or Agent tab)",
+    icon: <ScanSearch size={12} />,
+    onSelect: async () => {
+      const note = watchPath || notePath;
+      const result = await launchAgentJob({
+        title: `Review PR #${row.number}`,
+        kind: "review",
+        repoName: row.repo,
+        notePath: note,
+        promptText: agentReviewPrompt(row.url, note),
+        promptCommand: await agentReviewCommand(row.url, note),
+        mode: "oneshot",
+        reason: `PR review ${row.repo}#${row.number}`,
+        alreadyConfirmed: true,
+      });
+      notifyPrReviewNoteWatch(row);
+      toast.info(
+        result.channel === "opencode"
+          ? "Review running in OpenCode — note glyph appears here when saved."
+          : "Review queued in the Agent tab — note glyph appears when saved.",
+      );
+    },
+  };
+  const repFirst = {
+    id: "daily-rep-first",
+    label: "Finish your daily rep first",
+    description: "AI-free review before the agent gets a look",
+    icon: <Dumbbell size={12} />,
+    onSelect: () => openRep?.(),
+  };
 
   if (kind === "authored") {
     return [
@@ -94,12 +131,7 @@ export function buildPrRowMenuGroups({
           openGithub,
           ...copyUrlItems(row, toast),
           openCursor,
-          {
-            id: "request-review",
-            label: "Request review…",
-            icon: <UserPlus size={12} />,
-            onSelect: () => onRequestReview?.(),
-          },
+          agentReview,
           {
             id: "slack-request",
             label: "Copy Slack request",
@@ -117,20 +149,7 @@ export function buildPrRowMenuGroups({
       {
         id: "reviews",
         items: [
-          {
-            id: "agent-review",
-            label: "Review with agent",
-            description: "Explain & review this PR in the terminal",
-            icon: <ScanSearch size={12} />,
-            onSelect: async () => {
-              openTerminal({
-                label: `review ${row.repo}#${row.number}`,
-                command: await agentReviewCommand(row.url, watchPath || notePath),
-              });
-              notifyPrReviewNoteWatch(row);
-              toast.info("Reviewing in the terminal — a note glyph appears here when it's saved.");
-            },
-          },
+          repLocked ? repFirst : agentReview,
           openCursor,
           openGithub,
           ...copyUrlItems(row, toast),

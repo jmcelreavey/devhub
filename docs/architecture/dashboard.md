@@ -51,7 +51,7 @@ When allowlisted script runs failed since your last visit, Today shows a dismiss
 
 ## Navigation (2026-06 IA)
 
-The sidebar is driven by `dashboard/lib/nav.ts` — **16** core sidebar destinations in `NAV_ITEMS` (plugin items such as Ops merge in separately), grouped into **Workspace**, **Library**, **BI**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`.
+The sidebar is driven by `dashboard/lib/nav.ts` — **18** core sidebar destinations in `NAV_ITEMS` (plugin items such as Ops merge in separately), grouped into **Workspace**, **Library**, **BI**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`.
 
 | Sidebar  | Route       | Notes                                                                                  |
 | -------- | ----------- | -------------------------------------------------------------------------------------- |
@@ -72,6 +72,8 @@ The sidebar is driven by `dashboard/lib/nav.ts` — **16** core sidebar destinat
 | Chamber  | `/chamber`  | Gated on `chamber`                                                                     |
 | OpenCode | `/opencode` | Gated on `opencode`                                                                    |
 | Claude   | `/claude`   | Gated on `claude`; desktop nav only                                                    |
+| Cursor   | `/cursor`   | Gated on `cursor`; desktop nav only                                                    |
+| ChatGPT  | `/chatgpt`  | Gated on `chatgpt`; desktop nav only. ChatGPT.app is the Codex desktop.                |
 
 ### Merged destinations
 

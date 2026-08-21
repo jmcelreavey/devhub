@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isDesktop, openInBrowser } from "./bridge";
+import { isDesktop, openInBrowser, setDesktopIcon } from "./bridge";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -50,5 +50,24 @@ describe("openInBrowser", () => {
     expect(failure).toHaveBeenCalledOnce();
     expect(open).not.toHaveBeenCalled();
     window.removeEventListener("devhub:external-open-failed", failure);
+  });
+});
+
+describe("setDesktopIcon", () => {
+  it("is a no-op in a browser", async () => {
+    await expect(setDesktopIcon("default")).resolves.toBeUndefined();
+  });
+
+  it("invokes the shell with the bundled default kind", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window, "__TAURI__", {
+      configurable: true,
+      value: { core: { invoke } },
+    });
+    await setDesktopIcon("default");
+    expect(invoke).toHaveBeenCalledWith("set_desktop_icon", {
+      kind: "default",
+      png: undefined,
+    });
   });
 });

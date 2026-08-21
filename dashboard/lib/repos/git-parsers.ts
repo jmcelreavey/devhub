@@ -44,6 +44,12 @@ export interface GraphCommitRaw {
    * rather than guessing which of several refs is the current one.
    */
   headBranch: string | null;
+  /**
+   * GPG verification status from `%G?`: "G" for a good signature, anything else
+   * (including "N" for none) means unsigned or unverified. Optional so payloads
+   * parsed from an older log format still type-check.
+   */
+  gpg?: string;
 }
 
 export interface BlameLine {
@@ -149,7 +155,8 @@ export function parseGraphLog(stdout: string): GraphCommitRaw[] {
     .filter((chunk) => chunk.trim())
     .map((chunk) => {
       // authorEmail is appended last rather than slotted in beside %an, so an
-      // older cached payload still parses every field it used to.
+      // older cached payload still parses every field it used to. gpg rides
+      // after it for the same reason.
       const [
         hash = "",
         parentsRaw = "",
@@ -159,6 +166,7 @@ export function parseGraphLog(stdout: string): GraphCommitRaw[] {
         relativeDate = "",
         refsRaw = "",
         authorEmail = "",
+        gpgRaw = "",
       ] = chunk.trim().split("\0");
       const parents = parentsRaw.trim() ? parentsRaw.trim().split(/\s+/) : [];
       const rawRefs = refsRaw
@@ -190,6 +198,7 @@ export function parseGraphLog(stdout: string): GraphCommitRaw[] {
         refs,
         isHead,
         headBranch,
+        ...(gpgRaw ? { gpg: gpgRaw } : {}),
       };
     });
 }
@@ -289,6 +298,52 @@ export function parseUnifiedDiff(stdout: string): DiffLine[] {
     if (text.startsWith("-")) return { type: "del" as const, text };
     return { type: "ctx" as const, text };
   });
+}
+
+export interface DiffFileSection {
+  path: string;
+  lines: DiffLine[];
+  additions: number;
+  deletions: number;
+  binary: boolean;
+}
+
+/** `diff --git a/<path> b/<path>` — quoted paths and renames fall back to "unknown". */
+function diffPathFromGitLine(text: string): string {
+  const match = text.match(/^diff --git a\/(\S+) b\/(\S+)$/);
+  return match?.[2] ?? "unknown";
+}
+
+/** Split a unified diff into per-file sections for collapsible rendering. */
+export function groupUnifiedDiffByFile(stdout: string): DiffFileSection[] {
+  const chunks: string[][] = [];
+  for (const line of stdout.split("\n")) {
+    if (line.startsWith("diff --git ") || chunks.length === 0) {
+      chunks.push([line]);
+    } else {
+      chunks[chunks.length - 1].push(line);
+    }
+  }
+  return chunks
+    .filter((lines) => lines.some((l) => l.length > 0))
+    .map((lines) => {
+      const parsed = parseUnifiedDiff(lines.join("\n"));
+      const plusHeader = parsed.find((l) => l.text.startsWith("+++ "));
+      let filePath = plusHeader ? pathFromDiffHeader(plusHeader.text) : null;
+      if (!filePath) {
+        const gitLine = parsed.find((l) => l.text.startsWith("diff --git "));
+        filePath = gitLine ? diffPathFromGitLine(gitLine.text) : "unknown";
+      }
+      let additions = 0;
+      let deletions = 0;
+      let binary = false;
+      for (const line of parsed) {
+        if (line.type === "add") additions += 1;
+        else if (line.type === "del") deletions += 1;
+        if (line.text.startsWith("Binary files ")) binary = true;
+      }
+      return { path: filePath, lines: parsed, additions, deletions, binary };
+    });
 }
 
 /** Git's placeholder for missing side of a new/deleted file — never a repo path. */

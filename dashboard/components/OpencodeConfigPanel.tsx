@@ -9,9 +9,10 @@ import {
   DEFAULT_CURSOR_AGENT_MODEL,
   getAgentCliConfig,
   saveAgentCliConfig,
-  type AgentCli,
   type AgentCliConfig,
+  type AiProviderId,
 } from "@/lib/agent/cli-config";
+
 
 interface OpencodeConfigResponse {
   exists: boolean;
@@ -39,9 +40,16 @@ const MODEL_INPUT_STYLE = {
  * `lib/agent-cli-env.ts`. The Cursor option only appears when `cursor-agent`
  * is installed.
  */
+function providerFromConfig(c: AgentCliConfig): AiProviderId {
+  if (c.provider) return c.provider;
+  if (c.cli === "cursor") return "cursor-cli";
+  if (c.cli === "chatgpt") return "chatgpt-cli";
+  return "opencode";
+}
+
 function AgentCliCard() {
   const [config, setConfig] = useState<AgentCliConfig | null>(null);
-  const [cli, setCli] = useState<AgentCli>("opencode");
+  const [provider, setProvider] = useState<AiProviderId>("opencode");
   const [opencodeModel, setOpencodeModel] = useState("");
   const [cursorModel, setCursorModel] = useState("");
   const [saving, setSaving] = useState(false);
@@ -50,7 +58,7 @@ function AgentCliCard() {
   useEffect(() => {
     void getAgentCliConfig(true).then((c) => {
       setConfig(c);
-      setCli(c.cli);
+      setProvider(providerFromConfig(c));
       setOpencodeModel(c.opencodeModel);
       setCursorModel(c.cursorModel);
     });
@@ -58,33 +66,44 @@ function AgentCliCard() {
 
   const dirty =
     !!config &&
-    (cli !== config.cli ||
+    (provider !== providerFromConfig(config) ||
       opencodeModel.trim() !== config.opencodeModel ||
       (cursorModel.trim() || DEFAULT_CURSOR_AGENT_MODEL) !== config.cursorModel);
 
   const save = async () => {
     setSaving(true);
     try {
-      const next = await saveAgentCliConfig({ cli, opencodeModel, cursorModel });
+      const next = await saveAgentCliConfig({ provider, opencodeModel, cursorModel });
       setConfig(next);
-      setCli(next.cli);
+      setProvider(providerFromConfig(next));
       setOpencodeModel(next.opencodeModel);
       setCursorModel(next.cursorModel);
-      toast.success("Agent CLI settings saved to .env.local.");
+      toast.success("AI provider settings saved to .env.local.");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not save agent CLI settings.");
+      toast.error(e instanceof Error ? e.message : "Could not save AI provider settings.");
     } finally {
       setSaving(false);
     }
   };
 
+  const options: Array<{
+    value: AiProviderId;
+    label: string;
+    available: boolean;
+  }> = config
+    ? [
+        { value: "cursor-cli", label: "Cursor CLI", available: config.cursorAgentInstalled },
+        { value: "chatgpt-cli", label: "ChatGPT CLI", available: config.chatgptCliInstalled },
+        { value: "opencode", label: "OpenCode", available: config.opencodeInstalled },
+        { value: "api", label: "HTTP API", available: config.apiConfigured },
+      ]
+    : [];
+
   return (
     <div className="card mb-3" style={{ padding: "10px 14px" }}>
       <div className="flex items-center gap-2" style={{ marginBottom: "6px" }}>
         <TerminalSquare size={14} className="text-accent" aria-hidden />
-        <span className="font-medium text-sm text-text">
-          Agent CLI
-        </span>
+        <span className="font-medium text-sm text-text">AI Provider</span>
         {dirty && (
           <button
             onClick={() => void save()}
@@ -97,42 +116,38 @@ function AgentCliCard() {
         )}
       </div>
       <p className="text-xs" style={{ color: "var(--text-muted)", lineHeight: 1.5, marginBottom: "8px" }}>
-        Which CLI handles one-shot terminal jobs (PR review, DX audit, labs, repo upstart). Both see
-        the same skills and notes MCP via sync (<code>~/.cursor/skills</code>,{" "}
-        <code>~/.cursor/mcp.json</code>). Saved to <code>.env.local</code> as{" "}
-        <code>DEVHUB_AGENT_*</code> keys, so the 1Password <code>devhub</code> item can populate
-        them like other managed config.
+        Default for learn-repo, briefings, and agent launches. Local CLIs preferred; HTTP API is
+        optional. Saved as <code>DEVHUB_AI_PROVIDER</code> in <code>.env.local</code>.
       </p>
       {!config ? (
-        <div role="status" aria-label="Loading agent CLI settings">
+        <div role="status" aria-label="Loading AI provider settings">
           <SkeletonRows count={1} height={28} />
         </div>
       ) : (
         <>
-          <div className="flex items-center gap-3 flex-wrap" role="radiogroup" aria-label="Agent CLI">
-            <label className="text-xs flex items-center gap-1" style={{ color: "var(--text)", cursor: "pointer" }}>
-              <input
-                type="radio"
-                name="agent-cli"
-                value="opencode"
-                checked={cli === "opencode"}
-                onChange={() => setCli("opencode")}
-              />
-              OpenCode
-            </label>
-            {config.cursorAgentInstalled && (
-              <label className="text-xs flex items-center gap-1" style={{ color: "var(--text)", cursor: "pointer" }}>
+          <div className="flex items-center gap-3 flex-wrap" role="radiogroup" aria-label="AI Provider">
+            {options.map((opt) => (
+              <label
+                key={opt.value}
+                className="text-xs flex items-center gap-1"
+                style={{
+                  color: "var(--text)",
+                  cursor: opt.available ? "pointer" : "not-allowed",
+                  opacity: opt.available ? 1 : 0.5,
+                }}
+              >
                 <input
                   type="radio"
-                  name="agent-cli"
-                  value="cursor"
-                  checked={cli === "cursor"}
-                  onChange={() => setCli("cursor")}
+                  name="ai-provider"
+                  value={opt.value}
+                  checked={provider === opt.value}
+                  disabled={!opt.available}
+                  onChange={() => setProvider(opt.value)}
                 />
-                Cursor CLI (cursor-agent)
+                {opt.label}
               </label>
-            )}
-            {cli === "opencode" ? (
+            ))}
+            {provider === "opencode" ? (
               <label className="text-xs flex items-center gap-1 text-text-muted">
                 Model
                 <input
@@ -144,7 +159,7 @@ function AgentCliCard() {
                   style={MODEL_INPUT_STYLE}
                 />
               </label>
-            ) : (
+            ) : provider === "cursor-cli" ? (
               <label className="text-xs flex items-center gap-1 text-text-muted">
                 Model
                 <input
@@ -156,29 +171,12 @@ function AgentCliCard() {
                   style={MODEL_INPUT_STYLE}
                 />
               </label>
-            )}
+            ) : null}
           </div>
           <p className="text-xs" style={{ color: "var(--text-subtle)", lineHeight: 1.5, marginTop: "6px" }}>
-            {cli === "opencode" ? (
-              <>
-                Model uses <code>provider/model</code> form (e.g.{" "}
-                <code>cursor-acp/cursor-grok-4.5-high</code>); blank uses the shared{" "}
-                <code>opencode.json</code> default below.
-              </>
-            ) : (
-              <>
-                Verify the model slug with <code>cursor-agent --help</code> or the{" "}
-                <code>/model</code> picker; blank falls back to{" "}
-                <code>{DEFAULT_CURSOR_AGENT_MODEL}</code>.
-              </>
-            )}
-            {!config.cursorAgentInstalled && (
-              <>
-                {" "}
-                Cursor CLI not detected — install <code>cursor-agent</code> to unlock the Cursor
-                option.
-              </>
-            )}
+            Unavailable options need the matching CLI (or <code>AI_API_KEY</code> for HTTP API).
+            Cursor: <code>curl https://cursor.com/install -fsS | bash</code>. ChatGPT: macOS app or Codex CLI.
+            Same switch under Setup → AI Provider.
           </p>
         </>
       )}

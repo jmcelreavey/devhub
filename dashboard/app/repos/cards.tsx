@@ -14,12 +14,12 @@ import {
   MonitorPlay,
   Rocket,
   ScanSearch,
-  Search,
   Shield,
   ShieldCheck,
   TerminalSquare,
   Trash2,
 } from "lucide-react";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { HoverTip } from "@/components/ui/HoverTip";
 import { usePrompt } from "@/components/shell/ConfirmDialog";
 import {
@@ -33,6 +33,7 @@ import { RepoGitWorkspace } from "@/components/repo-git/RepoGitWorkspace";
 import { RepoOpenPrLink } from "@/components/repos/RepoOpenPrLink";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { useToast } from "@/lib/hooks/use-toast";
+import { launchAgentJob } from "@/lib/agent-job";
 import { agentSkillCommand, claudeCliCommand, opencodeCliCommand, openTerminal } from "@/lib/terminal-launch";
 import type { GithubRepoInfo, RepoInfo } from "./types";
 
@@ -105,25 +106,13 @@ export function SearchCard({
         <label htmlFor="repos-filter" className="sr-only">
           Filter local repositories, or type to search GitHub
         </label>
-        <div className="relative min-w-[14rem] flex-1">
-          <Search
-            size={13}
-            aria-hidden
-            className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-text-subtle"
-          />
-          <input
-            id="repos-filter"
-            className="input w-full"
-            style={{ paddingLeft: 30 }}
-            placeholder="Filter local… type to also search GitHub"
-            value={query}
-            onChange={(e) => onQueryChange(e.target.value)}
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
-          />
-        </div>
+        <SearchInput
+          id="repos-filter"
+          wrapperClassName="min-w-[14rem] flex-1 mb-0"
+          placeholder="Filter local… type to also search GitHub"
+          value={query}
+          onChange={onQueryChange}
+        />
         <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter local repos">
           <FilterChip
             label="Changed"
@@ -247,14 +236,20 @@ export function LocalRepoCard({
     const slash = trimmed.lastIndexOf("/");
     const projectsDir = slash > 0 ? trimmed.slice(0, slash) : trimmed;
     void (async () => {
-      openTerminal({
+      const instruction = `Scan ${projectsDir} for abandoned projects and report causes of death.`;
+      await launchAgentJob({
+        title: "project-graveyard",
+        kind: "agent",
         cwd: projectsDir,
-        label: "project-graveyard",
-        command: await agentSkillCommand(
+        promptText: `Use the project-graveyard skill. ${instruction}`,
+        promptCommand: await agentSkillCommand(
           "project-graveyard",
-          `Scan ${projectsDir} for abandoned projects and report causes of death.`,
+          instruction,
           "run project-graveyard",
         ),
+        mode: "oneshot",
+        alreadyConfirmed: true,
+        reason: "Project graveyard",
       });
     })();
   };
@@ -312,14 +307,21 @@ export function LocalRepoCard({
           icon: <ScanSearch size={12} />,
           onSelect: () => {
             void (async () => {
-              openTerminal({
+              const instruction = `Check the current working tree of ${target.name} for scope creep against the branch intent.`;
+              await launchAgentJob({
+                title: `scope-creep · ${target.name}`,
+                kind: "agent",
                 cwd: target.path,
-                label: `scope-creep · ${target.name}`,
-                command: await agentSkillCommand(
+                repoName: target.name,
+                promptText: `Use the scope-creep-detector skill. ${instruction}`,
+                promptCommand: await agentSkillCommand(
                   "scope-creep-detector",
-                  `Check the current working tree of ${target.name} for scope creep against the branch intent.`,
+                  instruction,
                   "run scope-creep-detector",
                 ),
+                mode: "oneshot",
+                alreadyConfirmed: true,
+                reason: `Scope creep · ${target.name}`,
               });
             })();
           },

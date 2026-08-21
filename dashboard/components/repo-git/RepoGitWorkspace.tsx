@@ -22,8 +22,15 @@ import {
 } from "lucide-react";
 import { useConfirm } from "@/components/shell/ConfirmDialog";
 import { useToast } from "@/lib/hooks/use-toast";
-import { agentGitSyncConflictCommand, agentStashConflictCommand, openTerminal } from "@/lib/terminal-launch";
+import { launchAgentJob } from "@/lib/agent-job";
+import {
+  agentGitSyncConflictCommand,
+  agentGitSyncConflictPrompt,
+  agentStashConflictCommand,
+  agentStashConflictPrompt,
+} from "@/lib/terminal-launch";
 import type { GitHookFailurePayload } from "@/lib/git/hook-failure";
+import { peekUndo, popUndo, type UndoEntry } from "@/lib/git/undo-stack";
 import type { StashConflictPayload } from "@/app/repos/types";
 import { useStoredChoice } from "@/lib/hooks/use-stored-state";
 import { BlamePanel } from "./BlamePanel";
@@ -31,17 +38,21 @@ import { BranchesPanel } from "./BranchesPanel";
 import { ChangesPanel } from "./ChangesPanel";
 import { ConflictsPanel } from "./ConflictsPanel";
 import { GitHookFailureDialog } from "./GitHookFailureDialog";
+import { GitRail } from "./GitRail";
 import { HistoryPanel } from "./HistoryPanel";
 import { ReflogPanel } from "./ReflogPanel";
 import { WorktreesPanel } from "./WorktreesPanel";
 import { ShortcutsOverlay } from "./ShortcutsOverlay";
 import { StashPanel } from "./StashPanel";
 import {
+  fetchGitJson,
   postGitAction,
   readFullscreenPref,
   repoApi,
   writeFullscreenPref,
+  type BranchesPayload,
   type RepoGitTabId,
+  type StatusPayload,
 } from "./shared";
 
 export type { RepoGitTabId } from "./shared";
@@ -101,9 +112,34 @@ export function RepoGitWorkspace({
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   /** Live visible dirty count from ChangesPanel; falls back to parent scan. */
   const [liveVisibleDirty, setLiveVisibleDirty] = useState<number | null>(null);
+  /**
+   * Working-tree + branch summary for the History WIP row, the tab badges, and
+   * the left rail. Fetched while the modal is open, refreshed by the same
+   * onMutate fan-out the panels use.
+   */
+  const [summary, setSummary] = useState<{
+    staged: number;
+    unstaged: number;
+    conflicts: number;
+    stashes: number;
+    currentBranch: string;
+    ahead: number;
+    behind: number;
+    branches: { name: string; current: boolean; upstream?: string | null }[];
+    remoteBranches: {
+      name: string;
+      remote: string;
+      localName: string;
+      trackedLocalName: string | null;
+    }[];
+    tags: string[];
+  } | null>(null);
   const [hookFailure, setHookFailure] = useState<GitHookFailurePayload | null>(null);
   /** Workspace-level push so tab switches never cancel a long pre-push hook. */
   const [pushing, setPushing] = useState(false);
+  /** Latest undoable action (recorded by the panels), shown as a header chip. */
+  const [undoEntry, setUndoEntry] = useState<UndoEntry | null>(null);
+  const [undoing, setUndoing] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
@@ -120,9 +156,98 @@ export function RepoGitWorkspace({
     [controlled, onOpenChange],
   );
 
+  const refreshSummary = useCallback(async () => {
+    try {
+      const [status, branches] = await Promise.all([
+        fetchGitJson<StatusPayload>(repoApi(repoName, "/git/status")),
+        fetchGitJson<BranchesPayload>(repoApi(repoName, "/branches")).catch(() => null),
+      ]);
+      setSummary({
+        staged: status.staged.length,
+        unstaged: status.unstaged.length,
+        conflicts: status.conflictCount,
+        stashes: branches?.stashCount ?? 0,
+        currentBranch: branches?.currentBranch ?? status.currentBranch,
+        ahead: branches?.ahead ?? 0,
+        behind: branches?.behind ?? 0,
+        branches: (branches?.branches ?? []).map((b) => ({
+          name: b.name,
+          current: b.current,
+          upstream: b.upstream ?? null,
+        })),
+        remoteBranches: (branches?.remoteBranches ?? []).map((r) => ({
+          name: r.name,
+          remote: r.remote,
+          localName: r.localName,
+          trackedLocalName: r.trackedLocalName,
+        })),
+        tags: branches?.tags ?? [],
+      });
+    } catch {
+      // Summary is decorative — panels surface real errors themselves.
+    }
+  }, [repoName]);
+
+  useEffect(() => {
+    if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch summary + undo chip when the workspace opens
+    void refreshSummary();
+    setUndoEntry(peekUndo(repoName));
+  }, [open, refreshSummary, repoName]);
+
   const displayDirty = liveVisibleDirty ?? dirtyCount;
   const hasDirty = displayDirty > 0;
   const hasUnpushed = unpushedCount > 0;
+
+  /** Panels' mutate fan-out also refreshes the workspace summary (WIP row, badges, rail). */
+  const handleMutate = useCallback(() => {
+    onMutate();
+    void refreshSummary();
+    setUndoEntry(peekUndo(repoName));
+  }, [onMutate, refreshSummary, repoName]);
+
+  /**
+   * One-click undo of the last DevHub-performed action.
+   *
+   * Soft: `reset --soft HEAD~1` — the commit's changes come back staged.
+   * Hard: `commit-action reset-to-commit <headBefore>` — the same endpoint the
+   * graph menu uses, which takes a backup branch first.
+   */
+  const executeUndo = useCallback(async () => {
+    const entry = peekUndo(repoName);
+    if (!entry || undoing) return;
+    const ok = await confirm({
+      title: `Undo ${entry.label}?`,
+      message:
+        entry.kind === "soft"
+          ? "git reset --soft HEAD~1 — the commit is removed and its changes come back staged. Does not touch the remote."
+          : `Resets the branch to ${entry.headBefore.slice(0, 7)} with a backup branch first. Does not touch the remote.`,
+      confirmLabel: "Undo",
+      variant: "danger",
+    });
+    if (!ok) return;
+    setUndoing(true);
+    try {
+      const result =
+        entry.kind === "soft"
+          ? await postGitAction(repoApi(repoName, "/branches"), { action: "undo-commit" })
+          : await postGitAction(repoApi(repoName, "/git/commit-action"), {
+              action: "reset-to-commit",
+              commit: entry.headBefore,
+            });
+      if (!result.ok) {
+        throw new Error(result.kind === "error" ? result.message : result.kind);
+      }
+      popUndo(repoName);
+      setUndoEntry(peekUndo(repoName));
+      toast.success(`Undid ${entry.label}`);
+      handleMutate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Undo failed");
+    } finally {
+      setUndoing(false);
+    }
+  }, [repoName, undoing, confirm, toast, handleMutate]);
 
   const setFullscreenPref = useCallback((next: boolean) => {
     setFullscreen(next);
@@ -284,13 +409,43 @@ export function RepoGitWorkspace({
     setTab("conflicts");
     setOpen(true);
     if (!ok) return;
-    openTerminal({
-      cwd: repoPath,
-      label: `resolve conflicts · ${repoName}`,
-      command: syncingMain
-        ? await agentGitSyncConflictCommand({ repoName, branch: conflict.branch, conflictFiles: conflict.conflictFiles, syncTarget: conflict.syncTarget ?? "origin/main", stashed: conflict.stashed })
-        : await agentStashConflictCommand({ repoName, branch: conflict.branch, conflictFiles: conflict.conflictFiles }),
-    });
+    if (syncingMain) {
+      const opts = {
+        repoName,
+        branch: conflict.branch,
+        conflictFiles: conflict.conflictFiles,
+        syncTarget: conflict.syncTarget ?? "origin/main",
+        stashed: conflict.stashed,
+      };
+      await launchAgentJob({
+        title: `resolve conflicts · ${repoName}`,
+        kind: "agent",
+        cwd: repoPath,
+        repoName,
+        promptText: agentGitSyncConflictPrompt(opts),
+        promptCommand: await agentGitSyncConflictCommand(opts),
+        mode: "interactive",
+        forceTerminal: true,
+        alreadyConfirmed: true,
+      });
+    } else {
+      const opts = {
+        repoName,
+        branch: conflict.branch,
+        conflictFiles: conflict.conflictFiles,
+      };
+      await launchAgentJob({
+        title: `resolve conflicts · ${repoName}`,
+        kind: "agent",
+        cwd: repoPath,
+        repoName,
+        promptText: agentStashConflictPrompt(opts),
+        promptCommand: await agentStashConflictCommand(opts),
+        mode: "interactive",
+        forceTerminal: true,
+        alreadyConfirmed: true,
+      });
+    }
     toast.info("Resolving conflicts in the terminal.");
   }
 
@@ -334,6 +489,22 @@ export function RepoGitWorkspace({
                   </p>
                 </div>
                 <div className="repo-git-modal-badges">
+                  {undoEntry && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost repo-git-undo-chip"
+                      disabled={undoing}
+                      onClick={() => void executeUndo()}
+                      title={`Undo ${undoEntry.label}`}
+                    >
+                      {undoing ? (
+                        <RefreshCw size={11} className="animate-spin" aria-hidden />
+                      ) : (
+                        <Undo2 size={11} aria-hidden />
+                      )}
+                      Undo {undoEntry.label}
+                    </button>
+                  )}
                   <span className={hasDirty ? "badge badge-warning" : "badge badge-success"}>
                     {hasDirty ? `${displayDirty} changed` : "clean"}
                   </span>
@@ -410,41 +581,77 @@ export function RepoGitWorkspace({
                 aria-label="Git workspace"
                 onKeyDown={onTablistKeyDown}
               >
-                {TABS.map(([id, label, Icon]) => (
-                  <button
-                    key={id}
-                    ref={(el) => {
-                      if (el) tabRefs.current.set(id, el);
-                      else tabRefs.current.delete(id);
-                    }}
-                    type="button"
-                    role="tab"
-                    id={`${titleId}-tab-${id}`}
-                    aria-selected={tab === id}
-                    aria-controls={`${titleId}-panel`}
-                    tabIndex={tab === id ? 0 : -1}
-                    className="repo-git-tab"
-                    data-active={tab === id || undefined}
-                    onClick={() => setTab(id)}
-                  >
-                    <Icon size={12} aria-hidden />
-                    {label}
-                  </button>
-                ))}
+                {TABS.map(([id, label, Icon]) => {
+                  const badgeCount =
+                    id === "conflicts"
+                      ? summary?.conflicts ?? 0
+                      : id === "stash"
+                        ? summary?.stashes ?? 0
+                        : 0;
+                  return (
+                    <button
+                      key={id}
+                      ref={(el) => {
+                        if (el) tabRefs.current.set(id, el);
+                        else tabRefs.current.delete(id);
+                      }}
+                      type="button"
+                      role="tab"
+                      id={`${titleId}-tab-${id}`}
+                      aria-selected={tab === id}
+                      aria-controls={`${titleId}-panel`}
+                      tabIndex={tab === id ? 0 : -1}
+                      className="repo-git-tab"
+                      data-active={tab === id || undefined}
+                      data-alert={(id === "conflicts" && badgeCount > 0) || undefined}
+                      onClick={() => setTab(id)}
+                    >
+                      <Icon size={12} aria-hidden />
+                      {label}
+                      {badgeCount > 0 && (
+                        <span
+                          className={id === "conflicts" ? "repo-git-tab-badge repo-git-tab-badge-alert" : "repo-git-tab-badge"}
+                        >
+                          {badgeCount}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
 
-              <div
-                className="repo-git-tab-body"
-                role="tabpanel"
-                id={`${titleId}-panel`}
-                aria-labelledby={`${titleId}-tab-${tab}`}
-              >
+              <div className="repo-git-body">
+                <GitRail
+                  repoName={repoName}
+                  summary={
+                    summary
+                      ? {
+                          currentBranch: summary.currentBranch,
+                          ahead: summary.ahead,
+                          behind: summary.behind,
+                          stashes: summary.stashes,
+                          branches: summary.branches,
+                          remoteBranches: summary.remoteBranches,
+                          tags: summary.tags,
+                        }
+                      : null
+                  }
+                  onMutate={handleMutate}
+                  onConflict={offerAiConflict}
+                  onOpenTab={setTab}
+                />
+                <div
+                  className="repo-git-tab-body"
+                  role="tabpanel"
+                  id={`${titleId}-panel`}
+                  aria-labelledby={`${titleId}-tab-${tab}`}
+                >
                 <div key={tab} className="repo-git-pane-enter">
                   {tab === "changes" && (
                     <ChangesPanel
                       repoName={repoName}
                       repoPath={repoPath}
-                      onMutate={onMutate}
+                      onMutate={handleMutate}
                       onConflict={offerAiConflict}
                       onHookFailure={showHookFailure}
                       onVisibleDirtyChange={setLiveVisibleDirty}
@@ -455,7 +662,7 @@ export function RepoGitWorkspace({
                   {tab === "branches" && (
                     <BranchesPanel
                       repoName={repoName}
-                      onMutate={onMutate}
+                      onMutate={handleMutate}
                       onConflict={offerAiConflict}
                       onHookFailure={showHookFailure}
                       pushing={pushing}
@@ -466,7 +673,7 @@ export function RepoGitWorkspace({
                     <StashPanel
                       repoName={repoName}
                       repoPath={repoPath}
-                      onMutate={onMutate}
+                      onMutate={handleMutate}
                       onConflict={offerAiConflict}
                     />
                   )}
@@ -474,11 +681,17 @@ export function RepoGitWorkspace({
                     <HistoryPanel
                       repoName={repoName}
                       repoPath={repoPath}
-                      onMutate={onMutate}
+                      onMutate={handleMutate}
                       onConflict={offerAiConflict}
                       onHookFailure={showHookFailure}
                       pushing={pushing}
                       onPush={() => void pushRepo()}
+                      wip={
+                        summary
+                          ? { staged: summary.staged, unstaged: summary.unstaged }
+                          : null
+                      }
+                      onOpenWip={() => setTab("changes")}
                       focusUnpushed={historyFocusUnpushed}
                       onFocusUnpushedConsumed={() => setHistoryFocusUnpushed(false)}
                       focusCommit={historyFocusCommit}
@@ -486,7 +699,7 @@ export function RepoGitWorkspace({
                     />
                   )}
                   {tab === "conflicts" && (
-                    <ConflictsPanel repoName={repoName} repoPath={repoPath} onMutate={onMutate} />
+                    <ConflictsPanel repoName={repoName} repoPath={repoPath} onMutate={handleMutate} />
                   )}
                   {tab === "blame" && (
                     <BlamePanel
@@ -498,18 +711,19 @@ export function RepoGitWorkspace({
                     />
                   )}
                   {tab === "worktrees" && (
-                    <WorktreesPanel repoName={repoName} onMutate={onMutate} />
+                    <WorktreesPanel repoName={repoName} onMutate={handleMutate} />
                   )}
                   {tab === "reflog" && (
                     <ReflogPanel
                       repoName={repoName}
-                      onMutate={onMutate}
+                      onMutate={handleMutate}
                       onOpenCommit={(hash) => {
                         setHistoryFocusCommit(hash);
                         setTab("history");
                       }}
                     />
                   )}
+                </div>
                 </div>
               </div>
             </div>

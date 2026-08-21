@@ -7,8 +7,15 @@ import { resolveDatadogApplicationKey } from "@/lib/datadog/application-key";
 import { getResolvedGoogleCalendarEnv } from "@/lib/google-calendar";
 import { isGithubCliAuthenticated } from "@/lib/repos";
 import { detectBiPresence } from "@/lib/bi-presence";
-import { getPeerServiceGateStatus } from "@/lib/peer-service-availability";
+import { getPeerServiceGateStatus, isOpenCodeConfigured } from "@/lib/peer-service-availability";
 import { isCursorAgentInstalled, readAgentCliSettings } from "@/lib/agent/cli-env";
+import {
+  isChatgptCliInstalled,
+  readConfiguredAiProvider,
+} from "@/lib/ai/preference";
+import { isNotesAiConfigured } from "@/lib/notes-ai/config";
+
+
 
 export const dynamic = "force-dynamic";
 
@@ -108,6 +115,7 @@ export async function GET() {
     opencode: peerServices.opencode,
     claude: peerServices.claude,
     cursor: peerServices.cursor,
+    chatgpt: peerServices.chatgpt,
     allowLanNetwork,
     hasOpenchamberUiPassword,
     envPath: ".env.local",
@@ -158,8 +166,13 @@ export async function GET() {
     },
     agentVars: {
       ...readAgentCliSettings(),
+      provider: readConfiguredAiProvider(),
       cursorAgentInstalled: isCursorAgentInstalled(),
+      chatgptCliInstalled: isChatgptCliInstalled(),
+      opencodeInstalled: isOpenCodeConfigured(),
+      apiConfigured: isNotesAiConfigured(),
     },
+
     biVars: {
       awsProfile: biPresence.awsProfile,
       // Live AWS account id comes from the BI plugin's /ops page (/api/bi), not here —

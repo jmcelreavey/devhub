@@ -76,7 +76,7 @@ The dashboard owns most operational scripts. They handle tasks such as:
 - Post-install setup.
 - Action runner execution.
 - Plugin dashboard/branding materialisation before `dev`, `build`, `start`, and full sync.
-- Chained OpenChamber and OpenCode startup (`start-peer-services.ts`; standalone `start-chamber.ts`, `start-opencode.ts`).
+- Peer boot (`start-peer-services.ts`) frees leftover OpenCode on 1338/4096; OpenChamber and OpenCode lazy-start from the dashboard tabs.
 - 1Password secret fallback (`op-secrets.ts`) before services bind ports.
 - Standup diagnostics.
 - PWA icon generation.

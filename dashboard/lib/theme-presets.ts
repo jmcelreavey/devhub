@@ -64,7 +64,7 @@ export const CORE_THEME_PRESETS = [
     darkSwatch: "#111416",
     lightSwatch: "#f7f8f9",
     darkAccent: "#9ed84a",
-    lightAccent: "#5d9e10",
+    lightAccent: "#4c840c",
   },
   {
     id: "tokyo",

@@ -1,0 +1,1115 @@
+/* Agent dock surface — layout + empty state. Strip colors stay in globals.css. */
+
+.terminal-agent-strip-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.terminal-dock-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.terminal-dock-tab-label {
+  max-width: 200px;
+}
+
+.terminal-agent-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-host {
+  position: relative;
+  height: 100%;
+}
+
+.terminal-agent-body[data-phase="starting"] .terminal-host {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.terminal-agent-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px 24px 28px;
+  min-height: 0;
+}
+
+.terminal-agent-empty-copy {
+  margin: 0;
+  max-width: 36em;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.terminal-agent-strip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-chat {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  background: var(--bg-elevated);
+}
+
+.agent-chat-log {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 16px 10px;
+}
+
+/* Absorbs free space so a short conversation sits near the composer instead of
+   stranded at the top. Collapses once the log overflows, unlike
+   justify-content: flex-end, which clips the top of a scrolled flex column. */
+.agent-chat-log::before {
+  content: "";
+  margin-top: auto;
+}
+
+/* Keep the conversation in a readable column — the dock can be 2500px wide. */
+.agent-chat-log > *,
+.agent-chat-composer,
+.agent-chat-context,
+.agent-chat-workflows,
+.agent-chat-attach-list {
+  width: 100%;
+  max-width: 780px;
+  margin-inline: auto;
+}
+
+.agent-chat-empty {
+  margin: auto 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  max-width: 36em;
+}
+
+.agent-chat-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+/* The row is a column, so alignment — not margin — decides the side. */
+.agent-chat-row.is-user {
+  align-items: flex-end;
+}
+
+.agent-chat-row .agent-chat-bubble {
+  max-width: 86%;
+}
+
+.agent-chat-bubble {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 9px 13px;
+  border-radius: 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-muted);
+}
+
+/* Tuck the tail corner in on each side so the bubbles read as a conversation. */
+.agent-chat-row.is-ai .agent-chat-bubble {
+  border-bottom-left-radius: 5px;
+}
+
+.agent-chat-row.is-user .agent-chat-bubble {
+  background: color-mix(in oklab, var(--accent) 18%, var(--bg-surface));
+  border-color: color-mix(in oklab, var(--accent) 32%, var(--border-muted));
+  border-bottom-right-radius: 5px;
+}
+
+.agent-chat-pending {
+  min-width: 72px;
+  min-height: 1.4em;
+  display: flex;
+  align-items: center;
+}
+
+.agent-chat-shimmer {
+  display: block;
+  width: 56px;
+  height: 8px;
+  border-radius: 99px;
+  background: linear-gradient(
+    90deg,
+    var(--border-muted) 0%,
+    color-mix(in oklab, var(--accent) 35%, var(--border-muted)) 50%,
+    var(--border-muted) 100%
+  );
+  background-size: 200% 100%;
+  animation: agent-chat-shimmer 1.1s ease-in-out infinite;
+}
+
+@keyframes agent-chat-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+.agent-chat-setup {
+  padding: 0 16px 8px;
+}
+
+/* One field: the attach and send buttons sit inside the border rather than
+   floating either side of it, which is what made this look unfinished. */
+.agent-chat-composer {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+  margin: 0 auto 10px;
+  padding: 6px 6px 6px 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-muted);
+  border-radius: 14px;
+  transition: border-color 120ms var(--ease-swift), box-shadow 120ms var(--ease-swift);
+}
+
+.agent-chat-composer:focus-within {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 14%, transparent);
+}
+
+.agent-chat-input.agent-chat-input {
+  flex: 1;
+  resize: none;
+  min-height: 34px;
+  max-height: 160px;
+  padding: 6px 2px;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  outline: none;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.agent-chat-send {
+  flex-shrink: 0;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 10px;
+}
+
+.agent-chat-attach-btn {
+  flex-shrink: 0;
+  height: 32px;
+  min-width: 32px;
+  padding: 0;
+  border-radius: 10px;
+}
+
+.agent-chat-send-spin {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid color-mix(in oklab, var(--accent-fg, #fff) 35%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: agent-chat-spin 0.6s linear infinite;
+}
+
+@keyframes agent-chat-spin {
+  to { transform: rotate(360deg); }
+}
+
+.agent-chat-clear {
+  align-self: flex-end;
+  margin: 0 16px 8px;
+  background: none;
+  border: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.agent-chat-clear:hover {
+  color: var(--text);
+}
+
+body[data-motion="off"] .agent-chat-shimmer,
+body[data-motion="off"] .agent-chat-send-spin {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-chat-shimmer,
+  .agent-chat-send-spin {
+    animation: none !important;
+  }
+}
+
+.agent-chat-drop {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklab, var(--accent) 12%, var(--bg-elevated));
+  border: 1px dashed color-mix(in oklab, var(--accent) 45%, var(--border));
+  color: var(--text);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.agent-chat {
+  position: relative;
+}
+
+.agent-chat-chips,
+.agent-chat-attach-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.agent-chat-attach-list {
+  padding: 0 16px 6px;
+}
+
+.agent-chat-attach-chip,
+.agent-chat-chips li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-muted);
+  background: var(--bg-surface);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.agent-chat-attach-chip em {
+  font-style: normal;
+  margin-left: 4px;
+  color: var(--text-subtle);
+}
+
+.agent-chat-attach-note {
+  font-size: 10px;
+  color: var(--warning);
+}
+
+.agent-chat-thumb {
+  width: 22px;
+  height: 22px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.agent-chat-attach-remove {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+  padding: 0;
+}
+
+.agent-chat-msg-actions {
+  display: flex;
+  gap: 10px;
+  padding-left: 2px;
+  /* Present but quiet until the message is hovered or a button is focused. */
+  opacity: 0;
+  transition: opacity 120ms var(--ease-swift);
+}
+
+.agent-chat-row:hover .agent-chat-msg-actions,
+.agent-chat-msg-actions:focus-within {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .agent-chat-msg-actions {
+    opacity: 1;
+  }
+}
+
+.agent-chat-msg-btn {
+  background: none;
+  border: 0;
+  color: var(--text-subtle);
+  font-size: 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+}
+
+.agent-chat-msg-btn:hover {
+  color: var(--text);
+}
+
+.agent-chat-md {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.agent-chat-md pre {
+  overflow: auto;
+  max-width: 100%;
+}
+
+/* Detached pane — terminal or Agent. Natively resizable; size persists. */
+.dock-popout {
+  position: fixed;
+  z-index: 140;
+  top: 52px;
+  right: 16px;
+  width: 720px;
+  height: 520px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 68px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.dock-popout .terminal-agent-body,
+.dock-popout .agent-chat {
+  flex: 1;
+  min-height: 0;
+}
+
+.agent-chat-popped-placeholder {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  width: 100%;
+  background: none;
+  border: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.terminal-dock[data-dock-frame="split"] {
+  height: min(72vh, calc(100vh - 48px));
+  min-height: 320px;
+}
+
+.terminal-dock-body[data-split] {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr);
+  min-height: 0;
+}
+
+.terminal-dock-body[data-split] > [data-split-pane="agent"] {
+  grid-column: 1;
+  min-width: 0;
+  border-right: 1px solid var(--border-muted);
+}
+
+.terminal-dock-body[data-split] > [data-split-pane="shell"] {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.terminal-session-stack {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.terminal-session-xterm {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.terminal-prompt {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-muted);
+  background: var(--bg-elevated);
+  padding: 6px 10px 8px;
+}
+
+.terminal-prompt-block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.terminal-prompt-block code {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-prompt-block-actions {
+  display: inline-flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.terminal-prompt-block-actions button {
+  background: none;
+  border: 0;
+  color: var(--text-subtle);
+  font-size: 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+}
+
+.terminal-prompt-block-actions button:hover {
+  color: var(--text);
+}
+
+.terminal-prompt-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.terminal-prompt-chip {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--text-subtle);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-prompt-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.terminal-prompt-send {
+  flex-shrink: 0;
+  min-width: 36px;
+}
+
+.terminal-prompt-error {
+  margin: 0;
+  padding: 0 12px 8px;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.agent-chat-context {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 4px 16px 0;
+}
+
+.agent-chat-context li {
+  font-size: 10.5px;
+  color: var(--text-subtle);
+  border: 1px solid var(--border-muted);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.agent-chat-workflows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 16px 6px;
+}
+
+.agent-chat-workflow {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-muted);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.agent-chat-workflow:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.terminal-dock-templates {
+  z-index: 80;
+}
+
+.terminal-sel-drag-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.terminal-sel-drag {
+  position: absolute;
+  pointer-events: auto;
+  cursor: grab;
+  background: transparent;
+}
+
+.terminal-host.has-selection .terminal-sel-drag:active,
+.terminal-host.is-dragging-selection .terminal-sel-drag {
+  cursor: grabbing;
+}
+
+.terminal-block-rail {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  width: 168px;
+  max-height: calc(100% - 16px);
+  overflow: auto;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--bg-elevated) 92%, transparent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.terminal-block-chip {
+  position: relative;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: var(--bg-surface);
+}
+
+.terminal-block-chip:hover,
+.terminal-block-chip:focus-within {
+  border-color: var(--border-muted);
+}
+
+.terminal-block-cmd {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-block-actions {
+  display: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.terminal-block-chip:hover .terminal-block-actions,
+.terminal-block-chip:focus-within .terminal-block-actions {
+  display: flex;
+}
+
+.terminal-block-actions button {
+  background: none;
+  border: 0;
+  color: var(--text-subtle);
+  font-size: 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+}
+
+.terminal-block-actions button:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.terminal-block-actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.terminal-block-chip[data-pending]::after {
+  content: "";
+  display: block;
+  height: 3px;
+  margin-top: 6px;
+  border-radius: 99px;
+  background: linear-gradient(
+    90deg,
+    var(--border-muted) 0%,
+    color-mix(in oklab, var(--accent) 35%, var(--border-muted)) 50%,
+    var(--border-muted) 100%
+  );
+  background-size: 200% 100%;
+  animation: agent-chat-shimmer 1.1s ease-in-out infinite;
+}
+
+.terminal-dock .terminal-dock-tabs {
+  padding-block: 4px;
+}
+
+.terminal-dock-tab[data-drop-target] {
+  outline: none;
+  box-shadow: 0 0 0 2px dashed var(--accent);
+  background: color-mix(in oklab, var(--accent) 18%, var(--bg-surface));
+  color: var(--text);
+}
+
+body[data-motion="off"] .terminal-block-chip[data-pending]::after {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .terminal-block-chip[data-pending]::after {
+    animation: none !important;
+  }
+}
+
+.dock-popout.terminal-session-stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.dock-popout .terminal-session-xterm {
+  flex: 1;
+  min-height: 0;
+}
+
+/* A popped-out pane floats above the dock, so it carries its own controls —
+   the dock bar behind it cannot be clicked. */
+.dock-popout-bar {
+  cursor: grab;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px 4px 10px;
+  border-bottom: 1px solid var(--border-muted);
+  background: var(--bg-elevated);
+  border-radius: var(--radius) var(--radius) 0 0;
+  cursor: default;
+  flex-shrink: 0;
+}
+
+.dock-popout[data-moving] {
+  cursor: grabbing;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+}
+
+/* No transition while dragging — the window must track the pointer exactly. */
+.dock-popout[data-moving] .dock-popout-bar {
+  cursor: grabbing;
+}
+
+.dock-popout-title {
+  font-size: 11px;
+  color: var(--text-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Popout edges — same drag affordance as the dashboard side panels. The window
+   is pinned top-right, so the left edge sets width and the bottom sets height. */
+.dock-popout-resize-w {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  z-index: 10;
+}
+
+.dock-popout-resize-s {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 6px;
+  z-index: 10;
+}
+
+/* ── In-pane find (⌘F) ─────────────────────────────────────────────────── */
+.terminal-host-wrap {
+  position: relative;
+  height: 100%;
+}
+
+.terminal-find-bar {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.terminal-find-input {
+  width: 180px;
+  padding: 3px 7px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+
+.terminal-find-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+
+.terminal-find-btn:hover {
+  background: var(--bg-overlay);
+  color: var(--text);
+}
+
+/* ── View toggle (Blocks | Raw) ────────────────────────────────────────── */
+.terminal-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 2px;
+  border-radius: 7px;
+  border: 1px solid var(--border-muted);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.terminal-view-toggle button {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 20px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+
+.terminal-view-toggle button[data-active] {
+  background: var(--bg-overlay);
+  color: var(--accent);
+}
+
+/* ── Blocks view (Warp-style DOM cards) ────────────────────────────────── */
+.terminal-session-xterm[data-under] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.terminal-blocks-pane {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+}
+
+.terminal-blocks-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: 10px 12px 14px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.terminal-blocks-view[data-empty] {
+  align-items: flex-start;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  max-width: 36em;
+}
+
+.terminal-blocks-hint {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-subtle);
+}
+
+.terminal-block-card {
+  border: 1px solid var(--border-muted);
+  border-radius: 9px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.terminal-block-card[data-failed] {
+  border-color: color-mix(in oklab, var(--danger) 38%, var(--border-muted));
+}
+
+.terminal-block-card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.terminal-block-glyph {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.terminal-block-card-cmd {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.terminal-block-card-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.terminal-block-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border-muted);
+  color: var(--text-subtle);
+}
+
+.terminal-block-badge[data-state="ok"] {
+  color: var(--success);
+  border-color: color-mix(in oklab, var(--success) 40%, var(--border-muted));
+}
+
+.terminal-block-badge[data-state="fail"] {
+  color: var(--danger);
+  border-color: color-mix(in oklab, var(--danger) 45%, var(--border-muted));
+}
+
+.terminal-block-badge[data-state="running"] {
+  color: var(--warning);
+}
+
+.terminal-block-duration {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-subtle);
+}
+
+.terminal-block-output-wrap {
+  min-width: 0;
+}
+
+.terminal-block-output {
+  margin: 0;
+  padding: 8px 12px;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.terminal-block-expand {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 8px 12px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-subtle);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.terminal-block-expand:hover {
+  color: var(--text);
+}
+
+.terminal-block-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 6px 12px 8px;
+  border-top: 1px solid var(--border-muted);
+  background: var(--bg-surface);
+}
+
+.terminal-block-card-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-subtle);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.terminal-block-card-actions button:hover {
+  color: var(--text);
+}
+
+/* ── Block rail chips: badges + duration ───────────────────────────────── */
+.terminal-block-chip-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.terminal-block-chip[data-failed] .terminal-block-cmd {
+  color: color-mix(in oklab, var(--danger) 70%, var(--text));
+}
+
+/* ── Prompt editor (multi-line + ⌃R history) ───────────────────────────── */
+.terminal-prompt-editor-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+textarea.terminal-prompt-editor {
+  resize: none;
+  overflow-y: auto;
+  min-height: 30px;
+  max-height: 132px;
+  line-height: 1.55;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  width: 100%;
+}
+
+.terminal-history-pop {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
+}
+
+.terminal-history-pop button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.terminal-history-pop button[data-active],
+.terminal-history-pop button:hover {
+  background: var(--bg-overlay);
+  color: var(--text);
+}
+
+.terminal-history-pop code {
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-history-empty {
+  padding: 6px 8px;
+  font-size: 11.5px;
+  color: var(--text-subtle);
+}
+
+.terminal-dock-btn[data-on] {
+  color: var(--accent);
+}

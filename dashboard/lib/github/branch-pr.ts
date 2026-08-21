@@ -19,7 +19,7 @@ export interface WorkflowRun {
   headSha?: string;
 }
 
-interface GhCheckRow {
+export interface GhCheckRow {
   /** Check runs use conclusion+status; commit statuses use state. */
   conclusion?: string;
   status?: string;

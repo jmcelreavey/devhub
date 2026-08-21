@@ -11,19 +11,23 @@ interface PrRow {
   repo: string;
 }
 
-interface GithubLogin {
-  login: string;
-}
-
-function fmtLogins(users: GithubLogin[] = []): string {
-  return users.length ? users.map((u) => u.login).join(", ") : "(none)";
-}
-
 interface JiraTicket {
   key?: string;
   summary?: string;
   status?: string;
   [k: string]: unknown;
+}
+
+interface JiraTicketDetail {
+  key: string;
+  status?: string | { name?: string };
+  summary?: string;
+  issuetype?: string;
+}
+
+export function formatJiraTicket(ticket: JiraTicketDetail): string {
+  const status = typeof ticket.status === "string" ? ticket.status : ticket.status?.name ?? "?";
+  return `${ticket.key} [${status}]${ticket.issuetype ? ` (${ticket.issuetype})` : ""}\n${ticket.summary ?? ""}`.trimEnd();
 }
 
 export function registerWorkTools(server: McpServer, ctx: Context): void {
@@ -33,7 +37,7 @@ export function registerWorkTools(server: McpServer, ctx: Context): void {
     "prs_list",
     {
       description:
-        "List my open GitHub PRs (authored + awaiting my review) via the dashboard. Request reviewers with prs_request_reviewers; stash+checkout a PR into Cursor with prs_open_in_cursor. Requires the dashboard running and the GitHub CLI authenticated.",
+        "List my open GitHub PRs (authored + awaiting my review) via the dashboard. Stash+checkout a PR into Cursor with prs_open_in_cursor. Requires the dashboard running and the GitHub CLI authenticated.",
     },
     async () =>
       withDashboardErrors(async () => {
@@ -69,67 +73,6 @@ export function registerWorkTools(server: McpServer, ctx: Context): void {
         ];
         const html = items.length ? listWidgetHtml("Pull requests", "Open PRs", items) : null;
         return uiResult(out.join("\n"), html, "ui://devhub/prs");
-      }),
-  );
-
-  server.registerTool(
-    "prs_request_reviewers",
-    {
-      description:
-        "Request GitHub reviewers on a PR you can modify. Omit reviewers to list currently requested + suggested logins (GET /api/github/prs/reviewers). Pass reviewers plus confirm:true to POST. Proxies the dashboard — does not call gh api itself. Requires the dashboard running and gh auth.",
-      inputSchema: {
-        repo: z.string().describe("owner/repo, e.g. acme/widgets"),
-        number: z.number().int().positive().describe("PR number"),
-        reviewers: z
-          .array(z.string())
-          .optional()
-          .describe("GitHub logins to request. Omit to list current/suggested reviewers."),
-        confirm: z.boolean().optional().describe("Required true to actually request reviewers"),
-      },
-    },
-    async ({ repo, number, reviewers, confirm }) =>
-      withDashboardErrors(async () => {
-        if (!reviewers?.length) {
-          const data = await dashboard.get<{
-            requested?: GithubLogin[];
-            suggested?: GithubLogin[];
-          }>("/api/github/prs/reviewers", { repo, number });
-          return {
-            content: [
-              {
-                type: "text",
-                text:
-                  `${repo}#${number}\n` +
-                  `Requested: ${fmtLogins(data.requested)}\n` +
-                  `Suggested: ${fmtLogins(data.suggested)}\n\n` +
-                  `Request with prs_request_reviewers(repo, number, reviewers: [...], confirm: true).`,
-              },
-            ],
-          };
-        }
-        if (!confirm) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Would request review from ${reviewers.join(", ")} on ${repo}#${number}. Re-run with confirm: true.`,
-              },
-            ],
-            isError: true,
-          };
-        }
-        const data = await dashboard.post<{ ok?: boolean; requested?: GithubLogin[] }>(
-          "/api/github/prs/reviewers",
-          { repo, number, reviewers },
-        );
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Requested review on ${repo}#${number}: ${fmtLogins(data.requested)}.`,
-            },
-          ],
-        };
       }),
   );
 
@@ -222,14 +165,12 @@ export function registerWorkTools(server: McpServer, ctx: Context): void {
     },
     async ({ key }) =>
       withDashboardErrors(async () => {
-        const t = await dashboard.get<{ key: string; status?: string; summary?: string; issuetype?: string }>(
-          `/api/jira/ticket/${encodeURIComponent(key)}`,
-        );
+        const t = await dashboard.get<JiraTicketDetail>(`/api/jira/ticket/${encodeURIComponent(key)}`);
         return {
           content: [
             {
               type: "text",
-              text: `${t.key} [${t.status ?? "?"}]${t.issuetype ? ` (${t.issuetype})` : ""}\n${t.summary ?? ""}`.trimEnd(),
+              text: formatJiraTicket(t),
             },
           ],
         };

@@ -10,7 +10,11 @@ import {
   type ConflictChoice,
 } from "@/lib/git/conflict-markers";
 import { useToast } from "@/lib/hooks/use-toast";
-import { agentStashConflictCommand, openTerminal } from "@/lib/terminal-launch";
+import { launchAgentJob } from "@/lib/agent-job";
+import {
+  agentStashConflictCommand,
+  agentStashConflictPrompt,
+} from "@/lib/terminal-launch";
 import { fetchGitJson, postGitAction, repoApi } from "./shared";
 
 interface ConflictItem {
@@ -150,13 +154,20 @@ export function ConflictsPanel({
   }
 
   async function handoff() {
-    openTerminal({
+    const opts = {
+      repoName,
+      conflictFiles: conflicts.map((c) => c.path),
+    };
+    await launchAgentJob({
+      title: `resolve conflicts · ${repoName}`,
+      kind: "agent",
       cwd: repoPath,
-      label: `resolve conflicts · ${repoName}`,
-      command: await agentStashConflictCommand({
-        repoName,
-        conflictFiles: conflicts.map((c) => c.path),
-      }),
+      repoName,
+      promptText: agentStashConflictPrompt(opts),
+      promptCommand: await agentStashConflictCommand(opts),
+      mode: "interactive",
+      forceTerminal: true,
+      alreadyConfirmed: true,
     });
   }
 

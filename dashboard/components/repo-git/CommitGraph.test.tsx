@@ -65,3 +65,30 @@ describe("CommitGraph avatars", () => {
     expect(onKebabOpen).toHaveBeenCalled();
   });
 });
+
+describe("CommitGraph WIP row", () => {
+  it("pins a WIP row above HEAD and opens Changes on click", async () => {
+    const onOpenWip = vi.fn();
+    const commits = layoutCommitGraph([raw("dev@example.com")]);
+    render(
+      <CommitGraph
+        commits={commits}
+        wip={{ staged: 2, unstaged: 1 }}
+        onOpenWip={onOpenWip}
+      />,
+    );
+    const wip = document.querySelector<HTMLElement>(".repo-git-wip-row");
+    expect(wip).toBeTruthy();
+    expect(wip!.textContent).toContain("3 changed file");
+    fireEvent.click(wip!);
+    expect(onOpenWip).toHaveBeenCalledTimes(1);
+    // The commit rows still render below it.
+    expect(document.querySelectorAll(".repo-git-graph-row:not(.repo-git-wip-row)").length).toBe(1);
+  });
+
+  it("hides the WIP row when the tree is clean (wip null)", () => {
+    const commits = layoutCommitGraph([raw("dev@example.com")]);
+    render(<CommitGraph commits={commits} />);
+    expect(document.querySelector(".repo-git-wip-row")).toBeNull();
+  });
+});

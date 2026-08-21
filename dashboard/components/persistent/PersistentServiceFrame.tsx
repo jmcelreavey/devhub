@@ -16,23 +16,37 @@ interface Props {
   serviceId: string;
   /** Human-readable name for error messages (e.g. "OpenChamber"). */
   serviceName: string;
-  /** Port to build the iframe URL (resolved by the parent from NEXT_PUBLIC env). */
-  port: string;
+  /** Port for the iframe URL. `null` while the lazy-start API is still resolving. */
+  port: string | null;
   /** iframe title attribute. */
   title: string;
   /** Optional path (e.g. `/session/abc`) appended to the service origin for deep-linking. */
   srcPath?: string | null;
+  /** Called after an in-frame Restart so the parent can re-resolve the port. */
+  onRestarted?: () => void;
 }
 
-function useServiceBaseUrl(port: string): string {
+function useServiceBaseUrl(port: string | null): string {
   const [base, setBase] = useState(`http://localhost:${port}`);
   useEffect(() => {
+    if (!port) return;
     const id = window.setTimeout(() => {
       setBase(`${window.location.protocol}//${window.location.hostname}:${port}`);
     }, 0);
     return () => window.clearTimeout(id);
   }, [port]);
   return base;
+}
+
+function ServiceSpinner({ label }: { label: string }) {
+  return (
+    <div className="flex-1 flex items-center justify-center">
+      <div className="flex items-center gap-2 text-text-subtle">
+        <RotateCw size={14} className="animate-spin" />
+        <span className="text-sm">{label}</span>
+      </div>
+    </div>
+  );
 }
 
 export function PersistentServiceFrame({
@@ -42,6 +56,7 @@ export function PersistentServiceFrame({
   port,
   title,
   srcPath,
+  onRestarted,
 }: Props) {
   const pathname = usePathname();
   const isActive = pathname === route;
@@ -79,6 +94,7 @@ export function PersistentServiceFrame({
         port={port}
         title={title}
         srcPath={srcPath}
+        onRestarted={onRestarted}
       />
     </div>
   );
@@ -90,12 +106,14 @@ function ServiceIframe({
   port,
   title,
   srcPath,
+  onRestarted,
 }: {
   serviceId: string;
   serviceName: string;
-  port: string;
+  port: string | null;
   title: string;
   srcPath?: string | null;
+  onRestarted?: () => void;
 }) {
   const baseUrl = useServiceBaseUrl(port);
   const iframeSrc = srcPath ? `${baseUrl}${srcPath}` : baseUrl;
@@ -129,10 +147,15 @@ function ServiceIframe({
         body: JSON.stringify({ service: serviceId }),
       });
       setTimeout(fetchStatus, 2_000);
+      // OpenCode comes back on a new ephemeral port — the parent has to ask
+      // the listen API again or the iframe keeps pointing at the dead one.
+      onRestarted?.();
     } finally {
       setRestarting(false);
     }
   }
+
+  if (!port) return <ServiceSpinner label={`Starting ${serviceName}…`} />;
 
   if (services && !running) {
     return (
@@ -154,16 +177,7 @@ function ServiceIframe({
     );
   }
 
-  if (!running) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="flex items-center gap-2 text-text-subtle">
-          <RotateCw size={14} className="animate-spin" />
-          <span className="text-sm">Waiting for {serviceName}…</span>
-        </div>
-      </div>
-    );
-  }
+  if (!running) return <ServiceSpinner label={`Waiting for ${serviceName}…`} />;
 
   return (
     <>

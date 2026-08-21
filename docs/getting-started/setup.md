@@ -61,7 +61,7 @@ Use LAN mode when:
 - You trust the network.
 - You understand that DevHub has no built-in authentication.
 
-LAN mode exposes these ports through the proxy: dashboard `1337`, OpenChamber `1336`, OpenCode `1338`, and terminal `1339`.
+LAN mode exposes dashboard `1337` and OpenChamber `1336` through the proxy. OpenCode is ephemeral loopback (not proxied). Terminal `1339` is never proxied.
 
 When opening DevHub from another device at `http://<lan-ip>:1337` during **`npm run dev`**, Next.js 16+ blocks `/_next/*` chunk requests unless the browser `Origin` matches an allowlisted host pattern. DevHub ships defaults for common private ranges (`192.168.*.*`, `10.*.*.*`, `172.*.*.*`, `*.local`). If the UI stays on loading skeletons from a phone or tablet, add your host pattern to `DEVHUB_ALLOWED_DEV_ORIGINS` in `dashboard/.env.local` (comma-separated) and restart. Production `npm run start` does not use this dev-only gate.
 

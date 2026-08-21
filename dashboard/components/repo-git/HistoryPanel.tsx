@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   CornerDownLeft,
   Download,
@@ -10,6 +11,7 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  ShieldCheck,
   Upload,
 } from "lucide-react";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
@@ -24,6 +26,7 @@ import type { StashConflictPayload } from "@/app/repos/types";
 import type { DiffLine, GraphCommitRaw } from "@/lib/repos/git-parsers";
 import { lookupByEmail } from "@/lib/people/identity";
 import { layoutCommitGraph, type GraphLaneCommit } from "@/lib/repos/git-graph";
+import { recordUndo } from "@/lib/git/undo-stack";
 import { CommitAvatar } from "./CommitAvatar";
 import { CommitContextChips } from "./CommitContextChips";
 import { CommitGraph } from "./CommitGraph";
@@ -31,12 +34,15 @@ import { DiffMaximizeModal } from "./DiffMaximizeModal";
 import { DiffToolbar, DIFF_CONTEXT_LINES, type DiffContextMode } from "./DiffToolbar";
 import { GitDiffView } from "./GitDiffView";
 import { RangeCompareButton, RangeCompareModal } from "./RangeCompareModal";
+import { RebasePlanModal } from "./RebasePlanModal";
 import { RepoFileOpenMenu } from "./RepoFileOpenMenu";
 import { WhyExistsAction } from "./WhyExistsAction";
 import { RepoSplit } from "./SplitResize";
 import { shareGitShowPatch } from "./shareGitPatch";
 import { buildCommitMenuGroups } from "./commitMenuGroups";
-import { agentLocalCommitReviewCommand, openTerminal } from "@/lib/terminal-launch";
+import { usePointerDrag } from "./usePointerDrag";
+import { launchAgentJob } from "@/lib/agent-job";
+import { agentLocalCommitReviewCommand } from "@/lib/terminal-launch";
 import {
   fetchGitJson,
   postGitAction,
@@ -62,6 +68,8 @@ interface CommitShowPayload {
   isHead?: boolean;
   isAncestorOfHead?: boolean;
   aheadCount?: number;
+  /** `%G?` verification status; "G" means a good signature. */
+  gpg?: string;
 }
 
 interface BranchRelation {
@@ -123,6 +131,8 @@ export function HistoryPanel({
   onHookFailure,
   pushing = false,
   onPush,
+  wip = null,
+  onOpenWip,
   focusUnpushed = false,
   onFocusUnpushedConsumed,
   focusCommit = null,
@@ -134,9 +144,13 @@ export function HistoryPanel({
   /** Shared with the other tabs so a sync conflict lands in the same place. */
   onConflict?: (c: StashConflictPayload) => Promise<void>;
   onHookFailure?: (f: GitHookFailurePayload) => void;
-  /** Workspace-level push state, so History shows the same spinner as the header. */
+  /** Workspace-level push so History shows the same spinner as the header. */
   pushing?: boolean;
   onPush?: () => void;
+  /** Working-tree counts for the pinned WIP row; null hides it. */
+  wip?: { staged: number; unstaged: number } | null;
+  /** Click on the WIP row — the workspace switches to the Changes tab. */
+  onOpenWip?: () => void;
   focusUnpushed?: boolean;
   onFocusUnpushedConsumed?: () => void;
   /** Select this commit on arrival — used by Blame's "Open in History". */
@@ -147,6 +161,8 @@ export function HistoryPanel({
   const confirm = useConfirm();
   const prompt = usePrompt();
   const commitMenu = useContextMenu<GraphLaneCommit>();
+  /** Menu shown after a commit is dropped on a branch chip / rail item. */
+  const dropMenu = useContextMenu<{ commit: GraphLaneCommit; branch: string }>();
   const [commits, setCommits] = useState<GraphLaneCommit[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -180,6 +196,13 @@ export function HistoryPanel({
   const [diffMaximized, setDiffMaximized] = useState(false);
   const closeMaximized = useCallback(() => setDiffMaximized(false), []);
   const [comparing, setComparing] = useState(false);
+  /** Interactive-rebase planner, anchored below this commit. */
+  const [rebaseBase, setRebaseBase] = useState<GraphLaneCommit | null>(null);
+  /** Rolled-up CI state for the selected commit; keyed per sha for the session. */
+  const [ciState, setCiState] = useState<{ state: string; counts?: { passed: number; failed: number; pending: number } } | null>(null);
+  const ciCache = useRef(new Map<string, { state: string; counts?: { passed: number; failed: number; pending: number } }>());
+  /** `/` jumps into the search box, so it needs a handle. */
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const stackHistory = useMediaQuery("(max-width: 900px)");
   const stackDetail = useMediaQuery("(max-width: 720px)");
 
@@ -336,6 +359,7 @@ export function HistoryPanel({
             refs: commit.refs,
             isHead: commit.isHead,
             headBranch: commit.headBranch,
+            ...(commit.gpg ? { gpg: commit.gpg } : {}),
           });
         }
         return layoutCommitGraph([...byHash.values()]);
@@ -375,6 +399,43 @@ export function HistoryPanel({
     setUnpushedOnly(true); // eslint-disable-line react-hooks/set-state-in-effect -- badge navigates into unpushed filter
     onFocusUnpushedConsumed?.();
   }, [focusUnpushed, onFocusUnpushedConsumed]);
+
+  // CI state rides one gh call per selected commit, cached for the session —
+  // paging back to a commit you already inspected costs nothing.
+  useEffect(() => {
+    if (!selected) return;
+    const cached = ciCache.current.get(selected);
+    setCiState(cached ?? null);
+    if (cached) return;
+    let cancelled = false;
+    void fetchGitJson<{ state: string; counts?: { passed: number; failed: number; pending: number } }>(
+      repoApi(repoName, `/git/ci?commit=${selected}`),
+    )
+      .then((json) => {
+        if (cancelled || json.state === "none") return;
+        ciCache.current.set(selected, json);
+        setCiState(json);
+      })
+      .catch(() => {
+        // No gh, no remote, rate-limited — the chip just doesn't show.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, repoName]);
+
+  // `/` focuses history search unless the user is already typing somewhere.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      if (el?.isContentEditable || el?.tagName === "INPUT" || el?.tagName === "TEXTAREA" || el?.tagName === "SELECT") return;
+      e.preventDefault();
+      searchInputRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   const isUnpushed = useCallback(
     (c: GraphLaneCommit) => unpushedHashes.has(c.hash) || unpushedHashes.has(c.shortHash),
@@ -520,7 +581,7 @@ export function HistoryPanel({
     }
     setActing(action);
     try {
-      const result = await postGitAction<{ alreadyUpToDate?: boolean; message?: string }>(
+      const result = await postGitAction<{ alreadyUpToDate?: boolean; message?: string; headBefore?: string | null }>(
         repoApi(repoName, "/branches"),
         { action },
       );
@@ -547,6 +608,15 @@ export function HistoryPanel({
         toast.success("Pulled with merge");
       } else {
         toast.success(result.json.message?.split("\n")[0] || "Pulled");
+      }
+      // A merge pull moved HEAD forward; the header chip can undo it.
+      if (action === "pull-merge" && !result.json.alreadyUpToDate && result.json.headBefore) {
+        recordUndo(repoName, {
+          id: `pull-merge:${result.json.headBefore}`,
+          label: "merge pull",
+          headBefore: result.json.headBefore,
+          kind: "hard",
+        });
       }
       onMutate();
       await refresh();
@@ -654,7 +724,7 @@ export function HistoryPanel({
     async (action: string, commit: GraphLaneCommit, name?: string) => {
       setActing(action);
       try {
-        const result = await postGitAction<{ backupBranch?: string | null }>(
+        const result = await postGitAction<{ backupBranch?: string | null; headBefore?: string | null }>(
           repoApi(repoName, "/git/commit-action"),
           { action, commit: commit.hash, name },
         );
@@ -678,6 +748,16 @@ export function HistoryPanel({
         toast.success(labels[action] ?? "Done");
         if (result.json.backupBranch) {
           toast.info(`Backup branch: ${result.json.backupBranch}`, { duration: 9000 });
+        }
+        // cherry-pick/revert move HEAD forward; the header chip can undo them
+        // with a hard reset to the recorded pre-action HEAD.
+        if ((action === "cherry-pick" || action === "revert") && result.json.headBefore) {
+          recordUndo(repoName, {
+            id: `${action}:${commit.hash}`,
+            label: `${action} ${commit.shortHash}`,
+            headBefore: result.json.headBefore,
+            kind: "hard",
+          });
         }
         setSelectedFile(null);
         onMutate();
@@ -705,6 +785,26 @@ export function HistoryPanel({
     [confirm, runCommitAction],
   );
 
+  /** Switch branches (server auto-stashes), surfacing conflicts to the shared dialog. */
+  async function checkoutBranch(branch: string): Promise<boolean> {
+    const result = await postGitAction(repoApi(repoName, "/branches"), { action: "checkout", branch });
+    if (!result.ok) {
+      if (result.kind === "conflict") await onConflict?.(result.conflict);
+      else toast.error(result.kind === "error" ? result.message : "Checkout failed");
+      return false;
+    }
+    return true;
+  }
+
+  /** Drag a commit onto a branch chip → apply it relative to that branch. */
+  const branchDrag = usePointerDrag<GraphLaneCommit>({
+    dropSelector: "[data-drop-branch]",
+    onDrop: (commit, target, at) => {
+      const branch = target.getAttribute("data-drop-branch");
+      if (branch) dropMenu.openAtPoint(at.x, at.y, { commit, branch });
+    },
+  });
+
   const commitMenuGroups = useMemo(
     () =>
       // `runCommitAction` reaches `refresh`, which reads `historyGeneration.current`
@@ -719,6 +819,7 @@ export function HistoryPanel({
         confirmCommitAction,
         prompt,
         runCommitAction,
+        onRebasePlan: (commit) => setRebaseBase(commit),
         onCopySha: (commit) =>
           void copyTextToClipboard(commit.hash).then(() => toast.success("SHA copied")),
         onCopyMessage: (commit) =>
@@ -730,17 +831,99 @@ export function HistoryPanel({
           ),
         onReview: (commit) => {
           void (async () => {
-            openTerminal({
+            const date = new Date().toISOString().slice(0, 10);
+            const notePath = `reviews/${repoName}-${date}`;
+            const promptText = [
+              `Use the pr-explain-review skill to explain and review local commit ${commit.hash} ("${commit.subject}") in the ${repoName} repo. This is not a GitHub PR — review the commit and its parent window in the local git history.`,
+              `Write the report to DevHub notes via the notes MCP (notes_write). Notes MCP path: ${notePath}.`,
+              `Include a Repo entity link for ${repoName} in the note's ## Links section.`,
+              `Finish with a terminal summary, then exit.`,
+            ].join(" ");
+            const result = await launchAgentJob({
+              title: `review · ${commit.shortHash}`,
+              kind: "review",
               cwd: repoPath,
-              label: `review · ${commit.shortHash}`,
-              command: await agentLocalCommitReviewCommand(repoName, commit.hash, commit.subject),
+              repoName,
+              notePath,
+              promptText,
+              promptCommand: await agentLocalCommitReviewCommand(
+                repoName,
+                commit.hash,
+                commit.subject,
+              ),
+              mode: "oneshot",
+              alreadyConfirmed: true,
+              reason: `Review commit ${commit.shortHash}`,
             });
-            toast.info("Review running in the terminal.");
+            toast.info(
+              result.channel === "opencode"
+                ? `Review running in OpenCode — note at ${notePath}.`
+                : `Review queued in the Agent tab — note at ${notePath}.`,
+            );
           })();
         },
       }),
     [acting, commitMenu.target, confirmCommitAction, prompt, repoName, repoPath, runCommitAction, toast],
   );
+
+  const dropMenuGroups = useMemo(() => {
+    const target = dropMenu.target;
+    if (!target) return [];
+    const { commit, branch } = target;
+    return [
+      {
+        id: "drop-actions",
+        label: `${commit.shortHash} → ${branch}`,
+        items: [
+          {
+            id: "cherry-onto",
+            label: `Cherry-pick onto ${branch}`,
+            description: "Switches to that branch and applies the commit there",
+            disabled: acting !== null,
+            onSelect: () =>
+              void (async () => {
+                if (!(await checkoutBranch(branch))) return;
+                await runCommitAction("cherry-pick", commit);
+              })(),
+          },
+          {
+            id: "merge-into",
+            label: `Merge ${branch} into current`,
+            description: "Merge that branch into the checked-out one",
+            disabled: acting !== null,
+            onSelect: () =>
+              void confirmedBranchesAction({
+                actingKey: "drop-merge",
+                confirmTitle: `Merge ${branch}?`,
+                confirmMessage: `Merges ${branch} into the current branch. Conflicts open in the Conflicts tab.`,
+                confirmLabel: "Merge",
+                body: { action: "merge-branch", branch },
+                successToast: () => `Merged ${branch}`,
+                failLabel: "Merge failed",
+              }),
+          },
+          {
+            id: "rebase-onto",
+            label: `Rebase current onto ${branch}`,
+            description: "Replays the current branch's commits on top of that branch",
+            danger: true,
+            disabled: acting !== null,
+            onSelect: () =>
+              void confirmedBranchesAction({
+                actingKey: "drop-rebase",
+                confirmTitle: `Rebase onto ${branch}?`,
+                confirmMessage: `Rewrites the current branch onto ${branch}. Conflicts open in the Conflicts tab.`,
+                confirmLabel: "Rebase",
+                body: { action: "rebase-branch", branch },
+                successToast: () => `Rebased onto ${branch}`,
+                failLabel: "Rebase failed",
+              }),
+          },
+        ],
+      },
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- confirmedBranchesAction is a stable-enough closure; menu rebuilds per open
+  }, [dropMenu.target, acting]);
 
   if (loading && commits.length === 0) return <SkeletonRows count={8} height={32} />;
 
@@ -830,9 +1013,10 @@ export function HistoryPanel({
           <Search size={12} aria-hidden />
           <span className="sr-only">Search commits</span>
           <input
+            ref={searchInputRef}
             className="input repo-git-filter-input"
             type="search"
-            placeholder="Search all history or paste a hash…"
+            placeholder="Search all history or paste a hash…  ( / )"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             aria-label="Search commits"
@@ -894,6 +1078,8 @@ export function HistoryPanel({
             <CommitGraph
               commits={graphRows}
               selectedHash={selected}
+              wip={wip}
+              onOpenWip={onOpenWip}
               onSelect={(hash) => {
                 setSelectedFile(null);
                 setSelected(hash);
@@ -909,6 +1095,10 @@ export function HistoryPanel({
               }}
               unpushedHashes={unpushedHashes}
               identityByEmail={identityByEmail}
+              onRowDragStart={(event, commit) => {
+                if (event.pointerType !== "mouse") return;
+                branchDrag.start(event, commit);
+              }}
               mainRefNames={
                 relation?.mainShort
                   ? [relation.mainShort, `origin/${relation.mainShort}`, relation.mainBranch].filter(
@@ -947,6 +1137,24 @@ export function HistoryPanel({
                       {selectedCommit && isUnpushed(selectedCommit) && (
                         <span className="repo-git-ref-chip" data-tone="warning">
                           unpushed
+                        </span>
+                      )}
+                      {ciState && ciState.state !== "none" && (
+                        <span
+                          className="repo-git-ref-chip"
+                          data-tone={ciState.state === "passing" ? "main" : ciState.state === "failing" ? "warning" : undefined}
+                          title={
+                            ciState.counts
+                              ? `${ciState.counts.passed} passed · ${ciState.counts.failed} failed · ${ciState.counts.pending} pending`
+                              : "CI checks"
+                          }
+                        >
+                          ci {ciState.state}
+                        </span>
+                      )}
+                      {detailForSelection.gpg === "G" && (
+                        <span className="repo-git-ref-chip" title="Signed with a verified GPG signature">
+                          <ShieldCheck size={10} aria-hidden /> verified
                         </span>
                       )}
                       {detailForSelection.parents[0] && (
@@ -1122,6 +1330,30 @@ export function HistoryPanel({
         onClose={commitMenu.close}
         label={commitMenu.target ? `Actions for ${commitMenu.target.shortHash}` : "Commit actions"}
       />
+      <ContextMenu
+        open={Boolean(dropMenu.target)}
+        position={dropMenu.position}
+        groups={dropMenuGroups}
+        onClose={dropMenu.close}
+        label={
+          dropMenu.target
+            ? `${dropMenu.target.commit.shortHash} onto ${dropMenu.target.branch}`
+            : "Branch actions"
+        }
+      />
+      {branchDrag.state &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="repo-git-drag-ghost"
+            style={{ left: branchDrag.state.x + 10, top: branchDrag.state.y + 8 }}
+            aria-hidden
+          >
+            <span className="font-mono">{branchDrag.state.payload.shortHash}</span>
+            <span className="truncate">{branchDrag.state.payload.subject}</span>
+          </div>,
+          document.body,
+        )}
       <DiffMaximizeModal
         maximized={diffMaximized}
         canOpen={Boolean(activeFile)}
@@ -1170,6 +1402,24 @@ export function HistoryPanel({
           currentBranch={relation?.currentBranch}
         />
       ) : null}
+      <RebasePlanModal
+        open={Boolean(rebaseBase)}
+        onClose={() => setRebaseBase(null)}
+        repoName={repoName}
+        base={rebaseBase}
+        commits={filtered}
+        onConflict={async (c) => {
+          await onConflict?.(c);
+          onMutate();
+          await refresh();
+        }}
+        onDone={async () => {
+          setSelectedFile(null);
+          toast.success("History rewritten");
+          onMutate();
+          await refresh();
+        }}
+      />
     </div>
   );
 }

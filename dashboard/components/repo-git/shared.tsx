@@ -73,6 +73,8 @@ export interface BranchesPayload {
   /** https base for the origin remote, for "Open on GitHub". Null when unparseable. */
   remoteWebUrl?: string | null;
   remotes?: { name: string; fetchUrl: string; pushUrl: string }[];
+  /** Newest-first, capped at 30 — the rail shows recent tags, not the full dump. */
+  tags?: string[];
 }
 
 export type CommitMode = "commit-and-push" | "commit-only";
@@ -128,7 +130,9 @@ export function parseStashConflict(body: string): StashConflictPayload | null {
                   ? "pull-rebase"
                   : json.action === "pull-merge"
                     ? "pull-merge"
-                    : "checkout",
+                    : json.action === "rebase"
+                      ? "rebase"
+                      : "checkout",
       branch: typeof json.branch === "string" ? json.branch : undefined,
       switched: Boolean(json.switched),
       conflictFiles: Array.isArray(json.conflictFiles)

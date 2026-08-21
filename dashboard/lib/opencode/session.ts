@@ -1,6 +1,6 @@
 /**
  * Tiny client-side channel for steering the persistent OpenCode iframe to a
- * specific session. The iframe lives on a different origin (:1338) so the
+ * specific session. The iframe lives on a different origin (ephemeral OpenCode port) so the
  * parent can't read its location — but it *can* set `src`. Callers (e.g. the
  * Datadog "Investigate" button) request a session id here; PersistentOpenCode
  * subscribes and points the iframe at `/session/{id}`.
@@ -15,6 +15,10 @@ const listeners = new Set<Listener>();
 export function requestOpenCodeSession(sessionId: string): void {
   pending = sessionId;
   for (const l of listeners) l(sessionId);
+  // Soft-navigate so non-component callers (PR row menus) land on /opencode.
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("devhub:navigate", { detail: { href: "/opencode" } }));
+  }
 }
 
 /** Read + clear any session requested before the listener mounted. */

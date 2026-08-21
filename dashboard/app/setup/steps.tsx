@@ -1040,51 +1040,77 @@ export function JiraStep({
 }
 
 
+export type SetupAiProvider = "cursor-cli" | "chatgpt-cli" | "opencode" | "api";
+
 export function AgentCliStep({
-  cli,
-  onCliChange,
+  provider,
+  onProviderChange,
   opencodeModel,
   onOpencodeModelChange,
   cursorModel,
   onCursorModelChange,
-  cursorAgentInstalled,
+  availability,
 }: {
-  cli: "opencode" | "cursor";
-  onCliChange: (v: "opencode" | "cursor") => void;
+  provider: SetupAiProvider;
+  onProviderChange: (v: SetupAiProvider) => void;
   opencodeModel: string;
   onOpencodeModelChange: (v: string) => void;
   cursorModel: string;
   onCursorModelChange: (v: string) => void;
-  cursorAgentInstalled: boolean;
+  availability: {
+    cursorAgentInstalled: boolean;
+    chatgptCliInstalled: boolean;
+    opencodeInstalled: boolean;
+    apiConfigured: boolean;
+  };
 }) {
-  const options: Array<{ value: "opencode" | "cursor"; title: string; description: string }> = [
+  const options: Array<{
+    value: SetupAiProvider;
+    title: string;
+    description: string;
+    available: boolean;
+    hint?: string;
+  }> = [
+    {
+      value: "cursor-cli",
+      title: "Cursor CLI",
+      description: "cursor-agent for learn-repo, briefings, and one-shot agent jobs.",
+      available: availability.cursorAgentInstalled,
+      hint: "Install: curl https://cursor.com/install -fsS | bash",
+    },
+    {
+      value: "chatgpt-cli",
+      title: "ChatGPT CLI",
+      description: "Codex from ChatGPT.app (or codex on PATH) for generation and agent jobs.",
+      available: availability.chatgptCliInstalled,
+      hint: "Install the ChatGPT macOS app, or the Codex CLI.",
+    },
     {
       value: "opencode",
       title: "OpenCode",
-      description: "opencode run — uses the shared opencode.json model unless overridden below.",
+      description: "opencode run / HTTP sessions — uses opencode.json unless overridden below.",
+      available: availability.opencodeInstalled,
+      hint: "Install opencode, then revisit this step.",
     },
-    ...(cursorAgentInstalled
-      ? [
-          {
-            value: "cursor" as const,
-            title: "Cursor CLI",
-            description: "cursor-agent print mode, pointed at the model below.",
-          },
-        ]
-      : []),
+    {
+      value: "api",
+      title: "HTTP API key",
+      description: "Optional third-party / local OpenAI-compatible endpoint (AI_API_KEY).",
+      available: availability.apiConfigured,
+      hint: "Set AI_API_KEY in dashboard/.env.local (and optionally AI_BASE_URL / AI_MODEL).",
+    },
   ];
 
   return (
     <div>
       <h2 style={{ fontSize: "20px", fontWeight: 700, color: "var(--text)", marginBottom: "4px" }}>
-        Agent CLI
+        AI Provider
       </h2>
       <p style={{ color: "var(--text-subtle)", fontSize: "13px", marginBottom: "16px", lineHeight: 1.5 }}>
-        Which CLI runs one-shot terminal jobs — PR review, DX audits, capability labs, and repo
-        upstart. Saved to <code style={{ fontSize: "11px" }}>.env.local</code> as{" "}
-        <code style={{ fontSize: "11px" }}>DEVHUB_AGENT_*</code>, so the 1Password{" "}
-        <code style={{ fontSize: "11px" }}>devhub</code> item can populate it like other managed
-        config. Both CLIs get your skills and the notes MCP from the sync engine.
+        One default for learn-repo, morning briefings, and agent launches. Local CLIs are preferred —
+        you only need an API key if you pick HTTP API. Saved as{" "}
+        <code style={{ fontSize: "11px" }}>DEVHUB_AI_PROVIDER</code> in{" "}
+        <code style={{ fontSize: "11px" }}>.env.local</code>.
       </p>
       <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
         {options.map((option) => (
@@ -1096,39 +1122,44 @@ export function AgentCliStep({
               gap: "10px",
               padding: "12px 14px",
               borderRadius: "8px",
-              border: `1px solid ${cli === option.value ? "var(--accent)" : "var(--border)"}`,
+              border: `1px solid ${provider === option.value ? "var(--accent)" : "var(--border)"}`,
               background: "var(--bg-elevated)",
-              cursor: "pointer",
+              cursor: option.available ? "pointer" : "not-allowed",
+              opacity: option.available ? 1 : 0.55,
             }}
           >
             <input
               type="radio"
-              name="setup-agent-cli"
+              name="setup-ai-provider"
               value={option.value}
-              checked={cli === option.value}
-              onChange={() => onCliChange(option.value)}
+              checked={provider === option.value}
+              disabled={!option.available}
+              onChange={() => onProviderChange(option.value)}
               style={{ marginTop: "3px" }}
             />
             <div>
               <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text)" }}>
                 {option.title}
+                {!option.available && (
+                  <span style={{ fontWeight: 400, color: "var(--text-muted)", marginLeft: 6 }}>
+                    (not installed)
+                  </span>
+                )}
               </div>
               <div style={{ fontSize: "12px", color: "var(--text-subtle)", lineHeight: 1.5, marginTop: "2px" }}>
                 {option.description}
               </div>
+              {!option.available && option.hint && (
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
+                  {option.hint}
+                </div>
+              )}
             </div>
           </label>
         ))}
       </div>
-      {!cursorAgentInstalled && (
-        <TipCard>
-          Cursor CLI not detected. Install <code style={{ fontSize: "11px" }}>cursor-agent</code>{" "}
-          (<code style={{ fontSize: "11px" }}>curl https://cursor.com/install -fsS | bash</code>)
-          and revisit this step to unlock the Cursor option.
-        </TipCard>
-      )}
       <div style={{ marginTop: "16px" }}>
-        {cli === "opencode" ? (
+        {provider === "opencode" ? (
           <FormField
             label="OpenCode model override (optional)"
             value={opencodeModel}
@@ -1136,7 +1167,7 @@ export function AgentCliStep({
             placeholder="provider/model, e.g. cursor-acp/cursor-grok-4.5-high — blank uses opencode.json"
             hint="Passed as opencode run --model. Leave blank to keep the shared opencode.json default."
           />
-        ) : (
+        ) : provider === "cursor-cli" ? (
           <FormField
             label="Cursor model"
             value={cursorModel}
@@ -1144,11 +1175,12 @@ export function AgentCliStep({
             placeholder="cursor-grok-4.5-high"
             hint="Passed as cursor-agent --model. Verify the slug with cursor-agent --help or the /model picker."
           />
-        )}
+        ) : null}
       </div>
     </div>
   );
 }
+
 
 export function DoneStep({ saveResult }: { saveResult: { ok: boolean; message: string } | null }) {
   return (

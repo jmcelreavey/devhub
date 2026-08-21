@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { isNotesAiConfigured } from "@/lib/notes-ai/config";
+import { isAiConfigured, resolveAiProvider } from "@/lib/ai/preference";
+
 import { getGitHead, scanRepoContext, type RepoContext } from "@/lib/repos/context";
 import { generateRepoLearnArtifacts } from "@/lib/repos/learn-ai";
 import {
@@ -36,7 +37,8 @@ export async function loadRepoLearn(
   const scopeKey = scope
     ? `${scope.id}-${createHash("sha1").update(scope.paths.join("\n")).digest("hex").slice(0, 8)}`
     : undefined;
-  const aiConfigured = isNotesAiConfigured();
+  const resolved = resolveAiProvider();
+  const aiConfigured = isAiConfigured();
 
   if (!aiConfigured) {
     return {
@@ -45,9 +47,10 @@ export async function loadRepoLearn(
       aiConfigured: false,
       artifacts: null,
       code: "not_configured",
-      message: "AI_API_KEY is not set.",
+      message: resolved.setupHint ?? "No AI provider available.",
     };
   }
+
 
   if (!refresh) {
     const cached = readRepoLearnCache(context.repoName, gitHead, scopeKey);

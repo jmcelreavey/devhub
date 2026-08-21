@@ -6,9 +6,8 @@
 // a full AI-authored canvas now (see lib/briefing-canvas.ts). These remaining
 // helpers produce small text bits (dev tip, one-line summary, interest snippets).
 
-import { generateText } from "ai";
-import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai/provider";
-import { isNotesAiConfigured } from "@/lib/notes-ai/config";
+import { tryGenerateAiText } from "@/lib/ai/generate";
+import { isAiConfigured } from "@/lib/ai/preference";
 import { pickDevTip, type DailyBriefing, type DevTip, type InterestSnippet } from "./morning-briefing";
 
 function extractJson(text: string): unknown {
@@ -33,15 +32,12 @@ function extractJson(text: string): unknown {
 // ── AI Dev Tip ───────────────────────────────────────────────────────────────
 
 export async function generateAiDevTip(techStack: string[], date: Date): Promise<DevTip | null> {
-  if (!isNotesAiConfigured() || techStack.length === 0) {
+  if (!isAiConfigured() || techStack.length === 0) {
     return pickDevTip(date);
   }
-  const model = getNotesAiModel();
-  if (!model) return pickDevTip(date);
 
   try {
-    const result = await generateText({
-      model,
+    const result = await tryGenerateAiText({
       prompt: [
         `Generate one practical, specific development tip for a developer who works with: ${techStack.join(", ")}.`,
         "The tip must be:",
@@ -52,9 +48,8 @@ export async function generateAiDevTip(techStack: string[], date: Date): Promise
         'Respond as JSON only: {"tag": "<primary-tech>","text": "<the tip>"}',
       ].join("\n"),
       maxOutputTokens: 300,
-      ...getNotesAiCallOptions(),
     });
-    if (!result.text || result.finishReason === "length") return pickDevTip(date);
+    if (!result?.text || result.finishReason === "length") return pickDevTip(date);
 
     const parsed = extractJson(result.text) as { tag?: string; text?: string } | null;
     if (!parsed?.text || typeof parsed.text !== "string" || parsed.text.length < 10) {
@@ -97,17 +92,14 @@ export async function generateAiSummary(
   briefing: DailyBriefing,
   profile: { techStack: string[]; interests: string[] },
 ): Promise<string | null> {
-  if (!isNotesAiConfigured()) return null;
-  const model = getNotesAiModel();
-  if (!model) return null;
+  if (!isAiConfigured()) return null;
 
   try {
     const data = JSON.stringify(summariseBriefing(briefing));
     const interestLine = profile.interests.length > 0 ? profile.interests.join(", ") : "none";
     const stackLine = profile.techStack.length > 0 ? profile.techStack.join(", ") : "general";
 
-    const result = await generateText({
-      model,
+    const result = await tryGenerateAiText({
       prompt: [
         "You are writing a one-sentence morning briefing summary for a personal dashboard.",
         `The developer works with: ${stackLine}.`,
@@ -125,9 +117,8 @@ export async function generateAiSummary(
         "Respond with the sentence only — no quotes, no JSON.",
       ].join("\n"),
       maxOutputTokens: 200,
-      ...getNotesAiCallOptions(),
     });
-    if (!result.text || result.finishReason === "length") return null;
+    if (!result?.text || result.finishReason === "length") return null;
 
     const clean = result.text.trim().replace(/^["']|["']$/g, "").slice(0, 200);
     return clean.length > 10 ? clean : null;
@@ -139,13 +130,10 @@ export async function generateAiSummary(
 // ── AI Interest Snippets ─────────────────────────────────────────────────────
 
 export async function generateInterestSnippets(interests: string[]): Promise<InterestSnippet[]> {
-  if (!isNotesAiConfigured() || interests.length === 0) return [];
-  const model = getNotesAiModel();
-  if (!model) return [];
+  if (!isAiConfigured() || interests.length === 0) return [];
 
   try {
-    const result = await generateText({
-      model,
+    const result = await tryGenerateAiText({
       prompt: [
         "For each of the user's interests below, generate one short, useful insight or tip.",
         "These are evergreen insights (not news) — practical knowledge, techniques, or interesting facts.",
@@ -160,9 +148,8 @@ export async function generateInterestSnippets(interests: string[]): Promise<Int
         'Respond as JSON array: [{"interest":"<name>","text":"<insight>"}]',
       ].join("\n"),
       maxOutputTokens: 800,
-      ...getNotesAiCallOptions(),
     });
-    if (!result.text || result.finishReason === "length") return [];
+    if (!result?.text || result.finishReason === "length") return [];
 
     const parsed = extractJson(result.text);
     if (!Array.isArray(parsed)) return [];

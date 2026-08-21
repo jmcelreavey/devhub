@@ -143,7 +143,7 @@ export async function collectSkills(opts: CollectSkillsOptions): Promise<number>
 
   if (localDirs.length === 0) {
     emit("WARNING: No local skill directories found.");
-    emit("Expected one of: ~/.claude/skills, ~/.codex/skills, ~/.opencode/skills, ~/.cursor/skills, ~/.agents/skills");
+    emit("Expected one of: ~/.claude/skills, ~/.codex/skills (ChatGPT desktop / Codex), ~/.opencode/skills, ~/.cursor/skills, ~/.agents/skills");
     return 0;
   }
 

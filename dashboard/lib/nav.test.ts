@@ -13,8 +13,8 @@ import { PLUGIN_NAV_ITEMS } from "./plugin-nav.generated";
 const hrefs = (items: ReturnType<typeof filterNavBySetup>) => items.map((i) => i.href);
 
 describe("NAV_ITEMS (sidebar IA)", () => {
-  it("has exactly 17 core sidebar destinations", () => {
-    expect(NAV_ITEMS).toHaveLength(17);
+  it("has exactly 18 core sidebar destinations", () => {
+    expect(NAV_ITEMS).toHaveLength(18);
   });
 
   it("gives owned repositories a repo-centric destination", () => {
@@ -129,6 +129,13 @@ describe("filterNavBySetup", () => {
   });
   it("shows Cursor only when installed", () => {
     expect(hrefs(filterNavBySetup(NAV_ITEMS, { cursor: true }))).toContain("/cursor");
+  });
+  it("hides ChatGPT unless it is installed", () => {
+    expect(hrefs(filterNavBySetup(NAV_ITEMS, { chatgpt: false }))).not.toContain("/chatgpt");
+    expect(hrefs(filterNavBySetup(NAV_ITEMS, {}))).not.toContain("/chatgpt");
+  });
+  it("shows ChatGPT only when installed", () => {
+    expect(hrefs(filterNavBySetup(NAV_ITEMS, { chatgpt: true }))).toContain("/chatgpt");
   });
 });
 

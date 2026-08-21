@@ -1,138 +1,111 @@
-import { spawn, type ChildProcess } from "node:child_process";
-import process from "node:process";
-import { cleanOpenChamberEnv, resolveOpenChamberBind, resolveOpenChamberCommand } from "./openchamber-command";
+import { spawn } from "node:child_process";
+import fs from "node:fs";
 import {
-  getOpenCodeEnv,
-  resolveOpenCodeBinary,
-  resolveOpenCodeBindHost,
-  resolveOpenCodePort,
-} from "@/lib/opencode/command";
-import { canBindPort, canConnect, waitForPortListening } from "./port-probe";
+  chamberProcessPinsExternalOpenCode,
+  cleanOpenChamberEnv,
+  findOpenChamberBin,
+  findOpenChamberServerEntry,
+  openChamberInstallVersion,
+  resolveOpenChamberBind,
+  resolveOpenChamberCommand,
+  resolveOpenChamberPort,
+  shouldReplaceOpenChamberListener,
+} from "./openchamber-command";
+import { freePinnedOpenCodePorts } from "./opencode/listen";
+import {
+  canBindPort,
+  canConnect,
+  commandAndEnvForPid,
+  commandForPid,
+  killPidsListeningOnPort,
+  pidsListeningOnPort,
+  processElapsedSeconds,
+  waitForPortListening,
+} from "./port-probe";
 
 export type PeerLog = (msg: string) => void;
 
-export interface OpenCodePeerHandle {
-  child: ChildProcess | null;
-  reusedExisting: boolean;
-}
-
 export interface ChamberPeerHandle {
   reusedExisting: boolean;
-  /**
-   * The daemon process, when DevHub spawned it directly rather than through
-   * `openchamber serve`. Absent when `serve` forked its own daemon (nothing to
-   * hold) or when an existing instance was reused.
-   */
-  child?: ChildProcess;
-}
-
-function probeHost(bindHost: string): string {
-  return bindHost === "0.0.0.0" ? "127.0.0.1" : bindHost;
 }
 
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function startOpenCodePeer(log: PeerLog): Promise<OpenCodePeerHandle> {
-  const port = resolveOpenCodePort();
-  const bindHost = resolveOpenCodeBindHost();
-  const host = probeHost(bindHost);
-
-  if (await canConnect(port, host)) {
-    log(`OpenCode already listening on port ${port}`);
-    return { child: null, reusedExisting: true };
+async function waitForPortFree(port: number, host: string, timeoutMs: number): Promise<boolean> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (!(await canConnect(port, host))) return true;
+    await sleep(100);
   }
-
-  let binary: string;
-  try {
-    binary = resolveOpenCodeBinary();
-  } catch (err) {
-    throw new Error(err instanceof Error ? err.message : String(err));
-  }
-
-  const env = getOpenCodeEnv();
-  const maxAttempts = 3;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    if (await canConnect(port, host)) {
-      log(`OpenCode became reachable on port ${port} during startup`);
-      return { child: null, reusedExisting: true };
-    }
-
-    if (!(await canBindPort(port, host))) {
-      if (await canConnect(port, host)) {
-        log(`OpenCode already listening on port ${port}`);
-        return { child: null, reusedExisting: true };
-      }
-      log(`port ${port} busy but not accepting connections — retrying (${attempt}/${maxAttempts})`);
-      await sleep(500);
-      continue;
-    }
-
-    log(`using: ${binary} serve --port ${port} --hostname ${bindHost}`);
-    const child = spawn(binary, ["serve", "--port", String(port), "--hostname", bindHost], {
-      stdio: "inherit",
-      env,
-    });
-
-    const started = await new Promise<boolean>((resolve) => {
-      let settled = false;
-      const finish = (value: boolean): void => {
-        if (settled) return;
-        settled = true;
-        resolve(value);
-      };
-
-      child.once("error", (err) => {
-        log(`opencode spawn error: ${err.message}`);
-        finish(false);
-      });
-
-      child.once("spawn", () => {
-        void waitForPortListening(port, 15_000, host).then(finish);
-      });
-
-      child.once("close", (code) => {
-        if (code !== 0 && code !== null) {
-          log(`opencode serve exited with code ${code}`);
-        }
-        finish(false);
-      });
-    });
-
-    if (started || (await canConnect(port, host))) {
-      return { child, reusedExisting: false };
-    }
-
-    child.kill("SIGTERM");
-    log(`OpenCode did not become reachable on port ${port} — retrying (${attempt}/${maxAttempts})`);
-    await sleep(500);
-  }
-
-  if (await canConnect(port, host)) {
-    log(`OpenCode is reachable on port ${port} after retries`);
-    return { child: null, reusedExisting: true };
-  }
-
-  throw new Error(`OpenCode did not start on port ${port} — check ~/.local/share/opencode/log/`);
+  return !(await canConnect(port, host));
 }
 
-export async function waitForOpenCodePeer(log: PeerLog, timeoutMs = 30_000): Promise<boolean> {
-  const port = resolveOpenCodePort();
-  const host = probeHost(resolveOpenCodeBindHost());
-  const ready = await waitForPortListening(port, timeoutMs, host);
-  if (ready) {
-    log(`OpenCode is listening on port ${port}`);
-  }
-  return ready;
+async function ensurePortFree(port: number, host: string, log: PeerLog): Promise<void> {
+  killPidsListeningOnPort(port, "SIGTERM");
+  if (await waitForPortFree(port, host, 2_000)) return;
+  log(`listener on ${port} ignored SIGTERM — sending SIGKILL`);
+  killPidsListeningOnPort(port, "SIGKILL");
+  await waitForPortFree(port, host, 2_000);
 }
 
-function runOpenChamber(args: string[], log: PeerLog): Promise<void> {
-  const { cmd, argsPrefix, source } = resolveOpenChamberCommand();
-  log(`using ${source}: ${cmd} ${[...argsPrefix, ...args].join(" ")}`);
+function chamberListenerPinnedToExternalOpenCode(port: number): boolean {
+  return pidsListeningOnPort(port).some((pid) =>
+    chamberProcessPinsExternalOpenCode(commandAndEnvForPid(pid)),
+  );
+}
+
+function chamberListenerIsStale(port: number, bin: string): boolean {
+  const entry = findOpenChamberServerEntry(bin);
+  const currentVersion = openChamberInstallVersion(bin);
+  let entryMtimeMs: number | undefined;
+  if (entry) {
+    try {
+      entryMtimeMs = fs.statSync(entry).mtimeMs;
+    } catch {
+      entryMtimeMs = undefined;
+    }
+  }
+
+  const pids = pidsListeningOnPort(port);
+  if (pids.length === 0) return false;
+  return pids.some((pid) => {
+    const cmdline = commandForPid(pid);
+    if (!cmdline) return false;
+    return shouldReplaceOpenChamberListener({
+      cmdline,
+      currentBin: bin,
+      currentEntry: entry,
+      currentVersion,
+      entryMtimeMs,
+      processAgeSeconds: processElapsedSeconds(pid),
+    });
+  });
+}
+
+/**
+ * Decide what to do about a live listener on `port`: reuse it, or stop it so a
+ * fresh daemon can bind. Returns true when the existing one is good enough.
+ */
+async function canReuseChamberListener(port: number, bin: string | null, log: PeerLog): Promise<boolean> {
+  if (chamberListenerPinnedToExternalOpenCode(port)) {
+    log(`replacing OpenChamber on port ${port} (pinned to an external OpenCode)`);
+  } else if (!bin || !chamberListenerIsStale(port, bin)) {
+    log(`OpenChamber already listening on port ${port}`);
+    return true;
+  } else {
+    log(`replacing stale OpenChamber on port ${port} with ${openChamberInstallVersion(bin) ?? bin}`);
+  }
+  await stopChamberPeer(log, port);
+  return false;
+}
+
+function runOpenChamberCli(args: string[], log: PeerLog): Promise<void> {
+  const cmd = findOpenChamberBin() ?? "openchamber";
+  log(`using CLI: ${cmd} ${args.join(" ")}`);
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, [...argsPrefix, ...args], { stdio: "inherit", env: cleanOpenChamberEnv() });
+    const child = spawn(cmd, args, { stdio: "inherit", env: cleanOpenChamberEnv() });
     child.on("error", reject);
     child.on("close", (code) => {
       if (code === 0) {
@@ -144,28 +117,31 @@ function runOpenChamber(args: string[], log: PeerLog): Promise<void> {
   });
 }
 
-export async function stopChamberPeer(log: PeerLog, port = Number.parseInt(process.env.OPENCHAMBER_PORT ?? "1336", 10)): Promise<void> {
+export async function stopChamberPeer(log: PeerLog, port = resolveOpenChamberPort()): Promise<void> {
   try {
-    await runOpenChamber(["stop", "--port", String(port), "--quiet"], log);
+    await runOpenChamberCli(["stop", "--port", String(port), "--quiet"], log);
   } catch {
-    // already stopped
+    // CLI stop is best-effort; the bun-bypass daemon often ignores it.
+  }
+  const { probe } = resolveOpenChamberBind();
+  if (await canConnect(port, probe)) {
+    await ensurePortFree(port, probe, log);
   }
 }
 
 export async function startChamberPeer(log: PeerLog): Promise<ChamberPeerHandle> {
-  const port = Number.parseInt(process.env.OPENCHAMBER_PORT ?? "1336", 10);
+  const port = resolveOpenChamberPort();
   const { host, probe, note } = resolveOpenChamberBind();
   if (note) log(note);
 
-  if (await canConnect(port, probe)) {
-    log(`OpenChamber already listening on port ${port}`);
+  const bin = findOpenChamberBin();
+  if ((await canConnect(port, probe)) && (await canReuseChamberListener(port, bin, log))) {
     return { reusedExisting: true };
   }
 
   const maxAttempts = 3;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    if (await canConnect(port, probe)) {
-      log(`OpenChamber became reachable on port ${port}`);
+    if ((await canConnect(port, probe)) && (await canReuseChamberListener(port, bin, log))) {
       return { reusedExisting: true };
     }
 
@@ -199,7 +175,7 @@ export async function startChamberPeer(log: PeerLog): Promise<ChamberPeerHandle>
       // binds, and 30s was exactly the timeout that made `serve` give up.
       if (await waitForPortListening(port, 60_000, probe)) {
         log(`OpenChamber daemon is running on port ${port}`);
-        return { reusedExisting: false, child };
+        return { reusedExisting: false };
       }
       log(`OpenChamber daemon did not bind port ${port} within 60s — retrying (${attempt}/${maxAttempts})`);
       try {
@@ -211,7 +187,7 @@ export async function startChamberPeer(log: PeerLog): Promise<ChamberPeerHandle>
       continue;
     }
 
-    await runOpenChamber(["serve", "--port", String(port), "--host", host, "--quiet"], log);
+    await runOpenChamberCli(["serve", "--port", String(port), "--host", host, "--quiet"], log);
 
     // Verify the daemon actually came up — the CLI forks and exits 0 even
     // if the forked daemon crashes immediately.
@@ -232,62 +208,22 @@ export async function startChamberPeer(log: PeerLog): Promise<ChamberPeerHandle>
   throw new Error(`OpenChamber did not start on port ${port}`);
 }
 
-export function attachOpenCodeShutdown(child: ChildProcess | null, log: PeerLog): () => void {
-  let exiting = false;
-  const shutdown = (signal: NodeJS.Signals): void => {
-    if (exiting || !child?.pid) return;
-    exiting = true;
-    log(`shutting down OpenCode (${signal})`);
-    child.kill(signal);
-  };
+let chamberStart: Promise<number> | null = null;
 
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
-  process.on("SIGINT", () => shutdown("SIGINT"));
-
-  return () => {
-    exiting = true;
-  };
-}
-
-export function attachChamberShutdown(handle: ChamberPeerHandle, log: PeerLog): () => void {
-  const port = Number.parseInt(process.env.OPENCHAMBER_PORT ?? "1336", 10);
-  let shuttingDown = false;
-
-  const shutdown = (): void => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-
-    if (handle.reusedExisting) {
-      log("leaving existing OpenChamber daemon running");
-      process.exit(0);
-      return;
-    }
-
-    if (handle.child?.pid) {
-      log("shutting down OpenChamber daemon");
-      const child = handle.child;
-      const finish = () => process.exit(0);
-      child.once("close", finish);
-      child.kill("SIGTERM");
-      setTimeout(finish, 2_000).unref();
-      return;
-    }
-
-    log("shutting down OpenChamber daemon");
-    void stopChamberPeer(log, port).finally(() => process.exit(0));
-  };
-
-  process.on("SIGTERM", shutdown);
-  process.on("SIGINT", shutdown);
-
-  return () => {
-    shuttingDown = true;
-  };
-}
-
-export function keepPeerProcessAlive(): Promise<never> {
-  return new Promise(() => {
-    const timer = setInterval(() => undefined, 60_000);
-    timer.ref();
+/**
+ * Single entry point for "make sure Chamber is serving on 1336": the `/chamber`
+ * tab, the desktop-app launcher, and Restart all go through here. Concurrent
+ * callers share one start so two tabs cannot race two daemons onto the port.
+ */
+export function ensureChamberListening(log: PeerLog = () => undefined): Promise<number> {
+  chamberStart ??= (async () => {
+    // A leftover OpenCode on a pinned port is what makes Chamber attach to a
+    // server it cannot restart, which breaks Claude/Cursor Setup.
+    freePinnedOpenCodePorts(log);
+    await startChamberPeer(log);
+    return resolveOpenChamberPort();
+  })().finally(() => {
+    chamberStart = null;
   });
+  return chamberStart;
 }

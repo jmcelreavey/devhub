@@ -4,6 +4,7 @@ import {
   Copy,
   GitBranch,
   GitCommitHorizontal,
+  ListTree,
   LogOut,
   Rewind,
   RotateCcw,
@@ -34,6 +35,8 @@ export interface CommitMenuCallbacks {
   onCopyMessage: (commit: GraphLaneCommit) => void;
   onSharePatch: (commit: GraphLaneCommit) => void;
   onReview: (commit: GraphLaneCommit) => void;
+  /** Open the interactive-rebase planner anchored below this commit. */
+  onRebasePlan?: (commit: GraphLaneCommit) => void;
 }
 
 export function buildCommitMenuGroups(
@@ -146,6 +149,17 @@ export function buildCommitMenuGroups(
               "HEAD will point directly at this commit. Create or check out a branch before committing new work.",
               "Check out",
             ),
+        },
+        {
+          id: "rebase-plan",
+          label: "Rewrite history from here…",
+          description: "Reorder, reword, squash, fixup or drop commits after this one",
+          icon: <ListTree size={12} />,
+          disabled: busy || isMerge,
+          disabledReason: isMerge
+            ? "Pick a non-merge commit as the base"
+            : undefined,
+          onSelect: () => cb.onRebasePlan?.(commit),
         },
         {
           id: "reset",

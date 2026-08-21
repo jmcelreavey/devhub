@@ -78,11 +78,11 @@ During normal use, DevHub may run several local services:
 | Service     | Default port | Typical role                                  |
 | ----------- | ------------ | --------------------------------------------- |
 | Dashboard   | `1337`       | Main web app                                  |
-| OpenChamber | `1336`       | Embedded thinking/workspace UI                |
-| OpenCode    | `1338`       | Shared coding assistant UI (also used by Chamber) |
+| OpenChamber | `1336`       | `/chamber` lazy-starts the embed; not always-on |
+| OpenCode    | ephemeral    | `/opencode` lazy-starts a loopback instance; not on 1338 |
 | MCP server  | —            | Stdio server launched by AI tools when needed |
 
-OpenChamber does not start its own OpenCode server when managed by DevHub (`OPENCODE_SKIP_START`). See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md).
+OpenChamber starts its own managed OpenCode. DevHub does not pass `OPENCODE_PORT` or `OPENCODE_SKIP_START` into Chamber, so Claude/Cursor Setup can restart that process. See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md).
 
 The dashboard can also run local actions, such as syncing skills or validating the repo.
 

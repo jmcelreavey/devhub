@@ -18,6 +18,7 @@ import { LabTutor } from "@/components/capability/LabTutor";
 import { LabMarkdown } from "@/components/capability/LabMarkdown";
 import { cursorFileUrl } from "@/lib/cursor-link";
 import { openLabWorkspaceInCursor } from "@/lib/open-in-cursor-client";
+import { launchAgentJob } from "@/lib/agent-job";
 import { agentLabCommand, openTerminal, type LabLaunchPlan } from "@/lib/terminal-launch";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
@@ -165,14 +166,32 @@ export function useLab(signalId: string, repoName?: string, builtHint?: boolean)
         }
       }
 
-      // Build in the terminal via the OpenCode agent, then wait for adoption.
+      // Build via launchAgentJob (provider-aware), then wait for adoption.
       const launchedAt = new Date().toISOString();
-      openTerminal({
+      const query = `signalId=${encodeURIComponent(plan.signalId)}&repoName=${encodeURIComponent(plan.repoName)}`;
+      const planUrl = `${window.location.origin}/api/capability/journey/plan?${query}`;
+      const adoptUrl = `${window.location.origin}/api/capability/journey/adopt`;
+      const promptText = [
+        `Use the capability-lab skill to build a hands-on learning lab for "${plan.label}" (signal id: ${plan.signalId}) in the ${plan.repoName} repo.`,
+        `Plan URL (curl for repo path, workspace dir, evidence, language, notes path): ${planUrl}`,
+        `Adopt URL: ${adoptUrl}`,
+        refresh ? "This is a REBUILD — overwrite the existing note and refresh the starter." : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      await launchAgentJob({
+        title: `lab · ${plan.repoName}/${signalId}`,
+        kind: "agent",
         cwd: plan.repoPath,
-        label: `lab · ${plan.repoName}/${signalId}`,
-        command: await agentLabCommand(plan, refresh),
+        repoName: plan.repoName,
+        promptText,
+        promptCommand: await agentLabCommand(plan, refresh),
+        mode: "oneshot",
+        forceTerminal: true,
+        alreadyConfirmed: true,
+        reason: `Build lab ${plan.label}`,
       });
-      toast.info("Building the lab with OpenCode - watch the terminal; it'll appear here when done.");
+      toast.info("Building the lab — watch the Agent tab; it'll appear here when done.");
 
       const adopted = await pollForAdoption(plan.category, launchedAt);
       if (!adopted) {

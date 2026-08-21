@@ -112,8 +112,8 @@ Teaching, code review, debugging, scaffolding, and other modes live under `perso
 | Service | Command | Port | Notes |
 |---------|---------|------|-------|
 | Next.js Dashboard | `npm run dev` (repo root) | 1337 | Primary service; file-based storage, no DB |
-| OpenChamber | Auto-started by `npm run dev` | 1336 | Optional companion; requires `openchamber` binary |
-| OpenCode | Auto-started by `npm run dev` | 1338 | Optional companion |
+| OpenChamber | Lazy on `/chamber` tab | 1336 | Optional companion; requires `openchamber` binary |
+| OpenCode | Lazy on `/opencode` tab | ephemeral | Optional companion; never pin 1338 |
 
 ### Running the app
 
@@ -121,7 +121,7 @@ Teaching, code review, debugging, scaffolding, and other modes live under `perso
 - Core env vars (`NOTES_DIR`, `REPO_ROOT`, `PORT`) are auto-configured by `postinstall`.
 - Optional integrations (Google Calendar, Jira, Datadog) are configured via the `/setup` page; they are not required for the app to function.
 - Optional **notes in-editor AI** uses `AI_API_KEY` (any OpenAI-compatible provider; `AI_BASE_URL`/`AI_MODEL` default to z.ai) in `dashboard/.env.local` (see `dashboard/.env.example`); not configured via `/setup`.
-- OpenChamber and OpenCode will fail to start if their binaries aren't installed — this is harmless; the dashboard still works.
+- OpenChamber and OpenCode start when you open those tabs. Missing binaries just hide the tab — the dashboard still works.
 
 ### Lint / Typecheck / Test
 

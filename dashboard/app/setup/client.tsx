@@ -111,12 +111,13 @@ const STEPS: Step[] = [
   },
   {
     id: "agent",
-    title: "Agent CLI",
+    title: "AI Provider",
     icon: <TerminalSquare size={18} />,
-    description: "Which CLI runs one-shot agent jobs (PR review, DX audits, labs)",
+    description: "Cursor / ChatGPT / OpenCode CLI, or optional HTTP API key",
     configured: true,
     optional: true,
   },
+
   {
     id: "done",
     title: "All Set",
@@ -157,10 +158,11 @@ export default function SetupPage() {
   const [biChecking, setBiChecking] = useState(false);
   const [biForm, setBiForm] = useState({ capiRepoPath: "" });
   const [agentForm, setAgentForm] = useState<{
-    cli: "opencode" | "cursor";
+    provider: "cursor-cli" | "chatgpt-cli" | "opencode" | "api";
     opencodeModel: string;
     cursorModel: string;
-  }>({ cli: "opencode", opencodeModel: "", cursorModel: "" });
+  }>({ provider: "opencode", opencodeModel: "", cursorModel: "" });
+
 
   /**
    * Native folder picker, when there is one.
@@ -228,9 +230,16 @@ export default function SetupPage() {
       }
       if (data.agentVars) {
         setAgentForm({
-          cli: data.agentVars.cli,
+          provider:
+            data.agentVars.provider ??
+            (data.agentVars.cli === "cursor"
+              ? "cursor-cli"
+              : data.agentVars.cli === "chatgpt"
+                ? "chatgpt-cli"
+                : "opencode"),
           opencodeModel: data.agentVars.opencodeModel,
           cursorModel: data.agentVars.cursorModel,
+
         });
       }
       return data;
@@ -816,14 +825,20 @@ export default function SetupPage() {
           )}
           {step.id === "agent" && (
             <AgentCliStep
-              cli={agentForm.cli}
-              onCliChange={(v) => setAgentForm((prev) => ({ ...prev, cli: v }))}
+              provider={agentForm.provider}
+              onProviderChange={(v) => setAgentForm((prev) => ({ ...prev, provider: v }))}
               opencodeModel={agentForm.opencodeModel}
               onOpencodeModelChange={(v) => setAgentForm((prev) => ({ ...prev, opencodeModel: v }))}
               cursorModel={agentForm.cursorModel}
               onCursorModelChange={(v) => setAgentForm((prev) => ({ ...prev, cursorModel: v }))}
-              cursorAgentInstalled={status.agentVars?.cursorAgentInstalled === true}
+              availability={{
+                cursorAgentInstalled: status.agentVars?.cursorAgentInstalled === true,
+                chatgptCliInstalled: status.agentVars?.chatgptCliInstalled === true,
+                opencodeInstalled: status.agentVars?.opencodeInstalled === true,
+                apiConfigured: status.agentVars?.apiConfigured === true,
+              }}
             />
+
           )}
           {step.id === "done" && <DoneStep saveResult={saveResult} />}
 

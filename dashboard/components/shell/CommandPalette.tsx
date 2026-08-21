@@ -29,7 +29,9 @@ import { flattenTreeFiles } from "@/lib/tree-utils";
 import { clearFocusSession, readFocusSession, writeFocusSession } from "@/lib/focus-session-storage";
 import { clearRouteUsage, summariseRouteUsage } from "@/lib/route-usage";
 import { copyTextToClipboard } from "@/lib/clipboard";
-import { openTerminalTranscript } from "@/lib/terminal-launch";
+import { openTerminal, openTerminalTranscript } from "@/lib/terminal-launch";
+import { focusAgentComposer, openAgentChat } from "@/lib/agent-chat";
+import { openInteractiveAgentSession } from "@/lib/agent-job";
 import { openInBrowser } from "@/lib/desktop/bridge";
 
 type CommandKind =
@@ -75,6 +77,7 @@ interface TicketItem {
 /** Just enough of a repo to offer it as a destination. */
 interface RepoEntry {
   name: string;
+  path: string;
   branch: string | null;
   dirtyCount: number;
   unpushedCount: number;
@@ -293,6 +296,19 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       };
     });
 
+    const terminalHereCmds: Command[] = repos.map((r) => ({
+      id: `terminal-here:${r.name}`,
+      kind: "action" as const,
+      label: `Terminal here · ${r.name}`,
+      detail: r.path?.replace(/^\/Users\/[^/]+/, "~") || r.name,
+      hint: "terminal",
+      perform: () => {
+        onClose();
+        // Focus existing tab by cwd/label, or open a new shell tab.
+        openTerminal({ cwd: r.path, label: r.name, kind: "shell", repoName: r.name });
+      },
+    }));
+
     const diagramCmds: Command[] = diagrams.map((d) => ({
       id: `diagram:${d.path}`,
       kind: "diagram",
@@ -469,18 +485,60 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           void copyContextPackToClipboard(toast);
         },
       },
+      {
+        id: "action:ask-agent",
+        kind: "action",
+        label: "Ask Agent",
+        hint: "Chat",
+        perform: () => {
+          onClose();
+          void openInteractiveAgentSession().then(() => {
+            window.setTimeout(() => focusAgentComposer(), 80);
+          });
+        },
+      },
+      {
+        id: "action:new-agent-chat",
+        kind: "action",
+        label: "New Agent chat",
+        hint: "Chat",
+        perform: () => {
+          onClose();
+          openAgentChat({ title: "Agent", kind: "agent", forceNewTab: true, autoSend: false });
+          window.setTimeout(() => focusAgentComposer(), 80);
+        },
+      },
+      ...repos.map((r) => ({
+        id: `ask-agent:${r.name}`,
+        kind: "action" as CommandKind,
+        label: `Ask Agent · ${r.name}`,
+        detail: r.path?.replace(/^\/Users\/[^/]+/, "~") || r.name,
+        hint: "Chat",
+        perform: () => {
+          onClose();
+          openAgentChat({
+            title: `Agent · ${r.name}`,
+            kind: "agent",
+            cwd: r.path,
+            repoName: r.name,
+            autoSend: false,
+          });
+          window.setTimeout(() => focusAgentComposer(), 80);
+        },
+      })),
     ];
 
     return [
       ...navCmds,
       ...actionCmds,
       ...repoCmds,
+      ...terminalHereCmds,
       ...taskCmds,
       ...ticketCmds,
       ...noteCmds,
       ...diagramCmds,
     ];
-  }, [notes, diagrams, tasks, tickets, repos, router, toggleTaskDone, toast, setup]);
+  }, [notes, diagrams, tasks, tickets, repos, router, toggleTaskDone, toast, setup, onClose]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) {

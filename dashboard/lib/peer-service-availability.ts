@@ -3,7 +3,8 @@ import http from "node:http";
 import { spawnSync } from "node:child_process";
 import { DEV_SERVICES } from "./dev-services";
 import { findOpenChamberBin } from "./openchamber-command";
-import { resolveOpenCodeBinary, resolveOpenCodeBindHost } from "@/lib/opencode/command";
+import { resolveOpenCodeBinary } from "@/lib/opencode/command";
+import { getDevHubOpenCodePort } from "@/lib/opencode/listen";
 import { findInstalledApp } from "@/lib/launch/desktop";
 
 function commandOnPath(cmd: string): boolean {
@@ -47,6 +48,17 @@ export function isCursorConfigured(): boolean {
   return findInstalledApp("Cursor", "cursor") !== null;
 }
 
+/**
+ * True when ChatGPT is available locally — the `codex` CLI (ChatGPT.app is the
+ * Codex desktop; its URL scheme is `codex://`) or `/Applications/ChatGPT.app`.
+ * Gates the ChatGPT sidebar item so it only appears for people who actually
+ * have it.
+ */
+export function isChatGPTConfigured(): boolean {
+  if (commandOnPath("codex") || commandOnPath("chatgpt")) return true;
+  return findInstalledApp("ChatGPT", "codex") !== null;
+}
+
 export function checkServicePort(port: number, host: string): Promise<boolean> {
   return new Promise((resolve) => {
     const req = http.get(`http://${host}:${port}`, { timeout: 2_000 }, (res) => {
@@ -64,11 +76,13 @@ export function checkServicePort(port: number, host: string): Promise<boolean> {
 export async function isPeerServiceActive(serviceId: "openchamber" | "opencode"): Promise<boolean> {
   const svc = DEV_SERVICES.find((s) => s.id === serviceId);
   if (!svc) return false;
+  if (serviceId === "opencode") {
+    const lazy = getDevHubOpenCodePort();
+    if (lazy == null) return false;
+    return checkServicePort(lazy, "127.0.0.1");
+  }
   const port = Number.parseInt(process.env[svc.portEnvKey] ?? String(svc.defaultPort), 10);
-  const bind =
-    serviceId === "opencode"
-      ? resolveOpenCodeBindHost()
-      : (process.env[svc.hostEnvKey] ?? "0.0.0.0");
+  const bind = process.env[svc.hostEnvKey] ?? "0.0.0.0";
   const probeHost = bind === "0.0.0.0" ? "127.0.0.1" : bind;
   return checkServicePort(port, probeHost);
 }
@@ -79,16 +93,17 @@ export async function getPeerServiceGateStatus(): Promise<{
   opencode: boolean;
   claude: boolean;
   cursor: boolean;
+  chatgpt: boolean;
 }> {
   const [chamberActive, opencodeActive] = await Promise.all([
     isPeerServiceActive("openchamber"),
     isPeerServiceActive("opencode"),
   ]);
   const opencode = isOpenCodeConfigured() || opencodeActive;
-  // Chamber depends on OpenCode — hide it unless a system OpenChamber exists
-  // and OpenCode is available too.
+  // Chamber starts its own OpenCode, but still needs the binary installed.
   const chamber = chamberActive || (isOpenChamberConfigured() && opencode);
   const claude = isClaudeConfigured();
   const cursor = isCursorConfigured();
-  return { chamber, opencode, claude, cursor };
+  const chatgpt = isChatGPTConfigured();
+  return { chamber, opencode, claude, cursor, chatgpt };
 }

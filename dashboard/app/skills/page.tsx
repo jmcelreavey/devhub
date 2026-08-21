@@ -5,6 +5,9 @@ import type { SkillsListResponse } from "@/lib/skills/api-types";
 import { BootScreen } from "@/components/today/TodayBootScreen";
 import Client from "./client";
 
+export const metadata = { title: "Skills" };
+
+
 export default function SkillsPage() {
   const repoRoot = getRepoRoot();
   const initialCatalog: SkillsListResponse = {

@@ -421,7 +421,7 @@ function TreeDragHandle({
     <button
       type="button"
       {...dragHandleProps}
-      title="Drag to reorder. Arrow keys also work."
+      title="Drag to reorder."
       className="shrink-0 rounded p-0.5 reveal-on-hover focus:opacity-100"
       style={{ color: "var(--text-subtle)", cursor: "grab" }}
       aria-label={`Drag to reorder ${label}`}

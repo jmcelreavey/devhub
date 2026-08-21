@@ -15,17 +15,3 @@ export function resolveOpenCodeBinary(): string {
 
   return "opencode";
 }
-
-/** Bind address for `opencode serve --hostname` (legacy: OPENCODE_HOST). */
-export function resolveOpenCodeBindHost(): string {
-  const bind = process.env.OPENCODE_BIND_HOST?.trim();
-  if (bind) return bind;
-  const legacy = process.env.OPENCODE_HOST?.trim();
-  if (legacy && !legacy.includes("://")) return legacy;
-  return "0.0.0.0";
-}
-
-export function resolveOpenCodePort(): number {
-  const parsed = Number.parseInt(process.env.OPENCODE_PORT ?? "1338", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1338;
-}

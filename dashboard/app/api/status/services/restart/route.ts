@@ -1,85 +1,26 @@
 import { NextResponse } from "next/server";
-import { spawn } from "node:child_process";
-import { cleanOpenChamberEnv, resolveOpenChamberBind, resolveOpenChamberCommand } from "@/lib/openchamber-command";
-import {
-  resolveOpenCodeBinary,
-  getOpenCodeEnv,
-  resolveOpenCodeBindHost,
-  resolveOpenCodePort,
-} from "@/lib/opencode/command";
+import { resolveOpenChamberBind, resolveOpenChamberPort } from "@/lib/openchamber-command";
+import { ensureChamberListening, stopChamberPeer } from "@/lib/dev-peer-services";
+import { ensureDevHubOpenCode, freePinnedOpenCodePorts, stopDevHubOpenCode } from "@/lib/opencode/listen";
 import { DEV_SERVICES } from "@/lib/dev-services";
 import { z } from "zod";
 import { parseBody } from "@/lib/api-utils";
 
-const CHAMBER_PORT = Number.parseInt(process.env.OPENCHAMBER_PORT ?? "1336", 10);
-
-function runOpenChamber(args: string[]): Promise<{ code: number | null; output: string }> {
-  const { cmd, argsPrefix } = resolveOpenChamberCommand();
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, [...argsPrefix, ...args], { env: cleanOpenChamberEnv() });
-    let output = "";
-    child.stdout.on("data", (chunk: Buffer) => { output += chunk.toString(); });
-    child.stderr.on("data", (chunk: Buffer) => { output += chunk.toString(); });
-    child.on("error", reject);
-    child.on("close", (code) => resolve({ code, output }));
-  });
-}
-
-/** Kill any process listening on the given port (macOS/Linux). */
-async function killProcessOnPort(port: number): Promise<void> {
-  return new Promise((resolve) => {
-    const lsof = spawn("lsof", ["-ti", "-sTCP:LISTEN", `tcp:${port}`], {
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    let out = "";
-    lsof.stdout.on("data", (d: Buffer) => { out += d.toString(); });
-    lsof.on("close", () => {
-      for (const pid of out.trim().split("\n").filter(Boolean)) {
-        try { process.kill(Number.parseInt(pid, 10), "SIGTERM"); } catch { /* already gone */ }
-      }
-      resolve();
-    });
-    lsof.on("error", () => resolve());
-  });
-}
-
 async function restartOpenChamber(): Promise<NextResponse> {
-  // Mirror the peer-startup auth guard: OpenChamber >=1.13 exits with code 4
-  // when binding a LAN address without UI auth, which is what made the in-app
-  // Restart button silently fail. Fall back to loopback unless auth is set.
+  // `resolveOpenChamberBind` also carries the >=1.13 auth guard note: Chamber
+  // exits with code 4 when binding a LAN address without UI auth, so it falls
+  // back to loopback. Surface that to the caller instead of failing silently.
   const { host, note } = resolveOpenChamberBind();
-  await runOpenChamber(["stop", "--port", String(CHAMBER_PORT), "--quiet"]).catch(() => null);
-  const started = await runOpenChamber([
-    "serve",
-    "--port", String(CHAMBER_PORT),
-    "--host", host,
-    "--quiet",
-  ]);
-  if (started.code !== 0) {
-    return NextResponse.json(
-      { error: "Failed to restart OpenChamber", output: started.output.trim(), hint: note },
-      { status: 500 },
-    );
-  }
-  return NextResponse.json({ ok: true, restarted: true, host, note });
+  await stopChamberPeer(() => undefined, resolveOpenChamberPort());
+  const port = await ensureChamberListening();
+  return NextResponse.json({ ok: true, restarted: true, port, host, note });
 }
 
 async function restartOpenCode(): Promise<NextResponse> {
-  const port = resolveOpenCodePort();
-  const bindHost = resolveOpenCodeBindHost();
-  await killProcessOnPort(port);
-  // Give the OS a moment to release the port.
-  await new Promise((r) => setTimeout(r, 300));
-
-  const binary = resolveOpenCodeBinary();
-  const child = spawn(
-    binary,
-    ["serve", "--port", String(port), "--hostname", bindHost],
-    { detached: true, stdio: "ignore", env: getOpenCodeEnv() },
-  );
-  child.unref();
-
-  return NextResponse.json({ ok: true, restarted: true });
+  freePinnedOpenCodePorts();
+  stopDevHubOpenCode();
+  const port = await ensureDevHubOpenCode();
+  return NextResponse.json({ ok: true, restarted: true, port });
 }
 
 /** `unit` is the legacy field name; both are accepted so old callers keep working. */
@@ -101,8 +42,17 @@ export async function POST(req: Request) {
     );
   }
 
-  if (service === "openchamber") return restartOpenChamber();
-  if (service === "opencode") return restartOpenCode();
+  try {
+    if (service === "openchamber") return await restartOpenChamber();
+    if (service === "opencode") return await restartOpenCode();
+  } catch (err) {
+    // Restart is a user-facing button; a dead binary or a held port should read
+    // as "couldn't restart", not a 500 with a stack trace.
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 503 },
+    );
+  }
 
   return NextResponse.json({ error: "Unhandled service" }, { status: 500 });
 }

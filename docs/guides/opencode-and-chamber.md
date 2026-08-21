@@ -1,6 +1,6 @@
 ---
 title: OpenCode and OpenChamber
-description: The four cooperating local services started by `npm run dev`, and how to run them apart.
+description: How DevHub's dashboard, terminal, lazy OpenChamber tab, and lazy OpenCode tab work together.
 order: 11
 icon: Terminal
 tags: [workflow]
@@ -11,33 +11,35 @@ related:
 
 # OpenCode and OpenChamber
 
-DevHub runs four cooperating local services during `npm run dev` and `npm run start`:
+DevHub runs the dashboard and a localhost terminal during `npm run dev` / `npm run start`. OpenChamber and OpenCode are **not** always-on peers:
 
 | Service     | Default port | Dashboard route | Role                              |
 | ----------- | ------------ | --------------- | --------------------------------- |
 | Dashboard   | `1337`       | `/`             | Main Next.js app                  |
 | OpenChamber | `1336`       | `/chamber`      | Thinking/workspace UI (iframe)    |
-| OpenCode    | `1338`       | `/opencode`     | Coding assistant web UI (iframe)  |
+| OpenCode    | ephemeral    | `/opencode`     | Lazy loopback instance; never 1338 |
 | Terminal    | `1339`       | Docked drawer   | In-app PTY shell (WebSocket peer) |
 
-OpenCode is a **shared peer service**. OpenChamber connects to the same `opencode serve` instance instead of starting its own embedded server.
+DevHub does **not** start always-on OpenCode on `1338`, and does **not** start OpenChamber until you open `/chamber`. Always-on Chamber on 1336 spawned a second OpenCode that raced OpenChamber.app on `opencode.json`. The `/opencode` tab, session recap, and Datadog Investigate lazy-start a **loopback ephemeral** instance. Chamber (app or embed) starts and restarts its **own** OpenCode. DevHub never exports `OPENCODE_PORT` / `OPENCODE_SKIP_START` into Chamber.
 
 The **terminal peer** is a separate localhost-only WebSocket PTY (`dashboard/scripts/terminal-pty-server.ts`). The docked terminal (`TerminalDock`) connects over `ws://127.0.0.1:1339` and keeps sessions alive while hidden — long-running commands (including PR reviews) continue when you switch tabs.
 
-OpenChamber is **developer-managed**: DevHub does not bundle it. Install it yourself (`npm i -g @openchamber/web`, or point `OPENCHAMBER_BIN` at any build) and DevHub serves it on `OPENCHAMBER_PORT` and embeds it. When no `openchamber` is found on `PATH` (and `OPENCHAMBER_BIN` is unset), the Chamber tab and its iframe are hidden and nothing is started.
+OpenChamber is **developer-managed**: DevHub does not bundle it. Install it yourself (`npm i -g @openchamber/web`, or point `OPENCHAMBER_BIN` at any build) and DevHub lazy-starts it when you open `/chamber`. When no `openchamber` is found on `PATH` (and `OPENCHAMBER_BIN` is unset), the Chamber tab and its iframe are hidden and nothing is started.
 
 ## Startup Flow
 
 ```text
 npm run dev
-  -> start-peer-services.ts  -> opencode serve on OPENCODE_PORT (default 1338)
-                             -> openchamber serve on OPENCHAMBER_PORT (default 1336)
-                                with OPENCODE_SKIP_START=true
-  -> terminal-pty-server.ts  -> WebSocket PTY on TERMINAL_PORT (default 1339)
-  -> dashboard (Next.js on PORT, default 1337)
+-> start-peer-services.ts  -> free leftover OpenCode on 1338/4096; exit
+                              (does not start OpenCode or OpenChamber)
+-> terminal-pty-server.ts  -> WebSocket PTY on TERMINAL_PORT (default 1339)
+-> dashboard (Next.js on PORT, default 1337)
+     /chamber  -> GET /api/openchamber/listen -> OpenChamber on 1336
+                  without OPENCODE_PORT / OPENCODE_SKIP_START
+     /opencode -> GET /api/opencode/listen -> ephemeral loopback OpenCode
 ```
 
-Startup lives in `dashboard/scripts/start-peer-services.ts` (chained OpenCode + OpenChamber), with `start-opencode.ts` available for standalone OpenCode use and `terminal-pty-server.ts` for the docked shell. `npm run dev` starts all four via `concurrently`. Peer startup calls `loadEnvWithOnePasswordFallback` before binding ports so provider keys can be resolved from 1Password when local env vars are empty. OpenChamber is only started when a system install is detected.
+`start-peer-services.ts` only frees pinned OpenCode ports (and, in the packaged app, runs update checks). `terminal-pty-server.ts` is the docked shell. `npm run dev` starts dashboard + peers boot + terminal + optional LAN proxy via `concurrently`. Peer boot calls `loadEnvWithOnePasswordFallback` so provider keys can be resolved from 1Password when local env vars are empty.
 
 ### Peer Version Updates
 
@@ -59,19 +61,18 @@ See [Environment Variables](../reference/environment-variables.md) for the full 
 
 ### Port Reuse
 
-If a port is already listening, the startup script assumes the service is already running and keeps the npm/concurrently process alive without starting a duplicate listener.
-
-This lets you attach DevHub to an existing OpenCode session. OpenChamber startup also reuses an existing listener on `OPENCHAMBER_PORT`, and shutdown leaves that existing process alone.
+`ensureChamberListening()` is the single entry point (the `/chamber` tab, the desktop-app launcher, and Restart all call it; concurrent callers share one start). It reuses a healthy listener on 1336, but **replaces** a daemon whose env still has skip-start or `OPENCODE_PORT` (that leftover is what broke Setup). It also replaces a stale nvm binary. OpenCode listen never binds 1338/4096.
 
 ### OpenChamber → OpenCode Wiring
 
-`cleanOpenChamberEnv()` (in `dashboard/lib/openchamber-command.ts`) sets:
+`cleanOpenChamberEnv()` (in `dashboard/lib/openchamber-command.ts`) **strips** the env that would make Chamber attach to DevHub's OpenCode as an external server it cannot restart:
 
-- `OPENCODE_PORT` to the shared DevHub port
-- `OPENCODE_SKIP_START=true` so OpenChamber does not spawn a second `opencode serve`
-- `OPENCODE_BINARY` when `~/.opencode/bin/opencode` exists (unless `DEVHUB_OPENCODE_BINARY` overrides)
+- `OPENCODE_PORT`, `OPENCODE_HOST`, `OPENCODE_SKIP_START`
+- `OPENCHAMBER_OPENCODE_PORT`, `OPENCHAMBER_SKIP_OPENCODE_START`, `OPENCHAMBER_INTERNAL_PORT`
 
-OpenChamber waits up to 30 seconds for OpenCode to listen before starting its own daemon.
+It still sets `OPENCODE_BINARY` when `~/.opencode/bin/opencode` exists (unless `DEVHUB_OPENCODE_BINARY` overrides) so Chamber uses the same binary. Chamber then allocates and manages its own OpenCode port.
+
+Do **not** set `OPENCODE_PORT` / `OPENCODE_SKIP_START` expecting Chamber to share DevHub's `1338` listener. That is what broke Claude/Cursor Setup.
 
 ## In-App Terminal
 
@@ -111,24 +112,19 @@ Agents can summarize **what an OpenCode session did** (commands, MCP calls, file
 | Skill   | `devhub-recap` — call the tool and return the JSON unchanged                                              |
 | HTTP    | `GET /api/opencode/recap` (requires `requireDashboardAuth`; see [API Routes](../reference/api-routes.md)) |
 
-OpenCode must be running on `OPENCODE_PORT`. The recap builder reads the OpenCode HTTP API, redacts secrets, and omits prompts/reasoning. Use `directory` to scope sessions to a workspace; pass `sessionId` when multiple root sessions are busy (`409`).
+Open `/opencode` (or recap / Investigate) so DevHub can lazy-start OpenCode on an ephemeral loopback port. The recap builder reads the OpenCode HTTP API, redacts secrets, and omits prompts/reasoning. Use `directory` to scope sessions to a workspace.
 
 ## Configuration
 
 ### Environment Variables
 
-| Variable                       | Default     | Purpose                                                         |
-| ------------------------------ | ----------- | --------------------------------------------------------------- |
-| `OPENCODE_PORT`                | `1338`      | `opencode serve --port`                                         |
-| `OPENCODE_BIND_HOST`           | `127.0.0.1` | `opencode serve --hostname`; LAN access is proxied when enabled |
-| `NEXT_PUBLIC_OPENCODE_PORT`    | `1338`      | Port in the browser iframe URL                                  |
-| `DEVHUB_OPENCODE_BINARY`       | —           | Override path to the `opencode` binary                          |
-| `OPENCHAMBER_PORT`             | `1336`      | OpenChamber daemon port                                         |
-| `OPENCHAMBER_HOST`             | `127.0.0.1` | OpenChamber local bind host; LAN access is proxied when enabled |
-| `NEXT_PUBLIC_OPENCHAMBER_PORT` | `1336`      | Port in the Chamber iframe URL                                  |
-| `OPENCHAMBER_BIN`              | —           | Override path to the `openchamber` CLI                          |
+| Variable                 | Default     | Purpose                                                         |
+| ------------------------ | ----------- | --------------------------------------------------------------- |
+| `DEVHUB_OPENCODE_BINARY` | —           | Override path to the `opencode` binary                          |
+| `OPENCHAMBER_BIN`        | —           | Override path to the `openchamber` CLI                          |
+| `OPENCHAMBER_HOST`       | `127.0.0.1` | OpenChamber local bind host; LAN access is proxied when enabled |
 
-Legacy `OPENCODE_HOST` is still read as a bind host when it is not a full URL; prefer `OPENCODE_BIND_HOST` for new setups.
+Do **not** set `OPENCODE_PORT`, `OPENCODE_HOST`, or `OPENCODE_SKIP_START`. Chamber's iframe uses 1336 internally; you do not need `OPENCHAMBER_PORT` / `NEXT_PUBLIC_*_PORT`.
 
 See [Environment Variables](../reference/environment-variables.md) for 1Password-related keys.
 
@@ -167,28 +163,30 @@ Managed secret names come from the dashboard env allowlist plus any `{env:VAR}` 
 
 ## Status and Restarts
 
-The **Status** page probes OpenChamber and OpenCode ports via `/api/status/services`. Restart actions use `/api/status/services/restart` and respect the same port env vars.
+The **Status** page probes whether Chamber (1336) or the lazy OpenCode instance is up via `/api/status/services`. Restart uses `/api/status/services/restart` (OpenCode comes back on a new ephemeral port).
 
 **Actions** can launch native apps when installed:
 
-- `/api/actions/launch-chamber` — OpenChamber Desktop pointing at the existing DevHub server (port `1336` / shared OpenCode on `1338`)
+- `/api/actions/launch-chamber` — OpenChamber Desktop pointing at the existing DevHub Chamber server (port `1336`)
 - `/api/actions/launch-opencode` — macOS OpenCode Desktop app (when present under `/Applications`)
 - `/api/actions/launch-claude` — Claude Desktop when installed; otherwise opens `https://claude.ai/new` in the browser. Available from the top-bar launch menu and command palette.
+- `/api/actions/launch-chatgpt` — ChatGPT Desktop (`/Applications/ChatGPT.app`) when installed; otherwise opens `https://chatgpt.com` in the browser.
 
 ## Troubleshooting
 
 | Symptom                                 | Things to check                                                                                                                                           |
 | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Chamber iframe blank                    | OpenCode listening on `OPENCODE_PORT`; Status page service indicators                                                                                     |
-| OpenCode won't start                    | `which opencode` or set `DEVHUB_OPENCODE_BINARY`; port `1338` not held by another process                                                                 |
+| Chamber iframe blank                    | Open `/chamber` so listen can start it; Status page Chamber indicator; `openchamber` on PATH                                                              |
+| OpenCode won't start                    | `which opencode` or set `DEVHUB_OPENCODE_BINARY`; confirm nothing is still bound to 1338                                                                   |
 | Provider auth errors                    | `/setup` or 1Password item fields; run sync after env vars are set; `DEVHUB_OP_REFRESH=1` once to refresh                                                 |
-| LAN device can't reach Chamber/OpenCode | Enable LAN mode in `/setup`; it starts the LAN proxy for `1336` and `1338`. On WSL, still forward those ports from Windows (see root README)              |
-| Two OpenCode instances                  | Should not happen when `OPENCODE_SKIP_START=true`; if you run `opencode serve` manually, let DevHub reuse that port                                       |
-| Terminal drawer blank or stuck          | Terminal peer on `1339`; check `concurrently` `term` process. Heavy zsh themes may need `DEVHUB_TERMINAL_ARGS=-f`. LAN proxy forwards `1339` when enabled |
+| LAN device can't reach Chamber          | Enable LAN mode in `/setup`; proxy is dashboard `1337` + Chamber `1336` only. OpenCode is loopback-only. On WSL, forward those ports from Windows (see root README) |
+| Two OpenCode instances                  | Expected if both `/opencode` and Chamber are open — different ports. Do not point Chamber at 1338 via env                                                 |
+| Claude/Cursor Setup fails in Chamber    | Something is still listening on 1338, or `OPENCODE_PORT`/`OPENCODE_SKIP_START` is in Chamber's env. Quit OpenChamber.app, confirm `lsof -iTCP:1338 -sTCP:LISTEN` is empty, reopen the app, then Setup. |
+| Terminal drawer blank or stuck          | Terminal peer on `1339`; check `concurrently` `term` process. Heavy zsh themes may need `DEVHUB_TERMINAL_ARGS=-f`. Terminal is never LAN-proxied          |
 | PR review note in wrong repo            | Set `NEXT_PUBLIC_REPO_ROOT` in `dashboard/.env.local` to match `REPO_ROOT`; restart dev server                                                            |
 
 ## Related Docs
 
 - [Sync Engine](../architecture/sync-engine.md) — sync vs collect for shared assets
-- [Desktop App](../getting-started/desktop-app.md) — desktop app for all three ports
+- [Desktop App](../getting-started/desktop-app.md) — packaged DevHub shell
 - [Theming](theming.md) — OpenChamber theme install during postinstall

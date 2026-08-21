@@ -10,9 +10,9 @@
 // author's script runs, JSON-escaped so it can't break out of the script tag.
 
 import path from "node:path";
-import { generateText } from "ai";
-import { getNotesAiModel, getNotesAiCallOptions } from "@/lib/ai/provider";
-import { isNotesAiConfigured } from "@/lib/notes-ai/config";
+import { formatGenerateError, generateAiText } from "@/lib/ai/generate";
+import { isAiConfigured } from "@/lib/ai/preference";
+
 import { getNotesDir } from "@/lib/notes/dir";
 import { writeAtomic, safeReadJSON, withMutex } from "@/lib/atomic-write";
 import { BRIEFING_DATA_SHAPE, type BriefingContext } from "@/lib/briefing-context";
@@ -154,6 +154,25 @@ function stripFences(text: string): string {
     .trim();
 }
 
+/**
+ * Carve the HTML document out of a model reply.
+ *
+ * "Return ONLY the HTML document" is an instruction, not a guarantee — replies
+ * arrive with a line of commentary in front ("Returning the full revised
+ * document.<!doctype html>…") or a sign-off after the closing tag. Stripping
+ * fences alone left that prose in the stored canvas, which then rendered as
+ * stray text above the page inside the iframe.
+ */
+export function extractHtmlDocument(text: string): string {
+  const stripped = stripFences(text);
+  const start = stripped.search(/<!doctype\s+html/i);
+  const from = start === -1 ? stripped.search(/<html[\s>]/i) : start;
+  if (from === -1) return stripped;
+  const close = stripped.toLowerCase().lastIndexOf("</html>");
+  const to = close === -1 ? stripped.length : close + "</html>".length;
+  return stripped.slice(from, to).trim();
+}
+
 function looksLikeDocument(html: string): boolean {
   const lower = html.toLowerCase();
   return (
@@ -172,16 +191,30 @@ function looksLikeDocument(html: string): boolean {
  * full HTML document string, or null if AI is unavailable / the output was junk
  * (callers keep the current canvas in that case).
  */
+export interface CanvasGenerateResult {
+  html: string | null;
+  error?: string;
+}
+
+/** Status line when a redesign was requested but no new canvas landed. */
+export function canvasRegenFailureMessage(opts: { configured: boolean; error?: string }): string {
+  if (!opts.configured) {
+    return "(AI isn't configured — pick a provider under Setup → AI Provider, or set AI_API_KEY.)";
+  }
+  const err = opts.error?.trim();
+  if (err) return `Couldn't regenerate the layout: ${err}`;
+  return "Couldn't regenerate the layout.";
+}
+
 export async function generateCanvasHtml(
   instruction: string,
   dataForPrompt: Record<string, unknown>,
   currentHtml: string | null,
   theme?: CanvasTheme | null,
   opts?: { customAesthetic?: boolean },
-): Promise<string | null> {
-  if (!isNotesAiConfigured()) return null;
-  const model = getNotesAiModel();
-  if (!model) return null;
+): Promise<CanvasGenerateResult> {
+  if (!isAiConfigured()) return { html: null, error: "AI isn't configured." };
+
 
   const customAesthetic = opts?.customAesthetic ?? false;
   const revising = Boolean(currentHtml && currentHtml.length > 200);
@@ -212,11 +245,15 @@ export async function generateCanvasHtml(
     : "";
 
   try {
-    const result = await generateText({
-      model,
+    const result = await generateAiText({
       maxOutputTokens: 16_000,
-      ...getNotesAiCallOptions(),
+      // A full canvas legitimately takes minutes (134s measured for a simple
+      // prompt). The old 300s wall-clock ceiling cut real work off mid-flight;
+      // the idle guard in the CLI runner is what now catches a genuine hang.
+      timeoutMs: 900_000,
+      idleTimeoutMs: 120_000,
       prompt: [
+
         "You are the sole designer and front-end engineer for a personal daily-briefing screen.",
         "You have real creative control of layout, colour, typography and motion, but you must ship tasteful, professional work that obeys the house rules below. Tasteful and restrained beats busy and decorative.",
         "",
@@ -254,10 +291,16 @@ export async function generateCanvasHtml(
         .join("\n"),
     });
 
-    if (!result.text || result.finishReason === "length") return null;
-    const html = stripFences(result.text).slice(0, MAX_CANVAS_CHARS);
-    return looksLikeDocument(html) ? html : null;
-  } catch {
-    return null;
+    if (!result.text) return { html: null, error: "The model returned an empty response." };
+    if (result.finishReason === "length") {
+      return { html: null, error: "The layout was truncated (token limit). Try a smaller change." };
+    }
+    const html = extractHtmlDocument(result.text).slice(0, MAX_CANVAS_CHARS);
+    if (!looksLikeDocument(html)) {
+      return { html: null, error: "The model did not return an HTML document." };
+    }
+    return { html };
+  } catch (err) {
+    return { html: null, error: formatGenerateError(err) };
   }
 }

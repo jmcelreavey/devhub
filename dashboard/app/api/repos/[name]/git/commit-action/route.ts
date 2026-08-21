@@ -92,6 +92,8 @@ export async function POST(req: NextRequest, { params }: RepoParams) {
         { status: 400 },
       );
     }
+    // HEAD before the mutation — the client's one-click undo resets to it.
+    const headBefore = await runGitRepoAsync(repoRoot, ["rev-parse", "HEAD"]);
     const result = await runGitRepoAsync(
       repoRoot,
       action === "cherry-pick" ? ["cherry-pick", commit] : ["revert", "--no-edit", commit],
@@ -104,7 +106,12 @@ export async function POST(req: NextRequest, { params }: RepoParams) {
       }
       return gitFail(result, `${action} failed`);
     }
-    return NextResponse.json({ ok: true, action, commit });
+    return NextResponse.json({
+      ok: true,
+      action,
+      commit,
+      headBefore: headBefore.status === 0 ? headBefore.stdout.trim() : null,
+    });
   }
 
   if (action === "checkout-detached") {

@@ -6,7 +6,11 @@ import {
   hookFailureTitle,
   type GitHookFailurePayload,
 } from "@/lib/git/hook-failure";
-import { agentGitHookFailureCommand, openTerminal } from "@/lib/terminal-launch";
+import { launchAgentJob } from "@/lib/agent-job";
+import {
+  agentGitHookFailureCommand,
+  agentGitHookFailurePrompt,
+} from "@/lib/terminal-launch";
 import { useToast } from "@/lib/hooks/use-toast";
 
 interface GitHookFailureDialogProps {
@@ -49,15 +53,22 @@ export function GitHookFailureDialog({
   async function resolveWithAi() {
     setLaunching(true);
     try {
-      openTerminal({
+      const opts = {
+        repoName,
+        hook: failure!.hook,
+        phase: failure!.phase,
+        logPath: failure!.logPath,
+      };
+      await launchAgentJob({
+        title: `fix ${failure!.hook ?? "hook"} · ${repoName}`,
+        kind: "agent",
         cwd: repoPath,
-        label: `fix ${failure!.hook ?? "hook"} · ${repoName}`,
-        command: await agentGitHookFailureCommand({
-          repoName,
-          hook: failure!.hook,
-          phase: failure!.phase,
-          logPath: failure!.logPath,
-        }),
+        repoName,
+        promptText: agentGitHookFailurePrompt(opts),
+        promptCommand: await agentGitHookFailureCommand(opts),
+        mode: "interactive",
+        forceTerminal: true,
+        alreadyConfirmed: true,
       });
       toast.info("Fixing the hook failure in the terminal.");
       onClose();

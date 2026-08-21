@@ -18,6 +18,10 @@ interface SearchInputProps {
   inputClassName?: string;
 }
 
+/**
+ * Boxed search field. Shares `.search-field` spacing/focus with InlineSearch
+ * so list pages and overlays don't each invent a different ring.
+ */
 export function SearchInput({
   id,
   value,
@@ -31,60 +35,29 @@ export function SearchInput({
   wrapperClassName = "mb-4",
   inputClassName = "",
 }: SearchInputProps) {
-  const showTrailingControl = isLoading || (showClear && value);
+  const classes = ["search-field", "search-field--boxed", wrapperClassName].filter(Boolean).join(" ");
 
   return (
-    <div className={wrapperClassName} style={{ position: "relative" }}>
-      <Search
-        size={14}
-        style={{
-          position: "absolute",
-          left: "10px",
-          top: "50%",
-          transform: "translateY(-50%)",
-          color: "var(--text-subtle)",
-        }}
-        aria-hidden
-      />
+    <div className={classes}>
+      <Search size={15} className="search-field__icon" aria-hidden />
       <input
         id={id}
         ref={inputRef}
         type="search"
         autoFocus={autoFocus}
-        className={`input w-full ${inputClassName}`.trim()}
+        className={`search-field__input ${inputClassName}`.trim()}
         aria-label={placeholder}
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        style={{ paddingLeft: "32px", paddingRight: showTrailingControl ? "32px" : undefined }}
       />
       {isLoading ? (
-        <Clock
-          size={14}
-          className="animate-spin"
-          style={{
-            position: "absolute",
-            right: "10px",
-            top: "50%",
-            transform: "translateY(-50%)",
-            color: "var(--text-subtle)",
-          }}
-          aria-hidden
-        />
+        <Clock size={14} className="search-field__busy" aria-hidden />
       ) : showClear && value ? (
         <button
           type="button"
+          className="search-field__clear"
           onClick={() => (onClear ? onClear() : onChange(""))}
-          style={{
-            position: "absolute",
-            right: "8px",
-            top: "50%",
-            transform: "translateY(-50%)",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            color: "var(--text-subtle)",
-          }}
           aria-label="Clear search"
         >
           <X size={14} />

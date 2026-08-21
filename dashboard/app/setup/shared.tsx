@@ -33,11 +33,16 @@ export interface SetupStatus {
   jiraVars: { hasDomain: boolean; hasEmail: boolean; hasApiToken: boolean };
   biVars: { awsProfile: string | null; account: string | null; capiRepoPath: string | null };
   agentVars: {
-    cli: "opencode" | "cursor";
+    cli: "opencode" | "cursor" | "chatgpt";
+    provider?: "cursor-cli" | "chatgpt-cli" | "opencode" | "api" | null;
     opencodeModel: string;
     cursorModel: string;
     cursorAgentInstalled: boolean;
+    chatgptCliInstalled?: boolean;
+    opencodeInstalled?: boolean;
+    apiConfigured?: boolean;
   };
+
 }
 
 export interface PathCheck {

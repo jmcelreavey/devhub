@@ -32,16 +32,16 @@ interface DesignResponse {
 }
 
 const STARTERS = [
-  "Design it as a calm dark dashboard with a big weather hero and a subtle animated background.",
-  "Add a section for gaming news and put it near the top.",
-  "Research things to do with the kids in Northern Ireland this weekend.",
-  "Give it a retro terminal look: monospace, green on black, minimal.",
+  "Calm dark dashboard. Weather hero. Quiet background.",
+  "Gaming news near the top.",
+  "Kids in Northern Ireland this weekend — research it.",
+  "Retro terminal: monospace, green on black.",
 ] as const;
 
 const INTRO: ChatMessage = {
   role: "assistant",
   content:
-    "This is your briefing canvas. I control the whole screen, so tell me how it should look, what to show, feeds to pull in, or something to research in the background. Every morning it refreshes the data and keeps the design until you change it.",
+    "This canvas is the briefing. Layout, feeds, what to show, or a research job. Data refreshes in the morning; the design stays until you change it.",
 };
 
 export function BriefingDesignChat({ open, onClose, onCanvasUpdated, onSideEffects }: BriefingDesignChatProps) {
@@ -69,8 +69,8 @@ export function BriefingDesignChat({ open, onClose, onCanvasUpdated, onSideEffec
         if (!res.ok || !json.ok) throw new Error(json.error ?? "Design request failed");
 
         const extras: string[] = [];
-        if (json.addedFeeds?.length) extras.push(`Added feed: ${json.addedFeeds.map((f) => f.label).join(", ")}.`);
-        if (json.tasks?.length) extras.push(`Researching in the background: ${json.tasks.map((t) => t.topic).join("; ")}.`);
+        if (json.addedFeeds?.length) extras.push(`Feed: ${json.addedFeeds.map((f) => f.label).join(", ")}.`);
+        if (json.tasks?.length) extras.push(`Research queued: ${json.tasks.map((t) => t.topic).join("; ")}.`);
         const reply = [json.reply ?? "Done.", ...extras].join(" ");
 
         setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
@@ -80,7 +80,7 @@ export function BriefingDesignChat({ open, onClose, onCanvasUpdated, onSideEffec
         toastError(err instanceof Error ? err.message : "Design request failed");
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: "That didn't go through. Try rephrasing and I'll have another go." },
+          { role: "assistant", content: "Didn't go through. Try again." },
         ]);
       } finally {
         setSending(false);
@@ -95,8 +95,8 @@ export function BriefingDesignChat({ open, onClose, onCanvasUpdated, onSideEffec
     <ModalShell
       open
       onClose={onClose}
-      title="Design your briefing"
-      description="Chat to reshape the whole screen. I write the HTML, CSS and JS in real time."
+      title="Briefing"
+      description="Layout, feeds, research. Edits the canvas live."
       maxWidth="max-w-2xl"
       align="top"
       footer={

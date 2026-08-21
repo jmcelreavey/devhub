@@ -11,6 +11,20 @@ type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+export async function generateMetadata({ params }: Pick<PageProps, "params">) {
+  const { path } = await params;
+  const last = path[path.length - 1];
+  let label = "Docs";
+  if (last) {
+    try {
+      label = decodeURIComponent(last);
+    } catch {
+      label = last;
+    }
+  }
+  return { title: label };
+}
+
 export default async function DocPage({ params, searchParams }: PageProps) {
   const [{ path }, query] = await Promise.all([params, searchParams]);
   const decoded = path.map((segment) => {

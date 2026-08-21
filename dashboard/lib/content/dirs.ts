@@ -86,6 +86,11 @@ export function getCollectionsDir(): string {
   return resolveContentDir("COLLECTIONS_DIR", "collections");
 }
 
+/** Daily review reps; defaults to `REPO_ROOT/reps` when `REPS_DIR` is unset. */
+export function getRepsDir(): string {
+  return resolveContentDir("REPS_DIR", "reps");
+}
+
 /**
  * Per-repo Upstart scripts owned by the DevHub private mirror (not the target
  * project). Defaults to `REPO_ROOT/upstarts` when `UPSTARTS_DIR` is unset.

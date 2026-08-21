@@ -91,3 +91,8 @@ notes/.cache/
 
 # Ad-hoc review screenshots
 /.review-shots/
+
+# Local tool artifacts
+.openchamber/
+.pr-review-tmp/
+.tmp-pr*/

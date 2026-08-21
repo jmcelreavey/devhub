@@ -1,18 +1,11 @@
 import Link from "next/link";
-import { ChevronRight, Clock, History, Pencil, Tag } from "lucide-react";
+import { ChevronRight, Clock, Pencil, Tag } from "lucide-react";
 import { DocContent } from "@/components/docs/DocContent";
 import { DocRelations } from "@/components/docs/DocRelations";
 import { DocToc } from "@/components/docs/DocToc";
+import { VaultFileHistory } from "@/components/vault/VaultFileHistory";
 import { getSectionMeta } from "@/lib/docs/doc-sections";
 import type { DocDetail } from "@/lib/docs/doc-types";
-
-// Explicit locale: this renders on the server, so `undefined` locale would
-// resolve differently there than in the browser and trip hydration.
-const DATE_FORMAT = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-});
 
 export function DocArticleView({ detail }: { detail: DocDetail }) {
   const section = getSectionMeta(detail.section);
@@ -50,12 +43,12 @@ export function DocArticleView({ detail }: { detail: DocDetail }) {
             <Clock size={11} aria-hidden />
             {detail.readingMinutes} min read
           </span>
-          {detail.modified > 0 ? (
-            <span className="docs-meta-item">
-              <History size={11} aria-hidden />
-              Updated {DATE_FORMAT.format(new Date(detail.modified))}
-            </span>
-          ) : null}
+          <VaultFileHistory
+            vaultId="docs"
+            path={detail.slug}
+            modifiedMs={detail.modified > 0 ? detail.modified : null}
+            compact
+          />
           {detail.tags.length > 0 ? (
             <span className="docs-meta-item">
               <Tag size={11} aria-hidden />

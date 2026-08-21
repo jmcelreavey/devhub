@@ -108,7 +108,7 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
       "--date-order",
       ...searchArgs,
       "--decorate=short",
-      "--format=%x1e%H%x00%P%x00%h%x00%s%x00%an%x00%ar%x00%D%x00%ae",
+      "--format=%x1e%H%x00%P%x00%h%x00%s%x00%an%x00%ar%x00%D%x00%ae%x00%G?",
     ]),
     mainBranch
       ? runGitRepoAsync(resolved.repoRoot, [

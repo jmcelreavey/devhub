@@ -217,6 +217,17 @@ export const MCP_TOOL_TARGETS: McpToolTarget[] = [
     fromTool: sharedFromTool,
   },
   {
+    // ChatGPT.app shares Codex MCP (~/.codex/mcp.json). Same file as `codex`
+    // so sync_mcp --tool chatgpt does not drop the system link.
+    id: "chatgpt",
+    label: "ChatGPT desktop",
+    configPath: (home) => path.join(home, ".codex", "mcp.json"),
+    topKey: "mcpServers",
+    mergeRest: false,
+    toTool: stdioToTool,
+    fromTool: sharedFromTool,
+  },
+  {
     id: "cursor",
     label: "Cursor",
     configPath: cursorMcpConfigPath,

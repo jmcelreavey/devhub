@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Search, X } from "lucide-react";
 
 export interface InlineSearchProps {
@@ -12,12 +13,18 @@ export interface InlineSearchProps {
   /** Right-aligned hint, e.g. "12 of 48". */
   hint?: string;
   autoFocus?: boolean;
+  /** Extra control after the clear button (e.g. "Add PR"). */
+  trailing?: ReactNode;
+  describedBy?: string;
 }
 
 /**
  * The single-line search row used across the dedicated screens (Work → Tasks,
  * Work → Jira, History, PRs). Deliberately borderless so it can sit inside a
  * `card` or directly above a list without adding a second box.
+ *
+ * Focus ring lives on this wrapper — not the inner input — so the accent
+ * outline has padding between it and the icon/placeholder.
  */
 export function InlineSearch({
   id,
@@ -27,10 +34,12 @@ export function InlineSearch({
   placeholder,
   hint,
   autoFocus = false,
+  trailing,
+  describedBy,
 }: InlineSearchProps) {
   return (
-    <div className="flex items-center gap-2">
-      <Search size={15} style={{ color: "var(--accent)", flexShrink: 0 }} aria-hidden />
+    <div className="search-field">
+      <Search size={15} className="search-field__icon search-field__icon--accent" aria-hidden />
       <label htmlFor={id} className="sr-only">
         {label}
       </label>
@@ -41,24 +50,25 @@ export function InlineSearch({
         placeholder={placeholder ?? label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="min-w-0 flex-1 bg-transparent text-sm outline-none text-text"
+        className="search-field__input"
+        aria-describedby={describedBy}
       />
       {hint ? (
-        <span className="shrink-0 text-xs text-text-subtle" role="status">
+        <span className="search-field__hint" role="status">
           {hint}
         </span>
       ) : null}
       {value ? (
         <button
           type="button"
-          className="rounded p-1 transition-colors hover:bg-[var(--bg-muted)]"
+          className="search-field__clear"
           onClick={() => onChange("")}
-          style={{ color: "var(--text-subtle)", flexShrink: 0 }}
           aria-label={`Clear ${label.toLowerCase()}`}
         >
           <X size={14} aria-hidden />
         </button>
       ) : null}
+      {trailing}
     </div>
   );
 }

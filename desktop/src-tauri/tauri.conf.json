@@ -34,7 +34,8 @@
       "../staging/server": "server",
       "../staging/services": "services",
       "../staging/resources": "resources",
-      "../src-tauri/binaries": "runtime"
+      "../src-tauri/binaries": "runtime",
+      "../staging/icons/plugin.png": "icons/plugin.png"
     },
     "macOS": {
       "minimumSystemVersion": "11.0"

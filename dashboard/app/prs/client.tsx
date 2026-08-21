@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { GitPullRequest, RefreshCw, Search, X } from "lucide-react";
+import { GitPullRequest, RefreshCw, X } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import type { GithubPrsApiPayload, GithubPrRow, RecentlyReviewedPr } from "@/lib/github/prs";
 import { filterPrRows, type PrSearchRow } from "@/lib/github/pr-search";
@@ -10,7 +10,7 @@ import { useGithubPrSearch } from "@/lib/hooks/use-github-pr-search";
 import { useMarkPrsSeen } from "@/lib/hooks/use-sidebar-counts";
 import { parseGithubPrRef } from "@/lib/entity-links/parse-pr";
 import { PrRow } from "@/components/PrRow";
-import { FetchError, EmptyState, SkeletonRows } from "@/components";
+import { FetchError, EmptyState, InlineSearch, SkeletonRows } from "@/components";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 
 type PrTab = "authored" | "reviews" | "recent";
@@ -145,37 +145,21 @@ export default function PrsPage() {
       {/* One box: type to filter, paste a PR URL to pin it. */}
       <div className="mb-4 space-y-2">
         <form className="card" style={{ padding: "8px 10px" }} onSubmit={addPinnedPr}>
-          <div className="flex items-center gap-2">
-            <Search size={15} style={{ color: "var(--accent)", flexShrink: 0 }} aria-hidden />
-            <label htmlFor="pr-search" className="sr-only">
-              Search pull requests or paste a PR URL
-            </label>
-            <input
-              id="pr-search"
-              type="text"
-              className="min-w-0 flex-1 bg-transparent text-sm outline-none text-text"
-              placeholder="Search by title, repo, author or reviewer — or paste a PR URL"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              aria-describedby="pr-search-hint"
-            />
-            {query ? (
-              <button
-                type="button"
-                className="rounded p-1 transition-colors hover:bg-[var(--bg-muted)]"
-                onClick={() => setQuery("")}
-                style={{ color: "var(--text-subtle)", flexShrink: 0 }}
-                aria-label="Clear PR search"
-              >
-                <X size={14} aria-hidden />
-              </button>
-            ) : null}
-            {isAddMode ? (
-              <button type="submit" className="btn btn-secondary shrink-0 text-xs">
-                Add PR
-              </button>
-            ) : null}
-          </div>
+          <InlineSearch
+            id="pr-search"
+            label="Search pull requests or paste a PR URL"
+            placeholder="Search by title, repo, author or reviewer — or paste a PR URL"
+            value={query}
+            onChange={setQuery}
+            describedBy="pr-search-hint"
+            trailing={
+              isAddMode ? (
+                <button type="submit" className="btn btn-secondary shrink-0 text-xs">
+                  Add PR
+                </button>
+              ) : null
+            }
+          />
         </form>
 
         <p id="pr-search-hint" className="px-1 text-xs text-text-subtle" role="status">

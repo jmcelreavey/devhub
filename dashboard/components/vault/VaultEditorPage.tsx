@@ -39,6 +39,7 @@ import { NotePageTitle } from "@/components/notes/NotePageTitle";
 import { ShareControls } from "@/components/ShareControls";
 import { OneTimeShareButton } from "@/components/OneTimeShareButton";
 import { VaultEditorNav } from "@/components/vault/VaultEditorNav";
+import { VaultFileHistory } from "@/components/vault/VaultFileHistory";
 import { getVaultClient } from "@/lib/vault/vault-client";
 import type { VaultId } from "@/lib/vault/vault-client";
 import { blocksToText, textToBlocks } from "@/lib/markdown-convert";
@@ -117,6 +118,11 @@ export function VaultEditorPage({
   /** Bumped on navigation/delete so debounced saves cannot write a prior note. */
   const saveGenerationRef = useRef(0);
   const sourceModifiedRef = useRef<number | null>(null);
+  const [modifiedMs, setModifiedMs] = useState<number | null>(null);
+  const setSourceModified = useCallback((ms: number | null) => {
+    sourceModifiedRef.current = ms;
+    setModifiedMs(ms);
+  }, []);
   const isNewRef = useRef(isNew);
   const allMastersRef = useRef(allMasters);
   const pendingLegacyMigrationRef = useRef(false);
@@ -179,7 +185,7 @@ export function VaultEditorPage({
         if (!r.ok) {
           if (r.status === 404) {
             setIsNew(true);
-            sourceModifiedRef.current = null;
+            setSourceModified(null);
             setBlocks([]);
             if (vaultId === "docs") setDocBody("");
             return null;
@@ -191,7 +197,7 @@ export function VaultEditorPage({
       .then((data: { content: unknown; modified?: number } | null) => {
         if (cancelled) return;
         if (data) {
-          sourceModifiedRef.current = typeof data.modified === "number" ? data.modified : null;
+          setSourceModified(typeof data.modified === "number" ? data.modified : null);
           if (vaultId === "docs") {
             const md = typeof data.content === "string" ? data.content : "";
             // Frontmatter is metadata, not prose. Hold it aside verbatim so the
@@ -222,7 +228,7 @@ export function VaultEditorPage({
     return () => {
       cancelled = true;
     };
-  }, [apiPrefix, filePath, paths, vaultId]);
+  }, [apiPrefix, filePath, paths, vaultId, setSourceModified]);
 
   useEffect(() => {
     if (!isNotes || !allMasters || !pendingLegacyMigrationRef.current) return;
@@ -265,7 +271,7 @@ export function VaultEditorPage({
             });
             if (!r.ok) throw new Error(await r.text());
             const saved = (await r.json()) as { modified?: number };
-            if (typeof saved.modified === "number") sourceModifiedRef.current = saved.modified;
+            if (typeof saved.modified === "number") setSourceModified(saved.modified);
             if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
             if (wasNew) {
               setIsNew(false);
@@ -287,7 +293,7 @@ export function VaultEditorPage({
         await queued;
       }, 1500);
     },
-    [apiPrefix, cancelPendingSave, filePath, paths, router],
+    [apiPrefix, cancelPendingSave, filePath, paths, router, setSourceModified],
   );
 
   const handleDocChange = useCallback(
@@ -390,13 +396,13 @@ export function VaultEditorPage({
       const saved = (await r.json()) as { modified?: number };
       if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
       setBlocks(newBlocks);
-      if (typeof saved.modified === "number") sourceModifiedRef.current = saved.modified;
+      if (typeof saved.modified === "number") setSourceModified(saved.modified);
       setEditorEpoch((n) => n + 1);
       setStatus("saved");
       setLastSaved(new Date());
       void mutate("/api/share");
     },
-    [apiPrefix, cancelPendingSave, filePath, paths],
+    [apiPrefix, cancelPendingSave, filePath, paths, setSourceModified],
   );
 
   const handleMoved = useCallback(
@@ -446,7 +452,7 @@ export function VaultEditorPage({
         ) as DevHubPartialBlock[],
       );
       if ("modified" in result && typeof result.modified === "number") {
-        sourceModifiedRef.current = result.modified;
+        setSourceModified(result.modified);
       }
       setEditorEpoch((value) => value + 1);
       setStatus("saved");
@@ -458,7 +464,7 @@ export function VaultEditorPage({
     } finally {
       setApplyingCursorDraft(false);
     }
-  }, [allMasters, cursorDraftRepo, filePath, invalidatePendingSave, status, toast]);
+  }, [allMasters, cursorDraftRepo, filePath, invalidatePendingSave, status, toast, setSourceModified]);
 
   const handleDeleteCursorDraft = useCallback(async () => {
     if (!cursorDraftRepo || applyingCursorDraft) return;
@@ -629,6 +635,9 @@ export function VaultEditorPage({
               <span>Saved {lastSaved.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
             )}
           </div>
+          {!isNew && filePath ? (
+            <VaultFileHistory vaultId={vaultId} path={filePath} modifiedMs={modifiedMs} />
+          ) : null}
           {readHref && status !== "saving" && status !== "error" ? (
             <Link
               href={readHref}

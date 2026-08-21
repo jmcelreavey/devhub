@@ -95,6 +95,9 @@ describe("GET /api/repos/[name]/branches", () => {
       if (command === "stash list" || command === "status --porcelain") {
         return { status: 0, stdout: "", stderr: "" };
       }
+      if (args[0] === "tag") {
+        return { status: 0, stdout: "", stderr: "" };
+      }
       if (command === "rev-parse --abbrev-ref --symbolic-full-name @{u}") {
         return { status: 0, stdout: "origin/main\n", stderr: "" };
       }
@@ -169,6 +172,8 @@ describe("POST /api/repos/[name]/branches", () => {
   it("returns an index-lock conflict if the lock appears while committing", async () => {
     vi.mocked(runGitRepoAsync)
       .mockResolvedValueOnce({ status: 0, stdout: "staged.txt\n", stderr: "" })
+      // HEAD before the commit — the undo stack's reset target.
+      .mockResolvedValueOnce({ status: 0, stdout: "aaa1111bbb2ccc333ddd444eee555fff666\n", stderr: "" })
       .mockResolvedValueOnce({
         status: 1,
         stdout: "",
@@ -182,7 +187,7 @@ describe("POST /api/repos/[name]/branches", () => {
       code: "index_lock",
       error: expect.stringMatching(/index\.lock/i),
     });
-    expect(runGitRepoAsync).toHaveBeenNthCalledWith(2, "/tmp/test-repo", [
+    expect(runGitRepoAsync).toHaveBeenNthCalledWith(3, "/tmp/test-repo", [
       "commit",
       "-m",
       "fix: safe commit",

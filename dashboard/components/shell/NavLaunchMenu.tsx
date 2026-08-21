@@ -8,19 +8,21 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { Bot, Code2, Monitor, Play, TerminalSquare } from "lucide-react";
+import { Bot, Code2, MessageSquare, Monitor, Play, TerminalSquare } from "lucide-react";
 import { useLaunchChamberDesktop } from "@/lib/launch/chamber";
 import { useLaunchOpenCodeDesktop } from "@/lib/launch/opencode";
 import { useLaunchClaudeDesktop } from "@/lib/launch/claude";
 import { useLaunchCursorDesktop } from "@/lib/launch/cursor";
+import { useLaunchChatGPTDesktop } from "@/lib/launch/chatgpt";
 import {
+  chatgptCliCommand,
   claudeCliCommand,
   cursorCliCommand,
   opencodeCliCommand,
   openTerminal,
 } from "@/lib/terminal-launch";
 
-type LaunchIcon = "chamber" | "opencode" | "claude" | "cursor";
+type LaunchIcon = "chamber" | "opencode" | "claude" | "cursor" | "chatgpt";
 
 interface LaunchEntry {
   /**
@@ -49,6 +51,10 @@ const ENTRIES: Record<LaunchIcon, LaunchEntry> = {
     cli: { label: "Cursor", command: cursorCliCommand },
     appDescription: "Launch the Cursor Agent IDE.",
   },
+  chatgpt: {
+    cli: { label: "ChatGPT", command: chatgptCliCommand },
+    appDescription: "Launch the native ChatGPT desktop app.",
+  },
 };
 
 const TRIGGER_STYLE: CSSProperties = {
@@ -71,6 +77,7 @@ const TRIGGER_STYLE: CSSProperties = {
 function desktopIcon(icon: LaunchIcon) {
   if (icon === "claude") return <Bot size={13} />;
   if (icon === "cursor") return <Code2 size={13} />;
+  if (icon === "chatgpt") return <MessageSquare size={13} />;
   return <Monitor size={13} />;
 }
 
@@ -87,6 +94,7 @@ export function NavLaunchMenu({ icon, label }: { icon: LaunchIcon; label: string
   const launchOpenCode = useLaunchOpenCodeDesktop();
   const launchClaude = useLaunchClaudeDesktop();
   const launchCursor = useLaunchCursorDesktop();
+  const launchChatGPT = useLaunchChatGPTDesktop();
 
   const [open, setOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties | undefined>();
@@ -99,6 +107,7 @@ export function NavLaunchMenu({ icon, label }: { icon: LaunchIcon; label: string
     opencode: launchOpenCode,
     claude: launchClaude,
     cursor: launchCursor,
+    chatgpt: launchChatGPT,
   }[icon];
 
   function updateMenuPosition() {

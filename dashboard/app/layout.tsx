@@ -6,6 +6,7 @@ import {
   getThemeBootstrapInlineScript,
   resolveMode,
 } from "@/lib/theme-presets";
+import { getLogoBootstrapInlineScript } from "@/lib/brand-mark";
 import "./globals.css";
 // Machine-local palette + @font-face for the active branding plugin (empty baseline
 // when none is enabled). Imported after globals so a plugin can override core tokens.
@@ -28,8 +29,7 @@ import { HubTopBar } from "@/components/shell/HubTopBar";
 import { NavProgress } from "@/components/shell/NavProgress";
 import { PersistentChamber } from "@/components/persistent/PersistentChamber";
 import { PersistentOpenCode } from "@/components/persistent/PersistentOpenCode";
-import { PersistentClaude } from "@/components/persistent/PersistentClaude";
-import { PersistentCursor } from "@/components/persistent/PersistentCursor";
+import { PersistentCliTerminals } from "@/components/persistent/PersistentCliTerminal";
 import { PersistentRepoLearnDock } from "@/components/persistent/PersistentRepoLearnDock";
 import { UiPrefsBootstrap } from "@/components/shell/UiPrefsBootstrap";
 import { KonamiGate } from "@/components/shell/KonamiGate";
@@ -99,6 +99,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       data-theme={resolveMode(DEFAULT_THEME_MODE_SETTING)}
       data-theme-mode={DEFAULT_THEME_MODE_SETTING}
       data-theme-preset={DEFAULT_THEME_PRESET_ID}
+      data-logo="devhub"
       suppressHydrationWarning
     >
       <head>
@@ -110,6 +111,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           caused a dark→light flash on reload.
         */}
         <script dangerouslySetInnerHTML={{ __html: getThemeBootstrapInlineScript() }} />
+        <script dangerouslySetInnerHTML={{ __html: getLogoBootstrapInlineScript() }} />
         <link rel="manifest" href="/manifest.webmanifest" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
@@ -165,8 +167,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                   {children}
                   <PersistentChamber />
                   <PersistentOpenCode />
-                  <PersistentClaude />
-                  <PersistentCursor />
+                  <PersistentCliTerminals />
               </main>
             </div>
 

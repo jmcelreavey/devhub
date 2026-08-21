@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { normalizeAgentCli } from "@/lib/agent/cli-env";
+import { normalizeAiProvider, toAgentLaunchCli } from "@/lib/ai/preference";
+
 import {
   readDashboardEnvLocalFile,
   syncAgentProcessEnvFromOverrides,
@@ -191,9 +193,25 @@ export async function POST(req: NextRequest) {
   }
 
   if (agent) {
-    // "opencode" is the default → store nothing so a fresh clone stays clean.
-    if (agent.cli !== undefined) {
-      if (normalizeAgentCli(agent.cli) === "cursor") overrides.set("DEVHUB_AGENT_CLI", "cursor");
+    const provider =
+      agent.provider !== undefined
+        ? normalizeAiProvider(agent.provider)
+        : agent.cli !== undefined
+          ? normalizeAiProvider(agent.cli)
+          : null;
+
+    if (provider) {
+      overrides.set("DEVHUB_AI_PROVIDER", provider);
+      if (provider === "api") {
+        // Keep existing agent CLI for tool jobs; only set the generation preference.
+      } else {
+        const launch = toAgentLaunchCli(provider);
+        if (launch === "cursor" || launch === "chatgpt") overrides.set("DEVHUB_AGENT_CLI", launch);
+        else overrides.delete("DEVHUB_AGENT_CLI");
+      }
+    } else if (agent.cli !== undefined) {
+      const cli = normalizeAgentCli(agent.cli);
+      if (cli === "cursor" || cli === "chatgpt") overrides.set("DEVHUB_AGENT_CLI", cli);
       else overrides.delete("DEVHUB_AGENT_CLI");
     }
     if (agent.opencodeModel !== undefined) {
@@ -207,6 +225,7 @@ export async function POST(req: NextRequest) {
       else overrides.delete("DEVHUB_AGENT_CURSOR_MODEL");
     }
   }
+
 
   writeDashboardEnvLocalFile(overrides, passthrough);
   syncGoogleProcessEnvFromOverrides(overrides);
@@ -233,9 +252,11 @@ export async function POST(req: NextRequest) {
   if (datadog?.email?.trim()) saved.push(`BI_OPS_USER_EMAIL=${datadog.email.trim()}`);
   if (datadog?.scheduleId?.trim()) saved.push(`DATADOG_ONCALL_SCHEDULE_ID=${datadog.scheduleId.trim()}`);
   if (bi?.capiRepoPath && overrides.get("CAPI_REPO_PATH")) saved.push(`CAPI_REPO_PATH=${overrides.get("CAPI_REPO_PATH")}`);
-  if (agent?.cli !== undefined) saved.push(`DEVHUB_AGENT_CLI=${normalizeAgentCli(agent.cli)}`);
+  if (agent?.provider) saved.push(`DEVHUB_AI_PROVIDER=${normalizeAiProvider(agent.provider) ?? agent.provider}`);
+  else if (agent?.cli !== undefined) saved.push(`DEVHUB_AGENT_CLI=${normalizeAgentCli(agent.cli)}`);
   if (agent?.opencodeModel?.trim()) saved.push(`DEVHUB_AGENT_OPENCODE_MODEL=${agent.opencodeModel.trim()}`);
   if (agent?.cursorModel?.trim()) saved.push(`DEVHUB_AGENT_CURSOR_MODEL=${agent.cursorModel.trim()}`);
+
   if (network?.openchamberUiPassword?.trim() && overrides.get("OPENCHAMBER_UI_PASSWORD")) {
     saved.push(`OPENCHAMBER_UI_PASSWORD=${mask(overrides.get("OPENCHAMBER_UI_PASSWORD")!)}`);
   }

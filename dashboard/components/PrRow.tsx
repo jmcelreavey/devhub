@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { GithubPrRow } from "@/lib/github/prs";
 import { PersonChip } from "@/components/PersonChip";
@@ -10,13 +9,13 @@ import {
   openPrRowNote,
   type PrRowKind,
 } from "@/components/PrRowActions";
-import { RequestReviewDialog, ReviewerFacepile } from "@/components/RequestReviewAction";
 import {
   ContextMenu,
   RowMenuKebab,
   useContextMenu,
 } from "@/components/shell/ContextMenu";
 import { useToast } from "@/lib/hooks/use-toast";
+import { useTodayRep } from "@/lib/hooks/use-today-rep";
 
 export type { PrRowKind };
 
@@ -32,15 +31,23 @@ export function PrRow({
   const toast = useToast();
   const router = useRouter();
   const menu = useContextMenu<GithubPrRow>();
-  const [reviewOpen, setReviewOpen] = useState(false);
+  const { data: repData } = useTodayRep();
   const compact = density === "compact";
   const avatarSize = compact ? 14 : 16;
+  const target = menu.target ?? row;
+  const repLocked =
+    kind === "reviews" &&
+    !!repData?.rep?.pr &&
+    !repData.rep.completedAt &&
+    repData.rep.pr.repo === target.repo &&
+    repData.rep.pr.number === target.number;
   const groups = buildPrRowMenuGroups({
-    row: menu.target ?? row,
+    row: target,
     kind,
     toast,
-    onRequestReview: () => setReviewOpen(true),
     openNote: () => openPrRowNote(row, (href) => router.push(href), toast),
+    repLocked,
+    openRep: () => router.push("/review/rep"),
   });
 
   return (
@@ -76,18 +83,6 @@ export function PrRow({
                 />
               </>
             ) : null}
-            {(row.requestedReviewers?.length ?? 0) > 0 ? (
-              <>
-                <span className="text-text-subtle" aria-hidden>
-                  ·
-                </span>
-                <ReviewerFacepile
-                  reviewers={row.requestedReviewers ?? []}
-                  size={avatarSize}
-                  onClick={() => setReviewOpen(true)}
-                />
-              </>
-            ) : null}
           </div>
         </div>
         <div className="pr-row-actions" data-pr-actions>
@@ -98,7 +93,6 @@ export function PrRow({
           />
         </div>
       </div>
-      {reviewOpen ? <RequestReviewDialog row={row} onClose={() => setReviewOpen(false)} /> : null}
       <ContextMenu
         open={menu.target !== null}
         position={menu.position}

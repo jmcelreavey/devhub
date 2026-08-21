@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { useLaunchClaudeDesktop } from "@/lib/launch/claude";
 import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
+import { launchAgentJob } from "@/lib/agent-job";
 import {
   agentRepoDxAuditCommand,
+  agentRepoDxAuditPrompt,
   agentRepoUpstartCommand,
   agentRepoUpstartDebugCommand,
   agentRepoUpstartUpdateCommand,
@@ -49,7 +51,7 @@ export function useReposActions(opts: {
   }
 
   function openInTerminal(repo: { name: string; path: string }) {
-    openTerminal({ cwd: repo.path, label: repo.name });
+    openTerminal({ cwd: repo.path, label: repo.name, kind: "shell", repoName: repo.name });
   }
 
   async function openInGitKraken(name: string) {
@@ -86,17 +88,38 @@ export function useReposActions(opts: {
     const upstartPath =
       repo.upstartPath?.trim() ||
       `${(process.env.NEXT_PUBLIC_REPO_ROOT ?? "").trim()}/upstarts/${repo.name}/upstart.sh`;
-    openTerminal({
+    const label = `${debug ? "Debug upstart" : "Upstart"} · ${repo.name}`;
+    // Approved script run stays a plain shell inject — no agent handoff.
+    if (!debug && repo.hasUpstart && !trimmedContext) {
+      openTerminal({
+        cwd: repo.path,
+        label,
+        kind: "upstart",
+        repoName: repo.name,
+        command: repoUpstartCommand(upstartPath),
+      });
+      return;
+    }
+    const command = debug
+      ? await agentRepoUpstartDebugCommand(repo.name, upstartPath, trimmedContext)
+      : repo.hasUpstart && trimmedContext
+        ? await agentRepoUpstartUpdateCommand(repo.name, upstartPath, trimmedContext)
+        : await agentRepoUpstartCommand(repo.name, upstartPath, trimmedContext);
+    const result = await launchAgentJob({
+      title: label,
+      kind: "upstart",
       cwd: repo.path,
-      label: `${debug ? "Debug upstart" : "Upstart"} · ${repo.name}`,
-      command: debug
-        ? await agentRepoUpstartDebugCommand(repo.name, upstartPath, trimmedContext)
-        : repo.hasUpstart && trimmedContext
-          ? await agentRepoUpstartUpdateCommand(repo.name, upstartPath, trimmedContext)
-        : repo.hasUpstart
-          ? repoUpstartCommand(upstartPath)
-          : await agentRepoUpstartCommand(repo.name, upstartPath, trimmedContext),
+      repoName: repo.name,
+      promptCommand: command,
+      // Upstart generation is interactive-ish / must land in a PTY near the script.
+      mode: debug ? "interactive" : "oneshot",
+      forceTerminal: true,
+      reason: label,
+      alreadyConfirmed: true,
     });
+    if (result.channel === "terminal") {
+      /* dock handles confirm/inject */
+    }
   }
 
   async function openDxAudit(repo: RepoInfo) {
@@ -108,11 +131,24 @@ export function useReposActions(opts: {
       confirmLabel: "Run audit",
     });
     if (context === null) return;
-    openTerminal({
+    const audit = agentRepoDxAuditPrompt(repo.name, context.trim() || undefined);
+    const result = await launchAgentJob({
+      title: `DX audit · ${repo.name}`,
+      kind: "review",
       cwd: repo.path,
-      label: `DX audit · ${repo.name}`,
-      command: await agentRepoDxAuditCommand(repo.name, context.trim() || undefined),
+      repoName: repo.name,
+      notePath: audit.notePath,
+      promptText: audit.prompt,
+      promptCommand: await agentRepoDxAuditCommand(repo.name, context.trim() || undefined),
+      mode: "oneshot",
+      reason: `DX audit ${repo.name}`,
+      alreadyConfirmed: true,
     });
+    toast.info(
+      result.channel === "opencode"
+        ? `DX audit running in OpenCode — note at ${audit.notePath}.`
+        : `DX audit queued in the Agent tab — note at ${audit.notePath}.`,
+    );
   }
 
   async function cloneFromUrl() {

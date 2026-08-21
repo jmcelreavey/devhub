@@ -43,6 +43,9 @@ export interface SyncSkillsOptions {
 export const TOOL_DIRS: Record<string, string> = {
   claude: ".claude/skills",
   codex: ".codex/skills",
+  // ChatGPT.app is the Codex desktop — same skill dir as `codex`. Alias so
+  // sync_skills / preview list ChatGPT instead of dropping the system link.
+  chatgpt: ".codex/skills",
   opencode: ".opencode/skills",
   "opencode-config": ".config/opencode/skills",
   "opencode-config-single": ".config/opencode/skill",
@@ -57,6 +60,7 @@ export const TOOL_DIRS: Record<string, string> = {
 export const AGENT_TOOL_DIRS: Array<{ tool: string; subdir: string }> = [
   { tool: "claude", subdir: ".claude/agents" },
   { tool: "codex", subdir: ".codex/agents" },
+  { tool: "chatgpt", subdir: ".codex/agents" },
   { tool: "opencode", subdir: ".config/opencode/agent" },
   { tool: "opencode", subdir: ".config/opencode/agents" },
   { tool: "cursor", subdir: ".cursor/agents" },

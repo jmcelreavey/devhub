@@ -26,7 +26,7 @@ interface Crumb {
 
 const ROOT_LABEL: Record<NavGroup, string> = {
   workspace: "Workspace",
-  library: "Library",
+  library: "Notes",
   bi: "BI",
   system: "System",
 };

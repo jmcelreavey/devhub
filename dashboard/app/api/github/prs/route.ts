@@ -7,11 +7,16 @@ import {
   writeGithubPrsListCache,
   type GithubPrRow,
 } from "@/lib/github/prs";
-import { attachRequestedReviewers } from "@/lib/github/request-reviewers";
+import { sortReviewRequestedPrs } from "@/lib/github/review-requested-sort";
 import { isGithubCliAuthenticated, mapGithubCliError } from "@/lib/gh-exec";
 import { getGithubLogin } from "@/lib/standup/github-merged";
+import { reviewNoteActivityByPath } from "@/lib/notes/review-index-server";
 import { pMap } from "@/lib/p-limit";
 import { SUBPROCESS_CONCURRENCY } from "@/lib/standup/config";
+
+function sortReviews(rows: GithubPrRow[]): GithubPrRow[] {
+  return sortReviewRequestedPrs(rows, reviewNoteActivityByPath());
+}
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +28,12 @@ export async function GET() {
 
   const cached = readGithubPrsListCache();
   if (cached) {
-    return NextResponse.json({ ...cached, cached: true, configured: true });
+    return NextResponse.json({
+      ...cached,
+      reviews: sortReviews(cached.reviews),
+      cached: true,
+      configured: true,
+    });
   }
 
   try {
@@ -38,8 +48,8 @@ export async function GET() {
     });
     const filterArchived = (rows: GithubPrRow[]) => rows.filter((r) => !archivedSet.has(r.repo));
 
-    const filteredAuthored = await attachRequestedReviewers(filterArchived(authored));
-    const filteredReviews = filterArchived(reviews);
+    const filteredAuthored = filterArchived(authored);
+    const filteredReviews = sortReviews(filterArchived(reviews));
 
     const excludeUrls = new Set([
       ...filteredAuthored.map((r) => r.url),

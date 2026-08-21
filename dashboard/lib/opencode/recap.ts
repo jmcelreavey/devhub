@@ -1,4 +1,4 @@
-import { resolveOpenCodePort } from "@/lib/opencode/command";
+import { ensureDevHubOpenCode } from "@/lib/opencode/listen";
 
 type JsonObject = Record<string, unknown>;
 
@@ -206,7 +206,7 @@ export async function getOpenCodeRecap(
   options: OpenCodeRecapOptions = {},
   fetchImpl: typeof fetch = fetch,
 ): Promise<{ sessions: JsonObject[] }> {
-  const base = `http://127.0.0.1:${resolveOpenCodePort()}`;
+  const base = `http://127.0.0.1:${await ensureDevHubOpenCode()}`;
   const scoped = (path: string) => withDirectory(path, options.directory);
   const listed = options.sessionId ? [] : await getJson<OpenCodeSession[]>(fetchImpl, base, scoped("/session?roots=true"));
   const byId = new Map(listed.map(session => [session.id, session]));

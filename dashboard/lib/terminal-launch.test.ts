@@ -16,6 +16,7 @@ import {
   agentStashConflictCommand,
   agentCommitMessageCommand,
   agentStashMessageCommand,
+  chatgptCliCommand,
   claudeCliCommand,
   cursorCliCommand,
 } from "./terminal-launch";
@@ -100,7 +101,20 @@ describe("agentReviewCommand (opencode)", () => {
 });
 
 describe("agent CLI switch (cursor)", () => {
+  it("hands one-shot jobs to chatgpt/codex exec mode", async () => {
+    useConfig({ cli: "chatgpt" });
+    const { agentReviewCommand } = await import("./terminal-launch");
+    const command = await agentReviewCommand("https://github.com/acme/app/pull/1");
+    expect(command).toContain("codex");
+    expect(command).toContain(" exec ");
+    expect(command).toContain("ChatGPT.app/Contents/Resources/codex");
+    // Bin expr echoes paths (including chatgpt fallback) — never executes inside $().
+    expect(command).toContain("echo chatgpt");
+    expect(command).toContain("command -v codex");
+  });
+
   it("hands one-shot jobs to cursor-agent print mode with the default model", async () => {
+
     useConfig({ cli: "cursor" });
 
     const command = await agentReviewCommand("https://github.com/acme/app/pull/1");
@@ -290,5 +304,15 @@ describe("companion CLI launch commands", () => {
     expect(cmd).toContain("command -v");
     expect(cmd).toContain("cursor-agent");
     expect(cmd).toContain("Cursor CLI not found");
+  });
+
+  it("prefers the Codex CLI bundled in ChatGPT.app over a PATH install", () => {
+    const cmd = chatgptCliCommand();
+    // The npm install's native binary gets quarantined by macOS; the app's is signed.
+    expect(cmd.indexOf("/Applications/ChatGPT.app/Contents/Resources/codex")).toBeLessThan(
+      cmd.indexOf("command -v"),
+    );
+    expect(cmd).toContain("codex");
+    expect(cmd).toContain("Codex CLI not found");
   });
 });

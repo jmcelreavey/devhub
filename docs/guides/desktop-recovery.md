@@ -156,7 +156,7 @@ The installed `.app` ships a **frozen** Next.js build inside `Contents/Resources
 
 | Situation | Fix |
 | --------- | --- |
-| Installed app, you pulled dashboard changes | **View → Rebuild Dashboard…** (or **Status → Rebuild & restart** when the shell is *not* supervising the server). The boot page shows a log panel while Rust runs `desktop/scripts/rebuild-installed-server.mjs`, stages a fresh production build from your linked checkout, and relaunches. |
+| Installed app, you pulled dashboard changes | **View → Rebuild Dashboard…** (or **Status → Rebuild & restart** when the shell is *not* supervising the server). The boot page shows a log panel while Rust runs `desktop/scripts/rebuild-installed-server.mjs`, stages a fresh production Next server **and** peer-services bundle (`start-peer-services.mjs`) from your linked checkout, copies both into this app, and relaunches. |
 | Installed app, active development | **View → Attach to Dev Server…** and run `npm run dev` in the checkout instead — hot reload without rebuilding the bundle. |
 | Browser / checkout `npm run dev` | Restart the dev server, or run `npm run restart` for a production build on port 1337. |
 

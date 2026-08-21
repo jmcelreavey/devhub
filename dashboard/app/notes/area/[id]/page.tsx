@@ -7,6 +7,11 @@ export const dynamic = "force-dynamic";
 
 type PageProps = { params: Promise<{ id: string }> };
 
+export async function generateMetadata({ params }: PageProps) {
+  const { id } = await params;
+  return { title: decodeURIComponent(id) };
+}
+
 export default async function NoteAreaPage({ params }: PageProps) {
   const { id } = await params;
   const area = getNoteAreaDetail(decodeURIComponent(id));
