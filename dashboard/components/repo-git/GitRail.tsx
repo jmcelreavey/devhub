@@ -1,17 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Layers, Tag } from "lucide-react";
 import { useToast } from "@/lib/hooks/use-toast";
 import type { StashConflictPayload } from "@/app/repos/types";
 import { postGitAction, repoApi, type RepoGitTabId } from "./shared";
 
-export interface RailSummary {
-  currentBranch: string;
+export interface RailSummary {  currentBranch: string;
   ahead: number;
   behind: number;
   stashes: number;
-  branches: { name: string; current: boolean; upstream?: string | null }[];
+  branches: {
+    name: string;
+    current: boolean;
+    upstream?: string | null;
+    ahead?: number;
+    behind?: number;
+    upstreamGone?: boolean;
+  }[];
   remoteBranches: {
     name: string;
     remote: string;
@@ -19,6 +25,36 @@ export interface RailSummary {
     trackedLocalName: string | null;
   }[];
   tags: string[];
+}
+
+/** Toggleable section header. Module-level: a component defined inside the
+ *  parent would remount (and lose focus) on every render. */
+function SectionHeader({
+  label,
+  count,
+  open,
+  onToggle,
+  icon,
+}: {
+  label: string;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+  icon?: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className="repo-git-section-label repo-git-rail-toggle"
+      aria-expanded={open}
+      onClick={onToggle}
+    >
+      {open ? <ChevronDown size={11} aria-hidden /> : <ChevronRight size={11} aria-hidden />}
+      {icon}
+      {label}
+      <span className="badge badge-muted">{count}</span>
+    </button>
+  );
 }
 
 /**
@@ -44,7 +80,12 @@ export function GitRail({
 }) {
   const toast = useToast();
   const [busyBranch, setBusyBranch] = useState<string | null>(null);
+  // Every section toggles — long tag/branch lists shouldn't push the rest of
+  // the rail out of reach, and a collapsed section reads as skippable.
+  const [branchesOpen, setBranchesOpen] = useState(true);
   const [remotesOpen, setRemotesOpen] = useState(false);
+  const [tagsOpen, setTagsOpen] = useState(false);
+  const [stashOpen, setStashOpen] = useState(false);
 
   const localBranches = useMemo(() => summary?.branches ?? [], [summary]);
   const remoteOnly = useMemo(
@@ -105,42 +146,53 @@ export function GitRail({
   return (
     <aside className="repo-git-rail" aria-label="Repository overview">
       <div className="repo-git-rail-section">
-        <div className="repo-git-section-label">Branches</div>
-        {(summary ? localBranches : []).map((b) => (
-          <button
-            key={b.name}
-            type="button"
-            className="repo-git-rail-branch"
-            data-current={b.current || undefined}
-            disabled={Boolean(busyBranch) && busyBranch !== b.name}
-            title={b.current ? `${b.name} — checked out` : `Check out ${b.name}`}
-            onClick={() => void checkout(b.name)}
-            data-drop-branch={b.current ? undefined : b.name}
-          >
-            <span className="truncate font-mono">{b.name}</span>
-            {b.current && summary && (summary.ahead > 0 || summary.behind > 0) && (
+        <SectionHeader
+          label="Branches"
+          count={localBranches.length}
+          open={branchesOpen}
+          onToggle={() => setBranchesOpen((v) => !v)}
+        />
+        {branchesOpen && (summary ? localBranches : []).map((b) => {
+          const ahead = b.current ? summary!.ahead : b.ahead ?? 0;
+          const behind = b.current ? summary!.behind : b.behind ?? 0;
+          const gone = b.upstreamGone;
+          return (
+            <button
+              key={b.name}
+              type="button"
+              className="repo-git-rail-branch"
+              data-current={b.current || undefined}
+              disabled={Boolean(busyBranch) && busyBranch !== b.name}
+              title={
+                b.current
+                  ? `${b.name} — checked out`
+                  : gone
+                    ? `${b.name} — upstream is gone`
+                    : `Check out ${b.name}`
+              }
+              onClick={() => void checkout(b.name)}
+              data-drop-branch={b.current ? undefined : b.name}
+            >
+              <span className="truncate font-mono">{b.name}</span>
               <span className="repo-git-rail-counts" aria-label="Ahead and behind upstream">
-                {summary.ahead > 0 && <span data-dir="ahead">↑{summary.ahead}</span>}
-                {summary.behind > 0 && <span data-dir="behind">↓{summary.behind}</span>}
+                {gone && <span data-dir="gone" title="Upstream deleted">⌫</span>}
+                {ahead > 0 && <span data-dir="ahead">↑{ahead}</span>}
+                {behind > 0 && <span data-dir="behind">↓{behind}</span>}
               </span>
-            )}
-          </button>
-        ))}
+            </button>
+          );
+        })}
         {!summary && <div className="repo-git-empty-sm">Loading…</div>}
       </div>
 
       {remoteOnly.length > 0 && (
         <div className="repo-git-rail-section">
-          <button
-            type="button"
-            className="repo-git-section-label repo-git-rail-toggle"
-            aria-expanded={remotesOpen}
-            onClick={() => setRemotesOpen((v) => !v)}
-          >
-            {remotesOpen ? <ChevronDown size={11} aria-hidden /> : <ChevronRight size={11} aria-hidden />}
-            Remotes
-            <span className="badge badge-muted">{remoteOnly.length}</span>
-          </button>
+          <SectionHeader
+            label="Remotes"
+            count={remoteOnly.length}
+            open={remotesOpen}
+            onToggle={() => setRemotesOpen((v) => !v)}
+          />
           {remotesOpen &&
             remoteOnly.map((r) => (
               <button
@@ -158,17 +210,19 @@ export function GitRail({
       )}
 
       <div className="repo-git-rail-section">
-        <div className="repo-git-section-label">
-          Stashes
-          <span className="badge badge-muted">{summary?.stashes ?? 0}</span>
-        </div>
-        {(summary?.stashes ?? 0) > 0 && (
+        <SectionHeader
+          label="Stashes"
+          count={summary?.stashes ?? 0}
+          open={stashOpen}
+          onToggle={() => setStashOpen((v) => !v)}
+          icon={<Layers size={10} aria-hidden />}
+        />
+        {stashOpen && (summary?.stashes ?? 0) > 0 && (
           <button
             type="button"
             className="repo-git-rail-branch"
             onClick={() => onOpenTab("stash")}
           >
-            <Layers size={11} aria-hidden />
             Open stash list
           </button>
         )}
@@ -176,14 +230,19 @@ export function GitRail({
 
       {(summary?.tags.length ?? 0) > 0 && (
         <div className="repo-git-rail-section repo-git-rail-tags">
-          <div className="repo-git-section-label">
-            <Tag size={10} aria-hidden /> Tags
-          </div>
-          {summary!.tags.slice(0, 12).map((t) => (
-            <span key={t} className="repo-git-rail-tag font-mono truncate" title={t}>
-              {t}
-            </span>
-          ))}
+          <SectionHeader
+            label="Tags"
+            count={summary!.tags.length}
+            open={tagsOpen}
+            onToggle={() => setTagsOpen((v) => !v)}
+            icon={<Tag size={10} aria-hidden />}
+          />
+          {tagsOpen &&
+            summary!.tags.slice(0, 12).map((t) => (
+              <span key={t} className="repo-git-rail-tag font-mono truncate" title={t}>
+                {t}
+              </span>
+            ))}
         </div>
       )}
     </aside>

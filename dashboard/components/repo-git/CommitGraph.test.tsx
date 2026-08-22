@@ -79,7 +79,10 @@ describe("CommitGraph WIP row", () => {
     );
     const wip = document.querySelector<HTMLElement>(".repo-git-wip-row");
     expect(wip).toBeTruthy();
-    expect(wip!.textContent).toContain("3 changed file");
+    // Compact chips, not a sentence — the row is 32px tall and lives in a pane
+    // that gets narrow.
+    expect(wip!.textContent).toContain("2 staged");
+    expect(wip!.textContent).toContain("1 unstaged");
     fireEvent.click(wip!);
     expect(onOpenWip).toHaveBeenCalledTimes(1);
     // The commit rows still render below it.

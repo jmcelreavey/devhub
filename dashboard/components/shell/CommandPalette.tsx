@@ -486,6 +486,16 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         },
       },
       {
+        id: "action:shortcuts",
+        kind: "action",
+        label: "Keyboard shortcuts",
+        hint: "?",
+        perform: () => {
+          onClose();
+          window.dispatchEvent(new CustomEvent("shortcuts:toggle"));
+        },
+      },
+      {
         id: "action:ask-agent",
         kind: "action",
         label: "Ask Agent",
@@ -728,11 +738,20 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
               {commandNavigates(cmd) && (
                 <ChevronRight size={12} className="text-text-subtle" aria-hidden />
               )}
-            </button>
-          ))}
+              </button>
+            ))}
+          </div>
+          <div
+            aria-hidden
+            className="flex items-center justify-center gap-3 px-4 py-2 text-[11px]"
+            style={{ borderTop: "1px solid var(--border-muted)", color: "var(--text-subtle)" }}
+          >
+            <span>↑↓ navigate</span>
+            <span>↵ open</span>
+            <span>esc close</span>
+          </div>
         </div>
       </div>
-    </div>
   );
 }
 

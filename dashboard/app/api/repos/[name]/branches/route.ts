@@ -24,6 +24,7 @@ import {
   parseChangedFiles,
   parseLeftRightCount,
   parseUnpushedCommits,
+  parseUpstreamTrack,
 } from "./parsers";
 
 function indexLockResponse(repoRoot: string, gitError?: string): NextResponse {
@@ -194,7 +195,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     runGitRepoAsync(rp, [
       "branch",
       "--list",
-      "--format=%(refname:short)%00%(upstream:short)%00%(objectname:short)",
+      "--format=%(refname:short)%00%(upstream:short)%00%(objectname:short)%00%(upstream:track)",
     ]),
     runGitRepoAsync(rp, [
       "branch",
@@ -231,8 +232,13 @@ export async function GET(_req: NextRequest, { params }: Params) {
     .split("\n")
     .filter(Boolean)
     .map((line) => {
-      const [name = "", branchUpstream = "", shortHash = ""] = line.split("\0");
-      return { name: name.trim(), upstream: branchUpstream.trim() || null, shortHash };
+      const [name = "", branchUpstream = "", shortHash = "", trackRaw = ""] = line.split("\0");
+      return {
+        name: name.trim(),
+        upstream: branchUpstream.trim() || null,
+        shortHash,
+        track: parseUpstreamTrack(trackRaw),
+      };
     })
     .filter((b) => b.name);
 
@@ -251,6 +257,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
     remote: b.upstream,
     upstream: b.upstream,
     shortHash: b.shortHash,
+    ahead: b.upstream ? b.track.ahead : undefined,
+    behind: b.upstream ? b.track.behind : undefined,
+    upstreamGone: b.upstream && b.track.gone ? true : undefined,
   }));
   const remoteBranches = (remoteBranchResult.stdout || "")
     .trim()

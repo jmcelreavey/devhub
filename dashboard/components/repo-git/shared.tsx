@@ -47,6 +47,12 @@ export interface BranchInfo {
   /** Tracking branch (`origin/foo`), or null when this branch was never pushed. */
   upstream?: string | null;
   shortHash?: string;
+  /** Commits ahead of the branch's own upstream (from `%(upstream:track)`). */
+  ahead?: number;
+  /** Commits behind the branch's upstream. */
+  behind?: number;
+  /** The upstream ref no longer exists on the remote. */
+  upstreamGone?: boolean;
 }
 
 export interface RemoteBranchInfo {

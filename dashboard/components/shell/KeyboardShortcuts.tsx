@@ -14,6 +14,12 @@ export function KeyboardShortcuts() {
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       if ((e.target as HTMLElement)?.isContentEditable) return;
 
+      // A native <dialog> (git workspace, confirm dialogs) paints in the top
+      // layer — a modal opened here would hide behind it until the dialog
+      // closes, then pop up unexpectedly. Surfaces with their own "?" handler
+      // (e.g. the git workspace) own the key while they're open.
+      if (document.querySelector("dialog[open]")) return;
+
       if (e.key === "?") {
         e.preventDefault();
         const event = new CustomEvent("shortcuts:toggle");

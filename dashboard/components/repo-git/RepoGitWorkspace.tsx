@@ -125,7 +125,14 @@ export function RepoGitWorkspace({
     currentBranch: string;
     ahead: number;
     behind: number;
-    branches: { name: string; current: boolean; upstream?: string | null }[];
+    branches: {
+      name: string;
+      current: boolean;
+      upstream?: string | null;
+      ahead?: number;
+      behind?: number;
+      upstreamGone?: boolean;
+    }[];
     remoteBranches: {
       name: string;
       remote: string;
@@ -174,6 +181,9 @@ export function RepoGitWorkspace({
           name: b.name,
           current: b.current,
           upstream: b.upstream ?? null,
+          ahead: b.ahead,
+          behind: b.behind,
+          upstreamGone: b.upstreamGone,
         })),
         remoteBranches: (branches?.remoteBranches ?? []).map((r) => ({
           name: r.name,

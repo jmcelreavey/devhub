@@ -49,6 +49,15 @@ export function isBranchDropTarget(ref: string, headBranch: string | null): bool
   return !ref.startsWith("tag:") && !ref.startsWith("origin/") && ref !== headBranch;
 }
 
+/**
+ * `origin/HEAD` and friends are decoration noise — they always shadow the
+ * real branch chip on the same commit and double the refs track width for
+ * zero information.
+ */
+function displayRefs(commit: GraphLaneCommit): string[] {
+  return commit.refs.filter((r) => !r.endsWith("/HEAD"));
+}
+
 const ROW_H = 32;
 const LANE_W = 14;
 const PAD_X = 10;
@@ -206,7 +215,6 @@ function CommitGraphInner({
   const y = (row: number) => row * ROW_H + ROW_H / 2;
   const maxLanes = Math.max(1, ...commits.map((c) => c.activeLanes));
   const graphW = PAD_X * 2 + maxLanes * LANE_W;
-
   const headCommit = commits.find((c) => c.isHead) ?? commits[0] ?? null;
   const wipLane = headCommit ? headCommit.lane : 0;
   const wipCount = wip ? wip.staged + wip.unstaged : 0;
@@ -222,7 +230,10 @@ function CommitGraphInner({
 
   return (
     <div ref={scrollRef} className="repo-git-graph" onScroll={onScroll}>
-      <div className="repo-git-graph-canvas" style={{ height: totalH, minWidth: graphW + 320 }}>
+      <div
+        className="repo-git-graph-canvas"
+        style={{ height: totalH, minWidth: Math.max(graphW + 60, 430) }}
+      >
         <div className="repo-git-graph-rail" style={{ width: graphW, height: totalH }}>
           <svg width={graphW} height={totalH} aria-hidden>
             {hasWip && headCommit && (
@@ -362,10 +373,22 @@ function CommitGraphInner({
               }}
             >
               <span className="repo-git-wip-label font-mono">WIP</span>
-              <span className="repo-git-graph-subject truncate">
-                {wipCount === 0
-                  ? "Working tree clean — click to stage changes"
-                  : `${wipCount} changed file${wipCount === 1 ? "" : "s"}${wip && wip.staged > 0 ? ` · ${wip.staged} staged` : ""} — click to review`}
+              <span
+                className="repo-git-graph-subject truncate"
+                title={
+                  wipCount === 0
+                    ? "Working tree clean — click to open the Changes tab"
+                    : `${wip!.staged} staged · ${wip!.unstaged} unstaged — click to review`
+                }
+              >
+                {wipCount === 0 ? (
+                  <span className="repo-git-wip-quiet">clean tree</span>
+                ) : (
+                  <>
+                    <span className="repo-git-wip-chip">{wip!.staged} staged</span>
+                    <span className="repo-git-wip-chip">{wip!.unstaged} unstaged</span>
+                  </>
+                )}
               </span>
               <span className="repo-git-graph-refs" />
               <span className="repo-git-graph-author" />
@@ -430,24 +453,26 @@ function CommitGraphInner({
                   into the refs track and the whole right-hand edge went ragged.
                 */}
                 <span className="repo-git-graph-refs">
-                  {c.refs.length > 0 &&
-                    c.refs.slice(0, 3).map((ref) => (
-                      <span
-                        key={ref}
-                        className="repo-git-ref-chip"
-                        data-tone={
-                          ref === c.headBranch
-                            ? "head"
-                            : isMainRef(ref, mainRefNames)
-                              ? "main"
-                              : undefined
-                        }
-                        title={ref === c.headBranch ? `${ref} — checked out` : ref}
-                        data-drop-branch={isBranchDropTarget(ref, c.headBranch) ? ref : undefined}
-                      >
-                        {ref}
-                      </span>
-                    ))}
+                  {displayRefs(c).length > 0 &&
+                    displayRefs(c)
+                      .slice(0, 3)
+                      .map((ref) => (
+                        <span
+                          key={ref}
+                          className="repo-git-ref-chip"
+                          data-tone={
+                            ref === c.headBranch
+                              ? "head"
+                              : isMainRef(ref, mainRefNames)
+                                ? "main"
+                                : undefined
+                          }
+                          title={ref === c.headBranch ? `${ref} — checked out` : ref}
+                          data-drop-branch={isBranchDropTarget(ref, c.headBranch) ? ref : undefined}
+                        >
+                          {ref}
+                        </span>
+                      ))}
                 </span>
                 <span className="repo-git-graph-author">
                   <CommitAvatar

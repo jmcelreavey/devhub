@@ -41,6 +41,33 @@ export function parseLeftRightCount(stdout: string): { left: number; right: numb
   };
 }
 
+export interface UpstreamTrack {
+  ahead: number;
+  behind: number;
+  /** Upstream ref no longer exists on the remote. */
+  gone: boolean;
+}
+
+/**
+ * Parse `%(upstream:track)` → ahead/behind vs the branch's own upstream.
+ *
+ * Output shapes: `""` (in sync), `"[ahead 2]"`, `"[behind 3]"`,
+ * `"[ahead 1, behind 4]"`, `"[gone]"`. One for-each-ref column covers every
+ * branch, so the rail gets per-branch arrows without N rev-list calls.
+ */
+export function parseUpstreamTrack(raw: string): UpstreamTrack {
+  const text = raw.trim();
+  if (!text) return { ahead: 0, behind: 0, gone: false };
+  if (/gone/i.test(text)) return { ahead: 0, behind: 0, gone: true };
+  const ahead = Number(text.match(/ahead (\d+)/i)?.[1] ?? 0);
+  const behind = Number(text.match(/behind (\d+)/i)?.[1] ?? 0);
+  return {
+    ahead: Number.isFinite(ahead) ? ahead : 0,
+    behind: Number.isFinite(behind) ? behind : 0,
+    gone: false,
+  };
+}
+
 /**
  * Local branch names we're willing to hand to git as a positional argument.
  *
