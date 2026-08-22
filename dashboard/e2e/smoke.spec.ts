@@ -232,7 +232,8 @@ test.describe("app shell", () => {
 
   test("sidebar exposes the primary destinations", async ({ page }) => {
     await page.goto("/");
-    for (const label of ["Today", "Briefing", "Work", "Library", "Agents", "Repos", "System"]) {
+    // Labels track the sidebar glossary (Notes / Skills — see lib/nav.ts).
+    for (const label of ["Today", "Briefing", "Work", "Notes", "Skills", "Repos", "System"]) {
       await expect(page.getByRole("link", { name: label, exact: false }).first()).toBeVisible();
     }
   });
