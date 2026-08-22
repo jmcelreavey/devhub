@@ -158,6 +158,7 @@ export async function collectSkills(opts: CollectSkillsOptions): Promise<number>
     const catalogNames = new Set(catalogByName.keys());
     emit(`Importing ${explicit.length} selected skill(s) into ${repoSkillsDir}`);
     let collected = 0;
+    let failed = 0;
     let skipped = 0;
     for (const skillName of explicit) {
       const candidate = candidates.get(skillName);
@@ -207,10 +208,12 @@ export async function collectSkills(opts: CollectSkillsOptions): Promise<number>
         collected++;
       } catch (e) {
         emit(`  FAILED: ${skillName} (${e instanceof Error ? e.message : String(e)})`);
-        skipped++;
+        failed++;
       }
     }
-    if (collected === 0) {
+    if (failed > 0) {
+      emit(`Import finished with ${failed} failure(s).`);
+    } else if (collected === 0) {
       emit("No skills imported (all skipped or missing locally).");
     } else if (opts.dryRun) {
       emit(`[DRY-RUN] Would collect ${collected} skill(s); skipped ${skipped}.`);
@@ -218,7 +221,8 @@ export async function collectSkills(opts: CollectSkillsOptions): Promise<number>
       emit(`Imported ${collected} skill(s); skipped ${skipped}.`);
       emit("Staged for commit. Review with: git status");
     }
-    return skipped > 0 ? 1 : 0;
+    // Skips are expected (vendored, in-sync, etc.) — only real failures fail.
+    return failed > 0 ? 1 : 0;
   }
 
   emit(`Scanning ${localDirs.length} local skill directories...`);

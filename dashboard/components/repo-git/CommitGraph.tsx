@@ -42,6 +42,18 @@ interface CommitGraphProps {
    * to merge, rebase or cherry-pick). Mouse-only — touch keeps long-press.
    */
   onRowDragStart?: (event: ReactPointerEvent<HTMLDivElement>, commit: GraphLaneCommit) => void;
+  /**
+   * Full hashes of local commits that are not on the default branch yet.
+   * Rows in this set get a tinted band + edge bar, so "how far ahead is this
+   * branch" reads as a contiguous strip from fork point to HEAD.
+   */
+  aheadOfMain?: Set<string>;
+  /** merge-base(HEAD, main) — the row where the ahead band starts. */
+  forkBase?: string | null;
+  /** Display name for the fork marker chip ("main"). */
+  forkLabel?: string | null;
+  /** Commits ahead of main — rendered as a ↑N pill on the HEAD row. */
+  aheadMain?: number;
 }
 
 /** Refs you can drop a commit onto: local branches only. */
@@ -130,6 +142,10 @@ export function CommitGraph({
   wip = null,
   onOpenWip,
   onRowDragStart,
+  aheadOfMain,
+  forkBase = null,
+  forkLabel = null,
+  aheadMain = 0,
 }: CommitGraphProps) {
   if (commits.length === 0 && !wip) {
     return (
@@ -152,6 +168,10 @@ export function CommitGraph({
       wip={wip}
       onOpenWip={onOpenWip}
       onRowDragStart={onRowDragStart}
+      aheadOfMain={aheadOfMain}
+      forkBase={forkBase}
+      forkLabel={forkLabel}
+      aheadMain={aheadMain}
     />
   );
 }
@@ -178,6 +198,10 @@ function CommitGraphInner({
   wip,
   onOpenWip,
   onRowDragStart,
+  aheadOfMain,
+  forkBase = null,
+  forkLabel = null,
+  aheadMain = 0,
 }: CommitGraphProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -404,6 +428,7 @@ function CommitGraphInner({
             const identity = identityByEmail
               ? lookupByEmail(identityByEmail, c.authorEmail)
               : undefined;
+            const isFork = Boolean(forkBase) && (c.hash === forkBase || c.hash.startsWith(forkBase!));
             return (
               <div
                 key={c.hash}
@@ -414,6 +439,8 @@ function CommitGraphInner({
                 data-unpushed={unpushed || undefined}
                 data-on-main={onMain || undefined}
                 data-head={c.isHead || undefined}
+                data-ahead={aheadOfMain?.has(c.hash) || undefined}
+                data-fork={isFork || undefined}
                 style={{ top: row * ROW_H, height: ROW_H }}
                 {...(rowBind?.(c) ?? {})}
                 onPointerDown={(event) => {
@@ -453,6 +480,14 @@ function CommitGraphInner({
                   into the refs track and the whole right-hand edge went ragged.
                 */}
                 <span className="repo-git-graph-refs">
+                  {isFork && forkLabel && (
+                    <span
+                      className="repo-git-ref-chip repo-git-fork-chip"
+                      title={`This branch forked from ${forkLabel} here`}
+                    >
+                      ⎇ {forkLabel}
+                    </span>
+                  )}
                   {displayRefs(c).length > 0 &&
                     displayRefs(c)
                       .slice(0, 3)
@@ -473,6 +508,16 @@ function CommitGraphInner({
                           {ref}
                         </span>
                       ))}
+                  {/* How far ahead of main this branch is, right where your eye
+                      already is — the HEAD row — instead of only in the strip. */}
+                  {c.isHead && aheadMain > 0 && (
+                    <span
+                      className="repo-git-ahead-pill"
+                      title={`${aheadMain} commit${aheadMain === 1 ? "" : "s"} not on ${forkLabel ?? "main"} yet`}
+                    >
+                      ↑{aheadMain}
+                    </span>
+                  )}
                 </span>
                 <span className="repo-git-graph-author">
                   <CommitAvatar

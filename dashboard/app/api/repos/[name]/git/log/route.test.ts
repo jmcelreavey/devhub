@@ -45,7 +45,16 @@ describe("GET /api/repos/[name]/git/log", () => {
     vi.mocked(runGitRepoAsync).mockImplementation(async (_repoRoot, args) => {
       if (args[0] === "rev-parse") return { status: 0, stdout: "feature/test\n", stderr: "" };
       if (args[0] === "log") return { status: 0, stdout: logStdout, stderr: "" };
-      if (args[0] === "rev-list") return { status: 0, stdout: "0 1\n", stderr: "" };
+      // Two rev-list shapes: the left-right ahead/behind count and the
+      // ahead-of-main sha walk the graph band is built from.
+      if (args[0] === "rev-list") {
+        return args[1] === "--left-right"
+          ? { status: 0, stdout: "0 1\n", stderr: "" }
+          : { status: 0, stdout: "", stderr: "" };
+      }
+      if (args[0] === "merge-base") {
+        return { status: 0, stdout: "abc1234def5678abc1234def5678abc1234def56\n", stderr: "" };
+      }
       throw new Error(`Unexpected git command: ${args.join(" ")}`);
     });
   }
@@ -213,7 +222,14 @@ describe("GET /api/repos/[name]/git/log", () => {
       }
       if (args[0] === "rev-parse") return { status: 0, stdout: "feature/test\n", stderr: "" };
       if (args[0] === "log") return { status: 0, stdout: chain(1, true), stderr: "" };
-      if (args[0] === "rev-list") return { status: 0, stdout: "0 1\n", stderr: "" };
+      if (args[0] === "rev-list") {
+        return args[1] === "--left-right"
+          ? { status: 0, stdout: "0 1\n", stderr: "" }
+          : { status: 0, stdout: "", stderr: "" };
+      }
+      if (args[0] === "merge-base") {
+        return { status: 0, stdout: "abc1234def5678abc1234def5678abc1234def56\n", stderr: "" };
+      }
       throw new Error(`Unexpected git command: ${args.join(" ")}`);
     });
 
@@ -236,7 +252,14 @@ describe("GET /api/repos/[name]/git/log", () => {
       }
       if (args[0] === "rev-parse") return { status: 0, stdout: "feature/test\n", stderr: "" };
       if (args[0] === "log") return { status: 0, stdout: chain(1, true), stderr: "" };
-      if (args[0] === "rev-list") return { status: 0, stdout: "0 1\n", stderr: "" };
+      if (args[0] === "rev-list") {
+        return args[1] === "--left-right"
+          ? { status: 0, stdout: "0 1\n", stderr: "" }
+          : { status: 0, stdout: "", stderr: "" };
+      }
+      if (args[0] === "merge-base") {
+        return { status: 0, stdout: "abc1234def5678abc1234def5678abc1234def56\n", stderr: "" };
+      }
       throw new Error(`Unexpected git command: ${args.join(" ")}`);
     });
 

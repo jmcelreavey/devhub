@@ -94,7 +94,7 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
   ];
   const searching = searchArgs.length > 0 || Boolean(directHit);
 
-  const [log, mainAheadBehind] = await Promise.all([
+  const [log, mainAheadBehind, forkInfo] = await Promise.all([
     runGitRepoAsync(resolved.repoRoot, [
       "log",
       // A resolved hash replaces the walk entirely — the user asked for one
@@ -118,6 +118,19 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
           `${mainBranch}...HEAD`,
         ])
       : Promise.resolve({ status: 1, stdout: "", stderr: "" }),
+    // Where this branch came off main, and exactly which local commits are
+    // not on main yet — the two facts that make "how far ahead am I" readable
+    // straight off the graph instead of via a count in a strip.
+    mainBranch
+      ? Promise.all([
+          runGitRepoAsync(resolved.repoRoot, ["merge-base", "HEAD", mainBranch]),
+          runGitRepoAsync(resolved.repoRoot, [
+            "rev-list",
+            `${mainBranch}..HEAD`,
+            "--max-count=300",
+          ]),
+        ])
+      : Promise.resolve(null),
   ]);
   if (log.status !== 0) return gitFail(log, "Log failed");
 
@@ -153,6 +166,13 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
   // Tip is reachable from main → fully merged (or identical).
   const mergedIntoMain = Boolean(mainBranch) && !onMain && aheadMain === 0;
 
+  const forkBaseHash =
+    forkInfo && forkInfo[0].status === 0 ? forkInfo[0].stdout.trim() || null : null;
+  const aheadOfMain =
+    forkInfo && forkInfo[1].status === 0
+      ? forkInfo[1].stdout.split("\n").map((l) => l.trim()).filter(Boolean)
+      : [];
+
   return NextResponse.json({
     commits: graph,
     count: graph.length,
@@ -170,5 +190,9 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
     behindMain,
     onMain,
     mergedIntoMain,
+    /** merge-base(HEAD, main) — the commit this branch came off. */
+    forkBase: forkBaseHash ? { hash: forkBaseHash, shortHash: forkBaseHash.slice(0, 7) } : null,
+    /** Local commits not on main yet (capped at 300). */
+    aheadOfMain,
   });
 }

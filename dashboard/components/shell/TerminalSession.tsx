@@ -490,7 +490,10 @@ export function TerminalSession({
         `${proto}://${window.location.hostname}:${TERMINAL_PORT}/?${params}`,
       );
       socketRef = socket;
-      if (disposed || preferKillRef.current) {
+      // Only bail if unmount already happened. killOnUnmount is honoured at
+      // cleanup time; it must not veto the initial connect, or sessions whose
+      // owner leaves the default (the persistent CLI tabs) never connect.
+      if (disposed) {
         disposeSession();
         term.dispose();
         return;

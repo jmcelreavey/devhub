@@ -173,16 +173,17 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       ])
         .then(([notesData, docsData, terminalData]) => {
           const noteCmds: Command[] = (notesData.files ?? []).map(
-            (f: { path: string; matches: { text: string }[] }) => {
+            (f: { path: string; matches: { text: string }[]; tags?: string[] }) => {
               const cleanPath = f.path.replace(/\.json$/, "");
               const href = isDiagramStoragePath(f.path)
                 ? toDiagramRoutePath(f.path)
                 : `/notes/${cleanPath}`;
+              const tagBit = f.tags?.length ? `  ${f.tags.map((t) => `#${t}`).join(" ")}` : "";
               return {
                 id: `content:notes:${f.path}`,
                 kind: "content" as CommandKind,
                 label: cleanPath,
-                detail: f.matches[0]?.text ?? "",
+                detail: `${f.matches[0]?.text ?? ""}${tagBit}`,
                 hint: "note",
                 perform: () => router.push(href),
               };

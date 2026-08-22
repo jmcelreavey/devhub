@@ -28,14 +28,23 @@ interface TaskCount {
 export default function WorkPage() {
   const searchParams = useSearchParams();
   const paramTab = parseWorkTab(searchParams.get("tab"));
+  const paramTag = searchParams.get("tag");
   const [tab, setTab] = useState<WorkTab>(paramTab ?? "tasks");
   // Track the last URL tab so in-app ?tab= navigation switches tabs without an
   // effect (React "adjust state during render" pattern).
   const [seenParamTab, setSeenParamTab] = useState(paramTab);
-  const [taskQuery, setTaskQuery] = useState("");
+  const [taskQuery, setTaskQuery] = useState(paramTag ? `#${paramTag}` : "");
   if (paramTab !== seenParamTab) {
     setSeenParamTab(paramTab);
     if (paramTab) setTab(paramTab);
+  }
+  // A tag hop (?tag=auth) seeds the task search; editing the box afterwards is
+  // free-form as usual. matchesTaskSearch substring-matches, so "#auth" finds
+  // every task tagged #auth.
+  const [seenParamTag, setSeenParamTag] = useState(paramTag);
+  if (paramTag !== seenParamTag) {
+    setSeenParamTag(paramTag);
+    setTaskQuery(paramTag ? `#${paramTag}` : "");
   }
   const { data: setup } = useLive<SetupGateStatus>("/api/setup/status", { refreshInterval: 0 });
   const { data: taskData } = useLive<TaskCount>("/api/tasks");

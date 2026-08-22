@@ -12,7 +12,16 @@
  * `shared/entity-note` in MCP/sibling packages. Do not invent per-plugin formats.
  */
 
-export type EntityKind = "task" | "meeting" | "pr" | "note" | "diagram" | "calendar" | "jira" | "repo";
+export type EntityKind =
+  | "task"
+  | "meeting"
+  | "pr"
+  | "note"
+  | "diagram"
+  | "calendar"
+  | "jira"
+  | "repo"
+  | "tag";
 
 export interface EntityRef {
   kind: EntityKind;
@@ -61,7 +70,31 @@ const KIND_LABEL: Record<EntityKind, string> = {
   diagram: "Diagram",
   jira: "Jira",
   repo: "Repo",
+  tag: "Tag",
 };
+
+/**
+ * Inline `#tag` tokens: must start with a letter or underscore, so issue
+ * numbers (`#525`) and digit-leading ids never become tags. Bounded to 32
+ * chars. The leading lookbehind-free form requires whitespace, start, or an
+ * open paren before the `#`, so `owner/repo#123` never matches.
+ */
+export const TAG_RE = /(?:^|[\s(])#([a-z_][a-z0-9_-]{0,31})\b/g;
+
+/** Extract unique lowercase tags from free text (`Fix login #auth #urgent` → ["auth","urgent"]). */
+export function extractTags(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(TAG_RE)) {
+    const tag = m[1];
+    if (tag && !out.includes(tag)) out.push(tag);
+  }
+  return out;
+}
+
+/** Tags as EntityRefs, ready to mix with other links. */
+export function tagRefs(text: string): EntityRef[] {
+  return extractTags(text).map((id) => ({ kind: "tag", id, label: `#${id}`, href: `/work?tag=${encodeURIComponent(id)}` }));
+}
 
 /** One markdown line for an EntityRef (marker, or labelled link / plain text). */
 export function formatEntityRefLine(ref: EntityRef): string {
@@ -215,6 +248,8 @@ function kindFromLabel(raw: string): EntityKind | null {
     case "repo":
     case "repository":
       return "repo";
+    case "tag":
+      return "tag";
     default:
       return null;
   }
@@ -244,6 +279,8 @@ export function defaultHrefForRef(ref: EntityRef): string | undefined {
       return "/calendar";
     case "repo":
       return "/repos";
+    case "tag":
+      return `/work?tag=${encodeURIComponent(ref.id)}`;
     default:
       return undefined;
   }

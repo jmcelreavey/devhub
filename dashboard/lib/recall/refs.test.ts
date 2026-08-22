@@ -51,6 +51,24 @@ describe("extractRefs", () => {
     expect(extractRefKeys("")).toEqual([]);
   });
 
+  it("extracts #tags but not bare issue numbers or PR short forms", () => {
+    const refs = extractRefs("shipped the fix #auth #devhub, see owner/repo#123 and (#525)");
+    const tags = refs.filter((r) => r.kind === "tag");
+    expect(tags.map((t) => t.id)).toEqual(["auth", "devhub"]);
+    expect(tags[0].label).toBe("#auth");
+    // PR short form survives untouched — no tag collision.
+    expect(refs.some((r) => r.kind === "pr" && r.id === "owner/repo#123")).toBe(true);
+  });
+
+  it("round-trips a tag key through refFromKey", () => {
+    expect(refFromKey("tag:perf")).toEqual({
+      kind: "tag",
+      id: "perf",
+      label: "#perf",
+      href: "/work?tag=perf",
+    });
+  });
+
   it("caps output on a pathological document", () => {
     const text = Array.from({ length: 500 }, (_, i) => `AB-${i}`).join(" ");
     expect(extractRefs(text).length).toBeLessThanOrEqual(64);

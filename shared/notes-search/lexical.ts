@@ -1,6 +1,7 @@
 /** Lexical TF-IDF ranking over vault text — not embedding/vector search. */
 import fs from "node:fs";
 import path from "node:path";
+import { extractTags } from "../entity-note/index.ts";
 import { detectJsonFileType, extractPlainTextFromBlockNote, extractPlainTextFromTldraw } from "./extract.ts";
 import type { SearchNotesOptions } from "./search.ts";
 
@@ -8,6 +9,8 @@ export interface LexicalSearchResult {
   path: string;
   score: number;
   preview: string;
+  /** Inline #tags found anywhere in the note, so search results can show them. */
+  tags: string[];
 }
 
 const STOP_WORDS = new Set(["a", "an", "the", "and", "or", "in", "on", "to", "for", "of", "is", "it", "with", "as", "by", "from"]);
@@ -79,7 +82,12 @@ export function lexicalSearchNotes(root: string, query: string, options: SearchN
     }
     if (score <= 0) continue;
     const preview = doc.text.split("\n").find((l) => queryTokens.some((t) => l.toLowerCase().includes(t))) ?? doc.text.split("\n")[0] ?? "";
-    scored.push({ path: doc.path, score: Math.round(score * 100) / 100, preview: preview.slice(0, 200) });
+    scored.push({
+      path: doc.path,
+      score: Math.round(score * 100) / 100,
+      preview: preview.slice(0, 200),
+      tags: extractTags(doc.text),
+    });
   }
 
   scored.sort((a, b) => b.score - a.score);

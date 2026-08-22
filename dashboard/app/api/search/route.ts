@@ -31,6 +31,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
         path: r.path,
         score: r.score,
         matches: [{ line: 1, text: r.preview }],
+        tags: r.tags,
       })),
     });
   }

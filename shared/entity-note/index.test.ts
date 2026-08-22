@@ -2,10 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   buildEntityLinksSection,
   entityKey,
+  extractTags,
   formatEntityRefLine,
   mergeEntityRefs,
   parseEntityLinksFromMarkdown,
   slugify,
+  tagRefs,
   upsertEntityLinksInMarkdown,
   type EntityRef,
 } from "./index.ts";
@@ -21,6 +23,28 @@ describe("slugify / entityKey", () => {
   });
   it("keys kind+id", () => {
     expect(entityKey({ kind: "task", id: "abc" })).toBe("task:abc");
+  });
+});
+
+describe("extractTags / tagRefs", () => {
+  it("extracts unique lowercase tags", () => {
+    expect(extractTags("Fix login #auth #urgent #auth")).toEqual(["auth", "urgent"]);
+  });
+  it("ignores bare issue numbers and PR short forms", () => {
+    expect(extractTags("see owner/repo#123 and (#525)")).toEqual([]);
+  });
+  it("requires a letter or underscore start, never pure digits", () => {
+    expect(extractTags("#123 #1_2 #ab1")).toEqual(["ab1"]);
+  });
+  it("bounds tag length", () => {
+    const long = "a".repeat(40);
+    expect(extractTags(`#${long}`)).toEqual([]);
+  });
+  it("tagRefs carry the work-filter href", () => {
+    const refs = tagRefs("ship it #devhub");
+    expect(refs).toEqual([
+      { kind: "tag", id: "devhub", label: "#devhub", href: "/work?tag=devhub" },
+    ]);
   });
 });
 

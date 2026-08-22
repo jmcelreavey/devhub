@@ -19,7 +19,8 @@
 import path from "node:path";
 import { getNotesDir } from "@/lib/notes/dir";
 
-export const RECALL_INDEX_VERSION = 1;
+/** v2: #tag extraction added to derived refs (tags join the graph). */
+export const RECALL_INDEX_VERSION = 2;
 
 export function recallRoot(): string {
   return path.join(getNotesDir(), ".index");

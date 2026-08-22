@@ -30,6 +30,9 @@ function log(msg) {
  */
 const ALLOWLIST = [
   { from: "skills/shared", to: "skills/shared" },
+  // Vendored upstream skills are read-only catalog entries; without them the
+  // Skills page offers "Add to catalog" for skills the repo already owns.
+  { from: "skills/vendor", to: "skills/vendor", optional: true },
   { from: "agents/shared", to: "agents/shared" },
   { from: "mcp/shared", to: "mcp/shared", optional: true },
   { from: "persona/shared-persona.md", to: "persona/shared-persona.md" },

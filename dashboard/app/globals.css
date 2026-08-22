@@ -9906,6 +9906,16 @@ body[data-motion="off"] .lib-card-icon {
 .repo-git-context-chip[data-kind="ticket"] {
   font-family: var(--font-mono, ui-monospace, monospace);
 }
+/* Derived (co-occurrence) chips — evidence, not intent, so they read quieter. */
+.repo-git-context-chip[data-kind="pr"],
+.repo-git-context-chip[data-kind="note"],
+.repo-git-context-chip[data-kind="tag"],
+.repo-git-context-chip[data-kind="task"] {
+  border-style: dashed;
+}
+.repo-git-context-chip[data-kind="tag"] {
+  color: var(--accent);
+}
 /* A same-repo review is the answer; a cross-repo ticket hit is a lead. The
    dashed border is the visual difference between the two. */
 .repo-git-context-chip[data-confidence="pr"],
@@ -10088,4 +10098,46 @@ body[data-motion="off"] .lib-card-icon {
 .repo-git-graph-row[data-head]:not([data-selected]) {
   box-shadow: inset 2px 0 0 var(--accent);
   background: color-mix(in oklab, var(--accent) 7%, transparent);
+}
+/* Ahead-of-main band: a faint contiguous strip from the fork point up to
+   HEAD makes "how far ahead is this branch" scannable without reading counts.
+   The checked-out row keeps its own stronger marker on top. */
+.repo-git-graph-row[data-ahead]:not([data-head]) {
+  background: color-mix(in oklab, var(--accent) 4.5%, transparent);
+}
+.repo-git-graph-row[data-fork] {
+  border-top: 1px dashed
+    color-mix(in oklab, var(--text-subtle) 55%, transparent);
+}
+.repo-git-fork-chip {
+  background: transparent;
+  border: 1px dashed color-mix(in oklab, var(--text-subtle) 55%, transparent);
+  color: var(--text-muted);
+}
+.repo-git-ahead-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+/* PR chip on the relation strip inherits the PR-row check colours. */
+a.repo-git-context-chip[data-kind="pr"][data-checks="passing"] {
+  color: var(--success);
+  border-color: color-mix(in oklab, var(--success) 45%, transparent);
+}
+a.repo-git-context-chip[data-kind="pr"][data-checks="failing"] {
+  color: var(--danger, #e5484d);
+  border-color: color-mix(in oklab, var(--danger) 45%, transparent);
+}
+a.repo-git-context-chip[data-kind="pr"][data-checks="pending"] {
+  color: var(--warning);
+  border-color: color-mix(in oklab, var(--warning) 45%, transparent);
+}
+.repo-git-pr-checks {
+  margin-left: 3px;
 }

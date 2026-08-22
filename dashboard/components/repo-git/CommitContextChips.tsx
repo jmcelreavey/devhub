@@ -1,8 +1,9 @@
 "use client";
 
-import { BookOpen, ExternalLink } from "lucide-react";
+import { BookOpen, ExternalLink, Hash } from "lucide-react";
 import Link from "next/link";
 import { useLive } from "@/lib/hooks/use-fetch";
+import { defaultHrefForRef, type EntityRef } from "@/lib/entity-note";
 import { jiraBrowseUrl } from "@/lib/utils";
 import type { ReviewNoteMatch } from "@/lib/notes/review-index";
 import { repoApi } from "./shared";
@@ -10,7 +11,9 @@ import { repoApi } from "./shared";
 interface CommitContextPayload {
   tickets: string[];
   prNumbers: number[];
+  prRepo: string | null;
   notes: ReviewNoteMatch[];
+  related: EntityRef[];
 }
 
 const CONFIDENCE_LABEL: Record<ReviewNoteMatch["confidence"], string> = {
@@ -41,10 +44,35 @@ export function CommitContextChips({
 
   const tickets = data?.tickets ?? [];
   const notes = data?.notes ?? [];
-  if (tickets.length === 0 && notes.length === 0) return null;
+  const notePaths = new Set(notes.map((n) => n.path.replace(/\.json$/, "")));
+  const related = (data?.related ?? []).filter((ref) => {
+    // Already rendered above by their dedicated chip shapes.
+    if (ref.kind === "jira" && tickets.some((t) => t.toUpperCase() === ref.id.toUpperCase())) {
+      return false;
+    }
+    if (ref.kind === "note" && notePaths.has(ref.id)) return false;
+    return true;
+  });
+  if (tickets.length === 0 && notes.length === 0 && (data?.prNumbers ?? []).length === 0 && related.length === 0) {
+    return null;
+  }
 
   return (
     <div className="repo-git-commit-context">
+      {(data?.prNumbers ?? []).map((n) => (
+        <a
+          key={`pr-${n}`}
+          className="repo-git-context-chip"
+          data-kind="pr"
+          href={data?.prRepo ? `https://github.com/${data.prRepo}/pull/${n}` : undefined}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={data?.prRepo ? `Open ${data.prRepo}#${n} on GitHub` : `PR #${n}`}
+          style={data?.prRepo ? undefined : { pointerEvents: "none" }}
+        >
+          #{n}
+        </a>
+      ))}
       {tickets.map((key) => (
         <a
           key={key}
@@ -58,6 +86,18 @@ export function CommitContextChips({
           {key}
           <ExternalLink size={9} aria-hidden />
         </a>
+      ))}
+      {related.map((ref) => (
+        <Link
+          key={`${ref.kind}:${ref.id}`}
+          className="repo-git-context-chip"
+          data-kind={ref.kind}
+          href={defaultHrefForRef(ref) ?? "#"}
+          title={`Related via commit history — ${ref.kind}`}
+        >
+          {ref.kind === "tag" ? <Hash size={9} aria-hidden /> : ref.kind === "note" ? <BookOpen size={9} aria-hidden /> : null}
+          {ref.label}
+        </Link>
       ))}
       {notes.map((note) => (
         <Link

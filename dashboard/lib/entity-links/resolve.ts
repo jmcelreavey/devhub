@@ -18,6 +18,7 @@ import {
   entityKey,
   mergeEntityRefs,
   parseEntityLinksFromMarkdown,
+  tagRefs,
   type EntityKind,
   type EntityRef,
 } from "@/lib/entity-note";
@@ -154,6 +155,9 @@ export function resolveEntityLinks(kind: EntityKind, id: string, opts?: {
     // Companion note chip sits under the task title — don't re-echo the title.
     pushNote(taskNotePath({ id, text, date }), "Note");
     if (found?.task.links?.length) related.push(...found.task.links);
+    // Free-form #tags typed in the task text are links too — they show as
+    // chips and hop to a filtered work view.
+    related.push(...tagRefs(text));
     // Do not auto-emit the task's own jiraKey as a related chip: the task row
     // already has JiraKeyChip (copy) + open-in-Jira. Explicit jira links in
     // task.links (a different key) still flow through above. Same-key refs

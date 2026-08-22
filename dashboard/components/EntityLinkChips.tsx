@@ -20,6 +20,7 @@ import {
   GitPullRequest,
   ListTodo,
   PenTool,
+  Tag,
   Ticket,
   X,
 } from "lucide-react";
@@ -40,6 +41,7 @@ const KIND_ICON: Record<EntityKind, typeof FileText> = {
   pr: GitPullRequest,
   jira: Ticket,
   repo: FolderGit2,
+  tag: Tag,
 };
 
 const NOTE_LABEL_MAX = 28;

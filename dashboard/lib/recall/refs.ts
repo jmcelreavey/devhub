@@ -15,7 +15,7 @@
  * one: it pollutes every future retrieval that touches either endpoint. Hence
  * full 40-char SHAs only, and no bare-number "issue" matching.
  */
-import { entityKey, type EntityRef } from "@/lib/entity-note";
+import { entityKey, tagRefs, type EntityRef } from "@/lib/entity-note";
 
 /** `PTF-3774`. Global variant of `JIRA_KEY_RE` from lib/utils. */
 const JIRA_RE = /\b([A-Z][A-Z0-9]{1,9}-\d{1,6})\b/g;
@@ -103,6 +103,12 @@ export function extractRefs(text: string, options: ExtractRefsOptions = {}): Ent
     push(found, { kind: "task", id: m[1], label: `Task ${m[1]}`, href: "/work" });
   }
 
+  // Inline #tags — the free-form tagging layer. extractTags already rejects
+  // bare issue numbers like "#525", so this can't collide with PR short forms.
+  for (const ref of tagRefs(text)) {
+    push(found, ref);
+  }
+
   if (includeRepoSlugs) {
     for (const m of text.matchAll(REPO_SLUG_RE)) {
       const slug = m[1];
@@ -185,6 +191,8 @@ export function refFromKey(key: string): EntityRef | null {
     case "meeting":
     case "calendar":
       return { kind: kind === "meeting" ? "meeting" : "calendar", id, label: id };
+    case "tag":
+      return { kind: "tag", id, label: `#${id}`, href: `/work?tag=${encodeURIComponent(id)}` };
     default:
       return null;
   }

@@ -24,6 +24,8 @@ import { useToast } from "@/lib/hooks/use-toast";
 import type { GitHookFailurePayload } from "@/lib/git/hook-failure";
 import type { StashConflictPayload } from "@/app/repos/types";
 import type { DiffLine, GraphCommitRaw } from "@/lib/repos/git-parsers";
+import type { BranchOpenPr } from "@/lib/github/branch-pr";
+import { jiraBrowseUrl } from "@/lib/utils";
 import { lookupByEmail } from "@/lib/people/identity";
 import { layoutCommitGraph, type GraphLaneCommit } from "@/lib/repos/git-graph";
 import { recordUndo } from "@/lib/git/undo-stack";
@@ -121,6 +123,10 @@ interface LogPayload {
   behindMain?: number;
   onMain?: boolean;
   mergedIntoMain?: boolean;
+  /** merge-base(HEAD, main) — where this branch came off. */
+  forkBase?: { hash: string; shortHash: string } | null;
+  /** Full hashes of local commits not on main yet (capped at 300). */
+  aheadOfMain?: string[];
 }
 
 export function HistoryPanel({
@@ -185,6 +191,12 @@ export function HistoryPanel({
   const [search, setSearch] = useState("");
   const [unpushedOnly, setUnpushedOnly] = useState(false);
   const [unpushedHashes, setUnpushedHashes] = useState<Set<string>>(() => new Set());
+  /** Local commits not on main yet — the tinted band from fork point to HEAD. */
+  const [aheadOfMain, setAheadOfMain] = useState<Set<string>>(() => new Set());
+  /** merge-base(HEAD, main) — the row the band starts below. */
+  const [forkBase, setForkBase] = useState<string | null>(null);
+  /** Open PR for the current branch, with its CI rollup. Lazy, best-effort. */
+  const [openPr, setOpenPr] = useState<BranchOpenPr | null>(null);
   const [relation, setRelation] = useState<BranchRelation | null>(null);
   const [people, setPeople] = useState<RepoPerson[]>([]);
   const [detail, setDetail] = useState<CommitShowPayload | null>(null);
@@ -254,6 +266,8 @@ export function HistoryPanel({
       setNextOffset(logJson.nextOffset ?? null);
       setSearching(Boolean(logJson.searching));
       setSelected((prev) => prev ?? logJson.commits?.[0]?.hash ?? null);
+      setAheadOfMain(new Set(logJson.aheadOfMain ?? []));
+      setForkBase(logJson.forkBase?.hash ?? null);
       setRelation({
         currentBranch: logJson.currentBranch ?? branchJson?.currentBranch ?? "HEAD",
         mainBranch: logJson.mainBranch ?? branchJson?.mainBranch ?? null,
@@ -399,6 +413,31 @@ export function HistoryPanel({
     setUnpushedOnly(true); // eslint-disable-line react-hooks/set-state-in-effect -- badge navigates into unpushed filter
     onFocusUnpushedConsumed?.();
   }, [focusUnpushed, onFocusUnpushedConsumed]);
+
+  // Open PR for the current branch. Deliberately not awaited with the log —
+  // same reasoning as the people fetch below: one gh call must never delay
+  // the graph, and a missing/slow gh just means no chip.
+  const currentBranch = relation?.currentBranch ?? null;
+  // Clear the stale branch's PR during render (React adjust-state pattern) so
+  // a branch switch never shows the previous branch's PR for a frame.
+  const [seenPrBranch, setSeenPrBranch] = useState(currentBranch);
+  if (currentBranch !== seenPrBranch) {
+    setSeenPrBranch(currentBranch);
+    setOpenPr(null);
+  }
+  useEffect(() => {
+    let live = true;
+    void fetchGitJson<{ pr: BranchOpenPr | null }>(repoApi(repoName, "/git/branch-pr"))
+      .then((json) => {
+        if (live) setOpenPr(json.pr ?? null);
+      })
+      .catch(() => {
+        // No gh / no remote / rate-limited — the chip simply doesn't show.
+      });
+    return () => {
+      live = false;
+    };
+  }, [repoName, currentBranch]);
 
   // CI state rides one gh call per selected commit, cached for the session —
   // paging back to a commit you already inspected costs nothing.
@@ -833,12 +872,36 @@ export function HistoryPanel({
           void (async () => {
             const date = new Date().toISOString().slice(0, 10);
             const notePath = `reviews/${repoName}-${date}`;
+            // Hand the reviewer agent the same context chips the UI shows:
+            // PRs, tickets and derived links, so it doesn't have to rediscover them.
+            const context = await fetchGitJson<{
+              tickets?: string[];
+              prNumbers?: number[];
+              prRepo?: string | null;
+              related?: { kind: string; id: string }[];
+            }>(repoApi(repoName, `/git/commit-context?commit=${encodeURIComponent(commit.hash)}`))
+              .then((json) => {
+                const bits: string[] = [];
+                if (json.prRepo && json.prNumbers?.length) {
+                  bits.push(`PRs: ${json.prNumbers.map((n) => `${json.prRepo}#${n}`).join(", ")}`);
+                }
+                if (json.tickets?.length) bits.push(`Tickets: ${json.tickets.join(", ")}`);
+                const rel = (json.related ?? [])
+                  .filter((r) => r.kind === "note" || r.kind === "tag")
+                  .slice(0, 5);
+                if (rel.length) bits.push(`Related: ${rel.map((r) => `${r.kind}:${r.id}`).join(", ")}`);
+                return bits.length ? ` Known context — ${bits.join("; ")}.` : "";
+              })
+              .catch(() => "");
             const promptText = [
               `Use the pr-explain-review skill to explain and review local commit ${commit.hash} ("${commit.subject}") in the ${repoName} repo. This is not a GitHub PR — review the commit and its parent window in the local git history.`,
+              context,
               `Write the report to DevHub notes via the notes MCP (notes_write). Notes MCP path: ${notePath}.`,
               `Include a Repo entity link for ${repoName} in the note's ## Links section.`,
               `Finish with a terminal summary, then exit.`,
-            ].join(" ");
+            ]
+              .filter(Boolean)
+              .join(" ");
             const result = await launchAgentJob({
               title: `review · ${commit.shortHash}`,
               kind: "review",
@@ -1057,6 +1120,7 @@ export function HistoryPanel({
           acting={acting}
           pushing={pushing}
           unpushedCount={unpushedHashes.size}
+          openPr={openPr}
           onFetch={() => void incoming("fetch")}
           onPull={() => void incoming("pull")}
           onPullRebase={() => void incoming("pull-rebase")}
@@ -1080,6 +1144,10 @@ export function HistoryPanel({
               selectedHash={selected}
               wip={wip}
               onOpenWip={onOpenWip}
+              aheadOfMain={aheadOfMain}
+              forkBase={forkBase}
+              forkLabel={relation?.mainShort ?? null}
+              aheadMain={relation?.aheadMain ?? 0}
               onSelect={(hash) => {
                 setSelectedFile(null);
                 setSelected(hash);
@@ -1429,6 +1497,7 @@ function BranchRelationStrip({
   acting,
   pushing,
   unpushedCount,
+  openPr,
   onFetch,
   onPull,
   onPullRebase,
@@ -1440,6 +1509,8 @@ function BranchRelationStrip({
   acting: string | null;
   pushing: boolean;
   unpushedCount: number;
+  /** Open PR for this branch (lazy, best-effort). Null = no gh or no PR. */
+  openPr?: { number: number; title: string; url: string; checks: string } | null;
   onFetch: () => void;
   onPull: () => void;
   onPullRebase: () => void;
@@ -1450,6 +1521,10 @@ function BranchRelationStrip({
   const main = relation.mainShort ?? "main";
   const ahead = relation.aheadMain;
   const behind = relation.behindMain;
+
+  // A ticket key in the branch name (PTF-3774-fix-thing) links straight to
+  // Jira — the branch is the unit of work, so its ticket belongs next to it.
+  const branchTicket = relation.currentBranch.match(/([A-Z][A-Z0-9]{1,9}-\d+)/)?.[1] ?? null;
 
   let status: string;
   let tone: "ok" | "ahead" | "behind" | "diverged" | "merged";
@@ -1526,6 +1601,34 @@ function BranchRelationStrip({
         <div className="repo-git-branch-relation-title">
           <GitMerge size={11} aria-hidden />
           <span className="font-mono">{relation.currentBranch}</span>
+          {branchTicket && (
+            <a
+              className="repo-git-context-chip"
+              data-kind="ticket"
+              href={jiraBrowseUrl(branchTicket)}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`Open ${branchTicket} in Jira`}
+            >
+              {branchTicket}
+            </a>
+          )}
+          {openPr && (
+            <a
+              className="repo-git-context-chip"
+              data-kind="pr"
+              data-checks={openPr.checks}
+              href={openPr.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`PR #${openPr.number}: ${openPr.title} · checks ${openPr.checks}`}
+            >
+              PR #{openPr.number}
+              <span className="repo-git-pr-checks" aria-hidden>
+                {openPr.checks === "passing" ? "✓" : openPr.checks === "failing" ? "✕" : "◌"}
+              </span>
+            </a>
+          )}
           <span className="text-text-subtle">vs</span>
           <span className="font-mono">{main}</span>
         </div>

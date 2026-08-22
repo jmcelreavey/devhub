@@ -103,7 +103,8 @@ describe("scanLocalSkillImportCandidates", () => {
       importSkillNames: ["example"],
     });
 
-    expect(code).toBe(1);
+    // Skipping a repo-newer skill is expected, not an error.
+    expect(code).toBe(0);
     expect(fs.readFileSync(repoFile, "utf-8")).toBe("# repo\n");
   });
 
@@ -128,7 +129,8 @@ describe("scanLocalSkillImportCandidates", () => {
       importSkillNames: ["project-graveyard"],
     });
 
-    expect(code).toBe(1);
+    // Vendored skills are skipped on purpose — that is not a failure.
+    expect(code).toBe(0);
     expect(fs.existsSync(path.join(repo, "skills/shared/project-graveyard"))).toBe(false);
   });
 

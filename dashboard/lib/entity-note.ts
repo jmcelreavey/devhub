@@ -17,6 +17,7 @@ export {
   mergeEntityRefs,
   parseEntityLinksFromMarkdown,
   slugify,
+  tagRefs,
   upsertEntityLinksInMarkdown,
   type EntityKind,
   type EntityRef,
