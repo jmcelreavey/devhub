@@ -1,5 +1,12 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { getOpenCodeRecap, OpenCodeRecapError, redactRecapSecrets } from "@/lib/opencode/recap";
+
+// recap.ts resolves its base URL through ensureDevHubOpenCode, which spawns a
+// real `opencode serve` — not installed on CI. Tests inject their own fetch,
+// so any port will do as long as nothing tries to spawn a binary.
+vi.mock("@/lib/opencode/listen", () => ({
+  ensureDevHubOpenCode: vi.fn(async () => 40971),
+}));
 
 const ORIGINAL_ENV = { ...process.env };
 
