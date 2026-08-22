@@ -244,6 +244,16 @@ test.describe("terminal (xterm.js)", () => {
       await expect(dock).toBeVisible({ timeout: 2_000 });
     }).toPass({ timeout: 30_000 });
 
+    /**
+     * The dock boots into blocks view (Warp-style DOM cards), which keeps the
+     * xterm grid mounted but hidden until a command runs or the user flips
+     * views. The assertions below are about the grid itself — mount, canvas
+     * measurement, keystrokes — so switch to raw first.
+     */
+    const rawToggle = page.getByRole("button", { name: "Raw terminal view" });
+    await expect(rawToggle).toBeVisible({ timeout: 10_000 });
+    await rawToggle.click();
+
     const screen = dock.locator(".xterm-screen, .xterm").first();
     await expect(screen).toBeVisible({ timeout: 20_000 });
 
