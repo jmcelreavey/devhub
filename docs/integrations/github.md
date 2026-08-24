@@ -99,15 +99,17 @@ Each PR row shows the title (links to GitHub), metadata (`repo#number`, author, 
 
 | Tab | Menu actions |
 | --- | ------------ |
-| **Mine** (authored) | Open on GitHub · Copy PR URL · Copy Jira URL (when title contains a key) · **Open in Cursor** (stash if dirty, `gh pr checkout`) · **Request review…** · Copy Slack request · Open review note |
-| **Review requested** | **Review with agent** · Open in Cursor · Open on GitHub · Copy URLs · Open note |
+| **Mine** (authored) | Open on GitHub · Copy PR URL · Copy Jira URL (when title contains a key) · **Open in Cursor** (stash if dirty, `gh pr checkout`) · **Review with agent** · Copy Slack request · Open review note |
+| **Review requested** | **Review with agent** (or **Finish your daily rep first** when that PR is today's unfinished rep) · Open in Cursor · Open on GitHub · Copy URLs · Open note |
 | **Recently reviewed** | Copy approved · Copy reviewed · Open in Cursor · Open on GitHub · Copy URLs |
 
-**Request review** (authored tab only) opens a dialog backed by `GET /api/github/prs/reviewers`. It lists currently requested reviewers, GitHub-suggested reviewers, and historical contributors from the local clone (`repo-people`). Type or pick logins, then submit via `POST /api/github/prs/reviewers` (same-origin). Clicking the reviewer facepile opens the same dialog. MCP parity: `prs_request_reviewers`.
+The reviewer facepile is display-only. There is no dashboard **Request review** action and no `/api/github/prs/reviewers` route — request reviewers on GitHub.
 
 **Open in Cursor** calls `POST /api/github/prs/open-in-cursor` — finds the local clone under the Repos scan directory, stashes dirty work, checks out the PR branch, and launches Cursor. Optional `notePath` opens a notes working copy alongside. MCP parity: `prs_open_in_cursor`. Requires the repo to be cloned locally.
 
-**Review with agent** is intentionally local. It opens the terminal drawer and runs the configured **Agent CLI** (`opencode run` or `cursor-agent`; see `/setup → Agent CLI`) with the `pr-explain-review` skill. It streams the explanation in DevHub and tells the skill to save the finished write-up as a note through the notes MCP. It does **not** post comments, approve, or request changes on GitHub unless the human explicitly asks the tool to do that later.
+**Review with agent** is intentionally local. It queues an agent job (`launchAgentJob`) that opens the **Agent** dock tab (or an OpenCode session when that is the resolved provider) with the `pr-explain-review` skill. It does **not** inject into a live shell tab. The skill saves the write-up through notes MCP. It does **not** post comments, approve, or request changes on GitHub unless the human explicitly asks the tool to do that later.
+
+On the **Review requested** tab, if today's [daily review rep](../architecture/dashboard.md#daily-review-reps) is this PR and findings are not saved yet, the menu swaps **Review with agent** for **Finish your daily rep first** so the AI-free pass happens before the agent looks.
 
 The `pr-explain-review` skill pulls full PR context before judging the diff:
 
@@ -125,7 +127,7 @@ pr-reviews/<owner-repo-slug>-<pr-number>
 
 For example, `BusinessInsider/Fancy Repo#123` becomes
 `pr-reviews/businessinsider-fancy-repo-123`. Once the note exists, the dashboard
-shows a **Notes** link beside that PR. After clicking **Review**, the link polls
+shows a **Notes** link beside that PR. After clicking **Review with agent**, the link polls
 for the note every few seconds; before a note exists, it renders nothing.
 
 Scaffolded review notes include a `## Links` section with an EntityRef back to the
@@ -134,8 +136,9 @@ the scaffold with MCP `notes_create_pr`. See [Notes System — Cross-entity link
 
 ### Review Note Constraints
 
-- The selected Agent CLI (`opencode` or `cursor-agent`) must be on `PATH`; otherwise
-  the terminal prints an install hint instead of crashing the UI.
+- A usable AI provider must be installed or configured (`DEVHUB_AI_PROVIDER`:
+  Cursor CLI, ChatGPT/Codex CLI, OpenCode, or `AI_API_KEY`). Otherwise the Agent
+  tab shows a setup hint instead of crashing the UI. See [Agent CLI selection](../guides/opencode-and-chamber.md#agent-cli-selection).
 - When `NEXT_PUBLIC_REPO_ROOT` is set, the launch command exports `REPO_ROOT`
   and `NOTES_DIR` for the agent run so the notes MCP writes into
   `notes/pr-reviews/...`, even if the review targets a different repository.
@@ -160,9 +163,9 @@ GitHub activity can contribute to standup markdown, especially merged PRs and re
 | PRs do not load                       | `gh auth status` succeeds.                                                                                                                                               |
 | Repo is missing                       | It has a GitHub remote and is discoverable from DevHub's repo search scope.                                                                                              |
 | Archived repo PRs are missing         | Expected: authored and review-requested rows from archived repos are hidden.                                                                                             |
-| **Review with agent** prints a CLI error | The selected Agent CLI (`opencode` or `cursor-agent`) is installed and on `PATH`. See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md#agent-cli-selection). |
+| **Review with agent** shows a setup hint | A local CLI (`cursor-agent`, ChatGPT/Codex, or `opencode`) is on `PATH`, or `AI_API_KEY` is set. See [Agent CLI selection](../guides/opencode-and-chamber.md#agent-cli-selection). |
 | **Open in Cursor** fails               | The PR's repo is cloned under the Repos scan directory and `cursor` is on `PATH`.                                                                                          |
-| **Request review** returns 503         | `gh auth status` succeeds.                                                                                                                                                 |
-| **Notes** link never appears          | The terminal review finished, the skill had notes MCP access, and it wrote to the exact `Notes MCP path` from the prompt.                                                |
-| Review note landed in the wrong place | `NEXT_PUBLIC_REPO_ROOT` mirrors `REPO_ROOT` in `dashboard/.env.local`; restart DevHub so the terminal command can pin `NOTES_DIR`.                                       |
+| **Finish your daily rep first**        | Expected when this PR is today's unfinished [daily review rep](../architecture/dashboard.md#daily-review-reps). Save findings on `/review/rep` first.                     |
+| **Notes** link never appears          | The agent job finished, the skill had notes MCP access, and it wrote to the exact `Notes MCP path` from the prompt.                                                       |
+| Review note landed in the wrong place | `NEXT_PUBLIC_REPO_ROOT` mirrors `REPO_ROOT` in `dashboard/.env.local`; restart DevHub so the agent run can pin `NOTES_DIR`.                                                |
 | Standup misses PRs                    | The PR was merged in the selected time window.                                                                                                                           |

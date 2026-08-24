@@ -207,26 +207,42 @@ The **Review** page (`/review`, desktop nav) is a retrospective view over the la
 
 Pair with [Standup](../guides/standup.md) for daily forward-looking summaries; Review is the backward-looking complement.
 
+### Daily review reps
+
+A **daily review rep** is one AI-free PR review per calendar day, then an optional compare-and-grade against the agent. The card lives on `/review`; the workout is `/review/rep`.
+
+| Step | What happens |
+| ---- | ------------ |
+| Start | `POST /api/reps` `{ action: "start", pr }` picks today's PR (defaults to the top review-requested row). Idempotent — once a day has a pick, it sticks. Swap with `{ action: "repick", pr }` only before findings are saved. |
+| Solo review | You read the diff (`GET /api/reps/diff?repo=&number=`) and write findings. Saving (`{ action: "save", findings }`) sets `completedAt` — that is what the streak counts. |
+| Compare & grade | After findings are saved, **Review with agent** is unlocked for that PR. `{ action: "grade", caught, missed }` records how many agent findings you already had vs missed. Grading is optional and does **not** affect the streak. |
+
+State is one JSON file per day under `reps/YYYY-MM-DD.json` (override with `REPS_DIR`). Stats (`streak`, last 35 days) come from those files. `reps/` is personal data — it is **not** in `sync_notes_tasks_push` paths, so a default in-repo `reps/` folder shows up as other dirty files until you commit it through Repo Git or relocate `REPS_DIR`.
+
+On `/prs`, if today's unfinished rep is a review-requested PR, that row's **Review with agent** action is replaced with **Finish your daily rep first**.
+
 ## Agent CLI
 
-One-shot terminal handoffs — PR review, capability **Build lab**, DX audit, repo upstart — run through either **OpenCode** (`opencode run`) or the **Cursor CLI** (`cursor-agent -p … --force --model <model>`). The choice is global, not per feature.
+One shared **AI provider** covers in-app generation (briefings, learn-repo, Agent tab chat) and agent launches (PR review, capability **Build lab**, DX audit, repo upstart). Local CLIs are preferred over requiring `AI_API_KEY`.
 
 | Surface    | Route / env                           | Behavior                                                                                                           |
 | ---------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Setup      | `/setup → Agent CLI`                  | Pick CLI and optional model overrides                                                                              |
-| Skills     | **Skills → Agent CLI**                | Same settings as Setup                                                                                             |
-| API        | `GET/PUT /api/agent-cli`              | Read/save `DEVHUB_AGENT_CLI`, `DEVHUB_AGENT_OPENCODE_MODEL`, `DEVHUB_AGENT_CURSOR_MODEL` in `dashboard/.env.local` |
-| Setup poll | `GET /api/setup/status` → `agentVars` | `{ cli, opencodeModel, cursorModel, cursorAgentInstalled }` for nav gates and the Cursor option                    |
+| Setup      | `/setup → AI Provider`                | Pick `cursor-cli`, `chatgpt-cli`, `opencode`, or `api`; optional model overrides                                   |
+| Skills     | **Skills → Agent CLI**                | Same settings                                                                                                      |
+| API        | `GET/PUT /api/agent-cli`              | Read/save `DEVHUB_AI_PROVIDER`, `DEVHUB_AGENT_CLI`, model overrides in `dashboard/.env.local`                      |
+| Setup poll | `GET /api/setup/status` → `agentVars` | Resolved provider plus install flags                                                                               |
 
-OpenCode is the default (`DEVHUB_AGENT_CLI` omitted or `opencode`). Cursor appears only when `cursor-agent` resolves on `PATH`; `PUT` with `cli: "cursor"` returns `400` otherwise. Blank `opencodeModel` keeps the shared `opencode.json` default; Cursor defaults to `cursor-grok-4.5-high` when unset.
+Unset `DEVHUB_AI_PROVIDER` auto-picks the first available of Cursor CLI → ChatGPT/Codex CLI → OpenCode → HTTP API. `PUT` with a provider whose binary/key is missing returns `400`. Legacy `DEVHUB_AGENT_CLI` (`opencode` \| `cursor` \| `chatgpt`) still maps in.
 
-Launch wiring lives in `dashboard/lib/terminal-launch.ts`. See [OpenCode and OpenChamber — Agent CLI selection](../guides/opencode-and-chamber.md#agent-cli-selection).
+Agent/review jobs open the **Agent** dock tab (`POST /api/agent/chat`) or an OpenCode HTTP session (`POST /api/agent/run`). They do **not** inject into a live shell unless the job is an upstart that must share a PTY with bash. Concurrent CLI generations are capped at `DEVHUB_AI_MAX_CONCURRENT` (default 3); queued wait time is not counted against the job timeout.
+
+Launch wiring lives in `dashboard/lib/agent-job.ts` and `dashboard/lib/ai/preference.ts`. See [OpenCode and OpenChamber — Agent CLI selection](../guides/opencode-and-chamber.md#agent-cli-selection).
 
 ## Pull Request Reviews
 
 **PRs** (`/prs`, gated on `github`) and the Today GitHub panel read `GET /api/github/prs` — authored PRs, review-requested PRs, and recently reviewed PRs (archived repos filtered from active queues; up to 100 rows per active bucket). The screen search box filters those buckets client-side or pins a pasted PR URL; unmatched phrases fall back to `GET /api/github/prs/search` (**Elsewhere on GitHub**). See [GitHub — Search and pin](../integrations/github.md#search-and-pin).
 
-The **Review** row action does **not** call a review API. It opens the terminal drawer and runs the configured Agent CLI with the `pr-explain-review` skill. The skill pulls conversation, inline review threads, and the linked Jira/GitHub ticket, then saves a note at `pr-reviews/<owner-repo-slug>-<pr-number>` via notes MCP. The **Notes** link polls `GET /api/notes/pr-reviews/<slug>` every few seconds until the note exists.
+The **Review with agent** row action does **not** call a GitHub review API. It queues an agent job (`launchAgentJob`) that opens the Agent dock tab (or OpenCode) with the `pr-explain-review` skill. The skill pulls conversation, inline review threads, and the linked Jira/GitHub ticket, then saves a note at `pr-reviews/<owner-repo-slug>-<pr-number>` via notes MCP. The **Notes** link polls `GET /api/notes/pr-reviews/<slug>` every few seconds until the note exists. There is no dashboard **Request review** action.
 
 Full workflow, constraints, and troubleshooting: [GitHub integration](../integrations/github.md#row-actions).
 
@@ -378,13 +394,15 @@ Merge conflict recovery lives on Status through `ConflictResolverPanel`. It read
 
 `RepoGitWorkspace` is the in-dashboard git UI for the DevHub checkout and every sibling repo on `/repos`. Open it from the top-bar warning control, a repo card's **Open Git** badge, or `/status` when code changes block sync.
 
+A persistent **Git rail** on the left keeps branches, remotes, tags, and stashes visible regardless of which tab is open. Branch rows are drop targets for History-graph commit drags (cherry-pick / merge / rebase onto that branch).
+
 | Tab       | Purpose                                                                                                                                                                                   |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Changes   | Stage/unstage (per file, hunk, or all), inline diff with **find** (`⌘F` / `Ctrl+F` while focused), scoped discard (staged vs unstaged — discarding one side does not wipe the other), **Usually changed together** coupling hints (historical co-change ratios from the last 800 commits — advisory, not a gate), AI commit message, commit-only or commit-and-push |
-| Branches  | Checkout, create, delete, fetch, pull, push (with pre-push hook failure handling); **Remotes** section to add/rename/remove remotes and set fetch/push URLs |
+| Branches  | Checkout, create, delete, rename, fetch, **pull rebase** / **pull merge**, push (with pre-push hook failure handling), merge/rebase onto another branch; **Remotes** section to add/rename/remove remotes and set fetch/push URLs |
 | Stash     | List, apply, pop, drop; stash conflicts open the terminal with a resolve command                                                                                                          |
-| History   | Commit graph (windowed for large repos) with **trusted avatars** per author (see below), branch relation banner (ahead/behind upstream) with inline **Fetch** / **Pull**, author/search filters, commit detail with file list + diff + **commit context** chips (Jira keys, local PR review notes), per-commit actions (cherry-pick, revert, tag, detached checkout, reset, branch-from-commit), **Compare branch** range diff vs default remote branch, **Open with → Cursor** at a historical revision |
-| Conflicts | Inline conflict editor (same semantics as Status)                                                                                                                                         |
+| History   | Commit graph (windowed for large repos) with **trusted avatars** per author (see below), branch relation banner (ahead/behind upstream) with inline **Fetch** / **Pull** / **Pull rebase**, author/search filters, commit detail with file list + diff + **commit context** chips (Jira keys, local PR review notes) + per-commit CI (`GET …/git/ci?commit=`), per-commit actions (cherry-pick, revert, tag, detached checkout, reset, branch-from-commit, **Rewrite history from here…**), **Compare branch** range diff vs default remote branch, **Open with → Cursor** at a historical revision |
+| Conflicts | Inline conflict editor (same semantics as Status); also handles rebase/cherry-pick/revert conflicts                                                                                       |
 | Blame     | Searchable file picker (`GET /api/repos/<name>/git/files`), porcelain blame, commit context chips, **In History** handoff to the History tab, **Open with → Cursor** at the blamed revision |
 | Worktrees | List linked worktrees, add/remove, lock/unlock, prune stale entries; sibling scan directory correctly resolves worktree `.git` pointers |
 | Reflog    | Recent reflog with reachable vs **unreachable** commits flagged — recovery path after a bad reset |
@@ -394,6 +412,10 @@ Merge conflict recovery lives on Status through `ConflictResolverPanel`. It read
 Press **`?`** while the Repo Git workspace is focused for its **context shortcuts** overlay (not the global app shortcuts from [Command palette](../guides/command-palette.md#keyboard-shortcuts)). Tab-aware bindings include History `j`/`k` commit navigation, split-pane resize (`Tab` to focus the handle, `←`/`→` resize, `Home`/`End` snap), and diff find (`⌘F` / `Ctrl+F` when a diff pane is focused). `Esc` closes the top-most dialog.
 
 **Compare branch** (History tab) opens a range diff with `base...head` (defaults: `head=HEAD`, `base` = merge-base with the repo's default remote branch). The modal lists changed files; selecting one shows a unified diff with the same toolbar as commit detail. Ahead/behind counts in the banner reflect `head` vs `base`. API: `GET /api/repos/<name>/git/range?base=&head=&path=`.
+
+**Rewrite history from here…** (History commit menu) opens a drag-to-reorder planner for every commit newer than the chosen base. Ops are `pick` / `reword` / `fixup` / `squash` / `drop`. The server runs a scripted `git rebase -i` (`POST /api/repos/<name>/git/rebase-interactive`) with a generated todo file — `sequence.editor` overwrites the todo, `core.editor=true`, so no editor or TTY ever opens. Requires a checked-out branch and a clean tree; merge commits cannot be the base; squash/fixup cannot be the first step. Conflicts return `409 stash_conflict` and open the Conflicts tab.
+
+**Undo** is a workspace chip for the last action **DevHub itself performed** (commit, cherry-pick, revert, pull-merge). It is not reflog archaeology. Soft undo is `git reset --soft HEAD~1` (`POST …/branches` `undo-commit`); hard undo is `reset-to-commit` with a backup branch first. The stack lives in `sessionStorage`, capped at 5, per repo — a private-mode or evicted tab just hides the chip.
 
 **Usually changed together** (Changes tab) calls `GET /api/repos/<name>/git/coupling?paths=` for staged/unstaged paths. Suggestions come from the last 800 non-merge commits (5-minute in-process cache). Each hint shows how often the suggested file changed in the same commit as your selection — advisory, not a linter rule.
 
@@ -405,13 +427,15 @@ When the checkout is on a feature branch with an open GitHub PR, the workspace h
 
 API routes are scoped under `/api/repos/<name>/git/…` (and branch push/pull under `/api/repos/<name>/branches`). See [API Routes](../reference/api-routes.md#repo-git-routes).
 
-**DevHub-only:** personal content paths (`notes/`, `tasks/`, `collections/`, `upstarts/`, `docs/`, plus env-resolved content dirs) are classified by `lib/content-sync-dirs.ts` and **hidden from the Changes list** in the DevHub repo. Scoped sync (`sync_notes_tasks_push`) covers `notes/`, `collections/`, `tasks/`, `docs/`, and `upstarts/` — **not** `diagrams/`, which must be committed through the Repo Git workspace or a manual commit. Sibling repos show every file.
+**DevHub-only:** personal content paths (`notes/`, `tasks/`, `collections/`, `upstarts/`, `docs/`, plus env-resolved content dirs) are classified by `lib/content-sync-dirs.ts` and **hidden from the Changes list** in the DevHub repo. Scoped sync (`sync_notes_tasks_push`) covers `notes/`, `collections/`, `tasks/`, `docs/`, and `upstarts/` — **not** `diagrams/` or `reps/`, which must be committed through the Repo Git workspace, a manual commit, or relocated via `REPS_DIR`. Sibling repos show every file.
 
 | Problem                                | What to do                                                                                                                                                                                                                                                                                                                                                                                              |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `index.lock` / "could not write index" | Another git process may be running, or a prior command left `.git/index.lock`. DevHub never deletes the lock for you — confirm no git is active, remove the lock manually, retry.                                                                                                                                                                                                                       |
 | Pre-push verify failed                 | Read the hook output in **GitHookFailureDialog** or Status → failed sync logs. Full output is also written to `.git/devhub-hook-failure.log` in the repo. Fix lint/tests/build locally (`npm run verify`), or use **Copy Chamber prompt** / the `git-hook-fix` terminal handoff for an agent fix. Emergency bypass: `DEVHUB_SKIP_VERIFY=1 git push` (see [Scripts](../reference/scripts.md#git-hooks)). |
 | Stash apply left conflicts             | The terminal drawer opens with the `git-conflict-resolve` skill preloaded. Resolve markers, then retry apply/pop from the Stash tab.                                                                                                                                                                                                                                                                    |
+| Interactive rebase conflicted          | Conflicts tab opens (`409 stash_conflict`, `action: "rebase"`). Ours is the target branch; theirs is the commit being replayed. Abort or continue from that tab.                                                                                                                                                                                                                                      |
+| Undo chip missing                      | Expected: only actions DevHub performed in this tab are undoable, and the stack is `sessionStorage` (gone in private mode). Use Reflog for anything else.                                                                                                                                                                                                                                              |
 | Wrong Node version in hook             | The pre-push hook sources `nvm` when your shell's Node does not match `.nvmrc`. Run `nvm install` from repo root if verify fails under a system Node.                                                                                                                                                                                                                                                   |
 
 ## Safety Boundaries

@@ -292,6 +292,8 @@ Embedded media in docs can reference private note assets — a lone markdown lin
 
 Open **Docs** under **Library** (`/docs`) for the landing page, section indexes, file tree, and search. Command palette content search includes docs via `/api/search` (notes by default; `?vault=docs` for docs-only API calls). Prefer editing architecture and guides here or in git — the automation that maintains this tree expects markdown on disk.
 
+Notes and docs editors show a **history** chip (`VaultFileHistory`) with the file's mtime plus `git log --follow` commits (`GET /api/vault/history?vault=&path=`). mtime is the live "edited" signal (includes unsynced saves). Commits only appear once the file lives in the checkout. `available: false` when there is no git history for that path.
+
 ### Content sync workflow
 
 Content sync is the low-friction path for personal content that changes while using the dashboard. It is intentionally scoped: `dashboard/lib/content-sync-paths.ts` defines `notes/`, `collections/`, `tasks/`, `docs/`, and `upstarts/` as the paths staged by the `sync_notes_tasks_push` action.
@@ -303,7 +305,7 @@ Content sync is the low-friction path for personal content that changes while us
 | Status page              | Shows repo branch, ahead/behind counts, dirty content vs other dirty files, recent sync failures, merge conflicts, and sync-health checks. Use it when the top bar blocks sync or a scripted action fails.                                                                                                             |
 | Actions page             | Exposes the same allowlisted script IDs for manual runs and log inspection. `dry_run_scoped_sync` previews the scoped content commit without staging anything.                                                                                                                                                         |
 
-`/api/status/git` classifies content via `lib/content-sync-dirs.ts`. Each bucket always includes its **conventional in-repo folder** (`notes/`, `tasks/`, …) even when `NOTES_DIR` / `TASKS_DIR` env vars point elsewhere — relocated env values must not turn repo content into "other dirty files". A configured dir that resolves inside the repo adds its prefix on top. Root `diagrams/` counts as content-adjacent in dirty badges but is **not** staged by `sync_notes_tasks_push`; commit diagrams through the Repo Git workspace or a manual commit.
+`/api/status/git` classifies content via `lib/content-sync-dirs.ts`. Each bucket always includes its **conventional in-repo folder** (`notes/`, `tasks/`, …) even when `NOTES_DIR` / `TASKS_DIR` env vars point elsewhere — relocated env values must not turn repo content into "other dirty files". A configured dir that resolves inside the repo adds its prefix on top. Root `diagrams/` counts as content-adjacent in dirty badges but is **not** staged by `sync_notes_tasks_push`; commit diagrams through the Repo Git workspace or a manual commit. Daily review reps (`reps/`, `REPS_DIR`) are personal data and are **not** in either the content-sync path list or the dirty-file content buckets — they show as other dirty files until you commit them through Repo Git or relocate `REPS_DIR`.
 
 In the DevHub checkout, the Repo Git workspace **hides** classified content paths from the Changes tab (`contentSyncCount` on `GET /api/repos/<devhub>/git/status`) so notes/tasks edits do not clutter the code-commit UI. Sibling repos on `/repos` show all files.
 

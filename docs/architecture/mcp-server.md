@@ -46,7 +46,7 @@ The server has two tool tiers:
 | Tier              | Source Of Truth                           | Dashboard Required | Tool Groups                                                                                                                                                                          |
 | ----------------- | ----------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Filesystem-backed | Local files under configured content dirs | No                 | Notes, docs, tasks, diagrams, appraisal, DX audit                                                                                                                                    |
-| Dashboard-backed  | DevHub HTTP routes on `DEVHUB_BASE_URL`   | Yes                | Status, briefing, calendar, work/PRs/Jira, assets, search, scripts, repos (list/open/reveal/clone/learn + full git workspace), capability, sessions, share, workspace reads, Datadog |
+| Dashboard-backed  | DevHub HTTP routes on `DEVHUB_BASE_URL`   | Yes                | Status, briefing, calendar, work/PRs/Jira, assets, search, scripts, repos (list/open/reveal/clone/learn + full git workspace), capability, sessions, share, workspace reads, Datadog, terminal |
 | Script-backed     | Local shell scripts under `REPO_ROOT`     | No (runs detached) | `repo_ship`, `repo_ship_status`                                                                                                                                                      |
 
 Filesystem-backed tools call the vault/storage layer directly and work headless.
@@ -105,6 +105,7 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 | Datadog    | `datadog_oncall`, `datadog_recent_alerts`, `datadog_investigate`                                                                                                                                                                                                                                                                                              |
 | Recall     | `recall`, `recall_graph`, `recall_remember`, `recall_index`                                                                                                                                                                                                                                                                                                   |
 | Ownership  | `owned_repos`, `repo_owner_brief`, `repo_pr_radar`, `repo_who_owns`, `repo_knowledge_gaps` — dashboard-backed proxies for `/api/own/*`                                                                                                                                                                                                                        |
+| Terminal   | `terminal_list`, `terminal_tail`, `terminal_propose_run`, `terminal_proposal_status` — dock tabs and propose-then-confirm command runs. **Never** injects stdin; the UI must confirm.                                                                                                                                                                         |
 
 `recall` is the one an agent should reach for first. `search` answers "which
 files contain these words"; `recall` answers "what do I already know about
@@ -235,6 +236,17 @@ Use `sessions_recap` (or the `devhub-recap` skill) when you need **what happened
 
 The dashboard route redacts secrets (tokens, env values, URL credentials) before returning JSON.
 
+### Propose a terminal command from an agent
+
+Terminal tools proxy `/api/terminal/sessions` and `/api/terminal/propose`. Start the dashboard and open the dock at least once so tabs register.
+
+1. `terminal_list` — visible dock tabs (label, cwd, kind, busy, session id). Empty until the dock has opened this process.
+2. `terminal_propose_run` with `command` (and optional `cwd`, `kind`, `preferAgentTab`). Returns a proposal id. **Does not execute.** Prefer `preferAgentTab: true` so a long-running agent does not stomp `npm run dev`.
+3. `terminal_proposal_status` with that id — poll until `approved` / `injected` / `denied` / `expired` / `failed`. Pending means the human has not confirmed yet; do not proceed as if it ran.
+4. `terminal_tail` with a `sessionId` from `terminal_list` to read the cleaned log tail after inject.
+
+Proposals live in the dashboard process (15 min TTL, max 20 pending). Desktop WS tickets alone are not user intent.
+
 ### Commit and push a sibling repo from an agent
 
 1. Start the dashboard with `npm run dev`.
@@ -252,7 +264,7 @@ These proxy the same GitHub PR routes as the `/prs` row actions. Start the dashb
 1. `prs_list` — authored + review-requested queues.
 2. `prs_open_in_cursor` with `repo` + `number` and `confirm: true` — stashes dirty work in the local clone, `gh pr checkout`, then launches Cursor. Optional `notePath` opens a notes working copy alongside. `repos_open` only opens the current branch.
 
-**Not exposed as MCP tools** (dashboard UI / direct HTTP only): `GET /api/repos/<name>/git/commit-context`, `.../git/coupling`, `.../git/range`, `.../git/reflog`, `.../git/remotes`, `.../git/worktrees`, `POST .../git/commit-action`. Agents can call these via `DEVHUB_BASE_URL` when needed; there is no matching `repos_git_*` registrar yet.
+**Not exposed as MCP tools** (dashboard UI / direct HTTP only): `GET /api/repos/<name>/git/commit-context`, `.../git/coupling`, `.../git/range`, `.../git/reflog`, `.../git/remotes`, `.../git/worktrees`, `.../git/ci`, `POST .../git/commit-action`, `POST .../git/rebase-interactive`. Agents can call these via `DEVHUB_BASE_URL` when needed; there is no matching `repos_git_*` registrar yet.
 
 Structured errors from the underlying routes: `409 index_lock` (another git process holds `.git/index.lock`), `409 stash_conflict` (unmerged paths after stash apply/pop), `422 hook_failed` (pre-commit/pre-push). Hook failures persist full output under `.git/devhub-hook-failure.log` in the target repo. The UI offers a terminal handoff via the `git-hook-fix` skill.
 

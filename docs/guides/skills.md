@@ -114,12 +114,12 @@ Some dashboard actions launch a one-shot agent in the terminal dock with a prelo
 
 | Skill | Triggered from | Purpose |
 | ----- | -------------- | ------- |
-| `pr-explain-review` | `/prs` **Review** button | Explain a GitHub PR and save a review note under `notes/pr-reviews/…`. See [GitHub integration](../integrations/github.md#row-actions). |
+| `pr-explain-review` | `/prs` **Review with agent** | Explain a GitHub PR and save a review note under `notes/pr-reviews/…`. Runs in the Agent dock tab (or OpenCode), not a raw PTY inject. See [GitHub integration](../integrations/github.md#row-actions). |
 | `git-hook-fix` | Repo Git **GitHookFailureDialog** | Diagnose and fix pre-commit/pre-push hook failures after a `422 hook_failed` response. |
 | `git-conflict-resolve` | Repo Git stash conflicts | Walk through resolving conflict markers after a failed stash apply/pop (`409 stash_conflict`). |
 | `taste-skill` | Briefing canvas generation (house aesthetic) | Anti-slop frontend rules distilled into briefing prompts via `lib/briefing-taste.ts`. Install under `skills/shared/` (or sync to tool paths) for stricter default palettes; **fresh look** / custom aesthetics bypass house rules until reset. |
 
-Configure the underlying CLI (`opencode` vs `cursor`) from **/setup → Agent CLI**. See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md#agent-cli-selection).
+Configure the underlying provider (`cursor-cli`, `chatgpt-cli`, `opencode`, or `api`) from **/setup → AI Provider**. See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md#agent-cli-selection).
 
 ## MCP tab
 
