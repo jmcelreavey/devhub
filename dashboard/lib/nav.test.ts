@@ -188,6 +188,12 @@ describe("buildCrumbs", () => {
   it("does not repeat a group on its own landing page", () => {
     expect(buildCrumbs("/notes").map((c) => c.label)).toEqual(["Notes"]);
     expect(buildCrumbs("/").map((c) => c.label)).toEqual(["Today"]);
+  });
+
+  it("collapses plugin-contributed group landings when the plugin is present", () => {
+    const ops = ALL_NAV_DESTINATIONS.find((n) => n.href === "/ops");
+    if (!ops) return; // ponytail: /ops comes from the bi plugin, absent in the public core
+    expect(PLUGIN_NAV_ITEMS.some((n) => n.href === "/ops")).toBe(true);
     expect(buildCrumbs("/ops").map((c) => c.label)).toEqual(["Ops"]);
   });
 
