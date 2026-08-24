@@ -542,7 +542,7 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
     <div className="page-wrapper">
       <BootScreen state={boot} />
       <div className="page-header">
-        <div className="page-title">Agents</div>
+        <h1 className="page-title">Agents</h1>
         {(tab === "skills" || tab === "agents") && (
           <span className="badge badge-muted" suppressHydrationWarning>
             {mounted ? filteredRows.length : "-"}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -24,6 +24,7 @@ import { agentReviewCommand, agentReviewPrompt } from "@/lib/terminal-launch";
 import { groupUnifiedDiffByFile, type DiffFileSection } from "@/lib/repos/git-parsers";
 import { createOrOpenVaultNote } from "@/lib/create-vault-note";
 import type { GithubPrsApiPayload } from "@/lib/github/prs";
+import type { AiGrade } from "@/lib/reps-grade";
 import type { Rep, RepsApiPayload } from "@/lib/reps";
 
 function Stepper({
@@ -102,7 +103,7 @@ function FileDiff({ section }: { section: DiffFileSection }) {
         </span>
       </summary>
       <div style={{ borderTop: "1px solid var(--border)" }}>
-        <GitDiffView lines={section.lines} emptyMessage="No renderable changes." />
+        <GitDiffView lines={section.lines} filePath={section.path} emptyMessage="No renderable changes." />
       </div>
     </details>
   );
@@ -284,6 +285,9 @@ export default function RepView() {
   const [grading, setGrading] = useState(false);
   const [showSwap, setShowSwap] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [aiGrade, setAiGrade] = useState<AiGrade | null>(null);
+  const [gradingAi, setGradingAi] = useState(false);
+  const [aiGradeError, setAiGradeError] = useState<string | null>(null);
 
   const pr = rep?.pr;
   const notePath = pr ? prReviewNotePath(pr) : null;
@@ -351,7 +355,56 @@ export default function RepView() {
       alreadyConfirmed: true,
     });
     if (pr) notifyPrReviewNoteWatch(pr);
+    // Stamp server-side so a reload can't double-launch the review.
+    try {
+      await post({ action: "agent-review-started" });
+    } catch {
+      /* best-effort — the review still runs */
+    }
   }
+
+  // Auto-run the agent review the moment findings are saved (and on reload if
+  // the launch never got stamped). The stamp + ref guard keep it single-shot.
+  const autoLaunchRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!rep?.completedAt || !rep.pr || agentReview || rep.agentReviewStartedAt) return;
+    const key = `${rep.date}:${rep.pr.repo}#${rep.pr.number}`;
+    if (autoLaunchRef.current === key) return;
+    autoLaunchRef.current = key;
+    void reviewWithAgent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fires once per rep when findings land
+  }, [rep?.completedAt, rep?.pr, rep?.agentReviewStartedAt, rep?.date, agentReview]);
+
+  async function runAiGrade() {
+    setGradingAi(true);
+    setAiGradeError(null);
+    try {
+      const res = await fetch("/api/reps", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "ai-grade" }),
+      });
+      const body = (await res.json()) as { ok?: boolean; grade?: AiGrade; error?: string };
+      if (!res.ok || !body.grade) throw new Error(body.error ?? `Request failed (${res.status})`);
+      setAiGrade(body.grade);
+      setCaught(body.grade.caught);
+      setMissed(body.grade.missed);
+    } catch (err) {
+      setAiGradeError(err instanceof Error ? err.message : "AI grade failed.");
+    } finally {
+      setGradingAi(false);
+    }
+  }
+
+  // When the agent review lands while the page is open, prefill the grade with
+  // the AI's counts. Reloads don't auto-grade — the button covers that case.
+  const prevAgentReviewRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const prev = prevAgentReviewRef.current;
+    prevAgentReviewRef.current = agentReview;
+    if (prev || !agentReview || !rep?.completedAt || rep.grade || gradingAi) return;
+    void runAiGrade();
+  }, [agentReview, rep?.completedAt, rep?.grade, gradingAi]);
 
   async function openNote() {
     if (!rep || !rep.pr) return;
@@ -375,9 +428,9 @@ export default function RepView() {
           >
             <ArrowLeft size={11} aria-hidden /> Weekly review
           </Link>
-          <div className="page-title" style={{ fontFamily: "var(--font-display)" }}>
+          <h1 className="page-title" style={{ fontFamily: "var(--font-display)" }}>
             Daily rep
-          </div>
+          </h1>
           {stats && stats.streak > 0 && (
             <div className="text-xs mt-1 text-text-subtle">
               {stats.streak}-day streak
@@ -507,7 +560,8 @@ export default function RepView() {
                         style={{ fontSize: 12, padding: "4px 10px" }}
                         onClick={() => void reviewWithAgent()}
                       >
-                        <Bot size={12} aria-hidden /> Review with agent
+                        <Bot size={12} aria-hidden />{" "}
+                        {rep.agentReviewStartedAt && !agentReview ? "Re-run review" : "Review with agent"}
                       </button>
                       <button
                         type="button"
@@ -530,7 +584,9 @@ export default function RepView() {
                   ) : (
                     <p className="text-sm text-text-subtle inline-flex items-center gap-1.5">
                       <RefreshCw size={12} className="animate-spin" aria-hidden />
-                      Run the agent review — its note appears here automatically.
+                      {rep.agentReviewStartedAt
+                        ? "Agent review started — it appears here when the note lands."
+                        : "Run the agent review — its note appears here automatically."}
                     </p>
                   )}
                 </div>
@@ -549,18 +605,47 @@ export default function RepView() {
                     <div className="text-xs font-medium mb-3 text-text-muted">
                       Grade it — how did you do against the agent?
                     </div>
+                    {gradingAi && (
+                      <p className="text-xs text-text-subtle mb-2 inline-flex items-center gap-1.5">
+                        <RefreshCw size={12} className="animate-spin" aria-hidden /> AI is grading your findings…
+                      </p>
+                    )}
+                    {aiGradeError && (
+                      <p className="text-xs mb-2" style={{ color: "var(--danger)" }}>
+                        {aiGradeError}
+                      </p>
+                    )}
+                    {aiGrade && !gradingAi && (
+                      <p className="text-xs text-text-subtle mb-2">
+                        AI graded you at caught {aiGrade.caught} / missed {aiGrade.missed}
+                        {aiGrade.missedSummary ? ` — ${aiGrade.missedSummary}` : ""}. Adjust if it&apos;s wrong,
+                        then save.
+                      </p>
+                    )}
                     <div className="flex flex-wrap items-center gap-4 mb-3">
                       <Stepper label="You'd flagged" value={caught} onChange={setCaught} tone="var(--success)" />
                       <Stepper label="You missed" value={missed} onChange={setMissed} tone="var(--danger)" />
                     </div>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      disabled={grading}
-                      onClick={() => void saveGrade()}
-                    >
-                      <Check size={12} aria-hidden /> Save grade
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={grading}
+                        onClick={() => void saveGrade()}
+                      >
+                        <Check size={12} aria-hidden /> Save grade
+                      </button>
+                      {!aiGrade && !gradingAi && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          style={{ fontSize: 12, padding: "4px 10px" }}
+                          onClick={() => void runAiGrade()}
+                        >
+                          <Bot size={12} aria-hidden /> Grade with AI
+                        </button>
+                      )}
+                    </div>
                   </>
                 )}
               </div>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowLeft, ListTodo, Plus } from "lucide-react";
 import { LayoutPresetsButton } from "@/components/shell/LayoutPresets";
 import { HoverTip } from "@/components/ui/HoverTip";
+import { TodayRepSignal } from "./TodayRepSignal";
 import { LiveClock } from "./LiveClock";
 import { greetingForHour, nowNextEvent, type HeroEvent } from "./hero-helpers";
 
@@ -81,8 +82,7 @@ export function TodayHero({
             <ArrowLeft size={11} aria-hidden /> Yesterday
           </Link>
         </div>
-        {(signal || topTask) && (
-          <div className="hub-hero-signals">
+        <div className="hub-hero-signals">
             {signal && (
               <Link
                 href="/calendar"
@@ -111,8 +111,8 @@ export function TodayHero({
                 <span className="hero-signal-text">{topTask.text}</span>
               </button>
             )}
+            <TodayRepSignal />
           </div>
-        )}
       </div>
       <div className="flex items-center gap-2">
         <HoverTip label="Quick capture (⌘⇧C)" pos="bottom-end">

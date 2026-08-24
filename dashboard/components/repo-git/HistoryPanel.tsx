@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  Check,
   CornerDownLeft,
+  Columns3,
   Download,
   GitBranch,
   GitMerge,
@@ -13,13 +15,12 @@ import {
   Search,
   ShieldCheck,
   Upload,
-} from "lucide-react";
-import { SkeletonRows } from "@/components/ui/SkeletonRows";
+} from "lucide-react";import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { ContextMenu, useContextMenu } from "@/components/shell/ContextMenu";
 import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
-import { useStoredFraction } from "@/lib/hooks/use-stored-state";
+import { useStoredFraction, useStoredState } from "@/lib/hooks/use-stored-state";
 import { useToast } from "@/lib/hooks/use-toast";
 import type { GitHookFailurePayload } from "@/lib/git/hook-failure";
 import type { StashConflictPayload } from "@/app/repos/types";
@@ -28,12 +29,15 @@ import type { BranchOpenPr } from "@/lib/github/branch-pr";
 import { jiraBrowseUrl } from "@/lib/utils";
 import { lookupByEmail } from "@/lib/people/identity";
 import { layoutCommitGraph, type GraphLaneCommit } from "@/lib/repos/git-graph";
+import {
+  type GraphColumnsPartial,
+} from "./CommitGraph";
 import { recordUndo } from "@/lib/git/undo-stack";
 import { CommitAvatar } from "./CommitAvatar";
 import { CommitContextChips } from "./CommitContextChips";
 import { CommitGraph } from "./CommitGraph";
 import { DiffMaximizeModal } from "./DiffMaximizeModal";
-import { DiffToolbar, DIFF_CONTEXT_LINES, type DiffContextMode } from "./DiffToolbar";
+import { DiffToolbar, DIFF_CONTEXT_LINES, useDiffViewMode, type DiffContextMode } from "./DiffToolbar";
 import { GitDiffView } from "./GitDiffView";
 import { RangeCompareButton, RangeCompareModal } from "./RangeCompareModal";
 import { RebasePlanModal } from "./RebasePlanModal";
@@ -91,6 +95,8 @@ interface BranchRelation {
   behindUpstream: number;
   /** Commits on HEAD that the upstream doesn't have — what Push would send. */
   aheadUpstream: number;
+  /** When the repo last fetched; ahead/behind arrows are only as fresh as this. */
+  lastFetchAt: string | null;
 }
 
 /** Subset of `Person` the history view needs; the rest is for other surfaces. */
@@ -203,6 +209,7 @@ export function HistoryPanel({
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [contextMode, setContextMode] = useState<DiffContextMode>("default");
+  const [diffView, setDiffView] = useDiffViewMode();
   const [historyListFr, setHistoryListFr] = useStoredFraction("devhub:repo-git:history-list-fr", 0.46);
   const [filesFr, setFilesFr] = useStoredFraction("devhub:repo-git:history-files-fr", 0.34);
   const [diffMaximized, setDiffMaximized] = useState(false);
@@ -215,6 +222,47 @@ export function HistoryPanel({
   const ciCache = useRef(new Map<string, { state: string; counts?: { passed: number; failed: number; pending: number } }>());
   /** `/` jumps into the search box, so it needs a handle. */
   const searchInputRef = useRef<HTMLInputElement>(null);
+  /**
+   * Visible graph columns (hash / refs / author / date). Subject is always on.
+   * Persisted per browser; the grid reflows around whatever is off.
+   */
+  const [graphCols, setGraphCols] = useStoredState<GraphColumnsPartial>(
+    "devhub:repo-git:graph-columns",
+    {},
+    (raw) => {
+      try {
+        const parsed: unknown = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") return parsed as GraphColumnsPartial;
+      } catch {
+        // fall through
+      }
+      return undefined;
+    },
+    JSON.stringify,
+  );
+  const [colsMenuOpen, setColsMenuOpen] = useState(false);
+  const colsMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!colsMenuOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (colsMenuRef.current?.contains(event.target as Node)) return;
+      setColsMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setColsMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [colsMenuOpen]);
+
+  function toggleGraphCol(key: keyof NonNullable<GraphColumnsPartial>) {
+    setGraphCols({ ...graphCols, [key]: !(graphCols[key] ?? true) });
+  }
   const stackHistory = useMediaQuery("(max-width: 900px)");
   const stackDetail = useMediaQuery("(max-width: 720px)");
 
@@ -281,6 +329,7 @@ export function HistoryPanel({
         upstream: branchJson?.upstream ?? null,
         behindUpstream: branchJson?.behind ?? 0,
         aheadUpstream: branchJson?.ahead ?? 0,
+        lastFetchAt: branchJson?.lastFetchAt ?? null,
       });
 
       if (branchJson) {
@@ -1055,6 +1104,51 @@ export function HistoryPanel({
           <GitBranch size={11} />
           {scope === "all" ? "All branches" : "This branch"}
         </button>
+        <div ref={colsMenuRef} className="repo-git-commit-split relative inline-flex">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            aria-haspopup="menu"
+            aria-expanded={colsMenuOpen}
+            onClick={() => setColsMenuOpen((v) => !v)}
+            title="Choose which columns the graph shows"
+          >
+            <Columns3 size={11} />
+            Columns
+          </button>
+          {colsMenuOpen && (
+            <div role="menu" className="repo-git-commit-menu">
+              {(
+                [
+                  ["hash", "Hash"],
+                  ["refs", "Branch / tag labels"],
+                  ["author", "Author"],
+                  ["date", "Date"],
+                ] as const
+              ).map(([key, label]) => {
+                const on = graphCols[key] ?? true;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={on}
+                    className="repo-git-commit-menu-item"
+                    data-active={on || undefined}
+                    onClick={() => toggleGraphCol(key)}
+                  >
+                    <Check
+                      size={11}
+                      aria-hidden
+                      style={{ visibility: on ? "visible" : "hidden" }}
+                    />
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
         <label className="repo-git-filter">
           <span className="sr-only">Author</span>
           <select
@@ -1148,6 +1242,7 @@ export function HistoryPanel({
               forkBase={forkBase}
               forkLabel={relation?.mainShort ?? null}
               aheadMain={relation?.aheadMain ?? 0}
+              columns={graphCols}
               onSelect={(hash) => {
                 setSelectedFile(null);
                 setSelected(hash);
@@ -1349,6 +1444,8 @@ export function HistoryPanel({
                         <DiffToolbar
                           mode={contextMode}
                           onModeChange={setContextMode}
+                          view={diffView}
+                          onViewChange={setDiffView}
                           onMaximize={() => setDiffMaximized(true)}
                           maximizeDisabled={!activeFile}
                           openSlot={
@@ -1377,6 +1474,8 @@ export function HistoryPanel({
                         ) : (
                           <GitDiffView
                             lines={detailForSelection.lines}
+                            filePath={activeFile ?? undefined}
+                            view={diffView}
                             emptyMessage="No textual diff for this file (binary or empty)."
                           />
                         )}
@@ -1427,6 +1526,8 @@ export function HistoryPanel({
         canOpen={Boolean(activeFile)}
         onClose={closeMaximized}
         title={activeFile ?? "Diff"}
+        view={diffView}
+        onViewChange={setDiffView}
         description={
           detailForSelection
             ? `${detailForSelection.shortHash} · ${detailForSelection.subject}`
@@ -1458,6 +1559,8 @@ export function HistoryPanel({
         ) : detailForSelection ? (
           <GitDiffView
             lines={detailForSelection.lines}
+            filePath={activeFile ?? undefined}
+            view={diffView}
             emptyMessage="No textual diff for this file (binary or empty)."
           />
         ) : null}
@@ -1525,6 +1628,30 @@ function BranchRelationStrip({
   // A ticket key in the branch name (PTF-3774-fix-thing) links straight to
   // Jira — the branch is the unit of work, so its ticket belongs next to it.
   const branchTicket = relation.currentBranch.match(/([A-Z][A-Z0-9]{1,9}-\d+)/)?.[1] ?? null;
+
+  // How old the remote-tracking data behind the ↑/↓ arrows is. Under an hour
+  // it's noise; past that it earns a label so "↑2" reads as "per the last
+  // fetch", not gospel. A ticking clock (not Date.now() in render — that's
+  // impure) also keeps "3m ago" current without a refetch.
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clock starts on mount; the label appears a frame later
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  const fetchedMsAgo =
+    relation.lastFetchAt && now !== null ? now - new Date(relation.lastFetchAt).getTime() : null;
+  const fetchStale = fetchedMsAgo !== null && fetchedMsAgo > 60 * 60 * 1000;
+  const fetchAgeLabel = (() => {
+    if (fetchedMsAgo === null) return null;
+    const mins = Math.floor(fetchedMsAgo / 60_000);
+    if (mins < 1) return null;
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+  })();
 
   let status: string;
   let tone: "ok" | "ahead" | "behind" | "diverged" | "merged";
@@ -1641,6 +1768,15 @@ function BranchRelationStrip({
         </div>
       )}
       <div className="repo-git-branch-relation-actions">
+        {fetchAgeLabel && (
+          <span
+            className="repo-git-fetch-age"
+            data-stale={fetchStale || undefined}
+            title={`Ahead/behind arrows compare against the remote as of this fetch — run Fetch to refresh them.`}
+          >
+            fetched {fetchAgeLabel}
+          </span>
+        )}
         <button
           type="button"
           className="btn btn-ghost"

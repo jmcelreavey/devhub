@@ -98,6 +98,12 @@ describe("GET /api/repos/[name]/branches", () => {
       if (args[0] === "tag") {
         return { status: 0, stdout: "", stderr: "" };
       }
+      if (command === "rev-parse --git-path FETCH_HEAD") {
+        return { status: 0, stdout: ".git/FETCH_HEAD\n", stderr: "" };
+      }
+      if (command === "worktree list --porcelain") {
+        return { status: 0, stdout: "", stderr: "" };
+      }
       if (command === "rev-parse --abbrev-ref --symbolic-full-name @{u}") {
         return { status: 0, stdout: "origin/main\n", stderr: "" };
       }

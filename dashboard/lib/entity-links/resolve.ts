@@ -189,7 +189,18 @@ export function resolveEntityLinks(kind: EntityKind, id: string, opts?: {
     }
   } else if (kind === "note") {
     notes.push({ kind: "note", id, label: opts?.label || id, href: noteHref(id) });
-    related.push(...refsFromNote(id));
+    const md = readNoteMarkdown(id);
+    if (md) {
+      related.push(
+        ...parseEntityLinksFromMarkdown(md).map((ref) => ({
+          ...ref,
+          href: defaultHrefForRef(ref) ?? ref.href,
+        })),
+      );
+      // Inline #tags in the note body show up as hop chips in the
+      // relations panel, same as task tags.
+      related.push(...tagRefs(md));
+    }
   }
 
   // Deduplicate notes/related excluding the queried entity itself

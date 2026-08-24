@@ -119,7 +119,7 @@ export function CalendarEventRow({
   return (
     <div className="min-w-0">
       <div
-        className={`group flex min-w-0 items-start gap-2 rounded ${compact ? "py-0.5" : "py-2"} transition-colors hover:bg-[var(--bg-muted)]`}
+        className={`group flex min-w-0 items-start gap-2 rounded -mx-2 px-2 ${compact ? "py-1" : "py-2"} transition-colors hover:bg-[var(--bg-muted)]`}
         {...menu.bindRow(event)}
       >
         <span

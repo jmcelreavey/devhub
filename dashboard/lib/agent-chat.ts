@@ -206,10 +206,10 @@ export function clearAgentChatHistory(tabId: number): void {
 
 /**
  * Client ceiling so Ask/chat can't spin forever if the route never returns.
- * Sit above the route's generate timeout (240s) so a late CLI reply isn't
- * aborted as a silent fetch AbortError.
+ * Sits above the route's generate timeout (900s) so a long-but-alive CLI run
+ * isn't aborted client-side — hung CLIs are the route idle guard's job.
  */
-export const AGENT_CHAT_TIMEOUT_MS = 260_000;
+export const AGENT_CHAT_TIMEOUT_MS = 920_000;
 
 export function isAbortError(err: unknown): boolean {
   if (typeof DOMException !== "undefined" && err instanceof DOMException && err.name === "AbortError") {

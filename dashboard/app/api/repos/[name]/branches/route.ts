@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
+import fs from "node:fs";
+import path from "node:path";
 import {
   readOriginRemoteUrl,
   readRemoteUrl,
@@ -187,15 +189,15 @@ export async function GET(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Unknown repo" }, { status: 404 });
   }
 
-  const [branchResult, remoteBranchResult, stashResult, statusResult, upstream, mainBranch, tagsResult] =
+  const [branchResult, remoteBranchResult, stashResult, statusResult, upstream, mainBranch, tagsResult, worktreeResult] =
     await Promise.all([
     // NUL-separated so branch metadata survives names with odd characters, and
     // so the context menu can tell "has an upstream" from "never pushed"
-    // without a round trip per branch.
+    // without a round trip per branch. committerdate powers zombie dimming.
     runGitRepoAsync(rp, [
       "branch",
       "--list",
-      "--format=%(refname:short)%00%(upstream:short)%00%(objectname:short)%00%(upstream:track)",
+      "--format=%(refname:short)%00%(upstream:short)%00%(objectname:short)%00%(upstream:track)%00%(committerdate:unix)",
     ]),
     runGitRepoAsync(rp, [
       "branch",
@@ -208,6 +210,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
     resolveDefaultRemoteBranch(rp),
     // Newest first, capped — the rail shows recent tags, not the full tag dump.
     runGitRepoAsync(rp, ["tag", "--list", "--sort=-creatordate", "--format=%(refname:short)"]),
+    // Which branches are checked out in linked worktrees — checking those out
+    // here is refused by git until the other worktree moves off them.
+    runGitRepoAsync(rp, ["worktree", "list", "--porcelain"]),
     ]);
   const [unpushedResult, aheadBehindResult, mainAheadBehindResult] = await Promise.all([
     runGitRepoAsync(rp, [
@@ -232,15 +237,37 @@ export async function GET(_req: NextRequest, { params }: Params) {
     .split("\n")
     .filter(Boolean)
     .map((line) => {
-      const [name = "", branchUpstream = "", shortHash = "", trackRaw = ""] = line.split("\0");
+      const [name = "", branchUpstream = "", shortHash = "", trackRaw = "", dateRaw = ""] =
+        line.split("\0");
       return {
         name: name.trim(),
         upstream: branchUpstream.trim() || null,
         shortHash,
         track: parseUpstreamTrack(trackRaw),
+        lastCommitUnix: Number(dateRaw) > 0 ? Number(dateRaw) : undefined,
       };
     })
     .filter((b) => b.name);
+
+  /**
+   * Branch → worktree path for every branch checked out somewhere other than
+   * this checkout. Git refuses a second checkout of those, so the rail can
+   * warn before the attempt instead of after.
+   */
+  const worktreeElsewhere = new Map<string, string>();
+  {
+    let currentPath = "";
+    const rpReal = path.resolve(rp);
+    for (const line of (worktreeResult.stdout || "").split("\n")) {
+      if (line.startsWith("worktree ")) {
+        currentPath = line.slice("worktree ".length).trim();
+        continue;
+      }
+      if (line.startsWith("branch refs/heads/") && path.resolve(currentPath) !== rpReal) {
+        worktreeElsewhere.set(line.slice("branch refs/heads/".length).trim(), currentPath);
+      }
+    }
+  }
 
   const currentResult = runGitRepo(rp, ["rev-parse", "--abbrev-ref", "HEAD"]);
   const currentBranch = (currentResult.stdout || "").trim() || "HEAD";
@@ -251,16 +278,55 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   const hasChanges = (statusResult.stdout || "").trim().length > 0;
 
-  const branchList = branches.map((b) => ({
-    name: b.name,
-    current: b.name === currentBranch,
-    remote: b.upstream,
-    upstream: b.upstream,
-    shortHash: b.shortHash,
-    ahead: b.upstream ? b.track.ahead : undefined,
-    behind: b.upstream ? b.track.behind : undefined,
-    upstreamGone: b.upstream && b.track.gone ? true : undefined,
-  }));
+  const branchList = branches.map((b) => {
+    const staleDays =
+      b.lastCommitUnix !== undefined
+        ? Math.floor((Date.now() / 1000 - b.lastCommitUnix) / 86_400)
+        : undefined;
+    return {
+      name: b.name,
+      current: b.name === currentBranch,
+      remote: b.upstream,
+      upstream: b.upstream,
+      shortHash: b.shortHash,
+      ahead: b.upstream ? b.track.ahead : undefined,
+      behind: b.upstream ? b.track.behind : undefined,
+      upstreamGone: b.upstream && b.track.gone ? true : undefined,
+      pushedElsewhereRef: undefined as string | undefined,
+      /** Checked out in another linked worktree — checkout here will be refused. */
+      worktreePath: worktreeElsewhere.get(b.name),
+      /** Days since the last commit; the rail dims zombies (30+). */
+      staleDays: staleDays !== undefined && staleDays >= 30 ? staleDays : undefined,
+    };
+  });
+
+  /**
+   * An ahead-count can be a lie: rebased/rebranched work often leaves old
+   * local branches whose commits all live on some OTHER remote branch, yet
+   * the stale upstream pointer still says "[ahead 2]". For every branch that
+   * claims ahead-commits, ask git how many are reachable from NO remote ref —
+   * zero means nothing to push, and the containing remote ref names where the
+   * work actually landed. Only runs for the few diverged branches.
+   */
+  for (const b of branchList) {
+    if (!b.ahead || !b.upstream) continue;
+    const orphaned = await runGitRepoAsync(rp, [
+      "rev-list",
+      "--count",
+      b.name,
+      "--not",
+      "--glob=refs/remotes",
+    ]);
+    const n = Number((orphaned.stdout || "").trim());
+    if (orphaned.status !== 0 || !Number.isFinite(n) || n > 0) continue;
+    const container = await runGitRepoAsync(rp, ["branch", "-r", "--contains", b.shortHash]);
+    if (container.status !== 0) continue;
+    const ref = (container.stdout || "")
+      .split("\n")
+      .map((l) => l.trim())
+      .find((l) => l && !l.includes("HEAD"));
+    if (ref) b.pushedElsewhereRef = ref;
+  }
   const remoteBranches = (remoteBranchResult.stdout || "")
     .trim()
     .split("\n")
@@ -320,6 +386,22 @@ export async function GET(_req: NextRequest, { params }: Params) {
       .map((t) => t.trim())
       .filter(Boolean)
       .slice(0, 30),
+    /**
+     * When the repo last fetched. Ahead/behind arrows compare against the
+     * last-known remote state, so a day-old fetch makes ↑2 read as "push
+     * pending" when the truth has since moved on. Surfacing the age lets the
+     * UI say so.
+     */
+    lastFetchAt: await (async () => {
+      const fetchHead = await runGitRepoAsync(rp, ["rev-parse", "--git-path", "FETCH_HEAD"]);
+      if (fetchHead.status !== 0) return null;
+      try {
+        const stat = await fs.promises.stat(path.resolve(rp, fetchHead.stdout.trim()));
+        return stat.mtime.toISOString();
+      } catch {
+        return null;
+      }
+    })(),
   });
 }
 

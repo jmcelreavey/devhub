@@ -16,11 +16,13 @@ export function TerminalPromptBar({
   asking,
   askError,
   focused,
+  inputHint,
   onRun,
   onAsk,
   onCancelAsk,
   onRerun,
   onSendLastToAgent,
+  inputRef: inputRefSink,
 }: {
   cwd?: string;
   repoName?: string;
@@ -31,11 +33,15 @@ export function TerminalPromptBar({
   askError?: string | null;
   /** When true (active tab, dock open), own the keyboard like Warp's editor. */
   focused?: boolean;
+  /** Last output line of a running command that looks blocked on stdin. */
+  inputHint?: string;
   onRun: (command: string) => void;
   onAsk: (text: string) => void;
   onCancelAsk?: () => void;
   onRerun?: (command: string) => void;
   onSendLastToAgent?: (command: string) => void;
+  /** Sink for the editor element so the dock can refocus it on pane clicks. */
+  inputRef?: (el: HTMLTextAreaElement | null) => void;
 }) {
   const [draft, setDraft] = useState("");
   const [mode, setMode] = useState<"run" | "ask">("run");
@@ -62,6 +68,14 @@ export function TerminalPromptBar({
   useEffect(() => {
     if (focused) inputRef.current?.focus();
   }, [focused]);
+
+  // The running script asked a question — put the cursor in the answer box
+  // instead of letting the user sit there wondering why nothing happens.
+  const hintRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (inputHint && hintRef.current !== inputHint) inputRef.current?.focus();
+    hintRef.current = inputHint ?? null;
+  }, [inputHint]);
 
   const submit = () => {
     const text = draft.trim();
@@ -192,6 +206,11 @@ export function TerminalPromptBar({
           </div>
         </div>
       ) : null}
+      {inputHint ? (
+        <p className="terminal-prompt-input-wait" role="status">
+          Waiting for input · <code>{inputHint}</code>
+        </p>
+      ) : null}
       <form
         className="terminal-prompt-row"
         onSubmit={(e) => {
@@ -202,13 +221,22 @@ export function TerminalPromptBar({
         {where ? <span className="terminal-prompt-chip">{where}</span> : null}
         <div className="terminal-prompt-editor-wrap">
           <textarea
-            ref={inputRef}
+            ref={(el) => {
+              inputRef.current = el;
+              inputRefSink?.(el);
+            }}
             className="input terminal-prompt-input terminal-prompt-editor"
             value={draft}
             disabled={asking}
             rows={1}
             spellCheck={false}
-            placeholder={mode === "ask" ? "Ask, then confirm a command" : "Command · Enter to run, ⇧Enter newline, ⌃R history"}
+            placeholder={
+              mode === "ask"
+                ? "Ask, then confirm a command"
+                : inputHint
+                  ? "Answer the prompt · Enter to send"
+                  : "Command · Enter to run, ⇧Enter newline, ⌃R history"
+            }
             aria-label={mode === "ask" ? "Ask input" : "Command input"}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {

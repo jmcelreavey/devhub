@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
-  parsePersistedDockState,
-  shouldExpandOnTerminalOpen,
-  clampDockHeight,
-  parseDockFrame,
   DOCK_FRAMES,
   DOCK_MIN_HEIGHT,
   DOCK_TOP_GUTTER,
-  clampPopoutPos,
+  LONG_RUNNING_MS,
+  NOTIFY_MIN_MS,
   POPOUT_KEEP_VISIBLE,
+  UNPROVEN_SHELL_GRACE_MS,
+  clampDockHeight,
+  clampPopoutPos,
+  parseDockFrame,
+  parsePersistedDockState,
+  shouldExpandOnTerminalOpen,
+  shouldFallBackToRawView,
+  shouldNotifyCommandFinished,
 } from "./terminal-dock-state";
 
 describe("shouldExpandOnTerminalOpen", () => {
@@ -142,5 +147,82 @@ describe("clampPopoutPos", () => {
     expect(clampPopoutPos({ x: 200, y: 5_000 }, size, viewport).y).toBe(
       viewport.h - POPOUT_KEEP_VISIBLE,
     );
+  });
+});
+
+describe("shouldNotifyCommandFinished", () => {
+  const base = {
+    startedAt: 1_000,
+    now: 1_000 + NOTIFY_MIN_MS,
+    notifyEnabled: true,
+    dockOpen: false,
+    documentHidden: true,
+    permission: "granted" as const,
+  };
+
+  it("notifies for a long command you weren't watching", () => {
+    expect(shouldNotifyCommandFinished(base)).toBe(true);
+  });
+
+  it("stays quiet for a command that finished quickly", () => {
+    expect(shouldNotifyCommandFinished({ ...base, now: base.startedAt + 500 })).toBe(false);
+  });
+
+  it("stays quiet when the dock is open in front of you", () => {
+    expect(
+      shouldNotifyCommandFinished({ ...base, dockOpen: true, documentHidden: false }),
+    ).toBe(false);
+  });
+
+  it("still notifies when the dock is open but the tab is hidden", () => {
+    expect(
+      shouldNotifyCommandFinished({ ...base, dockOpen: true, documentHidden: true }),
+    ).toBe(true);
+  });
+
+  it("respects the preference being off", () => {
+    expect(shouldNotifyCommandFinished({ ...base, notifyEnabled: false })).toBe(false);
+  });
+
+  it("never notifies without permission, including where Notification is unsupported", () => {
+    expect(shouldNotifyCommandFinished({ ...base, permission: "default" })).toBe(false);
+    expect(shouldNotifyCommandFinished({ ...base, permission: "denied" })).toBe(false);
+    expect(shouldNotifyCommandFinished({ ...base, permission: "unsupported" })).toBe(false);
+  });
+
+  it("cannot notify about a command it never saw start", () => {
+    expect(shouldNotifyCommandFinished({ ...base, startedAt: undefined })).toBe(false);
+  });
+});
+
+describe("shouldFallBackToRawView", () => {
+  const now = 100_000;
+  const pending = (ageMs: number) => ({ pending: true, startedAt: now - ageMs });
+  const done = { pending: false, startedAt: now - 60_000 };
+
+  it("falls back when a proven shell streams past the long-running mark", () => {
+    expect(
+      shouldFallBackToRawView({ blocks: [done, pending(LONG_RUNNING_MS + 1)], now, busy: true }),
+    ).toBe(true);
+  });
+
+  it("stays in blocks while the shell is quiet, however long it has been pending", () => {
+    expect(shouldFallBackToRawView({ blocks: [done, pending(60_000)], now, busy: false })).toBe(false);
+  });
+
+  it("gives an unproven shell a longer grace period", () => {
+    const young = { blocks: [pending(LONG_RUNNING_MS + 1)], now, busy: true };
+    const old = { blocks: [pending(UNPROVEN_SHELL_GRACE_MS + 1)], now, busy: true };
+    expect(shouldFallBackToRawView(young)).toBe(false);
+    expect(shouldFallBackToRawView(old)).toBe(true);
+  });
+
+  it("does nothing when there is no pending block", () => {
+    expect(shouldFallBackToRawView({ blocks: [done], now, busy: true })).toBe(false);
+    expect(shouldFallBackToRawView({ blocks: [], now, busy: true })).toBe(false);
+  });
+
+  it("does not flip on a block that only just started", () => {
+    expect(shouldFallBackToRawView({ blocks: [done, pending(500)], now, busy: true })).toBe(false);
   });
 });

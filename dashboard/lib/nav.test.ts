@@ -3,6 +3,7 @@ import {
   ALL_NAV_DESTINATIONS,
   LEGACY_NAV_ITEMS,
   NAV_GROUPS,
+  buildCrumbs,
   NAV_ITEMS,
   SECTION_TABS,
   filterNavBySetup,
@@ -21,19 +22,24 @@ describe("NAV_ITEMS (sidebar IA)", () => {
     expect(NAV_ITEMS.find((item) => item.href === "/own")?.group).toBe("library");
   });
 
-  it("gives Recall a sidebar slot in the library group", () => {
-    const recall = NAV_ITEMS.find((item) => item.href === "/recall");
-    expect(recall).toBeDefined();
-    expect(recall?.group).toBe("library");
-    // Ungated on purpose: recall works with zero integrations configured, so
+  it("gives Search the unified-discovery slot in the library group", () => {
+    const search = NAV_ITEMS.find((item) => item.href === "/search");
+    expect(search).toBeDefined();
+    expect(search?.group).toBe("library");
+    // Ungated on purpose: search works with zero integrations configured, so
     // hiding it behind a setup gate would hide the one page that is useful on
     // a fresh machine.
-    expect(recall?.gate).toBeUndefined();
+    expect(search?.gate).toBeUndefined();
+  });
+
+  it("keeps Recall routable but out of the sidebar (unified into /search)", () => {
+    expect(hrefs(NAV_ITEMS)).not.toContain("/recall");
+    expect(hrefs(ALL_NAV_DESTINATIONS)).toContain("/recall");
   });
 
   it("keeps merged pages out of the sidebar but in the destination list", () => {
     const sidebar = hrefs(NAV_ITEMS);
-    for (const legacy of ["/search", "/docs", "/learnings", "/diagrams", "/setup"]) {
+    for (const legacy of ["/recall", "/docs", "/learnings", "/diagrams", "/setup"]) {
       expect(sidebar).not.toContain(legacy);
       expect(hrefs(ALL_NAV_DESTINATIONS)).toContain(legacy);
     }
@@ -151,5 +157,45 @@ describe("SECTION_TABS", () => {
 
   it("exposes Logs on the system strip for the desktop shell", () => {
     expect(SECTION_TABS.system.map((t) => t.href)).toContain("/logs");
+  });
+});
+
+/**
+ * The breadcrumb used to keep its own copy of the group labels, and it
+ * drifted: the sidebar said "Library" while every destination under it
+ * breadcrumbed as "Notes › Repos". One list now feeds both.
+ */
+describe("buildCrumbs", () => {
+  it("uses the group labels the sidebar shows", () => {
+    expect(buildCrumbs("/repos")[0]?.label).toBe("Library");
+    expect(buildCrumbs("/skills")[0]?.label).toBe("Library");
+    expect(buildCrumbs("/status")[0]?.label).toBe("System");
+    expect(buildCrumbs("/datadog")[0]?.label).toBe("BI");
+  });
+
+  it("never invents a label that isn't a real group or destination", () => {
+    const known = new Set([
+      ...NAV_GROUPS.map((g) => g.label),
+      ...ALL_NAV_DESTINATIONS.map((n) => n.label),
+    ]);
+    for (const nav of ALL_NAV_DESTINATIONS) {
+      for (const crumb of buildCrumbs(nav.href)) {
+        expect(known.has(crumb.label), `${nav.href} -> "${crumb.label}"`).toBe(true);
+      }
+    }
+  });
+
+  it("does not repeat a group on its own landing page", () => {
+    expect(buildCrumbs("/notes").map((c) => c.label)).toEqual(["Notes"]);
+    expect(buildCrumbs("/").map((c) => c.label)).toEqual(["Today"]);
+    expect(buildCrumbs("/ops").map((c) => c.label)).toEqual(["Ops"]);
+  });
+
+  it("links the group crumb back to its landing page", () => {
+    expect(buildCrumbs("/repos")[0]?.href).toBe("/notes");
+  });
+
+  it("falls back to a usable crumb for an unknown path", () => {
+    expect(buildCrumbs("/nope").map((c) => c.label)).toEqual(["Workspace", "/nope"]);
   });
 });

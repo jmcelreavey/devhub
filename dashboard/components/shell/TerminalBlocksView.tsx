@@ -18,16 +18,23 @@ import {
 /** Output lines shown before a card needs an expander. */
 const PREVIEW_LINES = 8;
 
-function BlockOutput({ output }: { output: string }) {
+function BlockOutput({ output, pending }: { output: string; pending?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const text = output.replace(/\s+$/, "");
   if (!text) return null;
   const lines = text.split("\n");
   const collapsible = lines.length > PREVIEW_LINES;
-  const shown = expanded || !collapsible ? text : lines.slice(0, PREVIEW_LINES).join("\n");
+  // Finished blocks lead with their head; a still-running block's story is at
+  // the tail — that's where an interactive prompt appears.
+  const shown =
+    expanded || !collapsible
+      ? text
+      : (pending ? lines.slice(-PREVIEW_LINES) : lines.slice(0, PREVIEW_LINES)).join("\n");
   return (
     <div className="terminal-block-output-wrap">
-      <pre className="terminal-block-output">{shown}</pre>
+      <pre className="terminal-block-output" data-pending={pending || undefined}>
+        {shown}
+      </pre>
       {collapsible && (
         <button
           type="button"
@@ -57,6 +64,7 @@ function BlockOutput({ output }: { output: string }) {
  */
 export function TerminalBlocksView({
   blocks,
+  waitingInputId,
   onCopy,
   onSend,
   onRerun,
@@ -64,6 +72,8 @@ export function TerminalBlocksView({
   onJump,
 }: {
   blocks: TerminalCommandBlock[];
+  /** Pending block whose last output looks like an interactive prompt. */
+  waitingInputId?: string;
   onCopy: (block: TerminalCommandBlock) => void;
   onSend: (block: TerminalCommandBlock) => void;
   onRerun: (block: TerminalCommandBlock) => void;
@@ -75,13 +85,20 @@ export function TerminalBlocksView({
   const lastDoneIdRef = useRef<string | null>(null);
 
   // Keep the newest completed block in view without yanking scroll while
-  // the user reads older cards.
+  // the user reads older cards. A pending block pins to the bottom only when
+  // the user is already there, so live output streams like a terminal.
   useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const last = blocks[blocks.length - 1];
+    if (last?.pending) {
+      const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 48;
+      if (nearBottom) list.scrollTop = list.scrollHeight;
+      return;
+    }
     const done = [...blocks].reverse().find((b) => !b.pending);
     if (!done || done.id === lastDoneIdRef.current) return;
     lastDoneIdRef.current = done.id;
-    const list = listRef.current;
-    if (!list) return;
     list.scrollTop = list.scrollHeight;
   }, [blocks]);
 
@@ -113,9 +130,16 @@ export function TerminalBlocksView({
               </code>
               <span className="terminal-block-card-meta">
                 {block.pending ? (
-                  <span className="terminal-block-badge" data-state="running">
-                    running
-                  </span>
+                  <>
+                    {waitingInputId === block.id && (
+                      <span className="terminal-block-badge" data-state="input">
+                        waiting for input
+                      </span>
+                    )}
+                    <span className="terminal-block-badge" data-state="running">
+                      running
+                    </span>
+                  </>
                 ) : (
                   <>
                     {typeof block.exitCode === "number" && (
@@ -132,7 +156,7 @@ export function TerminalBlocksView({
                 )}
               </span>
             </div>
-            {!block.pending && <BlockOutput output={block.output} />}
+            <BlockOutput output={block.output} pending={block.pending} />
             {!block.pending && (
               <div className="terminal-block-card-actions">
                 <button type="button" onClick={() => onCopy(block)} aria-label="Copy command output">

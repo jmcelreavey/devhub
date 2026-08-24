@@ -56,3 +56,6 @@ next-env.d.ts
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# eslint cache (speeds repeat lints from 18s to 1s)
+.eslintcache

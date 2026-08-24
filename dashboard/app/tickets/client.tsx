@@ -67,7 +67,7 @@ export default function TicketsPage() {
       <div className="page-wrapper">
       <BootScreen state={boot} />
         <div className="page-header">
-          <div className="page-title">Tickets</div>
+          <h1 className="page-title">Tickets</h1>
         </div>
         <EmptyState
           icon={<Ticket size={28} />}
@@ -87,7 +87,7 @@ export default function TicketsPage() {
     <div className="page-wrapper">
       <BootScreen state={boot} />
       <div className="page-header">
-        <div className="page-title">Tickets</div>
+        <h1 className="page-title">Tickets</h1>
         <div className="flex items-center gap-2">
           <span className="badge badge-muted">{tickets.length}</span>
           <button

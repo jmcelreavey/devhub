@@ -240,7 +240,7 @@ export default function SharedClient() {
   return (
     <div className="page-wrapper">
       <div className="page-header">
-        <div className="page-title">Live links</div>
+        <h1 className="page-title">Live links</h1>
         <div className="flex items-center gap-2">
           <span className="badge badge-muted">{shares.length}</span>
           <button

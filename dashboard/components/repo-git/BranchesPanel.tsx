@@ -2,20 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowDownToLine,
   Check,
-  Copy,
   CornerDownLeft,
   Download,
-  ExternalLink,
-  GitBranch,
   GitCompare,
   GitMerge,
-  Link2,
-  Pencil,
   Plus,
   RefreshCw,
-  Rewind,
   Search,
   Trash2,
   Upload,
@@ -30,9 +23,12 @@ import {
 import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
 import { groupBranches } from "@/lib/repos/branch-grouping";
 import { RemotesSection } from "./RemotesSection";
-import { copyTextToClipboard } from "@/lib/clipboard";
-import { openInBrowser } from "@/lib/desktop/bridge";
 import { useToast } from "@/lib/hooks/use-toast";
+import {
+  BRANCH_ACTION_SUCCESS_LABELS,
+  buildBranchMenuGroups,
+  type BranchMenuState,
+} from "./branchMenuGroups";
 import { RangeCompareModal } from "./RangeCompareModal";
 import {
   fetchGitJson,
@@ -43,27 +39,6 @@ import {
   type GitPanelHandlers,
   type RemoteBranchInfo,
 } from "./shared";
-
-const ACTION_SUCCESS_LABELS: Record<string, (branch?: unknown) => string> = {
-  checkout: (branch) => `Switched to ${branch}`,
-  "create-branch": (branch) => `Created ${branch}`,
-  "delete-branch": (branch) => `Deleted ${branch}`,
-  fetch: () => "Fetched",
-  pull: () => "Pulled",
-  push: () => "Pushed",
-  "force-push-with-lease": () => "Force-pushed with lease",
-  "set-upstream": (branch) => `Tracking origin/${branch}`,
-  "merge-branch": (branch) => `Merged ${branch}`,
-  "rebase-branch": (branch) => `Rebased onto ${branch}`,
-  "branch-from": (branch) => `Created ${branch}`,
-  "rename-branch": (branch) => `Renamed to ${branch}`,
-  "reset-to-branch": (branch) => `Reset to ${branch}`,
-  "checkout-remote": (branch) => `Switched to ${branch}`,
-  "sync-main": () => "Synced with main",
-  "pull-rebase": () => "Pulled with rebase",
-  "pull-merge": () => "Pulled with merge",
-  "prune-backup-branches": () => "Pruned backup branches",
-};
 
 export function BranchesPanel({
   repoName,
@@ -99,21 +74,32 @@ export function BranchesPanel({
     [data?.remoteBranches, branchQuery],
   );
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      setData(await fetchGitJson<BranchesPayload>(repoApi(repoName, "/branches")));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Branches failed");
-    } finally {
-      setLoading(false);
-    }
-  }, [repoName, toast]);
+  const refresh = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      // Silent (poll) refreshes skip the skeleton flash and error toasts — a
+      // failed background poll shouldn't nag while the stale list is still shown.
+      if (!opts?.silent) setLoading(true);
+      try {
+        setData(await fetchGitJson<BranchesPayload>(repoApi(repoName, "/branches")));
+      } catch (err) {
+        if (!opts?.silent) toast.error(err instanceof Error ? err.message : "Branches failed");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [repoName, toast],
+  );
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch branches on mount / repo change
     void refresh();
-  }, [refresh]);
+    // Branch state changes outside this panel (terminal commits, pushes from
+    // other tools), so poll quietly instead of waiting for a manual refresh.
+    const timer = setInterval(() => void refresh({ silent: true }), 15_000);
+    return () => clearInterval(timer);
+    // Keyed on repoName only: a new toast/callback identity must not reset the poll cadence.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repoName]);
 
   const act = useCallback(
     async (action: string, extra?: Record<string, unknown>) => {
@@ -143,7 +129,7 @@ export function BranchesPanel({
           toast.success(result.json.message || "Already up to date.");
         } else {
           toast.success(
-            ACTION_SUCCESS_LABELS[action]?.(label) ??
+            BRANCH_ACTION_SUCCESS_LABELS[action]?.(label) ??
               result.json.message ??
               "Done",
           );
@@ -193,17 +179,6 @@ export function BranchesPanel({
     await act("create-branch", { branch: name.trim() });
   }, [act, prompt]);
 
-  const forcePushWithLease = useCallback(async () => {
-    const ok = await confirm({
-      title: "Force-push rewritten history?",
-      message:
-        "Uses git push --force-with-lease. The push is rejected if the remote changed since your last fetch.",
-      confirmLabel: "Force-push with lease",
-      variant: "danger",
-    });
-    if (ok) await act("force-push-with-lease");
-  }, [act, confirm]);
-
   const checkoutRemoteBranch = useCallback(
     async (branch: RemoteBranchInfo) => {
       const name = await prompt({
@@ -218,111 +193,7 @@ export function BranchesPanel({
     [act, prompt],
   );
 
-  const deleteBranch = useCallback(
-    async (branch: string) => {
-      const ok = await confirm({
-        title: `Delete branch ${branch}?`,
-        message: "Uses git branch -d (safe delete) — git refuses if the branch has unmerged work.",
-        confirmLabel: "Delete",
-        variant: "danger",
-      });
-      if (!ok) return;
-      await act("delete-branch", { branch });
-    },
-    [act, confirm],
-  );
-
-  const forceDeleteBranch = useCallback(
-    async (branch: string) => {
-      const ok = await confirm({
-        title: `Force-delete ${branch}?`,
-        message:
-          "git branch -D. Commits only on this branch are no longer reachable by name — recoverable from the reflog for a while, then gone.",
-        confirmLabel: "Force delete",
-        variant: "danger",
-      });
-      if (!ok) return;
-      await act("delete-branch", { branch, force: true });
-    },
-    [act, confirm],
-  );
-
-  const mergeIntoCurrent = useCallback(
-    async (branch: string, current: string) => {
-      const ok = await confirm({
-        title: `Merge ${branch} into ${current}?`,
-        message: `Runs git merge --no-edit ${branch} on ${current}. Conflicts open in the Conflicts tab; nothing is pushed.`,
-        confirmLabel: "Merge",
-      });
-      if (!ok) return;
-      await act("merge-branch", { branch });
-    },
-    [act, confirm],
-  );
-
-  const rebaseOnto = useCallback(
-    async (branch: string, current: string) => {
-      const ok = await confirm({
-        title: `Rebase ${current} onto ${branch}?`,
-        message: `Replays every commit on ${current} on top of ${branch}, rewriting their hashes. DevHub takes a backup branch first and aborts the rebase if anything conflicts.`,
-        confirmLabel: "Rebase",
-        variant: "danger",
-      });
-      if (!ok) return;
-      await act("rebase-branch", { branch });
-    },
-    [act, confirm],
-  );
-
-  const branchFrom = useCallback(
-    async (branch: string) => {
-      const name = await prompt({
-        title: `New branch from ${branch}`,
-        message: `Creates a branch at ${branch}'s tip. Your checkout does not move.`,
-        input: { placeholder: "feature/my-work" },
-        confirmLabel: "Create",
-      });
-      if (!name?.trim()) return;
-      await act("branch-from", { branch, newBranch: name.trim() });
-    },
-    [act, prompt],
-  );
-
-  const renameBranch = useCallback(
-    async (branch: string) => {
-      const name = await prompt({
-        title: `Rename ${branch}`,
-        message:
-          "Renames the local branch only. If it already tracks a remote branch, the remote name stays as it was.",
-        input: { placeholder: branch, defaultValue: branch },
-        confirmLabel: "Rename",
-      });
-      if (!name?.trim() || name.trim() === branch) return;
-      await act("rename-branch", { branch, newBranch: name.trim() });
-    },
-    [act, prompt],
-  );
-
-  const resetCurrentTo = useCallback(
-    async (branch: string, current: string, mode: "soft" | "mixed" | "hard") => {
-      const copy =
-        mode === "soft"
-          ? `Moves ${current} to ${branch} with git reset --soft: HEAD moves, index and working tree stay. Creates a backup branch first.`
-          : mode === "mixed"
-            ? `Moves ${current} to ${branch} with git reset --mixed: HEAD and index move, working tree stays. Creates a backup branch first.`
-            : `Moves ${current} to ${branch} with git reset --hard: commits only on ${current} stop being reachable by name, and the working tree is replaced. Requires a clean tree; DevHub takes a backup branch first.`;
-      const ok = await confirm({
-        title: `${mode === "hard" ? "Hard" : mode === "soft" ? "Soft" : "Mixed"} reset ${current} to ${branch}?`,
-        message: copy,
-        confirmLabel: `${mode[0]!.toUpperCase()}${mode.slice(1)} reset`,
-        variant: "danger",
-      });
-      if (!ok) return;
-      await act("reset-to-branch", { branch, mode });
-    },
-    [act, confirm],
-  );
-
+  /** Toolbar-only: the diverged pull buttons. The context menu has its own copy. */
   const pullWith = useCallback(
     async (action: "pull-rebase" | "pull-merge") => {
       const ok = await confirm({
@@ -339,8 +210,7 @@ export function BranchesPanel({
     [act, confirm],
   );
 
-  const pruneBackups = useCallback(async () => {
-    const ok = await confirm({
+  const pruneBackups = useCallback(async () => {    const ok = await confirm({
       title: "Prune backup branches?",
       message:
         "Deletes `devhub/backup-*` branches except the newest 10 and anything from the last 14 days. Never deletes the current branch.",
@@ -362,390 +232,111 @@ export function BranchesPanel({
     if (ok) await act("sync-main");
   }, [act, confirm, data?.mainBranch, data?.currentBranch]);
 
-  const copyName = useCallback(
-    async (branch: string) => {
-      try {
-        await copyTextToClipboard(branch);
-        toast.success("Branch name copied");
-      } catch {
-        toast.error("Could not copy to the clipboard");
-      }
-    },
-    [toast],
-  );
-
-  const openOnGitHub = useCallback(
-    (branch: string) => {
-      const base = data?.remoteWebUrl;
-      if (!base) {
-        toast.error("No browsable origin remote for this repo");
-        return;
-      }
-      void openInBrowser(`${base}/tree/${encodeURIComponent(branch)}`);
-    },
-    [data?.remoteWebUrl, toast],
-  );
-
-  const openPullRequest = useCallback(
-    (branch: string) => {
-      const base = data?.remoteWebUrl;
-      if (!base) {
-        toast.error("No browsable origin remote for this repo");
-        return;
-      }
-      const main = data?.mainBranch?.replace(/^origin\//, "") ?? "main";
-      void openInBrowser(
-        `${base}/compare/${encodeURIComponent(main)}...${encodeURIComponent(branch)}?expand=1`,
-      );
-    },
-    [data?.remoteWebUrl, data?.mainBranch, toast],
+  const branchMenuState = useCallback(
+    (): BranchMenuState => ({
+      currentBranch: data?.currentBranch ?? "",
+      mainBranch: data?.mainBranch ?? null,
+      defaultRemote: data?.remotes?.[0]?.name ?? "origin",
+      remoteWebUrl: data?.remoteWebUrl ?? null,
+      busy: acting !== null,
+      pushing,
+      dirty: Boolean(data?.hasChanges),
+      currentUpstream: data?.upstream ?? null,
+      currentAhead: data?.ahead ?? 0,
+      currentBehind: data?.behind ?? 0,
+    }),
+    [data, acting, pushing],
   );
 
   /**
-   * The right-click menu. Actions the branch cannot support are shown disabled
-   * with the reason rather than hidden — a menu whose shape changes per row is
-   * harder to learn than one where the same item is greyed out.
+   * The right-click menu, shared with the Git rail via buildBranchMenuGroups
+   * so the two surfaces offer the same actions and never drift.
    */
   const menuGroups = useMemo((): ContextMenuGroup[] => {
     const branch = menu.target;
     if (!branch || !data) return [];
-    const current = data.currentBranch;
-    const isCurrent = branch.current;
-    const busy = acting !== null;
-    const hasRemote = Boolean(data.remoteWebUrl);
-    const dirty = Boolean(data.hasChanges);
-
-    return [
+    return buildBranchMenuGroups(
       {
-        id: "move",
-        items: [
-          {
-            id: "checkout",
-            label: `Check out ${branch.name}`,
-            description: dirty ? "Auto-stashes your changes first" : undefined,
-            icon: <CornerDownLeft size={12} />,
-            disabled: isCurrent || busy,
-            disabledReason: isCurrent ? "Already checked out" : undefined,
-            onSelect: () => void checkoutBranch(branch.name),
-          },
-          {
-            id: "merge",
-            label: `Merge into ${current}`,
-            description: `git merge ${branch.name}`,
-            icon: <GitMerge size={12} />,
-            disabled: isCurrent || busy || dirty,
-            disabledReason: isCurrent
-              ? "That is the current branch"
-              : dirty
-                ? "Commit or stash your changes first"
-                : undefined,
-            onSelect: () => void mergeIntoCurrent(branch.name, current),
-          },
-          {
-            id: "rebase",
-            label: `Rebase ${current} onto this`,
-            description: "Rewrites local commit hashes",
-            icon: <Rewind size={12} />,
-            danger: true,
-            disabled: isCurrent || busy || dirty,
-            disabledReason: isCurrent
-              ? "That is the current branch"
-              : dirty
-                ? "Commit or stash your changes first"
-                : undefined,
-            onSelect: () => void rebaseOnto(branch.name, current),
-          },
-        ],
+        name: branch.name,
+        current: branch.current,
+        upstream: branch.upstream,
+        ahead: branch.ahead,
+        behind: branch.behind,
+        upstreamGone: branch.upstreamGone,
       },
+      branchMenuState(),
       {
-        id: "remote",
-        label: "Remote",
-        items: [
-          {
-            id: "push",
-            label: `Push ${branch.name}`,
-            description: branch.upstream
-              ? `to ${branch.upstream}`
-              : "Sets the upstream to origin on first push",
-            icon: <Upload size={12} />,
-            disabled: !isCurrent || busy || pushing,
-            disabledReason: !isCurrent ? "Check the branch out first" : undefined,
-            onSelect: onPush,
-          },
-          {
-            id: "pull",
-            label: "Pull (fast-forward)",
-            description: isCurrent ? "git pull --ff-only" : undefined,
-            icon: <ArrowDownToLine size={12} />,
-            disabled: !isCurrent || busy || !data.upstream || data.behind === 0 || (data.ahead > 0 && data.behind > 0),
-            disabledReason: !isCurrent
-              ? "Check the branch out to pull it"
-              : !data.upstream
-                ? "No upstream configured"
-                : data.behind === 0
-                  ? "Already up to date"
-                  : data.ahead > 0 && data.behind > 0
-                    ? "Diverged — use rebase or merge pull"
-                    : undefined,
-            onSelect: () => void act("pull"),
-          },
-          {
-            id: "pull-rebase",
-            label: "Pull with rebase",
-            description: "git pull --rebase — replay local commits on upstream",
-            icon: <CornerDownLeft size={12} />,
-            disabled: !isCurrent || busy || !data.upstream || data.behind === 0,
-            disabledReason: !isCurrent
-              ? "Check the branch out to pull it"
-              : !data.upstream
-                ? "No upstream configured"
-                : data.behind === 0
-                  ? "Already up to date"
-                  : undefined,
-            onSelect: () => void pullWith("pull-rebase"),
-          },
-          {
-            id: "pull-merge",
-            label: "Pull with merge",
-            description: "git pull --no-rebase — merge upstream into this branch",
-            icon: <GitMerge size={12} />,
-            disabled: !isCurrent || busy || !data.upstream || data.behind === 0,
-            disabledReason: !isCurrent
-              ? "Check the branch out to pull it"
-              : !data.upstream
-                ? "No upstream configured"
-                : data.behind === 0
-                  ? "Already up to date"
-                  : undefined,
-            onSelect: () => void pullWith("pull-merge"),
-          },
-          {
-            id: "set-upstream",
-            label: `Track ${data.remotes?.[0]?.name ?? "origin"}/${branch.name}`,
-            description: branch.upstream ? `Currently ${branch.upstream}` : undefined,
-            icon: <Link2 size={12} />,
-            disabled:
-              busy ||
-              branch.upstream === `${data.remotes?.[0]?.name ?? "origin"}/${branch.name}`,
-            disabledReason:
-              branch.upstream === `${data.remotes?.[0]?.name ?? "origin"}/${branch.name}`
-                ? "Already tracking it"
-                : undefined,
-            onSelect: () =>
-              void act("set-upstream", {
-                branch: branch.name,
-                remote: data.remotes?.[0]?.name,
-              }),
-          },
-          {
-            id: "force-push-with-lease",
-            label: "Force-push with lease",
-            description: "Publish rebased history without overwriting newer remote work",
-            icon: <Upload size={12} />,
-            danger: true,
-            disabled: !isCurrent || busy || !branch.upstream,
-            disabledReason: !isCurrent
-              ? "Check the branch out first"
-              : !branch.upstream
-                ? "Push normally to create an upstream first"
-                : undefined,
-            onSelect: () => void forcePushWithLease(),
-          },
-        ],
+        confirm,
+        prompt,
+        toast,
+        run: act,
+        checkout: (name) => void checkoutBranch(name),
+        checkoutRemote: (t) =>
+          void checkoutRemoteBranch({
+            name: t.name,
+            remote: t.name.split("/")[0] ?? "origin",
+            localName: t.localName ?? t.name.replace(/^[^/]+\//, ""),
+            shortHash: "",
+            trackedLocalName: t.trackedLocalName ?? null,
+          }),
+        onPush,
+        onCompare: (name) => setCompareBranch(name),
       },
-      {
-        id: "inspect",
-        label: "Inspect",
-        items: [
-          {
-            id: "compare",
-            label: `Compare with ${current}`,
-            description: "Diff this whole branch against your checkout",
-            icon: <GitCompare size={12} />,
-            disabled: isCurrent,
-            disabledReason: isCurrent ? "That is the current branch" : undefined,
-            onSelect: () => setCompareBranch(branch.name),
-          },
-          {
-            id: "copy",
-            label: "Copy branch name",
-            icon: <Copy size={12} />,
-            onSelect: () => void copyName(branch.name),
-          },
-          {
-            id: "open-pr",
-            label: "Open pull request",
-            description: `Compare against ${data.mainBranch?.replace(/^origin\//, "") ?? "main"} on the web`,
-            icon: <ExternalLink size={12} />,
-            disabled: !hasRemote,
-            disabledReason: !hasRemote ? "No browsable origin remote" : undefined,
-            onSelect: () => openPullRequest(branch.name),
-          },
-          {
-            id: "open-web",
-            label: "Open branch on the web",
-            icon: <ExternalLink size={12} />,
-            disabled: !hasRemote,
-            disabledReason: !hasRemote ? "No browsable origin remote" : undefined,
-            onSelect: () => openOnGitHub(branch.name),
-          },
-        ],
-      },
-      {
-        id: "edit",
-        label: "Modify",
-        items: [
-          {
-            id: "branch-from",
-            label: "New branch from here…",
-            description: "Creates a branch at this tip without switching",
-            icon: <GitBranch size={12} />,
-            disabled: busy,
-            onSelect: () => void branchFrom(branch.name),
-          },
-          {
-            id: "rename",
-            label: "Rename…",
-            icon: <Pencil size={12} />,
-            disabled: busy,
-            onSelect: () => void renameBranch(branch.name),
-          },
-          {
-            id: "reset-soft",
-            label: `Soft reset ${current} to here`,
-            description: "Move HEAD only — keep index and working tree",
-            icon: <Rewind size={12} />,
-            danger: true,
-            disabled: isCurrent || busy,
-            disabledReason: isCurrent ? "That is the current branch" : undefined,
-            onSelect: () => void resetCurrentTo(branch.name, current, "soft"),
-          },
-          {
-            id: "reset-mixed",
-            label: `Mixed reset ${current} to here`,
-            description: "Move HEAD and index — keep working tree",
-            icon: <Rewind size={12} />,
-            danger: true,
-            disabled: isCurrent || busy,
-            disabledReason: isCurrent ? "That is the current branch" : undefined,
-            onSelect: () => void resetCurrentTo(branch.name, current, "mixed"),
-          },
-          {
-            id: "reset",
-            label: `Hard reset ${current} to here`,
-            description: "Replace working tree; discards commits only on the current branch",
-            icon: <Rewind size={12} />,
-            danger: true,
-            disabled: isCurrent || busy || dirty,
-            disabledReason: isCurrent
-              ? "That is the current branch"
-              : dirty
-                ? "Commit or stash your changes first"
-                : undefined,
-            onSelect: () => void resetCurrentTo(branch.name, current, "hard"),
-          },
-          {
-            id: "delete",
-            label: "Delete",
-            description: "git branch -d — refuses if unmerged",
-            icon: <Trash2 size={12} />,
-            danger: true,
-            disabled: isCurrent || busy,
-            disabledReason: isCurrent ? "Cannot delete the current branch" : undefined,
-            onSelect: () => void deleteBranch(branch.name),
-          },
-          {
-            id: "force-delete",
-            label: "Force delete",
-            description: "git branch -D — drops unmerged commits",
-            icon: <Trash2 size={12} />,
-            danger: true,
-            disabled: isCurrent || busy,
-            disabledReason: isCurrent ? "Cannot delete the current branch" : undefined,
-            onSelect: () => void forceDeleteBranch(branch.name),
-          },
-        ],
-      },
-    ];
+    );
   }, [
     menu.target,
     data,
-    acting,
-    pushing,
+    branchMenuState,
     act,
     onPush,
     checkoutBranch,
-    mergeIntoCurrent,
-    rebaseOnto,
-    branchFrom,
-    renameBranch,
-    resetCurrentTo,
-    deleteBranch,
-    forceDeleteBranch,
-    forcePushWithLease,
-    pullWith,
-    copyName,
-    openOnGitHub,
-    openPullRequest,
+    checkoutRemoteBranch,
+    confirm,
+    prompt,
+    toast,
   ]);
 
   const remoteMenuGroups = useMemo((): ContextMenuGroup[] => {
     const branch = remoteMenu.target;
     if (!branch || !data) return [];
-    const busy = acting !== null;
-    const hasRemote = Boolean(data.remoteWebUrl);
-    return [
+    return buildBranchMenuGroups(
       {
-        id: "move",
-        items: [
-          {
-            id: "checkout",
-            label: branch.trackedLocalName
-              ? `Check out ${branch.trackedLocalName}`
-              : `Check out ${branch.localName}`,
-            icon: <Download size={12} />,
-            disabled: busy,
-            onSelect: () =>
-              branch.trackedLocalName
-                ? void checkoutBranch(branch.trackedLocalName)
-                : void checkoutRemoteBranch(branch),
-          },
-          {
-            id: "compare",
-            label: `Compare with ${data.currentBranch}`,
-            icon: <GitCompare size={12} />,
-            onSelect: () => setCompareBranch(branch.name),
-          },
-        ],
+        name: branch.name,
+        current: false,
+        remote: true,
+        localName: branch.localName,
+        trackedLocalName: branch.trackedLocalName,
       },
+      branchMenuState(),
       {
-        id: "copy",
-        items: [
-          {
-            id: "copy",
-            label: "Copy name",
-            icon: <Copy size={12} />,
-            onSelect: () => void copyName(branch.name),
-          },
-          {
-            id: "github",
-            label: "Open on GitHub",
-            icon: <ExternalLink size={12} />,
-            disabled: !hasRemote,
-            disabledReason: hasRemote ? undefined : "No browsable origin remote",
-            onSelect: () => openOnGitHub(branch.localName),
-          },
-        ],
+        confirm,
+        prompt,
+        toast,
+        run: act,
+        checkout: (name) => void checkoutBranch(name),
+        checkoutRemote: (t) =>
+          void checkoutRemoteBranch({
+            name: t.name,
+            remote: t.name.split("/")[0] ?? "origin",
+            localName: t.localName ?? t.name.replace(/^[^/]+\//, ""),
+            shortHash: "",
+            trackedLocalName: t.trackedLocalName ?? null,
+          }),
+        onPush,
+        onCompare: (name) => setCompareBranch(name),
       },
-    ];
+    );
   }, [
     remoteMenu.target,
     data,
-    acting,
+    branchMenuState,
+    act,
+    onPush,
     checkoutBranch,
     checkoutRemoteBranch,
-    copyName,
-    openOnGitHub,
+    confirm,
+    prompt,
+    toast,
   ]);
 
   if (loading && !data) return <SkeletonRows count={5} height={28} />;
@@ -770,6 +361,16 @@ export function BranchesPanel({
   return (
     <div className="repo-git-branches">
       <div className="repo-git-changes-toolbar">
+        <button
+          type="button"
+          className="btn btn-ghost"
+          disabled={acting !== null}
+          title="Reload branches from git"
+          onClick={() => void refresh()}
+        >
+          <RefreshCw size={11} className={loading ? "animate-spin" : undefined} />
+          Refresh
+        </button>
         <button type="button" className="btn btn-ghost" disabled={acting !== null} onClick={() => void act("fetch")}>
           {acting === "fetch" ? <RefreshCw size={11} className="animate-spin" /> : <Download size={11} />}
           Fetch

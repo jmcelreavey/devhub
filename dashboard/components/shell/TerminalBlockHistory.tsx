@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardCopy, CornerUpLeft, RotateCw, Sparkles } from "lucide-react";
+import { ClipboardCopy, CornerUpLeft, RotateCw, Sparkles, X } from "lucide-react";
 import {
   formatBlockDuration,
   previewBlockCommand,
@@ -14,6 +14,7 @@ export function TerminalBlockHistory({
   onRerun,
   onExplain,
   onJump,
+  onDismiss,
 }: {
   blocks: TerminalCommandBlock[];
   onCopy: (block: TerminalCommandBlock) => void;
@@ -23,12 +24,23 @@ export function TerminalBlockHistory({
   onExplain?: (block: TerminalCommandBlock) => void;
   /** Scroll the raw grid to where this command ran. */
   onJump?: (block: TerminalCommandBlock) => void;
+  /** Hide the rail. Restored from the toolbar; the choice is remembered. */
+  onDismiss?: () => void;
 }) {
   if (blocks.length === 0) return null;
   const shown = [...blocks.slice(-24)].reverse();
 
   return (
-    <ol className="terminal-block-rail" aria-label="Command history">
+    <div className="terminal-block-rail">
+      <div className="terminal-block-rail-head">
+        <span>History</span>
+        {onDismiss && (
+          <button type="button" onClick={onDismiss} aria-label="Hide command history">
+            <X size={11} aria-hidden />
+          </button>
+        )}
+      </div>
+      <ol className="terminal-block-rail-list" aria-label="Command history">
       {shown.map((block) => {
         const failed = typeof block.exitCode === "number" && block.exitCode !== 0;
         const duration = formatBlockDuration(block.startedAt, block.endedAt);
@@ -81,6 +93,7 @@ export function TerminalBlockHistory({
           </li>
         );
       })}
-    </ol>
+      </ol>
+    </div>
   );
 }

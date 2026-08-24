@@ -342,11 +342,23 @@ export function VaultEditorPage({
     const label = filePath.split("/").pop() ?? filePath;
     const ok = await confirm({
       title: `Delete ${itemLabel}`,
-      message: `Delete "${label}"? This cannot be undone.`,
+      message: `Delete "${label}"? You'll have a 10-second undo in the toast.`,
       confirmLabel: "Delete",
       variant: "danger",
     });
     if (!ok) return;
+    // Snapshot the content BEFORE the delete lands — the Undo action puts it
+    // back verbatim. If the snapshot fails we still delete, just without an
+    // undo offer.
+    let restoreContent: unknown = null;
+    try {
+      const snap = await fetch(`${apiPrefix}/${paths.apiPathFromSlug(filePath)}`);
+      if (snap.ok) {
+        restoreContent = ((await snap.json()) as { content?: unknown }).content ?? null;
+      }
+    } catch {
+      /* no undo then */
+    }
     broadcastNoteAutosaveInvalidation(filePath);
     invalidatePendingSave();
     setDeleting(true);
@@ -360,6 +372,30 @@ export function VaultEditorPage({
       }
       router.push(pagePrefix);
       router.refresh();
+      if (restoreContent != null) {
+        toast.success(`Deleted "${label}"`, {
+          duration: 10_000,
+          action: {
+            label: "Undo",
+            onClick: async () => {
+              try {
+                const restore = await fetch(`${apiPrefix}/${paths.apiPathFromSlug(filePath)}`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ content: restoreContent }),
+                });
+                if (!restore.ok) throw new Error(await restore.text());
+                broadcastNoteAutosaveInvalidation(filePath);
+                toast.success(`Restored "${label}"`);
+                router.refresh();
+              } catch (e) {
+                console.error(e);
+                toast.error(e instanceof Error ? e.message : `Could not restore ${label}.`);
+              }
+            },
+          },
+        });
+      }
     } catch (e) {
       console.error(e);
       toast.error(e instanceof Error ? e.message : `Could not delete ${itemLabel}.`);
@@ -407,11 +443,27 @@ export function VaultEditorPage({
 
   const handleMoved = useCallback(
     (newPath: string) => {
-      toast.success("Moved.");
+      const oldPath = filePath;
+      const undo = async () => {
+        try {
+          await paths.renameFile(newPath, oldPath.split("/").pop() ?? oldPath);
+          broadcastNoteAutosaveInvalidation(newPath);
+          toast.success("Moved back.");
+          router.push(paths.pageHref(oldPath));
+          router.refresh();
+        } catch (e) {
+          console.error(e);
+          toast.error(e instanceof Error ? e.message : "Could not move back.");
+        }
+      };
+      toast.success("Moved.", {
+        duration: 10_000,
+        action: { label: "Undo", onClick: () => void undo() },
+      });
       router.push(paths.pageHref(newPath));
       router.refresh();
     },
-    [paths, router, toast],
+    [filePath, paths, router, toast],
   );
 
   const fileName = pathParts[pathParts.length - 1] ?? filePath;

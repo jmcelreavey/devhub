@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ClipboardCopy,
   FileText,
+  History,
   ListTree,
   Plus,
   RotateCw,
@@ -53,6 +54,8 @@ import {
   readPersistedDockState,
   readPopoutPos,
   shouldExpandOnTerminalOpen,
+  shouldFallBackToRawView,
+  shouldNotifyCommandFinished,
   writeDockHeight,
   writePersistedDockState,
   writePopoutPos,
@@ -84,6 +87,8 @@ import {
   capBlockOutput,
   dataTransferHasTerminalSelection,
   formatBlockForAgent,
+  lastNonEmptyLine,
+  looksLikeInputPrompt,
   newTerminalBlockId,
   readTerminalSelection,
   setTerminalSelectionDrag,
@@ -130,16 +135,7 @@ function writeViewMode(mode: TerminalViewMode): void {
 }
 
 const NOTIFY_PREF_KEY = "devhub:terminal-notify";
-
-/**
- * A pending command older than this is probably a long-running foreground
- * process (`npm run dev`) — blocks view can't stream it, so drop to raw.
- * // ponytail: time heuristic; upgrade to process-tree sniffing if it misfires
- */
-const LONG_RUNNING_MS = 3_000;
-
-/** Only notify about commands that ran at least this long. */
-const NOTIFY_MIN_MS = 10_000;
+const RAIL_PREF_KEY = "devhub:terminal-rail-hidden";
 
 
 interface DockTab {
@@ -243,6 +239,8 @@ export function TerminalDock() {
   const userCollapsedRef = useRef(false);
   /** Per-session output readers, keyed by tab id. */
   const readersRef = useRef(new Map<number, TerminalReader>());
+  /** Per-tab prompt editor element — blocks-pane clicks refocus it so typed keys land in the editor. */
+  const promptInputsRef = useRef(new Map<number, HTMLTextAreaElement | null>());
   /** Commands waiting for a reattached/reused tab's reader to come online. */
   const pendingInjectRef = useRef(new Map<number, PendingInject>());
   /** Tabs opened only to host a proposal confirm — close on deny if unused. */
@@ -272,6 +270,10 @@ export function TerminalDock() {
   const [popoutPos, setPopoutPos] = useState<PopoutPos | null>(null);
   const [lastCommands, setLastCommands] = useState<Record<number, string>>({});
   const [commandBlocks, setCommandBlocks] = useState<Record<number, TerminalCommandBlock[]>>({});
+  /** Tabs whose launched `command` already has its block created (once per tab). */
+  const launchedBlockTabsRef = useRef(new Set<number>());
+  /** Tab id → prompt line, when the running command looks blocked on stdin. */
+  const [inputWaiting, setInputWaiting] = useState<Record<number, string>>({});
   const [agentDropTabId, setAgentDropTabId] = useState<number | null>(null);
   const blockMarkersRef = useRef(new Map<string, string>());
   const [askingTabId, setAskingTabId] = useState<number | null>(null);
@@ -293,6 +295,8 @@ export function TerminalDock() {
   const [altBufferTabs, setAltBufferTabs] = useState<Record<number, boolean>>({});
   /** OS notification when a long command finishes hidden. */
   const [notifyDone, setNotifyDone] = useState(false);
+  /** Command-history rail dismissed in raw view. Remembered across sessions. */
+  const [railHidden, setRailHidden] = useState(false);
   /** When each tab went busy — duration source for the notification. */
   const busySinceRef = useRef(new Map<number, number>());
   const proposal = proposalQueue[0] ?? null;
@@ -450,6 +454,7 @@ export function TerminalDock() {
     setViewMode(readViewMode());
     try {
       setNotifyDone(window.localStorage.getItem(NOTIFY_PREF_KEY) === "1");
+      setRailHidden(window.localStorage.getItem(RAIL_PREF_KEY) === "1");
     } catch {
       /* private mode */
     }
@@ -483,34 +488,86 @@ export function TerminalDock() {
     });
   }, []);
 
+  const setRailHiddenPref = useCallback((hidden: boolean) => {
+    setRailHidden(hidden);
+    try {
+      window.localStorage.setItem(RAIL_PREF_KEY, hidden ? "1" : "0");
+    } catch {
+      /* private mode */
+    }
+  }, []);
+
   const switchViewMode = useCallback((mode: TerminalViewMode) => {
     setViewMode(mode);
     writeViewMode(mode);
   }, []);
 
-  // A pending block that outlives LONG_RUNNING_MS while output is actively
-  // streaming is a foreground process (`npm run dev`) the blocks pane can't
-  // stream — fall back to the live grid. A quiet pending block is just a slow
-  // shell warming up; flipping there would yank blocks-mode users to raw on
-  // every fresh tab, so an unproven shell gets a longer grace period.
+  // Blocks view can't stream a long-running foreground process; the rules for
+  // telling one from a slow shell live in shouldFallBackToRawView. The same
+  // tick keeps pending blocks' output fresh (an interactive script's menu must
+  // be visible without switching to raw) and flags "waiting for input".
   useEffect(() => {
-    if (viewMode !== "blocks") return;
-    const timer = window.setInterval(() => {
-      for (const [tabId, list] of Object.entries(commandBlocksRef.current)) {
-        const pending = list.find((b) => b.pending);
-        if (!pending) continue;
-        const age = Date.now() - pending.startedAt;
-        if (age <= LONG_RUNNING_MS) continue;
-        const provenShell = list.some((b) => !b.pending);
+    const tick = () => {
+      if (viewMode !== "blocks") {
+        setInputWaiting((prev) => (Object.keys(prev).length > 0 ? {} : prev));
+        return;
+      }
+      const now = Date.now();
+      const waiting: Record<number, string> = {};
+      for (const [tabIdKey, list] of Object.entries(commandBlocksRef.current)) {
+        const tabId = Number(tabIdKey);
+        const reader = readersRef.current.get(tabId);
+        const pending = (list ?? []).filter((b) => b.pending);
+        if (reader && pending.length > 0) {
+          const buffer = reader.getBuffer();
+          setCommandBlocks((prev) => {
+            const cur = prev[tabId];
+            if (!cur) return prev;
+            let changed = false;
+            const next = cur.map((b) => {
+              if (!b.pending) return b;
+              const marker = blockMarkersRef.current.get(b.id) ?? "";
+              const output = capBlockOutput(stripCommandEcho(b.command, sliceNewOutput(marker, buffer)));
+              if (output === b.output) return b;
+              changed = true;
+              return { ...b, output };
+            });
+            return changed ? { ...prev, [tabId]: next } : prev;
+          });
+          const busy = reader.isBusy();
+          if (!busy) {
+            const promptBlock = pending.find(
+              (b) => b.output.trim() && looksLikeInputPrompt(b.output),
+            );
+            if (promptBlock) waiting[tabId] = lastNonEmptyLine(promptBlock.output);
+          }
+        }
+      }
+      setInputWaiting((prev) => {
+        const prevKeys = Object.keys(prev);
+        const nextKeys = Object.keys(waiting);
         if (
-          readersRef.current.get(Number(tabId))?.isBusy() === true &&
-          (provenShell || age > 15_000)
+          prevKeys.length === nextKeys.length &&
+          nextKeys.every((k) => prev[Number(k)] === waiting[Number(k)])
+        ) {
+          return prev;
+        }
+        return waiting;
+      });
+      for (const [tabId, list] of Object.entries(commandBlocksRef.current)) {
+        if (
+          shouldFallBackToRawView({
+            blocks: list,
+            now,
+            busy: readersRef.current.get(Number(tabId))?.isBusy() === true,
+          })
         ) {
           switchViewMode("raw");
           return;
         }
       }
-    }, 1_000);
+    };
+    const timer = window.setInterval(tick, 1_000);
     return () => window.clearInterval(timer);
   }, [viewMode, switchViewMode]);
 
@@ -1250,22 +1307,15 @@ export function TerminalDock() {
     }
     if (!text) text = reader.getBuffer();
     try {
-      await navigator.clipboard.writeText(text);
+      await copyTextToClipboard(text);
     } catch {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      try {
-        document.execCommand("copy");
-      } catch {
-        /* ignore */
-      }
-      ta.remove();
+      // Don't claim "Copied" when nothing was copied.
+      toast.error("Couldn't copy the terminal output.");
+      return;
     }
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
-  }, [activeId]);
+  }, [activeId, toast]);
 
   const saveActiveToNote = useCallback(async () => {
     const tab = activeId != null ? tabsRef.current.find((t) => t.id === activeId) : undefined;
@@ -1452,6 +1502,8 @@ export function TerminalDock() {
   const restartArmed = !!active && armedRestartId === active.id;
   const activeBusy = active?.busy === true;
   const showSessionActions = !!active && !isAgentLikeKind(active.kind);
+  /** The rail shows whenever the blocks pane doesn't — mirror that exactly. */
+  const railApplies = !!active && !(viewMode === "blocks" && altBufferTabs[active.id] !== true);
   const agentActive = isAgentLikeKind(active?.kind);
   const splitOn = dockFrame === "split";
   const splitAgent =
@@ -1870,6 +1922,23 @@ export function TerminalDock() {
               </HoverTip>
             </div>
           )}
+          {showSessionActions && railApplies && (
+            <HoverTip
+              label={railHidden ? "Show command history" : "Hide command history"}
+              pos="top-end"
+            >
+              <button
+                type="button"
+                className="hub-icon-btn terminal-dock-btn"
+                data-on={!railHidden || undefined}
+                onClick={() => setRailHiddenPref(!railHidden)}
+                aria-pressed={!railHidden}
+                aria-label="Toggle command history"
+              >
+                <History size={12} aria-hidden />
+              </button>
+            </HoverTip>
+          )}
           {showSessionActions && (
             <HoverTip
               label={notifyDone ? "Notify on finished commands: on" : "Notify when long commands finish"}
@@ -2106,12 +2175,17 @@ export function TerminalDock() {
                     } else {
                       busySinceRef.current.delete(tab.id);
                       if (
-                        since &&
-                        Date.now() - since >= NOTIFY_MIN_MS &&
-                        notifyDone &&
-                        (!openRef.current || document.hidden) &&
-                        typeof Notification !== "undefined" &&
-                        Notification.permission === "granted"
+                        shouldNotifyCommandFinished({
+                          startedAt: since,
+                          now: Date.now(),
+                          notifyEnabled: notifyDone,
+                          dockOpen: openRef.current,
+                          documentHidden: document.hidden,
+                          permission:
+                            typeof Notification === "undefined"
+                              ? "unsupported"
+                              : Notification.permission,
+                        })
                       ) {
                         try {
                           new Notification("DevHub terminal", {
@@ -2158,11 +2232,18 @@ export function TerminalDock() {
                   onReader={(reader) => {
                     if (reader) {
                       readersRef.current.set(tab.id, reader);
+                      // A launched tab command (upstart etc.) always gets a
+                      // block — OSC detection of the echoed line is unreliable
+                      // while the shell is still starting up.
+                      if (tab.command && !launchedBlockTabsRef.current.has(tab.id)) {
+                        launchedBlockTabsRef.current.add(tab.id);
+                        beginCommandBlock(tab.id, tab.command, "inject");
+                      }
                       flushPendingInject(tab.id);
                     } else readersRef.current.delete(tab.id);
                   }}
                 />
-                {!blocksOn && (
+                {!blocksOn && !railHidden && (
                   <TerminalBlockHistory
                     blocks={commandBlocks[tab.id] ?? []}
                     onCopy={(block) => {
@@ -2172,13 +2253,29 @@ export function TerminalDock() {
                     onRerun={(block) => runPromptCommand(tab, block.command)}
                     onExplain={(block) => explainFailedBlock(tab, block)}
                     onJump={(block) => jumpToBlock(tab, block)}
+                    onDismiss={() => setRailHiddenPref(true)}
                   />
                 )}
               </div>
               {blocksOn && (
-                <div className="terminal-blocks-pane">
+                <div
+                  className="terminal-blocks-pane"
+                  onMouseDown={(e) => {
+                    // The grid is hidden in blocks view, so the console pane is
+                    // read-only DOM — refocus the prompt editor on plain clicks
+                    // or keystrokes vanish (target was never an editable).
+                    const target = e.target as HTMLElement;
+                    if (target.closest("button, a, input, textarea")) return;
+                    promptInputsRef.current.get(tab.id)?.focus({ preventScroll: true });
+                  }}
+                >
                   <TerminalBlocksView
                     blocks={commandBlocks[tab.id] ?? []}
+                    waitingInputId={
+                      inputWaiting[tab.id]
+                        ? (commandBlocks[tab.id] ?? []).find((b) => b.pending)?.id
+                        : undefined
+                    }
                     onCopy={(block) => {
                       void copyTextToClipboard(block.output.trim() || block.command);
                     }}
@@ -2197,11 +2294,13 @@ export function TerminalDock() {
                 asking={askingTabId === tab.id}
                 askError={askError}
                 focused={open && tab.id === active?.id && !proposal && blocksOn}
+                inputHint={inputWaiting[tab.id]}
                 onRun={(command) => runPromptCommand(tab, command)}
                 onAsk={(text) => void askPromptCommand(tab, text)}
                 onCancelAsk={() => askAbortRef.current?.abort()}
                 onRerun={(command) => runPromptCommand(tab, command)}
                 onSendLastToAgent={(command) => sendTerminalToAgent(tab, command)}
+                inputRef={(el) => promptInputsRef.current.set(tab.id, el)}
               />
             </div>
           );

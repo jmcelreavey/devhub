@@ -109,7 +109,7 @@ export default function PrsPage() {
       <div className="page-wrapper">
         <BootScreen state={boot} />
         <div className="page-header">
-          <div className="page-title">Pull Requests</div>
+          <h1 className="page-title">Pull Requests</h1>
         </div>
         <EmptyState
           icon={<GitPullRequest size={28} />}
@@ -124,7 +124,7 @@ export default function PrsPage() {
     <div className="page-wrapper">
       <BootScreen state={boot} />
       <div className="page-header">
-        <div className="page-title">Pull Requests</div>
+        <h1 className="page-title">Pull Requests</h1>
         <div className="flex items-center gap-2">
           <span className="badge badge-muted">{authored.length + reviews.length}</span>
           <button

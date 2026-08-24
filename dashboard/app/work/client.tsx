@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { ListTodo, Ticket, History } from "lucide-react";
 import { TaskList } from "@/components/tasks/TaskList";
+import { TagContextCard } from "@/components/tasks/TagContextCard";
 import { InlineSearch } from "@/components/ui/InlineSearch";
 import { useLive } from "@/lib/hooks/use-fetch";
 import type { SetupGateStatus } from "@/lib/nav";
@@ -80,6 +81,7 @@ export default function WorkPage() {
     <div className="page-wrapper">
       <BootScreen state={boot} />
       {tabs}
+      {paramTag && <TagContextCard tag={paramTag} />}
       <section className="card card-body fade-rise space-y-3" aria-label="Today's queue">
         <InlineSearch
           id="work-task-search"

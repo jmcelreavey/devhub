@@ -54,11 +54,53 @@ interface CommitGraphProps {
   forkLabel?: string | null;
   /** Commits ahead of main — rendered as a ↑N pill on the HEAD row. */
   aheadMain?: number;
+  /**
+   * Which row columns render (hash / refs / author / date). Omitted = all on.
+   * Subject is always rendered.
+   */
+  columns?: GraphColumnsPartial;
 }
 
 /** Refs you can drop a commit onto: local branches only. */
 export function isBranchDropTarget(ref: string, headBranch: string | null): boolean {
   return !ref.startsWith("tag:") && !ref.startsWith("origin/") && ref !== headBranch;
+}
+
+/**
+ * Optional row columns. Subject is always shown — hiding it leaves nothing to
+ * read — but hash, refs, author and the date column can each be turned off,
+ * and the grid reflows around what remains.
+ */
+export interface GraphColumns {
+  hash: boolean;
+  refs: boolean;
+  author: boolean;
+  date: boolean;
+}
+
+export const DEFAULT_GRAPH_COLUMNS: GraphColumns = {
+  hash: true,
+  refs: true,
+  author: true,
+  date: true,
+};
+
+export type GraphColumnsPartial = Partial<GraphColumns>;
+
+export function resolveColumns(columns?: GraphColumnsPartial): GraphColumns {
+  return { ...DEFAULT_GRAPH_COLUMNS, ...columns };
+}
+
+/** Grid tracks for the visible columns; subject and kebab are not optional. */
+export function graphGridTemplate(c: GraphColumns): string {
+  const parts: string[] = [];
+  if (c.hash) parts.push("3.8rem");
+  parts.push("minmax(0, 1fr)");
+  if (c.refs) parts.push("minmax(0, 30%)");
+  if (c.author) parts.push("minmax(7rem, 12rem)");
+  if (c.date) parts.push("5.5rem");
+  parts.push("24px");
+  return parts.join(" ");
 }
 
 /**
@@ -146,6 +188,7 @@ export function CommitGraph({
   forkBase = null,
   forkLabel = null,
   aheadMain = 0,
+  columns,
 }: CommitGraphProps) {
   if (commits.length === 0 && !wip) {
     return (
@@ -172,6 +215,7 @@ export function CommitGraph({
       forkBase={forkBase}
       forkLabel={forkLabel}
       aheadMain={aheadMain}
+      columns={columns}
     />
   );
 }
@@ -202,6 +246,7 @@ function CommitGraphInner({
   forkBase = null,
   forkLabel = null,
   aheadMain = 0,
+  columns,
 }: CommitGraphProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -241,6 +286,8 @@ function CommitGraphInner({
   const graphW = PAD_X * 2 + maxLanes * LANE_W;
   const headCommit = commits.find((c) => c.isHead) ?? commits[0] ?? null;
   const wipLane = headCommit ? headCommit.lane : 0;
+  const cols = resolveColumns(columns);
+  const gridTemplate = graphGridTemplate(cols);
   const wipCount = wip ? wip.staged + wip.unstaged : 0;
 
   // Visible slice of the graph nodes/edges. An edge is drawn when either of its
@@ -256,7 +303,7 @@ function CommitGraphInner({
     <div ref={scrollRef} className="repo-git-graph" onScroll={onScroll}>
       <div
         className="repo-git-graph-canvas"
-        style={{ height: totalH, minWidth: Math.max(graphW + 60, 430) }}
+        style={{ height: totalH, width: "100%", minWidth: Math.max(graphW + 60, 430) }}
       >
         <div className="repo-git-graph-rail" style={{ width: graphW, height: totalH }}>
           <svg width={graphW} height={totalH} aria-hidden>
@@ -388,7 +435,7 @@ function CommitGraphInner({
               tabIndex={0}
               className="repo-git-graph-row repo-git-wip-row"
               data-wip-count={wipCount || undefined}
-              style={{ top: 0, height: ROW_H }}
+              style={{ top: 0, height: ROW_H, gridTemplateColumns: gridTemplate }}
               onClick={() => onOpenWip?.()}
               onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
                 if (e.key !== "Enter" && e.key !== " ") return;
@@ -396,7 +443,9 @@ function CommitGraphInner({
                 onOpenWip?.();
               }}
             >
-              <span className="repo-git-wip-label font-mono">WIP</span>
+              {cols.hash ? (
+                <span className="repo-git-wip-label font-mono">WIP</span>
+              ) : null}
               <span
                 className="repo-git-graph-subject truncate"
                 title={
@@ -405,6 +454,7 @@ function CommitGraphInner({
                     : `${wip!.staged} staged · ${wip!.unstaged} unstaged — click to review`
                 }
               >
+                {!cols.hash && <span className="repo-git-wip-label font-mono">WIP </span>}
                 {wipCount === 0 ? (
                   <span className="repo-git-wip-quiet">clean tree</span>
                 ) : (
@@ -414,8 +464,9 @@ function CommitGraphInner({
                   </>
                 )}
               </span>
-              <span className="repo-git-graph-refs" />
-              <span className="repo-git-graph-author" />
+              {cols.refs && <span className="repo-git-graph-refs" />}
+              {cols.author && <span className="repo-git-graph-author" />}
+              {cols.date && <span className="repo-git-graph-date-cell" />}
               <span className="repo-git-graph-kebab" />
             </div>
           )}
@@ -441,7 +492,7 @@ function CommitGraphInner({
                 data-head={c.isHead || undefined}
                 data-ahead={aheadOfMain?.has(c.hash) || undefined}
                 data-fork={isFork || undefined}
-                style={{ top: row * ROW_H, height: ROW_H }}
+                style={{ top: row * ROW_H, height: ROW_H, gridTemplateColumns: gridTemplate }}
                 {...(rowBind?.(c) ?? {})}
                 onPointerDown={(event) => {
                   onRowDragStart?.(event, c);
@@ -463,14 +514,16 @@ function CommitGraphInner({
                   onSelect?.(c.hash);
                 }}
               >
-                <span
-                  className="repo-git-graph-hash font-mono"
-                  style={{ color: laneColor(c.color) }}
-                  title={c.gpg === "G" ? "Signed with a verified GPG signature" : undefined}
-                >
-                  {c.gpg === "G" ? "✓ " : ""}
-                  {c.shortHash}
-                </span>
+                {cols.hash && (
+                  <span
+                    className="repo-git-graph-hash font-mono"
+                    style={{ color: laneColor(c.color) }}
+                    title={c.gpg === "G" ? "Signed with a verified GPG signature" : undefined}
+                  >
+                    {c.gpg === "G" ? "✓ " : ""}
+                    {c.shortHash}
+                  </span>
+                )}
                 <span className="repo-git-graph-subject truncate" title={c.subject}>
                   {c.subject}
                 </span>
@@ -479,8 +532,9 @@ function CommitGraphInner({
                   cell, so on a commit with no refs the author column slid left
                   into the refs track and the whole right-hand edge went ragged.
                 */}
-                <span className="repo-git-graph-refs">
-                  {isFork && forkLabel && (
+                {cols.refs && (
+                  <span className="repo-git-graph-refs">
+                    {isFork && forkLabel && (
                     <span
                       className="repo-git-ref-chip repo-git-fork-chip"
                       title={`This branch forked from ${forkLabel} here`}
@@ -519,24 +573,30 @@ function CommitGraphInner({
                     </span>
                   )}
                 </span>
-                <span className="repo-git-graph-author">
-                  <CommitAvatar
-                    author={c.author}
-                    email={c.authorEmail}
-                    resolvedUrl={identity?.avatarUrl ?? undefined}
-                    title={c.authorEmail ? `${c.author} <${c.authorEmail}>` : c.author}
-                  />
-                  <span className="repo-git-graph-meta">
+                )}
+                {cols.author && (
+                  <span className="repo-git-graph-author">
+                    <CommitAvatar
+                      author={c.author}
+                      email={c.authorEmail}
+                      resolvedUrl={identity?.avatarUrl ?? undefined}
+                      title={c.authorEmail ? `${c.author} <${c.authorEmail}>` : c.author}
+                    />
                     {/*
                       The identity's name rather than the commit's, so a person who
                       commits as "jmc" from one machine and "John McElreavey" from
-                      another reads as one contributor down the column. The commit's
-                      own name and address stay in the avatar tooltip.
+                      another reads as one contributor down the column.
                     */}
-                    <span className="truncate">{identity?.displayName || c.author}</span>
-                    <span className="repo-git-graph-date">{c.relativeDate}</span>
+                    <span className="repo-git-graph-name truncate">
+                      {identity?.displayName || c.author}
+                    </span>
                   </span>
-                </span>
+                )}
+                {cols.date && (
+                  <span className="repo-git-graph-date-cell" title={c.relativeDate}>
+                    {c.relativeDate}
+                  </span>
+                )}
                 <span className="repo-git-graph-kebab">
                   {onKebabOpen ? (
                     <RowMenuKebab

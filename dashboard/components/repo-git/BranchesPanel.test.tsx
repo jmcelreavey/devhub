@@ -158,3 +158,42 @@ describe("BranchesPanel danger actions", () => {
     expect(posts).toEqual([]);
   });
 });
+
+describe("BranchesPanel refresh", () => {
+  it("re-fetches branches when the Refresh button is clicked", async () => {
+    await renderPanel();
+    const fetchMock = vi.mocked(fetch);
+    const before = fetchMock.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(before);
+    });
+    expect(fetchMock.mock.calls.at(-1)?.[0]).toContain("/repos/devhub/branches");
+  });
+
+  it("polls quietly every 15s", async () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <BranchesPanel
+          repoName="devhub"
+          onMutate={vi.fn()}
+          onConflict={vi.fn(async () => undefined)}
+          onHookFailure={vi.fn()}
+          pushing={false}
+          onPush={vi.fn()}
+        />,
+      );
+      const fetchMock = vi.mocked(fetch);
+      await vi.advanceTimersByTimeAsync(0);
+      const before = fetchMock.mock.calls.length;
+      expect(before).toBeGreaterThan(0);
+      await vi.advanceTimersByTimeAsync(14_999);
+      expect(fetchMock.mock.calls.length).toBe(before);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

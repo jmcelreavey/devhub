@@ -326,14 +326,14 @@
   --border-muted: #e0e3ea;
   --text: #4c4f69;
   --text-muted: #64677e;
-  --text-subtle: #797b8e;
+  --text-subtle: #6c6f85; /* Latte subtext0 — 4.94:1 on surface */
   --accent: #8839ef;
   --accent-hover: #7127c9;
   --accent-dim: rgba(136, 57, 239, 0.1);
   --accent-fg: #ffffff;
   --success: #40a02b;
   --success-dim: rgba(64, 160, 43, 0.1);
-  --warning: #df8e1d;
+  --warning: #c77e14; /* Latte yellow, darkened to clear 3:1 on surface */
   --warning-dim: rgba(223, 142, 29, 0.14);
   --danger: #d20f39;
   --danger-dim: rgba(210, 15, 57, 0.1);
@@ -2440,9 +2440,74 @@ body[data-grid-resizing="true"] * {
 
 /* TaskList add row — responsive */
 .task-add-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.task-tag-sugs {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: var(--z-dropdown);
+  min-width: 180px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated, var(--bg));
+  box-shadow: var(--shadow-md, 0 8px 24px rgb(0 0 0 / 18%));
+}
+.task-tag-sugs button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 5px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--text);
+}
+.task-tag-sugs button[data-active] {
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+}
+
+/* Work-page tag context: notes/docs + derived PR/Jira neighbours for one tag. */
+.tag-context {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+}
+.tag-context-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+}
+.tag-context-group ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 0;
+  list-style: none;
+}
+.tag-context-group li {
+  display: contents;
+}
+.tag-context-label {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-subtle);
+}
+.tag-context .entity-link-chip {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .task-add-row .task-add-text {
   flex: 1 1 100%;
@@ -4927,6 +4992,11 @@ body[data-motion="off"] .terminal-agent-strip-pulse {
   gap: 8px;
   margin-top: 10px;
 }
+/* All chips hidden (no calendar signal, no top task, rest-day rep) — the row
+   must not donate its margin-top to the hero as dead space. */
+.hub-hero-signals:empty {
+  display: none;
+}
 .hero-signal {
   display: inline-flex;
   align-items: center;
@@ -5111,16 +5181,14 @@ body[data-motion="off"] .terminal-agent-strip-pulse {
 
 .context-menu:popover-open,
 .context-menu:not([hidden]) {
-  animation: context-menu-in var(--dur-base) var(--ease-swift);
+  animation: context-menu-in var(--dur-quick) var(--ease-swift);
 }
 @keyframes context-menu-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -6401,6 +6469,9 @@ body[data-motion="off"] .evolution-arrow {
   background: var(--bg);
 }
 .repo-git-diff-context-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   border: 0;
   border-right: 1px solid var(--border);
   background: transparent;
@@ -6608,8 +6679,8 @@ body[data-motion="off"] .evolution-arrow {
   margin: 0;
   padding: 0;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: 13.5px;
+  line-height: 1.6;
 }
 .repo-git-diff-line {
   display: flex;
@@ -6618,7 +6689,7 @@ body[data-motion="off"] .evolution-arrow {
   gap: 6px;
 }
 .repo-git-diff-gutter {
-  width: 1.25rem;
+  width: 1.6rem;
   flex-shrink: 0;
   text-align: center;
   color: var(--text-subtle);
@@ -6663,18 +6734,81 @@ body[data-motion="off"] .evolution-arrow {
   opacity: 0.4;
   cursor: not-allowed;
 }
+/* Selection actions over a diff. Built as a small menu rather than a row of
+   ghost buttons: it lands under the cursor in dense monospace text, where
+   full-width rows with real hit targets beat 20px chips. */
 .repo-git-diff-ai-pop {
   position: absolute;
   z-index: 3;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 6px);
-  background: var(--bg-elevated);
-  box-shadow: 0 8px 24px color-mix(in oklab, #000 28%, transparent);
+  display: flex;
+  flex-direction: column;
+  min-width: 176px;
+  gap: 1px;
+  padding: 4px;
+  border: 1px solid color-mix(in oklab, var(--border) 70%, var(--text) 30%);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  box-shadow: 0 12px 30px color-mix(in oklab, #000 42%, transparent);
   animation: hub-enter var(--dur-fast) var(--ease-swift);
+}
+.repo-git-diff-ai-pop-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 2px 3px 8px;
+}
+.repo-git-diff-ai-pop-close {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+.repo-git-diff-ai-pop-close:hover {
+  background: var(--bg-overlay);
+  color: var(--text);
+}
+.repo-git-diff-ai-pop-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.3;
+  cursor: pointer;
+  text-align: left;
+}
+.repo-git-diff-ai-pop-item:hover:not(:disabled) {
+  background: var(--bg-overlay);
+  color: var(--text);
+}
+.repo-git-diff-ai-pop-item:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+.repo-git-diff-ai-pop-item:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
+  outline-offset: -2px;
+  color: var(--text);
+}
+/* Staging is what the menu is usually opened for — the accent icon lets the
+   eye land on it without making a second button compete as a full CTA. */
+.repo-git-diff-ai-pop-item[data-primary] {
+  color: var(--text);
+}
+.repo-git-diff-ai-pop-item[data-primary] svg {
+  color: var(--accent);
 }
 .repo-git-diff-add {
   background: color-mix(in oklab, var(--success) 12%, transparent);
@@ -6690,6 +6824,270 @@ body[data-motion="off"] .evolution-arrow {
 }
 .repo-git-diff-meta {
   color: var(--text-subtle);
+}
+/* Side-by-side: the pre itself is the grid so both columns size together and
+ * scroll as one — per-row grids would let columns drift out of alignment. */
+.repo-git-diff-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-width: max-content;
+}
+.repo-git-diff-split .repo-git-diff-line {
+  min-width: 0;
+  border-right: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
+}
+.repo-git-diff-split .repo-git-diff-wide {
+  grid-column: 1 / -1;
+  border-right: 0;
+}
+/* A del/add row with no counterpart — faint fill says "nothing here" without
+ * reading as an empty context line. */
+.repo-git-diff-void {
+  background: color-mix(in oklab, var(--text-subtle) 6%, transparent);
+}
+/* Rendered markdown preview for .md diffs — reading measure, not full-bleed. */
+.repo-git-md-preview {
+  padding: 16px 20px;
+  max-width: 82ch;
+}
+.repo-git-md-preview-hint {
+  font-size: 11px;
+  color: var(--text-subtle);
+  margin-bottom: 12px;
+}
+/* GFM pipe tables in LabMarkdown (learnings, previews, lab content). */
+.lab-md-table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 11.5px;
+  width: 100%;
+}
+.lab-md-table th,
+.lab-md-table td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+}
+.lab-md-table th {
+  background: var(--bg-muted);
+  color: var(--text);
+  font-weight: 600;
+}
+.lab-md-table td {
+  color: var(--text-muted);
+}
+/* Review comments — per-line notes gathered for a bulk agent handoff. */
+.repo-git-comment-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  margin-right: 8px;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-quick) var(--ease-swift);
+}
+.repo-git-diff-line:hover .repo-git-comment-btn,
+.repo-git-comment-btn:focus-visible {
+  opacity: 1;
+}
+.repo-git-comment-btn:hover {
+  color: var(--accent);
+  background: var(--bg-elevated);
+}
+.repo-git-comment-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 10px;
+  background: color-mix(in oklab, var(--accent) 9%, var(--bg-elevated));
+  border-left: 2px solid var(--accent);
+  color: var(--text);
+  font-family: var(--font-sans, inherit);
+  font-size: 11.5px;
+  white-space: normal;
+}
+.repo-git-comment-text {
+  flex: 1;
+  min-width: 0;
+}
+.repo-git-comment-line {
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40%;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: var(--text-subtle);
+}
+.repo-git-comment-delete {
+  flex-shrink: 0;
+  display: inline-flex;
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+.repo-git-comment-delete:hover {
+  color: var(--danger);
+  background: var(--bg-overlay);
+}
+.repo-git-comment-editor {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 10px;
+  background: var(--bg-elevated);
+  border-left: 2px solid var(--accent);
+  white-space: normal;
+}
+.repo-git-comment-input {
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
+  font-size: 11.5px;
+}
+/* The review basket popover. */
+.repo-git-review-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: min(420px, 90vw);
+  max-height: 360px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md, 0 4px 12px rgb(0 0 0 / 0.18));
+}
+.repo-git-review-empty {
+  padding: 12px;
+  font-size: 11.5px;
+  color: var(--text-subtle);
+}
+.repo-git-review-list {
+  overflow-y: auto;
+  padding: 6px;
+}
+.repo-git-review-file-path {
+  padding: 4px 4px 2px;
+  font-family: var(--font-mono, monospace);
+  font-size: 10.5px;
+  color: var(--text-subtle);
+}
+.repo-git-review-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.repo-git-review-jump {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.repo-git-review-jump:hover {
+  background: var(--bg-overlay);
+  color: var(--text);
+}
+.repo-git-review-line {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: var(--text-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.repo-git-review-text {
+  overflow-wrap: break-word;
+}
+.repo-git-review-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid var(--border);
+}
+/* Syntax tokens — full VSCode-style colors on every line; the add/del signal
+ * lives in the row background and gutter, not the text tint. */
+:root[data-theme="dark"] {
+  --diff-tok-keyword: #ff7b72;
+  --diff-tok-string: #a5d6ff;
+  --diff-tok-function: #d2a8ff;
+  --diff-tok-constant: #79c0ff;
+  --diff-tok-tag: #7ee787;
+  --diff-tok-attr: #79c0ff;
+  --diff-tok-type: #ffa657;
+}
+:root[data-theme="light"] {
+  --diff-tok-keyword: #cf222e;
+  --diff-tok-string: #0a3069;
+  --diff-tok-function: #8250df;
+  --diff-tok-constant: #0550ae;
+  --diff-tok-tag: #116329;
+  --diff-tok-attr: #0550ae;
+  --diff-tok-type: #953800;
+}
+.repo-git-diff .token.keyword,
+.repo-git-diff .token.important,
+.repo-git-diff .token.atrule {
+  color: var(--diff-tok-keyword);
+}
+.repo-git-diff .token.string,
+.repo-git-diff .token.char,
+.repo-git-diff .token.attr-value,
+.repo-git-diff .token.regex,
+.repo-git-diff .token.url {
+  color: var(--diff-tok-string);
+}
+.repo-git-diff .token.function {
+  color: var(--diff-tok-function);
+}
+.repo-git-diff .token.number,
+.repo-git-diff .token.boolean,
+.repo-git-diff .token.constant,
+.repo-git-diff .token.symbol {
+  color: var(--diff-tok-constant);
+}
+.repo-git-diff .token.comment,
+.repo-git-diff .token.prolog,
+.repo-git-diff .token.doctype,
+.repo-git-diff .token.cdata {
+  color: var(--text-subtle);
+  font-style: italic;
+}
+.repo-git-diff .token.tag,
+.repo-git-diff .token.selector {
+  color: var(--diff-tok-tag);
+}
+.repo-git-diff .token.attr-name,
+.repo-git-diff .token.property {
+  color: var(--diff-tok-attr);
+}
+.repo-git-diff .token.class-name,
+.repo-git-diff .token.builtin,
+.repo-git-diff .token.type,
+.repo-git-diff .token.maybe-class-name {
+  color: var(--diff-tok-type);
 }
 .repo-git-diff-empty,
 .repo-git-empty,
@@ -7290,17 +7688,86 @@ button.conflict-path-row:not(:disabled):active {
   flex: 1;
   min-height: 0;
 }
-.repo-git-rail {
+body.col-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+.repo-git-rail-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   flex-shrink: 0;
-  width: 196px;
+  min-height: 0;
+}
+.repo-git-rail {
+  width: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   border-right: 1px solid var(--border);
-  padding: 10px 8px;
+  /* Bottom padding keeps the floating collapse button off the last row. */
+  padding: 10px 8px 36px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   background: var(--bg-surface);
+  flex: 1;
+  min-height: 0;
+}
+.repo-git-rail-collapse {
+  /* Bottom edge, not top — the top corner is the first section header, and
+     an absolutely-positioned control there collided with its badge. */
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-elevated);
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+.repo-git-rail-collapse:hover {
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+.repo-git-rail-handle {
+  width: 5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 150ms var(--ease-swift);
+}
+.repo-git-rail-handle:hover,
+.repo-git-rail-handle:focus-visible {
+  background: color-mix(in oklab, var(--accent) 45%, transparent);
+}
+.repo-git-rail-collapsed {
+  flex-shrink: 0;
+  width: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 2px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+.repo-git-rail-collapsed:hover {
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+.repo-git-rail-collapsed-label {
+  writing-mode: vertical-rl;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
 }
 .repo-git-rail .repo-git-section-label {
   margin-bottom: 4px;
@@ -7314,12 +7781,23 @@ button.conflict-path-row:not(:disabled):active {
   color: var(--text-muted);
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  /* Left-aligned cluster (chevron · icon · label) with the badge pinned to
+     the far edge — space-between made the label float mid-width. */
+  justify-content: flex-start;
+  gap: 5px;
+}
+.repo-git-rail-toggle .badge {
+  margin-left: auto;
 }
 .repo-git-rail-branch {
-  display: flex;
+  /* Three tracks, not space-between: the name takes the slack and truncates,
+     and the PR badge + ahead/behind sit in fixed right-hand columns so they
+     line up down the list instead of floating wherever the name happens to
+     end. Explicit grid-column on the trailing spans keeps that alignment on
+     rows where the PR badge is absent. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  justify-content: space-between;
   gap: 6px;
   width: 100%;
   border: 0;
@@ -7343,10 +7821,16 @@ button.conflict-path-row:not(:disabled):active {
   cursor: default;
 }
 .repo-git-rail-counts {
+  grid-column: 3;
   display: inline-flex;
+  justify-content: flex-end;
+  /* Reserved even when empty so a single ↑/↓ on one row doesn't shove that
+     row's PR badge out of the column the others sit in. */
+  min-width: 15px;
   gap: 3px;
   font-size: 10px;
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
   color: var(--text-muted);
 }
 .repo-git-rail-counts [data-dir="ahead"] {
@@ -7358,6 +7842,46 @@ button.conflict-path-row:not(:disabled):active {
 .repo-git-rail-counts [data-dir="gone"] {
   color: var(--danger, #e5484d);
 }
+/* ↑N✓ — every ahead commit already lives on another remote ref; trivia, not
+   a push queue, so it reads muted-success instead of action-required. */
+.repo-git-rail-counts [data-dir="pushed"] {
+  color: var(--text-subtle);
+}
+/* Open-PR badge on rail branches — review state without leaving the sidebar. */
+.repo-git-rail-pr {
+  grid-column: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 600;
+  background: color-mix(in oklab, var(--text-subtle) 16%, transparent);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.repo-git-rail-pr[data-checks="passing"] {
+  background: color-mix(in oklab, var(--success, #3fb950) 18%, transparent);
+  color: var(--success, #3fb950);
+}
+.repo-git-rail-pr[data-checks="failing"] {
+  background: color-mix(in oklab, var(--danger, #e5484d) 16%, transparent);
+  color: var(--danger, #e5484d);
+}
+.repo-git-rail-pr[data-checks="pending"] {
+  background: color-mix(in oklab, var(--warning, #f0883e) 16%, transparent);
+  color: var(--warning, #f0883e);
+}
+/* Zombie branches: untouched 30+ days dim so the active set pops. */
+.repo-git-rail-branch[data-stale] {
+  opacity: 0.55;
+}
+.repo-git-rail-branch[data-stale]:hover {
+  opacity: 1;
+}
 .repo-git-rail-tag {
   display: block;
   font-size: 10.5px;
@@ -7366,9 +7890,33 @@ button.conflict-path-row:not(:disabled):active {
 }
 @media (max-width: 1100px) {
   /* Rail is a luxury; below this width the tabs carry everything. */
-  .repo-git-rail {
+  .repo-git-rail-wrap,
+  .repo-git-rail-handle,
+  .repo-git-rail-collapsed {
     display: none;
   }
+}
+/* Graph date column (own track, right-aligned, tabular so digits don't wobble) */
+.repo-git-graph-date-cell {
+  font-size: 10px;
+  color: var(--text-subtle);
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.repo-git-graph-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Conflicted file rows in Changes: red glyph + tinted row; their only action
+   is Resolve (stage), so destructive buttons never appear for them. */
+.repo-git-file-row[data-conflict] {
+  background: color-mix(in oklab, var(--danger, #e5484d) 7%, transparent);
+}
+.repo-git-file-row[data-conflict] .repo-git-file-status {
+  color: var(--danger, #e5484d);
+  font-weight: 700;
 }
 .repo-git-graph-row {
   display: grid;
@@ -10140,4 +10688,27 @@ a.repo-git-context-chip[data-kind="pr"][data-checks="pending"] {
 }
 .repo-git-pr-checks {
   margin-left: 3px;
+}
+/* Selection popup on diff text: hint line above the actions. */
+/* Header label. Was `width: 100%` inside a row flex, which stretched the
+   popup to whatever the sentence measured. */
+.repo-git-diff-ai-pop-hint {
+  flex: 1;
+  min-width: 0;
+  font-size: 10px;
+  color: var(--text-subtle);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Fetch staleness cue beside the Fetch button — arrows are only as fresh as
+   the last fetch, and past an hour the label earns a visible tone. */
+.repo-git-fetch-age {
+  font-size: 10px;
+  color: var(--text-subtle);
+  white-space: nowrap;
+}
+.repo-git-fetch-age[data-stale] {
+  color: var(--warning, #f0883e);
 }

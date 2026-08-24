@@ -6,6 +6,7 @@ import {
   dataTransferHasTerminalSelection,
   formatBlockForAgent,
   lastNonEmptyLine,
+  looksLikeInputPrompt,
   looksLikePromptLine,
   parseOsc133,
   parseStructuredExit,
@@ -233,5 +234,35 @@ describe("stripRightPrompt with an icon (Nerd Font) prompt", () => {
 
   it("does not mistake a redirect for the prompt glyph", () => {
     expect(shouldRecordTypedCommand("echo hi > out.txt", `${"\uf07c  ~/dev \u276f"} echo hi > out.txt`)).toBe(true);
+  });
+});
+
+describe("looksLikeInputPrompt", () => {
+  it("spots a choice prompt", () => {
+    expect(looksLikeInputPrompt("Which development mode?\n  1) Expo Go\n  2) Native build\nChoice [1]:")).toBe(true);
+  });
+
+  it("spots a question", () => {
+    expect(looksLikeInputPrompt("Which platform?\n  1) iOS simulator\nWhich platform?")).toBe(true);
+  });
+
+  it("spots y/n", () => {
+    expect(looksLikeInputPrompt("Overwrite ./ios? [y/N]")).toBe(true);
+  });
+
+  it("spots enter-to-continue", () => {
+    expect(looksLikeInputPrompt("Press Enter to continue")).toBe(true);
+  });
+
+  it("ignores plain progress output", () => {
+    expect(looksLikeInputPrompt("Building project...\nDone in 1.2s")).toBe(false);
+  });
+
+  it("ignores a shell prompt line", () => {
+    expect(looksLikeInputPrompt("~/dev ❯")).toBe(false);
+  });
+
+  it("ignores empty output", () => {
+    expect(looksLikeInputPrompt("")).toBe(false);
   });
 });

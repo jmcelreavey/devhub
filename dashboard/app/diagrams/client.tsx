@@ -202,7 +202,27 @@ function DiagramsIndexInner() {
     setMoving(null);
     try {
       await moveDiagramEntry(candidate.storagePath, targetRel, candidate.isDir);
-      toast.success(`Moved to ${targetRel || "top level"}.`);
+      // Undo = move back to the original parent folder.
+      const originalRel = stripDiagramsPrefix(candidate.storagePath);
+      const originalParent = originalRel.includes("/")
+        ? originalRel.slice(0, originalRel.lastIndexOf("/"))
+        : "";
+      const name = candidate.storagePath.split("/").pop() ?? candidate.storagePath;
+      toast.success(`Moved to ${targetRel || "top level"}.`, {
+        duration: 10_000,
+        action: {
+          label: "Undo",
+          onClick: () => {
+            void moveDiagramEntry(
+              `${diagramFolderStoragePath(targetRel)}/${name}`,
+              originalParent,
+              candidate.isDir,
+            )
+              .then(() => reload())
+              .catch(() => toast.error("Couldn't move it back."));
+          },
+        },
+      });
       await reload();
     } catch (err) {
       if (err instanceof Error && err.message === "unchanged") return;

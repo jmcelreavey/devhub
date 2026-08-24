@@ -174,7 +174,12 @@ export function TerminalSession({
 }: SessionProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<{ fit: () => void } | null>(null);
-  const termRef = useRef<{ focus: () => void; getSelection: () => string } | null>(null);
+  const termRef = useRef<{
+    focus: () => void;
+    getSelection: () => string;
+    hasSelection: () => boolean;
+    clearSelection: () => void;
+  } | null>(null);
   const sessionIdRef = useRef<string | null>(attachSessionId ?? null);
   const lastOutputAtRef = useRef<number | null>(null);
   const lastInputAtRef = useRef<number | null>(null);
@@ -224,9 +229,15 @@ export function TerminalSession({
       window.setTimeout(() => findInputRef.current?.select(), 0);
     };
     const onEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && findOpen) {
+      if (e.key !== "Escape") return;
+      if (findOpen) {
         setFindOpen(false);
         termRef.current?.focus();
+        return;
+      }
+      // Escape dismisses a text selection before it traps the pane.
+      if (termRef.current?.hasSelection()) {
+        termRef.current.clearSelection();
       }
     };
     document.addEventListener("keydown", onKey, true);
@@ -392,6 +403,19 @@ export function TerminalSession({
       };
       dragLayer.addEventListener("dragstart", onDragStart);
       dragLayer.addEventListener("dragend", onDragEnd);
+      // Selection row overlays sit on top of the grid (pointer-events: auto so
+      // they stay draggable). Without these, a large selection dead-zones the
+      // pane: wheel never reaches xterm and clicks can't clear the highlight.
+      const onWheelForward = (e: WheelEvent) => {
+        const cell = host.clientHeight / Math.max(term.rows, 1);
+        const lines = Math.round(e.deltaY / cell);
+        if (lines !== 0) term.scrollLines(lines);
+      };
+      const onClickClearSelection = () => {
+        if (term.hasSelection()) term.clearSelection();
+      };
+      dragLayer.addEventListener("wheel", onWheelForward, { passive: true });
+      dragLayer.addEventListener("click", onClickClearSelection);
 
       const disposeSession = () => {
         preferKillRef.current = true;
@@ -513,6 +537,10 @@ export function TerminalSession({
        */
       let suppressBlocksUntil = 0;
       let ranCommand = false;
+      /** Command injected via the `command` prop — the dock owns its block. */
+      let launchCommand: string | null = null;
+      /** Setup lines (`stty`/`clear`) must not become blocks of their own. */
+      let suppressSetupBlocksUntil = 0;
       let opened = false;
       let reportedClose = false;
 
@@ -526,11 +554,16 @@ export function TerminalSession({
         // process running (and re-sending would restart a long-running command).
         if (!reattached && !attachSessionId && command?.trim() && !ranCommand) {
           ranCommand = true;
-          socket.send("stty -echo\r");
-          window.setTimeout(() => {
-            if (socket.readyState !== WebSocket.OPEN) return;
-            socket.send(`clear\r${command.trim()}; stty echo\r`);
-          }, 50);
+          // One line, not three: separate `clear` lines used to show up as
+          // their own (failing) blocks and race the launched command's block
+          // detection. No `stty -echo` here — it stays off for the whole
+          // command, which makes typing invisible in interactive launch
+          // scripts (upstarts that `read` choices). The raw echo of the
+          // inject happens before the shell executes the line anyway, so
+          // stty never hid it reliably.
+          launchCommand = command.trim();
+          suppressSetupBlocksUntil = Date.now() + 10_000;
+          socket.send(`clear 2>/dev/null; ${command.trim()}\r`);
         }
         if (autoFocusRef.current) term.focus();
       };
@@ -628,7 +661,16 @@ export function TerminalSession({
         if (parsed.kind === "C") {
           sawOsc133 = true;
           const cmd = commandFromPromptLine(lastNonEmptyLine(getText()));
-          if (cmd) onOscCommandRef.current?.(cmd);
+          if (!cmd) return true;
+          // The launch inject's own plumbing (stty/clear wrap) must not spawn
+          // blocks — the dock creates one block for the launched command.
+          if (
+            Date.now() < suppressSetupBlocksUntil &&
+            (cmd === "stty -echo" || cmd === "clear" || (launchCommand !== null && cmd.includes(launchCommand)))
+          ) {
+            return true;
+          }
+          onOscCommandRef.current?.(cmd);
         }
         if (parsed.kind === "D" && parsed.exitCode != null) {
           sawOsc133 = true;
@@ -672,6 +714,8 @@ export function TerminalSession({
         searchAddonRef.current = null;
         dragLayer.removeEventListener("dragstart", onDragStart);
         dragLayer.removeEventListener("dragend", onDragEnd);
+        dragLayer.removeEventListener("wheel", onWheelForward);
+        dragLayer.removeEventListener("click", onClickClearSelection);
         dragLayer.remove();
         if (preferKillRef.current || killOnUnmountRef.current) {
           disposeSession();

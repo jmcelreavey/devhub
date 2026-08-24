@@ -187,7 +187,7 @@ export default function ReposPage() {
       <BootScreen state={boot} />
       <div className="page-header">
         <div>
-          <div className="page-title">Repos</div>
+          <h1 className="page-title">Repos</h1>
           <div className="page-subtitle">Clone, open, run, and get up to speed without spelunking through every folder by hand.</div>
         </div>
         <div className="flex items-center gap-2 shrink-0">

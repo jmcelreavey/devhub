@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { Bot, ExternalLink, Monitor, Search, Settings, Terminal } from "lucide-react";
-import { ALL_NAV_DESTINATIONS, type NavGroup } from "@/lib/nav";
+import { buildCrumbs } from "@/lib/nav";
 import { SectionTabs } from "@/components/shell/SectionTabs";
 import { AccentPicker } from "@/components/shell/AccentPicker";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
@@ -18,39 +18,6 @@ import { useLaunchChamberDesktop } from "@/lib/launch/chamber";
 import { useLaunchOpenCodeDesktop } from "@/lib/launch/opencode";
 import { claudeCliCommand, openTerminal, opencodeCliCommand } from "@/lib/terminal-launch";
 import { openInBrowser } from "@/lib/desktop/bridge";
-
-interface Crumb {
-  label: string;
-  href?: string;
-}
-
-const ROOT_LABEL: Record<NavGroup, string> = {
-  workspace: "Workspace",
-  library: "Notes",
-  bi: "BI",
-  system: "System",
-};
-
-/** Landing page for each nav family — makes the group crumb clickable. */
-const ROOT_HREF: Record<NavGroup, string> = {
-  workspace: "/",
-  library: "/notes",
-  bi: "/ops",
-  system: "/status",
-};
-
-function buildCrumbs(pathname: string): Crumb[] {
-  const item = ALL_NAV_DESTINATIONS.find((n) =>
-    n.href === "/" ? pathname === "/" : pathname.startsWith(n.href),
-  );
-  if (!item) return [{ label: "Workspace" }, { label: pathname }];
-  const groupLabel = ROOT_LABEL[item.group] ?? "Workspace";
-  const rootHref = ROOT_HREF[item.group];
-  return [
-    { label: groupLabel, href: item.href === rootHref ? undefined : rootHref },
-    { label: item.label },
-  ];
-}
 
 /**
  * Desktop chrome — breadcrumbs, pending-changes indicator, focus timer,

@@ -43,6 +43,8 @@ export interface AgentChatSeed {
 
 const ACCEPT =
   "image/png,image/jpeg,image/gif,image/webp,.txt,.md,.json,.ts,.tsx,.js,.jsx,.py,.go,.rs,.css,.html,.yml,.yaml,.toml,.sh,.svg,.csv";
+/** Keep in step with .agent-chat-input's max-height in terminal-agent.css. */
+const COMPOSER_MAX_HEIGHT = 160;
 
 export function AgentChatPanel({
   tabId,
@@ -103,6 +105,16 @@ export function AgentChatPanel({
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, [messages, sending]);
+
+  // Auto-grow the composer. It rests at exactly one line so the clip, the
+  // placeholder and the send button share a row; it grows from there up to the
+  // CSS max-height, after which the textarea scrolls.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT)}px`;
+  }, [draft]);
 
   useEffect(() => {
     const onFocus = () => inputRef.current?.focus();
@@ -521,13 +533,13 @@ export function AgentChatPanel({
           title="Attach"
           onClick={() => fileRef.current?.click()}
         >
-          <Paperclip size={13} aria-hidden />
+          <Paperclip size={16} aria-hidden />
         </button>
         <textarea
           ref={inputRef}
           className="input agent-chat-input"
           value={draft}
-          rows={2}
+          rows={1}
           disabled={sending}
           placeholder={cwd ? "Ask about this repo" : `Ask ${whom}`}
           onChange={(e) => setDraft(e.target.value)}

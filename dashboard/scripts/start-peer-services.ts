@@ -22,6 +22,7 @@ import { loadEnvWithOnePasswordFallback } from "./op-secrets";
 import { ensureOpenChamberCurrent } from "../lib/openchamber-command";
 import { ensureOpenCodeCurrent } from "../lib/opencode/update";
 import { freePinnedOpenCodePorts } from "../lib/opencode/listen";
+import { evictStaleChamberListener } from "../lib/dev-peer-services";
 
 function log(msg: string): void {
   process.stdout.write(`[peers] ${msg}\n`);
@@ -38,6 +39,8 @@ async function main(): Promise<void> {
   }
 
   freePinnedOpenCodePorts(log);
+  // After update checks so the version comparison uses the freshly-upgraded CLI.
+  await evictStaleChamberListener(log);
   log("peer boot done — OpenCode and OpenChamber start when you open those tabs");
 }
 

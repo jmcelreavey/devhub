@@ -166,8 +166,12 @@
 }
 
 @keyframes agent-chat-shimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
 }
 
 .agent-chat-setup {
@@ -185,7 +189,9 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-muted);
   border-radius: 14px;
-  transition: border-color 120ms var(--ease-swift), box-shadow 120ms var(--ease-swift);
+  transition:
+    border-color 120ms var(--ease-swift),
+    box-shadow 120ms var(--ease-swift);
 }
 
 .agent-chat-composer:focus-within {
@@ -196,7 +202,10 @@
 .agent-chat-input.agent-chat-input {
   flex: 1;
   resize: none;
-  min-height: 34px;
+  /* Exactly the button height: one line (19.5px) + 6px padding top and bottom.
+     Any taller and flex-end leaves the buttons hanging below the text. */
+  min-height: 32px;
+  height: 32px;
   max-height: 160px;
   padding: 6px 2px;
   background: none;
@@ -209,6 +218,7 @@
 
 .agent-chat-send {
   flex-shrink: 0;
+  justify-content: center;
   min-width: 32px;
   height: 32px;
   padding: 0 10px;
@@ -217,7 +227,11 @@
 
 .agent-chat-attach-btn {
   flex-shrink: 0;
+  /* .btn sets align-items but not justify-content, and min-width forces the
+     box wider than the 13px icon — without this the glyph sits left of centre. */
+  justify-content: center;
   height: 32px;
+  width: 32px;
   min-width: 32px;
   padding: 0;
   border-radius: 10px;
@@ -234,7 +248,9 @@
 }
 
 @keyframes agent-chat-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .agent-chat-clear {
@@ -537,6 +553,22 @@ body[data-motion="off"] .agent-chat-send-spin {
   line-height: 1.35;
 }
 
+.terminal-prompt-input-wait {
+  margin: 0;
+  padding: 0 12px 6px;
+  color: var(--warning);
+  font-size: 11.5px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-prompt-input-wait code {
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+
 .agent-chat-context {
   list-style: none;
   display: flex;
@@ -606,10 +638,8 @@ body[data-motion="off"] .agent-chat-send-spin {
   z-index: 3;
   width: 168px;
   max-height: calc(100% - 16px);
-  overflow: auto;
-  margin: 0;
+  min-height: 0;
   padding: 6px;
-  list-style: none;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -617,6 +647,48 @@ body[data-motion="off"] .agent-chat-send-spin {
   border-radius: 8px;
   background: color-mix(in oklab, var(--bg-elevated) 92%, transparent);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+/* The scroller is the list, not the rail — the head stays pinned. */
+.terminal-block-rail-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.terminal-block-rail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 2px 2px;
+  color: var(--text-subtle);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.terminal-block-rail-head button {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+
+.terminal-block-rail-head button:hover {
+  background: var(--bg-overlay);
+  color: var(--text);
 }
 
 .terminal-block-chip {
@@ -961,6 +1033,28 @@ body[data-motion="off"] .terminal-block-chip[data-pending]::after {
 
 .terminal-block-badge[data-state="running"] {
   color: var(--warning);
+}
+
+.terminal-block-badge[data-state="input"] {
+  color: var(--warning);
+  border-color: color-mix(in oklab, var(--warning) 55%, var(--border-muted));
+  animation: terminal-input-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes terminal-input-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .terminal-block-badge[data-state="input"] {
+    animation: none;
+  }
 }
 
 .terminal-block-duration {

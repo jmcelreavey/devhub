@@ -101,6 +101,26 @@ async function canReuseChamberListener(port: number, bin: string | null, log: Pe
   return false;
 }
 
+/**
+ * Boot-time eviction: if an OpenChamber daemon is already bound to `port` but
+ * predates the resolved CLI version (or was started from a stale binary),
+ * stop it so the next /chamber open starts a current daemon. Without this, a
+ * long-lived detached daemon survives every app restart — ensureChamberListening
+ * only runs when the tab or launcher asks for Chamber.
+ */
+export async function evictStaleChamberListener(log: PeerLog): Promise<void> {
+  const port = resolveOpenChamberPort();
+  const { probe } = resolveOpenChamberBind();
+  if (!(await canConnect(port, probe))) return;
+  const bin = findOpenChamberBin();
+  if (!bin || !chamberListenerIsStale(port, bin)) return;
+  log(
+    `stopping outdated OpenChamber on port ${port} (` +
+      `${openChamberInstallVersion(bin) ?? "unknown"} will start fresh on next /chamber open)`,
+  );
+  await stopChamberPeer(log, port);
+}
+
 function runOpenChamberCli(args: string[], log: PeerLog): Promise<void> {
   const cmd = findOpenChamberBin() ?? "openchamber";
   log(`using CLI: ${cmd} ${args.join(" ")}`);

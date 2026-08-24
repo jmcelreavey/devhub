@@ -1,15 +1,31 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Layers, Tag } from "lucide-react";
+import { ContextMenu, useContextMenu } from "@/components/shell/ContextMenu";
+import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
 import { useToast } from "@/lib/hooks/use-toast";
-import type { StashConflictPayload } from "@/app/repos/types";
-import { postGitAction, repoApi, type RepoGitTabId } from "./shared";
-
-export interface RailSummary {  currentBranch: string;
+import { openInBrowser } from "@/lib/desktop/bridge";
+import type { GitHookFailurePayload, StashConflictPayload } from "@/app/repos/types";
+import {
+  BRANCH_ACTION_SUCCESS_LABELS,
+  buildBranchMenuGroups,
+  type BranchMenuTarget,
+} from "./branchMenuGroups";
+import { fetchGitJson, postGitAction, repoApi, type RepoGitTabId } from "./shared";
+export interface RailSummary {
+  currentBranch: string;
+  upstream: string | null;
   ahead: number;
   behind: number;
+  mainBranch: string | null;
+  defaultRemote: string;
+  remoteWebUrl: string | null;
   stashes: number;
+  /** Unresolved merge conflicts — switches are blocked while > 0. */
+  conflicts: number;
+  staged: number;
+  unstaged: number;
   branches: {
     name: string;
     current: boolean;
@@ -17,6 +33,9 @@ export interface RailSummary {  currentBranch: string;
     ahead?: number;
     behind?: number;
     upstreamGone?: boolean;
+    pushedElsewhereRef?: string;
+    worktreePath?: string;
+    staleDays?: number;
   }[];
   remoteBranches: {
     name: string;
@@ -70,15 +89,24 @@ export function GitRail({
   summary,
   onMutate,
   onConflict,
+  onHookFailure,
   onOpenTab,
+  pushing,
+  onPush,
 }: {
   repoName: string;
   summary: RailSummary | null;
   onMutate: () => void;
   onConflict: (c: StashConflictPayload) => Promise<void>;
+  onHookFailure: (f: GitHookFailurePayload) => void;
   onOpenTab: (tab: RepoGitTabId) => void;
+  pushing: boolean;
+  onPush: () => void;
 }) {
   const toast = useToast();
+  const confirm = useConfirm();
+  const prompt = usePrompt();
+  const branchMenu = useContextMenu<BranchMenuTarget>();
   const [busyBranch, setBusyBranch] = useState<string | null>(null);
   // Every section toggles — long tag/branch lists shouldn't push the rest of
   // the rail out of reach, and a collapsed section reads as skippable.
@@ -94,8 +122,78 @@ export function GitRail({
     [summary],
   );
 
+  interface RailPr {
+    headBranch: string;
+    number: number;
+    title: string;
+    url: string;
+    checks: string;
+  }
+  /**
+   * Open PRs, one gh call for the whole repo. Lazily fetched so a slow or
+   * missing gh costs nothing — badges arrive late and swap in quietly.
+   */
+  const [prsByBranch, setPrsByBranch] = useState<Record<string, RailPr>>({});
+  // Repo switches clear stale badges during render (React adjust-state
+  // pattern) rather than inside the fetch effect.
+  const [seenPrRepo, setSeenPrRepo] = useState(repoName);
+  if (seenPrRepo !== repoName) {
+    setSeenPrRepo(repoName);
+    setPrsByBranch({});
+  }
+  useEffect(() => {
+    let live = true;
+    void fetchGitJson<{ prs: RailPr[] }>(repoApi(repoName, "/git/branch-prs"))
+      .then((json) => {
+        if (!live) return;
+        const map: Record<string, RailPr> = {};
+        for (const pr of json.prs ?? []) map[pr.headBranch] = pr;
+        setPrsByBranch(map);
+      })
+      .catch(() => {
+        // No gh / rate-limited — the badge simply doesn't show.
+      });
+    return () => {
+      live = false;
+    };
+  }, [repoName]);
+
+  /**
+   * Switching branches is confirm-first, never click-through: a misclick
+   * mid-review moves HEAD and (with a dirty tree) triggers the auto-stash
+   * dance. The copy scales with risk — clean tree gets one line, dirty warns
+   * about the stash, open conflicts say the switch will be blocked.
+   */
+  async function confirmCheckout(branch: string): Promise<boolean> {
+    // Git refuses a second checkout of a branch held by another worktree —
+    // say so up front instead of failing after the confirm.
+    const wtPath = summary?.branches.find((b) => b.name === branch)?.worktreePath;
+    if (wtPath) {
+      toast.info(
+        `${branch} is already checked out at ${wtPath} — switch that worktree off the branch first.`,
+        { duration: 9000 },
+      );
+      return false;
+    }
+    const conflicts = summary?.conflicts ?? 0;
+    const dirty = (summary?.staged ?? 0) + (summary?.unstaged ?? 0);
+    const message =
+      conflicts > 0
+        ? `${conflicts} unresolved conflict${conflicts === 1 ? "" : "s"} in this repo. Git blocks branch switches until they are resolved or the operation is aborted.`
+        : dirty > 0
+          ? `Your ${dirty} changed file${dirty === 1 ? "" : "s"} will be auto-stashed and restored after the switch.`
+          : "Working tree is clean — nothing will be stashed.";
+    return confirm({
+      title: `Check out ${branch}?`,
+      message,
+      confirmLabel: "Check out",
+      variant: conflicts > 0 || dirty > 0 ? "danger" : "default",
+    });
+  }
+
   async function checkout(branch: string) {
     if (busyBranch) return;
+    if (!(await confirmCheckout(branch))) return;
     setBusyBranch(branch);
     try {
       const result = await postGitAction(repoApi(repoName, "/branches"), {
@@ -117,9 +215,96 @@ export function GitRail({
     }
   }
 
+  /**
+   * POST one /branches action for the rail's context menu. Mirrors the
+   * Branches tab's act(): conflict → AI dialog, hook failure → dialog,
+   * success → labelled toast + workspace refresh.
+   */
+  async function run(action: string, extra?: Record<string, unknown>) {
+    if (busyBranch) return;
+    setBusyBranch(String(extra?.branch ?? action));
+    try {
+      const result = await postGitAction<{
+        alreadyUpToDate?: boolean;
+        message?: string;
+        backupBranch?: string | null;
+      }>(repoApi(repoName, "/branches"), { action, ...extra });
+      if (!result.ok) {
+        if (result.kind === "conflict") {
+          await onConflict(result.conflict);
+          return;
+        }
+        if (result.kind === "hook") {
+          onHookFailure(result.hook);
+          return;
+        }
+        throw new Error(result.message);
+      }
+      const label = (extra?.newBranch ?? extra?.branch) as unknown;
+      if (result.json.alreadyUpToDate) {
+        toast.success(result.json.message || "Already up to date.");
+      } else {
+        toast.success(
+          BRANCH_ACTION_SUCCESS_LABELS[action]?.(label) ?? result.json.message ?? "Done",
+        );
+      }
+      if (result.json.backupBranch) {
+        toast.info(`Backup branch: ${result.json.backupBranch}`, { duration: 9000 });
+      }
+      onMutate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Action failed");
+    } finally {
+      setBusyBranch(null);
+    }
+  }
+
+  /** Same menu as the Branches tab — one builder, two surfaces, no drift. */
+  const railMenuGroupsMemo = useMemo(() => {
+    const t = branchMenu.target;
+    if (!t) return [];
+    return buildBranchMenuGroups(
+      t,
+      {
+        currentBranch: summary?.currentBranch ?? t.name,
+        mainBranch: summary?.mainBranch ?? null,
+        defaultRemote: summary?.defaultRemote ?? "origin",
+        remoteWebUrl: summary?.remoteWebUrl ?? null,
+        busy: busyBranch !== null,
+        pushing,
+        dirty: (summary?.staged ?? 0) + (summary?.unstaged ?? 0) > 0,
+        currentUpstream: summary?.upstream ?? null,
+        currentAhead: summary?.ahead ?? 0,
+        currentBehind: summary?.behind ?? 0,
+      },
+      {
+        confirm,
+        prompt,
+        toast,
+        run,
+        checkout: (name) => void checkout(name),
+        checkoutRemote: (target) => void checkoutRemote(target.name),
+        onPush,
+      },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- actions are stable closures recreated per open
+  }, [branchMenu.target, summary, busyBranch, pushing]);
+
+  /** Right-click opens the branch menu. Returns the handler directly so the
+   *  JSX site's contextual type applies (a typed object literal trips
+   *  strictFunctionTypes against MouseEventHandler). */
+  function railMenuBind(target: BranchMenuTarget) {
+    return (event: ReactMouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      branchMenu.openAtPoint(event.clientX, event.clientY, target);
+    };
+  }
+
   async function checkoutRemote(remoteRef: string) {
     const suggested = remoteRef.replace(/^[^/]+\//, "");
     if (busyBranch) return;
+    if (!(await confirmCheckout(suggested))) return;
     setBusyBranch(remoteRef);
     try {
       const result = await postGitAction<{ branch?: string }>(repoApi(repoName, "/branches"), {
@@ -156,28 +341,83 @@ export function GitRail({
           const ahead = b.current ? summary!.ahead : b.ahead ?? 0;
           const behind = b.current ? summary!.behind : b.behind ?? 0;
           const gone = b.upstreamGone;
+          // Every "ahead" commit already lives on this other remote ref —
+          // the count is trivia, not a push queue. Demote it to a ✓.
+          const pushedVia = b.pushedElsewhereRef;
+          const aheadLabel =
+            ahead > 0 && pushedVia ? `↑${ahead}✓` : ahead > 0 ? `↑${ahead}` : null;
+          const pushedTitle = pushedVia
+            ? `All ${ahead} ahead commit${ahead === 1 ? "" : "s"} already on ${pushedVia} — nothing to push`
+            : undefined;
+          const pr = prsByBranch[b.name];
           return (
             <button
               key={b.name}
               type="button"
               className="repo-git-rail-branch"
               data-current={b.current || undefined}
+              data-stale={b.staleDays !== undefined || undefined}
               disabled={Boolean(busyBranch) && busyBranch !== b.name}
               title={
                 b.current
                   ? `${b.name} — checked out`
                   : gone
                     ? `${b.name} — upstream is gone`
-                    : `Check out ${b.name}`
+                    : pushedTitle
+                      ? `${b.name} — ${pushedTitle}`
+                      : b.worktreePath
+                        ? `${b.name} — checked out in another worktree (${b.worktreePath})`
+                        : b.staleDays !== undefined
+                          ? `${b.name} — last commit ${b.staleDays}d ago · Check out (right-click for more)`
+                          : `Check out ${b.name} (right-click for more)`
               }
               onClick={() => void checkout(b.name)}
+              onContextMenu={railMenuBind({
+                name: b.name,
+                current: b.current,
+                upstream: b.upstream,
+                ahead: b.ahead,
+                behind: b.behind,
+                upstreamGone: b.upstreamGone,
+                prUrl: prsByBranch[b.name]?.url,
+              })}
               data-drop-branch={b.current ? undefined : b.name}
             >
               <span className="truncate font-mono">{b.name}</span>
+              {pr && (
+                <span
+                  className="repo-git-rail-pr"
+                  data-checks={pr.checks}
+                  title={`PR #${pr.number}: ${pr.title} · checks ${pr.checks} — click to open`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void openInBrowser(pr.url);
+                  }}
+                >
+                  #{pr.number}
+                </span>
+              )}
               <span className="repo-git-rail-counts" aria-label="Ahead and behind upstream">
-                {gone && <span data-dir="gone" title="Upstream deleted">⌫</span>}
-                {ahead > 0 && <span data-dir="ahead">↑{ahead}</span>}
-                {behind > 0 && <span data-dir="behind">↓{behind}</span>}
+                {gone && <span data-dir="gone" title={`Upstream ${b.upstream ?? ""} was deleted on the remote`.trim()}>⌫</span>}
+                {aheadLabel && (
+                  <span
+                    data-dir={pushedVia ? "pushed" : "ahead"}
+                    title={
+                      pushedTitle ??
+                      `${ahead} commit${ahead === 1 ? "" : "s"} ahead of ${b.upstream ?? "upstream"}${b.current ? " — right-click to push" : ""}`
+                    }
+                  >
+                    {aheadLabel}
+                  </span>
+                )}
+                {behind > 0 && (
+                  <span
+                    data-dir="behind"
+                    title={`${behind} commit${behind === 1 ? "" : "s"} behind ${b.upstream ?? "upstream"}${b.current ? " — right-click to pull" : " — check out to pull"}`}
+                  >
+                    ↓{behind}
+                  </span>
+                )}
               </span>
             </button>
           );
@@ -202,6 +442,16 @@ export function GitRail({
                 disabled={busyBranch !== null}
                 title={`Create local ${r.localName} tracking this branch`}
                 onClick={() => void checkoutRemote(r.name)}
+                onContextMenu={railMenuBind({
+                  name: r.name,
+                  current: false,
+                  remote: true,
+                  localName: r.localName,
+                  trackedLocalName: r.trackedLocalName,
+                  prUrl:
+                    prsByBranch[r.name]?.url ??
+                    prsByBranch[r.name.replace(/^[^/]+\//, "")]?.url,
+                })}
               >
                 <span className="truncate font-mono">{r.name}</span>
               </button>
@@ -245,6 +495,13 @@ export function GitRail({
             ))}
         </div>
       )}
+      <ContextMenu
+        open={Boolean(branchMenu.target)}
+        position={branchMenu.position}
+        groups={railMenuGroupsMemo}
+        onClose={branchMenu.close}
+        label={branchMenu.target ? `Actions for ${branchMenu.target.name}` : "Branch actions"}
+      />
     </aside>
   );
 }

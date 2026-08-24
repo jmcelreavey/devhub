@@ -78,8 +78,19 @@ export default function LogsPage() {
 
   useEffect(() => {
     if (!live) return;
-    const id = window.setInterval(() => void pull(), 1000);
-    return () => window.clearInterval(id);
+    // Nothing to read in a hidden tab, and at 1 Hz this is measurable battery
+    // on a laptop. Resume with an immediate pull so the view is never stale.
+    const id = window.setInterval(() => {
+      if (!document.hidden) void pull();
+    }, 1000);
+    const onVisible = () => {
+      if (!document.hidden) void pull();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [live, pull]);
 
   useEffect(() => {

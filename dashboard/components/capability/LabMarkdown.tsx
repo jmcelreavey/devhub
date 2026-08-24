@@ -186,6 +186,54 @@ export function LabMarkdown({
       if (!compact) out.push(<div key={key++} className="h-1.5" />);
     } else if (/^---+$/.test(line.trim())) {
       out.push(<hr key={key++} className="my-2" style={{ borderColor: "var(--border)" }} />);
+    } else if (
+      /^\s*\|.*\|\s*$/.test(line) &&
+      i + 1 < lines.length &&
+      /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1] ?? "")
+    ) {
+      // GFM pipe table: header row, delimiter row, then body rows.
+      const splitRow = (row: string) =>
+        row
+          .trim()
+          .replace(/^\|/, "")
+          .replace(/\|$/, "")
+          .split("|")
+          .map((c) => c.trim());
+      const alignOf = (c: string) =>
+        c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : "left";
+      const header = splitRow(line);
+      const aligns = splitRow(lines[i + 1] ?? "").map(alignOf);
+      i += 2;
+      const rows: string[][] = [];
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) {
+        rows.push(splitRow(lines[i]));
+        i++;
+      }
+      out.push(
+        <table key={key++} className="lab-md-table">
+          <thead>
+            <tr>
+              {header.map((h, c) => (
+                <th key={c} style={{ textAlign: aligns[c] }}>
+                  {renderInline(h, fileBase)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, ri) => (
+              <tr key={ri}>
+                {r.map((cell, c) => (
+                  <td key={c} style={{ textAlign: aligns[c] }}>
+                    {renderInline(cell, fileBase)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>,
+      );
+      continue;
     } else {
       out.push(
         <div key={key++} className="text-xs leading-relaxed text-text-muted">

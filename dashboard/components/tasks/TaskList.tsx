@@ -50,6 +50,8 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
   const [exitingIds, setExitingIds] = useState<Set<string>>(() => new Set());
   const [detectedUrl, setDetectedUrl] = useState<string | null>(null);
   const [linkName, setLinkName] = useState("");
+  /** Open while the text ends in `#fragment` — tag autocomplete for the composer. */
+  const [tagSugs, setTagSugs] = useState<{ items: string[]; active: number } | null>(null);
   const [jiraStatuses, setJiraStatuses] = useState<Record<string, JiraStatus>>({});
   const [jiraModalTask, setJiraModalTask] = useState<Task | null>(null);
   const [transitionPrompt, setTransitionPrompt] = useState<{
@@ -130,6 +132,53 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
     }
   }, []);
 
+  /**
+   * Tag autocomplete: while the text ends in `#fragment`, offer known tags.
+   * Debounced server lookup so typing `#au` doesn't fire a fetch per character;
+   * results are cached per prefix for the session (tags rarely shrink).
+   */
+  const tagCache = useRef(new Map<string, string[]>());
+  const tagTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleTextChange = useCallback((value: string) => {
+    handleInputChange(value);
+    if (tagTimer.current) clearTimeout(tagTimer.current);
+    const m = /#([a-z0-9_-]*)$/.exec(value);
+    if (!m) {
+      setTagSugs(null);
+      return;
+    }
+    const frag = m[1] ?? "";
+    const cached = tagCache.current.get(frag);
+    if (cached) {
+      setTagSugs(cached.length ? { items: cached, active: 0 } : null);
+      return;
+    }
+    setTagSugs({ items: [], active: 0 });
+    tagTimer.current = setTimeout(() => {
+      void fetch(`/api/tags?q=${encodeURIComponent(frag)}`)
+        .then((r) => (r.ok ? r.json() : { tags: [] }))
+        .then((json: { tags?: { id: string }[] }) => {
+          const items = (json.tags ?? []).map((t) => t.id).slice(0, 6);
+          tagCache.current.set(frag, items);
+          // Only still-relevant fragments apply the answer.
+          setTagSugs((prev) =>
+            prev && /#([a-z0-9_-]*)$/.test(value) && items.length ? { items, active: 0 } : null,
+          );
+        })
+        .catch(() => setTagSugs(null));
+    }, 150);
+  }, [handleInputChange]);
+
+  /** Complete the trailing `#fragment` with the picked tag. */
+  const applyTagSuggestion = useCallback(
+    (tag: string) => {
+      setNewText((prev) => prev.replace(/#([a-z0-9_-]*)$/, `#${tag} `));
+      setTagSugs(null);
+      inputRef.current?.focus();
+    },
+    [],
+  );
+
   const confirmLink = useCallback(() => {
     if (!detectedUrl || !linkName.trim()) return;
     const mdLink = `[${linkName.trim()}](${detectedUrl})`;
@@ -159,6 +208,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
       setNewText("");
       setDetectedUrl(null);
       setLinkName("");
+      setTagSugs(null);
       await mutate(
         (cur) => ({
           ...(cur ?? {}),
@@ -290,6 +340,53 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
     [mutate, toast],
   );
 
+  const reactivateTask = useCallback(
+    async (id: string) => {
+      const original = tasks.find((t) => t.id === id);
+      if (!original) return;
+      await mutate(
+        (cur) => ({
+          ...(cur ?? {}),
+          tasks: (cur?.tasks ?? []).map((t) =>
+            t.id === id
+              ? { ...t, abandonedAt: undefined, abandonReason: undefined }
+              : t,
+          ),
+        }),
+        { revalidate: false },
+      );
+      try {
+        const res = await fetch("/api/tasks", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          // status:"active" is what clears abandonedAt — a text-only PATCH
+          // hits the update branch and the task silently stays abandoned.
+          body: JSON.stringify({ id, status: "active" }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const updated = (await res.json()) as Task;
+        await mutate(
+          (cur) => ({
+            ...(cur ?? {}),
+            tasks: (cur?.tasks ?? []).map((t) => (t.id === id ? updated : t)),
+          }),
+          { revalidate: false },
+        );
+      } catch (e) {
+        console.error("reactivate task:", e);
+        await mutate(
+          (cur) => ({
+            ...(cur ?? {}),
+            tasks: (cur?.tasks ?? []).map((t) => (t.id === id ? original : t)),
+          }),
+          { revalidate: false },
+        );
+        toast.error("Couldn't reactivate task.");
+      }
+    },
+    [tasks, mutate, toast],
+  );
+
   const abandonTask = useCallback(
     async (id: string, reason?: string) => {
       const original = tasks.find((t) => t.id === id);
@@ -326,6 +423,14 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
           }),
           { revalidate: false },
         );
+        // Destructive-ish with a safety net: the toast IS the undo window.
+        toast.success(
+          `Abandoned "${original.text.length > 48 ? `${original.text.slice(0, 48)}…` : original.text}"`,
+          {
+            duration: 10_000,
+            action: { label: "Undo", onClick: () => void reactivateTask(id) },
+          },
+        );
       } catch (e) {
         console.error("abandon task:", e);
         await mutate(
@@ -338,52 +443,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
         toast.error("Couldn't abandon task.");
       }
     },
-    [tasks, mutate, toast],
-  );
-
-  const reactivateTask = useCallback(
-    async (id: string) => {
-      const original = tasks.find((t) => t.id === id);
-      if (!original) return;
-      await mutate(
-        (cur) => ({
-          ...(cur ?? {}),
-          tasks: (cur?.tasks ?? []).map((t) =>
-            t.id === id
-              ? { ...t, abandonedAt: undefined, abandonReason: undefined }
-              : t,
-          ),
-        }),
-        { revalidate: false },
-      );
-      try {
-        const res = await fetch("/api/tasks", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, text: original.text }),
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const updated = (await res.json()) as Task;
-        await mutate(
-          (cur) => ({
-            ...(cur ?? {}),
-            tasks: (cur?.tasks ?? []).map((t) => (t.id === id ? updated : t)),
-          }),
-          { revalidate: false },
-        );
-      } catch (e) {
-        console.error("reactivate task:", e);
-        await mutate(
-          (cur) => ({
-            ...(cur ?? {}),
-            tasks: (cur?.tasks ?? []).map((t) => (t.id === id ? original : t)),
-          }),
-          { revalidate: false },
-        );
-        toast.error("Couldn't reactivate task.");
-      }
-    },
-    [tasks, mutate, toast],
+    [tasks, mutate, toast, reactivateTask],
   );
 
   const deleteTask = useCallback(
@@ -680,8 +740,34 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
           className="input task-add-text"
           placeholder="Add a task… (paste a link or Jira key)"
           value={newText}
-          onChange={(e) => handleInputChange(e.target.value)}
+          onChange={(e) => handleTextChange(e.target.value)}
+          onBlur={() => setTagSugs(null)}
           onKeyDown={(e) => {
+            if (tagSugs && tagSugs.items.length > 0) {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setTagSugs({ ...tagSugs, active: (tagSugs.active + 1) % tagSugs.items.length });
+                return;
+              }
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setTagSugs({
+                  ...tagSugs,
+                  active: (tagSugs.active - 1 + tagSugs.items.length) % tagSugs.items.length,
+                });
+                return;
+              }
+              if (e.key === "Tab" || e.key === "Enter") {
+                e.preventDefault();
+                applyTagSuggestion(tagSugs.items[tagSugs.active] ?? tagSugs.items[0]!);
+                return;
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setTagSugs(null);
+                return;
+              }
+            }
             if (e.key !== "Enter") return;
             const currentText = (e.target as HTMLInputElement).value;
             const freshUrl = detectedUrl || detectBareUrl(currentText);
@@ -697,6 +783,28 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
             }
           }}
         />
+        {tagSugs && tagSugs.items.length > 0 && (
+          <ul className="task-tag-sugs" role="listbox" aria-label="Tag suggestions">
+            {tagSugs.items.map((tag, i) => (
+              <li key={tag}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={i === tagSugs.active}
+                  data-active={i === tagSugs.active || undefined}
+                  // mousedown, not click — blur would close the list first
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    applyTagSuggestion(tag);
+                  }}
+                  onMouseEnter={() => setTagSugs({ ...tagSugs, active: i })}
+                >
+                  #{tag}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         <HoverTip label="Add task" pos="top-end">
           <button
             type="button"

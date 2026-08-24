@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import {
   AlertTriangle,
@@ -14,6 +14,8 @@ import {
   Layers,
   Maximize2,
   Minimize2,
+  PanelLeftClose,
+  PanelLeftOpen,
   RefreshCw,
   Undo2,
   Upload,
@@ -32,7 +34,7 @@ import {
 import type { GitHookFailurePayload } from "@/lib/git/hook-failure";
 import { peekUndo, popUndo, type UndoEntry } from "@/lib/git/undo-stack";
 import type { StashConflictPayload } from "@/app/repos/types";
-import { useStoredChoice } from "@/lib/hooks/use-stored-state";
+import { useStoredChoice, useStoredState } from "@/lib/hooks/use-stored-state";
 import { BlamePanel } from "./BlamePanel";
 import { BranchesPanel } from "./BranchesPanel";
 import { ChangesPanel } from "./ChangesPanel";
@@ -123,8 +125,12 @@ export function RepoGitWorkspace({
     conflicts: number;
     stashes: number;
     currentBranch: string;
+    upstream: string | null;
     ahead: number;
     behind: number;
+    mainBranch: string | null;
+    defaultRemote: string;
+    remoteWebUrl: string | null;
     branches: {
       name: string;
       current: boolean;
@@ -132,6 +138,9 @@ export function RepoGitWorkspace({
       ahead?: number;
       behind?: number;
       upstreamGone?: boolean;
+      pushedElsewhereRef?: string;
+      worktreePath?: string;
+      staleDays?: number;
     }[];
     remoteBranches: {
       name: string;
@@ -147,6 +156,47 @@ export function RepoGitWorkspace({
   /** Latest undoable action (recorded by the panels), shown as a header chip. */
   const [undoEntry, setUndoEntry] = useState<UndoEntry | null>(null);
   const [undoing, setUndoing] = useState(false);
+  /**
+   * Left rail: resizable (drag the divider) and collapsible. Both persisted.
+   * The rail is a convenience column; hiding it must never lose functionality
+   * (everything in it is reachable via tabs).
+   */
+  const [railWidth, setRailWidth] = useStoredState<number>(
+    "devhub:repo-git:rail-width",
+    196,
+    (raw) => {
+      const n = Number(raw);
+      return Number.isFinite(n) && n >= 150 && n <= 480 ? n : undefined;
+    },
+    String,
+  );
+  const [railOpen, setRailOpen] = useStoredState<boolean>(
+    "devhub:repo-git:rail-open",
+    true,
+    (raw) => (raw === "1" ? true : raw === "0" ? false : undefined),
+    (v) => (v ? "1" : "0"),
+  );
+
+  const startRailDrag = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      const startX = event.clientX;
+      const startW = railWidth;
+      const onMove = (moveEvent: PointerEvent) => {
+        setRailWidth(Math.min(480, Math.max(150, startW + moveEvent.clientX - startX)));
+      };
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        document.body.classList.remove("col-resizing");
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      // Kills text selection and holds the col-resize cursor for the gesture.
+      document.body.classList.add("col-resizing");
+    },
+    [railWidth, setRailWidth],
+  );
   const [fullscreen, setFullscreen] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
@@ -175,8 +225,12 @@ export function RepoGitWorkspace({
         conflicts: status.conflictCount,
         stashes: branches?.stashCount ?? 0,
         currentBranch: branches?.currentBranch ?? status.currentBranch,
+        upstream: branches?.upstream ?? null,
         ahead: branches?.ahead ?? 0,
         behind: branches?.behind ?? 0,
+        mainBranch: branches?.mainBranch ?? null,
+        defaultRemote: branches?.remotes?.[0]?.name ?? "origin",
+        remoteWebUrl: branches?.remoteWebUrl ?? null,
         branches: (branches?.branches ?? []).map((b) => ({
           name: b.name,
           current: b.current,
@@ -184,6 +238,9 @@ export function RepoGitWorkspace({
           ahead: b.ahead,
           behind: b.behind,
           upstreamGone: b.upstreamGone,
+          pushedElsewhereRef: b.pushedElsewhereRef,
+          worktreePath: b.worktreePath,
+          staleDays: b.staleDays,
         })),
         remoteBranches: (branches?.remoteBranches ?? []).map((r) => ({
           name: r.name,
@@ -204,6 +261,43 @@ export function RepoGitWorkspace({
     void refreshSummary();
     setUndoEntry(peekUndo(repoName));
   }, [open, refreshSummary, repoName]);
+
+  /**
+   * Always auto-fetch when the workspace opens (all repos, no setting).
+   *
+   * Ahead/behind arrows, staleness and the relation strip are only as honest
+   * as the last fetch — a day-old FETCH_HEAD can masquerade as current and
+   * send someone chasing phantom pushes. Runs in the background so a slow or
+   * offline remote never delays the summary; failures stay silent because an
+   * unreachable remote is normal, not an error worth a toast.
+   */
+  const fetchOnOpenRef = useRef<string | null>(null);
+  useEffect(() => {
+    // Closing clears the once-per-open guard so reopening fetches again.
+    if (!open) {
+      fetchOnOpenRef.current = null;
+      return;
+    }
+    if (pushing) return;
+    if (fetchOnOpenRef.current === repoName) return;
+    fetchOnOpenRef.current = repoName;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await postGitAction(
+          repoApi(repoName, "/branches"),
+          { action: "fetch" },
+          { signal: AbortSignal.timeout(90_000) },
+        );
+        if (!cancelled && result.ok) void refreshSummary();
+      } catch {
+        // Offline / timeout — the staleness label covers it.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, pushing, repoName, refreshSummary]);
 
   const displayDirty = liveVisibleDirty ?? dirtyCount;
   const hasDirty = displayDirty > 0;
@@ -484,6 +578,12 @@ export function RepoGitWorkspace({
               className="repo-git-modal"
               data-fullscreen={fullscreen || undefined}
               onClick={(e) => e.stopPropagation()}
+              onContextMenu={(e) => {
+                // React portals bubble through the React tree, not the DOM —
+                // without this, a right-click anywhere in the modal also opened
+                // the repo card's context menu behind it.
+                e.stopPropagation();
+              }}
             >
               <header className="repo-git-modal-header">
                 <div className="repo-git-modal-title-block">
@@ -631,25 +731,70 @@ export function RepoGitWorkspace({
               </div>
 
               <div className="repo-git-body">
-                <GitRail
-                  repoName={repoName}
-                  summary={
-                    summary
-                      ? {
-                          currentBranch: summary.currentBranch,
-                          ahead: summary.ahead,
-                          behind: summary.behind,
-                          stashes: summary.stashes,
-                          branches: summary.branches,
-                          remoteBranches: summary.remoteBranches,
-                          tags: summary.tags,
+                {railOpen ? (
+                  <>
+                    <div className="repo-git-rail-wrap" style={{ width: railWidth }}>
+                      <GitRail
+                        repoName={repoName}
+                        summary={
+                          summary
+                            ? {
+                                currentBranch: summary.currentBranch,
+                                upstream: summary.upstream,
+                                ahead: summary.ahead,
+                                behind: summary.behind,
+                                mainBranch: summary.mainBranch,
+                                defaultRemote: summary.defaultRemote,
+                                remoteWebUrl: summary.remoteWebUrl,
+                                stashes: summary.stashes,
+                                conflicts: summary.conflicts,
+                                staged: summary.staged,
+                                unstaged: summary.unstaged,
+                                branches: summary.branches,
+                                remoteBranches: summary.remoteBranches,
+                                tags: summary.tags,
+                              }
+                            : null
                         }
-                      : null
-                  }
-                  onMutate={handleMutate}
-                  onConflict={offerAiConflict}
-                  onOpenTab={setTab}
-                />
+                        onMutate={handleMutate}
+                        onConflict={offerAiConflict}
+                        onHookFailure={showHookFailure}
+                        onOpenTab={setTab}
+                        pushing={pushing}
+                        onPush={() => void pushRepo()}
+                      />
+                      <button
+                        type="button"
+                        className="repo-git-rail-collapse"
+                        onClick={() => setRailOpen(false)}
+                        title="Hide sidebar — branches, stashes and tags stay available via tabs"
+                        aria-expanded={railOpen}
+                      >
+                        <PanelLeftClose size={12} aria-hidden />
+                      </button>
+                    </div>
+                    <div
+                      className="repo-git-rail-handle"
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label="Resize sidebar"
+                      title="Drag to resize · double-click to reset"
+                      onPointerDown={startRailDrag}
+                      onDoubleClick={() => setRailWidth(196)}
+                    />
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="repo-git-rail-collapsed"
+                    onClick={() => setRailOpen(true)}
+                    title="Show sidebar (branches, stashes, tags)"
+                    aria-expanded={false}
+                  >
+                    <PanelLeftOpen size={13} aria-hidden />
+                    <span className="repo-git-rail-collapsed-label">Branches</span>
+                  </button>
+                )}
                 <div
                   className="repo-git-tab-body"
                   role="tabpanel"

@@ -629,7 +629,7 @@ export default function StatusPage() {
         }}
       />
       <div className="page-header">
-        <div className="page-title">Status</div>
+        <h1 className="page-title">Status</h1>
         <div className="flex flex-wrap items-center justify-end gap-2">
           {lanAddresses.length > 0 && (
             <div className="relative">

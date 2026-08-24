@@ -128,6 +128,22 @@ Notes carry outbound refs in a `## Links` markdown section. Each line is either:
 
 `parseEntityLinksFromMarkdown` and `buildEntityLinksSection` in `shared/entity-note/` are the canonical parse/write helpers. Do not invent per-feature link formats.
 
+### Tags
+
+Tags are the ninth entity kind, and the only one that is **derived, never stored**: typing `#auth` in a task, note body, commit message or event makes the tag exist. There is no tag list to maintain and nothing to migrate.
+
+| Operation  | Where                                            | Source                                                                                                |
+| ---------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| Extraction | `extractTags` / `tagRefs` (`shared/entity-note`) | Inline `#token` — lowercase, letter-or-`_` first, ≤32 chars, so issue numbers like `#525` never match |
+| Graph      | Recall index v2+ extracts tags at chunk time     | Tags join the derived graph like any other entity                                                     |
+| List       | `GET /api/tags?q=`                               | Live task scan ∪ index nodes                                                                          |
+| Lookup     | `GET /api/tags/[id]`                             | Tasks (live) + notes/docs (index) + PR/Jira neighbours                                                |
+| Rename     | `POST /api/tags/rename {from,to}`                | Boundary-safe rewrite across task texts + note bodies                                                 |
+
+Surfaces: task rows and the note relations panel show tag chips (via `entity-links`); clicking one opens `/work?tag=id`, which filters the queue and renders a context card with everything else carrying that tag plus an inline rename control. The task composer autocompletes `#` fragments from `/api/tags`. In recall queries, a `#tag` acts as an entity prior — `cache #devhub` boosts tagged chunks without needing the word in the text. MCP agents get the same reach through `tags_list` / `tags_lookup` / `tags_rename` (see [MCP Server](mcp-server.md)); for them, writing `#tag` into `tasks_create` text or a note body is the whole create API.
+
+Because tags are free text, precision comes from convention: prefer short lowercase tokens, and fix drift early with rename before two spellings split the corpus.
+
 ### Dashboard surfaces
 
 | Surface            | Behavior                                                                                                                               |
@@ -141,14 +157,14 @@ Notes carry outbound refs in a `## Links` markdown section. Each line is either:
 
 Task rows and the note editor footer share one modal (`dashboard/components/EntityLinkDialog.tsx`) for adding hop-around refs. It portals via `ModalShell` so it is not tied to hover shelves.
 
-| Kind     | Picker source | Paste fallback |
-| -------- | ------------- | -------------- |
-| Calendar | Today's events from `GET /api/calendar` | Event id or Google Calendar URL |
-| PR       | Open PRs from `GET /api/github/prs` | `https://github.com/org/repo/pull/n` |
-| Note     | Recent notes from the vault tree | Vault-relative path (e.g. `task-notes/2026-07-28-…`) |
-| Repo     | Sibling checkouts from `GET /api/repos` | Local folder name |
-| Jira     | Tickets from `GET /api/jira/tickets` | Issue key (e.g. `PTF-1234`) |
-| Task     | Last 14 days from `GET /api/tasks/history?includeTasks=1` | Task UUID |
+| Kind     | Picker source                                             | Paste fallback                                       |
+| -------- | --------------------------------------------------------- | ---------------------------------------------------- |
+| Calendar | Today's events from `GET /api/calendar`                   | Event id or Google Calendar URL                      |
+| PR       | Open PRs from `GET /api/github/prs`                       | `https://github.com/org/repo/pull/n`                 |
+| Note     | Recent notes from the vault tree                          | Vault-relative path (e.g. `task-notes/2026-07-28-…`) |
+| Repo     | Sibling checkouts from `GET /api/repos`                   | Local folder name                                    |
+| Jira     | Tickets from `GET /api/jira/tickets`                      | Issue key (e.g. `PTF-1234`)                          |
+| Task     | Last 14 days from `GET /api/tasks/history?includeTasks=1` | Task UUID                                            |
 
 Pickers load once per kind when the dialog opens; filtering is in-memory (no per-keystroke remote search). Selecting a row or pasting a valid value calls `buildEntityRefFromInput` (`dashboard/lib/entity-links/build-ref.ts`) and appends the ref to the task's `links` array or the note's `## Links` section. Duplicate refs are ignored.
 
@@ -170,10 +186,10 @@ On open, DevHub converts the note to Markdown and compares the result to the sou
 
 ### Storage layout
 
-| File | Purpose |
-| ---- | ------- |
-| `.devhub/cursor-notes/<basename>-<key>.md` | Markdown projection with a `<!-- DEVHUB NOTE WORKING COPY … -->` header |
-| `.devhub/cursor-notes/<key>.json` | Manifest: `repoName`, `notePath`, `vaultKey`, `sourceHash`, `baseMarkdownHash`, `writable` |
+| File                                       | Purpose                                                                                    |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `.devhub/cursor-notes/<basename>-<key>.md` | Markdown projection with a `<!-- DEVHUB NOTE WORKING COPY … -->` header                    |
+| `.devhub/cursor-notes/<key>.json`          | Manifest: `repoName`, `notePath`, `vaultKey`, `sourceHash`, `baseMarkdownHash`, `writable` |
 
 Files are mode `0600`; the directory is `0700`. Reopening the same note reuses an existing copy when the header is intact. The manifest's `sourceHash` must still match the live note at apply time — if you edited the note in DevHub after opening Cursor, apply fails with `409` until you reopen.
 
@@ -188,11 +204,11 @@ The footer actions appear only when the note has at least one repo link and the 
 
 ### API and MCP
 
-| Action | Route / tool | Body / args |
-| ------ | ------------ | ----------- |
-| Open | `POST /api/repos/<name>/open`, MCP `notes_cursor_open` | `{ notePath }` — also opens the repo in Cursor; returns `{ ok, path, writable }` |
-| Apply | `PATCH /api/repos/<name>/open`, MCP `notes_cursor_apply` | `{ notePath }` — returns the updated note payload from vault storage |
-| Delete copy | `DELETE /api/repos/<name>/open`, MCP `notes_cursor_delete` | `{ notePath }` |
+| Action      | Route / tool                                               | Body / args                                                                      |
+| ----------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Open        | `POST /api/repos/<name>/open`, MCP `notes_cursor_open`     | `{ notePath }` — also opens the repo in Cursor; returns `{ ok, path, writable }` |
+| Apply       | `PATCH /api/repos/<name>/open`, MCP `notes_cursor_apply`   | `{ notePath }` — returns the updated note payload from vault storage             |
+| Delete copy | `DELETE /api/repos/<name>/open`, MCP `notes_cursor_delete` | `{ notePath }`                                                                   |
 
 `POST` still accepts `{ path?, line? }` for `repo://` links without a note projection. `503` when `cursor` is not on `PATH`.
 
@@ -200,13 +216,13 @@ See [API Routes](../reference/api-routes.md) and [MCP Server — Edit a note in 
 
 ### Troubleshooting
 
-| Problem | Check |
-| ------- | ----- |
-| **Open with** is missing | The note has a `repo` entry in `## Links` and the repo exists under the Repos scan directory. |
-| Opened read-only | The note has rich blocks that do not round-trip through Markdown; edit in DevHub or simplify the note body. |
-| Apply returns stale error | The DevHub note changed after Cursor opened — use **Open with** again to refresh the working copy. |
-| Header missing in `.md` | Do not delete the `<!-- DEVHUB NOTE WORKING COPY … -->` block; reopen from DevHub if it was removed. |
-| Working copy orphaned | **Delete working copy** from the note footer, or remove files under `.devhub/cursor-notes/` manually. |
+| Problem                   | Check                                                                                                       |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Open with** is missing  | The note has a `repo` entry in `## Links` and the repo exists under the Repos scan directory.               |
+| Opened read-only          | The note has rich blocks that do not round-trip through Markdown; edit in DevHub or simplify the note body. |
+| Apply returns stale error | The DevHub note changed after Cursor opened — use **Open with** again to refresh the working copy.          |
+| Header missing in `.md`   | Do not delete the `<!-- DEVHUB NOTE WORKING COPY … -->` block; reopen from DevHub if it was removed.        |
+| Working copy orphaned     | **Delete working copy** from the note footer, or remove files under `.devhub/cursor-notes/` manually.       |
 
 ## Learnings
 
@@ -336,10 +352,10 @@ Notes and docs autosave on a short debounce. Each navigation or vault switch bum
 
 The editor header (`NotePageTitle`) prefers a **content title** over the filename:
 
-| Vault | Title source |
-| ----- | ------------ |
+| Vault | Title source                                                                 |
+| ----- | ---------------------------------------------------------------------------- |
 | Notes | First `#`–`###` heading in the BlockNote body (`lib/vault/display-title.ts`) |
-| Docs  | Frontmatter `title`, else first heading |
+| Docs  | Frontmatter `title`, else first heading                                      |
 
 When no content title exists, machine filenames are shortened — date+UUID task-note paths collapse to `YYYY-MM-DD-<short-id>…` so slugs do not dominate the chrome. Click the title to **rename** the underlying file (`InlineNoteRename`); renames go through vault path helpers and update the URL slug on success. The file tree uses the same rename control.
 
@@ -347,10 +363,10 @@ When no content title exists, machine filenames are shortened — date+UUID task
 
 `shared/markdown-convert` supports two BlockNote → markdown modes:
 
-| Mode | Flag | Used for |
-| ---- | ---- | -------- |
-| Round-trip | default (`blocksToText`) | Vault storage, Cursor working copies, MCP `notes_write` — preserves `::task-ref`, `::shared-checklist`, toggles, etc. |
-| Portable | `{ portable: true }` / `blocksToPortableMarkdown` | Gist and one-time share export — GitHub-friendly: toggles → `<details>`, directives humanized or dropped |
+| Mode       | Flag                                              | Used for                                                                                                              |
+| ---------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Round-trip | default (`blocksToText`)                          | Vault storage, Cursor working copies, MCP `notes_write` — preserves `::task-ref`, `::shared-checklist`, toggles, etc. |
+| Portable   | `{ portable: true }` / `blocksToPortableMarkdown` | Gist and one-time share export — GitHub-friendly: toggles → `<details>`, directives humanized or dropped              |
 
 Cursor apply refuses writes when portable conversion would be lossy; share export always uses portable. See [Sharing — Publish from the editor](../guides/sharing.md#publish-from-the-editor).
 

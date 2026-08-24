@@ -72,7 +72,7 @@ async function buildNext() {
     await new Promise((resolve, reject) => {
       const child = spawn(
         process.execPath,
-        [require.resolve("next/dist/bin/next", { paths: [dashboardDir] }), "build", "--webpack"],
+        [require.resolve("next/dist/bin/next", { paths: [dashboardDir] }), "build", "--turbopack"],
         {
           cwd: dashboardDir,
           env: {
@@ -116,7 +116,7 @@ async function buildNext() {
         const why = signal ? `signal ${signal}` : `exit ${code}`;
         reject(
           new Error(
-            `next build --webpack failed (${why})\n${output || "(no compiler output captured)"}`,
+            `next build --turbopack failed (${why})\n${output || "(no compiler output captured)"}`,
           ),
         );
       });

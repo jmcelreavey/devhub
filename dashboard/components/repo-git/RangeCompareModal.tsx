@@ -7,7 +7,7 @@ import { ModalShell } from "@/components/shell/ModalShell";
 import { useStoredFraction } from "@/lib/hooks/use-stored-state";
 import { useToast } from "@/lib/hooks/use-toast";
 import type { DiffLine } from "@/lib/repos/git-parsers";
-import { DiffToolbar, DIFF_CONTEXT_LINES, type DiffContextMode } from "./DiffToolbar";
+import { DiffToolbar, DIFF_CONTEXT_LINES, useDiffViewMode, type DiffContextMode } from "./DiffToolbar";
 import { GitDiffView } from "./GitDiffView";
 import { RepoSplit } from "./SplitResize";
 import { fetchGitJson, repoApi } from "./shared";
@@ -54,6 +54,7 @@ export function RangeCompareModal({
   const [loading, setLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [contextMode, setContextMode] = useState<DiffContextMode>("default");
+  const [diffView, setDiffView] = useDiffViewMode();
   const [listFr, setListFr] = useStoredFraction("devhub:repo-git:range-list-fr", 0.32);
   const [sharing, setSharing] = useState(false);
 
@@ -154,7 +155,7 @@ export function RangeCompareModal({
                   ) : (
                     <span className="text-text-subtle">Whole range — select a file to narrow</span>
                   )}
-                  <DiffToolbar mode={contextMode} onModeChange={setContextMode} />
+                  <DiffToolbar mode={contextMode} onModeChange={setContextMode} view={diffView} onViewChange={setDiffView} />
                   <button
                     type="button"
                     className="btn btn-ghost"
@@ -178,6 +179,8 @@ export function RangeCompareModal({
                   ) : (
                     <GitDiffView
                       lines={data.lines}
+                      filePath={selectedFile ?? undefined}
+                      view={diffView}
                       emptyMessage="No textual diff (binary or empty)."
                     />
                   )}

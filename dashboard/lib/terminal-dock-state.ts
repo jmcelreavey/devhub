@@ -342,3 +342,78 @@ export function formatProposePreview(
   }
   return previewTerminalCommand(proposal.command, max);
 }
+
+// ---------------------------------------------------------------------------
+// Decisions that used to live inline inside TerminalDock's effects. They are
+// pure, they each encode a judgement call worth stating once, and neither was
+// reachable from a test while it sat in a 2,300-line component.
+// ---------------------------------------------------------------------------
+
+/** Only notify about commands that ran at least this long. */
+export const NOTIFY_MIN_MS = 10_000;
+
+export type NotificationPermissionState = "granted" | "denied" | "default" | "unsupported";
+
+/**
+ * Should a finished command raise a desktop notification?
+ *
+ * The point is to catch the case where you started something slow and went to
+ * do something else. Every clause is there to avoid notifying someone about a
+ * thing they are already looking at: a quick command, a dock that is open and
+ * on screen, or a browser that never granted permission.
+ */
+export function shouldNotifyCommandFinished(opts: {
+  /** When the command went busy, or undefined if we never saw it start. */
+  startedAt: number | undefined;
+  now: number;
+  notifyEnabled: boolean;
+  /** The dock is expanded on screen. */
+  dockOpen: boolean;
+  documentHidden: boolean;
+  permission: NotificationPermissionState;
+  minDurationMs?: number;
+}): boolean {
+  const { startedAt, now, notifyEnabled, dockOpen, documentHidden, permission } = opts;
+  if (!startedAt) return false;
+  if (!notifyEnabled) return false;
+  if (permission !== "granted") return false;
+  if (now - startedAt < (opts.minDurationMs ?? NOTIFY_MIN_MS)) return false;
+  // Watching it happen is its own notification.
+  if (dockOpen && !documentHidden) return false;
+  return true;
+}
+
+/**
+ * A pending block that outlives this while output is actively streaming is a
+ * foreground process (`npm run dev`) the blocks pane cannot stream.
+ */
+export const LONG_RUNNING_MS = 3_000;
+
+/** An unproven shell gets longer, so a slow first prompt is not mistaken for one. */
+export const UNPROVEN_SHELL_GRACE_MS = 15_000;
+
+/**
+ * Should the blocks view drop back to the raw grid?
+ *
+ * A quiet pending block is just a shell warming up; flipping there would yank
+ * blocks-mode users to raw on every fresh tab. So the shell has to be actively
+ * producing output, and it has to have either completed a command before (it
+ * is a real shell, so this really is a long-running foreground process) or been
+ * pending long enough that nothing else explains it.
+ */
+export function shouldFallBackToRawView(opts: {
+  blocks: { pending?: boolean; startedAt: number }[];
+  now: number;
+  /** The reader says output is still streaming. */
+  busy: boolean;
+  longRunningMs?: number;
+  unprovenGraceMs?: number;
+}): boolean {
+  if (!opts.busy) return false;
+  const pending = opts.blocks.find((b) => b.pending);
+  if (!pending) return false;
+  const age = opts.now - pending.startedAt;
+  if (age <= (opts.longRunningMs ?? LONG_RUNNING_MS)) return false;
+  const provenShell = opts.blocks.some((b) => !b.pending);
+  return provenShell || age > (opts.unprovenGraceMs ?? UNPROVEN_SHELL_GRACE_MS);
+}

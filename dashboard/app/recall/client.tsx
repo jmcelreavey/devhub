@@ -203,7 +203,7 @@ export default function RecallPage() {
       {/* items-start: multi-line subtitle vs action cluster (see VaultIndexPage). */}
       <header className="page-header items-start mb-6">
         <div className="min-w-0">
-          <div className="page-title">Recall</div>
+          <h1 className="page-title">Recall</h1>
           <div className="page-subtitle">
             Ranked, budgeted, cited context across notes, docs, tasks and the event spine.{" "}
             <Link href="/search" className="underline text-accent">

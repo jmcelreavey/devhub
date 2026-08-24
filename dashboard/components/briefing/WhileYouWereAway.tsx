@@ -6,6 +6,7 @@ import { useLive } from "@/lib/hooks/use-fetch";
 import { formatRelativePastAge } from "@/lib/utils";
 import { useMinuteTick } from "@/lib/minute-tick";
 import type { AwayDigest } from "@/lib/since-last-visit";
+import { groupAwayFailures, isStale } from "@/lib/away-failures";
 
 const LAST_VISIT_KEY = "devhub:last-visit";
 
@@ -59,35 +60,47 @@ export function WhileYouWereAway() {
 
   if (dismissed || !data || data.failedRuns.length === 0) return null;
 
-  const failures = data.failedRuns;
+  // One row per distinct problem. The same script failing on a loop is one
+  // thing to fix, not four lines of banner.
+  const groups = groupAwayFailures(data.failedRuns);
+  const stale = isStale(groups, now);
+  // Nothing in the last day is a "you should know", not a "stop what you are
+  // doing". Danger red is reserved for the second kind.
+  const tone = stale ? "warning" : "danger";
 
   return (
     <div
       role="status"
       className="mb-3 flex items-start gap-2.5 rounded-lg px-3 py-2.5"
       style={{
-        border: "1px solid var(--danger)",
-        background: "var(--danger-dim)",
+        border: `1px solid var(--${tone})`,
+        background: `var(--${tone}-dim)`,
         color: "var(--text)",
       }}
     >
-      <AlertTriangle size={15} className="mt-0.5 shrink-0 text-danger" aria-hidden />
+      <AlertTriangle
+        size={15}
+        className="mt-0.5 shrink-0"
+        style={{ color: `var(--${tone})` }}
+        aria-hidden
+      />
       <div className="min-w-0 flex-1 text-sm">
         <div className="font-medium">
-          {failures.length === 1
-            ? "A background job failed while you were away"
-            : `${failures.length} background jobs failed while you were away`}
+          {groups.length === 1
+            ? `${groups[0]!.script} failed while you were away`
+            : `${groups.length} background jobs failed while you were away`}
         </div>
         <ul className="mt-1 flex flex-col gap-0.5" style={{ color: "var(--text-muted)" }}>
-          {failures.slice(0, 4).map((f) => (
+          {groups.slice(0, 3).map((f) => (
             <li key={f.runId} className="truncate text-xs">
               <span className="font-mono">{f.script}</span>
               {f.exitCode !== undefined ? ` · exit ${f.exitCode}` : ""}
-              {` · ${formatRelativePastAge(Math.max(0, now - f.startedAt))}`}
+              {f.count > 1 ? ` · ${f.count}×` : ""}
+              {` · ${formatRelativePastAge(Math.max(0, now - f.latestAt))}`}
             </li>
           ))}
-          {failures.length > 4 && (
-            <li className="text-xs">+{failures.length - 4} more — see Run history on System</li>
+          {groups.length > 3 && (
+            <li className="text-xs">+{groups.length - 3} more — see Run history on System</li>
           )}
         </ul>
       </div>

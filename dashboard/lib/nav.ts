@@ -64,7 +64,9 @@ export function groupSidebarNav(
  * - Library     = Notes / Docs / Diagrams (tabs over /notes…)
  * - BI          = Ops (plugin) / Datadog — first-class items under a BI group
  * - System      = Status / Logs / Actions / Setup (tabs over /status…)
- * - Search page → ⌘K palette
+ * - Search        = unified discovery (exact / ranked / semantic via Recall);
+ *                   Recall's graph + ingest controls live at /recall, linked
+ *                   from the search page and the ⌘K palette
  *
  * Plugin pages (e.g. /ops) come from `PLUGIN_NAV_ITEMS` (materialised from plugin
  * manifests) and are merged into the sidebar via `groupSidebarNav` — not hand
@@ -83,7 +85,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/review", label: "Review", icon: "review", group: "workspace", desktopOnly: true },
 
   { href: "/notes", label: "Notes", icon: "notes", group: "library" },
-  { href: "/recall", label: "Recall", icon: "recall", group: "library" },
+  { href: "/search", label: "Search", icon: "search", group: "library" },
   { href: "/skills", label: "Skills", icon: "skills", group: "library" },
   { href: "/repos", label: "Repos", icon: "repos", group: "library", desktopOnly: true },
   { href: "/own", label: "Own", icon: "own", group: "library", gate: "github" },
@@ -110,8 +112,8 @@ export const LEGACY_NAV_ITEMS: NavItem[] = [
   { href: "/appraisal", label: "Appraisal", icon: "review", group: "library" },
   { href: "/one-on-one", label: "1:1", icon: "review", group: "library" },
   { href: "/research", label: "Research", icon: "learnings", group: "library" },
-  { href: "/search", label: "Search", icon: "search", group: "library" },
   { href: "/learnings", label: "Learnings", icon: "learnings", group: "library" },
+  { href: "/recall", label: "Recall", icon: "recall", group: "library" },
   { href: "/radar", label: "Radar", icon: "radar", group: "library" },
   { href: "/diagrams", label: "Diagrams", icon: "diagrams", group: "library" },
   { href: "/docs", label: "Docs", icon: "docs", group: "library" },
@@ -150,6 +152,7 @@ export const SECTION_TABS: Record<string, SectionTab[]> = {
   library: mergeSectionTabs(
     [
       { href: "/notes", label: "Notes" },
+      { href: "/search", label: "Search" },
       { href: "/docs", label: "Docs" },
       { href: "/radar", label: "Radar" },
       { href: "/appraisal", label: "Appraisal" },
@@ -191,4 +194,42 @@ export function gateAllows(gate: NavGate | undefined, setup: SetupGateStatus | n
 
 export function filterNavBySetup(items: NavItem[], setup: SetupGateStatus | null): NavItem[] {
   return items.filter((i) => gateAllows(i.gate, setup));
+}
+
+export interface Crumb {
+  label: string;
+  href?: string;
+}
+
+/**
+ * Group crumbs come from NAV_GROUPS — the same list the sidebar renders — so
+ * the two can't disagree. They did: the top bar used to hold its own copy that
+ * labelled the Library group "Notes", so all fourteen Library destinations
+ * breadcrumbed as "Notes › Repos", "Notes › Skills", "Notes › Own"…
+ *
+ * This lives in lib rather than in the top bar because it is pure routing
+ * data: importing the component to test it drags in xterm's stylesheet.
+ */
+const ROOT_LABEL = Object.fromEntries(
+  NAV_GROUPS.map((g) => [g.id, g.label]),
+) as Record<NavGroup, string>;
+
+/** Landing page for each nav family — makes the group crumb clickable. */
+const ROOT_HREF: Record<NavGroup, string> = {
+  workspace: "/",
+  library: "/notes",
+  bi: "/ops",
+  system: "/status",
+};
+
+export function buildCrumbs(pathname: string): Crumb[] {
+  const item = ALL_NAV_DESTINATIONS.find((n) =>
+    n.href === "/" ? pathname === "/" : pathname.startsWith(n.href),
+  );
+  if (!item) return [{ label: "Workspace" }, { label: pathname }];
+  const groupLabel = ROOT_LABEL[item.group] ?? "Workspace";
+  const rootHref = ROOT_HREF[item.group];
+  // On a group's own landing page, don't repeat it ("Notes › Notes").
+  if (item.href === rootHref) return [{ label: item.label }];
+  return [{ label: groupLabel, href: rootHref }, { label: item.label }];
 }

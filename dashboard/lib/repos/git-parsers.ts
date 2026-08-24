@@ -114,6 +114,14 @@ export function fileStatusGlyph(file: StagedFileInfo): string {
   return file.indexStatus || file.worktreeStatus || "M";
 }
 
+/** Porcelain pairs that mean the path is in conflict (stage1/2/3 in the index). */
+const UNMERGED_PAIRS = new Set(["DD", "AU", "UD", "UA", "DU", "AA", "UU"]);
+
+/** True when the index still holds conflict stages for this path. */
+export function isUnmergedFile(file: { indexStatus: string; worktreeStatus: string }): boolean {
+  return UNMERGED_PAIRS.has(`${file.indexStatus}${file.worktreeStatus}`);
+}
+
 /** macOS / Python clutter that rarely belongs in a staging UI. */
 export function isGitNoisePath(filePath: string): boolean {
   const parts = filePath.split(/[/\\]/);

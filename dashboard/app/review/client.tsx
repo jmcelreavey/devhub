@@ -53,9 +53,9 @@ export default function ReviewPage() {
         style={{ alignItems: "flex-end", marginBottom: "var(--space-8)", gap: "var(--space-4)" }}
       >
         <div>
-          <div className="page-title" style={{ fontFamily: "var(--font-display)" }}>
+          <h1 className="page-title" style={{ fontFamily: "var(--font-display)" }}>
             Weekly review
-          </div>
+          </h1>
           <div className="text-xs mt-1 text-text-subtle">
             {data ? `${shortDate(data.start)} – ${shortDate(data.end)}` : "Last 7 days"}
           </div>

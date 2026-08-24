@@ -262,15 +262,23 @@ function integrationZsh(): string {
 (( \${+functions[__devhub_precmd]} )) && return
 typeset -g __devhub_first_prompt=1
 __devhub_precmd() {
+  # MUST be the first line: $? is the exit status of the last command, and
+  # anything here clobbers it — including the (( )) below, which returns 1
+  # whenever its expression evaluates to zero. Reading $? inside the else
+  # branch reported exit code 1 for every successful command.
+  local __devhub_status=$?
   if (( __devhub_first_prompt )); then
     __devhub_first_prompt=0
   else
-    printf '\\e]133;D;%s\\a' $?
+    printf '\\e]133;D;%s\\a' $__devhub_status
   fi
   printf '\\e]133;A\\a'
 }
 __devhub_preexec() { printf '\\e]133;C\\a'; }
-precmd_functions+=(__devhub_precmd)
+# Prepended, not appended: our hooks.zsh is sourced after the user's rc, so
+# precmd_functions already holds theirs (p10k et al). Running last would mean
+# reading $? after someone else's precmd had already overwritten it.
+precmd_functions=(__devhub_precmd $precmd_functions)
 preexec_functions+=(__devhub_preexec)
 `;
 }

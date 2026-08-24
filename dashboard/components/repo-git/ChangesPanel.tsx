@@ -1,18 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  Bot,
   Check,
   ChevronDown,
   CloudUpload,
+  Copy,
+  Eye,
   File,
   Folder,
   GitCommit,
+  MessageSquarePlus,
   RefreshCw,
   RotateCcw,
   Sparkles,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
@@ -25,11 +30,16 @@ import {
   agentDiffSelectionPrompt,
 } from "@/lib/terminal-launch";
 import { launchAgentJob } from "@/lib/agent-job";
-import { isGitNoisePath, looksLikeDirectoryPath, type DiffLine } from "@/lib/repos/git-parsers";
+import { isGitNoisePath, isUnmergedFile, looksLikeDirectoryPath, type DiffLine } from "@/lib/repos/git-parsers";
+import { SimpleMarkdown } from "@/components/ui/SimpleMarkdown";
+import { ContextMenu, useContextMenu, type ContextMenuGroup } from "@/components/shell/ContextMenu";
+import { copyTextToClipboard } from "@/lib/clipboard";
+import { openRepoFileInCursor } from "@/lib/open-in-cursor-client";
+import { reviewCommentsStore, useReviewComments, type ReviewComment } from "@/lib/git/review-comments";
 import { recordUndo } from "@/lib/git/undo-stack";
 import { CouplingHints } from "./CouplingHints";
 import { DiffMaximizeModal } from "./DiffMaximizeModal";
-import { DiffToolbar, DIFF_CONTEXT_LINES, type DiffContextMode } from "./DiffToolbar";
+import { DiffToolbar, DIFF_CONTEXT_LINES, useDiffViewMode, type DiffContextMode } from "./DiffToolbar";
 import { GitDiffView } from "./GitDiffView";
 import { RepoFileOpenMenu } from "./RepoFileOpenMenu";
 import { RepoSplit } from "./SplitResize";
@@ -53,8 +63,151 @@ interface DiffDirEntry {
   type: "file" | "dir";
 }
 
-function splitNoiseFiles(files: StatusFile[]): { visible: StatusFile[]; noise: StatusFile[] } {
-  const visible: StatusFile[] = [];
+const isMarkdownPath = (path: string) => /\.(md|mdx)$/i.test(path);
+
+/**
+ * Review basket — line comments gathered across files, shipped to the agent in
+ * one handoff. Clicking a comment jumps to its file; send goes through the
+ * in-dock agent chat so the full note set survives (no PTY length limit).
+ */
+function ReviewBasket({
+  repoName,
+  repoPath,
+  onJumpTo,
+}: {
+  repoName: string;
+  repoPath: string;
+  onJumpTo: (path: string, staged: boolean) => void;
+}) {
+  const comments = useReviewComments();
+  const [open, setOpen] = useState(false);
+  const toast = useToast();
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("pointerdown", onDown, true);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [open]);
+
+  const byFile = useMemo(() => {
+    const map = new Map<string, ReviewComment[]>();
+    for (const c of comments) {
+      map.set(c.filePath, [...(map.get(c.filePath) ?? []), c]);
+    }
+    return map;
+  }, [comments]);
+
+  async function sendAll() {
+    const detail = [...byFile]
+      .map(
+        ([path, cs]) =>
+          `${path}:\n${cs
+            .map((c) => `  \`${c.lineText.slice(0, 90)}\`\n  → ${c.text}`)
+            .join("\n")}`,
+      )
+      .join("\n\n");
+    const files = [...byFile.keys()].join(", ");
+    const promptText = [
+      `Review notes for ${repoName} — ${comments.length} comment${comments.length === 1 ? "" : "s"} across ${byFile.size} file${byFile.size === 1 ? "" : "s"}.`,
+      `Work through each note against the current working tree:`,
+      detail,
+      `Ask if intent is unclear. Do not commit unless asked.`,
+    ].join("\n\n");
+    await launchAgentJob({
+      title: `review · ${repoName}`,
+      kind: "agent",
+      cwd: repoPath,
+      repoName,
+      promptText,
+      promptCommand: `In ${repoName}, address these review comments on ${files}. Ask if intent is unclear. Do not commit unless asked.`,
+      mode: "interactive",
+      reason: `${comments.length} review comments on ${byFile.size} files`,
+      alreadyConfirmed: true,
+    });
+    toast.info("Agent chat ready with your review notes.");
+    setOpen(false);
+  }
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative" }}>
+      <button
+        type="button"
+        className="repo-git-diff-context-btn"
+        data-active={open || comments.length > 0 || undefined}
+        aria-pressed={open}
+        title="Line comments gathered across files — send them all to the agent"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <MessageSquarePlus size={11} aria-hidden /> Review{comments.length > 0 ? ` (${comments.length})` : ""}
+      </button>
+      {open ? (
+        <div className="repo-git-review-pop" role="group" aria-label="Review comments">
+          {comments.length === 0 ? (
+            <div className="repo-git-review-empty">
+              No comments yet. Hover a diff line and hit the comment bubble — notes collect here
+              across files until you send them.
+            </div>
+          ) : (
+            <>
+              <div className="repo-git-review-list">
+                {[...byFile].map(([path, cs]) => (
+                  <div key={path} className="repo-git-review-file">
+                    <div className="repo-git-review-file-path">{path}</div>
+                    {cs.map((c) => (
+                      <div key={c.id} className="repo-git-review-item">
+                        <button
+                          type="button"
+                          className="repo-git-review-jump"
+                          title="Open this file in the diff"
+                          onClick={() => {
+                            onJumpTo(c.filePath, c.staged);
+                            setOpen(false);
+                          }}
+                        >
+                          <span className="repo-git-review-line">`{c.lineText.slice(0, 56)}`</span>
+                          <span className="repo-git-review-text">{c.text}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="repo-git-comment-delete"
+                          aria-label="Delete comment"
+                          onClick={() => reviewCommentsStore.remove(c.id)}
+                        >
+                          <X size={10} aria-hidden />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="repo-git-review-actions">
+                <button type="button" className="btn btn-ghost" onClick={() => reviewCommentsStore.clearAll()}>
+                  Clear all
+                </button>
+                <button type="button" className="btn btn-primary" onClick={() => void sendAll()}>
+                  <Bot size={12} aria-hidden /> Send {comments.length} to agent
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function splitNoiseFiles(files: StatusFile[]): { visible: StatusFile[]; noise: StatusFile[] } {  const visible: StatusFile[] = [];
   const noise: StatusFile[] = [];
   for (const f of files) {
     if (isGitNoisePath(f.path)) noise.push(f);
@@ -90,6 +243,8 @@ export function ChangesPanel({
   const [dirPreview, setDirPreview] = useState<{ entries: DiffDirEntry[]; message?: string } | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
   const [contextMode, setContextMode] = useState<DiffContextMode>("default");
+  const [diffView, setDiffView] = useDiffViewMode();
+  const [mdPreview, setMdPreview] = useState(false);
   const [listFr, setListFr] = useStoredFraction("devhub:repo-git:changes-list-fr", 0.4);
   const [diffMaximized, setDiffMaximized] = useState(false);
   const closeMaximized = useCallback(() => setDiffMaximized(false), []);
@@ -101,6 +256,17 @@ export function ChangesPanel({
   const [commitMode, setCommitMode] = useState<CommitMode>(() => readCommitModePref());
   const [commitMenuOpen, setCommitMenuOpen] = useState(false);
   const commitMenuRef = useRef<HTMLDivElement>(null);
+  const fileMenu = useContextMenu<{ path: string; staged: boolean }>();
+
+  const isMd = Boolean(selected && isMarkdownPath(selected.path));
+  /** New side of the diff, rebuilt for the markdown preview. */
+  const mdText = useMemo(() => {
+    if (!isMd) return "";
+    return diffLines
+      .filter((l) => l.type === "ctx" || l.type === "add")
+      .map((l) => (/^[+-\s]/.test(l.text) ? l.text.slice(1) : l.text))
+      .join("\n");
+  }, [isMd, diffLines]);
 
   useEffect(() => {
     if (!commitMenuOpen) return;
@@ -209,7 +375,10 @@ export function ChangesPanel({
     };
   }, [selected, repoName, toast, contextMode]);
 
-  async function stageAction(
+  // useCallback because the file context menu memoises on it: as a plain
+  // function it was a new identity every render, so that useMemo rebuilt the
+  // whole menu on every keystroke and state change.
+  const stageAction = useCallback(async function stageAction(
     action: "stage" | "unstage" | "discard",
     path?: string,
     options?: {
@@ -267,7 +436,7 @@ export function ChangesPanel({
     } finally {
       setActing(null);
     }
-  }
+  }, [confirm, onMutate, refresh, repoName, selected, toast]);
 
   async function discardAllVisible(kind: "staged" | "unstaged", files: StatusFile[]) {
     const paths = files.map((f) => f.path);
@@ -473,6 +642,95 @@ export function ChangesPanel({
   }
 
   /**
+   * Conflicted paths: unstaging or discarding them isn't a git operation while
+   * the index holds conflict stages — it fails with a raw "is unmerged" error.
+   * Their rows get one honest action instead (stage to mark resolved) and the
+   * destructive buttons go away.
+   */
+  const conflictedPaths = useMemo(
+    () =>
+      new Set((status?.files ?? []).filter(isUnmergedFile).map((f) => f.path)),
+    [status],
+  );
+
+  /** Right-click menu for staged/unstaged rows — same actions as the row buttons. */
+  const fileMenuGroups = useMemo((): ContextMenuGroup[] => {
+    const target = fileMenu.target;
+    if (!target) return [];
+    const busy = acting !== null;
+    const conflicted = conflictedPaths.has(target.path);
+    const fileItems = [
+      {
+        id: "open-cursor",
+        label: "Open in Cursor",
+        description: target.path.split("/").pop(),
+        onSelect: () => void openRepoFileInCursor(repoName, toast, target.path),
+      },
+      {
+        id: "copy-path",
+        label: "Copy path",
+        icon: <Copy size={12} />,
+        onSelect: () => {
+          void copyTextToClipboard(target.path);
+          toast.success("Path copied");
+        },
+      },
+    ];
+    if (target.staged) {
+      return [
+        {
+          id: "index",
+          items: [
+            {
+              id: "unstage",
+              label: "Unstage",
+              description: "git restore --staged",
+              icon: <RotateCcw size={12} />,
+              disabled: busy,
+              onSelect: () => void stageAction("unstage", target.path),
+            },
+            {
+              id: "discard-staged",
+              label: "Discard staged changes",
+              icon: <Trash2 size={12} />,
+              danger: true,
+              disabled: busy || conflicted,
+              disabledReason: conflicted ? "Unresolved conflict" : undefined,
+              onSelect: () => void stageAction("discard", target.path, { scope: "staged" }),
+            },
+          ],
+        },
+        { id: "file", items: fileItems },
+      ];
+    }
+    return [
+      {
+        id: "worktree",
+        items: [
+          {
+            id: "stage",
+            label: "Stage",
+            description: "git add",
+            icon: <Check size={12} />,
+            disabled: busy,
+            onSelect: () => void stageAction("stage", target.path),
+          },
+          {
+            id: "discard-unstaged",
+            label: "Discard changes",
+            icon: <Trash2 size={12} />,
+            danger: true,
+            disabled: busy || conflicted,
+            disabledReason: conflicted ? "Unresolved conflict" : undefined,
+            onSelect: () => void stageAction("discard", target.path, { scope: "unstaged" }),
+          },
+        ],
+      },
+      { id: "file", items: fileItems },
+    ];
+  }, [fileMenu.target, acting, conflictedPaths, repoName, stageAction, toast]);
+
+  /**
    * Drag a file row between Staged and Unstaged. The sections carry
    * data-drop-stage; dropping calls the same stage/unstage endpoint the +/−
    * buttons use, so confirm flows and toasts stay in one place.
@@ -585,6 +843,7 @@ export function ChangesPanel({
             selected={selected}
             selectStaged
             dropStage="staged"
+            onRowContextMenu={(event, file) => fileMenu.openAt(event, { path: file.path, staged: true })}
             dropOver={fileDrag.state?.over?.getAttribute("data-drop-stage") === "staged"}
             onRowDragStart={
               fileDrag.dragging
@@ -619,26 +878,37 @@ export function ChangesPanel({
                 </IconBtn>
               </>
             }
-            actions={(path) => (
-              <>
-                <IconBtn label="Unstage" onClick={() => void stageAction("unstage", path)} disabled={acting !== null}>
-                  −
-                </IconBtn>
+            actions={(path) =>
+              conflictedPaths.has(path) ? (
                 <IconBtn
-                  label="Discard staged"
-                  danger
-                  onClick={() =>
-                    void stageAction("discard", path, {
-                      scope: "staged",
-                      successLabel: "Discarded staged",
-                    })
-                  }
+                  label="Stage to mark resolved"
+                  title="This file is in conflict — staging marks it resolved. The Conflicts tab has the merge editor."
+                  onClick={() => void stageAction("stage", path)}
                   disabled={acting !== null}
                 >
-                  <Trash2 size={10} />
+                  Resolve
                 </IconBtn>
-              </>
-            )}
+              ) : (
+                <>
+                  <IconBtn label="Unstage" onClick={() => void stageAction("unstage", path)} disabled={acting !== null}>
+                    −
+                  </IconBtn>
+                  <IconBtn
+                    label="Discard staged"
+                    danger
+                    onClick={() =>
+                      void stageAction("discard", path, {
+                        scope: "staged",
+                        successLabel: "Discarded staged",
+                      })
+                    }
+                    disabled={acting !== null}
+                  >
+                    <Trash2 size={10} />
+                  </IconBtn>
+                </>
+              )
+            }
           />
           <FileSection
             title="Unstaged"
@@ -646,6 +916,7 @@ export function ChangesPanel({
             selected={selected}
             selectStaged={false}
             dropStage="unstaged"
+            onRowContextMenu={(event, file) => fileMenu.openAt(event, { path: file.path, staged: false })}
             dropOver={fileDrag.state?.over?.getAttribute("data-drop-stage") === "unstaged"}
             onRowDragStart={
               fileDrag.dragging
@@ -680,26 +951,37 @@ export function ChangesPanel({
                 </IconBtn>
               </>
             }
-            actions={(path) => (
-              <>
-                <IconBtn label="Stage" onClick={() => void stageAction("stage", path)} disabled={acting !== null}>
-                  +
-                </IconBtn>
+            actions={(path) =>
+              conflictedPaths.has(path) ? (
                 <IconBtn
-                  label="Discard"
-                  danger
-                  onClick={() =>
-                    void stageAction("discard", path, {
-                      scope: "unstaged",
-                      successLabel: "Discarded",
-                    })
-                  }
+                  label="Stage to mark resolved"
+                  title="This file is in conflict — staging marks it resolved. The Conflicts tab has the merge editor."
+                  onClick={() => void stageAction("stage", path)}
                   disabled={acting !== null}
                 >
-                  <Trash2 size={10} />
+                  Resolve
                 </IconBtn>
-              </>
-            )}
+              ) : (
+                <>
+                  <IconBtn label="Stage" onClick={() => void stageAction("stage", path)} disabled={acting !== null}>
+                    +
+                  </IconBtn>
+                  <IconBtn
+                    label="Discard"
+                    danger
+                    onClick={() =>
+                      void stageAction("discard", path, {
+                        scope: "unstaged",
+                        successLabel: "Discarded",
+                      })
+                    }
+                    disabled={acting !== null}
+                  >
+                    <Trash2 size={10} />
+                  </IconBtn>
+                </>
+              )
+            }
           />
           {noiseCount > 0 && (
             <div className="repo-git-noise-hint">
@@ -735,11 +1017,35 @@ export function ChangesPanel({
             <DiffToolbar
               mode={contextMode}
               onModeChange={setContextMode}
+              view={diffView}
+              onViewChange={setDiffView}
               onMaximize={() => setDiffMaximized(true)}
               maximizeDisabled={!selected || Boolean(dirPreview)}
               openSlot={
                 selected && !dirPreview ? (
-                  <RepoFileOpenMenu repoName={repoName} filePath={selected.path} disabled={diffLoading} />
+                  <>
+                    <ReviewBasket
+                      repoName={repoName}
+                      repoPath={repoPath}
+                      onJumpTo={(path, staged) => setSelected({ path, staged })}
+                    />
+                    {isMd ? (
+                      <div className="repo-git-diff-context">
+                        <button
+                          type="button"
+                          className="repo-git-diff-context-btn"
+                          data-active={mdPreview || undefined}
+                          aria-pressed={mdPreview}
+                          title="Rendered markdown preview of the new side"
+                          disabled={diffLoading}
+                          onClick={() => setMdPreview((v) => !v)}
+                        >
+                          <Eye size={11} aria-hidden /> Preview
+                        </button>
+                      </div>
+                    ) : null}
+                    <RepoFileOpenMenu repoName={repoName} filePath={selected.path} disabled={diffLoading} />
+                  </>
                 ) : null
               }
             />
@@ -756,9 +1062,21 @@ export function ChangesPanel({
                 entries={dirPreview.entries}
                 message={dirPreview.message}
               />
+            ) : isMd && mdPreview ? (
+              <div className="repo-git-md-preview">
+                {contextMode !== "full" ? (
+                  <div className="repo-git-md-preview-hint">
+                    Preview covers the loaded context — switch context to Full for the whole file.
+                  </div>
+                ) : null}
+                <SimpleMarkdown text={mdText} />
+              </div>
             ) : (
               <GitDiffView
                 lines={diffLines}
+                filePath={selected?.path}
+                commentsEnabled
+                view={diffView}
                 hunkMode={selected ? (selected.staged ? "unstage" : "stage") : undefined}
                 hunkBusy={acting !== null}
                 onHunkAction={selected && rawDiff ? (a) => void hunkAction(a) : undefined}
@@ -771,6 +1089,14 @@ export function ChangesPanel({
       />
       )}
 
+      <ContextMenu
+        open={Boolean(fileMenu.target)}
+        position={fileMenu.position}
+        groups={fileMenuGroups}
+        onClose={fileMenu.close}
+        label={fileMenu.target ? `Actions for ${fileMenu.target.path}` : "File actions"}
+      />
+
       <DiffMaximizeModal
         maximized={diffMaximized}
         canOpen={Boolean(selected) && !dirPreview}
@@ -779,17 +1105,53 @@ export function ChangesPanel({
         description={selected ? (selected.staged ? "Staged changes" : "Unstaged changes") : undefined}
         mode={contextMode}
         onModeChange={setContextMode}
+        view={diffView}
+        onViewChange={setDiffView}
         openSlot={
           selected ? (
-            <RepoFileOpenMenu repoName={repoName} filePath={selected.path} disabled={diffLoading} />
+            <>
+              <ReviewBasket
+                repoName={repoName}
+                repoPath={repoPath}
+                onJumpTo={(path, staged) => setSelected({ path, staged })}
+              />
+              {isMd ? (
+                <div className="repo-git-diff-context">
+                  <button
+                    type="button"
+                    className="repo-git-diff-context-btn"
+                    data-active={mdPreview || undefined}
+                    aria-pressed={mdPreview}
+                    title="Rendered markdown preview of the new side"
+                    disabled={diffLoading}
+                    onClick={() => setMdPreview((v) => !v)}
+                  >
+                    <Eye size={11} aria-hidden /> Preview
+                  </button>
+                </div>
+              ) : null}
+              <RepoFileOpenMenu repoName={repoName} filePath={selected.path} disabled={diffLoading} />
+            </>
           ) : null
         }
       >
         {diffLoading ? (
           <SkeletonRows count={12} height={14} />
+        ) : isMd && mdPreview ? (
+          <div className="repo-git-md-preview">
+            {contextMode !== "full" ? (
+              <div className="repo-git-md-preview-hint">
+                Preview covers the loaded context — switch context to Full for the whole file.
+              </div>
+            ) : null}
+            <SimpleMarkdown text={mdText} />
+          </div>
         ) : (
           <GitDiffView
             lines={diffLines}
+            filePath={selected?.path}
+            commentsEnabled
+            view={diffView}
             hunkMode={selected ? (selected.staged ? "unstage" : "stage") : undefined}
             hunkBusy={acting !== null}
             onHunkAction={selected && rawDiff ? (a) => void hunkAction(a) : undefined}
@@ -943,6 +1305,7 @@ function FileSection({
   dropStage,
   dropOver = false,
   onRowDragStart,
+  onRowContextMenu,
 }: {
   title: string;
   files: StatusFile[];
@@ -955,6 +1318,7 @@ function FileSection({
   dropStage?: "staged" | "unstaged";
   dropOver?: boolean;
   onRowDragStart?: (event: React.PointerEvent, file: StatusFile) => void;
+  onRowContextMenu?: (event: React.MouseEvent, file: StatusFile) => void;
 }) {
   return (
     <div
@@ -979,7 +1343,9 @@ function FileSection({
               key={`${title}:${f.path}`}
               className="repo-git-file-row"
               data-active={active || undefined}
+              data-conflict={isUnmergedFile(f) || undefined}
               onPointerDown={onRowDragStart ? (event) => onRowDragStart(event, f) : undefined}
+              onContextMenu={onRowContextMenu ? (event) => onRowContextMenu(event, f) : undefined}
               style={{ touchAction: onRowDragStart ? "none" : undefined }}
             >
               <button type="button" className="repo-git-file-main" onClick={() => onSelect(f.path)}>

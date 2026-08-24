@@ -2,7 +2,7 @@
 
 import { useEffect, type ReactNode } from "react";
 import { ModalShell } from "@/components/shell/ModalShell";
-import { DiffToolbar, type DiffContextMode } from "./DiffToolbar";
+import { DiffToolbar, type DiffContextMode, type DiffViewMode } from "./DiffToolbar";
 
 /**
  * Full-screen diff view shared by Changes / History / Stash.
@@ -20,6 +20,8 @@ export function DiffMaximizeModal({
   description,
   mode,
   onModeChange,
+  view,
+  onViewChange,
   openSlot,
   children,
 }: {
@@ -31,6 +33,8 @@ export function DiffMaximizeModal({
   description?: string;
   mode: DiffContextMode;
   onModeChange: (mode: DiffContextMode) => void;
+  view?: DiffViewMode;
+  onViewChange?: (view: DiffViewMode) => void;
   openSlot?: ReactNode;
   children: ReactNode;
 }) {
@@ -52,7 +56,7 @@ export function DiffMaximizeModal({
           <span className="font-mono truncate" title={title}>
             {title}
           </span>
-          <DiffToolbar mode={mode} onModeChange={onModeChange} openSlot={openSlot} />
+          <DiffToolbar mode={mode} onModeChange={onModeChange} view={view} onViewChange={onViewChange} openSlot={openSlot} />
         </div>
         <div className="repo-git-diff-modal-body">{children}</div>
       </div>

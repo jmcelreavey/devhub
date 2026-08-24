@@ -142,6 +142,27 @@ export function looksLikePromptLine(line: string): boolean {
 }
 
 /**
+ * Heuristic: a running command's last output line reads like an interactive
+ * prompt waiting for stdin (`Choice [1]:`, `Which platform?`, `y/n`).
+ * Deliberately conservative — shell prompt lines and long prose don't count.
+ */
+export function looksLikeInputPrompt(output: string): boolean {
+  const line = lastNonEmptyLine(output);
+  if (!line || line.length > 160 || looksLikePromptLine(line)) return false;
+  if (/\?[:\s]*$/.test(line)) return true;
+  if (/\[[^\]]*\d[^\]]*\][:?]?\s*$/.test(line)) return true;
+  if (/y\/n|yes\/no/i.test(line)) return true;
+  if (
+    /\b(choice|choose|select|enter|press|pick|continue|proceed|confirm|overwrite|answer)\b/i.test(
+      line,
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Command sitting after a prompt glyph on the last line.
  * Used for OSC 133 C (execute) and typed-Enter confirmation.
  */

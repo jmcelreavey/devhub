@@ -1,8 +1,33 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { detectUnmergedFiles } from "@/lib/git/conflicts";
 import { discardGitPaths, type DiscardScope } from "@/lib/git/discard";
 import { stageDiffHunk } from "@/lib/git/patch-stage";
 import { runGitRepoAsync } from "@/lib/git/repo-local";
 import { gitFail, withScannedRepo, type RepoParams } from "../_shared";
+
+/**
+ * Unstage / discard are not git operations on a conflicted path — the index
+ * holds stage1/2/3 entries until the file is staged (resolved). `git restore
+ * --staged` fails on them with a raw "is unmerged" error per path, which read
+ * like five unrelated bugs. Catch it upfront and say what to do instead.
+ */
+function unmergedGuard(repoRoot: string, paths: string[]): NextResponse | null {
+  if (paths.length === 0) return null;
+  const unmerged = new Set(detectUnmergedFiles(repoRoot).map((f) => f.path));
+  const hit = paths.filter((p) => unmerged.has(p));
+  if (hit.length === 0) return null;
+  const names = hit.slice(0, 3).join(", ");
+  return NextResponse.json(
+    {
+      code: "unmerged",
+      conflictFiles: hit,
+      error:
+        `${hit.length} path${hit.length === 1 ? " is" : "s are"} still in conflict (${names}${hit.length > 3 ? "…" : ""}). ` +
+        "Resolve them in the Conflicts tab (or stage to mark resolved) — unstaging a conflicted file would re-create the conflict.",
+    },
+    { status: 409 },
+  );
+}
 
 export async function POST(req: NextRequest, { params }: RepoParams) {
   const { name } = await params;
@@ -48,6 +73,8 @@ export async function POST(req: NextRequest, { params }: RepoParams) {
         if (out.status !== 0) return gitFail(out, "Unstage failed");
         return NextResponse.json({ ok: true });
       }
+      const blocked = unmergedGuard(repoRoot, paths);
+      if (blocked) return blocked;
       const out = await runGitRepoAsync(repoRoot, ["restore", "--staged", "--", ...paths]);
       if (out.status !== 0) return gitFail(out, "Unstage failed");
       return NextResponse.json({ ok: true });
@@ -56,6 +83,8 @@ export async function POST(req: NextRequest, { params }: RepoParams) {
       if (paths.length === 0) {
         return NextResponse.json({ error: "path required for discard" }, { status: 400 });
       }
+      const blocked = unmergedGuard(repoRoot, paths);
+      if (blocked) return blocked;
       const scope: DiscardScope =
         body.scope === "staged" || body.scope === "unstaged" ? body.scope : "unstaged";
       const result = await discardGitPaths(repoRoot, paths, scope);

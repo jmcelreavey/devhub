@@ -25,6 +25,8 @@ export interface Rep {
   startedAt?: string;
   /** Set when findings are saved — this is what the streak counts. */
   completedAt?: string;
+  /** Set when the agent review job is launched — prevents double-launch on reload. */
+  agentReviewStartedAt?: string;
   gradedAt?: string;
   grade?: RepGrade;
 }
@@ -100,6 +102,19 @@ export async function saveRepFindings(date: string, findings: string): Promise<R
     rep.findings = findings;
     rep.completedAt = new Date().toISOString();
     await writeRep(rep);
+    return rep;
+  });
+}
+
+/** Stamp that the agent review job was launched. Idempotent. */
+export async function markAgentReviewStarted(date: string): Promise<Rep> {
+  return withMutex(repFile(date), async () => {
+    const rep = readRep(date);
+    if (!rep?.completedAt) throw new Error("Finish your AI-free review first");
+    if (!rep.agentReviewStartedAt) {
+      rep.agentReviewStartedAt = new Date().toISOString();
+      await writeRep(rep);
+    }
     return rep;
   });
 }

@@ -11,7 +11,7 @@ export function PageHeader({ title, subtitle, badge, actions }: PageHeaderProps)
   return (
     <div className="page-header">
       <div className="min-w-0">
-        <div className="page-title">{title}</div>
+        <h1 className="page-title">{title}</h1>
         {subtitle ? (
           <div className="text-xs mt-1 text-text-subtle">{subtitle}</div>
         ) : null}

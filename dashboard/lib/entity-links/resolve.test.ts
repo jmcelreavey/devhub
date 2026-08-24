@@ -90,4 +90,24 @@ describe("resolveEntityLinks", () => {
     expect(result.related.some((r) => r.kind === "jira" && r.id === "PTF-99")).toBe(false);
     expect(result.related.some((r) => r.kind === "jira" && r.id === "PTF-100")).toBe(true);
   });
+
+  it("surfaces inline #tags from a note body as related refs", () => {
+    fs.mkdirSync(path.join(root, "notes", "learnings"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "notes", "learnings", "tagged.json"),
+      JSON.stringify({
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "Cache notes #devhub and #perf live here." }],
+          },
+        ],
+      }),
+    );
+
+    const result = resolveEntityLinks("note", "learnings/tagged");
+    const tags = result.related.filter((r) => r.kind === "tag");
+    expect(tags.map((t) => t.id)).toEqual(["devhub", "perf"]);
+    expect(tags[0]?.href).toBe("/work?tag=devhub");
+  });
 });

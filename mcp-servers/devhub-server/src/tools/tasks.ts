@@ -52,9 +52,11 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
     "tasks_create",
     {
       description:
-        "Create a new task. Auto-extracts Jira keys from text (e.g. DAD-1234). Optionally create a linked task note (EntityRef ## Links) and/or attach hop-around links (PR/calendar/note).",
+        "Create a new task. Auto-extracts Jira keys from text (e.g. DAD-1234). Inline #tags (e.g. 'fix login #auth') become first-class tags — call tags_list first to reuse existing ones. Optionally create a linked task note (EntityRef ## Links) and/or attach hop-around links (PR/calendar/note).",
       inputSchema: {
-        text: z.string().describe("Task description (1-500 chars). Jira keys like DAD-1234 are auto-detected."),
+        text: z
+          .string()
+          .describe("Task description (1-500 chars). Jira keys like DAD-1234 are auto-detected; inline #tags become hop chips."),
         date: z.string().optional().describe("Date in YYYY-MM-DD format. Defaults to today."),
         due: z.string().optional().describe("Due date in YYYY-MM-DD format."),
         withNote: z.boolean().optional().describe("If true, also create the linked task-notes/ note"),

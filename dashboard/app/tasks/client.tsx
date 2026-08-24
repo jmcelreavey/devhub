@@ -276,7 +276,7 @@ export default function TasksPage() {
       <BootScreen state={boot} />
       <div className="page-header">
         <div>
-          <div className="page-title">Tasks</div>
+          <h1 className="page-title">Tasks</h1>
           <div className="text-xs flex flex-wrap gap-x-3 text-text-subtle">
             <span>{counts.all} total</span>
             <span>{counts.open} open</span>

@@ -86,7 +86,7 @@ export function registerRecallTools(server: McpServer, ctx: Context): void {
     "recall_graph",
     {
       description:
-        "Derived entity graph — what turns up alongside a ticket, PR, repo or note across all indexed content. Unlike `entity_links_read`, which only sees hand-written ## Links sections, these edges are derived from co-occurrence and exist without anyone having typed them. Omit `entity` for the whole graph.",
+        "Derived entity graph — what turns up alongside a ticket, PR, repo or note across all indexed content. Unlike `entity_links_read`, which only sees hand-written ## Links sections, these edges are derived from co-occurrence and exist without anyone having typed them. Tags extracted from text (e.g. `tag:auth`) participate too, and `tags_lookup` gives the same neighbourhood in friendlier form. Omit `entity` for the whole graph.",
       inputSchema: {
         entity: z
           .string()

@@ -53,6 +53,15 @@ export interface BranchInfo {
   behind?: number;
   /** The upstream ref no longer exists on the remote. */
   upstreamGone?: boolean;
+  /**
+   * Set when every ahead-commit already exists on this other remote ref —
+   * the ↑N is informational ("pushed via …"), not pending work.
+   */
+  pushedElsewhereRef?: string;
+  /** Checked out in another linked worktree; checkout here will be refused. */
+  worktreePath?: string;
+  /** Days since the last commit, only when ≥ 30 (zombie dimming). */
+  staleDays?: number;
 }
 
 export interface RemoteBranchInfo {
@@ -81,6 +90,8 @@ export interface BranchesPayload {
   remotes?: { name: string; fetchUrl: string; pushUrl: string }[];
   /** Newest-first, capped at 30 — the rail shows recent tags, not the full dump. */
   tags?: string[];
+  /** When the repo last fetched (FETCH_HEAD mtime). Arrows are only as fresh as this. */
+  lastFetchAt?: string | null;
 }
 
 export type CommitMode = "commit-and-push" | "commit-only";
@@ -244,12 +255,15 @@ export function IconBtn({
   onClick,
   disabled,
   danger,
+  title,
 }: {
   children: ReactNode;
   label: string;
   onClick: () => void;
   disabled?: boolean;
   danger?: boolean;
+  /** Longer explanation; defaults to the aria-label. */
+  title?: string;
 }) {
   return (
     <button
@@ -257,7 +271,7 @@ export function IconBtn({
       className="btn btn-ghost repo-git-icon-btn"
       data-danger={danger || undefined}
       aria-label={label}
-      title={label}
+      title={title ?? label}
       disabled={disabled}
       onClick={onClick}
     >

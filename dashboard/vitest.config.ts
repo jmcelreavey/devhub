@@ -11,6 +11,13 @@ export default defineConfig({
   test: {
     setupFiles: ["./vitest.setup.ts"],
     /**
+     * 30s per test: several suites spawn real git subprocesses in temp dirs
+     * (discard, standup, file-history, devhub-update). On the 5s default they
+     * blow their timeout whenever a build hogs the CPU — a load-flake that
+     * looks like a regression. A genuinely hung test still fails, just in 30s.
+     */
+    testTimeout: 30_000,
+    /**
      * Default `node` — almost everything under test is pure logic, and booting
      * a DOM per file would be overhead for no gain.
      *

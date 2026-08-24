@@ -10,7 +10,7 @@ import { launchAgentJob } from "@/lib/agent-job";
 import { agentStashMessageCommand, agentStashMessagePrompt } from "@/lib/terminal-launch";
 import type { DiffLine } from "@/lib/repos/git-parsers";
 import { DiffMaximizeModal } from "./DiffMaximizeModal";
-import { DiffToolbar, DIFF_CONTEXT_LINES, type DiffContextMode } from "./DiffToolbar";
+import { DiffToolbar, DIFF_CONTEXT_LINES, useDiffViewMode, type DiffContextMode } from "./DiffToolbar";
 import { GitDiffView } from "./GitDiffView";
 import { RepoSplit } from "./SplitResize";
 import {
@@ -49,6 +49,7 @@ export function StashPanel({
   const [diffLoading, setDiffLoading] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
   const [contextMode, setContextMode] = useState<DiffContextMode>("default");
+  const [diffView, setDiffView] = useDiffViewMode();
   const [listFr, setListFr] = useStoredFraction("devhub:repo-git:stash-list-fr", 0.42);
   const [diffMaximized, setDiffMaximized] = useState(false);
   const closeMaximized = useCallback(() => setDiffMaximized(false), []);
@@ -265,6 +266,8 @@ export function StashPanel({
               <DiffToolbar
                 mode={contextMode}
                 onModeChange={setContextMode}
+                view={diffView}
+                onViewChange={setDiffView}
                 onMaximize={() => setDiffMaximized(true)}
                 maximizeDisabled={!selected}
               />
@@ -273,7 +276,11 @@ export function StashPanel({
               {diffLoading ? (
                 <SkeletonRows count={6} height={14} />
               ) : (
-                <GitDiffView lines={diffLines} emptyMessage="Empty stash or binary-only changes." />
+                <GitDiffView
+                  lines={diffLines}
+                  view={diffView}
+                  emptyMessage="Empty stash or binary-only changes."
+                />
               )}
             </div>
           </div>
@@ -287,11 +294,17 @@ export function StashPanel({
         description={selectedEntry?.message}
         mode={contextMode}
         onModeChange={setContextMode}
+        view={diffView}
+        onViewChange={setDiffView}
       >
         {diffLoading ? (
           <SkeletonRows count={12} height={14} />
         ) : (
-          <GitDiffView lines={diffLines} emptyMessage="Empty stash or binary-only changes." />
+          <GitDiffView
+            lines={diffLines}
+            view={diffView}
+            emptyMessage="Empty stash or binary-only changes."
+          />
         )}
       </DiffMaximizeModal>
     </div>
