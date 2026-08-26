@@ -10,6 +10,7 @@
  */
 export {
   buildEntityLinksSection,
+  canonicalizeEntityRef,
   defaultHrefForRef,
   entityKey,
   extractTags,
@@ -17,6 +18,7 @@ export {
   joinMarkdownLines,
   mergeEntityRefs,
   parseEntityLinksFromMarkdown,
+  parseJiraIssueKey,
   slugify,
   TAG_RE,
   tagRefs,

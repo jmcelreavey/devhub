@@ -3,6 +3,8 @@
  * NL → one shell command, fence extract, last-command chips.
  */
 
+import { hasUnbalancedShellQuotes } from "@/lib/terminal-inject";
+
 export const PROMPT_ASK_SYSTEM =
   "You write one shell command for a developer terminal. Reply with only the command. No explanation. No markdown unless the command is multi-line, then a single fenced block.";
 
@@ -27,7 +29,22 @@ export function looksLikeShellCommand(text: string): boolean {
   );
 }
 
-/** Pull a runnable command out of a model reply (fenced or raw). */
+/** Prose-shaped line — capitalized sentence or trailing punctuation, no shell verb. */
+function looksLikeNarration(line: string): boolean {
+  if (looksLikeShellCommand(line)) return false;
+  return /^[A-Z][a-z]+[\s,.:;]/.test(line) || /[.!?]$/.test(line);
+}
+
+/**
+ * Pull a runnable command out of a model reply (fenced or raw).
+ *
+ * The model is told to reply with only the command, but it narrates anyway
+ * ("Checking what's running…") — and joining every line used to bracket-paste
+ * that prose straight into the PTY, concatenated onto the real command.
+ * Narration must never reach the shell: outside a fence, only command-shaped
+ * lines survive, and anything ambiguous or quote-unbalanced returns null so
+ * the reply renders as text in the UI instead.
+ */
 export function extractShellCommand(reply: string): string | null {
   const text = reply.trim();
   if (!text) return null;
@@ -39,7 +56,15 @@ export function extractShellCommand(reply: string): string | null {
     .map((l) => l.replace(/^\s*\$\s*/, "").trimEnd())
     .filter((l) => l.trim() && !l.trim().startsWith("#"));
   if (lines.length === 0) return null;
-  const command = lines.join("\n").trim();
+  let commandLines = lines;
+  if (!fenced) {
+    commandLines = lines.filter((l) => !looksLikeNarration(l.trim()));
+    if (commandLines.length === 0) return null;
+    // Prose mixed with several remaining lines is too ambiguous to run.
+    if (commandLines.length !== lines.length && commandLines.length > 1) return null;
+  }
+  const command = commandLines.join("\n").trim();
+  if (!command || hasUnbalancedShellQuotes(command)) return null;
   return command.length > 4000 ? `${command.slice(0, 4000)}…` : command;
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildGraph, capGraph, neighbours, relatedRefsForHits } from "./graph";
-import type { RecallChunk } from "./types";
+import { buildGraph, cachedGraph, capGraph, neighbours, relatedRefsForHits } from "./graph";
+import type { RecallChunk, RecallIndexManifest } from "./types";
 
 const chunk = (id: string, refs: string[], ts = Date.now()): RecallChunk => ({
   id,
@@ -10,6 +10,37 @@ const chunk = (id: string, refs: string[], ts = Date.now()): RecallChunk => ({
   text: id,
   ts,
   refs,
+});
+
+const manifest = (builtAt: string): RecallIndexManifest => ({
+  version: 1,
+  builtAt,
+  chunkCount: 1,
+  embedder: "test",
+  dims: 1,
+  bySource: {},
+  tookMs: 0,
+});
+
+describe("cachedGraph", () => {
+  it("reuses a graph until the index manifest changes", () => {
+    const chunks = [chunk("a", ["jira:A", "jira:B"])];
+    const first = cachedGraph({ chunks, manifest: manifest("one") }, { minWeight: 1 });
+    const second = cachedGraph({ chunks, manifest: manifest("one") }, { minWeight: 1 });
+    const rebuilt = cachedGraph({ chunks, manifest: manifest("two") }, { minWeight: 1 });
+
+    expect(second).toBe(first);
+    expect(rebuilt).not.toBe(first);
+  });
+
+  it("keeps graphs with different options separate", () => {
+    const chunks = [chunk("a", ["jira:A", "jira:B"])];
+    const source = { chunks, manifest: manifest("options") };
+
+    expect(cachedGraph(source, { minWeight: 1 })).not.toBe(
+      cachedGraph(source, { minWeight: 2 }),
+    );
+  });
 });
 
 describe("buildGraph", () => {

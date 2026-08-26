@@ -15,6 +15,8 @@ import { MoreHorizontal } from "lucide-react";
 
 export const ROW_LONG_PRESS_MS = 500;
 export const ROW_LONG_PRESS_MOVE_PX = 8;
+/** Chips/tags own their context menu — bindRow must not steal the event. */
+export const ENTITY_CHIP_SELECTOR = "[data-entity-chip], .entity-link-chip, .jira-key-chip";
 
 export interface ContextMenuItem {
   id: string;
@@ -105,6 +107,8 @@ export function clampMenuPosition(
 }
 
 export interface RowMenuBind {
+  /** Marks the host so kebab / elementFromPoint can resolve the open target. */
+  "data-context-menu-host": true;
   onContextMenu: (event: ReactMouseEvent) => void;
   onPointerDown: (event: ReactPointerEvent) => void;
   onPointerMove: (event: ReactPointerEvent) => void;
@@ -349,22 +353,62 @@ export function useContextMenu<T>() {
     x: number;
     y: number;
     target: T;
+    host: HTMLElement;
     timer: ReturnType<typeof setTimeout>;
     opened: boolean;
   } | null>(null);
   const suppressClickRef = useRef(false);
+  const hostRef = useRef<HTMLElement | null>(null);
 
-  const close = useCallback(() => setState(null), []);
-
-  const openAtPoint = useCallback((x: number, y: number, target: T) => {
-    setState({ target, position: { x, y } });
+  const clearHostHighlight = useCallback(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    host.removeAttribute("data-context-menu");
+    hostRef.current = null;
   }, []);
 
-  const openAt = useCallback((event: ReactMouseEvent, target: T) => {
-    event.preventDefault();
-    event.stopPropagation();
-    openAtPoint(event.clientX, event.clientY, target);
-  }, [openAtPoint]);
+  const markHostHighlight = useCallback(
+    (host: HTMLElement | null) => {
+      if (hostRef.current && hostRef.current !== host) {
+        hostRef.current.removeAttribute("data-context-menu");
+      }
+      hostRef.current = host;
+      if (host) host.setAttribute("data-context-menu", "open");
+    },
+    [],
+  );
+
+  const resolveHostNearPoint = useCallback((x: number, y: number): HTMLElement | null => {
+    if (typeof document === "undefined") return null;
+    if (typeof document.elementFromPoint !== "function") return null;
+    const hit = document.elementFromPoint(x, y);
+    if (!(hit instanceof Element)) return null;
+    return hit.closest<HTMLElement>("[data-context-menu-host]");
+  }, []);
+
+  const close = useCallback(() => {
+    clearHostHighlight();
+    setState(null);
+  }, [clearHostHighlight]);
+
+  useEffect(() => () => clearHostHighlight(), [clearHostHighlight]);
+
+  const openAtPoint = useCallback(
+    (x: number, y: number, target: T, host?: HTMLElement | null) => {
+      markHostHighlight(host ?? resolveHostNearPoint(x, y));
+      setState({ target, position: { x, y } });
+    },
+    [markHostHighlight, resolveHostNearPoint],
+  );
+
+  const openAt = useCallback(
+    (event: ReactMouseEvent, target: T) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openAtPoint(event.clientX, event.clientY, target, event.currentTarget as HTMLElement);
+    },
+    [openAtPoint],
+  );
 
   const clearPress = useCallback(() => {
     const press = pressRef.current;
@@ -375,13 +419,19 @@ export function useContextMenu<T>() {
 
   const bindRow = useCallback(
     (target: T): RowMenuBind => ({
-      onContextMenu: (event) => openAt(event, target),
+      "data-context-menu-host": true,
+      onContextMenu: (event) => {
+        const hit = event.target;
+        if (hit instanceof Element && hit.closest(ENTITY_CHIP_SELECTOR)) return;
+        openAt(event, target);
+      },
       onPointerDown: (event) => {
         if (event.pointerType === "mouse") return;
         event.stopPropagation();
         clearPress();
         const x = event.clientX;
         const y = event.clientY;
+        const host = event.currentTarget as HTMLElement;
         try {
           event.currentTarget.setPointerCapture(event.pointerId);
         } catch {
@@ -392,13 +442,14 @@ export function useContextMenu<T>() {
           x,
           y,
           target,
+          host,
           opened: false,
           timer: setTimeout(() => {
             const press = pressRef.current;
             if (!press || press.pointerId !== event.pointerId) return;
             press.opened = true;
             suppressClickRef.current = true;
-            openAtPoint(press.x, press.y, press.target);
+            openAtPoint(press.x, press.y, press.target, press.host);
           }, ROW_LONG_PRESS_MS),
         };
       },
@@ -433,7 +484,7 @@ export function useContextMenu<T>() {
         event.preventDefault();
         event.stopPropagation();
         const rect = event.currentTarget.getBoundingClientRect();
-        openAtPoint(rect.left + 12, rect.bottom - 4, target);
+        openAtPoint(rect.left + 12, rect.bottom - 4, target, event.currentTarget as HTMLElement);
       },
     }),
     [clearPress, openAt, openAtPoint],

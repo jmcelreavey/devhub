@@ -4,7 +4,7 @@ import type { AriaRole, ReactNode } from "react";
 import Link from "next/link";
 import { GitPullRequest } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
-import type { GithubPrsApiPayload, GithubPrRow, RecentlyReviewedPr } from "@/lib/github/prs";
+import type { GithubPrsApiPayload, GithubPrRow } from "@/lib/github/prs";
 import { HUB_STRIP_ICON_PX, hubStripSetupLinkClassName, hubStripSetupLinkStyle } from "@/lib/hub-strip";
 import { HubSignalStrip, HubStripHeading, hubStripInlineCodeClassName } from "@/components/shell/HubSignalStrip";
 import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
@@ -14,7 +14,6 @@ import { ConditionalList } from "@/components/ui/EmptyStateRow";
 import { useGridSize } from "@/lib/hooks/use-grid-size";
 
 const EMPTY_PR_ROWS: GithubPrRow[] = [];
-const EMPTY_RECENTLY_REVIEWED: RecentlyReviewedPr[] = [];
 
 function PrRowLink({ row, kind }: { row: GithubPrRow; kind: PrRowKind }) {
   return (
@@ -59,32 +58,15 @@ export function GithubPrsCollapsedSummary() {
   }
   const authored = data.authored ?? [];
   const reviews = data.reviews ?? [];
-  const recentlyReviewed = data.recentlyReviewed ?? [];
-  if (authored.length === 0 && reviews.length === 0 && recentlyReviewed.length === 0) {
+  if (authored.length === 0 && reviews.length === 0) {
     return <span>No open PRs</span>;
   }
   const total = authored.length + reviews.length;
-  if (total > 0 && recentlyReviewed.length > 0) {
-    return (
-      <span>
-        {total} open · {recentlyReviewed.length} reviewed
-      </span>
-    );
-  }
-  if (recentlyReviewed.length > 0) {
-    return <span>{recentlyReviewed.length} recently reviewed</span>;
-  }
-  if (authored.length > 0 && reviews.length > 0) {
-    return (
-      <span>
-        {total} open ({authored.length} mine · {reviews.length} review)
-      </span>
-    );
-  }
-  if (authored.length > 0) {
-    return <span>{authored.length} open (mine)</span>;
-  }
-  return <span>{reviews.length} review requested</span>;
+  return (
+    <span>
+      {total} open ({authored.length} mine · {reviews.length} review)
+    </span>
+  );
 }
 
 interface GithubPrsPanelProps {
@@ -183,7 +165,6 @@ export function GithubPrsPanel({
   const gridSize = useGridSize("github");
   const authored = data?.authored ?? EMPTY_PR_ROWS;
   const reviews = data?.reviews ?? EMPTY_PR_ROWS;
-  const recentlyReviewed = data?.recentlyReviewed ?? EMPTY_RECENTLY_REVIEWED;
 
   if (isLoading && !data) {
     const skeleton = <div className="skeleton" style={{ height: 14, width: "40%" }} />;
@@ -251,7 +232,7 @@ export function GithubPrsPanel({
     );
   }
 
-  if (authored.length === 0 && reviews.length === 0 && recentlyReviewed.length === 0) {
+  if (authored.length === 0 && reviews.length === 0) {
     const inner = (
       <p className="mb-0 leading-snug">
         No open PRs from GitHub search. Authored PRs and review requests from archived repositories are hidden.
@@ -278,7 +259,6 @@ export function GithubPrsPanel({
       <div className="flex gap-3 text-[12px] text-text-subtle">
         {authored.length > 0 && <span><span style={{ color: "var(--text)", fontWeight: 600 }}>{authored.length}</span> mine</span>}
         {reviews.length > 0 && <span><span style={{ color: "var(--text)", fontWeight: 600 }}>{reviews.length}</span> review</span>}
-        {recentlyReviewed.length > 0 && <span><span className="text-text-muted">{recentlyReviewed.length}</span> reviewed</span>}
       </div>
       {authored[0] && (
         <a href={authored[0].url} target="_blank" rel="noopener noreferrer" className="block truncate text-[12px] no-underline hover:underline text-text">
@@ -320,10 +300,9 @@ export function GithubPrsPanel({
     : gridSize === "2x1"
     ? compact2x1
     : (
-    <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,0.85fr)]">
+    <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
       <SubList title="Mine (open)" rows={authored} kind="authored" />
       <SubList title="Review requested" rows={reviews} kind="reviews" />
-      <SubList title="Recently reviewed" rows={recentlyReviewed} kind="reviewed" />
     </div>
   );
 

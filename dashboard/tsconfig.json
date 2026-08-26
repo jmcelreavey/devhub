@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -20,8 +24,12 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"],
-      "@shared/*": ["../shared/*"]
+      "@/*": [
+        "./*"
+      ],
+      "@shared/*": [
+        "../shared/*"
+      ]
     }
   },
   "include": [
@@ -42,8 +50,13 @@
     "../shared/markdown-convert/index.ts",
     "../shared/notes-assets/markdown.ts",
     "../shared/notes-assets/index.ts",
-    "../shared/notes-assets/server.ts"
+    "../shared/notes-assets/server.ts",
+    "./.next/types/**/*.ts",
+    "./.next/types/**/*.ts",
+    "./.next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "**/node_modules"]
+  "exclude": [
+    "node_modules",
+    "**/node_modules"
+  ]
 }
-

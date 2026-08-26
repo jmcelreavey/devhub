@@ -38,11 +38,12 @@ const EMPTY_TASKS: Task[] = [];
 export interface TaskListProps {
   inputId?: string;
   searchQuery?: string;
+  denseLinks?: boolean;
   /** Hide specific open tasks (e.g. the one already shown in the NOW card). */
   excludeIds?: readonly string[];
 }
 
-export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }: TaskListProps) {
+export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, denseLinks = false }: TaskListProps) {
   const { data, error, isLoading, mutate } = useLive<{ tasks?: Task[] }>("/api/tasks");
   const gridSize = useGridSize("main");
   const tasks = data?.tasks ?? EMPTY_TASKS;
@@ -662,6 +663,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
         return (
           <div className={exiting ? "task-exit" : undefined}>
             <TaskItem
+              denseLinks={denseLinks}
               task={exiting ? { ...task, done: true } : task}
               date={today}
               jiraStatus={task.jiraKey ? jiraStatuses[task.jiraKey] : undefined}
@@ -890,6 +892,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
               {completed.map((task) => (
                 <TaskItem
                   key={task.id}
+                  denseLinks={denseLinks}
                   task={task}
                   date={today}
                   jiraStatus={task.jiraKey ? jiraStatuses[task.jiraKey] : undefined}
@@ -923,6 +926,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
           {showAbandoned && abandoned.map((task) => (
             <TaskItem
               key={task.id}
+              denseLinks={denseLinks}
               task={task}
               date={today}
               jiraStatus={undefined}

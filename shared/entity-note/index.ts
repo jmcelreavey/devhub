@@ -130,10 +130,12 @@ export function parseEntityLinksFromMarkdown(markdown: string): EntityRef[] {
   const refs: EntityRef[] = [];
   const seen = new Set<string>();
   const push = (ref: EntityRef) => {
-    const key = entityKey(ref);
+    const canonical = canonicalizeEntityRef(ref);
+    if (!canonical) return;
+    const key = entityKey(canonical);
     if (seen.has(key)) return;
     seen.add(key);
-    refs.push(ref);
+    refs.push(canonical);
   };
 
   const lines = markdown.split("\n");
@@ -217,6 +219,28 @@ function refFromParsedLink(kind: EntityKind, label: string, href?: string): Enti
       href: href || undefined,
     };
   }
+  if (kind === "jira") {
+    const key = parseJiraIssueKey(href || "") || parseJiraIssueKey(label) || parseJiraIssueKey(raw);
+    const id = key || raw;
+    return {
+      kind,
+      id,
+      label: label || id,
+      href: href || undefined,
+    };
+  }
+
+  if (kind === "task") {
+    // Prefer a real task UUID when the markdown link is just "Open in Work".
+    // Bare /work?tab=tasks hrefs are dropped by canonicalizeEntityRef.
+    return {
+      kind,
+      id: raw,
+      label,
+      href: href || undefined,
+    };
+  }
+
   return {
     kind,
     id: raw,
@@ -278,7 +302,8 @@ export function defaultHrefForRef(ref: EntityRef): string | undefined {
     case "calendar":
       return "/calendar";
     case "repo":
-      return "/repos";
+      if (ref.id.includes("/")) return `https://github.com/${ref.id}`;
+      return `/repos/${encodeURIComponent(ref.id)}`;
     case "tag":
       return `/work?tag=${encodeURIComponent(ref.id)}`;
     default:
@@ -286,17 +311,141 @@ export function defaultHrefForRef(ref: EntityRef): string | undefined {
   }
 }
 
+/** `PROJ-123` — exact Jira issue key. */
+const JIRA_KEY_EXACT_RE = /^[A-Z][A-Z0-9]*-\d+$/;
+/** Key embedded in a browse URL or free text. */
+const JIRA_KEY_EMBEDDED_RE = /\b([A-Z][A-Z0-9]*-\d+)\b/;
+
+/**
+ * Accept a bare key (`PTF-1234`) or a browse URL
+ * (`https://….atlassian.net/browse/PTF-1234`).
+ */
+export function parseJiraIssueKey(rawInput: string): string | null {
+  const raw = rawInput.trim();
+  if (!raw) return null;
+  const exact = raw.toUpperCase();
+  if (JIRA_KEY_EXACT_RE.test(exact)) return exact;
+  const fromBrowse = raw.match(/\/browse\/([A-Za-z][A-Za-z0-9]*-\d+)/);
+  if (fromBrowse?.[1]) return fromBrowse[1].toUpperCase();
+  const embedded = exact.match(JIRA_KEY_EMBEDDED_RE);
+  return embedded?.[1] ?? null;
+}
+
+function normalizeChipLabel(s: string): string {
+  return s.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/** True when a note id looks like a vault path rather than a free-text title. */
+function isPathLikeNoteId(id: string): boolean {
+  return id.includes("/") && !/\s/.test(id);
+}
+
+/**
+ * Normalize EntityRef ids so the same logical hop collapses under `entityKey`.
+ * Drops unusable task hops (e.g. id=`/work?tab=tasks` from BlockNote round-trips).
+ */
+export function canonicalizeEntityRef(ref: EntityRef): EntityRef | null {
+  if (ref.kind === "jira") {
+    const key =
+      parseJiraIssueKey(ref.id) ||
+      (ref.href ? parseJiraIssueKey(ref.href) : null) ||
+      parseJiraIssueKey(ref.label);
+    if (!key) return ref;
+    const href =
+      ref.href && /\/browse\//i.test(ref.href) ? ref.href.split(/[?#]/)[0] : ref.href;
+    return { ...ref, id: key, label: ref.label || key, href };
+  }
+
+  if (ref.kind === "note") {
+    let id = ref.id.replace(/\.json$/i, "");
+    if (ref.href) {
+      let fromHref = ref.href.trim();
+      if (fromHref.startsWith("/notes/")) fromHref = fromHref.slice("/notes/".length);
+      fromHref = fromHref.replace(/^\/+/, "").replace(/\.json$/i, "");
+      try {
+        fromHref = fromHref.split("/").map((s) => decodeURIComponent(s)).join("/");
+      } catch {
+        /* keep */
+      }
+      if (isPathLikeNoteId(fromHref) && !isPathLikeNoteId(id)) {
+        id = fromHref;
+      }
+    }
+    return { ...ref, id };
+  }
+
+  if (ref.kind === "task") {
+    // Round-tripped "Open in Work" lines often become id=/work?tab=tasks.
+    if (ref.id.startsWith("/") || ref.id.includes("?")) return null;
+    return ref;
+  }
+
+  return ref;
+}
+
+/**
+ * Soft key for notes that used a human title as id (no vault path) so they
+ * collapse with a path-id note that shares the same label.
+ */
+function noteLabelSoftKey(ref: EntityRef): string | null {
+  if (ref.kind !== "note") return null;
+  if (isPathLikeNoteId(ref.id)) return null;
+  const label = normalizeChipLabel(ref.label || ref.id);
+  return label ? `note-label:${label}` : null;
+}
+
 export function mergeEntityRefs(...groups: Array<EntityRef[] | undefined>): EntityRef[] {
   const out: EntityRef[] = [];
   const seen = new Set<string>();
+  const softIndex = new Map<string, number>(); // softKey -> out index
+
+  const push = (raw: EntityRef) => {
+    const ref = canonicalizeEntityRef(raw);
+    if (!ref) return;
+    const key = entityKey(ref);
+    if (seen.has(key)) return;
+
+    const soft = noteLabelSoftKey(ref);
+    if (soft && softIndex.has(soft)) {
+      // Prefer a path-like note over a title-as-id duplicate.
+      if (!isPathLikeNoteId(ref.id)) return;
+      const idx = softIndex.get(soft)!;
+      const prev = out[idx]!;
+      seen.delete(entityKey(prev));
+      out[idx] = ref;
+      seen.add(key);
+      softIndex.set(soft, idx);
+      return;
+    }
+
+    // Path-like note replaces any prior soft-key placeholder with same label.
+    if (ref.kind === "note" && isPathLikeNoteId(ref.id)) {
+      const labelKey = `note-label:${normalizeChipLabel(ref.label || "")}`;
+      if (labelKey !== "note-label:" && softIndex.has(labelKey)) {
+        const idx = softIndex.get(labelKey)!;
+        const prev = out[idx]!;
+        if (!isPathLikeNoteId(prev.id)) {
+          seen.delete(entityKey(prev));
+          out[idx] = ref;
+          seen.add(key);
+          softIndex.set(labelKey, idx);
+          return;
+        }
+      }
+    }
+
+    seen.add(key);
+    if (soft) softIndex.set(soft, out.length);
+    if (ref.kind === "note" && isPathLikeNoteId(ref.id)) {
+      const labelKey = `note-label:${normalizeChipLabel(ref.label || "")}`;
+      if (labelKey !== "note-label:") softIndex.set(labelKey, out.length);
+    }
+    out.push(ref);
+  };
+
   for (const group of groups) {
     if (!group) continue;
-    for (const ref of group) {
-      const key = entityKey(ref);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(ref);
-    }
+    for (const ref of group) push(ref);
   }
   return out;
 }

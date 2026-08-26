@@ -73,6 +73,7 @@ import {
   parseEntityLinksFromMarkdown,
   upsertEntityLinksInMarkdown,
 } from "@/lib/entity-note";
+import { useRouteHistoryLabel } from "@/lib/hooks/use-session-history";
 
 export function VaultEditorPage({
   vault: vaultId,
@@ -478,6 +479,7 @@ export function VaultEditorPage({
   // Only pass content-derived titles; truncation of machine filenames is NotePageTitle's job.
   const headerDisplayTitle = fromContent ? displayTitle : undefined;
   const headerLabel = displayTitle;
+  useRouteHistoryLabel(headerLabel);
 
   const handleRenamed = useCallback(
     (newSlug: string) => {

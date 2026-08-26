@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { X } from "lucide-react";
 
 interface ShortcutEntry {
@@ -12,10 +12,11 @@ const SHORTCUT_SECTIONS: { title: string; items: ShortcutEntry[] }[] = [
   {
     title: "General",
     items: [
-      { keys: ["⌘", "K"], action: "Open command palette" },
-      { keys: ["⌘", "⇧", "O"], action: "Open notes side panel" },
-      { keys: ["⌘", "⇧", "T"], action: "Open tasks side panel" },
-      { keys: ["⌘", "⇧", "D"], action: "Open diagrams side panel" },
+      { keys: ["⌘", "P"], action: "Open command palette" },
+      { keys: ["⇧", "↵"], action: "Open palette result in a new tab" },
+      { keys: ["⌘", "N"], action: "Open notes side panel" },
+      { keys: ["⌘", "T"], action: "Open tasks side panel" },
+      { keys: ["⌘", "D"], action: "Open diagrams side panel" },
       { keys: ["⌘", "⇧", "C"], action: "Quick capture (task, note, or learning)" },
       { keys: ["?"], action: "Show keyboard shortcuts" },
       { keys: ["Esc"], action: "Close panel / modal" },
@@ -39,6 +40,14 @@ const SHORTCUT_SECTIONS: { title: string; items: ShortcutEntry[] }[] = [
       { keys: ["g", "t"], action: "Tasks" },
       { keys: ["g", "p"], action: "PRs" },
       { keys: ["g", "d"], action: "Datadog" },
+    ],
+  },
+  {
+    title: "Workspace tabs",
+    items: [
+      { keys: ["⌘", "1-9"], action: "Jump to workspace tab" },
+      { keys: ["⌃", "Tab"], action: "Next workspace tab" },
+      { keys: ["⌃", "⇧", "Tab"], action: "Previous workspace tab" },
     ],
   },
   {
@@ -169,5 +178,7 @@ export function ShortcutsModal({ open, onClose }: { open: boolean; onClose: () =
 
 export function useShortcutsModal() {
   const [open, setOpen] = useState(false);
-  return { open, show: () => setOpen(true), hide: () => setOpen(false) };
+  const show = useCallback(() => setOpen(true), []);
+  const hide = useCallback(() => setOpen(false), []);
+  return { open, show, hide };
 }

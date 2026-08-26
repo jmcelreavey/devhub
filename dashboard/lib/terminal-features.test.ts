@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatTerminalInjectPayload,
+  hasUnbalancedShellQuotes,
   isDestructiveTerminalCommand,
   isTerminalBusy,
   wrapQuietAgentRun,
@@ -55,6 +56,44 @@ describe("terminal-inject", () => {
     );
   });
 
+  it("trusts the OSC 133 lifecycle over the output heuristic", () => {
+    // Prompt clock repaints keep output fresh, but no command is running.
+    expect(
+      isTerminalBusy({ lastOutputAt: 9_900, lastInputAt: null, now: 10_000, commandRunning: false }),
+    ).toBe(false);
+    // Silent long-running command: quiet output, but C without D.
+    expect(
+      isTerminalBusy({ lastOutputAt: 1_000, lastInputAt: null, now: 10_000, commandRunning: true }),
+    ).toBe(true);
+    // Recent typing means injecting now would splice into the user's line.
+    expect(
+      isTerminalBusy({ lastOutputAt: null, lastInputAt: 9_800, now: 10_000, commandRunning: false }),
+    ).toBe(true);
+  });
+
+  it("treats a visible prompt after a short quiet gap as idle (clock repaints)", () => {
+    const clockTick = { lastOutputAt: 9_500, lastInputAt: null, now: 10_000, idleMs: 1_200 };
+    expect(isTerminalBusy({ ...clockTick, promptVisible: true })).toBe(false);
+    expect(isTerminalBusy({ ...clockTick, promptVisible: () => true })).toBe(false);
+    // Mid-stream output (gap under promptIdleMs) stays busy even when the
+    // last line happens to look like a prompt.
+    expect(
+      isTerminalBusy({ lastOutputAt: 9_900, lastInputAt: null, now: 10_000, promptVisible: true }),
+    ).toBe(true);
+    // No prompt on screen — recent output still means busy.
+    expect(isTerminalBusy({ ...clockTick, promptVisible: false })).toBe(true);
+  });
+
+  it("flags commands that would strand the shell at quote>", () => {
+    expect(hasUnbalancedShellQuotes("echo 'hi")).toBe(true);
+    expect(hasUnbalancedShellQuotes('echo "hi')).toBe(true);
+    expect(hasUnbalancedShellQuotes("echo hi \\")).toBe(true);
+    expect(hasUnbalancedShellQuotes("ps -o pgid= -p $$ | tr -d ' '")).toBe(false);
+    expect(hasUnbalancedShellQuotes('echo "it\'s fine"')).toBe(false);
+    expect(hasUnbalancedShellQuotes("echo 'double \" inside'")).toBe(false);
+    expect(hasUnbalancedShellQuotes('printf "%s\\n" done')).toBe(false);
+  });
+
   it("wraps one-shots with banner + exit code", () => {
     const wrapped = wrapStructuredTerminalRun("echo hi", { title: "DevHub run" });
     expect(wrapped).toContain("DevHub run");
@@ -78,6 +117,19 @@ describe("terminal-inject", () => {
     expect(multi.startsWith("\x1b[200~")).toBe(true);
     expect(multi.endsWith("\x1b[201~\r")).toBe(true);
     expect(multi).toContain("echo one\necho two");
+  });
+
+  it("writes quoting to the PTY untouched, one line, newline-terminated", () => {
+    const cmd = "ps -o pid,pgid,command -g $(ps -o pgid= -p $$ | tr -d ' '); jobs -l";
+    expect(formatTerminalInjectPayload(cmd)).toBe(`${cmd}\r`);
+    const mixed = `echo 'single' "double" $(pwd)`;
+    expect(formatTerminalInjectPayload(mixed)).toBe(`${mixed}\r`);
+    // Embedded newlines go through bracketed paste so zsh executes atomically.
+    const multi = formatTerminalInjectPayload(`echo 'one'\necho "two" $(pwd)`);
+    expect(multi).toBe(`\x1b[200~echo 'one'\necho "two" $(pwd)\x1b[201~\r`);
+    // Trailing newlines never leave a dangling continuation line.
+    expect(formatTerminalInjectPayload("echo hi\n\n")).toBe("echo hi\r");
+    expect(formatTerminalInjectPayload("echo hi\r\n")).toBe("echo hi\r");
   });
 });
 

@@ -6,32 +6,32 @@ import { useRouter } from "next/navigation";
 import { Check, Dumbbell, Flame } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { RepStreakStrip } from "@/components/reps/RepStreakStrip";
-import type { GithubPrsApiPayload } from "@/lib/github/prs";
-import type { RepsApiPayload } from "@/lib/reps";
+import { REP_KIND_LABEL, repTeaser, type RepsApiPayload } from "@/lib/reps-shared";
 
 export function DailyRepCard() {
   const router = useRouter();
-  const { data: prData } = useLive<GithubPrsApiPayload>("/api/github/prs");
   const { data, error, mutate } = useLive<RepsApiPayload>("/api/reps");
   const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
 
   const rep = data?.rep ?? null;
   const stats = data?.stats;
-  const topReview = prData?.reviews?.[0];
 
   async function start() {
-    if (!topReview) return;
     setStarting(true);
+    setStartError(null);
     try {
       const res = await fetch("/api/reps", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "start",
-          pr: { repo: topReview.repo, number: topReview.number, title: topReview.title, url: topReview.url },
-        }),
+        body: JSON.stringify({ action: "start" }),
       });
-      if (res.ok) router.push("/review/rep");
+      if (res.ok) {
+        router.push("/review/rep");
+      } else {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setStartError(body.error ?? "Couldn't start today's rep.");
+      }
     } finally {
       setStarting(false);
     }
@@ -42,38 +42,24 @@ export function DailyRepCard() {
   if (error) {
     stateLine = "Couldn't load today's rep.";
   } else if (data && !rep) {
-    if (!prData) {
-      stateLine = "Loading review queue…";
-    } else if (!prData.configured) {
-      stateLine = "GitHub not configured.";
-    } else if (!topReview) {
-      stateLine = `No PRs awaiting review — rest day.`;
-    } else {
-      stateLine = `${prData.reviews.length} PR${prData.reviews.length === 1 ? "" : "s"} awaiting review. Today's rep: review one AI-free first.`;
-      action = (
-        <button type="button" className="btn btn-primary" disabled={starting} onClick={() => void start()}>
-          <Dumbbell size={12} aria-hidden /> Start today&apos;s rep
-        </button>
-      );
-    }
-  } else if (rep?.pr) {
-    const pr = rep.pr;
+    stateLine =
+      startError ??
+      "Cold reads, gap sketches, and recall — real material from your repos, one a day.";
+    action = (
+      <button type="button" className="btn btn-primary" disabled={starting} onClick={() => void start()}>
+        <Dumbbell size={12} aria-hidden /> Start today&apos;s rep
+      </button>
+    );
+  } else if (rep) {
     if (!rep.completedAt) {
-      stateLine = `In progress: ${pr.title}`;
+      stateLine = `In progress — ${repTeaser(rep)}`;
       action = (
         <Link href="/review/rep" className="btn btn-primary">
           Continue rep
         </Link>
       );
-    } else if (!rep.grade) {
-      stateLine = `Findings saved for ${pr.title}. Compare with the agent and grade it.`;
-      action = (
-        <Link href="/review/rep" className="btn btn-primary">
-          Compare & grade
-        </Link>
-      );
     } else {
-      stateLine = `Done today — caught ${rep.grade.caught}, missed ${rep.grade.missed}.`;
+      stateLine = `Done today — ${REP_KIND_LABEL[rep.kind].toLowerCase()} complete.`;
       action = (
         <span className="text-xs text-text-subtle inline-flex items-center gap-1">
           <Check size={12} aria-hidden /> Rep complete

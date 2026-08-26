@@ -63,8 +63,6 @@ const CHROME_EXEMPT: Record<string, "redirect" | "shell"> = {
   activity: "redirect",
   tasks: "redirect",
   chamber: "shell",
-  claude: "shell",
-  cursor: "shell",
   opencode: "shell",
 };
 

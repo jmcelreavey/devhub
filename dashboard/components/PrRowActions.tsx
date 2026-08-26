@@ -2,6 +2,7 @@
 
 import {
   CircleCheck,
+  CircleSlash,
   Dumbbell,
   ExternalLink,
   FileText,
@@ -10,7 +11,8 @@ import {
   MessageSquare,
   ScanSearch,
 } from "lucide-react";
-import type { GithubPrRow } from "@/lib/github/prs";
+import { mutate as globalMutate } from "swr";
+import type { GithubPrRow, GithubPrsApiPayload } from "@/lib/github/prs";
 import { buildSlackMessage, copyTextAndToast } from "@/lib/pr-slack";
 import { launchAgentJob } from "@/lib/agent-job";
 import { agentReviewCommand, agentReviewPrompt } from "@/lib/terminal-launch";
@@ -22,6 +24,7 @@ import { openInBrowser } from "@/lib/desktop/bridge";
 import type { ContextMenuGroup, ContextMenuItem } from "@/components/shell/ContextMenu";
 import type { useToast } from "@/lib/hooks/use-toast";
 import { jiraBrowseUrl, jiraKeyFromText } from "@/lib/utils";
+import { withTagsGroup } from "@/lib/hooks/use-tag-menu";
 
 export type PrRowKind = "authored" | "reviews" | "reviewed";
 
@@ -57,6 +60,7 @@ export function buildPrRowMenuGroups({
   openNote,
   repLocked = false,
   openRep,
+  tagsGroup = null,
 }: {
   row: GithubPrRow;
   kind: PrRowKind;
@@ -65,6 +69,8 @@ export function buildPrRowMenuGroups({
   /** Today's unfinished daily rep is this PR — agent review stays locked until findings are saved. */
   repLocked?: boolean;
   openRep?: () => void;
+  /** #tags on this PR (title + linked review note) — see useTagMenuGroup. */
+  tagsGroup?: ContextMenuGroup | null;
 }): ContextMenuGroup[] {
   const watchPath = prReviewNotePath(row);
   const notePath = prNotePath({ repo: row.repo, number: row.number });
@@ -122,66 +128,110 @@ export function buildPrRowMenuGroups({
     icon: <Dumbbell size={12} />,
     onSelect: () => openRep?.(),
   };
+  const skipPr = {
+    id: "skip-pr",
+    label: "Skip until updated",
+    description: "Hides this PR until someone pushes new commits",
+    icon: <CircleSlash size={12} />,
+    onSelect: async () => {
+      const key = "/api/github/prs";
+      // Optimistic: the refetch takes seconds (two gh searches), so drop the row
+      // now and reconcile with the server in the background.
+      await globalMutate<GithubPrsApiPayload>(
+        key,
+        (current) => (current ? { ...current, reviews: current.reviews.filter((r) => r.url !== row.url) } : current),
+        { revalidate: false },
+      );
+      try {
+        const res = await fetch("/api/github/prs/skip", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            url: row.url,
+            updatedAt: row.updatedAt,
+            repo: row.repo,
+            number: row.number,
+            title: row.title,
+          }),
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        toast.info("Skipped — it comes back if the PR is updated.");
+      } catch {
+        toast.error("Couldn't skip PR.");
+      }
+      void globalMutate(key);
+    },
+  };
 
   if (kind === "authored") {
-    return [
-      {
-        id: "authored",
-        items: [
-          openGithub,
-          ...copyUrlItems(row, toast),
-          openCursor,
-          agentReview,
-          {
-            id: "slack-request",
-            label: "Copy Slack request",
-            icon: <MessageSquare size={12} />,
-            onSelect: () => void copyTextAndToast(buildSlackMessage(row, "awaiting"), "Slack message", toast),
-          },
-          noteItem,
-        ],
-      },
-    ];
+    return withTagsGroup(
+      [
+        {
+          id: "authored",
+          items: [
+            openGithub,
+            ...copyUrlItems(row, toast),
+            openCursor,
+            agentReview,
+            {
+              id: "slack-request",
+              label: "Copy Slack request",
+              icon: <MessageSquare size={12} />,
+              onSelect: () => void copyTextAndToast(buildSlackMessage(row, "awaiting"), "Slack message", toast),
+            },
+            noteItem,
+          ],
+        },
+      ],
+      tagsGroup,
+    );
   }
 
   if (kind === "reviews") {
-    return [
+    return withTagsGroup(
+      [
+        {
+          id: "reviews",
+          items: [
+            repLocked ? repFirst : agentReview,
+            openCursor,
+            openGithub,
+            ...copyUrlItems(row, toast),
+            noteItem,
+            skipPr,
+          ],
+        },
+      ],
+      tagsGroup,
+    );
+  }
+
+  return withTagsGroup(
+    [
       {
-        id: "reviews",
+        id: "reviewed",
         items: [
-          repLocked ? repFirst : agentReview,
+          {
+            id: "copy-approved",
+            label: "Copy approved",
+            icon: <CircleCheck size={12} />,
+            onSelect: () =>
+              void copyTextAndToast(buildSlackMessage(row, "reviewed-approved"), "Slack message", toast),
+          },
+          {
+            id: "copy-reviewed",
+            label: "Copy reviewed",
+            icon: <MessageSquare size={12} />,
+            onSelect: () => void copyTextAndToast(buildSlackMessage(row, "reviewed"), "Slack message", toast),
+          },
           openCursor,
           openGithub,
           ...copyUrlItems(row, toast),
-          noteItem,
         ],
       },
-    ];
-  }
-
-  return [
-    {
-      id: "reviewed",
-      items: [
-        {
-          id: "copy-approved",
-          label: "Copy approved",
-          icon: <CircleCheck size={12} />,
-          onSelect: () =>
-            void copyTextAndToast(buildSlackMessage(row, "reviewed-approved"), "Slack message", toast),
-        },
-        {
-          id: "copy-reviewed",
-          label: "Copy reviewed",
-          icon: <MessageSquare size={12} />,
-          onSelect: () => void copyTextAndToast(buildSlackMessage(row, "reviewed"), "Slack message", toast),
-        },
-        openCursor,
-        openGithub,
-        ...copyUrlItems(row, toast),
-      ],
-    },
-  ];
+    ],
+    tagsGroup,
+  );
 }
 
 export async function openPrRowNote(

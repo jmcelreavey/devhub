@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { GeneratedRep } from "./reps";
 
 let tmpRepo: string;
 let originalRepoRoot: string | undefined;
@@ -12,12 +13,27 @@ async function freshRepModule() {
   return (await import(url)) as typeof import("./reps");
 }
 
-const PR = {
-  repo: "example-org/example-service",
-  number: 123,
-  title: "Example change",
-  url: "https://github.com/example-org/example-service/pull/123",
-};
+function coldRead(sha = "abc1234def"): GeneratedRep {
+  return {
+    kind: "cold-read",
+    material: {
+      kind: "cold-read",
+      repo: "example-org/example-service",
+      sha,
+      committedAt: "2026-08-20T10:00:00Z",
+      filesChanged: 3,
+      additions: 40,
+      deletions: 12,
+    },
+    reveal: {
+      kind: "cold-read",
+      subject: "fix: close the connection pool on shutdown",
+      body: "Leaked sockets under SIGTERM.",
+      author: "Colleague",
+      url: `https://github.com/example-org/example-service/commit/${sha}`,
+    },
+  };
+}
 
 beforeEach(() => {
   tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-reps-"));
@@ -35,78 +51,109 @@ afterEach(() => {
 });
 
 describe("reps", () => {
-  it("start is idempotent — the day's pick sticks", async () => {
+  it("start is idempotent — the day's rep sticks", async () => {
     const m = await freshRepModule();
-    await m.startRep("2026-08-21", PR);
-    const second = await m.startRep("2026-08-21", { ...PR, number: 456 });
-    expect(second.pr?.number).toBe(123);
+    await m.startRep("2026-08-21", coldRead("first00"));
+    const second = await m.startRep("2026-08-21", coldRead("second0"));
+    expect(second.material.kind).toBe("cold-read");
+    expect((second.material as { sha: string }).sha).toBe("first00");
+    expect(second.attempt).toBe(0);
   });
 
-  it("save requires a started rep; grade requires saved findings", async () => {
+  it("save requires a started rep and stamps completion", async () => {
     const m = await freshRepModule();
-    await expect(m.saveRepFindings("2026-08-21", "- x")).rejects.toThrow();
-    await m.startRep("2026-08-21", PR);
-    await expect(m.gradeRep("2026-08-21", { caught: 1, missed: 1 })).rejects.toThrow();
-    const rep = await m.saveRepFindings("2026-08-21", "- null check missing");
+    await expect(m.saveRepResponse("2026-08-21", "- x")).rejects.toThrow();
+    await m.startRep("2026-08-21", coldRead());
+    const rep = await m.saveRepResponse("2026-08-21", "- refactors pool shutdown");
     expect(rep.completedAt).toBeTruthy();
-    const graded = await m.gradeRep("2026-08-21", { caught: 2, missed: 1 });
-    expect(graded.grade).toEqual({ caught: 2, missed: 1 });
+    expect(rep.response).toBe("- refactors pool shutdown");
   });
 
-  it("streak counts consecutive completed days, survives an ungraded today, ignores gaps", async () => {
+  it("swap replaces material and bumps attempt, refuses after completion", async () => {
     const m = await freshRepModule();
-    // Two completed days ending yesterday.
+    await expect(m.swapRep("2026-08-21", coldRead())).rejects.toThrow(); // nothing started
+    await m.startRep("2026-08-21", coldRead("first00"));
+    const swapped = await m.swapRep("2026-08-21", coldRead("second0"));
+    expect((swapped.material as { sha: string }).sha).toBe("second0");
+    expect(swapped.attempt).toBe(1);
+    expect(swapped.response).toBeUndefined();
+    await m.saveRepResponse("2026-08-21", "- done");
+    await expect(m.swapRep("2026-08-21", coldRead("third00"))).rejects.toThrow();
+  });
+
+  it("toPublicRep withholds the reveal until completion", async () => {
+    const m = await freshRepModule();
+    const started = await m.startRep("2026-08-21", coldRead());
+    expect(m.toPublicRep(started)?.reveal).toBeUndefined();
+    const completed = await m.saveRepResponse("2026-08-21", "- answer");
+    expect(m.toPublicRep(completed)?.reveal?.kind).toBe("cold-read");
+    expect(m.toPublicRep(null)).toBeNull();
+  });
+
+  it("streak counts consecutive completed days and ignores gaps", async () => {
+    const m = await freshRepModule();
     for (const date of ["2026-08-19", "2026-08-20"]) {
-      await m.startRep(date, PR);
-      await m.saveRepFindings(date, "- finding");
+      await m.startRep(date, coldRead());
+      await m.saveRepResponse(date, "- finding");
     }
-    // Gap on the 18th must not matter; grade one day for totals.
-    await m.startRep("2026-08-17", PR);
-    await m.saveRepFindings("2026-08-17", "- old");
-    await m.gradeRep("2026-08-17", { caught: 3, missed: 2 });
+    // Gap on the 18th must not matter.
+    await m.startRep("2026-08-17", coldRead());
+    await m.saveRepResponse("2026-08-17", "- old");
 
     let stats = m.repStats("2026-08-20");
     expect(stats.streak).toBe(2);
     expect(stats.completedCount).toBe(3);
-    expect(stats.gradedCount).toBe(1);
-    expect(stats.caughtTotal).toBe(3);
-    expect(stats.missedTotal).toBe(2);
 
-    // Completing today extends the streak to 3.
-    await m.startRep("2026-08-21", PR);
+    await m.startRep("2026-08-21", coldRead());
     stats = m.repStats("2026-08-21");
     expect(stats.streak).toBe(2); // started but not completed
-    await m.saveRepFindings("2026-08-21", "- today");
+    await m.saveRepResponse("2026-08-21", "- today");
     stats = m.repStats("2026-08-21");
     expect(stats.streak).toBe(3);
   });
 
-  it("repick swaps before completion, refuses after", async () => {
-    const m = await freshRepModule();
-    await expect(m.repickRep("2026-08-21", PR)).rejects.toThrow(); // nothing started
-    await m.startRep("2026-08-21", PR);
-    const swapped = await m.repickRep("2026-08-21", { ...PR, number: 456 });
-    expect(swapped.pr?.number).toBe(456);
-    await m.saveRepFindings("2026-08-21", "- done");
-    await expect(m.repickRep("2026-08-21", { ...PR, number: 789 })).rejects.toThrow();
-  });
-
   it("repStats returns a 35-day recent strip ending today", async () => {
     const m = await freshRepModule();
-    await m.startRep("2026-08-20", PR);
-    await m.saveRepFindings("2026-08-20", "- x");
-    await m.gradeRep("2026-08-20", { caught: 2, missed: 5 });
+    await m.startRep("2026-08-20", coldRead());
+    await m.saveRepResponse("2026-08-20", "- x");
     const stats = m.repStats("2026-08-21");
     expect(stats.recent).toHaveLength(35);
     expect(stats.recent[0].date).toBe("2026-07-18");
     expect(stats.recent[34]).toEqual({ date: "2026-08-21", done: false });
-    const the20th = stats.recent.find((d) => d.date === "2026-08-20");
-    expect(the20th).toEqual({ date: "2026-08-20", done: true, caught: 2, missed: 5 });
+    expect(stats.recent.find((d) => d.date === "2026-08-20")).toEqual({ date: "2026-08-20", done: true });
   });
 
-  it("readRep rejects malformed dates and missing files", async () => {
+  it("readRep rejects malformed dates, missing files, and pre-refactor rep shapes", async () => {
     const m = await freshRepModule();
     expect(m.readRep("not-a-date")).toBeNull();
     expect(m.readRep("2026-08-21")).toBeNull();
+    // A legacy PR-review rep has no kind/material — must be ignored, not crash.
+    fs.mkdirSync(path.join(tmpRepo, "reps"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpRepo, "reps", "2026-08-15.json"),
+      JSON.stringify({ date: "2026-08-15", pr: { repo: "a/b", number: 1 }, completedAt: "x" }),
+    );
+    expect(m.readRep("2026-08-15")).toBeNull();
+  });
+
+  it("repTeaser names the material", async () => {
+    const m = await freshRepModule();
+    expect(m.repTeaser(coldRead("abc1234def"))).toBe("Cold read: example-service @ abc1234");
+    expect(
+      m.repTeaser({
+        material: {
+          kind: "gap-sketch",
+          repo: "example-org/example-service",
+          domainId: "ingest",
+          label: "Ingest pipeline",
+          paths: ["src/ingest"],
+          commits90d: 42,
+          authoredByMe: 0,
+        },
+      }),
+    ).toBe("Gap sketch: Ingest pipeline in example-service");
+    expect(
+      m.repTeaser({ material: { kind: "recall", title: "demo-caching", diagramPath: "diagrams/Acme/demo-caching" } }),
+    ).toBe("Recall: demo-caching");
   });
 });

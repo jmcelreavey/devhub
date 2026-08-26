@@ -17,6 +17,7 @@ export function TerminalPromptBar({
   askError,
   focused,
   inputHint,
+  liveLine,
   onRun,
   onAsk,
   onCancelAsk,
@@ -35,6 +36,11 @@ export function TerminalPromptBar({
   focused?: boolean;
   /** Last output line of a running command that looks blocked on stdin. */
   inputHint?: string;
+  /**
+   * Live command line typed directly in xterm. Mirrored into the editor when
+   * it isn't focused so ↑/↓ history and Run share one buffer.
+   */
+  liveLine?: string;
   onRun: (command: string) => void;
   onAsk: (text: string) => void;
   onCancelAsk?: () => void;
@@ -54,14 +60,29 @@ export function TerminalPromptBar({
   const matches = useMemo(() => fuzzyFilterHistory(history, draft), [history, draft]);
   const where = repoName || cwd?.replace(/^\/Users\/[^/]+/, "~") || "";
 
-  // Auto-grow the editor up to a cap.
+  // Auto-grow up to max-height. Overflow vs the CSS cap (132px), not a
+  // per-line estimate — empty fields with padding used to clip slightly and
+  // show a useless scrollbar.
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "0px";
-    const lines = Math.min(MAX_EDITOR_LINES, draft.split("\n").length);
-    el.style.height = `${Math.min(el.scrollHeight, lines * 20 + 12)}px`;
+    const maxH = MAX_EDITOR_LINES * 20 + 12;
+    const contentH = el.scrollHeight;
+    el.style.height = `${Math.min(contentH, maxH)}px`;
+    el.style.overflowY = contentH > maxH ? "auto" : "hidden";
   }, [draft]);
+
+  // Mirror xterm's in-progress line into the editor when the user isn't
+  // typing here — otherwise commands typed in the grid never reach ↑/Run.
+  useEffect(() => {
+    if (liveLine === undefined) return;
+    const el = inputRef.current;
+    if (el && document.activeElement === el) return;
+    setDraft(liveLine);
+    draftBackupRef.current = null;
+    setHistoryOpen(false);
+  }, [liveLine]);
 
   // Take the keyboard when this becomes the active tab — in blocks mode the
   // grid is hidden, so the bottom editor is the only sensible key target.

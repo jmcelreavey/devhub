@@ -14,9 +14,11 @@ import {
   extractPlainTextFromBlockNote,
   extractPlainTextFromTldraw,
 } from "@shared/notes-search/extract.ts";
+import { getReposDir } from "@/lib/desktop/runtime-paths";
 import { getDocsDir, getNotesDir, getTasksDir } from "@/lib/notes/dir";
 import { entityKey } from "@/lib/entity-note";
 import { chunkText } from "./chunk";
+import { refsFromSourcePath } from "./path-refs";
 import { extractRefKeys } from "./refs";
 import { readEvents } from "./events";
 import type { RecallChunk, RecallSourceKind } from "./types";
@@ -69,9 +71,22 @@ function walkFiles(dir: string, predicate: (name: string) => boolean): string[] 
   return out;
 }
 
+function knownRepoNames(): string[] {
+  const root = getReposDir();
+  try {
+    return fs
+      .readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(root, entry.name, ".git")))
+      .map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+}
+
 /** Notes vault: BlockNote + tldraw JSON. Learnings are tagged separately. */
 function readNotes(): RawDoc[] {
   const root = getNotesDir();
+  const knownRepos = knownRepoNames();
   const docs: RawDoc[] = [];
 
   for (const file of walkFiles(root, (name) => name.endsWith(".json"))) {
@@ -100,6 +115,7 @@ function readNotes(): RawDoc[] {
       text,
       href: `/notes/${relPath}`,
       ts: mtime,
+      refs: refsFromSourcePath(relPath, knownRepos).map(entityKey),
     });
   }
 
@@ -291,6 +307,10 @@ export function sourcesNewestMtime(): number {
     }
   }
 
+  // Repo folder membership changes which flattened PR paths can be resolved.
+  // Directory mtime changes on add/remove/rename, not on ordinary git activity.
+  consider(getReposDir());
+
   // The event spine lives under a dot-directory that `walkFiles` skips by
   // design, so it has to be checked explicitly or appended events never
   // register as a change.
@@ -299,4 +319,3 @@ export function sourcesNewestMtime(): number {
 
   return newest;
 }
-

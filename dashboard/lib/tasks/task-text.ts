@@ -11,7 +11,7 @@
  * `components/tasks/TaskText.tsx`.
  */
 import { todayISO } from "@/lib/utils";
-import type { EntityRef } from "@/lib/entity-note";
+import { TAG_RE, type EntityRef } from "@/lib/entity-note";
 import type { Task } from "@/lib/tasks/types";
 
 export const MD_LINK_RE = /\[([^\]]+)\]\(([^)]+)\)/g;
@@ -39,6 +39,15 @@ export function stripLinkedJiraKeyFromText(text: string, jiraKey: string): strin
  * new one (so the chip/status/link all track the new ticket), or prepend the
  * new key when the task had none.
  */
+
+/** Remove a hashtag from task text once it is shown as a chip instead. */
+export function stripTagToken(text: string, tag: string): string {
+  return text
+    .replace(new RegExp(`#${escapeRegExp(tag)}\\b`, "gi"), "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function rewriteTaskKey(text: string, oldKey: string | undefined, newKey: string): string {
   if (oldKey) {
     const re = new RegExp(`\\b${escapeRegExp(oldKey)}\\b`, "g");
@@ -87,6 +96,33 @@ export function parseMarkdownLinks(text: string): TextPart[] {
     parts.push({ type: "text", text: text.slice(lastIndex) });
   }
   return parts;
+}
+
+export interface TagPart {
+  type: "text" | "tag";
+  text: string;
+  /** Token without the leading # — only set when type is "tag". */
+  tag?: string;
+}
+
+/**
+ * Split plain text into text runs and `#tag` tokens, using the shared TAG_RE
+ * grammar so what renders as a chip is exactly what extractTags/lookup see.
+ * Apply to plain-text runs only — never to markdown-link labels.
+ */
+export function splitTagTokens(text: string): TagPart[] {
+  const out: TagPart[] = [];
+  let last = 0;
+  for (const m of text.matchAll(TAG_RE)) {
+    // m[0] includes the leading boundary char; the token (#tag) trails it.
+    const tokenLen = (m[1]?.length ?? 0) + 1;
+    const start = m.index! + m[0].length - tokenLen;
+    if (start > last) out.push({ type: "text", text: text.slice(last, start) });
+    out.push({ type: "tag", text: `#${m[1]!}`, tag: m[1] });
+    last = start + tokenLen;
+  }
+  if (last < text.length) out.push({ type: "text", text: text.slice(last) });
+  return out;
 }
 
 /**

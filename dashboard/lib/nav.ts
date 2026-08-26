@@ -13,6 +13,11 @@ export interface NavItem {
   desktopOnly?: boolean;
   /** Keyboard shortcut hint displayed in the sidebar (mono, 9.5px, opacity .6) */
   shortcut?: string;
+  /**
+   * Not a route — clicking opens this CLI as a terminal-dock tab (see NavLink).
+   * Excluded from ALL_NAV_DESTINATIONS; `href` only keys the sidebar row.
+   */
+  terminal?: "claude" | "cursor" | "chatgpt";
 }
 
 export const NAV_GROUPS: { id: NavGroup; label: string }[] = [
@@ -66,7 +71,7 @@ export function groupSidebarNav(
  * - System      = Status / Logs / Actions / Setup (tabs over /status…)
  * - Search        = unified discovery (exact / ranked / semantic via Recall);
  *                   Recall's graph + ingest controls live at /recall, linked
- *                   from the search page and the ⌘K palette
+ *                   from the search page and the ⌘P palette
  *
  * Plugin pages (e.g. /ops) come from `PLUGIN_NAV_ITEMS` (materialised from plugin
  * manifests) and are merged into the sidebar via `groupSidebarNav` — not hand
@@ -88,27 +93,30 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/search", label: "Search", icon: "search", group: "library" },
   { href: "/skills", label: "Skills", icon: "skills", group: "library" },
   { href: "/repos", label: "Repos", icon: "repos", group: "library", desktopOnly: true },
-  { href: "/own", label: "Own", icon: "own", group: "library", gate: "github" },
 
   { href: "/datadog", label: "Datadog", icon: "datadog", group: "bi", gate: "datadog" },
 
   { href: "/status", label: "System", icon: "status", group: "system" },
   { href: "/chamber", label: "Chamber", icon: "chamber", group: "system", gate: "chamber" },
   { href: "/opencode", label: "OpenCode", icon: "opencode", group: "system", gate: "opencode" },
-  { href: "/claude", label: "Claude", icon: "claude", group: "system", gate: "claude", desktopOnly: true },
-  { href: "/cursor", label: "Cursor", icon: "cursor", group: "system", gate: "cursor", desktopOnly: true },
-  { href: "/chatgpt", label: "ChatGPT", icon: "chatgpt", group: "system", gate: "chatgpt", desktopOnly: true },
+  { href: "/claude", label: "Claude", icon: "claude", group: "system", gate: "claude", desktopOnly: true, terminal: "claude" },
+  { href: "/cursor", label: "Cursor", icon: "cursor", group: "system", gate: "cursor", desktopOnly: true, terminal: "cursor" },
+  { href: "/chatgpt", label: "ChatGPT", icon: "chatgpt", group: "system", gate: "chatgpt", desktopOnly: true, terminal: "chatgpt" },
 ];
 
 /**
  * Destinations that lost their sidebar slot in the 11-item IA but keep
- * working at their URLs. Used for breadcrumbs and the ⌘K palette so every
+ * working at their URLs. Used for breadcrumbs and the ⌘P palette so every
  * page stays one search away.
+ *
+ * /own redirects to /repos?view=owned — ownership radar lives on Repos, not
+ * a competing sidebar destination.
  *
  * Plugin-contributed destinations live in PLUGIN_NAV_ITEMS (not here).
  * /tasks and /tickets redirect forever to /work — do not re-add them.
  */
 export const LEGACY_NAV_ITEMS: NavItem[] = [
+  { href: "/own", label: "Owned repos", icon: "own", group: "library", gate: "github" },
   { href: "/appraisal", label: "Appraisal", icon: "review", group: "library" },
   { href: "/one-on-one", label: "1:1", icon: "review", group: "library" },
   { href: "/research", label: "Research", icon: "learnings", group: "library" },
@@ -123,9 +131,10 @@ export const LEGACY_NAV_ITEMS: NavItem[] = [
   { href: "/setup", label: "Setup", icon: "setup", group: "system" },
 ];
 
-/** Every routable destination — sidebar items first, then legacy + plugin pages. */
+/** Every routable destination — sidebar items first, then legacy + plugin pages.
+ *  Terminal-launch rows (Claude/Cursor/ChatGPT) have no page behind them. */
 export const ALL_NAV_DESTINATIONS: NavItem[] = [
-  ...NAV_ITEMS,
+  ...NAV_ITEMS.filter((i) => !i.terminal),
   ...LEGACY_NAV_ITEMS,
   ...PLUGIN_NAV_ITEMS,
 ];

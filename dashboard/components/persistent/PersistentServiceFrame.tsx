@@ -20,6 +20,14 @@ interface Props {
   port: string | null;
   /** iframe title attribute. */
   title: string;
+  /** Listen-API failure. Shown instead of an endless "Starting…" spinner. */
+  error?: string | null;
+  /**
+   * When true, a listen-returned port is enough to show the iframe.
+   * Status `/api/status/services` can lag (HMR resets in-memory port) and
+   * would otherwise swap "Starting…" for "not running" forever.
+   */
+  trustPort?: boolean;
   /** Optional path (e.g. `/session/abc`) appended to the service origin for deep-linking. */
   srcPath?: string | null;
   /** Called after an in-frame Restart so the parent can re-resolve the port. */
@@ -49,12 +57,45 @@ function ServiceSpinner({ label }: { label: string }) {
   );
 }
 
+function ServiceFailed({
+  serviceName,
+  message,
+  restarting,
+  onRetry,
+}: {
+  serviceName: string;
+  message: string;
+  restarting: boolean;
+  onRetry?: () => void;
+}) {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center gap-3 p-8 text-text-muted">
+      <AlertTriangle size={32} className="text-warning" />
+      <p className="text-sm">{serviceName} failed to start</p>
+      <p className="text-xs text-text-subtle max-w-md text-center">{message}</p>
+      {onRetry ? (
+        <button
+          className="btn btn-ghost flex items-center gap-1.5"
+          style={{ fontSize: "12px", padding: "4px 10px" }}
+          onClick={onRetry}
+          disabled={restarting}
+        >
+          <RotateCw size={12} className={restarting ? "animate-spin" : ""} />
+          {restarting ? "Retrying…" : "Retry"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function PersistentServiceFrame({
   route,
   serviceId,
   serviceName,
   port,
   title,
+  error,
+  trustPort,
   srcPath,
   onRestarted,
 }: Props) {
@@ -93,6 +134,8 @@ export function PersistentServiceFrame({
         serviceName={serviceName}
         port={port}
         title={title}
+        error={error}
+        trustPort={trustPort}
         srcPath={srcPath}
         onRestarted={onRestarted}
       />
@@ -105,6 +148,8 @@ function ServiceIframe({
   serviceName,
   port,
   title,
+  error,
+  trustPort,
   srcPath,
   onRestarted,
 }: {
@@ -112,6 +157,8 @@ function ServiceIframe({
   serviceName: string;
   port: string | null;
   title: string;
+  error?: string | null;
+  trustPort?: boolean;
   srcPath?: string | null;
   onRestarted?: () => void;
 }) {
@@ -155,7 +202,43 @@ function ServiceIframe({
     }
   }
 
-  if (!port) return <ServiceSpinner label={`Starting ${serviceName}…`} />;
+  if (!port) {
+    if (error) {
+      return (
+        <ServiceFailed
+          serviceName={serviceName}
+          message={error}
+          restarting={restarting}
+          onRetry={onRestarted}
+        />
+      );
+    }
+    return <ServiceSpinner label={`Starting ${serviceName}…`} />;
+  }
+
+  if (trustPort || running) {
+    return (
+      <>
+        {/*
+          "Open in new tab" used to live here — an escape hatch for a
+          frame-restricted iframe. It never worked in the desktop app: Tauri
+          blocks `target="_blank"` outright, so clicking it did nothing at all,
+          silently. A dead control is worse than no control.
+
+          The browser view in the same dropdown covers the real need, and now
+          routes through the shell's opener rather than `window.open`, which was
+          blocked the same way.
+        */}
+        <iframe
+          src={iframeSrc}
+          className="w-full border-0"
+          style={{ background: "#fff", flex: "1 1 0%", minHeight: 0 }}
+          allow="clipboard-read; clipboard-write"
+          title={title}
+        />
+      </>
+    );
+  }
 
   if (services && !running) {
     return (
@@ -177,27 +260,5 @@ function ServiceIframe({
     );
   }
 
-  if (!running) return <ServiceSpinner label={`Waiting for ${serviceName}…`} />;
-
-  return (
-    <>
-      {/*
-        "Open in new tab" used to live here — an escape hatch for a
-        frame-restricted iframe. It never worked in the desktop app: Tauri
-        blocks `target="_blank"` outright, so clicking it did nothing at all,
-        silently. A dead control is worse than no control.
-
-        The browser view in the same dropdown covers the real need, and now
-        routes through the shell's opener rather than `window.open`, which was
-        blocked the same way.
-      */}
-      <iframe
-        src={iframeSrc}
-        className="w-full border-0"
-        style={{ background: "#fff", flex: "1 1 0%", minHeight: 0 }}
-        allow="clipboard-read; clipboard-write"
-        title={title}
-      />
-    </>
-  );
+  return <ServiceSpinner label={`Waiting for ${serviceName}…`} />;
 }

@@ -11,6 +11,8 @@ import {
 } from "@/components/shell/ContextMenu";
 import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
 import { buildVaultFileMenuGroups } from "@/components/vault/vaultRowMenus";
+import { extractTags } from "@/lib/entity-note";
+import { useTagMenuGroup, withTagsGroup } from "@/lib/hooks/use-tag-menu";
 import { useToast } from "@/lib/hooks/use-toast";
 import { getVaultClient } from "@/lib/vault/vault-client";
 import {
@@ -129,6 +131,13 @@ export function DocRow({
     },
   });
 
+  const { group: tagsGroup, modal: tagsModal } = useTagMenuGroup({
+    kind: null,
+    id: doc.slug,
+    extraTags: extractTags(doc.title),
+    enabled: menu.target !== null,
+  });
+
   return (
     <div className={`group ${className ?? ""}`.trim()} {...menu.bindRow("row")}>
       {children}
@@ -139,10 +148,11 @@ export function DocRow({
       <ContextMenu
         open={menu.target !== null}
         position={menu.position}
-        groups={groups}
+        groups={withTagsGroup(groups, tagsGroup)}
         onClose={menu.close}
         label={`${doc.title} actions`}
       />
+      {tagsModal}
       <OneTimeShareButton
         vaultId="docs"
         path={doc.slug}

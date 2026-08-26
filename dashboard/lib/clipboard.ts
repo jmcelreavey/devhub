@@ -26,3 +26,15 @@ export async function copyTextToClipboard(text: string): Promise<void> {
     textarea.remove();
   }
 }
+
+/** Read plain text from the system clipboard (paste / middle-click). */
+export async function readTextFromClipboard(): Promise<string> {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.readText) {
+    try {
+      return await navigator.clipboard.readText();
+    } catch {
+      /* permission denied / insecure context */
+    }
+  }
+  return "";
+}

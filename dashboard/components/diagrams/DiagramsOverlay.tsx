@@ -4,13 +4,13 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   X,
   PenTool,
-  Search,
   RefreshCw,
   Plus,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/lib/hooks/use-toast";
 import { HoverTip } from "@/components/ui/HoverTip";
+import { SearchInput } from "@/components/ui/SearchInput";
 import {
   createEmptyDiagram,
   createUniqueDiagramStoragePath,
@@ -145,22 +145,17 @@ export function DiagramsOverlay({ open, onClose }: DiagramsOverlayProps) {
         className="flex items-center gap-2 px-4 py-3 border-b shrink-0"
         style={{ borderColor: "var(--border)" }}
       >
-        <Search
-          size={14}
-          style={{ color: "var(--text-muted)", flexShrink: 0 }}
-          aria-hidden
-        />
         <label htmlFor="diagrams-search-input" className="sr-only">
           Search diagrams
         </label>
-        <input
+        <SearchInput
           id="diagrams-search-input"
-          type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={setQuery}
           placeholder="Search diagrams…"
           autoFocus
-          className="flex-1 bg-transparent text-sm outline-none text-text"
+          wrapperClassName="min-w-0 flex-1"
+          inputClassName="h-8 text-sm"
         />
         <HoverTip label={isRefreshing ? "Refreshing…" : "Refresh diagrams list"}>
           <button

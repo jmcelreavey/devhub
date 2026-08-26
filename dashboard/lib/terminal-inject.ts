@@ -43,6 +43,8 @@ export interface TerminalProposeDetail {
    * (only for trusted first-party UI that already confirmed via prompt()).
    */
   skipConfirm?: boolean;
+  /** Always open a fresh tab — never reuse an idle shell/agent session. */
+  forceNewTab?: boolean;
 }
 
 export interface TerminalFocusDetail {
@@ -59,19 +61,82 @@ export function isDestructiveTerminalCommand(command: string): boolean {
   return DESTRUCTIVE_RE.test(command);
 }
 
-/** Soft busy heuristic: recent PTY output or recent stdin = busy. */
+/**
+ * Busy detection. Prefers the OSC 133 command lifecycle when live shell
+ * integration marks have been seen; otherwise falls back to an activity
+ * heuristic that knows an idle prompt repainting itself (p10k/starship
+ * clock segments redraw every second) is not a running command.
+ */
 export function isTerminalBusy(opts: {
   lastOutputAt: number | null;
   lastInputAt: number | null;
   now?: number;
   /** Quiet window before we call the shell idle (ms). */
   idleMs?: number;
+  /**
+   * OSC 133 lifecycle when shell integration is live: true between
+   * command-start (C) and command-done (D/next prompt). Null/undefined when
+   * no live marks have been seen — heuristic applies.
+   */
+  commandRunning?: boolean | null;
+  /**
+   * Heuristic escape hatch: the last buffer line looks like a shell prompt.
+   * Lazy so callers don't serialize the viewport on every output chunk.
+   */
+  promptVisible?: boolean | (() => boolean);
+  /** Minimum quiet gap before promptVisible may override recent output (ms). */
+  promptIdleMs?: number;
 }): boolean {
   const now = opts.now ?? Date.now();
   const idleMs = opts.idleMs ?? 1_200;
-  const last = Math.max(opts.lastOutputAt ?? 0, opts.lastInputAt ?? 0);
+  const lastInput = opts.lastInputAt ?? 0;
+  const recentInput = lastInput > 0 && now - lastInput < idleMs;
+  if (opts.commandRunning != null) return opts.commandRunning || recentInput;
+  const lastOutput = opts.lastOutputAt ?? 0;
+  const last = Math.max(lastOutput, lastInput);
   if (last <= 0) return false;
-  return now - last < idleMs;
+  if (now - last >= idleMs) return false;
+  // Recent output, but the stream has paused and a prompt is on screen —
+  // that's a prompt repaint, not a command. Without this an RPROMPT clock
+  // kept the shell "busy" forever and every inject timed out.
+  const promptIdleMs = opts.promptIdleMs ?? 250;
+  if (!recentInput && lastOutput > 0 && now - lastOutput >= promptIdleMs) {
+    const promptVisible =
+      typeof opts.promptVisible === "function" ? opts.promptVisible() : opts.promptVisible;
+    if (promptVisible) return false;
+  }
+  return true;
+}
+
+/**
+ * True when a command would leave the shell stuck at a `quote>` / `dquote>`
+ * continuation: unbalanced quotes or a trailing backslash. Used to refuse
+ * agent-produced commands before they ever reach the PTY.
+ */
+export function hasUnbalancedShellQuotes(command: string): boolean {
+  let state: "plain" | "single" | "double" = "plain";
+  let escaped = false;
+  for (const ch of command) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (state === "single") {
+      if (ch === "'") state = "plain";
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (state === "double") {
+      if (ch === '"') state = "plain";
+      continue;
+    }
+    if (ch === "'") state = "single";
+    else if (ch === '"') state = "double";
+  }
+  return state !== "plain" || escaped;
 }
 
 export function newTerminalProposeId(): string {

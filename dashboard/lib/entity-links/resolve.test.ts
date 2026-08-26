@@ -110,4 +110,56 @@ describe("resolveEntityLinks", () => {
     expect(tags.map((t) => t.id)).toEqual(["devhub", "perf"]);
     expect(tags[0]?.href).toBe("/work?tag=devhub");
   });
+
+  it("reads a note stored as a bare block array (the actual on-disk shape)", () => {
+    fs.mkdirSync(path.join(root, "notes", "learnings"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "notes", "learnings", "bare.json"),
+      JSON.stringify([
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "Bare array notes tag #devhub too." }],
+        },
+      ]),
+    );
+
+    const result = resolveEntityLinks("note", "learnings/bare");
+    expect(result.related.map((r) => r.id)).toContain("devhub");
+  });
+
+  it("doesn't double up a linking task across a rollover (stale copy left behind + fresh id today)", () => {
+    fs.writeFileSync(
+      path.join(root, "tasks", "2026-08-25.json"),
+      JSON.stringify([
+        {
+          id: "yesterday-id",
+          text: "Chase PTF-4791",
+          done: false,
+          createdAt: "2026-08-25T10:00:00.000Z",
+          jiraKey: "PTF-4791",
+          movedAt: "2026-08-26T00:00:37.174Z",
+          movedToDate: "2026-08-26",
+        },
+      ]),
+    );
+    fs.writeFileSync(
+      path.join(root, "tasks", "2026-08-26.json"),
+      JSON.stringify([
+        {
+          id: "today-id",
+          text: "Chase PTF-4791",
+          done: false,
+          createdAt: "2026-08-26T00:00:37.174Z",
+          jiraKey: "PTF-4791",
+          rolledFromId: "yesterday-id",
+          rolledFromDate: "2026-08-25",
+        },
+      ]),
+    );
+
+    const result = resolveEntityLinks("jira", "PTF-4791");
+    const linkingTasks = result.related.filter((r) => r.kind === "task");
+    expect(linkingTasks).toHaveLength(1);
+    expect(linkingTasks[0]?.id).toBe("today-id");
+  });
 });

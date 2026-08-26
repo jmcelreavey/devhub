@@ -146,7 +146,7 @@ export function DocsLandingPage({
                 How DevHub is put together and how to work on it — {totalDocs} pages across{" "}
                 {areas.length} areas. Search the full text from{" "}
                 <kbd className="lib-kbd">Filter docs</kbd> in the sidebar, or{" "}
-                <kbd className="lib-kbd">⌘K</kbd> anywhere.
+                <kbd className="lib-kbd">⌘P</kbd> anywhere.
               </p>
             </div>
             <NewDocButton

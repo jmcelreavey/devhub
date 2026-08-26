@@ -136,11 +136,11 @@ Features:
 - **Status** — Git/repo health, services, MCP server processes, restarts; same **GitHub PRs** strip as Today
 - **Skills** — Expandable skill cards with SKILL.md content
 - **Actions** — Script runner with run history
-- **Command palette (`Cmd+K`)** — Search across notes, tasks, tickets, navigation, **copy standup markdown**, and related actions in one box
+- **Command palette (`Cmd+P`)** — Search across notes, tasks, tickets, navigation, **copy standup markdown**, and related actions in one box
 - **Auto-refresh** — Calendar / Jira / repos revalidate on tab focus and every minute
 - **Toast errors with retry** — Failed saves surface as actionable toasts (no more silent failures)
 - **Undo on task delete** — 5s undo window on the toast before the delete is committed
-- **Keyboard shortcuts** — Press `?` when the **DevHub** document has focus for the full list (g+h/n/s/a/r/k/c/j/l/d nav, Cmd+K palette, Cmd+Shift+O notes panel, Cmd+Shift+T tasks panel, etc.). The **Chamber** iframe does not receive those keys — use the **Shortcuts** button on the Chamber page or open OpenChamber in a new tab.
+- **Keyboard shortcuts** — Press `?` when the **DevHub** document has focus for the full list (g+h/n/s/a/r/k/c/j/l/d nav, Cmd+P palette, Cmd+N notes, Cmd+T tasks, Cmd+D diagrams, Ctrl+` terminal, etc.). The **Chamber** iframe does not receive those keys — use the **Shortcuts** button on the Chamber page or open OpenChamber in a new tab.
 - **Atomic file writes** — In-process mutex + temp-and-rename, so concurrent task toggles never lose data and a crash mid-write can't corrupt your notes
 
 A starter `dashboard/.env.example` is checked in — copy to `dashboard/.env.local` and fill in the optional integration vars. The dev server runs a startup health check (`predev`/`prestart`) that verifies env vars and paths and fails fast with a clear message if something's missing.
@@ -230,7 +230,11 @@ Press `?` when DevHub (not the Chamber iframe) has focus to see all shortcuts:
 | `g + l`       | Go to Calendar          |
 | `g + j`       | Go to Tickets           |
 | `g + d`       | Go to Datadog           |
-| `Cmd+K`       | Toggle command palette  |
+| `Cmd+P`       | Toggle command palette  |
+| `Cmd+N`       | Notes panel  |
+| `Cmd+T`       | Tasks panel  |
+| `Cmd+D`       | Diagrams panel  |
+| `Ctrl+``      | Toggle terminal dock  |
 | `Cmd+Shift+O` | Toggle notes side panel |
 | `Cmd+Shift+T` | Toggle tasks side panel |
 | `Cmd+\`       | Toggle sidebar          |

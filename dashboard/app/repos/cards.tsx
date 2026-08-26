@@ -1,6 +1,8 @@
 "use client";
 
 import { type CSSProperties, type ReactNode } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Archive,
   Bot,
@@ -36,6 +38,7 @@ import { useToast } from "@/lib/hooks/use-toast";
 import { launchAgentJob } from "@/lib/agent-job";
 import { agentSkillCommand, claudeCliCommand, opencodeCliCommand, openTerminal } from "@/lib/terminal-launch";
 import type { GithubRepoInfo, RepoInfo } from "./types";
+import type { RepoProject } from "@/lib/projects";
 
 interface RepoApps {
   gitkraken: boolean;
@@ -91,6 +94,10 @@ export function SearchCard({
   onLocalFilterChange: (value: "changed" | "unpushed" | null) => void;
   changedCount: number;
   unpushedCount: number;
+  /** Named repo groups (e.g. frontend + its app); chips filter the grid. */
+  projects?: RepoProject[];
+  activeProjectId?: string | null;
+  onProjectChange?: (id: string | null) => void;
 }) {
   return (
     /*
@@ -128,6 +135,7 @@ export function SearchCard({
             tone="accent"
             onClick={() => onLocalFilterChange(localFilter === "unpushed" ? null : "unpushed")}
           />
+
         </div>
       </div>
     </div>
@@ -136,15 +144,15 @@ export function SearchCard({
 
 function FilterChip({
   label,
-  count,
+  count = 0,
   active,
-  tone,
+  tone = "accent",
   onClick,
 }: {
   label: string;
-  count: number;
+  count?: number;
   active: boolean;
-  tone: "warning" | "accent";
+  tone?: "warning" | "accent";
   onClick: () => void;
 }) {
   const idleClass = tone === "warning" ? "badge-warning" : "badge-accent";
@@ -225,6 +233,7 @@ export function LocalRepoCard({
   ownershipBusy,
   onToggleOwned,
 }: LocalRepoCardProps) {
+  const router = useRouter();
   const prompt = usePrompt();
   const toast = useToast();
   const menu = useContextMenu<RepoInfo>();
@@ -449,13 +458,38 @@ export function LocalRepoCard({
     },
   ];
 
+  const rowBind = menu.bindRow(repo);
   return (
-    <div className="card group" style={{ padding: 0, overflow: "visible" }} {...menu.bindRow(repo)}>
+    <div
+      className="card group"
+      data-repo={repo.name}
+      style={{ padding: 0, overflow: "visible", cursor: "pointer" }}
+      {...rowBind}
+      onClick={(e) => {
+        rowBind.onClick?.(e);
+        if (e.defaultPrevented) return;
+        if ((e.target as HTMLElement).closest("a, button, input, textarea, [role='menu'], [role='menuitem']")) return;
+        router.push(`/repos/${encodeURIComponent(repo.name)}`);
+      }}
+    >
       <div className="p-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 font-semibold text-sm break-words leading-snug text-text">
-              {repo.name}
+              <Link
+                href={`/repos/${encodeURIComponent(repo.name)}`}
+                className="hover:text-accent"
+                aria-label={`Open repo ${repo.name}`}
+                data-repo-link={repo.name}
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  router.push(`/repos/${encodeURIComponent(repo.name)}`);
+                }}
+              >
+                {repo.name}
+              </Link>
               {owned ? (
                 <span className="badge badge-muted" style={{ fontSize: 10 }}>
                   owned

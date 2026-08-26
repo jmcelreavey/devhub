@@ -7,6 +7,8 @@ export interface ModalShellProps {
   open: boolean;
   onClose: () => void;
   title: string;
+  /** Optional type icon shown next to the title. */
+  icon?: ReactNode;
   description?: string;
   children: ReactNode;
   maxWidth?: string;
@@ -25,6 +27,7 @@ export function ModalShell({
   open,
   onClose,
   title,
+  icon,
   description,
   children,
   maxWidth = "max-w-lg",
@@ -101,8 +104,9 @@ export function ModalShell({
           style={{ borderBottom: "1px solid var(--border)" }}
         >
           <div className="min-w-0">
-            <h2 id={titleId} className="text-sm font-semibold text-text">
-              {title}
+            <h2 id={titleId} className="flex items-center gap-2 text-sm font-semibold text-text">
+              {icon ? <span className="shrink-0 text-text-muted" aria-hidden>{icon}</span> : null}
+              <span className="min-w-0 truncate">{title}</span>
             </h2>
             {description ? (
               <p id={descriptionId} className="text-xs mt-1 text-text-muted">

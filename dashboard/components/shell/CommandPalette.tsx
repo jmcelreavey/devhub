@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronRight,
   FileText,
@@ -13,11 +13,13 @@ import {
   Search,
   PenTool,
   BookOpen,
+  FolderGit2,
 } from "lucide-react";
 import { ALL_NAV_DESTINATIONS, filterNavBySetup, type SetupGateStatus } from "@/lib/nav";
+import { useWorkspaceTabs } from "@/components/shell/WorkspaceTabs";
 import { toggleDensity, toggleMotion } from "@/lib/ui-prefs";
 import { useLive } from "@/lib/hooks/use-fetch";
-import { paletteCommandScore } from "@/lib/command-palette-score";
+import { filterVisiblePaletteCommands, uniqueById } from "@/lib/command-palette-score";
 import { useToast } from "@/lib/hooks/use-toast";
 import { copyContextPackToClipboard } from "@/lib/context-pack-client";
 import { buildSearchUrl } from "@/lib/search-ui";
@@ -28,6 +30,7 @@ import { isDiagramStoragePath, toDiagramRoutePath } from "@/lib/diagram-utils";
 import { flattenTreeFiles } from "@/lib/tree-utils";
 import { clearFocusSession, readFocusSession, writeFocusSession } from "@/lib/focus-session-storage";
 import { clearRouteUsage, summariseRouteUsage } from "@/lib/route-usage";
+import { useSessionHistory } from "@/lib/hooks/use-session-history";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { openTerminal, openTerminalTranscript } from "@/lib/terminal-launch";
 import { focusAgentComposer, openAgentChat } from "@/lib/agent-chat";
@@ -50,6 +53,8 @@ interface Command {
   label: string;
   detail?: string;
   hint?: string;
+  /** In-app destination — Shift+Enter / Shift+click opens this in a new workspace tab. */
+  href?: string;
   perform: () => void | Promise<void>;
 }
 
@@ -83,6 +88,13 @@ interface RepoEntry {
   unpushedCount: number;
 }
 
+/** Named repo group, from ~/.config/devhub/projects.json. */
+interface ProjectEntry {
+  id: string;
+  label: string;
+  repos: string[];
+}
+
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [query, setQuery] = useState("");
   const [notes, setNotes] = useState<NoteFile[]>([]);
@@ -90,9 +102,15 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [tickets, setTickets] = useState<TicketItem[]>([]);
   const [repos, setRepos] = useState<RepoEntry[]>([]);
+  const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [contentResults, setContentResults] = useState<Command[]>([]);
   const [highlightIdx, setHighlightIdx] = useState(0);
   const router = useRouter();
+  const tabs = useWorkspaceTabs();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentHref = searchParams.size ? `${pathname}?${searchParams}` : pathname;
+  const history = useSessionHistory();
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
@@ -122,13 +140,17 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       fetch("/api/repos")
         .then((r) => (r.ok ? r.json() : { repos: [] }))
         .catch(() => ({ repos: [] })),
-    ]).then(([tree, tasksData, ticketsData, reposData]) => {
+      fetch("/api/projects")
+        .then((r) => (r.ok ? r.json() : { projects: [] }))
+        .catch(() => ({ projects: [] })),
+    ]).then(([tree, tasksData, ticketsData, reposData, projectsData]) => {
       const allFiles = flattenTreeFiles(tree as unknown[]);
       setNotes(allFiles.filter((f) => !isDiagramStoragePath(f.path)));
       setDiagrams(allFiles.filter((f) => isDiagramStoragePath(f.path)));
       setTasks((tasksData.tasks ?? []) as TaskItem[]);
       setTickets((ticketsData.tickets ?? []) as TicketItem[]);
       setRepos((reposData.repos ?? []) as RepoEntry[]);
+      setProjects((projectsData.projects ?? []) as ProjectEntry[]);
     });
     return () => {
       previousFocus.current?.focus?.();
@@ -185,6 +207,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                 label: cleanPath,
                 detail: `${f.matches[0]?.text ?? ""}${tagBit}`,
                 hint: "note",
+                href,
                 perform: () => router.push(href),
               };
             },
@@ -199,6 +222,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
               // question the palette is answering is "where is this mentioned".
               detail: best ? `${best.heading} — ${best.snippet}` : (hit.description ?? hit.slug),
               hint: "doc",
+              href: best?.href ?? hit.href,
               perform: () => router.push(best?.href ?? hit.href),
             };
           });
@@ -261,16 +285,21 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       kind: "nav",
       label: `Go to ${item.label}`,
       hint: item.href,
+      href: item.href,
       perform: () => router.push(item.href),
     }));
 
-    const noteCmds: Command[] = notes.map((n) => ({
-      id: `note:${n.path}`,
-      kind: "note",
-      label: n.name,
-      detail: n.path.replace(/\.json$/, ""),
-      perform: () => router.push(`/notes/${n.path.replace(/\.json$/, "")}`),
-    }));
+    const noteCmds: Command[] = notes.map((n) => {
+      const href = `/notes/${n.path.replace(/\.json$/, "")}`;
+      return {
+        id: `note:${n.path}`,
+        kind: "note",
+        label: n.name,
+        detail: n.path.replace(/\.json$/, ""),
+        href,
+        perform: () => router.push(href),
+      };
+    });
 
     /**
      * Repos as destinations. The detail line carries branch and dirty state so
@@ -291,11 +320,22 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         label: r.name,
         detail: state || undefined,
         hint: "repo",
-        // /repos filters to the named repo, which is the existing way in — the
-        // Git workspace opens from the card rather than having its own route.
-        perform: () => router.push(`/repos?repo=${encodeURIComponent(r.name)}`),
+        href: `/repos/${encodeURIComponent(r.name)}`,
+        perform: () => router.push(`/repos/${encodeURIComponent(r.name)}`),
       };
     });
+
+    // One command per project, landing on /repos pre-filtered to members —
+    // the palette doesn't need to enumerate what the filtered grid shows.
+    const projectCmds: Command[] = projects.map((p) => ({
+      id: `project:${p.id}`,
+      kind: "nav" as const,
+      label: `Open project ${p.label}`,
+      detail: p.repos.join(" · "),
+      hint: "project",
+      href: `/repos?project=${encodeURIComponent(p.id)}`,
+      perform: () => router.push(`/repos?project=${encodeURIComponent(p.id)}`),
+    }));
 
     const terminalHereCmds: Command[] = repos.map((r) => ({
       id: `terminal-here:${r.name}`,
@@ -310,13 +350,17 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       },
     }));
 
-    const diagramCmds: Command[] = diagrams.map((d) => ({
-      id: `diagram:${d.path}`,
-      kind: "diagram",
-      label: d.name,
-      detail: d.path.replace(/\.json$/, ""),
-      perform: () => router.push(toDiagramRoutePath(d.path)),
-    }));
+    const diagramCmds: Command[] = diagrams.map((d) => {
+      const href = toDiagramRoutePath(d.path);
+      return {
+        id: `diagram:${d.path}`,
+        kind: "diagram",
+        label: d.name,
+        detail: d.path.replace(/\.json$/, ""),
+        href,
+        perform: () => router.push(href),
+      };
+    });
 
     const taskCmds: Command[] = tasks
       .filter((t) => !t.done && !t.abandonedAt && !t.movedAt)
@@ -409,6 +453,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         label: "Show keyboard shortcuts",
         hint: "?",
         perform: () => {
+          onClose();
           window.dispatchEvent(new CustomEvent("shortcuts:toggle"));
         },
       },
@@ -487,16 +532,6 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         },
       },
       {
-        id: "action:shortcuts",
-        kind: "action",
-        label: "Keyboard shortcuts",
-        hint: "?",
-        perform: () => {
-          onClose();
-          window.dispatchEvent(new CustomEvent("shortcuts:toggle"));
-        },
-      },
-      {
         id: "action:ask-agent",
         kind: "action",
         label: "Ask Agent",
@@ -539,8 +574,9 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       })),
     ];
 
-    return [
+    return uniqueById([
       ...navCmds,
+      ...projectCmds,
       ...actionCmds,
       ...repoCmds,
       ...terminalHereCmds,
@@ -548,49 +584,26 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       ...ticketCmds,
       ...noteCmds,
       ...diagramCmds,
-    ];
-  }, [notes, diagrams, tasks, tickets, repos, router, toggleTaskDone, toast, setup, onClose]);
+    ]);
+  }, [notes, diagrams, tasks, tickets, repos, projects, router, toggleTaskDone, toast, setup, onClose]);
 
   const filtered = useMemo(() => {
-    if (!query.trim()) {
-      // Default view: actions + recent content — nav is hidden (sidebar carries live counts)
-      const action = commands.filter((c) => c.kind === "action");
-      const task = commands.filter((c) => c.kind === "task").slice(0, 5);
-      const ticket = commands.filter((c) => c.kind === "ticket").slice(0, 5);
-      const note = commands.filter((c) => c.kind === "note").slice(0, 8);
-      const diagram = commands.filter((c) => c.kind === "diagram").slice(0, 5);
-      // Repos with uncommitted or unpushed work only, on the empty query — the
-      // full list is 52 entries and belongs behind a search, but the handful
-      // you left work in is exactly what the default view is for.
-      const repo = commands
-        .filter((c) => c.kind === "repo" && Boolean(c.detail?.includes("changed") || c.detail?.includes("unpushed")))
-        .slice(0, 5);
-      return [...action, ...repo, ...task, ...ticket, ...note, ...diagram];
-    }
-
-    const scored = commands
-      .map((c) => {
-        const parts = [c.label, c.detail, c.hint].filter(
-          (x): x is string => typeof x === "string" && x.trim().length > 0,
-        );
-        const score = paletteCommandScore(query, parts);
-        return { cmd: c, score };
-      })
-      .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 40)
-      .map((x) => x.cmd);
-
-    // Paths already matched by filename — skip duplicate content results
-    const matchedPaths = new Set(
-      scored
-        .filter((c) => c.kind === "note" || c.kind === "diagram")
-        .map((c) => c.detail ?? ""),
-    );
-    const deduped = contentResults.filter((c) => !matchedPaths.has(c.label));
-
-    return [...scored, ...deduped].slice(0, 40);
-  }, [query, commands, contentResults]);
+    const recent: Command[] = query.trim()
+      ? []
+      : [...history]
+          .reverse()
+          .filter((entry) => entry.href !== currentHref)
+          .slice(0, 8)
+          .map((entry) => ({
+            id: `recent:${entry.href}:${entry.ts}`,
+            kind: "nav",
+            label: entry.label,
+            detail: "Recent",
+            href: entry.href,
+            perform: () => router.push(entry.href),
+          }));
+    return filterVisiblePaletteCommands(commands, query, { contentResults, recent });
+  }, [query, commands, contentResults, currentHref, history, router]);
 
   // Reset highlight when query (and therefore filtered list) changes.
   // React's recommended pattern for "adjust state during render based on prior props/state".
@@ -601,11 +614,15 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   }
 
   const select = useCallback(
-    async (cmd: Command) => {
+    async (cmd: Command, opts?: { newTab?: boolean }) => {
       onClose();
+      if (cmd.href) {
+        tabs.openHref(cmd.href, { newTab: opts?.newTab });
+        return;
+      }
       await Promise.resolve(cmd.perform());
     },
-    [onClose],
+    [onClose, tabs],
   );
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -618,7 +635,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     } else if (e.key === "Enter") {
       e.preventDefault();
       const cmd = filtered[highlightIdx];
-      if (cmd) select(cmd);
+      if (cmd) void select(cmd, { newTab: e.shiftKey });
     }
   };
 
@@ -699,7 +716,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
               role="option"
               aria-selected={idx === highlightIdx}
               onMouseEnter={() => setHighlightIdx(idx)}
-              onClick={() => select(cmd)}
+              onClick={(e) => void select(cmd, { newTab: e.shiftKey })}
               style={{
                 width: "100%",
                 textAlign: "left",
@@ -749,6 +766,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           >
             <span>↑↓ navigate</span>
             <span>↵ open</span>
+            <span>⇧↵ new tab</span>
             <span>esc close</span>
           </div>
         </div>
@@ -758,6 +776,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
 /** Nav-style chevron only when selecting opens somewhere (in-app or browser). */
 function commandNavigates(cmd: Command): boolean {
+  if (cmd.href) return true;
   if (cmd.kind === "action" || cmd.kind === "task") return false;
   return true;
 }
@@ -767,6 +786,8 @@ function CommandIcon({ kind }: { kind: CommandKind }) {
   switch (kind) {
     case "nav":
       return <Compass {...props} className="text-accent" />;
+    case "repo":
+      return <FolderGit2 {...props} className="text-accent" />;
     case "note":
       return <FileText {...props} className="text-text-muted" />;
     case "task":

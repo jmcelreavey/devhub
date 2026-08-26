@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { AlertCircle, RefreshCw } from "lucide-react";
+import { AlertCircle, Folder, Plus, RefreshCw } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { revalidateRepoOpenPrs } from "@/lib/github/repo-open-pr-swr";
 import { revalidateOwnedRepos } from "@/lib/ownership/owned-repos-swr";
@@ -19,8 +19,11 @@ import { LearnPanel } from "./LearnPanel";
 import { EvolutionStrip } from "./EvolutionStrip";
 import { useReposActions } from "./useReposActions";
 import { useToast } from "@/lib/hooks/use-toast";
+import { usePrompt } from "@/components/shell/ConfirmDialog";
+import OwnIndex from "@/app/own/client";
 import type { GithubReposApiPayload, RepoInfo, ReposApiPayload } from "./types";
 import type { ResolvedOwnedRepo } from "@/lib/ownership/types";
+import type { RepoProject } from "@/lib/projects";
 
 function parseGithubFetchErrorMessage(error: unknown): string {
   if (!(error instanceof Error)) return "Couldn’t load GitHub repos.";
@@ -50,17 +53,13 @@ function githubFullName(remote: string | null): string | null {
 
 export default function ReposPage() {
   const toast = useToast();
+  const prompt = usePrompt();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const learnParam = searchParams.get("learn");
-  /**
-   * Deep link to one repo, used by the command palette. Seeds the filter rather
-   * than routing anywhere new, because the repo card — with its Git workspace,
-   * Upstart and Learn actions — is already the destination; there was just no
-   * way to arrive at it by name.
-   */
   const repoParam = searchParams.get("repo");
+  const ownedView = searchParams.get("view") === "owned";
 
   const {
     data,
@@ -81,6 +80,11 @@ export default function ReposPage() {
   );
   const [query, setQuery] = useState(repoParam ?? "");
   const [debouncedGithubQuery, setDebouncedGithubQuery] = useState("");
+  const { data: projectsData, mutate: mutateProjects } = useLive<{ projects: RepoProject[] }>("/api/projects", {
+    refreshInterval: 0,
+  });
+  const projects = projectsData?.projects ?? [];
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(searchParams.get("project"));
   const githubSearchQuery = debouncedGithubQuery.trim();
   const githubKey = useMemo(
     () => (githubSearchQuery ? `/api/repos/github${queryParam(githubSearchQuery)}` : null),
@@ -107,8 +111,14 @@ export default function ReposPage() {
     mutateGithub: () => mutateGithub(),
   });
   const githubRepos = githubData?.repos ?? [];
+  const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
+  const projectRepos = useMemo(
+    () => (activeProject ? new Set(activeProject.repos.map((r) => r.toLowerCase())) : null),
+    [activeProject],
+  );
   const normalizedLocalQuery = query.trim().toLowerCase();
   const filteredLocalRepos = repos.filter((repo) => {
+    if (projectRepos && !projectRepos.has(repo.name.toLowerCase())) return false;
     if (normalizedLocalQuery && !repo.name.toLowerCase().includes(normalizedLocalQuery)) return false;
     if (localFilter === "changed") return repo.dirtyCount > 0;
     if (localFilter === "unpushed") return (repo.unpushedCount ?? 0) > 0;
@@ -182,6 +192,51 @@ export default function ReposPage() {
     }
   }
 
+
+  function setRepoView(next: { owned?: boolean; project?: string | null }) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("view");
+    params.delete("project");
+    if (next.owned) params.set("view", "owned");
+    if (next.project) params.set("project", next.project);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    setActiveProjectId(next.project ?? null);
+  }
+
+  async function createRepoGroup() {
+    const label = await prompt({
+      title: "New repo group",
+      message: "Name this tab (e.g. Acme or Demo-App).",
+      input: { placeholder: "Acme" },
+      confirmLabel: "Next",
+    });
+    if (!label?.trim()) return;
+    const reposRaw = await prompt({
+      title: "Repos in this group",
+      message: "Comma-separated local repo names.",
+      input: { placeholder: "acme-api, demo-app" },
+      confirmLabel: "Create",
+    });
+    if (reposRaw === null) return;
+    const groupRepos = reposRaw.split(",").map((s) => s.trim()).filter(Boolean);
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ label: label.trim(), repos: groupRepos }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string; projects?: RepoProject[] };
+      if (!res.ok) throw new Error(body.error ?? "Could not create group");
+      await mutateProjects();
+      const created = (body.projects ?? []).find((g) => g.label === label.trim());
+      if (created) setRepoView({ project: created.id });
+      toast.success(`Created ${label.trim()}`);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not create group");
+    }
+  }
+
   return (
     <div className="page-wrapper">
       <BootScreen state={boot} />
@@ -231,6 +286,50 @@ export default function ReposPage() {
         </div>
       )}
 
+      <div className="hub-tabs mb-3" role="tablist" aria-label="Repo groups">
+        <button
+          type="button"
+          role="tab"
+          className="hub-tab"
+          aria-selected={!ownedView && !activeProjectId}
+          data-active={!ownedView && !activeProjectId ? "true" : undefined}
+          onClick={() => setRepoView({})}
+        >
+          All
+        </button>
+        <button
+          type="button"
+          role="tab"
+          className="hub-tab"
+          aria-selected={ownedView}
+          data-active={ownedView ? "true" : undefined}
+          onClick={() => setRepoView({ owned: true })}
+        >
+          Owned
+        </button>
+        {projects.map((project) => (
+          <button
+            key={project.id}
+            type="button"
+            role="tab"
+            className="hub-tab"
+            aria-label={`${project.label} group`}
+            aria-selected={!ownedView && activeProjectId === project.id}
+            data-active={!ownedView && activeProjectId === project.id ? "true" : undefined}
+            data-repo-group={project.id}
+            onClick={() => setRepoView({ project: project.id })}
+          >
+            <Folder size={12} aria-hidden />
+            {project.label}
+          </button>
+        ))}
+        <button type="button" className="hub-tab" onClick={() => void createRepoGroup()}>
+          <Plus size={12} aria-hidden /> New group
+        </button>
+      </div>
+
+      {ownedView ? <OwnIndex embedded /> : (
+      <>
       <SearchCard
         query={query}
         onQueryChange={setQuery}
@@ -238,6 +337,9 @@ export default function ReposPage() {
         onLocalFilterChange={setLocalFilter}
         changedCount={changedRepos}
         unpushedCount={unpushedRepos}
+        projects={projects}
+        activeProjectId={activeProjectId}
+        onProjectChange={setActiveProjectId}
       />
 
       <div className={showGithubColumn ? "grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_420px]" : undefined}>
@@ -364,6 +466,9 @@ export default function ReposPage() {
         <EmptyReposCard>
           No local repo named &quot;{learnParam}&quot; to learn. Clone it first, or clear the learn query.
         </EmptyReposCard>
+      )}
+
+      </>
       )}
 
       <LearnPanel

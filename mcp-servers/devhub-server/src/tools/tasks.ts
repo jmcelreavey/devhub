@@ -2,6 +2,42 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Context } from "../context.ts";
 import { escapeHtml, uiResult, widgetDocument } from "../ui.ts";
+import { blocksToText, textToBlocks } from "../convert.ts";
+import {
+  buildEntityLinksSection,
+  extractTags,
+  parseEntityLinksFromMarkdown,
+} from "../../../../shared/entity-note/index.ts";
+import {
+  buildTaskNoteMarkdown,
+  taskEntityRefs,
+  taskNotePath,
+} from "../../../../shared/task-note/index.ts";
+
+const CONTEXT_TAG_RE = /^[a-z_][a-z0-9_-]{0,31}$/;
+const singleLine = (max: number) =>
+  z.string().trim().min(1).max(max).refine((value) => !/[\u0000-\u001f\u007f]/.test(value), "must be one line");
+const linkLabel = singleLine(500).refine((value) => !/[\[\]]/.test(value), "must not contain markdown brackets");
+const linkHref = singleLine(2_000).refine((value) => !/[)]/.test(value), "must not contain ')' ");
+
+function sameRef(
+  left: { kind: string; id: string; href?: string },
+  right: { kind: string; id: string; href?: string },
+): boolean {
+  return left.kind === right.kind && (left.id === right.id || (!!left.href && left.href === right.href));
+}
+
+function taskHistoryLine(task: {
+  id: string;
+  text: string;
+  done: boolean;
+  movedAt?: string;
+  abandonedAt?: string;
+  jiraKey?: string;
+}): string {
+  const status = task.done ? "x" : task.movedAt ? ">" : task.abandonedAt ? "~" : " ";
+  return `- [${status}] ${task.id} - ${task.text}${task.jiraKey ? ` [${task.jiraKey}]` : ""}`;
+}
 
 export function registerTasksTools(server: McpServer, ctx: Context): void {
   const { tasksStorage } = ctx;
@@ -74,10 +110,9 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
       },
     },
     async ({ text, date, due, withNote, links }) => {
-      const task = tasksStorage.add(text, date, due);
+      let task = tasksStorage.add(text, date, due);
       if (links?.length) {
-        tasksStorage.update(task.id, { links }, date);
-        task.links = links;
+        task = tasksStorage.update(task.id, { links }, date) ?? task;
       }
       let noteLine = "";
       if (withNote) {
@@ -180,10 +215,7 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
             ],
           };
         }
-        const lines = day.tasks.map((t) => {
-          const s = t.done ? "x" : t.movedAt ? ">" : t.abandonedAt ? "~" : " ";
-          return `- [${s}] ${t.text}`;
-        });
+        const lines = day.tasks.map(taskHistoryLine);
         return {
           content: [{ type: "text", text: `${date} (${day.completed}/${day.total} done):\n${lines.join("\n")}` }],
         };
@@ -192,10 +224,189 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
       if (days.length === 0) {
         return { content: [{ type: "text", text: "No task history" }] };
       }
+      if (includeTasks) {
+        const sections = days.map((summary) => {
+          const day = tasksStorage.getDay(summary.date);
+          return `${summary.date} (${day.completed}/${day.total} done):\n${day.tasks.map(taskHistoryLine).join("\n")}`;
+        });
+        return { content: [{ type: "text", text: sections.join("\n\n") }] };
+      }
       const lines = days.map(
         (d) => `${d.date}: ${d.total} tasks, ${d.completed} done, ${d.abandoned} abandoned, ${d.moved} moved`,
       );
       return { content: [{ type: "text", text: lines.join("\n") }] };
+    },
+  );
+
+  server.registerTool(
+    "tasks_context_sync",
+    {
+      description:
+        "Merge context into a task and its linked note in one server-side operation: adds canonical #tags to the task text (dedup, existing tags preserved), merges hop-around links by kind+id (never drops existing links), appends missing note link/tag blocks without rewriting rich content, and appends an idempotent keyed implementation summary. Call tags_list first to reuse canonical tag names.",
+      inputSchema: {
+        id: z.string().trim().min(1).max(200).describe("Task ID (UUID)"),
+        date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional()
+          .describe("Date the task belongs to (YYYY-MM-DD). Defaults to today."),
+        tags: z
+          .array(z.string().trim().min(1).max(64))
+          .max(20)
+          .optional()
+          .describe("Canonical tag ids to add (with or without #). Existing tags are kept; duplicates are dropped."),
+        links: z
+          .array(
+            z.object({
+              kind: z.enum(["task", "meeting", "pr", "note", "diagram", "calendar", "jira", "repo"]),
+              id: singleLine(500),
+              label: linkLabel,
+              href: linkHref.optional(),
+            }),
+          )
+          .max(50)
+          .optional()
+          .describe("EntityRefs to merge into the task by kind+id (existing label/href refreshed when provided)"),
+        noteSummary: z
+          .string()
+          .trim()
+          .min(1)
+          .max(10_000)
+          .optional()
+          .describe("Short markdown summary to append to the task note under a keyed '## Implementation <key>' heading"),
+        noteSummaryKey: z
+          .string()
+          .trim()
+          .min(1)
+          .max(500)
+          .optional()
+          .describe("Required with noteSummary. Exact idempotency key, e.g. the PR URL or commit SHA."),
+      },
+    },
+    async ({ id, date, tags, links, noteSummary, noteSummaryKey }) => {
+      const target = date || new Date().toISOString().split("T")[0];
+      const task = tasksStorage.getDay(target).tasks.find((t) => t.id === id);
+      if (!task) {
+        return { content: [{ type: "text", text: `Task not found: ${id}` }] };
+      }
+      if (noteSummary && !noteSummaryKey) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: "noteSummaryKey is required when noteSummary is provided." }],
+        };
+      }
+
+      const requested = (tags ?? [])
+        .map((t) => t.replace(/^#/, "").trim().toLowerCase())
+        .filter((t) => CONTEXT_TAG_RE.test(t));
+      const skippedTags = (tags?.length ?? 0) - requested.length;
+      const knownTags = extractTags(task.text);
+      const known = new Set(knownTags);
+      const requestedTags = [...new Set(requested)];
+      const addedTags = requestedTags.filter((t) => !known.has(t));
+      const canonicalTags = [...new Set([...knownTags, ...requestedTags])];
+      const nextText = addedTags.length ? `${task.text} ${addedTags.map((t) => `#${t}`).join(" ")}` : task.text;
+      if (nextText.length > 500) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: "Tag merge would exceed the 500-character task text limit." }],
+        };
+      }
+
+      const merged = [...(task.links ?? [])];
+      let linksAdded = 0;
+      let linksUpdated = 0;
+      for (const ref of links ?? []) {
+        const idx = merged.findIndex((l) => l.kind === ref.kind && l.id === ref.id);
+        if (idx === -1) {
+          merged.push(ref);
+          linksAdded++;
+        } else if (
+          (ref.label && ref.label !== merged[idx].label) ||
+          (ref.href && ref.href !== merged[idx].href)
+        ) {
+          merged[idx] = { ...merged[idx], label: ref.label || merged[idx].label, href: ref.href || merged[idx].href };
+          linksUpdated++;
+        }
+      }
+
+      const textChanged = nextText !== task.text;
+      const linksChanged = linksAdded > 0 || linksUpdated > 0;
+      let synced = task;
+      if (textChanged || linksChanged) {
+        synced = tasksStorage.update(id, { text: nextText, links: merged }, target) ?? task;
+      }
+
+      const noteSource = {
+        id: synced.id,
+        text: synced.text,
+        date: target,
+        jiraKey: synced.jiraKey,
+        related: synced.links ?? merged,
+      };
+      const notePath = taskNotePath(noteSource);
+
+      const existingNote = ctx.storage.read(notePath);
+      const existingMarkdown =
+        existingNote?.content != null ? blocksToText(existingNote.content as unknown[]) : null;
+      const shouldCreateNote = !existingNote && !!(noteSummary || requestedTags.length);
+      const noteCreated = shouldCreateNote;
+      let summaryAdded = false;
+      let noteChanged = false;
+
+      if (shouldCreateNote) {
+        const parts = [buildTaskNoteMarkdown(noteSource)];
+        if (canonicalTags.length) parts.push(`Tags: ${canonicalTags.map((tag) => `#${tag}`).join(" ")}`);
+        if (noteSummary && noteSummaryKey) {
+          parts.push(`## Implementation ${noteSummaryKey}\n\n${noteSummary}`);
+          summaryAdded = true;
+        }
+        ctx.storage.write(notePath, textToBlocks(parts.join("\n\n")));
+        noteChanged = true;
+      } else if (existingNote && existingMarkdown !== null) {
+        const append: string[] = [];
+        const existingRefs = parseEntityLinksFromMarkdown(existingMarkdown);
+        const missingRefs = taskEntityRefs(noteSource).filter(
+          (ref) => !existingRefs.some((existingRef) => sameRef(existingRef, ref)),
+        );
+        if (missingRefs.length) append.push(buildEntityLinksSection(missingRefs).trim());
+
+        const noteTags = new Set(extractTags(existingMarkdown));
+        const missingTags = canonicalTags.filter((tag) => !noteTags.has(tag));
+        if (missingTags.length) append.push(`Tags: ${missingTags.map((tag) => `#${tag}`).join(" ")}`);
+
+        if (noteSummary && noteSummaryKey) {
+          const heading = `## Implementation ${noteSummaryKey}`;
+          const hasSummary = existingMarkdown.split("\n").some((line) => line.trim() === heading);
+          if (!hasSummary) {
+            append.push(`${heading}\n\n${noteSummary}`);
+            summaryAdded = true;
+          }
+        }
+
+        if (append.length) {
+          const currentBlocks = Array.isArray(existingNote.content) ? existingNote.content : [existingNote.content];
+          ctx.storage.write(notePath, [...currentBlocks, ...textToBlocks(append.join("\n\n"))]);
+          noteChanged = true;
+        }
+      }
+
+      const changes = [
+        addedTags.length ? `tags added: ${addedTags.map((t) => `#${t}`).join(" ")}` : null,
+        skippedTags > 0 ? `${skippedTags} invalid tag(s) skipped` : null,
+        linksChanged ? `links: +${linksAdded} added, ${linksUpdated} updated` : null,
+        existingNote || noteCreated
+          ? `note ${notePath}${noteCreated ? " created" : noteChanged ? " updated" : " unchanged"}${noteSummary ? (summaryAdded ? " (summary added)" : " (summary already present)") : ""}`
+          : null,
+      ].filter(Boolean);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Synced task ${id} (${target}):\n${changes.length ? changes.map((c) => `- ${c}`).join("\n") : "- no changes"}`,
+          },
+        ],
+      };
     },
   );
 }

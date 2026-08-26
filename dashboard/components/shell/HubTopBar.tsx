@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Bot, ExternalLink, Monitor, Search, Settings, Terminal } from "lucide-react";
-import { buildCrumbs } from "@/lib/nav";
+import { useSessionHistory } from "@/lib/hooks/use-session-history";
 import { SectionTabs } from "@/components/shell/SectionTabs";
 import { AccentPicker } from "@/components/shell/AccentPicker";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
@@ -21,12 +21,15 @@ import { openInBrowser } from "@/lib/desktop/bridge";
 
 /**
  * Desktop chrome — breadcrumbs, pending-changes indicator, focus timer,
- * quick-add panel buttons, ⌘K search, and theme picker. Panels: ⌘⇧O
- * (notes), ⌘⇧T (tasks), ⌘⇧D (diagrams).
+ * quick-add panel buttons, ⌘P search, and theme picker. Panels: ⌘N
+ * (notes), ⌘T (tasks), ⌘D (diagrams). Terminal: ⌃`.
  */
 export function HubTopBar() {
   const pathname = usePathname();
-  const crumbs = useMemo(() => buildCrumbs(pathname), [pathname]);
+  const searchParams = useSearchParams();
+  const query = searchParams.toString();
+  const currentHref = query ? `${pathname}?${query}` : pathname;
+  const trail = useSessionHistory().slice(-5);
   const isOnChamber = pathname === "/chamber";
   const isOnOpenCode = pathname === "/opencode";
   const launchChamberDesktop = useLaunchChamberDesktop();
@@ -117,25 +120,25 @@ export function HubTopBar() {
     // Visibility (desktop-only) is owned by `.hub-topbar` in globals.css —
     // a Tailwind `hidden md:flex` here would be silently overridden.
     <header className="hub-topbar">
-      <nav aria-label="Breadcrumbs" className="hub-crumbs">
-        {crumbs.map((c, i) => (
-          <span key={i} className="hub-crumb">
-            {c.href ? <Link href={c.href}>{c.label}</Link> : <span>{c.label}</span>}
-            {i < crumbs.length - 1 && <span aria-hidden className="hub-crumb-sep">›</span>}
+      <nav aria-label="Navigation history" className="hub-crumbs">
+        {trail.map((entry, i) => (
+          <span key={`${entry.href}:${entry.ts}`} className="hub-crumb">
+            {entry.href === currentHref ? <span>{entry.label}</span> : <Link href={entry.href}>{entry.label}</Link>}
+            {i < trail.length - 1 && <span aria-hidden className="hub-crumb-sep">›</span>}
           </span>
         ))}
       </nav>
       <SectionTabs />
-      {/* Visible search box - opens the ⌘K palette. */}
+      {/* Visible search box - opens the ⌘P palette. */}
       <button
         type="button"
         className="hub-search"
         onClick={openPalette}
-        aria-label="Search everything (⌘K)"
+        aria-label="Search everything (⌘P)"
       >
         <Search size={13} aria-hidden />
         <span className="hub-search-label">Search…</span>
-        <kbd className="hub-search-kbd" aria-hidden>⌘K</kbd>
+        <kbd className="hub-search-kbd" aria-hidden>⌘P</kbd>
       </button>
       <div className="hub-topbar-actions">
         {/* Signal cluster - git sync + dirty indicators */}

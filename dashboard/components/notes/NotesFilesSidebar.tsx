@@ -68,6 +68,8 @@ export function NotesFilesSidebar({
   }, [expandedWidth]);
 
   const width = collapsed ? COLLAPSED_WIDTH : expandedWidth;
+  const mobileDrawer = isMobile && !collapsed;
+  const layoutWidth = mobileDrawer ? COLLAPSED_WIDTH : width;
 
   const toggle = () => setCollapsed((prev) => !prev);
 
@@ -103,16 +105,37 @@ export function NotesFilesSidebar({
   }, []);
 
   return (
-    <aside
-      className="relative flex shrink-0 flex-col border-r overflow-hidden"
-      style={{
-        width,
-        minWidth: width,
-        background: "var(--bg-surface)",
-        borderColor: "var(--border)",
-        transition: "none",
-      }}
-    >
+    <>
+      {mobileDrawer ? (
+        <div
+          className="modal-backdrop fixed inset-0 z-[9550]"
+          style={{ background: "var(--scrim-strong)" }}
+          onClick={() => setCollapsed(true)}
+          aria-hidden
+        />
+      ) : null}
+      <aside
+        className="relative flex shrink-0 flex-col border-r overflow-hidden"
+        style={{
+          width: layoutWidth,
+          minWidth: layoutWidth,
+          background: "var(--bg-surface)",
+          borderColor: "var(--border)",
+          transition: "none",
+          ...(mobileDrawer
+            ? {
+                position: "fixed",
+                left: 0,
+                top: "var(--mobile-topbar-h, 48px)",
+                bottom: "calc(var(--shelf-h, 56px) + env(safe-area-inset-bottom, 0px))",
+                zIndex: 9600,
+                width: "min(88vw, 320px)",
+                minWidth: "min(88vw, 320px)",
+                boxShadow: "var(--shadow-lg)",
+              }
+            : {}),
+        }}
+      >
       {collapsed ? (
         <div className="flex flex-1 min-h-0 flex-col items-center py-2 gap-1">
           <NotesViewToggle value={panel} onChange={onPanelChange} collapsed />
@@ -181,6 +204,7 @@ export function NotesFilesSidebar({
         </button>
       </div>
     </aside>
+    </>
   );
 }
 

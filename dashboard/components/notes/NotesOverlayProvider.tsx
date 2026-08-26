@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
+import { appShortcutFromEvent } from "@/lib/app-shortcuts";
 
 /**
  * All five surfaces here are keyboard-summoned and invisible at boot, but this
@@ -100,52 +101,14 @@ export function NotesOverlayProvider() {
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
-      if (
-        (e.metaKey || e.ctrlKey) &&
-        e.key === "k" &&
-        !e.shiftKey &&
-        !e.altKey
-      ) {
-        e.preventDefault();
-        togglePalette();
-        return;
-      }
-      if (
-        (e.metaKey || e.ctrlKey) &&
-        e.shiftKey &&
-        e.key.toLowerCase() === "o"
-      ) {
-        e.preventDefault();
-        togglePanel("notes");
-        return;
-      }
-      if (
-        (e.metaKey || e.ctrlKey) &&
-        e.shiftKey &&
-        e.key.toLowerCase() === "t"
-      ) {
-        e.preventDefault();
-        togglePanel("tasks");
-        return;
-      }
-      if (
-        (e.metaKey || e.ctrlKey) &&
-        e.shiftKey &&
-        e.key.toLowerCase() === "d"
-      ) {
-        e.preventDefault();
-        togglePanel("diagrams");
-        return;
-      }
-      if (
-        (e.metaKey || e.ctrlKey) &&
-        e.shiftKey &&
-        e.key.toLowerCase() === "c"
-      ) {
-        e.preventDefault();
-        openCapture();
-        return;
-      }
+      const shortcut = appShortcutFromEvent(e);
+      if (!shortcut) return;
+      e.preventDefault();
+      if (shortcut === "palette") togglePalette();
+      else if (shortcut === "notes") togglePanel("notes");
+      else if (shortcut === "tasks") togglePanel("tasks");
+      else if (shortcut === "diagrams") togglePanel("diagrams");
+      else if (shortcut === "capture") openCapture();
     }
     function onNotesToggle() {
       togglePanel("notes");
@@ -184,11 +147,13 @@ export function NotesOverlayProvider() {
   return (
     <>
       {hasSummoned("palette") && (
-        <CommandPalette
-          key={paletteOpen ? "palette-open" : "palette-closed"}
-          open={paletteOpen}
-          onClose={closePalette}
-        />
+        <Suspense fallback={null}>
+          <CommandPalette
+            key={paletteOpen ? "palette-open" : "palette-closed"}
+            open={paletteOpen}
+            onClose={closePalette}
+          />
+        </Suspense>
       )}
       {hasSummoned("notes") && (
         <NotesOverlay open={panels.isOpen("notes")} onClose={panels.close} />

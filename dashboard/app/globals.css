@@ -2059,6 +2059,101 @@ body[data-grid-resizing="true"] * {
   }
 }
 
+/* Browser-style workspace tabs — routes, not iframes. Below the top bar. */
+.workspace-tabs {
+  display: none;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-muted);
+  background: var(--bg-sidebar);
+}
+@media (min-width: 768px) {
+  .workspace-tabs {
+    display: block;
+  }
+}
+.workspace-tabs-scroll {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 8px 0;
+  scrollbar-width: thin;
+}
+.workspace-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 180px;
+  min-width: 72px;
+  height: 28px;
+  padding: 0 6px 0 8px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition:
+    background 220ms var(--ease-swift),
+    color 220ms var(--ease-swift),
+    opacity 220ms var(--ease-swift),
+    border-color 220ms var(--ease-swift);
+}
+.workspace-tab:hover {
+  color: var(--text);
+  background: color-mix(in oklab, var(--bg-elevated) 70%, transparent);
+}
+.workspace-tab[data-active] {
+  color: var(--text);
+  background: var(--bg);
+  border-color: var(--border-muted);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.workspace-tab-icon {
+  display: inline-flex;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+.workspace-tab[data-active] .workspace-tab-icon {
+  opacity: 1;
+  color: var(--accent);
+}
+.workspace-tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.workspace-tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 2px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0.55;
+}
+.workspace-tab-close:hover {
+  opacity: 1;
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace-tab {
+    transition: none;
+  }
+}
+
 .hub-crumbs {
   display: flex;
   align-items: center;
@@ -2106,7 +2201,7 @@ body[data-grid-resizing="true"] * {
   border: 1px solid var(--border-muted);
 }
 
-/* ── Top-bar search box: looks like an input, opens the ⌘K palette ── */
+/* ── Top-bar search box: looks like an input, opens the ⌘P palette ── */
 .hub-search {
   display: inline-flex;
   align-items: center;
@@ -2535,15 +2630,30 @@ body[data-grid-resizing="true"] * {
   line-clamp: 2;
 }
 
-/* Right-aligned meta cluster (Jira status pill, due date, timer readout). Anchored
-   right so the trailing content sits in a consistent place whether or not the
-   task has a Jira link, due date, or tracked time. */
+/* Trailing meta cluster (Jira status pill, due date, timer readout). Lives at
+   the head of the action rail so pills and icons form one aligned column. */
 .task-row-meta {
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 0.5rem;
   flex-shrink: 0;
+  margin-right: 4px;
+}
+
+/* Inline #tag chips grouped so a wrapping title carries them as one block —
+   never split mid-wrap — with the "+N" overflow chip inside the cluster. */
+.task-title-tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+.task-title-tags .entity-link-chip-more {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
 .task-timer-readout {
@@ -2600,11 +2710,23 @@ body[data-motion="off"] .task-timer-dot {
   color: var(--accent);
 }
 
+/* Fixed right rail: meta pills + note glyph + tags + kebab. The 28px controls
+   are pulled up so their centers sit on the ~20px first text line instead of
+   drifting per row or inflating row height. */
 .task-row-actions {
   display: flex;
   flex-shrink: 0;
-  align-items: flex-start;
+  align-items: center;
   gap: 2px;
+  margin-top: -4px;
+}
+
+/* Match the tags button's hit-area so the icon column reads as a grid. */
+.task-row-actions .row-note-glyph {
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
 }
 
 .task-icon-action {
@@ -3841,7 +3963,7 @@ body[data-motion="off"] .briefing-wx-card {
   }
 }
 
-/* ── ⌘K palette entrance ── */
+/* ── ⌘P palette entrance ── */
 @keyframes palette-backdrop-in {
   from {
     opacity: 0;
@@ -5202,6 +5324,169 @@ body[data-motion="off"] .context-menu:not([hidden]) {
   animation: none;
 }
 
+.tags-modal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tags-modal-item {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
+}
+.tags-modal-item:hover {
+  background: var(--bg-overlay);
+  color: var(--text);
+}
+.tags-modal-item:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
+  outline-offset: -2px;
+  color: var(--text);
+}
+.tags-modal-item-icon {
+  margin-top: 2px;
+  color: var(--text-subtle);
+  flex-shrink: 0;
+}
+.tags-modal-item-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+.tags-modal-item-label {
+  font-size: 13px;
+  line-height: 1.3;
+}
+.tags-modal-item-desc {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-subtle);
+}
+.tags-modal-empty {
+  font-size: 12.5px;
+  color: var(--text-subtle);
+  padding: 8px 2px;
+}
+.tags-modal-row {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+.tags-modal-row .tags-modal-item {
+  flex: 1;
+  min-width: 0;
+}
+.tags-modal-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+.tags-modal-remove:hover {
+  background: var(--bg-overlay);
+  color: var(--danger);
+}
+.tags-modal-add {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+/* Tag field reuses Notes .search-field chrome; submit sits inside the ring. */
+.tags-modal-add-field {
+  width: 100%;
+  margin: 0;
+}
+.tags-modal-add-submit {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-swift),
+    background-color var(--dur-fast) var(--ease-swift);
+}
+.tags-modal-add-submit:hover:not(:disabled) {
+  background: var(--bg-muted);
+  color: var(--text);
+}
+.tags-modal-add-submit:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.tags-modal-add-submit:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
+  outline-offset: 1px;
+}
+/* Secondary action — same height/radius/border as search-field--boxed. */
+.tags-modal-add-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 0;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    color var(--dur-fast) var(--ease-swift),
+    border-color var(--dur-fast) var(--ease-swift),
+    background-color var(--dur-fast) var(--ease-swift);
+}
+.tags-modal-add-link:hover {
+  color: var(--text);
+  border-color: color-mix(in oklab, var(--border) 70%, var(--text-muted));
+  background: var(--bg-overlay);
+}
+.tags-modal-add-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Row that owns an open context menu — board-wide via bindRow host attr */
+[data-context-menu-host][data-context-menu="open"],
+[data-context-menu-host][data-context-menu="open"]:hover {
+  background: var(--accent-dim);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  body:not([data-motion="off"]) [data-context-menu-host] {
+    transition:
+      background var(--dur-fast) var(--ease-swift),
+      box-shadow var(--dur-fast) var(--ease-swift);
+  }
+}
+
 .row-menu-kebab {
   display: inline-flex;
   flex-shrink: 0;
@@ -6223,6 +6508,22 @@ body[data-motion="off"] .evolution-arrow {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+.repo-hub-history {
+  height: min(680px, 70dvh);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--bg-elevated);
+}
+.repo-hub-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+@media (max-width: 900px) {
+  .repo-hub-columns {
+    grid-template-columns: 1fr;
+  }
 }
 .repo-git-pane-enter {
   animation: hub-enter var(--dur-base) var(--ease-swift);
@@ -9127,10 +9428,21 @@ ul.docs-list ul.docs-list {
 .entity-link-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
   list-style: none;
   margin: 0;
   padding: 0;
+  align-items: center;
+}
+.task-row-links {
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+.side-panel-enter .entity-link-chips,
+.side-panel-enter-mobile .entity-link-chips {
+  flex-wrap: nowrap;
+  overflow: hidden;
+  gap: 6px;
 }
 
 .entity-link-chip {
@@ -9167,6 +9479,13 @@ ul.docs-list ul.docs-list {
 }
 .entity-link-chip[data-kind="note"] {
   --chip-tint: var(--accent);
+}
+.entity-link-chip[data-kind="tag"] {
+  --chip-tint: var(--accent);
+}
+/* Inline #tag chips inside task text sit tighter than chip rows. */
+.task-row .entity-link-chip {
+  padding: 0 4px;
 }
 .entity-link-chip[data-kind="diagram"] {
   --chip-tint: var(--info);

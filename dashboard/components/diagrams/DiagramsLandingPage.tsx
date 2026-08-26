@@ -105,7 +105,7 @@ export function DiagramsLandingPage({
               <h1 className="lib-hero-title">Diagrams</h1>
               <p className="lib-hero-sub">
                 Architecture and flow canvases — {total} diagrams across {browsable.length}{" "}
-                areas. Filter from the sidebar, or <kbd className="lib-kbd">⌘K</kbd> anywhere.
+                areas. Filter from the sidebar, or <kbd className="lib-kbd">⌘P</kbd> anywhere.
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">

@@ -1,8 +1,7 @@
-import OwnIndex from "./client";
+import { redirect } from "next/navigation";
 
-export const metadata = { title: "Own" };
-
+export const metadata = { title: "Owned repos" };
 
 export default function Page() {
-  return <OwnIndex />;
+  redirect("/repos?view=owned");
 }

@@ -19,8 +19,8 @@
 import path from "node:path";
 import { getNotesDir } from "@/lib/notes/dir";
 
-/** v2: #tag extraction added to derived refs (tags join the graph). */
-export const RECALL_INDEX_VERSION = 2;
+/** v3: stable note paths contribute task, repo, PR-review and audit refs. */
+export const RECALL_INDEX_VERSION = 3;
 
 export function recallRoot(): string {
   return path.join(getNotesDir(), ".index");

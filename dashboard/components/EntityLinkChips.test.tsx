@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { chipDisplayLabel } from "@/components/EntityLinkChips";
+import { chipDisplayLabel, isRedundantChip } from "@/components/EntityLinkChips";
 
 describe("chipDisplayLabel", () => {
   it("collapses companion note labels that echo the task title", () => {
@@ -40,5 +40,43 @@ describe("chipDisplayLabel", () => {
         { suppressJiraKey: "PTF-4485" },
       ),
     ).toBe("Fix the thing");
+  });
+});
+
+describe("isRedundantChip", () => {
+  it("hides the host Jira key even when it is a removable seed", () => {
+    expect(
+      isRedundantChip(
+        { kind: "jira", id: "PTF-4783", label: "PTF-4783" },
+        { suppressJiraKey: "PTF-4783" },
+      ),
+    ).toBe(true);
+  });
+
+  it("hides hashtags already shown in the title", () => {
+    expect(
+      isRedundantChip(
+        { kind: "tag", id: "mobile-app", label: "#mobile-app" },
+        { hostTags: ["mobile-app"] },
+      ),
+    ).toBe(true);
+  });
+
+  it("hides companion task notes when the row already has a note glyph", () => {
+    expect(
+      isRedundantChip(
+        { kind: "note", id: "task-notes/x", label: "Note" },
+        { hideCompanionNotes: true },
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps unrelated hops", () => {
+    expect(
+      isRedundantChip(
+        { kind: "pr", id: "org/repo#1", label: "Fix" },
+        { suppressJiraKey: "PTF-4783", hostTags: ["mobile-app"] },
+      ),
+    ).toBe(false);
   });
 });

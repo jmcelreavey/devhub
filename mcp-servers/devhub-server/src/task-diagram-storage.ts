@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { NotesStorage } from "./storage.ts";
 import { NOTE_SIZE, geoHeight, indexKeyAt, noteGrowY } from "./diagram-geometry.ts";
 import { buildGraphRecords, type GraphSpec } from "./diagram-graph.ts";
+import { normalizeTaskLinkState } from "../../../shared/task-note/index.ts";
 
 // keep in sync with dashboard/lib/tasks/types.ts Task
 export interface EntityRef {
@@ -58,7 +59,12 @@ export class TasksStorage {
     const fp = this.file(date);
     if (!fs.existsSync(fp)) return [];
     try {
-      return JSON.parse(fs.readFileSync(fp, "utf-8"));
+      const tasks = JSON.parse(fs.readFileSync(fp, "utf-8")) as Task[];
+      return tasks.map((task) => {
+        if (task.jiraKey || !task.links?.some((l) => l.kind === "jira")) return task;
+        const normalized = normalizeTaskLinkState(task.text, task.jiraKey, task.links);
+        return { ...task, text: normalized.text, jiraKey: normalized.jiraKey, links: normalized.links };
+      });
     } catch {
       return [];
     }
@@ -161,7 +167,10 @@ export class TasksStorage {
       task.due = patch.due;
     }
     if (patch.links !== undefined) {
-      task.links = patch.links.length > 0 ? patch.links : undefined;
+      const normalized = normalizeTaskLinkState(task.text, task.jiraKey, patch.links);
+      task.text = normalized.text;
+      task.jiraKey = normalized.jiraKey;
+      task.links = normalized.links;
     }
     if (patch.status === "complete") {
       task.done = true;

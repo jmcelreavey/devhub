@@ -2,7 +2,7 @@ import { test, expect, type ConsoleMessage, type Page } from "@playwright/test";
 
 /**
  * Routes that render their own UI. Redirect-only routes (/tasks, /activity,
- * /collections) and layout-hosted ones (/chamber, /claude, /cursor, /opencode) are
+ * /collections) and layout-hosted ones (/chamber, /opencode) are
  * excluded — they have no content of their own to assert on.
  */
 const ROUTES = [
@@ -142,7 +142,7 @@ test.describe("app shell", () => {
   test("command palette opens on the keyboard shortcut", async ({ page }) => {
     await page.goto("/");
 
-    // The ⌘K listener lives in a client component, so it only exists after
+    // The ⌘P listener lives in a client component, so it only exists after
     // hydration. Pressing before then does nothing and the test flakes — it
     // failed roughly one run in three without this wait. Not a regression from
     // making the palette a dynamic import (the listener was always client-side
@@ -151,7 +151,7 @@ test.describe("app shell", () => {
     await expect(searchTrigger).toBeEnabled();
     await page.waitForFunction(() => document.readyState === "complete");
 
-    await page.keyboard.press("ControlOrMeta+k");
+    await page.keyboard.press("ControlOrMeta+p");
     await expect(page.getByRole("dialog").or(page.locator("[data-command-palette]")))
       .toBeVisible({ timeout: 10_000 });
   });

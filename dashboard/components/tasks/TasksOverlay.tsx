@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { X, Search, RefreshCw, CheckCircle2, Ban } from "lucide-react";
+import { X, RefreshCw, CheckCircle2, Ban } from "lucide-react";
 import { SidePanel } from "@/components/shell/SidePanel";
 import { HoverTip } from "@/components/ui/HoverTip";
+import { SearchInput } from "@/components/ui/SearchInput";
 import {
   TaskList,
   renderTaskTextContent,
@@ -116,22 +117,17 @@ export function TasksOverlay({ open, onClose }: TasksOverlayProps) {
         className="flex items-center gap-2 px-4 py-3 border-b shrink-0"
         style={{ borderColor: "var(--border)" }}
       >
-        <Search
-          size={14}
-          style={{ color: "var(--text-muted)", flexShrink: 0 }}
-          aria-hidden
-        />
         <label htmlFor="tasks-search-input" className="sr-only">
           Search tasks
         </label>
-        <input
+        <SearchInput
           id="tasks-search-input"
-          type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={setQuery}
           placeholder="Search tasks…"
           autoFocus
-          className="flex-1 bg-transparent text-sm outline-none text-text"
+          wrapperClassName="min-w-0 flex-1"
+          inputClassName="h-8 text-sm"
         />
         <HoverTip label={isRefreshing ? "Refreshing…" : "Refresh tasks"}>
           <button
@@ -189,6 +185,7 @@ export function TasksOverlay({ open, onClose }: TasksOverlayProps) {
               key={refreshKey}
               inputId="hub-tasks-side-input"
               searchQuery={query}
+              denseLinks
             />
           </div>
         ) : isLoadingHistory ? (

@@ -1,91 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import {
-  ArrowLeft,
-  Bot,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  Dumbbell,
-  FileText,
-  RefreshCw,
-  Repeat,
-} from "lucide-react";
+import { ArrowLeft, BookOpen, Check, Dumbbell, ExternalLink, Eye, Repeat } from "lucide-react";
 import { FetchError, SkeletonRows } from "@/components";
 import { RepStreakStrip } from "@/components/reps/RepStreakStrip";
 import { GitDiffView } from "@/components/repo-git/GitDiffView";
 import { useLive } from "@/lib/hooks/use-fetch";
-import { notifyPrReviewNoteWatch, prReviewNotePath } from "@/lib/pr-review-notes";
-import { launchAgentJob } from "@/lib/agent-job";
-import { agentReviewCommand, agentReviewPrompt } from "@/lib/terminal-launch";
 import { groupUnifiedDiffByFile, type DiffFileSection } from "@/lib/repos/git-parsers";
-import { createOrOpenVaultNote } from "@/lib/create-vault-note";
-import type { GithubPrsApiPayload } from "@/lib/github/prs";
-import type { AiGrade } from "@/lib/reps-grade";
-import type { Rep, RepsApiPayload } from "@/lib/reps";
-
-function Stepper({
-  label,
-  value,
-  onChange,
-  tone,
-}: {
-  label: string;
-  value: number;
-  onChange: (next: number) => void;
-  tone: string;
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-text-subtle min-w-28">{label}</span>
-      <button
-        type="button"
-        className="btn btn-ghost"
-        style={{ fontSize: 12, padding: "2px 8px" }}
-        onClick={() => onChange(Math.max(0, value - 1))}
-        aria-label={`Fewer ${label}`}
-      >
-        <ChevronLeft size={12} aria-hidden />
-      </button>
-      <span className="font-mono tabular-nums text-sm w-6 text-center" style={{ color: tone }}>
-        {value}
-      </span>
-      <button
-        type="button"
-        className="btn btn-ghost"
-        style={{ fontSize: 12, padding: "2px 8px" }}
-        onClick={() => onChange(value + 1)}
-        aria-label={`More ${label}`}
-      >
-        <ChevronRight size={12} aria-hidden />
-      </button>
-    </div>
-  );
-}
-
-function StepChips({ completed }: { completed: boolean }) {
-  const chip = (n: number, label: string, state: "done" | "active" | "todo") => (
-    <span
-      key={label}
-      className="badge inline-flex items-center gap-1"
-      style={{
-        background: state === "todo" ? "var(--bg-elevated)" : state === "done" ? "var(--success-dim, var(--accent-dim))" : "var(--accent-dim)",
-        color: state === "todo" ? "var(--text-subtle)" : state === "done" ? "var(--success, var(--accent))" : "var(--accent)",
-      }}
-    >
-      {n} · {label}
-    </span>
-  );
-  return (
-    <div className="flex items-center gap-1.5">
-      {chip(1, "Solo review", completed ? "done" : "active")}
-      {chip(2, "Compare & grade", completed ? "active" : "todo")}
-    </div>
-  );
-}
+import { REP_KIND_LABEL, type PublicRep, type RepsApiPayload } from "@/lib/reps-shared";
 
 function FileDiff({ section }: { section: DiffFileSection }) {
   const summary = section.binary ? "binary" : `+${section.additions} −${section.deletions}`;
@@ -109,91 +32,8 @@ function FileDiff({ section }: { section: DiffFileSection }) {
   );
 }
 
-function SwapPicker({
-  current,
-  onPicked,
-  onDone,
-}: {
-  current: Rep["pr"];
-  onPicked: () => void;
-  onDone: () => void;
-}) {
-  const [rows, setRows] = useState<GithubPrsApiPayload["reviews"] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (rows || error) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch("/api/github/prs");
-        const body = (await res.json()) as GithubPrsApiPayload;
-        if (!cancelled) setRows(body.reviews ?? []);
-      } catch {
-        if (!cancelled) setError("Couldn't load the review queue.");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [rows, error]);
-
-  const others = (rows ?? [])
-    .filter((r) => !current || r.repo !== current.repo || r.number !== current.number)
-    .slice(0, 5);
-
-  async function swap(repo: string, number: number, title: string, url: string) {
-    setBusy(true);
-    try {
-      const res = await fetch("/api/reps", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "repick", pr: { repo, number, title, url } }),
-      });
-      if (res.ok) {
-        onPicked();
-        onDone();
-      } else {
-        const payload = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(payload.error ?? "Swap failed.");
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="mt-2 rounded p-2" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-      <div className="text-xs font-medium mb-1.5 text-text-muted">Swap today&apos;s rep for…</div>
-      {error && <p className="text-xs text-text-subtle">{error}</p>}
-      {!rows && !error && <p className="text-xs text-text-subtle">Loading queue…</p>}
-      {rows && others.length === 0 && (
-        <p className="text-xs text-text-subtle">Nothing else in the queue — this one&apos;s your rep.</p>
-      )}
-      <div className="space-y-1">
-        {others.map((r) => (
-          <button
-            key={`${r.repo}#${r.number}`}
-            type="button"
-            disabled={busy}
-            onClick={() => void swap(r.repo, r.number, r.title, r.url)}
-            className="w-full text-left px-2 py-1.5 rounded text-sm hover:bg-[var(--bg-muted)] transition-colors flex items-center gap-2 min-w-0"
-          >
-            <Repeat size={11} aria-hidden className="shrink-0" style={{ color: "var(--text-subtle)" }} />
-            <span className="min-w-0 truncate">{r.title}</span>
-            <span className="shrink-0 text-xs font-mono" style={{ color: "var(--text-subtle)" }}>
-              {r.repo}#{r.number}
-            </span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/** Owns diff fetching for one PR pick. Remounts (via key) reset it on swap. */
-function DiffPanel({ pr }: { pr: NonNullable<Rep["pr"]> }) {
+/** Diff for today's cold read. Remounts (via key) reset it on swap. */
+function DiffPanel() {
   const [diff, setDiff] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -201,7 +41,7 @@ function DiffPanel({ pr }: { pr: NonNullable<Rep["pr"]> }) {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(`/api/reps/diff?repo=${encodeURIComponent(pr.repo)}&number=${pr.number}`);
+        const res = await fetch("/api/reps/diff");
         const body = (await res.json()) as { diff?: string; error?: string };
         if (cancelled) return;
         if (!res.ok || typeof body.diff !== "string") {
@@ -210,17 +50,15 @@ function DiffPanel({ pr }: { pr: NonNullable<Rep["pr"]> }) {
           setDiff(body.diff);
         }
       } catch {
-        if (!cancelled) setError("Could not load PR diff.");
+        if (!cancelled) setError("Could not load the commit diff.");
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [pr]);
+  }, []);
 
   const sections = useMemo(() => (diff ? groupUnifiedDiffByFile(diff) : []), [diff]);
-  const totalAdd = sections.reduce((n, s) => n + s.additions, 0);
-  const totalDel = sections.reduce((n, s) => n + s.deletions, 0);
 
   return (
     <div className="card mb-4" style={{ padding: 0, overflow: "hidden" }}>
@@ -228,12 +66,10 @@ function DiffPanel({ pr }: { pr: NonNullable<Rep["pr"]> }) {
         className="px-3 py-2 text-xs font-medium text-text-muted flex items-center gap-2"
         style={{ borderBottom: "1px solid var(--border)" }}
       >
-        Diff
+        Diff — commit message hidden until you answer
         {sections.length > 0 && (
           <span className="tabular-nums font-normal" style={{ color: "var(--text-subtle)" }}>
-            {sections.length} file{sections.length === 1 ? "" : "s"} ·{" "}
-            <span style={{ color: "var(--success)" }}>+{totalAdd}</span>{" "}
-            <span style={{ color: "var(--danger)" }}>−{totalDel}</span>
+            {sections.length} file{sections.length === 1 ? "" : "s"}
           </span>
         )}
       </div>
@@ -251,55 +87,134 @@ function DiffPanel({ pr }: { pr: NonNullable<Rep["pr"]> }) {
   );
 }
 
-function seedNoteMarkdown(rep: Rep): string {
-  const pr = rep.pr!;
-  const lines = [
-    `# ${pr.title}`,
-    "",
-    `**PR:** [${pr.repo}#${pr.number}](${pr.url})`,
-    "",
-    "## Review",
-    "",
-    "**My AI-free findings**",
-    "",
-    rep.findings ?? "",
-    "",
-    "## Notes",
-    "",
-    "- ",
-  ];
-  return lines.join("\n");
+function RepPrompt({ rep }: { rep: PublicRep }) {
+  const material = rep.material;
+  if (material.kind === "cold-read") {
+    return (
+      <div className="card card-body mb-4">
+        <div className="text-xs font-medium text-text-muted mb-1">
+          {material.repo} · <span className="font-mono">{material.sha.slice(0, 7)}</span> ·{" "}
+          <span className="tabular-nums">
+            {material.filesChanged} file{material.filesChanged === 1 ? "" : "s"},{" "}
+            <span style={{ color: "var(--success)" }}>+{material.additions}</span>{" "}
+            <span style={{ color: "var(--danger)" }}>−{material.deletions}</span>
+          </span>
+        </div>
+        <p className="text-sm m-0">
+          A commit from your repo that you didn&apos;t write, message hidden. Read it cold: <strong>what does
+          this change do, and what would you have flagged in review?</strong>
+        </p>
+      </div>
+    );
+  }
+  if (material.kind === "gap-sketch") {
+    const realPaths = material.paths.filter((p) => p !== ".");
+    const subject = realPaths.length ? (
+      <span className="font-mono">{realPaths.join(", ")}</span>
+    ) : (
+      <span>the {material.repo.split("/")[1] ?? material.repo} repo</span>
+    );
+    return (
+      <div className="card card-body mb-4">
+        <div className="text-xs font-medium text-text-muted mb-1">
+          {material.repo} · {material.label} ·{" "}
+          <span className="tabular-nums">
+            {material.commits90d} commits in 90d, {material.authoredByMe} yours
+          </span>
+        </div>
+        <p className="text-sm m-0">
+          Your weakest domain in a repo you own. From memory: <strong>what lives in {subject}, what is
+          it responsible for, and what talks to it?</strong> No peeking at the code.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="card card-body mb-4">
+      <div className="text-xs font-medium text-text-muted mb-1">Diagram: {material.title}</div>
+      <p className="text-sm m-0">
+        You drew this once. <strong>Redraw &ldquo;{material.title}&rdquo; from memory</strong> — list the
+        boxes and the arrows between them before you look.
+      </p>
+    </div>
+  );
+}
+
+function RepReveal({ rep }: { rep: PublicRep }) {
+  const reveal = rep.reveal;
+  if (!reveal) return null;
+  if (reveal.kind === "cold-read") {
+    return (
+      <div className="card card-body mb-4">
+        <div className="text-xs font-medium text-text-muted mb-2 inline-flex items-center gap-1.5">
+          <Eye size={12} aria-hidden /> The actual commit message
+        </div>
+        <p className="text-sm font-medium m-0">{reveal.subject}</p>
+        {reveal.body && (
+          <pre
+            className="text-sm mt-2 mb-0"
+            style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", color: "var(--text-subtle)" }}
+          >
+            {reveal.body}
+          </pre>
+        )}
+        <div className="text-xs text-text-subtle mt-2 flex items-center gap-2">
+          {reveal.author && <span>by {reveal.author}</span>}
+          <a
+            href={reveal.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 hover:text-text transition-colors"
+          >
+            View on GitHub <ExternalLink size={10} aria-hidden />
+          </a>
+        </div>
+      </div>
+    );
+  }
+  if (reveal.kind === "gap-sketch") {
+    return (
+      <div className="card card-body mb-4">
+        <div className="text-xs font-medium text-text-muted mb-2 inline-flex items-center gap-1.5">
+          <Eye size={12} aria-hidden /> What actually happened there recently
+        </div>
+        {reveal.recentSubjects.length > 0 ? (
+          <ul className="text-sm m-0 pl-4 space-y-0.5">
+            {reveal.recentSubjects.map((subject) => (
+              <li key={subject}>{subject}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-text-subtle m-0">No recent commits in this domain.</p>
+        )}
+        <div className="mt-2">
+          <Link href={reveal.learnHref} className="text-xs inline-flex items-center gap-1 hover:text-text transition-colors">
+            <BookOpen size={11} aria-hidden /> Open the learn pack to check your sketch
+          </Link>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="card card-body mb-4">
+      <div className="text-xs font-medium text-text-muted mb-2 inline-flex items-center gap-1.5">
+        <Eye size={12} aria-hidden /> The real diagram
+      </div>
+      <Link href={reveal.href} className="text-sm inline-flex items-center gap-1 hover:text-text transition-colors">
+        Open it and compare against what you wrote <ExternalLink size={11} aria-hidden />
+      </Link>
+    </div>
+  );
 }
 
 export default function RepView() {
-  const router = useRouter();
   const { data, error, isLoading, mutate } = useLive<RepsApiPayload>("/api/reps");
   const rep = data?.rep ?? null;
   const stats = data?.stats;
-  const agentReview = data?.agentReview;
 
-  const [findings, setFindings] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [caught, setCaught] = useState(0);
-  const [missed, setMissed] = useState(0);
-  const [grading, setGrading] = useState(false);
-  const [showSwap, setShowSwap] = useState(false);
+  const [response, setResponse] = useState("");
+  const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [aiGrade, setAiGrade] = useState<AiGrade | null>(null);
-  const [gradingAi, setGradingAi] = useState(false);
-  const [aiGradeError, setAiGradeError] = useState<string | null>(null);
-
-  const pr = rep?.pr;
-  const notePath = pr ? prReviewNotePath(pr) : null;
-
-  // Phase B polls faster so the agent review shows up as soon as the note lands.
-  const waitingForAgent = !!rep?.completedAt && !rep.grade && !agentReview;
-  useEffect(() => {
-    if (!waitingForAgent) return;
-    const t = setInterval(() => void mutate(), 5000);
-    return () => clearInterval(t);
-  }, [waitingForAgent, mutate]);
-
 
   async function post(body: Record<string, unknown>) {
     const res = await fetch("/api/reps", {
@@ -314,106 +229,25 @@ export default function RepView() {
     return (await res.json()) as RepsApiPayload;
   }
 
-  async function saveFindings() {
-    if (!findings.trim()) return;
-    setSaving(true);
+  async function act(body: Record<string, unknown>) {
+    setBusy(true);
     setSubmitError(null);
     try {
-      await post({ action: "save", findings: findings.trim() });
+      await post(body);
       await mutate();
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Could not save findings.");
+      setSubmitError(err instanceof Error ? err.message : "Request failed.");
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
   }
 
-  async function saveGrade() {
-    setGrading(true);
-    setSubmitError(null);
-    try {
-      await post({ action: "grade", caught, missed });
-      await mutate();
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Could not save grade.");
-    } finally {
-      setGrading(false);
-    }
-  }
-
-  async function reviewWithAgent() {
-    if (!pr) return;
-    await launchAgentJob({
-      title: `Review PR #${pr.number}`,
-      kind: "review",
-      repoName: pr.repo,
-      notePath: notePath ?? undefined,
-      promptText: agentReviewPrompt(pr.url, notePath ?? undefined),
-      promptCommand: await agentReviewCommand(pr.url, notePath ?? undefined),
-      mode: "oneshot",
-      reason: `Daily rep review ${pr.repo}#${pr.number}`,
-      alreadyConfirmed: true,
-    });
-    if (pr) notifyPrReviewNoteWatch(pr);
-    // Stamp server-side so a reload can't double-launch the review.
-    try {
-      await post({ action: "agent-review-started" });
-    } catch {
-      /* best-effort — the review still runs */
-    }
-  }
-
-  // Auto-run the agent review the moment findings are saved (and on reload if
-  // the launch never got stamped). The stamp + ref guard keep it single-shot.
-  const autoLaunchRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!rep?.completedAt || !rep.pr || agentReview || rep.agentReviewStartedAt) return;
-    const key = `${rep.date}:${rep.pr.repo}#${rep.pr.number}`;
-    if (autoLaunchRef.current === key) return;
-    autoLaunchRef.current = key;
-    void reviewWithAgent();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- fires once per rep when findings land
-  }, [rep?.completedAt, rep?.pr, rep?.agentReviewStartedAt, rep?.date, agentReview]);
-
-  async function runAiGrade() {
-    setGradingAi(true);
-    setAiGradeError(null);
-    try {
-      const res = await fetch("/api/reps", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "ai-grade" }),
-      });
-      const body = (await res.json()) as { ok?: boolean; grade?: AiGrade; error?: string };
-      if (!res.ok || !body.grade) throw new Error(body.error ?? `Request failed (${res.status})`);
-      setAiGrade(body.grade);
-      setCaught(body.grade.caught);
-      setMissed(body.grade.missed);
-    } catch (err) {
-      setAiGradeError(err instanceof Error ? err.message : "AI grade failed.");
-    } finally {
-      setGradingAi(false);
-    }
-  }
-
-  // When the agent review lands while the page is open, prefill the grade with
-  // the AI's counts. Reloads don't auto-grade — the button covers that case.
-  const prevAgentReviewRef = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    const prev = prevAgentReviewRef.current;
-    prevAgentReviewRef.current = agentReview;
-    if (prev || !agentReview || !rep?.completedAt || rep.grade || gradingAi) return;
-    void runAiGrade();
-  }, [agentReview, rep?.completedAt, rep?.grade, gradingAi]);
-
-  async function openNote() {
-    if (!rep || !rep.pr) return;
-    const result = await createOrOpenVaultNote({
-      path: prReviewNotePath(rep.pr),
-      markdown: seedNoteMarkdown(rep),
-    });
-    router.push(result.href);
-  }
+  const placeholder =
+    rep?.material.kind === "cold-read"
+      ? "What does this change do? What would you flag?"
+      : rep?.material.kind === "gap-sketch"
+        ? "Sketch the domain: responsibilities, key pieces, what talks to what…"
+        : "List the boxes and arrows from memory…";
 
   return (
     <div className="page-wrapper">
@@ -432,226 +266,93 @@ export default function RepView() {
             Daily rep
           </h1>
           {stats && stats.streak > 0 && (
-            <div className="text-xs mt-1 text-text-subtle">
-              {stats.streak}-day streak
-              {stats.gradedCount > 0 &&
-                ` · ${stats.caughtTotal} caught / ${stats.missedTotal} missed across ${stats.gradedCount} graded reps`}
-            </div>
+            <div className="text-xs mt-1 text-text-subtle">{stats.streak}-day streak</div>
           )}
         </div>
+        {rep && (
+          <span className="badge" style={{ background: "var(--accent-dim)", color: "var(--accent)" }}>
+            {REP_KIND_LABEL[rep.kind]}
+          </span>
+        )}
       </div>
 
       {error && <FetchError message="Couldn't load today's rep." />}
-      {submitError && <FetchError message={submitError} />}
-      {isLoading && !data && <SkeletonRows count={3} height={48} variant="list" />}
+      {isLoading && !data && <SkeletonRows count={4} height={24} variant="list" />}
 
       {data && !rep && (
         <div className="card card-body">
-          <p className="text-sm text-text-subtle">
-            No rep picked yet. Start one from the{" "}
-            <Link href="/review" className="text-accent hover:underline">
-              weekly review
-            </Link>{" "}
-            page — it picks the top PR awaiting your review.
+          <p className="text-sm m-0 mb-3">
+            One rep a day, from your own repos: read a stranger&apos;s commit cold, sketch a domain you own
+            but don&apos;t know, or redraw one of your diagrams from memory.
           </p>
+          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "start" })}>
+            <Dumbbell size={12} aria-hidden /> Start today&apos;s rep
+          </button>
+          {submitError && <p className="text-xs mt-2 mb-0" style={{ color: "var(--danger)" }}>{submitError}</p>}
         </div>
       )}
 
-      {data && rep && pr && (
+      {rep && (
         <>
-          <div className="card card-body mb-4">
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div className="flex items-start gap-2 min-w-0">
-                <Dumbbell size={14} aria-hidden style={{ color: "var(--accent)", marginTop: 2 }} />
-                <div className="min-w-0">
-                  <div className="text-sm font-medium break-words">{pr.title}</div>
-                  <a
-                    href={pr.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs font-mono text-text-subtle hover:text-accent transition-colors"
-                  >
-                    {pr.repo}#{pr.number}
-                  </a>
-                </div>
-              </div>
-              <StepChips completed={!!rep.completedAt} />
-            </div>
-            {stats && stats.recent.some((d) => d.done) && (
-              <div className="mt-3">
-                <RepStreakStrip days={stats.recent} />
-              </div>
-            )}
-            {!rep.completedAt && (
-              <>
-                <p className="text-xs text-text-subtle mt-3">
-                  Review this diff yourself first — no AI. Write what you&apos;d flag, then unlock the agent
-                  comparison.
-                </p>
+          <RepPrompt rep={rep} />
+          {rep.material.kind === "cold-read" && <DiffPanel key={rep.material.sha} />}
+
+          {!rep.completedAt && (
+            <div className="card card-body mb-4">
+              <textarea
+                value={response}
+                onChange={(event) => setResponse(event.target.value)}
+                placeholder={placeholder}
+                rows={8}
+                className="w-full text-sm rounded p-2"
+                style={{
+                  background: "var(--bg-elevated)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text)",
+                  resize: "vertical",
+                }}
+              />
+              <div className="flex items-center gap-2 mt-2">
                 <button
                   type="button"
-                  className="btn btn-ghost mt-2"
-                  style={{ fontSize: 12, padding: "4px 10px" }}
-                  onClick={() => setShowSwap((s) => !s)}
+                  className="btn btn-primary"
+                  disabled={busy || !response.trim()}
+                  onClick={() => void act({ action: "save", response: response.trim() })}
                 >
-                  <Repeat size={12} aria-hidden /> {showSwap ? "Hide swap" : "Not this one? Swap PR"}
+                  <Check size={12} aria-hidden /> Save & reveal
                 </button>
-                {showSwap && (
-                  <SwapPicker
-                    current={pr}
-                    onPicked={() => void mutate()}
-                    onDone={() => setShowSwap(false)}
-                  />
-                )}
-              </>
-            )}
-          </div>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={busy}
+                  onClick={() => void act({ action: "swap" })}
+                  title="Different material, same day"
+                >
+                  <Repeat size={12} aria-hidden /> Swap
+                </button>
+              </div>
+              {submitError && <p className="text-xs mt-2 mb-0" style={{ color: "var(--danger)" }}>{submitError}</p>}
+            </div>
+          )}
 
-          {!rep.completedAt ? (
+          {rep.completedAt && (
             <>
-              <DiffPanel key={`${pr.repo}#${pr.number}`} pr={pr} />
-
-              <div className="card card-body">
-                <div className="text-xs font-medium mb-2 text-text-muted">Your findings</div>
-                <textarea
-                  value={findings}
-                  onChange={(e) => setFindings(e.target.value)}
-                  aria-label="Your AI-free review findings"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                      e.preventDefault();
-                      void saveFindings();
-                    }
-                  }}
-                  rows={8}
-                  placeholder="One bullet per finding. What would you flag, question, or ask the author?"
-                  className="w-full px-3 py-2 rounded text-sm resize-y font-mono"
-                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }}
-                />
-                <div className="flex items-center gap-2 mt-3">
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={!findings.trim() || saving}
-                    onClick={() => void saveFindings()}
-                  >
-                    <Check size={12} aria-hidden /> Save findings & unlock AI review
-                  </button>
-                  <span className="text-xs text-text-subtle">⌘/Ctrl+Enter to save</span>
-                </div>
+              <div className="card card-body mb-4">
+                <div className="text-xs font-medium text-text-muted mb-2">What you wrote</div>
+                <pre className="text-sm m-0" style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>
+                  {rep.response}
+                </pre>
               </div>
-            </>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 mb-4">
-                <div className="card card-body">
-                  <div className="text-xs font-medium mb-2 text-text-muted">Your findings</div>
-                  <pre className="text-xs whitespace-pre-wrap font-mono m-0" style={{ color: "var(--text)" }}>
-                    {rep.findings}
-                  </pre>
-                </div>
-                <div className="card card-body">
-                  <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-                    <div className="text-xs font-medium text-text-muted">Agent review</div>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        style={{ fontSize: 12, padding: "4px 10px" }}
-                        onClick={() => void reviewWithAgent()}
-                      >
-                        <Bot size={12} aria-hidden />{" "}
-                        {rep.agentReviewStartedAt && !agentReview ? "Re-run review" : "Review with agent"}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        style={{ fontSize: 12, padding: "4px 10px" }}
-                        onClick={() => void openNote()}
-                        aria-label="Open PR note (seeded with your findings)"
-                      >
-                        <FileText size={12} aria-hidden />
-                      </button>
-                    </div>
-                  </div>
-                  {agentReview ? (
-                    <pre
-                      className="text-xs whitespace-pre-wrap font-mono m-0 px-2 py-1.5 rounded"
-                      style={{ color: "var(--text)", background: "var(--bg-elevated)", maxHeight: "50vh", overflow: "auto" }}
-                    >
-                      {agentReview}
-                    </pre>
-                  ) : (
-                    <p className="text-sm text-text-subtle inline-flex items-center gap-1.5">
-                      <RefreshCw size={12} className="animate-spin" aria-hidden />
-                      {rep.agentReviewStartedAt
-                        ? "Agent review started — it appears here when the note lands."
-                        : "Run the agent review — its note appears here automatically."}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="card card-body">
-                {rep.grade ? (
-                  <p className="text-sm text-text-subtle">
-                    Graded: caught {rep.grade.caught}, missed {rep.grade.missed}
-                    {rep.grade.caught + rep.grade.missed > 0 &&
-                      ` · ${Math.round((rep.grade.caught / (rep.grade.caught + rep.grade.missed)) * 100)}% of the agent's findings you'd already flagged`}
-                    . Come back tomorrow.
-                  </p>
-                ) : (
-                  <>
-                    <div className="text-xs font-medium mb-3 text-text-muted">
-                      Grade it — how did you do against the agent?
-                    </div>
-                    {gradingAi && (
-                      <p className="text-xs text-text-subtle mb-2 inline-flex items-center gap-1.5">
-                        <RefreshCw size={12} className="animate-spin" aria-hidden /> AI is grading your findings…
-                      </p>
-                    )}
-                    {aiGradeError && (
-                      <p className="text-xs mb-2" style={{ color: "var(--danger)" }}>
-                        {aiGradeError}
-                      </p>
-                    )}
-                    {aiGrade && !gradingAi && (
-                      <p className="text-xs text-text-subtle mb-2">
-                        AI graded you at caught {aiGrade.caught} / missed {aiGrade.missed}
-                        {aiGrade.missedSummary ? ` — ${aiGrade.missedSummary}` : ""}. Adjust if it&apos;s wrong,
-                        then save.
-                      </p>
-                    )}
-                    <div className="flex flex-wrap items-center gap-4 mb-3">
-                      <Stepper label="You'd flagged" value={caught} onChange={setCaught} tone="var(--success)" />
-                      <Stepper label="You missed" value={missed} onChange={setMissed} tone="var(--danger)" />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={grading}
-                        onClick={() => void saveGrade()}
-                      >
-                        <Check size={12} aria-hidden /> Save grade
-                      </button>
-                      {!aiGrade && !gradingAi && (
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          style={{ fontSize: 12, padding: "4px 10px" }}
-                          onClick={() => void runAiGrade()}
-                        >
-                          <Bot size={12} aria-hidden /> Grade with AI
-                        </button>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
+              <RepReveal rep={rep} />
             </>
           )}
         </>
+      )}
+
+      {stats && stats.recent.some((day) => day.done) && (
+        <div className="mt-6">
+          <RepStreakStrip days={stats.recent} />
+        </div>
       )}
     </div>
   );

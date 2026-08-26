@@ -98,7 +98,7 @@ export function NotesLandingPage({
               <p className="lib-hero-sub">
                 Your working memory — {total} notes across {browsable.length} areas. Search
                 the full text from <kbd className="lib-kbd">Search…</kbd> in the sidebar, or{" "}
-                <kbd className="lib-kbd">⌘K</kbd> anywhere.
+                <kbd className="lib-kbd">⌘P</kbd> anywhere.
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">

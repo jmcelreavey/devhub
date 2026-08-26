@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withErrorHandler } from "@/lib/api-utils";
-import { buildGraph, capGraph, neighbours } from "@/lib/recall/graph";
+import { cachedGraph, capGraph, neighbours } from "@/lib/recall/graph";
 import { loadIndex } from "@/lib/recall/store";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +20,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   const minWeightRaw = Number(req.nextUrl.searchParams.get("minWeight") ?? 1);
   const minWeight = Number.isFinite(minWeightRaw) ? Math.max(1, minWeightRaw) : 1;
-  const graph = buildGraph(index.chunks, { minWeight });
+  const graph = cachedGraph(index, { minWeight });
 
   const entity = req.nextUrl.searchParams.get("entity");
   if (entity) {

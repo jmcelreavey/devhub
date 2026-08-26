@@ -117,6 +117,7 @@ function writeGitignore(): void {
 export function isStale(): boolean {
   const manifest = readManifest();
   if (!manifest) return true;
+  if (manifest.version !== RECALL_INDEX_VERSION) return true;
   if (manifest.embedder !== getEmbedder().id) return true;
   if (!fs.existsSync(chunksFile())) return true;
   return sourcesNewestMtime() > Date.parse(manifest.builtAt);

@@ -10,7 +10,13 @@
  */
 import { entityKey } from "@/lib/entity-note";
 import { refFromKey } from "./refs";
-import type { RecallChunk, RecallEdge, RecallGraph, RecallGraphNode } from "./types";
+import type {
+  RecallChunk,
+  RecallEdge,
+  RecallGraph,
+  RecallGraphNode,
+  RecallIndexManifest,
+} from "./types";
 
 /**
  * Chunks mentioning more entities than this are skipped for edge-building.
@@ -27,6 +33,29 @@ export interface BuildGraphOptions {
   minWeight?: number;
   /** Cap on edges returned, highest weight first. */
   maxEdges?: number;
+}
+
+interface GraphSource {
+  chunks: readonly RecallChunk[];
+  manifest: Pick<RecallIndexManifest, "builtAt" | "chunkCount" | "embedder">;
+}
+
+let graphCache: { manifestKey: string; graphs: Map<string, RecallGraph> } | null = null;
+
+export function cachedGraph(source: GraphSource, options: BuildGraphOptions = {}): RecallGraph {
+  const manifestKey = `${source.manifest.builtAt}:${source.manifest.chunkCount}:${source.manifest.embedder}`;
+  const optionsKey = `${options.minWeight ?? 1}:${options.maxEdges ?? 500}`;
+
+  if (!graphCache || graphCache.manifestKey !== manifestKey) {
+    graphCache = { manifestKey, graphs: new Map() };
+  }
+
+  const cached = graphCache.graphs.get(optionsKey);
+  if (cached) return cached;
+
+  const graph = buildGraph(source.chunks, options);
+  graphCache.graphs.set(optionsKey, graph);
+  return graph;
 }
 
 export function buildGraph(

@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { getTasksDir } from "@/lib/notes/dir";
 import { writeAtomic, safeReadJSON, withMutex } from "@/lib/atomic-write";
 import { todayISO, JIRA_KEY_RE } from "@/lib/utils";
-import { textWithJiraLinkPromotion } from "@/lib/tasks/task-text";
+import { normalizeTaskLinkState } from "@/lib/task-note";
 
 // Canonical shape lives in ./types so client components can import it too
 // (this module imports node:fs and cannot be reached from the browser).
@@ -31,7 +31,13 @@ function extractJiraKey(text: string): string | undefined {
 export function getTasks(date?: string): Task[] {
   const target = date ?? todayISO();
   const file = tasksFile(target);
-  return safeReadJSON<Task[]>(file, []);
+  return safeReadJSON<Task[]>(file, []).map((task) => {
+    // Heal stale rows where a Jira hop exists but jiraKey was never promoted
+    // (MCP write path historically skipped promotion). In-memory only.
+    if (task.jiraKey || !task.links?.some((l) => l.kind === "jira")) return task;
+    const normalized = normalizeTaskLinkState(task.text, task.jiraKey, task.links);
+    return { ...task, text: normalized.text, jiraKey: normalized.jiraKey, links: normalized.links };
+  });
 }
 
 /** Past task days (before `beforeDate`) that still have open tasks. Oldest first. */
@@ -253,14 +259,10 @@ export async function updateTask(
       task.due = patch.due;
     }
     if (patch.links !== undefined) {
-      task.links = patch.links.length > 0 ? patch.links : undefined;
-      // Promote a Jira hop-link into the title when the task isn't already
-      // Jira-associated — same convention as typing PROJ-123 in the text.
-      const nextText = textWithJiraLinkPromotion(task.text, task.jiraKey, task.links);
-      if (nextText !== task.text) {
-        task.text = nextText;
-        task.jiraKey = extractJiraKey(nextText);
-      }
+      const normalized = normalizeTaskLinkState(task.text, task.jiraKey, patch.links);
+      task.text = normalized.text;
+      task.jiraKey = normalized.jiraKey;
+      task.links = normalized.links;
     }
     await saveTasks(target, tasks);
     return task;

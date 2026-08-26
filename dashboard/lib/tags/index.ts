@@ -18,7 +18,7 @@ import path from "node:path";
 import { writeAtomic } from "@/lib/atomic-write";
 import { extractTags, type EntityRef } from "@/lib/entity-note";
 import { getTasksDir } from "@/lib/content/dirs";
-import { buildGraph, neighbours } from "@/lib/recall/graph";
+import { cachedGraph, neighbours } from "@/lib/recall/graph";
 import { loadIndex } from "@/lib/recall/store";
 import { getStorage } from "@/lib/storage-server";
 
@@ -98,7 +98,7 @@ function tagCountsFromIndex(): Map<string, number> {
   try {
     const index = loadIndex();
     if (!index) return counts;
-    const graph = buildGraph(index.chunks, { minWeight: 1 });
+    const graph = cachedGraph(index, { minWeight: 1 });
     for (const node of graph.nodes) {
       if (node.ref.kind === "tag") counts.set(node.ref.id, node.mentions);
     }
@@ -161,7 +161,7 @@ export function lookupTag(id: string): TagLookup {
           if (notes.length >= 12) break;
         }
       }
-      const graph = buildGraph(index.chunks, { minWeight: 1 });
+      const graph = cachedGraph(index, { minWeight: 1 });
       for (const n of neighbours(graph, key, 10)) {
         const ref = n.node.ref;
         // Notes and tasks render in their own groups; commits aren't navigable.

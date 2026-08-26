@@ -5,7 +5,7 @@ import { isSafeCommitRef } from "@/lib/git/ref-safety";
 import { runGitRepoAsync } from "@/lib/git/repo-local";
 import { matchReviewNotes, type ReviewNoteMatch } from "@/lib/notes/review-index";
 import { getReviewNoteIndex } from "@/lib/notes/review-index-server";
-import { buildGraph, neighbours } from "@/lib/recall/graph";
+import { cachedGraph, neighbours } from "@/lib/recall/graph";
 import { loadIndex } from "@/lib/recall/store";
 import { gitFail, withScannedRepo, type RepoParams } from "../_shared";
 
@@ -77,20 +77,12 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
 }
 
 /** Neighbours of `repo:commit:<sha>` in the derived graph; [] on any failure. */
-type CommitGraph = ReturnType<typeof buildGraph>;
-/** ponytail: per-process cache keyed on index build time; rebuilds are ~100ms if it ever goes stale */
-let graphCache: { key: string; graph: CommitGraph } | null = null;
-
 function recallRelated(fullSha: string): EntityRef[] {
   if (!/^[0-9a-f]{40}$/.test(fullSha)) return [];
   try {
     const index = loadIndex();
     if (!index) return [];
-    const key = index.manifest.builtAt;
-    if (!graphCache || graphCache.key !== key) {
-      graphCache = { key, graph: buildGraph(index.chunks, { minWeight: 1 }) };
-    }
-    return neighbours(graphCache.graph, `repo:commit:${fullSha}`, 8)
+    return neighbours(cachedGraph(index, { minWeight: 1 }), `repo:commit:${fullSha}`, 8)
       .map((n) => n.node.ref)
       .filter((ref) => ref.kind !== "repo");
   } catch {

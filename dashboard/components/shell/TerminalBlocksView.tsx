@@ -105,7 +105,7 @@ export function TerminalBlocksView({
   if (blocks.length === 0) {
     return (
       <div className="terminal-blocks-view" data-empty="">
-        <p>Run a command and it shows up here as a block — output, exit code, duration.</p>
+        <p>Each command becomes a card: output, exit code, duration. Copy, rerun, or send it to Agent.</p>
         <p className="terminal-blocks-hint">
           Full-screen apps (vim, htop) and long-running commands drop back to the live terminal
           automatically.
@@ -113,8 +113,16 @@ export function TerminalBlocksView({
       </div>
     );
   }
+  const failedCount = blocks.filter((b) => typeof b.exitCode === "number" && b.exitCode !== 0).length;
+  const runningCount = blocks.filter((b) => b.pending).length;
 
   return (
+    <div className="terminal-blocks-pane-inner">
+    <div className="terminal-blocks-summary">
+      {blocks.length} {blocks.length === 1 ? "command" : "commands"}
+      {runningCount ? ` · ${runningCount} running` : ""}
+      {failedCount ? ` · ${failedCount} failed` : ""}
+    </div>
     <ol className="terminal-blocks-view" ref={listRef} aria-label="Command blocks">
       {blocks.map((block) => {
         const failed = typeof block.exitCode === "number" && block.exitCode !== 0;
@@ -159,8 +167,11 @@ export function TerminalBlocksView({
             <BlockOutput output={block.output} pending={block.pending} />
             {!block.pending && (
               <div className="terminal-block-card-actions">
+                <button type="button" onClick={() => void navigator.clipboard.writeText(block.command)} aria-label="Copy command">
+                  <ClipboardCopy size={11} aria-hidden /> Command
+                </button>
                 <button type="button" onClick={() => onCopy(block)} aria-label="Copy command output">
-                  <ClipboardCopy size={11} aria-hidden /> Copy
+                  <ClipboardCopy size={11} aria-hidden /> Output
                 </button>
                 <button type="button" onClick={() => onRerun(block)} aria-label="Rerun command">
                   <RotateCw size={11} aria-hidden /> Rerun
@@ -190,5 +201,6 @@ export function TerminalBlocksView({
         );
       })}
     </ol>
+    </div>
   );
 }

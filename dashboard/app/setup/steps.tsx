@@ -1241,7 +1241,7 @@ export function DoneStep({ saveResult }: { saveResult: { ok: boolean; message: s
       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
         <TipCard>You can revisit this setup anytime from the sidebar Settings link.</TipCard>
         <TipCard>
-          Use ⌘K for the command palette, ⌘⇧O for the notes panel, and ⌘⇧T for the tasks panel from any page.
+          Use ⌘P for the command palette, ⌘N for notes, ⌘T for tasks, and ⌘D for diagrams from any page.
         </TipCard>
         <TipCard>
           Press ? for shortcuts when DevHub has focus. OpenChamber in an iframe won&apos;t receive those keys - use{" "}

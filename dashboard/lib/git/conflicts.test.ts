@@ -69,10 +69,15 @@ describe("git-conflicts", () => {
     fs.writeFileSync(path.join(repo, "file.txt"), "base\n");
     runGitRepo(repo, ["add", "file.txt"]);
     runGitRepo(repo, ["commit", "-m", "base"]);
+    // `git init`'s default branch name depends on this machine's
+    // init.defaultBranch (main, master, ...) — read it back instead of
+    // assuming "master", or the checkout below silently no-ops and both
+    // commits land on the same branch.
+    const initialBranch = runGitRepo(repo, ["branch", "--show-current"]).stdout.trim();
     runGitRepo(repo, ["checkout", "-b", "theirs"]);
     fs.writeFileSync(path.join(repo, "file.txt"), "theirs\n");
     runGitRepo(repo, ["commit", "-am", "theirs"]);
-    runGitRepo(repo, ["checkout", "master"]);
+    runGitRepo(repo, ["checkout", initialBranch]);
     fs.writeFileSync(path.join(repo, "file.txt"), "ours\n");
     runGitRepo(repo, ["commit", "-am", "ours"]);
     expect(runGitRepo(repo, ["merge", "theirs"]).status).not.toBe(0);

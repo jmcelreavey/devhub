@@ -34,6 +34,12 @@ import {
 } from "lucide-react";
 import type { NavItem } from "@/lib/nav";
 import { HoverTip } from "@/components/ui/HoverTip";
+import {
+  chatgptCliCommand,
+  claudeCliCommand,
+  cursorCliCommand,
+  openTerminal,
+} from "@/lib/terminal-launch";
 
 const ICONS: Record<string, LucideIcon> = {
   today: CalendarDays,
@@ -69,6 +75,22 @@ const ICONS: Record<string, LucideIcon> = {
 
 const UNSEEN_COLOR = "var(--info)";
 
+/** Sidebar rows marked `terminal` open the CLI as a terminal-dock tab. */
+const TERMINAL_COMMANDS: Record<NonNullable<NavItem["terminal"]>, () => string> = {
+  claude: claudeCliCommand,
+  cursor: cursorCliCommand,
+  chatgpt: chatgptCliCommand,
+};
+
+/** Buttons need what `<a>` gets from the browser for free. */
+const BUTTON_RESET = {
+  border: "none",
+  cursor: "pointer",
+  width: "100%",
+  textAlign: "left",
+  font: "inherit",
+} as const;
+
 const MONO_FONT = "var(--font-mono, 'JetBrains Mono', monospace)";
 
 interface Props {
@@ -86,7 +108,44 @@ export function NavLink({ item, onClick, collapsed, count = 0, unseen = false }:
   const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
   const Icon = ICONS[item.icon] ?? FileText;
 
+  const terminal = item.terminal;
+  const onLaunch =
+    terminal && TERMINAL_COMMANDS[terminal]
+      ? () => {
+          openTerminal({ label: item.label, command: TERMINAL_COMMANDS[terminal]() });
+          onClick?.();
+        }
+      : null;
+
   if (collapsed) {
+    if (onLaunch) {
+      return (
+        <HoverTip label={item.label}>
+          <button
+            type="button"
+            onClick={onLaunch}
+            className="nav-item-collapsed relative flex items-center justify-center mx-1 my-0.5"
+            style={BUTTON_RESET}
+          >
+            <Icon size={15} strokeWidth={1.7} />
+            {unseen && (
+              <span
+                aria-hidden
+                style={{
+                  position: "absolute",
+                  top: 5,
+                  right: 5,
+                  width: 5,
+                  height: 5,
+                  borderRadius: "50%",
+                  background: UNSEEN_COLOR,
+                }}
+              />
+            )}
+          </button>
+        </HoverTip>
+      );
+    }
     return (
       <HoverTip label={item.label}>
         <Link
@@ -115,13 +174,8 @@ export function NavLink({ item, onClick, collapsed, count = 0, unseen = false }:
     );
   }
 
-  return (
-    <Link
-      href={item.href}
-      onClick={onClick}
-      className="nav-item relative flex items-center gap-2.5 overflow-hidden"
-      data-active={active || undefined}
-    >
+  const body = (
+    <>
       {/* 2px left-rail accent for active items — grows in via .nav-rail */}
       {active && <span aria-hidden className="nav-rail" />}
       {/* Unseen activity dot at left edge (non-active rows). */}
@@ -172,6 +226,32 @@ export function NavLink({ item, onClick, collapsed, count = 0, unseen = false }:
           {item.shortcut}
         </span>
       )}
+    </>
+  );
+
+  // Terminal rows aren't routes — a click spawns/focuses a dock tab instead.
+  if (onLaunch) {
+    return (
+      <button
+        type="button"
+        onClick={onLaunch}
+        className="nav-item relative flex items-center gap-2.5 overflow-hidden"
+        style={BUTTON_RESET}
+        title={`Open ${item.label} in the terminal dock`}
+      >
+        {body}
+      </button>
+    );
+  }
+
+  return (
+    <Link
+      href={item.href}
+      onClick={onClick}
+      className="nav-item relative flex items-center gap-2.5 overflow-hidden"
+      data-active={active || undefined}
+    >
+      {body}
     </Link>
   );
 }

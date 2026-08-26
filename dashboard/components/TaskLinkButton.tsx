@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { Link2 } from "lucide-react";
 import type { EntityRef } from "@/lib/entity-note";
+import { mergeEntityRefs } from "@/lib/entity-note";
 import { useToast } from "@/lib/hooks/use-toast";
 import { HoverTip } from "@/components/ui/HoverTip";
 import { EntityLinkDialog } from "@/components/EntityLinkDialog";
@@ -63,10 +64,7 @@ export function TaskLinkButton({
         excludeTaskId={taskId}
         description="Link a calendar event, PR, note, diagram, Jira issue, or another task."
         onSave={async (ref) => {
-          const next = [
-            ...(existing ?? []).filter((r) => !(r.kind === ref.kind && r.id === ref.id)),
-            ref,
-          ];
+          const next = mergeEntityRefs(existing ?? [], [ref]);
           const res = await fetch("/api/tasks", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },

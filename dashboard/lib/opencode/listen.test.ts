@@ -3,6 +3,7 @@ import net from "node:net";
 import {
   PINNED_OPENCODE_PORTS,
   getDevHubOpenCodePort,
+  isDevHubOpenCodeCommand,
   opencodeSpawnEnv,
   stopDevHubOpenCode,
 } from "./listen";
@@ -39,6 +40,30 @@ describe("DevHub OpenCode listen", () => {
     expect(env.OPENCHAMBER_OPENCODE_PORT).toBeUndefined();
     expect(env.OPENCHAMBER_SKIP_OPENCODE_START).toBeUndefined();
   });
+
+  it("strips server basic-auth so the iframe is not 401", () => {
+    process.env.OPENCODE_SERVER_PASSWORD = "not-a-real-password-value";
+    process.env.OPENCODE_SERVER_USERNAME = "opencode";
+    const env = opencodeSpawnEnv();
+    expect(env.OPENCODE_SERVER_PASSWORD).toBeUndefined();
+    expect(env.OPENCODE_SERVER_USERNAME).toBeUndefined();
+  });
+
+  it("marks the spawn so later boots can reap it", () => {
+    expect(opencodeSpawnEnv().DEVHUB_OPENCODE_OWNED).toBe("1");
+  });
+
+  it("recognizes DevHub serve argv and ignores the TUI", () => {
+    expect(
+      isDevHubOpenCodeCommand(
+        "/Users/x/.opencode/bin/opencode serve --port 49640 --hostname 127.0.0.1",
+      ),
+    ).toBe(true);
+    expect(isDevHubOpenCodeCommand("opencode serve --port 1 --hostname 127.0.0.1")).toBe(true);
+    expect(isDevHubOpenCodeCommand("opencode run --port 1")).toBe(false);
+    expect(isDevHubOpenCodeCommand("opencode")).toBe(false);
+  });
+
   it("reserves a loopback port that is not 1338", async () => {
     const port = await reserveEphemeralPort("127.0.0.1");
     expect(port).toBeGreaterThan(0);

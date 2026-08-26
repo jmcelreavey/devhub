@@ -14,12 +14,15 @@ import { PLUGIN_NAV_ITEMS } from "./plugin-nav.generated";
 const hrefs = (items: ReturnType<typeof filterNavBySetup>) => items.map((i) => i.href);
 
 describe("NAV_ITEMS (sidebar IA)", () => {
-  it("has exactly 18 core sidebar destinations", () => {
-    expect(NAV_ITEMS).toHaveLength(18);
+  it("has exactly 17 core sidebar destinations", () => {
+    expect(NAV_ITEMS).toHaveLength(17);
   });
 
-  it("gives owned repositories a repo-centric destination", () => {
-    expect(NAV_ITEMS.find((item) => item.href === "/own")?.group).toBe("library");
+  it("folds owned repos into Repos instead of a competing sidebar slot", () => {
+    expect(hrefs(NAV_ITEMS)).not.toContain("/own");
+    expect(hrefs(NAV_ITEMS)).toContain("/repos");
+    expect(LEGACY_NAV_ITEMS.find((item) => item.href === "/own")?.label).toBe("Owned repos");
+    expect(hrefs(ALL_NAV_DESTINATIONS)).toContain("/own");
   });
 
   it("gives Search the unified-discovery slot in the library group", () => {

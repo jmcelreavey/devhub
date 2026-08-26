@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { LiveClock } from "./LiveClock";
+import { TodayRepSignal } from "./TodayRepSignal";
 import { TaskList } from "@/components/tasks/TaskList";
 import { JiraKeyChip } from "@/components/jira/JiraKeyChip";
 import { JiraStatusPill } from "@/components/jira/JiraStatusPill";
@@ -334,7 +335,6 @@ export function TodayFocusView() {
               const topTask = (taskData?.tasks ?? []).find(
                 (t) => !t.done && !t.abandonedAt && !t.movedAt && t.text,
               );
-              if (!signal && !topTask) return null;
               return (
                 <div className="hub-hero-signals">
                   {signal && (
@@ -356,6 +356,7 @@ export function TodayFocusView() {
                       <span className="hero-signal-text">{topTask.text}</span>
                     </span>
                   )}
+                  <TodayRepSignal />
                 </div>
               );
             })()}

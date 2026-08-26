@@ -1,7 +1,10 @@
 "use client";
 
+import { Check, GitMerge } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { prRowStatus } from "@/lib/github/pr-row-status";
 import type { GithubPrRow } from "@/lib/github/prs";
+import { extractTags } from "@/lib/entity-note";
 import { PersonChip } from "@/components/PersonChip";
 import { PrReviewNoteLink } from "@/components/PrReviewNoteLink";
 import {
@@ -14,10 +17,29 @@ import {
   RowMenuKebab,
   useContextMenu,
 } from "@/components/shell/ContextMenu";
+import { useTagMenuGroup } from "@/lib/hooks/use-tag-menu";
 import { useToast } from "@/lib/hooks/use-toast";
-import { useTodayRep } from "@/lib/hooks/use-today-rep";
 
 export type { PrRowKind };
+
+function PrStatusIcon({ row }: { row: GithubPrRow }) {
+  const status = prRowStatus(row);
+  if (status === "merged") {
+    return (
+      <span className="inline-flex shrink-0" title="Merged" aria-label="Merged" role="img">
+        <GitMerge size={14} style={{ color: "var(--text-muted)" }} aria-hidden />
+      </span>
+    );
+  }
+  if (status === "approved") {
+    return (
+      <span className="inline-flex shrink-0" title="Approved" aria-label="Approved" role="img">
+        <Check size={14} strokeWidth={2.5} style={{ color: "var(--success)" }} aria-hidden />
+      </span>
+    );
+  }
+  return null;
+}
 
 export function PrRow({
   row,
@@ -31,23 +53,24 @@ export function PrRow({
   const toast = useToast();
   const router = useRouter();
   const menu = useContextMenu<GithubPrRow>();
-  const { data: repData } = useTodayRep();
   const compact = density === "compact";
   const avatarSize = compact ? 14 : 16;
   const target = menu.target ?? row;
-  const repLocked =
-    kind === "reviews" &&
-    !!repData?.rep?.pr &&
-    !repData.rep.completedAt &&
-    repData.rep.pr.repo === target.repo &&
-    repData.rep.pr.number === target.number;
+  const { group: tagsGroup, modal: tagsModal } = useTagMenuGroup({
+    kind: "pr",
+    id: `${target.repo}#${target.number}`,
+    label: target.title,
+    prRepo: target.repo,
+    prNumber: target.number,
+    extraTags: extractTags(target.title),
+    enabled: menu.target !== null,
+  });
   const groups = buildPrRowMenuGroups({
     row: target,
     kind,
     toast,
     openNote: () => openPrRowNote(row, (href) => router.push(href), toast),
-    repLocked,
-    openRep: () => router.push("/review/rep"),
+    tagsGroup,
   });
 
   return (
@@ -86,6 +109,7 @@ export function PrRow({
           </div>
         </div>
         <div className="pr-row-actions" data-pr-actions>
+          <PrStatusIcon row={row} />
           <PrReviewNoteLink row={row} />
           <RowMenuKebab
             label={`Actions for ${row.repo}#${row.number}`}
@@ -100,6 +124,7 @@ export function PrRow({
         onClose={menu.close}
         label={`${row.repo}#${row.number} actions`}
       />
+      {tagsModal}
     </div>
   );
 }

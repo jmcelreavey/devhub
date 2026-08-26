@@ -17,7 +17,7 @@ const FALLBACK_PORT = process.env.NEXT_PUBLIC_OPENCHAMBER_PORT ?? "1336";
  */
 export function PersistentChamber() {
   const active = usePathname() === "/chamber";
-  const { port, refresh } = useLazyServicePort(active, "/api/openchamber/listen", FALLBACK_PORT);
+  const { port, error, refresh } = useLazyServicePort(active, "/api/openchamber/listen", FALLBACK_PORT);
 
   return (
     <PersistentServiceFrame
@@ -25,6 +25,7 @@ export function PersistentChamber() {
       serviceId="openchamber"
       serviceName="OpenChamber"
       port={port}
+      error={error}
       title="OpenChamber"
       onRestarted={refresh}
     />

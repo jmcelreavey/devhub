@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent } from "react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import {
   applyTypedInput,
   commandFromPromptLine,
+  dataTransferHasTerminalSelection,
   lastNonEmptyLine,
+  looksLikePromptLine,
   parseOsc133,
   setTerminalSelectionDrag,
   shouldRecordTypedCommand,
@@ -13,6 +15,20 @@ import {
   TERMINAL_SELECTION_MIME_LEGACY,
 } from "@/lib/terminal-blocks";
 import { isTerminalBusy } from "@/lib/terminal-inject";
+import {
+  collectTerminalPasteImageFiles,
+  formatTerminalImagePathInject,
+  uploadTerminalPasteImages,
+} from "@/lib/terminal-paste-image";
+import { copyTextToClipboard, readTextFromClipboard } from "@/lib/clipboard";
+import {
+  isAppleTerminalPlatform,
+  isTerminalCopyShortcut,
+  isTerminalCutShortcut,
+  isTerminalShiftPasteShortcut,
+  selectionInPlaceDeleteSequence,
+} from "@/lib/terminal-clipboard";
+import { useToast } from "@/lib/hooks/use-toast";
 import "@xterm/xterm/css/xterm.css";
 
 const TERMINAL_PORT = process.env.NEXT_PUBLIC_TERMINAL_PORT ?? "1339";
@@ -73,12 +89,25 @@ export interface TerminalReader {
   /** Inject stdin (confirmed commands only). */
   write: (data: string) => boolean;
   isBusy: () => boolean;
+  /** Tail of the scrollback — cheap streaming reads for the blocks tick. */
+  getBufferTail?: (maxLines: number) => string;
+  /** Timestamp of the most recent PTY input/output activity. */
+  activityAt?: () => number;
   /** Scroll the terminal so `line` (absolute buffer row) is in view. */
   scrollToLine: (line: number) => void;
   /** Absolute buffer row of the cursor — where the next output will land. */
   cursorLine: () => number;
   /** Open the in-pane find bar (⌘F). */
   openFind: () => void;
+  /** Paste plain text via xterm (bracketed paste when the shell supports it). */
+  paste: (text: string) => void;
+  /** Clear the active xterm selection highlight. */
+  clearSelection: () => void;
+  /**
+   * Best-effort: copy already done by caller; delete in-place when the
+   * selection ends at the cursor on the current line. Otherwise just clears.
+   */
+  deleteSelection: () => boolean;
   /**
    * True once live shell integration (OSC 133) has been seen — the dock uses
    * this to stand down its heuristic block detection.
@@ -146,6 +175,12 @@ interface SessionProps {
    * fires, heuristic detection stands down — the integration owns blocks.
    */
   onOscCommand?: (command: string) => void;
+  /**
+   * In-progress typed line for the prompt editor mirror.
+   * Hard limit: CSI/ESC (shell ↑ history, arrows, Ctrl+C) resets the
+   * accumulator — we track printable keystrokes, not the PTY line buffer.
+   */
+  onTypedLine?: (line: string) => void;
 }
 
 /**
@@ -171,6 +206,7 @@ export function TerminalSession({
   onReader,
   onCommandSubmit,
   onOscCommand,
+  onTypedLine,
 }: SessionProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<{ fit: () => void } | null>(null);
@@ -202,8 +238,75 @@ export function TerminalSession({
   const onReaderRef = useLatestRef(onReader);
   const onCommandSubmitRef = useLatestRef(onCommandSubmit);
   const onOscCommandRef = useLatestRef(onOscCommand);
+  const onTypedLineRef = useLatestRef(onTypedLine);
   const killOnUnmountRef = useLatestRef(killOnUnmount);
   const autoFocusRef = useLatestRef(autoFocus);
+  const toast = useToast();
+  const pasteBusyRef = useRef(false);
+
+  /** Write clipboard/drop images to temp files and inject paths into the PTY. */
+  const injectPastedImages = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0 || pasteBusyRef.current) return;
+      pasteBusyRef.current = true;
+      try {
+        const result = await uploadTerminalPasteImages(files);
+        if (!result.ok) {
+          toast.error(result.error);
+          return;
+        }
+        const payload = formatTerminalImagePathInject(result.paths);
+        const wrote = socketWriteRef.current?.(payload);
+        if (!wrote) {
+          toast.error("Terminal isn’t connected — couldn’t inject image path.");
+          return;
+        }
+        const n = result.paths.length;
+        toast.success(n === 1 ? "Image path inserted" : `${n} image paths inserted`);
+      } finally {
+        pasteBusyRef.current = false;
+      }
+    },
+    [toast],
+  );
+
+  const onPasteCapture = useCallback(
+    (e: ReactClipboardEvent) => {
+      const images = collectTerminalPasteImageFiles(e.clipboardData);
+      if (images.length === 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      void injectPastedImages(images);
+    },
+    [injectPastedImages],
+  );
+
+  const onDragOverImages = useCallback((e: ReactDragEvent) => {
+    if (dataTransferHasTerminalSelection(e.dataTransfer)) return;
+    if (![...e.dataTransfer.types].includes("Files")) return;
+    // Cheap accept: image mime in types, or Files present (validated on drop).
+    const types = [...e.dataTransfer.types];
+    const maybeImage =
+      types.some((t) => t.startsWith("image/")) ||
+      types.includes("Files");
+    if (!maybeImage) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }, []);
+
+  const onDropImages = useCallback(
+    (e: ReactDragEvent) => {
+      if (dataTransferHasTerminalSelection(e.dataTransfer)) return;
+      if (![...e.dataTransfer.types].includes("Files")) return;
+      // Always swallow file drops so the browser doesn’t navigate to the file.
+      e.preventDefault();
+      e.stopPropagation();
+      const images = collectTerminalPasteImageFiles(e.dataTransfer);
+      if (images.length === 0) return;
+      void injectPastedImages(images);
+    },
+    [injectPastedImages],
+  );
 
   // Zoom: update the live terminal and refit without touching the session.
   useEffect(() => {
@@ -265,12 +368,18 @@ export function TerminalSession({
     const preferKillRef = { current: killOnUnmountRef.current };
     let busyTimer: number | undefined;
     let lastBusy: boolean | null = null;
-
-    const emitBusy = () => {
-      const busy = isTerminalBusy({
+    /** OSC 133 lifecycle — null until live marks are seen (heuristic applies). */
+    let oscCommandRunning: boolean | null = null;
+    /** Reassigned once xterm exists so busy can also consult the on-screen prompt. */
+    let computeBusy = () =>
+      isTerminalBusy({
         lastOutputAt: lastOutputAtRef.current,
         lastInputAt: lastInputAtRef.current,
+        commandRunning: oscCommandRunning,
       });
+
+    const emitBusy = () => {
+      const busy = computeBusy();
       if (lastBusy === busy) return;
       lastBusy = busy;
       onBusyRef.current?.(busy);
@@ -308,6 +417,8 @@ export function TerminalSession({
         scrollback: TERMINAL_SCROLLBACK,
         // Unicode11Addon registers width providers via the proposed API.
         allowProposedApi: true,
+        // macOS-like: right-click selects the word under the cursor.
+        rightClickSelectsWord: isAppleTerminalPlatform(),
         theme: {
           background: cssVar("--bg-surface", "#11161b"),
           foreground: cssVar("--text", "#e6edf3"),
@@ -384,7 +495,7 @@ export function TerminalSession({
       };
       const selSub = term.onSelectionChange(schedulePaint);
       const scrollSub = term.onScroll(schedulePaint);
-      const onDragStart = (e: DragEvent) => {
+      const onDragStart = (e: globalThis.DragEvent) => {
         const text = term.getSelection()?.trim() ?? "";
         if (!text || !e.dataTransfer) {
           e.preventDefault();
@@ -444,6 +555,86 @@ export function TerminalSession({
       };
       socketWriteRef.current = writeStdin;
 
+      const isApple = isAppleTerminalPlatform();
+
+      const pasteText = (text: string) => {
+        if (!text) return;
+        touchActivity("input");
+        term.paste(text);
+      };
+
+      const deleteSelectionInPlace = (): boolean => {
+        const selection = term.getSelection() ?? "";
+        const sequence = selectionInPlaceDeleteSequence({
+          selection,
+          position: term.getSelectionPosition() ?? null,
+          cursorAbsY: term.buffer.active.baseY + term.buffer.active.cursorY,
+          cursorX: term.buffer.active.cursorX,
+        });
+        term.clearSelection();
+        if (!sequence) return false;
+        return writeStdin(sequence);
+      };
+
+      // Copy/cut when a selection exists; leave bare Ctrl+C as SIGINT otherwise.
+      // Native ⌘/Ctrl+V stays with the textarea so image paste still works.
+      term.attachCustomKeyEventHandler((ev) => {
+        if (ev.type !== "keydown") return true;
+        const hasSel = term.hasSelection();
+        const selection = hasSel ? term.getSelection() : "";
+
+        if (isTerminalCopyShortcut(ev, isApple) && selection) {
+          ev.preventDefault();
+          void copyTextToClipboard(selection);
+          return false;
+        }
+
+        if (isTerminalCutShortcut(ev, isApple) && selection) {
+          ev.preventDefault();
+          void copyTextToClipboard(selection);
+          deleteSelectionInPlace();
+          return false;
+        }
+
+        if (
+          (ev.key === "Backspace" || ev.key === "Delete") &&
+          hasSel &&
+          selection &&
+          !ev.metaKey &&
+          !ev.ctrlKey &&
+          !ev.altKey
+        ) {
+          if (deleteSelectionInPlace()) {
+            ev.preventDefault();
+            return false;
+          }
+          // Scrollback / multi-line: drop the highlight instead of BS one char.
+          term.clearSelection();
+          ev.preventDefault();
+          return false;
+        }
+
+        if (isTerminalShiftPasteShortcut(ev, isApple)) {
+          ev.preventDefault();
+          void readTextFromClipboard().then((text) => {
+            if (text) pasteText(text);
+          });
+          return false;
+        }
+
+        return true;
+      });
+
+      // Middle-click paste (X11-style best-effort via the system clipboard).
+      const onMiddlePaste = (e: MouseEvent) => {
+        if (e.button !== 1) return;
+        e.preventDefault();
+        void readTextFromClipboard().then((text) => {
+          if (text) pasteText(text);
+        });
+      };
+      host.addEventListener("mousedown", onMiddlePaste);
+
       const getViewport = () => {
         const buffer = term.buffer.active;
         const rows: string[] = [];
@@ -454,6 +645,31 @@ export function TerminalSession({
         return rows.join("\n").replace(/\n+$/, "");
       };
 
+      // Busy detection: an idle shell whose RPROMPT clock repaints every
+      // second must not read as "busy" — that starved every inject until the
+      // 60s timeout ("Terminal stayed busy"). With live OSC 133 marks the
+      // command lifecycle is authoritative; otherwise a visible prompt after
+      // a short quiet gap means idle.
+      computeBusy = () =>
+        isTerminalBusy({
+          lastOutputAt: lastOutputAtRef.current,
+          lastInputAt: lastInputAtRef.current,
+          commandRunning: oscCommandRunning,
+          promptVisible: () => looksLikePromptLine(lastNonEmptyLine(getViewport())),
+        });
+
+      /** Tail rows only — the blocks tick polls every second and must not
+       * serialize a 50k-line scrollback each time. */
+      const getBufferTail = (maxLines: number) => {
+        const buffer = term.buffer.active;
+        const start = Math.max(0, buffer.length - maxLines);
+        const rows: string[] = [];
+        for (let i = start; i < buffer.length; i++) {
+          rows.push(buffer.getLine(i)?.translateToString(true) ?? "");
+        }
+        return rows.join("\n").replace(/\n+$/, "") + "\n";
+      };
+
       // Flips true on live OSC 133 traffic — dock stands down heuristics then.
       let sawOsc133 = false;
       /** Server-asserted: this session was spawned with OSC 133 hooks. */
@@ -461,16 +677,18 @@ export function TerminalSession({
 
       onReaderRef.current?.({
         getBuffer: getText,
+        getBufferTail,
         getSelection: () => term.getSelection(),
         getViewport,
+        activityAt: () =>
+          Math.max(lastOutputAtRef.current ?? 0, lastInputAtRef.current ?? 0),
         sessionId: () => sessionIdRef.current,
         dispose: disposeSession,
         write: writeStdin,
-        isBusy: () =>
-          isTerminalBusy({
-            lastOutputAt: lastOutputAtRef.current,
-            lastInputAt: lastInputAtRef.current,
-          }),
+        paste: pasteText,
+        clearSelection: () => term.clearSelection(),
+        deleteSelection: deleteSelectionInPlace,
+        isBusy: () => computeBusy(),
         scrollToLine: (line: number) => {
           term.scrollToLine(Math.max(0, Math.min(line, term.buffer.active.length - 1)));
         },
@@ -641,6 +859,7 @@ export function TerminalSession({
         if (Date.now() < suppressBlocksUntil) return;
         const next = applyTypedInput(typedAccum, data);
         typedAccum = next.accum;
+        onTypedLineRef.current?.(next.submitted ? "" : typedAccum);
         if (next.submitted) {
           const submitted = next.submitted;
           const record = () => {
@@ -658,6 +877,10 @@ export function TerminalSession({
         if (Date.now() < suppressBlocksUntil) return true;
         const parsed = parseOsc133(payload);
         if (!parsed) return true;
+        // Live lifecycle marks are the authoritative busy signal: a command
+        // runs between C and D; A/B mean the shell is back at a prompt.
+        oscCommandRunning = parsed.kind === "C";
+        emitBusy();
         if (parsed.kind === "C") {
           sawOsc133 = true;
           const cmd = commandFromPromptLine(lastNonEmptyLine(getText()));
@@ -717,6 +940,7 @@ export function TerminalSession({
         dragLayer.removeEventListener("wheel", onWheelForward);
         dragLayer.removeEventListener("click", onClickClearSelection);
         dragLayer.remove();
+        host.removeEventListener("mousedown", onMiddlePaste);
         if (preferKillRef.current || killOnUnmountRef.current) {
           disposeSession();
         } else {
@@ -749,7 +973,13 @@ export function TerminalSession({
   }, [active, autoFocus]);
 
   return (
-    <div className="terminal-host-wrap" style={{ height: "100%", position: "relative" }}>
+    <div
+      className="terminal-host-wrap"
+      style={{ height: "100%", position: "relative" }}
+      onPasteCapture={onPasteCapture}
+      onDragOver={onDragOverImages}
+      onDrop={onDropImages}
+    >
       {findOpen && (
         <div className="terminal-find-bar" role="search" aria-label="Find in terminal">
           <input

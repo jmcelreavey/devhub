@@ -68,7 +68,7 @@ const TONE_COLOR: Record<ObligationTone, string> = {
   unknown: "var(--text-muted)",
 };
 
-export default function OwnIndex() {
+export default function OwnIndex({ embedded = false }: { embedded?: boolean } = {}) {
   const toast = useToast();
   const confirm = useConfirm();
   const [fullName, setFullName] = useState("");
@@ -135,11 +135,17 @@ export default function OwnIndex() {
   }
 
   return (
-    <div className="page-wrapper">
+    <div className={embedded ? undefined : "page-wrapper"}>
+      {embedded ? (
+        <p className="mb-3 text-xs text-text-muted">
+          Ownership radar — PRs, gaps, and obligations you are accountable for.
+        </p>
+      ) : (
       <PageHeader
         title="Own"
         subtitle="Repo-centric radar for the changes, gaps, and obligations you are accountable for."
       />
+      )}
 
       <form
         className="card card-body mt-4 flex flex-col gap-2 sm:flex-row sm:items-end"

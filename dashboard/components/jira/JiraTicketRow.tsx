@@ -1,13 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, ExternalLink, FileText, Link2 } from "lucide-react";
+import { Copy, ExternalLink, FileText, Link2, RefreshCw } from "lucide-react";
 import type { JiraTicket } from "@/lib/jira/client";
+import { extractTags } from "@/lib/entity-note";
 import { copyTextAndToast } from "@/lib/pr-slack";
 import { createOrOpenVaultNote } from "@/lib/create-vault-note";
 import { openInBrowser } from "@/lib/desktop/bridge";
 import { PersonChip } from "@/components/PersonChip";
 import { JiraStatusPill } from "@/components/jira/JiraStatusPill";
+import { JiraTransitionModal } from "@/components/jira/JiraTransitionModal";
 import { useVaultNoteExists } from "@/components/EntityNoteAction";
 import {
   ContextMenu,
@@ -15,6 +18,7 @@ import {
   useContextMenu,
   type ContextMenuGroup,
 } from "@/components/shell/ContextMenu";
+import { useTagMenuGroup, withTagsGroup } from "@/lib/hooks/use-tag-menu";
 import { useToast } from "@/lib/hooks/use-toast";
 
 function ticketNotePath(key: string): string {
@@ -43,6 +47,7 @@ export function JiraTicketRow({
 }) {
   const toast = useToast();
   const router = useRouter();
+  const [transitionOpen, setTransitionOpen] = useState(false);
   const menu = useContextMenu<JiraTicket>();
   const notePath = ticketNotePath(ticket.key);
   const noteExists = useVaultNoteExists(notePath);
@@ -60,37 +65,54 @@ export function JiraTicketRow({
     }
   };
 
-  const groups: ContextMenuGroup[] = [
-    {
-      id: "ticket",
-      items: [
-        {
-          id: "copy-key",
-          label: "Copy key",
-          icon: <Copy size={12} />,
-          onSelect: () => void copyTextAndToast(ticket.key, ticket.key, toast),
-        },
-        {
-          id: "open-jira",
-          label: "Open in Jira",
-          icon: <ExternalLink size={12} />,
-          onSelect: () => void openInBrowser(ticket.url),
-        },
-        {
-          id: "note",
-          label: noteExists ? "Open note" : "Create note",
-          icon: <FileText size={12} />,
-          onSelect: () => void openNote(),
-        },
-        {
-          id: "copy-url",
-          label: "Copy browse URL",
-          icon: <Link2 size={12} />,
-          onSelect: () => void copyTextAndToast(ticket.url, "browse URL", toast),
-        },
-      ],
-    },
-  ];
+  const { group: tagsGroup, modal: tagsModal } = useTagMenuGroup({
+    kind: "jira",
+    id: ticket.key,
+    label: ticket.summary,
+    extraTags: extractTags(ticket.summary),
+    enabled: menu.target !== null,
+  });
+
+  const groups: ContextMenuGroup[] = withTagsGroup(
+    [
+      {
+        id: "ticket",
+        items: [
+          {
+            id: "copy-key",
+            label: "Copy key",
+            icon: <Copy size={12} />,
+            onSelect: () => void copyTextAndToast(ticket.key, ticket.key, toast),
+          },
+          {
+            id: "open-jira",
+            label: "Open in Jira",
+            icon: <ExternalLink size={12} />,
+            onSelect: () => void openInBrowser(ticket.url),
+          },
+          {
+            id: "update-state",
+            label: "Update ticket state",
+            icon: <RefreshCw size={12} />,
+            onSelect: () => setTransitionOpen(true),
+          },
+          {
+            id: "note",
+            label: noteExists ? "Open note" : "Create note",
+            icon: <FileText size={12} />,
+            onSelect: () => void openNote(),
+          },
+          {
+            id: "copy-url",
+            label: "Copy browse URL",
+            icon: <Link2 size={12} />,
+            onSelect: () => void copyTextAndToast(ticket.url, "browse URL", toast),
+          },
+        ],
+      },
+    ],
+    tagsGroup,
+  );
 
   return (
     <div
@@ -161,6 +183,30 @@ export function JiraTicketRow({
         groups={groups}
         onClose={menu.close}
         label={`${ticket.key} actions`}
+      />
+      {tagsModal}
+      <JiraTransitionModal
+        open={transitionOpen}
+        jiraKey={ticket.key}
+        title="Update Jira status"
+        skipLabel="Cancel"
+        suggest={ticket.status}
+        onCancel={() => setTransitionOpen(false)}
+        onConfirm={async (transitionId) => {
+          setTransitionOpen(false);
+          if (!transitionId) return;
+          try {
+            const res = await fetch(`/api/jira/ticket/${ticket.key}/transition`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ transitionId }),
+            });
+            if (!res.ok) throw new Error("Transition failed");
+            toast.success(`Updated ${ticket.key}`);
+          } catch {
+            toast.error(`Couldn't transition ${ticket.key}`);
+          }
+        }}
       />
     </div>
   );

@@ -96,3 +96,5 @@ notes/.cache/
 .openchamber/
 .pr-review-tmp/
 .tmp-pr*/
+# QA walk recordings (local only)
+.tmp-qa-videos/

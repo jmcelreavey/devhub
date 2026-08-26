@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { summarizeChecks, type GhCheckRow } from "@/lib/github/branch-pr";
-import { execGh } from "@/lib/gh-exec";
+import { execGh, isGithubCliAuthenticated, mapGithubCliError } from "@/lib/gh-exec";
 import { withScannedRepo, type RepoParams } from "../_shared";
 
 interface GhPrRow {
@@ -30,6 +30,11 @@ export async function GET(_req: Request, { params }: RepoParams) {
   const resolved = withScannedRepo(name);
   if (!resolved.ok) return resolved.response;
 
+  const configured = await isGithubCliAuthenticated();
+  if (!configured) {
+    return NextResponse.json({ configured: false, prs: [], error: "GitHub CLI isn't signed in (`gh auth login`)." });
+  }
+
   try {
     const { stdout } = await execGh(
       [
@@ -58,8 +63,9 @@ export async function GET(_req: Request, { params }: RepoParams) {
         checks: summarizeChecks(row.statusCheckRollup).checks,
       });
     }
-    return NextResponse.json({ prs });
-  } catch {
-    return NextResponse.json({ prs: [] as RailPr[] });
+    return NextResponse.json({ configured: true, prs });
+  } catch (error) {
+    const mapped = mapGithubCliError(error);
+    return NextResponse.json({ configured: true, prs: [] as RailPr[], error: mapped.error });
   }
 }

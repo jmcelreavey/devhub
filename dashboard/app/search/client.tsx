@@ -47,7 +47,7 @@ export default function SearchPage() {
     <div className="page-wrapper">
       <PageHeader
         title="Search"
-        subtitle={<>Everything — notes, docs, tasks, learnings, diagrams, events. Quick jump: <kbd className="text-[10px] px-1 rounded" style={{ background: "var(--bg-elevated)" }}>⌘K</kbd></>}
+        subtitle={<>Everything — notes, docs, tasks, learnings, diagrams, events. Quick jump: <kbd className="text-[10px] px-1 rounded" style={{ background: "var(--bg-elevated)" }}>⌘P</kbd></>}
       />
 
       <div className="card card-body mb-4 space-y-3">

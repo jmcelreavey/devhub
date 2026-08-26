@@ -11,6 +11,7 @@ import {
 } from "@/components/shell/ContextMenu";
 import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
 import { buildVaultFileMenuGroups } from "@/components/vault/vaultRowMenus";
+import { useTagMenuGroup, withTagsGroup } from "@/lib/hooks/use-tag-menu";
 import { useToast } from "@/lib/hooks/use-toast";
 import { toDiagramRoutePath } from "@/lib/diagram-utils";
 import { broadcastNoteAutosaveInvalidation } from "@/lib/notes/autosave-invalidation";
@@ -143,6 +144,13 @@ export function NoteListRow({
     },
   });
 
+  const { group: tagsGroup, modal: tagsModal } = useTagMenuGroup({
+    kind: rowKind === "diagrams" ? null : "note",
+    id: note.slug,
+    label: note.title,
+    enabled: menu.target !== null,
+  });
+
   return (
     <div className="lib-row-menu-host group" {...menu.bindRow(note)}>
       <Link href={note.href} className={className} onContextMenu={(event) => event.preventDefault()}>
@@ -155,10 +163,11 @@ export function NoteListRow({
       <ContextMenu
         open={menu.target !== null}
         position={menu.position}
-        groups={groups}
+        groups={withTagsGroup(groups, tagsGroup)}
         onClose={menu.close}
         label={`${note.title} actions`}
       />
+      {tagsModal}
       {canShare ? (
         <OneTimeShareButton
           vaultId="notes"

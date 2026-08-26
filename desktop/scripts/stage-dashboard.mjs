@@ -166,8 +166,66 @@ function stageServer() {
     });
   }
 
+  materialiseExternalPackages();
   stripEnvFiles();
   stripForeignNativeBinaries();
+}
+
+/**
+ * Replace Next's external-package symlinks with real directories.
+ *
+ * Turbopack emits one `.next/node_modules/<pkg>-<hash>` symlink per
+ * `serverExternalPackages` entry, and the server bundle requires the *hashed*
+ * name — `require("adm-zip-7c2297ece2645652")`, not `require("adm-zip")`.
+ * Those links point into the build tree, and `fs.cpSync` does not follow a
+ * symlink even with `dereference: true`: it recreates it with the target
+ * resolved to an absolute path on the machine that ran the copy. So staging
+ * shipped links into `dashboard/.next/standalone/...`, the next `next build`
+ * wiped that directory, and the installed app died at boot — the
+ * instrumentation hook threw "Cannot find module 'adm-zip-<hash>'" before a
+ * single route could load.
+ *
+ * Copying the package in costs about a megabyte across all four entries and
+ * survives every later copy step (`rebuild-installed-server`, the Tauri
+ * bundler) rather than depending on each one preserving link targets.
+ */
+function materialiseExternalPackages() {
+  const dir = path.join(serverDir, ".next", "node_modules");
+  if (!fs.existsSync(dir)) return;
+
+  const links = [];
+  const collect = (current) => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isSymbolicLink()) links.push(full);
+      else if (entry.isDirectory()) collect(full);
+    }
+  };
+  collect(dir);
+
+  for (const link of links) {
+    // Targets end in the real package path, e.g. `.../node_modules/@blocknote/core`.
+    const target = fs.readlinkSync(link);
+    const marker = `${path.sep}node_modules${path.sep}`;
+    const at = target.lastIndexOf(marker);
+    if (at === -1) {
+      throw new Error(`Unrecognised external package link: ${link} -> ${target}`);
+    }
+    const pkg = target.slice(at + marker.length);
+    const source = fs.existsSync(target) ? target : path.join(serverDir, "node_modules", pkg);
+    if (!fs.existsSync(source)) {
+      throw new Error(
+        `External package "${pkg}" is linked from .next/node_modules but was never staged ` +
+          `into server/node_modules — the packaged app would fail to boot.`,
+      );
+    }
+    fs.rmSync(link, { force: true });
+    fs.cpSync(source, link, { recursive: true, dereference: true });
+  }
+
+  if (links.length > 0) {
+    log(`materialised ${links.length} external package link(s) under .next/node_modules`);
+  }
 }
 
 /**

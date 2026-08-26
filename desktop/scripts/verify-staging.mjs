@@ -251,6 +251,51 @@ if (userOnlyNames.length === 0) {
   }
 }
 
+/**
+ * 5. Every symlink in the bundle resolves, and resolves inside the bundle.
+ *
+ * Turbopack emits `.next/node_modules/<pkg>-<hash>` links for every
+ * `serverExternalPackages` entry, and `cpSync` stages them with their target
+ * rewritten to an absolute build-machine path. That path stops existing the
+ * moment the next `next build` clears `.next`, and the installed app then dies
+ * at boot on "Cannot find module 'adm-zip-<hash>'" — thrown from the
+ * instrumentation hook, so nothing serves at all. `materialiseExternalPackages`
+ * in `stage-dashboard.mjs` copies them in; this is the check that it worked,
+ * and the net that catches any future staged link with the same problem.
+ */
+{
+  const offenders = [];
+  const scan = (dir) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isSymbolicLink()) {
+        const resolved = path.resolve(path.dirname(full), fs.readlinkSync(full));
+        const rel = path.relative(serverDir, full);
+        if (!fs.existsSync(resolved)) offenders.push(`${rel} -> ${fs.readlinkSync(full)} (dangling)`);
+        else if (path.relative(serverDir, resolved).startsWith("..")) {
+          offenders.push(`${rel} -> ${resolved} (escapes the bundle)`);
+        }
+      } else if (entry.isDirectory()) scan(full);
+    }
+  };
+  scan(serverDir);
+
+  if (offenders.length > 0) {
+    fail(
+      `${offenders.length} staged symlink(s) will not resolve on another machine:\n      ` +
+        offenders.slice(0, 10).join("\n      "),
+    );
+  } else {
+    pass("every staged symlink resolves inside the bundle");
+  }
+}
+
 process.stdout.write(
   failures === 0
     ? "\nStaging verified — safe to sign.\n"

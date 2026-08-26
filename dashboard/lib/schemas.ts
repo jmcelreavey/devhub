@@ -211,6 +211,13 @@ export const DatadogCheckSchema = z.object({
   applicationKey: z.string().max(200).optional(),
 });
 
+// ─── Projects ───
+
+export const ProjectCreateSchema = z.object({
+  label: z.string().trim().min(1),
+  repos: z.array(z.string()).default([]),
+});
+
 // ─── Share ───
 
 export const ShareCreateSchema = z.object({

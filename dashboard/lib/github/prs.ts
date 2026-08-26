@@ -10,6 +10,7 @@ import {
   type SearchIssueItem,
   type SearchIssuesResponse,
 } from "@/lib/github/search-types";
+import { applySkippedPrs } from "@/lib/github/skipped-prs";
 
 export interface GithubPrAuthor {
   login: string;
@@ -27,6 +28,13 @@ export interface GithubPrRow {
   updatedAt?: string;
   /** PR author from the Search API `user` field. */
   author?: GithubPrAuthor;
+  /**
+   * True when GitHub's review decision is APPROVED (ready-to-merge signal).
+   * Filled for open authored / review-requested rows via a parallel search.
+   */
+  approved?: boolean;
+  /** Normalized state when known (recently reviewed / closed search hits). */
+  prState?: "open" | "closed" | "merged";
 }
 
 export interface RecentlyReviewedPr extends GithubPrRow {
@@ -133,18 +141,48 @@ async function searchOpenPrs(query: string): Promise<SearchIssueItem[]> {
   return searchIssues(query, MAX_LIST);
 }
 
+/** Best-effort: a 422 on the approval lookup must not take down the PR list. */
+async function searchOpenPrsIgnoringErrors(query: string): Promise<SearchIssueItem[]> {
+  try {
+    return await searchOpenPrs(query);
+  } catch {
+    return [];
+  }
+}
+
 /**
  * All open PRs you authored and PRs awaiting your review, using the GitHub Search API
  * across all repositories (not limited to locally cloned repos).
+ *
+ * GitHub Search returns HTTP 422 for `review:approved` combined with an OR group
+ * (`(author:@me OR review-requested:@me)`), which used to 500 `/api/github/prs`.
+ * Split into two valid queries instead.
  */
 export async function fetchMyGithubPrs(): Promise<{ authored: GithubPrRow[]; reviews: GithubPrRow[] }> {
-  const [authoredItems, reviewItems] = await Promise.all([
+  // Parallel `review:approved` search is cheaper than N× `gh pr view --json reviewDecision`
+  // and matches GitHub's ready-to-merge decision (not "someone left an approve comment").
+  const [authoredItems, reviewItems, approvedAuthored, approvedReviewRequested] = await Promise.all([
     searchOpenPrs("author:@me is:pr state:open sort:updated-desc"),
     searchOpenPrs("review-requested:@me is:pr state:open sort:updated-desc"),
+    searchOpenPrsIgnoringErrors("author:@me is:pr state:open review:approved"),
+    searchOpenPrsIgnoringErrors("review-requested:@me is:pr state:open review:approved"),
   ]);
 
-  const authoredRaw = dedupeBy(authoredItems.map(rowFromSearchItem), "url").slice(0, MAX_LIST);
-  const reviewsRaw = dedupeBy(reviewItems.map(rowFromSearchItem), "url").slice(0, MAX_LIST);
+  const approvedUrls = new Set(
+    [...approvedAuthored, ...approvedReviewRequested]
+      .map((item) => item.html_url?.trim())
+      .filter((url): url is string => Boolean(url)),
+  );
+
+  const withApproval = (item: SearchIssueItem): GithubPrRow => {
+    const row = rowFromSearchItem(item);
+    return approvedUrls.has(row.url) ? { ...row, approved: true } : row;
+  };
+
+  const authoredRaw = dedupeBy(authoredItems.map(withApproval), "url").slice(0, MAX_LIST);
+  const reviewsRaw = await applySkippedPrs(
+    dedupeBy(reviewItems.map(withApproval), "url").slice(0, MAX_LIST),
+  );
 
   return { authored: authoredRaw, reviews: reviewsRaw };
 }

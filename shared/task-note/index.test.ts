@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildTaskNoteMarkdown, taskNotePath } from "./index.ts";
+import { buildTaskNoteMarkdown, normalizeTaskLinkState, taskNotePath } from "./index.ts";
 import type { TaskNoteSource } from "./index.ts";
 
 const task: TaskNoteSource = {
@@ -34,3 +34,39 @@ describe("buildTaskNoteMarkdown", () => {
     expect(md).not.toContain("**Jira:**");
   });
 });
+
+describe("normalizeTaskLinkState", () => {
+  it("dedupes links and promotes jiraKey when unset", () => {
+    const out = normalizeTaskLinkState("PR 3: Acme comments count", null, [
+      {
+        kind: "jira",
+        id: "https://example.atlassian.net/browse/PTF-4783",
+        label: "PTF-4783",
+        href: "https://example.atlassian.net/browse/PTF-4783",
+      },
+      { kind: "jira", id: "PTF-4783", label: "PTF-4783", href: "https://example.atlassian.net/browse/PTF-4783" },
+      { kind: "note", id: "WebView implementation plan", label: "WebView implementation plan" },
+      {
+        kind: "note",
+        id: "projects/demo-app-article-screen-native-chrome-plan",
+        label: "WebView implementation plan",
+      },
+    ]);
+    expect(out.jiraKey).toBe("PTF-4783");
+    expect(out.text.startsWith("PTF-4783")).toBe(true);
+    expect(out.links?.filter((l) => l.kind === "jira")).toHaveLength(1);
+    expect(out.links?.filter((l) => l.kind === "note")).toHaveLength(1);
+    expect(out.links?.find((l) => l.kind === "note")?.id).toBe(
+      "projects/demo-app-article-screen-native-chrome-plan",
+    );
+  });
+
+  it("does not change an existing jiraKey", () => {
+    const out = normalizeTaskLinkState("BAR-1 already linked", "BAR-1", [
+      { kind: "jira", id: "ZZZ-9", label: "ZZZ-9" },
+    ]);
+    expect(out.jiraKey).toBe("BAR-1");
+    expect(out.text).toBe("BAR-1 already linked");
+  });
+});
+

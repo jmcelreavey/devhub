@@ -401,42 +401,37 @@ body[data-motion="off"] .agent-chat-send-spin {
   max-width: 100%;
 }
 
-/* Detached pane — terminal or Agent. Natively resizable; size persists. */
-.dock-popout {
-  position: fixed;
-  z-index: 140;
+/* Whole dock detached as a floating window — same chrome as the docked bar,
+   so tabs and actions keep working while it floats. Dragged by the bar. */
+.terminal-dock.terminal-dock-window {
+  inset-inline: auto;
+  bottom: auto;
   top: 52px;
   right: 16px;
-  width: 720px;
-  height: 520px;
+  z-index: 140;
+  min-width: 360px;
+  min-height: 280px;
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 68px);
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
   overflow: hidden;
 }
-
-.dock-popout .terminal-agent-body,
-.dock-popout .agent-chat {
-  flex: 1;
-  min-height: 0;
+.terminal-dock-window[data-moving],
+.terminal-dock-window[data-resizing] {
+  user-select: none;
 }
-
-.agent-chat-popped-placeholder {
-  display: grid;
-  place-items: center;
-  height: 100%;
-  width: 100%;
-  background: none;
-  border: 0;
-  color: var(--text-muted);
-  font-size: 13px;
-  cursor: pointer;
+.terminal-dock-window[data-moving] .xterm,
+.terminal-dock-window[data-resizing] .xterm {
+  pointer-events: none;
+}
+/* The bare stretch of bar drags the window; buttons and tabs stay clickable. */
+.terminal-dock-window .terminal-dock-bar {
+  cursor: grab;
+}
+.terminal-dock-window[data-moving] .terminal-dock-bar {
+  cursor: grabbing;
 }
 
 .terminal-dock[data-dock-frame="split"] {
@@ -783,51 +778,6 @@ body[data-motion="off"] .terminal-block-chip[data-pending]::after {
   }
 }
 
-.dock-popout.terminal-session-stack {
-  display: flex;
-  flex-direction: column;
-}
-
-.dock-popout .terminal-session-xterm {
-  flex: 1;
-  min-height: 0;
-}
-
-/* A popped-out pane floats above the dock, so it carries its own controls —
-   the dock bar behind it cannot be clicked. */
-.dock-popout-bar {
-  cursor: grab;
-  user-select: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 4px 6px 4px 10px;
-  border-bottom: 1px solid var(--border-muted);
-  background: var(--bg-elevated);
-  border-radius: var(--radius) var(--radius) 0 0;
-  cursor: default;
-  flex-shrink: 0;
-}
-
-.dock-popout[data-moving] {
-  cursor: grabbing;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
-}
-
-/* No transition while dragging — the window must track the pointer exactly. */
-.dock-popout[data-moving] .dock-popout-bar {
-  cursor: grabbing;
-}
-
-.dock-popout-title {
-  font-size: 11px;
-  color: var(--text-subtle);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* Popout edges — same drag affordance as the dashboard side panels. The window
    is pinned top-right, so the left edge sets width and the bottom sets height. */
 .dock-popout-resize-w {
@@ -938,6 +888,19 @@ body[data-motion="off"] .terminal-block-chip[data-pending]::after {
   display: flex;
 }
 
+.terminal-blocks-summary {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--text-subtle);
+  border-bottom: 1px solid var(--border);
+}
+.terminal-blocks-pane-inner {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
 .terminal-blocks-view {
   flex: 1;
   min-height: 0;
@@ -1078,6 +1041,8 @@ body[data-motion="off"] .terminal-block-chip[data-pending]::after {
   font-size: 11.5px;
   line-height: 1.45;
   color: var(--text-muted);
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .terminal-block-expand {
@@ -1144,7 +1109,8 @@ body[data-motion="off"] .terminal-block-chip[data-pending]::after {
 
 textarea.terminal-prompt-editor {
   resize: none;
-  overflow-y: auto;
+  /* Hidden until JS enables auto when content exceeds the height cap. */
+  overflow-y: hidden;
   min-height: 30px;
   max-height: 132px;
   line-height: 1.55;
@@ -1206,4 +1172,136 @@ textarea.terminal-prompt-editor {
 
 .terminal-dock-btn[data-on] {
   color: var(--accent);
+}
+
+/* ── Ask-in-terminal echo card ────────────────────────────────────────────
+   Keeps the submitted question visible while the agent works: shimmer =
+   content arriving, 200ms entrance, no motion when reduced-motion applies. */
+
+.terminal-ask-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 10px 0;
+  padding: 8px 10px;
+  background: color-mix(in oklab, var(--accent) 7%, var(--bg-surface));
+  border: 1px solid color-mix(in oklab, var(--accent) 22%, var(--border-muted));
+  border-radius: 10px;
+  animation: terminal-ask-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes terminal-ask-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.terminal-ask-card[data-phase="failed"] {
+  border-color: color-mix(in oklab, var(--danger, #e5484d) 40%, var(--border-muted));
+}
+
+.terminal-ask-question {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.terminal-ask-question svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--accent);
+}
+
+.terminal-ask-question span {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 72px;
+  overflow-y: auto;
+}
+
+.terminal-ask-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.terminal-ask-shimmer {
+  display: block;
+  width: 56px;
+  height: 8px;
+  border-radius: 99px;
+  background: linear-gradient(
+    90deg,
+    var(--border-muted) 0%,
+    color-mix(in oklab, var(--accent) 35%, var(--border-muted)) 50%,
+    var(--border-muted) 100%
+  );
+  background-size: 200% 100%;
+  animation: agent-chat-shimmer 1.1s ease-in-out infinite;
+}
+
+.terminal-ask-status {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.terminal-ask-answer {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.terminal-ask-answer p {
+  flex: 1;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.terminal-ask-card[data-phase="failed"] .terminal-ask-answer p {
+  color: var(--danger, #e5484d);
+}
+
+.terminal-ask-dismiss {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.terminal-ask-dismiss:hover {
+  color: var(--text);
+  background: color-mix(in oklab, var(--text) 8%, transparent);
+}
+
+body[data-motion="off"] .terminal-ask-card,
+body[data-motion="off"] .terminal-ask-shimmer {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .terminal-ask-card,
+  .terminal-ask-shimmer {
+    animation: none !important;
+  }
 }

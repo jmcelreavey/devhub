@@ -1,9 +1,17 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { parseMarkdownLinks } from "@/lib/tasks/task-text";
+import { parseMarkdownLinks, splitTagTokens } from "@/lib/tasks/task-text";
+import { ContextMenu, useContextMenu } from "@/components/shell/ContextMenu";
+import { buildEntityRefMenuGroups } from "@/lib/entity-ref-menu";
+import type { EntityRef } from "@/lib/entity-note";
+import { copyTextAndToast } from "@/lib/pr-slack";
+import { useToast } from "@/lib/hooks/use-toast";
 
 /**
- * Render task text with its markdown links live.
+ * Render task text with its markdown links and #tags live.
  *
  * The rendering half of the extraction; the parsing half is pure and lives in
  * `lib/tasks/task-text.ts` so it can be tested without React.
@@ -11,7 +19,7 @@ import { parseMarkdownLinks } from "@/lib/tasks/task-text";
 export function renderTaskTextContent(text: string): ReactNode {
   const parts = parseMarkdownLinks(text);
   if (parts.length === 0 || (parts.length === 1 && parts[0].type === "text")) {
-    return text;
+    return renderTaggedText(text);
   }
   return parts.map((part, i) => {
     if (part.type === "link" && part.url) {
@@ -40,6 +48,99 @@ export function renderTaskTextContent(text: string): ReactNode {
         </a>
       );
     }
-    return <span key={i}>{part.text}</span>;
+    return <span key={i}>{renderTaggedText(part.text)}</span>;
   });
+}
+
+function HashtagChip({ tag, text }: { tag: string; text: string }) {
+  const router = useRouter();
+  const toast = useToast();
+  const menu = useContextMenu<EntityRef>();
+  const href = `/work?tag=${encodeURIComponent(tag)}`;
+  const ref: EntityRef = { kind: "tag", id: tag, label: text, href };
+  const groups = buildEntityRefMenuGroups(ref, {
+    onOpen: () => router.push(href),
+    onCopy: (value, copied) => void copyTextAndToast(value, copied, toast),
+  });
+  return (
+    <>
+      <Link
+        href={href}
+        onClick={(e) => e.stopPropagation()}
+        onContextMenu={(e) => menu.openAt(e, ref)}
+        className="entity-link-chip"
+        data-entity-chip=""
+        data-kind="tag"
+      >
+        {text}
+      </Link>
+      <ContextMenu
+        open={menu.target !== null}
+        position={menu.position}
+        groups={groups}
+        onClose={menu.close}
+        label={`${text} actions`}
+      />
+    </>
+  );
+}
+
+/** Chips shown inline before collapsing the rest into one "+N" affordance. */
+const MAX_TITLE_TAGS = 2;
+
+/**
+ * Plain text with `#tag` tokens rendered as drill-in chips to /work?tag=.
+ *
+ * Consecutive chips are grouped in a nowrap cluster so a wrapping title moves
+ * them as one block instead of interleaving pills mid-wrap, and anything past
+ * MAX_TITLE_TAGS collapses into a single "+N" chip at the end of the title.
+ */
+function renderTaggedText(text: string): ReactNode {
+  const parts = splitTagTokens(text);
+  if (!parts.some((p) => p.type === "tag")) return text;
+
+  const nodes: ReactNode[] = [];
+  let cluster: ReactNode[] = [];
+  let shown = 0;
+  const hidden: string[] = [];
+
+  const flushCluster = (key: string) => {
+    if (cluster.length === 0) return;
+    nodes.push(
+      <span key={key} className="task-title-tags">
+        {cluster}
+      </span>,
+    );
+    cluster = [];
+  };
+
+  parts.forEach((part, i) => {
+    if (part.type === "tag") {
+      if (shown < MAX_TITLE_TAGS) {
+        cluster.push(<HashtagChip key={i} tag={part.tag!} text={part.text} />);
+        shown += 1;
+      } else {
+        hidden.push(part.tag!);
+      }
+      return;
+    }
+    // Whitespace between tags is replaced by the cluster's own gap.
+    if (cluster.length > 0 && part.text.trim() === "") return;
+    flushCluster(`tags-${i}`);
+    if (part.text) nodes.push(<span key={i}>{part.text}</span>);
+  });
+
+  if (hidden.length > 0) {
+    cluster.push(
+      <span
+        key="more"
+        className="entity-link-chip entity-link-chip-more"
+        title={hidden.map((t) => `#${t}`).join(" ")}
+      >
+        +{hidden.length}
+      </span>,
+    );
+  }
+  flushCluster("tags-end");
+  return nodes;
 }

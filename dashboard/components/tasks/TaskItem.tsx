@@ -12,7 +12,9 @@ import { useState, useEffect, useRef, type HTMLAttributes } from "react";
 import { useRouter } from "next/navigation";
 import { type Task } from "@/lib/tasks/types";
 import { renderTaskTextContent } from "@/components/tasks/TaskText";
-import { stripLinkedJiraKeyFromText } from "@/lib/tasks/task-text";
+import { stripLinkedJiraKeyFromText, stripTagToken } from "@/lib/tasks/task-text";
+import { extractTags } from "@/lib/entity-note";
+import { useTagMenuGroup, withTagsGroup } from "@/lib/hooks/use-tag-menu";
 import { statusTone } from "@/components/jira/JiraWidget";
 import {
   X,
@@ -28,7 +30,8 @@ import {
   GripVertical,
   Ticket,
   FileText,
-  Link2,
+  Bot,
+  Hash,
 } from "lucide-react";
 import { JiraKeyChip } from "@/components/jira/JiraKeyChip";
 import { JiraStatusPill } from "@/components/jira/JiraStatusPill";
@@ -51,6 +54,7 @@ import {
 import { mutate } from "swr";
 import type { EntityRef } from "@/lib/entity-note";
 import { useToast } from "@/lib/hooks/use-toast";
+import { ImplementTaskDialog } from "@/components/tasks/ImplementTaskDialog";
 
 interface JiraStatus {
   name: string;
@@ -72,6 +76,7 @@ export function TaskItem({
   dragHandleProps,
   isDragging = false,
   isDropTarget = false,
+  denseLinks = false,
 }: {
   task: Task;
   /** Day file this task lives in (YYYY-MM-DD). Defaults to today. */
@@ -89,6 +94,8 @@ export function TaskItem({
   dragHandleProps?: HTMLAttributes<HTMLButtonElement> & { draggable: boolean };
   isDragging?: boolean;
   isDropTarget?: boolean;
+  /** Narrow surfaces (tasks sidebar) show fewer hop chips. */
+  denseLinks?: boolean;
 }) {
   const toast = useToast();
   const router = useRouter();
@@ -98,6 +105,7 @@ export function TaskItem({
   const [linkOpen, setLinkOpen] = useState(false);
   const [editText, setEditText] = useState(task.text);
   const [showAbandon, setShowAbandon] = useState(false);
+  const [implementOpen, setImplementOpen] = useState(false);
   const [abandonReason, setAbandonReason] = useState("");
   // True only in the moment the user just checked the box, so the confetti
   // burst fires on completion — not when an already-done list renders.
@@ -145,19 +153,57 @@ export function TaskItem({
     ? stripLinkedJiraKeyFromText(task.text, task.jiraKey)
     : task.text;
 
+  const hostTags = extractTags(task.text);
+  const { group: tagsGroup, modal: tagsModal, openModal: openTags } = useTagMenuGroup({
+    kind: "task",
+    id: task.id,
+    date: taskDate,
+    label: task.text,
+    extraTags: hostTags,
+    enabled: menu.target !== null || linkOpen,
+    onAddTag: isInactive
+      ? undefined
+      : (tag) => {
+          if (hostTags.some((t) => t.toLowerCase() === tag.toLowerCase())) return;
+          onEdit(`${task.text} #${tag}`);
+        },
+    onRemoveRef: isInactive
+      ? undefined
+      : async (ref) => {
+          if (ref.kind === "tag") {
+            const next = stripTagToken(task.text, ref.id);
+            if (next && next !== task.text) onEdit(next);
+            return;
+          }
+          const next = (task.links ?? []).filter((r) => !(r.kind === ref.kind && r.id === ref.id));
+          const res = await fetch("/api/tasks", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: task.id, date: taskDate, links: next }),
+          });
+          if (!res.ok) {
+            toast.error("Couldn't remove link");
+            throw new Error(await res.text());
+          }
+          void mutate("/api/tasks");
+        },
+    onAddLink: isInactive ? undefined : () => setLinkOpen(true),
+  });
+
   const textStyle: React.CSSProperties = {
     color: task.done || isInactive ? "var(--text-subtle)" : "var(--text)",
     textDecoration: task.done ? "line-through" : "none",
     opacity: task.done ? 0.6 : isInactive ? 0.45 : 1,
   };
 
-  // The trailing meta cluster (Jira status, due date, timer readout) is
-  // right-aligned; only render it when it has content so plain tasks keep the
-  // text's full width (an always-present margin-left:auto would starve it).
+  // The trailing meta cluster (Jira status, due date, timer readout) renders
+  // in the fixed action rail so it lines up with the note/tags icons across
+  // rows; only render it when it has content so plain tasks stay compact.
   const showJiraStatus = !!jiraStatus && !task.done && !isAbandoned;
   const showTimerReadout = !isInactive && (!!task.timerStartedAt || (task.timeSpentMs ?? 0) > 0);
 
   const dueDateLabel = task.due ? new Date(task.due).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : null;
+  const showDueDate = !!dueDateLabel && !task.done && !isAbandoned;
 
   const notePath = taskNotePath(noteSource);
   const noteExists = useVaultNoteExists(notePath);
@@ -174,7 +220,8 @@ export function TaskItem({
     }
   };
 
-  const menuGroups: ContextMenuGroup[] = [
+  const menuGroups: ContextMenuGroup[] = withTagsGroup(
+    [
     {
       id: "task",
       items: [
@@ -184,6 +231,16 @@ export function TaskItem({
           icon: <FileText size={12} aria-hidden />,
           onSelect: () => void openTaskNote(),
         },
+        ...(!isInactive && !task.done
+          ? [
+              {
+                id: "implement-agent",
+                label: "Implement with Agent…",
+                icon: <Bot size={12} aria-hidden />,
+                onSelect: () => setImplementOpen(true),
+              },
+            ]
+          : []),
         ...(onTimer && !isInactive
           ? [
               {
@@ -191,16 +248,6 @@ export function TaskItem({
                 label: task.timerStartedAt ? "Stop timer" : "Start timer",
                 icon: task.timerStartedAt ? <Pause size={12} aria-hidden /> : <Play size={12} aria-hidden />,
                 onSelect: onTimer,
-              },
-            ]
-          : []),
-        ...(!isInactive
-          ? [
-              {
-                id: "link",
-                label: "Link task",
-                icon: <Link2 size={12} aria-hidden />,
-                onSelect: () => setLinkOpen(true),
               },
             ]
           : []),
@@ -266,7 +313,9 @@ export function TaskItem({
         },
       ],
     },
-  ];
+    ],
+    tagsGroup,
+  );
 
   return (
     <div>
@@ -278,6 +327,11 @@ export function TaskItem({
           outline: isDropTarget ? "1px solid var(--accent)" : undefined,
         }}
         {...(!editing && !showAbandon ? menu.bindRow(task) : {})}
+        onDoubleClick={() => {
+          if (isInactive || editing || showAbandon) return;
+          setEditing(true);
+          setEditText(task.text);
+        }}
       >
         {dragHandleProps && !isInactive && !editing && !showAbandon && (
           <HoverTip label="Drag to reorder." pos="top">
@@ -410,37 +464,53 @@ export function TaskItem({
             </span>
           )}
 
-          {/* Right-aligned meta: Jira status, due date, timer readout. */}
-          {(showJiraStatus || (!!dueDateLabel && !task.done && !isAbandoned) || showTimerReadout) && (
-            <div className="task-row-meta">
-              {showJiraStatus && (
-                onStatusClick ? (
-                  <span className="task-jira-status" onClick={(e) => e.stopPropagation()}>
-                    <JiraStatusPill ticketKey={task.jiraKey!} status={jiraStatus!.name} onChanged={onStatusClick} />
-                  </span>
-                ) : (
-                  <span className="task-jira-status">
-                    <SeverityPill tone={statusTone(jiraStatus!.name)}>{jiraStatus!.name}</SeverityPill>
-                  </span>
-                )
-              )}
-              {dueDateLabel && !task.done && !isAbandoned && (
-                <span className="text-xs shrink-0 font-mono text-text-subtle">
-                  due {dueDateLabel}
-                </span>
-              )}
-              {!isInactive && <TimerReadout task={task} />}
-            </div>
-          )}
         </div>
 
         {!editing && !showAbandon && (
-          <div className="task-row-actions flex items-start gap-0.5">
+          <div className="task-row-actions">
+            {/* Trailing meta (Jira status, due date, timer) leads the rail so the
+                note/tags icons keep the same column across rows. */}
+            {(showJiraStatus || showDueDate || showTimerReadout) && (
+              <div className="task-row-meta">
+                {showJiraStatus && (
+                  onStatusClick ? (
+                    <span className="task-jira-status" onClick={(e) => e.stopPropagation()}>
+                      <JiraStatusPill ticketKey={task.jiraKey!} status={jiraStatus!.name} onChanged={onStatusClick} />
+                    </span>
+                  ) : (
+                    <span className="task-jira-status">
+                      <SeverityPill tone={statusTone(jiraStatus!.name)}>{jiraStatus!.name}</SeverityPill>
+                    </span>
+                  )
+                )}
+                {showDueDate && (
+                  <span className="text-xs shrink-0 font-mono text-text-subtle">
+                    due {dueDateLabel}
+                  </span>
+                )}
+                {!isInactive && <TimerReadout task={task} />}
+              </div>
+            )}
             {noteExists ? (
-              <span className="row-note-glyph mt-0.5" title="Note exists" aria-hidden>
-                <FileText size={12} />
+              <span className="row-note-glyph" title="Note exists" aria-hidden>
+                <FileText size={14} />
               </span>
             ) : null}
+            <HoverTip label="Tags">
+              <button
+                type="button"
+                className="row-menu-kebab shrink-0"
+                aria-label="Tags"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  openTags();
+                }}
+              >
+                <Hash size={14} aria-hidden />
+              </button>
+            </HoverTip>
             <RowMenuKebab
               label={`Actions for ${task.text}`}
               onOpen={(x, y) => menu.openAtPoint(x, y, task)}
@@ -450,7 +520,7 @@ export function TaskItem({
       </div>
 
       {!editing && !showAbandon && (
-        <div className="ml-9 mr-2 mb-0.5">
+        <div className="task-row-links ml-9 mr-2">
           <EntityLinkChips
             kind="task"
             id={task.id}
@@ -458,6 +528,9 @@ export function TaskItem({
             label={task.text}
             seed={task.links as EntityRef[] | undefined}
             suppressJiraKey={task.jiraKey}
+            hostTags={hostTags}
+            hideCompanionNotes={noteExists}
+            maxVisible={denseLinks ? 2 : 4}
             onRemoveSeed={
               readOnly || isInactive
                 ? undefined
@@ -493,6 +566,12 @@ export function TaskItem({
           void mutate("/api/tasks");
         }}
       />
+      <ImplementTaskDialog
+        open={implementOpen}
+        task={task}
+        date={taskDate}
+        onClose={() => setImplementOpen(false)}
+      />
       <ContextMenu
         open={menu.target !== null}
         position={menu.position}
@@ -500,6 +579,7 @@ export function TaskItem({
         onClose={menu.close}
         label={`Task actions for ${task.text}`}
       />
+      {tagsModal}
 
       {showAbandon && (
         <div

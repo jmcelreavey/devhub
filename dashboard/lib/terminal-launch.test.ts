@@ -19,6 +19,7 @@ import {
   chatgptCliCommand,
   claudeCliCommand,
   cursorCliCommand,
+  taskImplementationCommand,
 } from "./terminal-launch";
 
 const ORIGINAL_ENV = { ...process.env };
@@ -296,6 +297,7 @@ describe("companion CLI launch commands", () => {
     const cmd = claudeCliCommand();
     expect(cmd).toContain("command -v");
     expect(cmd).toContain("claude");
+    expect(cmd).toContain("--dangerously-skip-permissions");
     expect(cmd).toContain("Claude CLI not found");
   });
 
@@ -303,6 +305,7 @@ describe("companion CLI launch commands", () => {
     const cmd = cursorCliCommand();
     expect(cmd).toContain("command -v");
     expect(cmd).toContain("cursor-agent");
+    expect(cmd).toContain("--force --approve-mcps --trust");
     expect(cmd).toContain("Cursor CLI not found");
   });
 
@@ -313,6 +316,36 @@ describe("companion CLI launch commands", () => {
       cmd.indexOf("command -v"),
     );
     expect(cmd).toContain("codex");
+    expect(cmd.match(/--dangerously-bypass-approvals-and-sandbox/g)?.length).toBe(2);
     expect(cmd).toContain("Codex CLI not found");
+  });
+});
+
+describe("taskImplementationCommand", () => {
+  it("uses the configured provider and model when defaults are requested", async () => {
+    useConfig({ cli: "opencode", opencodeModel: "openai/gpt-5" });
+
+    const result = await taskImplementationCommand("default", "Implement task 1");
+
+    expect(result.provider).toBe("opencode");
+    expect(result.command).toContain("opencode --model 'openai/gpt-5' --prompt 'Implement task 1'");
+  });
+
+  it("builds an interactive Claude command with an explicit model", async () => {
+    useConfig();
+
+    const result = await taskImplementationCommand("claude", "Implement task 1", "sonnet");
+
+    expect(result.provider).toBe("claude");
+    expect(result.command).toContain("claude --dangerously-skip-permissions --model 'sonnet' 'Implement task 1'");
+  });
+
+  it("uses Cursor's configured model when no override is supplied", async () => {
+    useConfig({ cursorModel: "cursor-model" });
+
+    const result = await taskImplementationCommand("cursor", "Implement task 1");
+
+    expect(result.command).toContain("--model 'cursor-model'");
+    expect(result.command).toContain("--approve-mcps");
   });
 });

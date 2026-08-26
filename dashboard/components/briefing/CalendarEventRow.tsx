@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Calendar, Copy, FileText, Video } from "lucide-react";
 import type { CalendarEvent } from "@/lib/google-calendar";
+import { extractTags } from "@/lib/entity-note";
 import { formatTime } from "@/lib/utils";
 import { copyTextAndToast } from "@/lib/pr-slack";
 import { createOrOpenVaultNote } from "@/lib/create-vault-note";
@@ -17,6 +18,7 @@ import {
   useContextMenu,
   type ContextMenuGroup,
 } from "@/components/shell/ContextMenu";
+import { useTagMenuGroup, withTagsGroup } from "@/lib/hooks/use-tag-menu";
 import { useToast } from "@/lib/hooks/use-toast";
 
 function isHappeningNow(start: string, end: string): boolean {
@@ -76,45 +78,57 @@ export function CalendarEventRow({
     }
   };
 
-  const groups: ContextMenuGroup[] = [
-    {
-      id: "event",
-      items: [
-        {
-          id: "note",
-          label: noteExists ? "Open note" : "Create note",
-          icon: <FileText size={12} />,
-          onSelect: () => void openNote(),
-        },
-        ...(event.conferenceUrl
-          ? [
-              {
-                id: "meet",
-                label: "Open Meet",
-                icon: <Video size={12} />,
-                onSelect: () => void openInBrowser(event.conferenceUrl!),
-              },
-            ]
-          : []),
-        ...(event.htmlLink
-          ? [
-              {
-                id: "gcal",
-                label: "Open in Google Calendar",
-                icon: <Calendar size={12} />,
-                onSelect: () => void openInBrowser(event.htmlLink!),
-              },
-            ]
-          : []),
-        {
-          id: "copy",
-          label: "Copy event",
-          icon: <Copy size={12} />,
-          onSelect: () => void copyTextAndToast(copyEventText(event), "event", toast),
-        },
-      ],
-    },
-  ];
+  const { group: tagsGroup, modal: tagsModal } = useTagMenuGroup({
+    kind: "calendar",
+    id: event.id,
+    label: event.title,
+    meetingTitle: event.title,
+    extraTags: extractTags(event.title),
+    enabled: menu.target !== null,
+  });
+
+  const groups: ContextMenuGroup[] = withTagsGroup(
+    [
+      {
+        id: "event",
+        items: [
+          {
+            id: "note",
+            label: noteExists ? "Open note" : "Create note",
+            icon: <FileText size={12} />,
+            onSelect: () => void openNote(),
+          },
+          ...(event.conferenceUrl
+            ? [
+                {
+                  id: "meet",
+                  label: "Open Meet",
+                  icon: <Video size={12} />,
+                  onSelect: () => void openInBrowser(event.conferenceUrl!),
+                },
+              ]
+            : []),
+          ...(event.htmlLink
+            ? [
+                {
+                  id: "gcal",
+                  label: "Open in Google Calendar",
+                  icon: <Calendar size={12} />,
+                  onSelect: () => void openInBrowser(event.htmlLink!),
+                },
+              ]
+            : []),
+          {
+            id: "copy",
+            label: "Copy event",
+            icon: <Copy size={12} />,
+            onSelect: () => void copyTextAndToast(copyEventText(event), "event", toast),
+          },
+        ],
+      },
+    ],
+    tagsGroup,
+  );
 
   return (
     <div className="min-w-0">
@@ -213,6 +227,7 @@ export function CalendarEventRow({
         onClose={menu.close}
         label={`${event.title} actions`}
       />
+      {tagsModal}
     </div>
   );
 }

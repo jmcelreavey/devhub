@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
+import { isAuthenticatedDesktopRequest } from "@/lib/desktop/bootstrap-auth";
 import { formatZodError } from "./schemas";
 
 type RouteHandler<Args extends unknown[]> = (...args: Args) => Promise<Response>;
@@ -113,16 +114,33 @@ export function isSameOriginStrict(req: NextRequest): boolean {
 }
 
 /**
+ * Browsers omit Origin on same-origin GET `fetch` (Chrome 150+, Safari,
+ * WKWebView). They still send Referer. Curl does not, unless you pass `-e`.
+ */
+export function isSameOriginReferer(req: NextRequest): boolean {
+  const referer = req.headers.get("referer");
+  const host = req.headers.get("host") ?? "";
+  if (!referer || !host) return false;
+  try {
+    const url = new URL(referer);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+    const refererHost = url.port ? `${url.hostname}:${url.port}` : url.hostname;
+    return refererHost === host;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Authentication guard for sensitive / mutating dashboard routes.
  *
- * Accepts either:
- * 1. `X-DevHub-Secret` matching `DEVHUB_API_SECRET` (MCP / local tooling), or
- * 2. A **strict** same-origin browser request (Origin present and matches Host).
+ * Accepts:
+ * 1. `X-DevHub-Secret` matching `DEVHUB_API_SECRET` (MCP / local tooling),
+ * 2. The packaged-app bootstrap cookie / `x-devhub-token`,
+ * 3. Origin matching Host, or
+ * 4. Referer matching Host (same-origin GET fetch omits Origin).
  *
- * Missing Origin without a valid secret is rejected — that closes the LAN hole
- * where any local process could POST with no Origin. Prefer setting
- * `DEVHUB_API_SECRET` when the dashboard is reachable off localhost.
- * See README + `.env.example`.
+ * Bare curl with neither header is still rejected.
  */
 export function requireDashboardAuth(req: NextRequest): { ok: true } | { ok: false; response: NextResponse } {
   const secret = process.env.DEVHUB_API_SECRET?.trim();
@@ -130,7 +148,9 @@ export function requireDashboardAuth(req: NextRequest): { ok: true } | { ok: fal
     const provided = req.headers.get("x-devhub-secret")?.trim();
     if (provided === secret) return { ok: true };
   }
+  if (isAuthenticatedDesktopRequest(req)) return { ok: true };
   if (isSameOriginStrict(req)) return { ok: true };
+  if (isSameOriginReferer(req)) return { ok: true };
   const status = secret ? 401 : 403;
   const error = secret ? "Unauthorized" : "Forbidden";
   return { ok: false, response: NextResponse.json({ error }, { status }) };

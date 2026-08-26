@@ -123,6 +123,54 @@ describe("bindRow on the card/row container", () => {
   });
 });
 
+
+function HostHighlightHarness() {
+  const menu = useContextMenu<string>();
+  return (
+    <div>
+      <div data-testid="row" {...menu.bindRow("row")}>
+        Row
+        <RowMenuKebab label="More" onOpen={(x, y) => menu.openAtPoint(x, y, "row")} />
+      </div>
+      {menu.target ? (
+        <button type="button" data-testid="close" onClick={() => menu.close()}>
+          Close
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+describe("useContextMenu host highlight", () => {
+  it("marks the host on contextmenu and clears on close", () => {
+    render(<HostHighlightHarness />);
+    const row = screen.getByTestId("row");
+    expect(row.getAttribute("data-context-menu-host")).toBe("true");
+    expect(row.getAttribute("data-context-menu")).toBeNull();
+
+    fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+    expect(row.getAttribute("data-context-menu")).toBe("open");
+
+    fireEvent.click(screen.getByTestId("close"));
+    expect(row.getAttribute("data-context-menu")).toBeNull();
+  });
+
+  it("marks the host via elementFromPoint when kebab opens without an explicit host", () => {
+    render(<HostHighlightHarness />);
+    const row = screen.getByTestId("row");
+    const kebab = screen.getByRole("button", { name: "More" });
+    Object.defineProperty(document, "elementFromPoint", {
+      configurable: true,
+      value: vi.fn(() => kebab),
+    });
+
+    fireEvent.click(kebab, { clientX: 50, clientY: 60 });
+
+    expect(document.elementFromPoint).toHaveBeenCalled();
+    expect(row.getAttribute("data-context-menu")).toBe("open");
+  });
+});
+
 describe("ContextMenu Escape capture", () => {
   it("closes the menu and does not let Escape reach an enclosing dialog listener", () => {
     const onClose = vi.fn();
@@ -284,3 +332,33 @@ describe("ContextMenu pointer origin", () => {
     rect.mockRestore();
   });
 });
+
+function ChipSkipHarness({ onOpen }: { onOpen: () => void }) {
+  const menu = useContextMenu<string>();
+  if (menu.target) onOpen();
+  return (
+    <div data-testid="row" {...menu.bindRow("row")}>
+      Row
+      <button type="button" data-entity-chip="" data-testid="chip">
+        chip
+      </button>
+    </div>
+  );
+}
+
+describe("useContextMenu bindRow chip skip", () => {
+  it("does not open the row menu from an entity chip", () => {
+    const onOpen = vi.fn();
+    render(<ChipSkipHarness onOpen={onOpen} />);
+    fireEvent.contextMenu(screen.getByTestId("chip"));
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("opens the row menu when right-clicking the row itself", () => {
+    const onOpen = vi.fn();
+    render(<ChipSkipHarness onOpen={onOpen} />);
+    fireEvent.contextMenu(screen.getByTestId("row"));
+    expect(onOpen).toHaveBeenCalled();
+  });
+});
+

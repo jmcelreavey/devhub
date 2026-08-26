@@ -564,7 +564,8 @@ export async function agentLabCommand(plan: LabLaunchPlan, refresh = false): Pro
 export function claudeCliCommand(): string {
   return guardedCliCommand(
     "claude",
-    "claude",
+    // Full permission: no approval prompts for edits or shell commands.
+    "claude --dangerously-skip-permissions",
     "Claude CLI not found. Use the Claude app option or install Claude Code.",
   );
 }
@@ -572,7 +573,9 @@ export function claudeCliCommand(): string {
 export function cursorCliCommand(): string {
   return guardedCliCommand(
     "cursor-agent",
-    "cursor-agent",
+    // --force runs every tool unless explicitly denied; --trust skips the
+    // workspace-trust prompt that would otherwise stall a fresh tab.
+    "cursor-agent --force --approve-mcps --trust",
     "Cursor CLI not found. Use the Cursor app option or install cursor-agent.",
   );
 }
@@ -594,6 +597,72 @@ export async function agentInteractiveSessionCommand(): Promise<{
   return { command: opencodeCliCommand(), label: spec.label, cli: "opencode" };
 }
 
+export type TaskImplementationProvider = "default" | AgentCli | "claude";
+
+export async function taskImplementationCommand(
+  provider: TaskImplementationProvider,
+  prompt: string,
+  model?: string,
+): Promise<{ command: string; label: string; provider: Exclude<TaskImplementationProvider, "default"> }> {
+  const config = await getAgentCliConfig();
+  const selected = provider === "default" ? config.cli : provider;
+  const requestedModel = model?.trim();
+
+  if (selected === "claude") {
+    const modelFlag = requestedModel ? ` --model ${shellQuote(requestedModel)}` : "";
+    return {
+      command: guardedCliCommand(
+        "claude",
+        `claude --dangerously-skip-permissions${modelFlag} ${shellQuote(prompt)}`,
+        "Claude CLI not found. Install Claude Code to implement this task.",
+      ),
+      label: "Claude",
+      provider: selected,
+    };
+  }
+
+  if (selected === "cursor") {
+    const selectedModel = requestedModel || config.cursorModel;
+    return {
+      command: guardedCliCommand(
+        "cursor-agent",
+        `cursor-agent --force --approve-mcps --trust --model ${shellQuote(selectedModel)} ${shellQuote(prompt)}`,
+        "Cursor CLI not found. Install cursor-agent to implement this task.",
+      ),
+      label: "Cursor",
+      provider: selected,
+    };
+  }
+
+  if (selected === "chatgpt") {
+    const bundled = shellQuote(CHATGPT_APP_CODEX);
+    const modelFlag = requestedModel ? ` -m ${shellQuote(requestedModel)}` : "";
+    const args = `--dangerously-bypass-approvals-and-sandbox${modelFlag} ${shellQuote(prompt)}`;
+    const onPath = guardedCliCommand(
+      "codex",
+      `codex ${args}`,
+      "Codex CLI not found. Install the ChatGPT app, or install the Codex CLI.",
+    );
+    return {
+      command: `if [ -x ${bundled} ]; then ${bundled} ${args}; else ${onPath}; fi`,
+      label: "ChatGPT",
+      provider: selected,
+    };
+  }
+
+  const selectedModel = requestedModel || config.opencodeModel;
+  const modelFlag = selectedModel ? ` --model ${shellQuote(selectedModel)}` : "";
+  return {
+    command: guardedCliCommand(
+      "opencode",
+      `opencode${modelFlag} --prompt ${shellQuote(prompt)}`,
+      "OpenCode CLI not found. Install opencode to implement this task.",
+    ),
+    label: "OpenCode",
+    provider: selected,
+  };
+}
+
 /**
  * ChatGPT.app ships a signed, notarized Codex CLI inside the bundle. Prefer it
  * over `codex` on PATH: the npm `@openai/codex` package vendors an unsigned
@@ -610,12 +679,14 @@ function chatgptBinExpr(): string {
 
 export function chatgptCliCommand(): string {
   const bundled = shellQuote(CHATGPT_APP_CODEX);
+  // Full permission: skip approval prompts and run without the sandbox.
+  const bypass = "--dangerously-bypass-approvals-and-sandbox";
   const onPath = guardedCliCommand(
     "codex",
-    "codex",
+    `codex ${bypass}`,
     "Codex CLI not found. Install the ChatGPT app, or install the Codex CLI.",
   );
-  return `if [ -x ${bundled} ]; then ${bundled}; else ${onPath}; fi`;
+  return `if [ -x ${bundled} ]; then ${bundled} ${bypass}; else ${onPath}; fi`;
 }
 
 export function guardedCliCommand(binary: string, command: string, missingMessage: string): string {

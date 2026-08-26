@@ -12,6 +12,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Calendar,
   ExternalLink,
@@ -25,14 +26,20 @@ import {
   X,
 } from "lucide-react";
 import type { EntityKind, EntityRef } from "@/lib/entity-note";
-import { defaultHrefForRef } from "@/lib/entity-note";
+import { defaultHrefForRef, entityKey, extractTags, mergeEntityRefs } from "@/lib/entity-note";
+import { ContextMenu, useContextMenu, type ContextMenuGroup } from "@/components/shell/ContextMenu";
+import { useTagMenuGroup } from "@/lib/hooks/use-tag-menu";
+import { buildEntityRefMenuGroups } from "@/lib/entity-ref-menu";
+import { JiraTransitionModal } from "@/components/jira/JiraTransitionModal";
+import { copyTextAndToast } from "@/lib/pr-slack";
+import { useToast } from "@/lib/hooks/use-toast";
 
 interface EntityLinksPayload {
   notes: EntityRef[];
   related: EntityRef[];
 }
 
-const KIND_ICON: Record<EntityKind, typeof FileText> = {
+export const KIND_ICON: Record<EntityKind, typeof FileText> = {
   note: FileText,
   diagram: PenTool,
   task: ListTodo,
@@ -45,7 +52,7 @@ const KIND_ICON: Record<EntityKind, typeof FileText> = {
 };
 
 const NOTE_LABEL_MAX = 28;
-const CHIP_LIMIT = 6;
+const CHIP_LIMIT = 4;
 
 function normalizeLabel(s: string): string {
   return s.replace(/\s+/g, " ").trim().toLowerCase();
@@ -60,8 +67,31 @@ function stripKey(text: string, key: string | undefined): string {
 }
 
 function refKey(ref: EntityRef): string {
-  return `${ref.kind}:${ref.id}`;
+  return entityKey(ref);
 }
+
+/** Hide chips the host row already shows (title Jira pill, inline #tags, companion note glyph). */
+export function isRedundantChip(
+  ref: EntityRef,
+  opts: { suppressJiraKey?: string; hostTags?: string[]; hideCompanionNotes?: boolean },
+): boolean {
+  if (
+    opts.suppressJiraKey &&
+    ref.kind === "jira" &&
+    ref.id.toUpperCase() === opts.suppressJiraKey.toUpperCase()
+  ) {
+    return true;
+  }
+  if (ref.kind === "tag") {
+    const id = ref.id.replace(/^#/, "").toLowerCase();
+    if ((opts.hostTags ?? []).some((t) => t.toLowerCase() === id)) return true;
+  }
+  if (opts.hideCompanionNotes && ref.kind === "note" && ref.id.startsWith("task-notes/")) {
+    return true;
+  }
+  return false;
+}
+
 
 /** Short chip text — avoid repeating the host title / ticket key. */
 export function chipDisplayLabel(
@@ -118,10 +148,9 @@ export function EntityLinkChips({
   showNotes = true,
   /** When set, hide jira chips for this key (host already shows a copy badge). */
   suppressJiraKey,
-  /**
-   * When set, seed refs (task.links / host-owned edges) get a remove control.
-   * Note-derived / reverse links stay read-only.
-   */
+  hostTags,
+  hideCompanionNotes,
+  maxVisible = CHIP_LIMIT,
   onRemoveSeed,
   className,
 }: {
@@ -136,6 +165,9 @@ export function EntityLinkChips({
   seed?: EntityRef[];
   showNotes?: boolean;
   suppressJiraKey?: string;
+  hostTags?: string[];
+  hideCompanionNotes?: boolean;
+  maxVisible?: number;
   onRemoveSeed?: (ref: EntityRef) => void | Promise<void>;
   className?: string;
 }) {
@@ -149,6 +181,18 @@ export function EntityLinkChips({
   );
   const [expanded, setExpanded] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
+  const router = useRouter();
+  const toast = useToast();
+  const [jiraStateKey, setJiraStateKey] = useState<string | null>(null);
+  const chipMenu = useContextMenu<EntityRef>();
+  const chipTarget = chipMenu.target;
+  const { group: chipTagsGroup, modal: chipTagsModal } = useTagMenuGroup({
+    kind: chipTarget && chipTarget.kind !== "tag" ? chipTarget.kind : null,
+    id: chipTarget?.id ?? "",
+    label: chipTarget?.label,
+    extraTags: chipTarget?.kind === "tag" ? [chipTarget.id] : undefined,
+    enabled: chipTarget !== null,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -166,7 +210,10 @@ export function EntityLinkChips({
         if (cancelled || !json) return;
         setData({
           notes: json.notes ?? [],
-          related: [...((JSON.parse(seedKey) as EntityRef[]) ?? []), ...(json.related ?? [])],
+          related: mergeEntityRefs(
+            (JSON.parse(seedKey) as EntityRef[]) ?? [],
+            json.related ?? [],
+          ),
         });
       })
       .catch(() => {
@@ -179,20 +226,19 @@ export function EntityLinkChips({
 
   const chips: EntityRef[] = [];
   const seen = new Set<string>();
-  for (const ref of [...(showNotes ? (data?.notes ?? []) : []), ...(data?.related ?? [])]) {
+  for (const ref of mergeEntityRefs(
+    showNotes ? (data?.notes ?? []) : [],
+    data?.related ?? [],
+  )) {
     const key = refKey(ref);
     if (seen.has(key)) continue;
     if (ref.kind === kind && ref.id === id) continue;
-    if (
-      suppressJiraKey &&
-      ref.kind === "jira" &&
-      ref.id.toUpperCase() === suppressJiraKey.toUpperCase()
-    ) {
-      // Host already shows JiraKeyChip — hide the hop chip unless it's a
-      // seed link the user can remove (otherwise they'd be stuck with it).
-      if (!(onRemoveSeed && seedKeys.has(refKey(ref)))) {
-        continue;
-      }
+    if (isRedundantChip(ref, {
+      suppressJiraKey,
+      hostTags: hostTags ?? extractTags(label ?? ""),
+      hideCompanionNotes,
+    })) {
+      continue;
     }
     seen.add(key);
     chips.push(ref);
@@ -200,8 +246,9 @@ export function EntityLinkChips({
 
   if (chips.length === 0) return null;
 
-  const hidden = expanded ? 0 : Math.max(0, chips.length - CHIP_LIMIT);
-  const visible = hidden > 0 ? chips.slice(0, CHIP_LIMIT) : chips;
+  const limit = Math.max(1, maxVisible);
+  const hidden = expanded ? 0 : Math.max(0, chips.length - limit);
+  const visible = hidden > 0 ? chips.slice(0, limit) : chips;
 
   const removeSeed = async (ref: EntityRef) => {
     if (!onRemoveSeed || removing) return;
@@ -225,8 +272,29 @@ export function EntityLinkChips({
     }
   };
 
+  const openRef = (ref: EntityRef) => {
+    const dest = ref.href ?? defaultHrefForRef(ref);
+    if (!dest) return;
+    if (/^https?:\/\//i.test(dest)) {
+      window.open(dest, "_blank", "noopener,noreferrer");
+    } else {
+      router.push(dest);
+    }
+  };
+  const chipMenuGroups: ContextMenuGroup[] = chipTarget
+    ? [
+        ...buildEntityRefMenuGroups(chipTarget, {
+          onOpen: openRef,
+          onCopy: (value, label) => void copyTextAndToast(value, label, toast),
+          onUpdateJiraState: (key) => setJiraStateKey(key),
+        }),
+        chipTagsGroup,
+      ]
+    : [];
+
   return (
-    <ul className={`entity-link-chips ${className ?? ""}`.trim()} aria-label="Linked entities">
+    <>
+    <ul className={`entity-link-chips ${className ?? ""}`.trim()} aria-label="Linked entities" style={{ flexWrap: "wrap", overflow: "visible" }}>
       {visible.map((ref) => {
         const Icon = KIND_ICON[ref.kind] ?? ExternalLink;
         const target = defaultHrefForRef(ref);
@@ -241,11 +309,17 @@ export function EntityLinkChips({
           </>
         );
         return (
-          <li key={refKey(ref)} className={removable ? "entity-link-chip-item" : undefined}>
+          <li
+            key={refKey(ref)}
+            className={removable ? "entity-link-chip-item" : undefined}
+            data-entity-chip=""
+            onContextMenu={(e) => chipMenu.openAt(e, ref)}
+          >
             {target ? (
               <Link
                 href={target}
                 className="entity-link-chip"
+                data-entity-chip=""
                 data-kind={ref.kind}
                 title={ref.label || text}
                 // External chips must not navigate the app (or the desktop
@@ -256,7 +330,7 @@ export function EntityLinkChips({
                 {inner}
               </Link>
             ) : (
-              <span className="entity-link-chip" data-kind={ref.kind} title={ref.label || text}>
+              <span className="entity-link-chip" data-entity-chip="" data-kind={ref.kind} title={ref.label || text}>
                 {inner}
               </span>
             )}
@@ -294,5 +368,37 @@ export function EntityLinkChips({
         </li>
       ) : null}
     </ul>
+    <ContextMenu
+      open={chipTarget !== null}
+      position={chipMenu.position}
+      groups={chipMenuGroups}
+      onClose={chipMenu.close}
+      label={chipTarget ? `${chipTarget.label || chipTarget.id} actions` : "Linked entity actions"}
+    />
+    {chipTagsModal}
+    <JiraTransitionModal
+      open={jiraStateKey !== null}
+      jiraKey={jiraStateKey ?? ""}
+      title="Update Jira status"
+      skipLabel="Cancel"
+      onCancel={() => setJiraStateKey(null)}
+      onConfirm={async (transitionId) => {
+        const key = jiraStateKey;
+        setJiraStateKey(null);
+        if (!transitionId || !key) return;
+        try {
+          const res = await fetch(`/api/jira/ticket/${key}/transition`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transitionId }),
+          });
+          if (!res.ok) throw new Error("Transition failed");
+          toast.success(`Updated ${key}`);
+        } catch {
+          toast.error(`Couldn't transition ${key}`);
+        }
+      }}
+    />
+    </>
   );
 }

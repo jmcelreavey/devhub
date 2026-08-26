@@ -20,7 +20,8 @@ metadata:
 
 ## Overview
 
-Given a GitHub PR (URL or `owner/repo#number`), produce two things in one pass:
+Given a GitHub PR (URL or `owner/repo#number`) or an implementation branch in
+local pre-PR mode, produce two things in one pass:
 
 1. **An explanation** a teammate can follow without opening the diff — purpose,
    how it works, and a walk through the code from entry point to exit.
@@ -36,12 +37,25 @@ comment, approve, or request changes on GitHub unless the user explicitly asks.
 - A PR URL or `owner/repo#number` is given with intent to understand or review it.
 - The dashboard "Review" button fired `opencode run` with a PR URL.
 - The user says: review / explain / walk through / "what does this do" for a PR.
+- `devhub-implement-task` invokes the skill before commit/push to review a local
+  implementation diff that does not have a PR yet.
 
 ## Inputs
 
 Accept any of: full PR URL, `owner/repo#123`, or a bare number when the repo is
 already obvious from the working directory. Resolve to `OWNER/REPO` and `NUMBER`
 before starting. `gh` must be authenticated (`gh auth status`).
+
+For local pre-PR mode, accept the repo path, implementation branch, intended
+remote base, and exact DevHub task `id`/`date`/`notePath`. Fetch first and verify
+the branch is anchored to the current intended base. Review the working-tree
+and committed branch diff together, including untracked implementation files;
+do not require a temporary commit or push merely to make the diff reviewable.
+
+When the caller supplies a DevHub task `id`/`date`, use it exactly. Otherwise,
+if the PR has a Jira key, use `tasks_history(includeTasks: true)` to find one
+exact matching task; ask if ambiguous. Read its note, links, and tags. Call
+`tags_list` before adding tags and reuse canonical names.
 
 ## Workflow
 
@@ -60,6 +74,22 @@ gh api repos/OWNER/REPO/pulls/NUMBER/comments --paginate \
 That gives the title, description, changed files, the full diff, **and the
 conversation**: top-level comments, review verdicts with their bodies, and
 inline threads anchored to files/lines. For most PRs this is enough — do not clone.
+
+**Local pre-PR mode:** use the existing checkout and collect:
+
+```bash
+git fetch origin --prune
+git status --short --branch
+git merge-base HEAD <remote-base>
+git diff --find-renames <remote-base>
+git diff --check
+```
+
+Include untracked implementation files in the review and size totals. State
+that GitHub comments/reviews are unavailable until a PR exists. If a prerequisite
+PR merged after this branch started, re-anchor the work to the updated remote
+base before judging the diff; otherwise the review includes already-merged code
+and its size, walkthrough, and risk conclusions are garbage.
 
 ### 2. Pull the linked ticket
 
@@ -165,6 +195,10 @@ End with a one-line call and the complexity metric:
 - Verdict: `Approve` / `Approve with nits` / `Needs changes` / `Blocking` — with the single reason.
 - `net: -<N> lines possible.` — or `Lean already. Ship.` if there is nothing to cut.
 
+In local pre-PR mode, `Approve` means ready for the user's commit/push decision;
+it does not authorize either action. Manual validation that cannot be run in the
+current environment must remain an explicit condition, not disappear from the verdict.
+
 ## Output Shape
 
 ```
@@ -204,6 +238,11 @@ to the DevHub repo, and the notes MCP is what knows that location — writing a
 exists to avoid). If the notes MCP isn't available, say so instead of writing
 files; don't guess a path.
 
+Before `notes_write`, call `notes_read` and `entity_links_read` for that path
+when it exists. Preserve every existing task backlink and canonical `#tag` in
+the replacement Markdown; `notes_write` replaces the whole note, and the
+automatic PR/repo links cannot reconstruct task context you delete.
+
 Pass Markdown to `notes_write` (the server converts it to BlockNote). Use this
 section layout — it's what the dashboard note view is tuned for.
 
@@ -226,48 +265,64 @@ open the PR branch in Cursor.
 - **Author:** <author>
 - **Size:** +<additions>/-<deletions> across <n> files
 - **State:** <open / draft / …>
+- **Tags:** <canonical #tags from the matching task/context, when any>
 
 ## Links
 
 **PR:** [<repo>#<number>](<PR url>)
 **Repo:** <local clone folder name>
+**Task:** <preserved task link/ref when one exists>
 
 ## At A Glance
+
 One or two sentences: what changes and whether it's safe to ship.
 
 ## What It's For
+
 The problem, in plain language — grounded in the linked ticket when there is one.
 
 ## Ticket & Conversation
+
 Only when a ticket or discussion exists. One short block: what the ticket asks
 for and whether this PR delivers it, then any unresolved review threads or
 requested changes (and whether the diff addresses them). Skip the section
 entirely when the PR has neither.
 
 ## Implementation Map
+
 The approach and the files it touches.
 
 ## Walkthrough
+
 1. **<entry — file:fn>** → ...
 2. ... → **<exit — result>**
 
 ## Review Findings
+
 ### Must Fix
+
 - `file:Lxx` — ...
+
 ### Should Fix
+
 - ...
+
 ### Nice To Have / DX
+
 - ...
 
 ## Complexity
+
 - `file:Lxx` stdlib: ... → ...
 
 **net: -N lines possible.**
 
 ## Tests Checked
+
 What's covered, what's missing.
 
 ## Verdict
+
 <call> — <one reason>.
 ```
 
@@ -276,10 +331,40 @@ numbered lists, and `inline code` / fenced code. **Avoid Markdown blockquotes
 (`> …`)** — the notes renderer shows the literal `>` instead of a quote block;
 use a bold line or a bullet instead.
 
-`notes_write` replaces the whole note, so write it in one pass; re-running the
-review on the same PR overwrites the previous note. Stream the same review to
-the terminal too — the note is the persistent copy, not a replacement for the
+`notes_write` replaces the whole note, so merge preserved backlinks/tags and
+write it in one pass. Re-running the review on the same PR updates the same
+note rather than appending duplicate sections. Stream the same review to the
+terminal too — the note is the persistent copy, not a replacement for the
 live output.
+
+After saving, sync the matching DevHub task with `tasks_context_sync`: pass
+the exact task `id`/`date`, the canonical tags, the PR EntityRef, and (when
+the review note is not the task note) nothing else - it merges links and tags
+ server-side without touching unrelated content. If no exact task was
+resolved, do not guess or create one.
+
+**For local pre-PR mode, write a real note — do not settle for a task-note
+summary.** Save it at `pr-reviews/<repo>-<branch>` (local clone folder name +
+branch, slashes and other unsafe characters turned to hyphens) using the same
+section layout as above, with two adjustments: the header has no `[<repo>#<number>]`
+PR link yet (use a plain `<repo>@<branch>` line instead), and the `## Links`
+section always carries an explicit **Repo:** line (the local clone folder
+name) plus the **Task:** backlink — that repo link is what makes the note
+resolvable before any PR exists, so never omit it. Use the same detailed
+sections as a post-PR review — implementation map, walkthrough, findings,
+complexity, tests, verdict — never the short implementation-summary shape.
+After writing it, sync the matching task with `tasks_context_sync`: a `links`
+entry of kind `"note"` pointing at this path, plus the canonical tags. The
+task points at the note; the note carries the content.
+
+Once a PR opens for that same branch, **update this same note in place** —
+add the `[<repo>#<number>](<PR url>)` line to the header and a **PR:** line to
+`## Links`, and refresh the review with the GitHub conversation (comments,
+review threads) now available. Do not create a second note under the
+`pr-reviews/<owner>-<repo>-<number>` path; that naming is for the dashboard's
+"Review" button flow, which starts from an existing PR with no branch context.
+A review that started pre-PR keeps its branch-based path for its lifetime —
+migrating the path would orphan the task's note link for no benefit.
 
 ## Rules
 
@@ -288,6 +373,7 @@ live output.
   happens **only** if the user explicitly asks, and show them the text first.
 - Never invent ticket titles, issue numbers, or descriptions.
 - Don't push, commit, or modify the PR branch.
+- In local pre-PR mode, review the existing worktree but do not commit or push it.
 - No AI attribution footers anywhere.
 - Prefer the cheapest path that answers the question: `gh` diff first, clone only
   when the walk genuinely needs the surrounding code.

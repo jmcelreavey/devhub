@@ -1,18 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   Bell,
   BellOff,
   Check,
   ChevronDown,
   ClipboardCopy,
+  ClipboardPaste,
   FileText,
   History,
   ListTree,
   Plus,
   RotateCw,
+  Scissors,
   Sparkles,
   SquareTerminal,
   TerminalSquare,
@@ -42,8 +43,10 @@ import {
   writeAgentPopoutSize,
   type AgentChatOpenDetail,
 } from "@/lib/agent-chat";
-import { copyTextToClipboard } from "@/lib/clipboard";
+import { copyTextToClipboard, readTextFromClipboard } from "@/lib/clipboard";
+import { resolveTerminalCopyText } from "@/lib/terminal-clipboard";
 import { TerminalPromptBar } from "@/components/shell/TerminalPromptBar";
+import { TerminalAskCard, type TerminalAskState } from "@/components/shell/TerminalAskCard";
 import { useToast } from "@/lib/hooks/use-toast";
 import {
   clampDockHeight,
@@ -114,7 +117,7 @@ import {
 } from "@/components/shell/TerminalSession";
 import "./terminal-agent.css";
 
-/** Starting size for a freshly popped-out pane, before the user drags it. */
+/** Starting size for a freshly popped-out window, before the user resizes it. */
 const POPOUT_DEFAULT = { w: 720, h: 520 };
 
 /** View mode for shell sessions — Warp-style DOM blocks or the raw grid. */
@@ -258,7 +261,6 @@ export function TerminalDock() {
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const templatesWrapRef = useRef<HTMLDivElement>(null);
   const [dockFrame, setDockFrame] = useState<DockFrame>("dock");
-  const [popoutTabId, setPopoutTabId] = useState<number | null>(null);
   /** null until hydrated so SSR keeps the CSS default (42vh). */
   const [dockHeight, setDockHeight] = useState<number | null>(null);
   const dockHeightRef = useRef<number | null>(null);
@@ -277,7 +279,8 @@ export function TerminalDock() {
   const [agentDropTabId, setAgentDropTabId] = useState<number | null>(null);
   const blockMarkersRef = useRef(new Map<string, string>());
   const [askingTabId, setAskingTabId] = useState<number | null>(null);
-  const [askError, setAskError] = useState<string | null>(null);
+  /** Per-tab ask lifecycle — echoes the question, then progress or the answer. */
+  const [askStates, setAskStates] = useState<Record<number, TerminalAskState>>({});
   const askAbortRef = useRef<AbortController | null>(null);
   const termMenu = useContextMenu<number>();
   /**
@@ -290,6 +293,8 @@ export function TerminalDock() {
   /** null until hydrated so SSR renders the default size. */
   const [fontSize, setFontSize] = useState<number | null>(null);
   const [terminalHistory, setTerminalHistory] = useState<string[]>([]);
+  /** In-progress command line typed in xterm, mirrored into the prompt editor. */
+  const [liveLines, setLiveLines] = useState<Record<number, string>>({});
   const [viewMode, setViewMode] = useState<TerminalViewMode>("blocks");
   /** Tabs whose xterm is in the alternate buffer (vim/htop) — force raw. */
   const [altBufferTabs, setAltBufferTabs] = useState<Record<number, boolean>>({});
@@ -500,18 +505,27 @@ export function TerminalDock() {
   const switchViewMode = useCallback((mode: TerminalViewMode) => {
     setViewMode(mode);
     writeViewMode(mode);
+    if (mode !== "blocks") {
+      // Raw view renders no waiting-hint chips — drop stale ones now.
+      inputWaitingRef.current = {};
+      setInputWaiting((prev) => (Object.keys(prev).length > 0 ? {} : prev));
+    }
   }, []);
+
+  /** Mirror of inputWaiting for the tick (carries values for skipped tabs). */
+  const inputWaitingRef = useRef<Record<number, string>>({});
+  /** Last processed `${activityAt}:${busy}` per tab — untouched tabs are skipped. */
+  const tickSeenRef = useRef(new Map<number, string>());
 
   // Blocks view can't stream a long-running foreground process; the rules for
   // telling one from a slow shell live in shouldFallBackToRawView. The same
   // tick keeps pending blocks' output fresh (an interactive script's menu must
   // be visible without switching to raw) and flags "waiting for input".
+  // It only runs while the dock is open in blocks view, and it skips tabs with
+  // no new PTY activity — constant full-scrollback reads caused visible jank.
   useEffect(() => {
+    if (viewMode !== "blocks" || !open) return;
     const tick = () => {
-      if (viewMode !== "blocks") {
-        setInputWaiting((prev) => (Object.keys(prev).length > 0 ? {} : prev));
-        return;
-      }
       const now = Date.now();
       const waiting: Record<number, string> = {};
       for (const [tabIdKey, list] of Object.entries(commandBlocksRef.current)) {
@@ -519,7 +533,15 @@ export function TerminalDock() {
         const reader = readersRef.current.get(tabId);
         const pending = (list ?? []).filter((b) => b.pending);
         if (reader && pending.length > 0) {
-          const buffer = reader.getBuffer();
+          const busy = reader.isBusy();
+          const seenKey = `${reader.activityAt?.() ?? 0}:${busy}`;
+          if (tickSeenRef.current.get(tabId) === seenKey) {
+            const prevHint = inputWaitingRef.current[tabId];
+            if (prevHint) waiting[tabId] = prevHint;
+            continue;
+          }
+          tickSeenRef.current.set(tabId, seenKey);
+          const buffer = reader.getBufferTail?.(600) ?? reader.getBuffer();
           setCommandBlocks((prev) => {
             const cur = prev[tabId];
             if (!cur) return prev;
@@ -534,7 +556,6 @@ export function TerminalDock() {
             });
             return changed ? { ...prev, [tabId]: next } : prev;
           });
-          const busy = reader.isBusy();
           if (!busy) {
             const promptBlock = pending.find(
               (b) => b.output.trim() && looksLikeInputPrompt(b.output),
@@ -543,6 +564,7 @@ export function TerminalDock() {
           }
         }
       }
+      inputWaitingRef.current = waiting;
       setInputWaiting((prev) => {
         const prevKeys = Object.keys(prev);
         const nextKeys = Object.keys(waiting);
@@ -569,7 +591,7 @@ export function TerminalDock() {
     };
     const timer = window.setInterval(tick, 1_000);
     return () => window.clearInterval(timer);
-  }, [viewMode, switchViewMode]);
+  }, [viewMode, open, switchViewMode]);
 
   /**
    * Drag the dock's top edge. The shield keeps the drag alive over the xterm
@@ -666,6 +688,10 @@ export function TerminalDock() {
         return;
       }
       lastBeginRef.current.set(tabId, { cmd, at: Date.now() });
+      // Typed-in-xterm and OSC paths used to skip the prompt-bar history store
+      // — ↑/⌃R then only saw Run-button commands. Same list, every source.
+      setTerminalHistory((prev) => recordTerminalCommand(prev, cmd));
+      setLiveLines((prev) => (prev[tabId] ? { ...prev, [tabId]: "" } : prev));
       const id = newTerminalBlockId();
       const reader = readersRef.current.get(tabId);
       blockMarkersRef.current.set(id, terminalBufferMarker(reader?.getBuffer() ?? ""));
@@ -781,8 +807,15 @@ export function TerminalDock() {
         // Still queued in the map until write or fail — visible chip stays up.
         if (!pendingInjectRef.current.has(tabId)) return;
         if (attempt > 240) {
-          // ~60s at 250ms — fail loudly rather than silent drop.
-          fail("Terminal stayed busy — command was not injected. Deny or retry when idle.");
+          // ~60s at 250ms — fail loudly rather than silent drop, and say
+          // what is actually hogging the shell.
+          const pendingBlocks = (commandBlocksRef.current[tabId] ?? []).filter((b) => b.pending);
+          const running = pendingBlocks[pendingBlocks.length - 1]?.command;
+          fail(
+            running
+              ? `Terminal is still running \`${previewPromptCommand(running, 60)}\` — command was not injected. Stop it or retry when idle.`
+              : "Terminal stayed busy — command was not injected. Deny or retry when idle.",
+          );
           return;
         }
         if (reader.isBusy()) {
@@ -946,6 +979,7 @@ export function TerminalDock() {
   const closeTab = useCallback((id: number) => {
     const tab = tabsRef.current.find((t) => t.id === id);
     pendingInjectRef.current.delete(id);
+    tickSeenRef.current.delete(id);
     readersRef.current.get(id)?.dispose();
     readersRef.current.delete(id);
     setCommandBlocks((prev) => {
@@ -1008,6 +1042,7 @@ export function TerminalDock() {
           kind: injectKind,
           repoName: detail.repoName,
           preferAgentTab: false,
+          forceNewTab: detail.forceNewTab,
           mode: detail.mode,
           summary: detail.summary,
           providerLabel: detail.providerLabel,
@@ -1030,6 +1065,7 @@ export function TerminalDock() {
         kind: injectKind,
         repoName: detail.repoName,
         preferAgentTab: false,
+        forceNewTab: detail.forceNewTab,
         mode: detail.mode,
         summary: detail.summary,
         providerLabel: detail.providerLabel,
@@ -1151,7 +1187,6 @@ export function TerminalDock() {
       if (dockFrame === "popout" || dockFrame === "split") {
         e.preventDefault();
         setDockFrame("dock");
-        setPopoutTabId(null);
       }
     };
     window.addEventListener("devhub:terminal-toggle", onToggle);
@@ -1373,6 +1408,7 @@ export function TerminalDock() {
       const cmd = command.trim();
       if (!cmd) return;
       setTerminalHistory((prev) => recordTerminalCommand(prev, cmd));
+      setLiveLines((prev) => (prev[tab.id] ? { ...prev, [tab.id]: "" } : prev));
       if (isDestructiveTerminalCommand(cmd)) {
         proposeTerminalRun({
           command: cmd,
@@ -1401,8 +1437,27 @@ export function TerminalDock() {
       askAbortRef.current?.abort();
       const ac = new AbortController();
       askAbortRef.current = ac;
-      setAskError(null);
       setAskingTabId(tab.id);
+      // Echo the question immediately — a submitted prompt must never vanish.
+      setAskStates((prev) => ({
+        ...prev,
+        [tab.id]: { question: q, startedAt: Date.now(), phase: "thinking" },
+      }));
+      const patchAsk = (patch: Partial<TerminalAskState>) => {
+        setAskStates((prev) => {
+          const cur = prev[tab.id];
+          if (!cur || cur.question !== q) return prev;
+          return { ...prev, [tab.id]: { ...cur, ...patch } };
+        });
+      };
+      const dropAsk = () => {
+        setAskStates((prev) => {
+          if (prev[tab.id]?.question !== q) return prev;
+          const next = { ...prev };
+          delete next[tab.id];
+          return next;
+        });
+      };
       try {
         const result = await sendAgentChat(
           {
@@ -1417,14 +1472,17 @@ export function TerminalDock() {
         );
         const cmd = extractShellCommand(result.text);
         if (!cmd) {
-          // An explanation without a runnable fix is still a useful answer.
-          const msg = result.text.trim()
-            ? previewPromptCommand(result.text.trim(), 180)
-            : "No command in the reply.";
-          setAskError(msg);
-          toast.error(msg);
+          // An explanation without a runnable command is an answer, not an error.
+          const answer = result.text.trim();
+          patchAsk({
+            phase: answer ? "answered" : "failed",
+            answer: answer || "The agent returned no command and no answer.",
+            endedAt: Date.now(),
+          });
           return;
         }
+        // The proposal chip takes over as the visible echo (it carries the question).
+        dropAsk();
         proposeTerminalRun({
           command: cmd,
           cwd: tab.cwd,
@@ -1436,9 +1494,12 @@ export function TerminalDock() {
           source: "ui",
         });
       } catch (err) {
-        if (isUserAbortedAsk(err, ac.signal)) return;
+        if (isUserAbortedAsk(err, ac.signal)) {
+          dropAsk();
+          return;
+        }
         const msg = err instanceof Error ? err.message : "Ask failed.";
-        setAskError(msg);
+        patchAsk({ phase: "failed", answer: msg, endedAt: Date.now() });
         toast.error(msg);
       } finally {
         if (askAbortRef.current === ac) askAbortRef.current = null;
@@ -1507,32 +1568,22 @@ export function TerminalDock() {
   const agentActive = isAgentLikeKind(active?.kind);
   const splitOn = dockFrame === "split";
   const splitAgent =
-    tabs.find((t) => isAgentLikeKind(t.kind) && t.id === (popoutTabId ?? activeId)) ??
+    tabs.find((t) => isAgentLikeKind(t.kind) && t.id === activeId) ??
     tabs.find((t) => isAgentLikeKind(t.kind));
   const splitShell =
     tabs.find((t) => !isAgentLikeKind(t.kind) && t.id === activeId) ??
     [...tabs].reverse().find((t) => !isAgentLikeKind(t.kind));
-  // `popout` detaches a pane instead of resizing the dock, so it is not a
-  // dock-level frame. Everything else is, for shell tabs as much as Agent ones.
+  // Popout detaches the whole dock as a floating window — tabs, actions and
+  // all — so nothing stops working while it floats.
+  const windowed = open && dockFrame === "popout";
   const frameAttr = dockFrame === "popout" || dockFrame === "dock" ? undefined : dockFrame;
-  // An explicit height only applies to the normal dock frame; max/min/split
-  // are sized by CSS and popout is detached entirely.
+  // An explicit height only applies to the normal dock frame; the floating
+  // window is sized by popout state and split by CSS.
   const dockStyle: React.CSSProperties = {
-    display: open && dockFrame !== "popout" ? undefined : "none",
+    display: open ? undefined : "none",
   };
-  if (dockHeight != null && dockFrame === "dock") dockStyle.height = `${dockHeight}px`;
-  const shellForAgent =
-    (agentActive ? splitShell : active && !isAgentLikeKind(active.kind) ? active : splitShell) ?? null;
-  // readersRef is a live registry filled by each session's onReader callback.
-  // The Agent pane needs whatever the shell shows *now*, so this is read at
-  // render time on purpose — there is no render-safe copy to read instead.
-  // eslint-disable-next-line react-hooks/refs
-  const shellReader = shellForAgent ? readersRef.current.get(shellForAgent.id) : undefined;
-  const shellLastBlock = shellReader
-    ? lastTerminalBlock(shellReader.getSelection()?.trim() || shellReader.getBuffer())
-    : undefined;
-  const popoutStyle = (popped: boolean): React.CSSProperties => {
-    if (!popped) return { height: "100%" };
+  if (dockHeight != null && !windowed) dockStyle.height = `${dockHeight}px`;
+  const popoutStyle = (): React.CSSProperties => {
     const size = {
       width: popoutSize?.w ?? POPOUT_DEFAULT.w,
       height: popoutSize?.h ?? POPOUT_DEFAULT.h,
@@ -1543,10 +1594,25 @@ export function TerminalDock() {
       ? { ...size, left: popoutPos.x, top: popoutPos.y, right: "auto" }
       : size;
   };
+  const windowStyle: React.CSSProperties | null = windowed
+    ? { ...popoutStyle(), ...(movingPopout ? { userSelect: "none" } : {}) }
+    : null;
+  const shellForAgent =
+    (agentActive ? splitShell : active && !isAgentLikeKind(active.kind) ? active : splitShell) ?? null;
+  // readersRef is a live registry filled by each session's onReader callback.
+  // The Agent pane needs whatever the shell shows *now*, so this is read at
+  // render time on purpose — there is no render-safe copy to read instead.
+  // eslint-disable-next-line react-hooks/refs
+  const shellReader = shellForAgent ? readersRef.current.get(shellForAgent.id) : undefined;
+  const shellLastBlock = shellReader
+    ? lastTerminalBlock(shellReader.getSelection()?.trim() || shellReader.getBuffer())
+    : undefined;
 
   /** Drag the floating window by its title bar, like a real window. */
   const startPopoutMove = (event: React.MouseEvent) => {
-    if ((event.target as HTMLElement).closest("button")) return;
+    // Buttons and tab chips stay interactive; drag starts from bare bar space.
+    if ((event.target as HTMLElement).closest("button, [role='tab'], .terminal-dock-new-wrap"))
+      return;
     event.preventDefault();
     const win = event.currentTarget.parentElement?.getBoundingClientRect();
     if (!win) return;
@@ -1601,7 +1667,6 @@ export function TerminalDock() {
       setDockFrame("dock");
       return;
     }
-    setPopoutTabId(null);
     if (!tabsRef.current.some((t) => !isAgentLikeKind(t.kind))) {
       addTab({ kind: "shell", cwd: tab?.cwd, repoName: tab?.repoName });
     }
@@ -1613,7 +1678,10 @@ export function TerminalDock() {
   // selection that exists at the moment the menu renders.
   // eslint-disable-next-line react-hooks/refs
   const menuReader = termMenu.target != null ? readersRef.current.get(termMenu.target) : undefined;
-  const menuSelection = menuReader?.getSelection()?.trim() ?? "";
+  const menuSelection = resolveTerminalCopyText(
+    menuReader?.getSelection(),
+    typeof window !== "undefined" ? window.getSelection()?.toString() : "",
+  );
   const termMenuGroups: ContextMenuGroup[] = [
     {
       id: "clip",
@@ -1627,6 +1695,30 @@ export function TerminalDock() {
           onSelect: () => {
             if (!menuSelection) return;
             void copyTextToClipboard(menuSelection);
+          },
+        },
+        {
+          id: "cut",
+          label: "Cut",
+          icon: <Scissors size={12} aria-hidden />,
+          disabled: !menuReader?.getSelection()?.trim(),
+          disabledReason: "No terminal selection",
+          onSelect: () => {
+            const text = menuReader?.getSelection()?.trim();
+            if (!text || !menuReader) return;
+            void copyTextToClipboard(text);
+            menuReader.deleteSelection();
+          },
+        },
+        {
+          id: "paste",
+          label: "Paste",
+          icon: <ClipboardPaste size={12} aria-hidden />,
+          onSelect: () => {
+            void readTextFromClipboard().then((text) => {
+              if (!text || !menuReader) return;
+              menuReader.paste(text);
+            });
           },
         },
         {
@@ -1656,15 +1748,29 @@ export function TerminalDock() {
 
   return (
     <div
-      className="terminal-dock"
+      className={windowed ? "terminal-dock terminal-dock-window" : "terminal-dock"}
       data-agent-surface={agentActive || undefined}
       data-dock-frame={frameAttr}
       data-resizing={resizing || undefined}
-      style={dockStyle}
+      data-moving={(windowed && movingPopout) || undefined}
+      style={windowStyle ?? dockStyle}
       role="complementary"
       aria-label={isAgentLikeKind(active?.kind) ? "Agent" : "Terminal"}
     >
-      {dockFrame === "dock" ? (
+      {windowed ? (
+        <>
+          <ResizeHandle
+            axis="w"
+            className="dock-popout-resize-w"
+            onMouseDown={startPopoutResize("w")}
+          />
+          <ResizeHandle
+            axis="s"
+            className="dock-popout-resize-s"
+            onMouseDown={startPopoutResize("s")}
+          />
+        </>
+      ) : dockFrame === "dock" ? (
         <ResizeHandle
           axis="s"
           className="terminal-dock-resize"
@@ -1743,7 +1849,11 @@ export function TerminalDock() {
           }}
         />
       )}
-      <div className="terminal-dock-bar">
+      {/* In the floating window the empty bar drags it; buttons and tabs stay clickable. */}
+      <div
+        className="terminal-dock-bar"
+        onMouseDown={windowed ? startPopoutMove : undefined}
+      >
         {/* Tabs scroll; + / templates stay outside overflow so the menu can overlay the pane. */}
         <div className="terminal-dock-tabs-cluster">
           <div className="terminal-dock-tabs" role="tablist" aria-label="Terminal tabs">
@@ -2011,14 +2121,8 @@ export function TerminalDock() {
               tabs.some((t) => isAgentLikeKind(t.kind)) ? () => toggleSplit(active) : undefined
             }
             onPopOut={() => {
-              if (dockFrame === "popout") {
-                setDockFrame("dock");
-                setPopoutTabId(null);
-                return;
-              }
               if (!active) return;
-              setPopoutTabId(active.id);
-              setDockFrame("popout");
+              setDockFrame(dockFrame === "popout" ? "dock" : "popout");
             }}
           />
           <HoverTip label="Hide (⌃`)" pos="top-end">
@@ -2036,42 +2140,11 @@ export function TerminalDock() {
       </div>
       <div className="terminal-dock-body" data-split={splitOn || undefined}>
         {tabs.map((tab) => {
-          const popped = dockFrame === "popout" && popoutTabId === tab.id;
           // Blocks pane replaces the grid unless a full-screen app owns it.
           const blocksOn = viewMode === "blocks" && altBufferTabs[tab.id] !== true;
-          const popoutChrome = popped ? (
-            <>
-              <ResizeHandle
-                axis="w"
-                className="dock-popout-resize-w"
-                onMouseDown={startPopoutResize("w")}
-              />
-              <ResizeHandle
-                axis="s"
-                className="dock-popout-resize-s"
-                onMouseDown={startPopoutResize("s")}
-              />
-              <div className="dock-popout-bar" onMouseDown={startPopoutMove}>
-                <span className="dock-popout-title">{tab.label}</span>
-                <DockFrameControls
-                  frame="popout"
-                  onPopOut={() => {
-                    setDockFrame("dock");
-                    setPopoutTabId(null);
-                  }}
-                />
-              </div>
-            </>
-          ) : null;
 
           const agentPane = isAgentLikeKind(tab.kind) ? (
-            <div
-              className={popped ? "dock-popout" : "terminal-agent-pane"}
-              data-phase={tab.agentPhase}
-              data-moving={popped && movingPopout ? "" : undefined}
-              style={popoutStyle(popped)}
-            >
-              {popoutChrome}
+            <div className="terminal-agent-pane" data-phase={tab.agentPhase}>
               {tab.agentPhase ? (
                 <AgentStatusStrip
                   phase={tab.agentPhase}
@@ -2091,7 +2164,7 @@ export function TerminalDock() {
                   providerLabel={tab.agentProvider}
                   phase={tab.agentPhase}
                   seed={tab.chatSeed}
-                  frame={popped ? "popout" : dockFrame}
+                  frame={dockFrame}
                   unavailableMessage={tab.agentSummary}
                   shellContext={{
                     cwd: tab.cwd ?? shellForAgent?.cwd,
@@ -2111,7 +2184,6 @@ export function TerminalDock() {
                   }}
                   onRequestDock={() => {
                     setDockFrame("dock");
-                    setPopoutTabId(null);
                   }}
                   onSeedConsumed={() => {
                     setTabs((prev) =>
@@ -2140,16 +2212,13 @@ export function TerminalDock() {
             </div>
           ) : (
             <div
-              className={popped ? "dock-popout terminal-session-stack" : "terminal-session-stack"}
-              data-moving={popped && movingPopout ? "" : undefined}
-              style={popoutStyle(popped)}
+              className="terminal-session-stack"
               onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 termMenu.openAt(e, tab.id);
               }}
             >
-              {popoutChrome}
               <div className="terminal-session-xterm" data-under={blocksOn || undefined}>
                 <TerminalSession
                   cwd={tab.cwd}
@@ -2229,6 +2298,11 @@ export function TerminalDock() {
                   }
                   onCommandSubmit={(command) => beginCommandBlock(tab.id, command, "typed")}
                   onOscCommand={(command) => beginCommandBlock(tab.id, command, "osc")}
+                  onTypedLine={(line) =>
+                    setLiveLines((prev) =>
+                      prev[tab.id] === line ? prev : { ...prev, [tab.id]: line },
+                    )
+                  }
                   onReader={(reader) => {
                     if (reader) {
                       readersRef.current.set(tab.id, reader);
@@ -2286,15 +2360,25 @@ export function TerminalDock() {
                   />
                 </div>
               )}
+              <TerminalAskCard
+                state={askStates[tab.id]}
+                onDismiss={() =>
+                  setAskStates((prev) => {
+                    const next = { ...prev };
+                    delete next[tab.id];
+                    return next;
+                  })
+                }
+              />
               <TerminalPromptBar
                 cwd={tab.cwd}
                 repoName={tab.repoName}
                 lastCommand={lastCommands[tab.id]}
                 history={terminalHistory}
                 asking={askingTabId === tab.id}
-                askError={askError}
                 focused={open && tab.id === active?.id && !proposal && blocksOn}
                 inputHint={inputWaiting[tab.id]}
+                liveLine={liveLines[tab.id]}
                 onRun={(command) => runPromptCommand(tab, command)}
                 onAsk={(text) => void askPromptCommand(tab, text)}
                 onCancelAsk={() => askAbortRef.current?.abort()}
@@ -2305,9 +2389,8 @@ export function TerminalDock() {
             </div>
           );
 
-          const inSplit =
-            splitOn && (tab.id === splitAgent?.id || tab.id === splitShell?.id) && !popped;
-          const visible = popped || inSplit || (!splitOn && tab.id === active?.id);
+          const inSplit = splitOn && (tab.id === splitAgent?.id || tab.id === splitShell?.id);
+          const visible = inSplit || (!splitOn && tab.id === active?.id);
 
           return (
             <div
@@ -2320,13 +2403,7 @@ export function TerminalDock() {
                 height: "100%",
               }}
             >
-              {popped ? (
-                <>
-                  {createPortal(agentPane, document.body)}
-                </>
-              ) : (
-                agentPane
-              )}
+              {agentPane}
             </div>
           );
         })}

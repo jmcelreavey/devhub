@@ -8,6 +8,10 @@ vi.mock("@/lib/hooks/use-toast", () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }),
 }));
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
 vi.mock("@/components/shell/ConfirmDialog", () => ({
   usePrompt: () => vi.fn(),
 }));

@@ -55,3 +55,66 @@ export function paletteCommandScore(query: string, parts: readonly string[]): nu
   }
   return best;
 }
+
+export interface PaletteListItem {
+  id: string;
+  kind: string;
+  label: string;
+  detail?: string;
+  hint?: string;
+}
+
+/** First occurrence of each id wins. Palette rows key on id — duplicates stack in the DOM. */
+export function uniqueById<T extends { id: string }>(items: readonly T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of items) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
+  }
+  return out;
+}
+
+/**
+ * Visible palette rows for a query. Empty query is the default landing list;
+ * a non-empty query scores the catalog plus content hits. Always unique by id
+ * so a second search cycle cannot append another shortcuts copy.
+ */
+export function filterVisiblePaletteCommands<T extends PaletteListItem>(
+  commands: readonly T[],
+  query: string,
+  extras: { contentResults?: readonly T[]; recent?: readonly T[] } = {},
+): T[] {
+  const unique = uniqueById(commands);
+  if (!query.trim()) {
+    const recent = uniqueById(extras.recent ?? []);
+    const action = unique.filter((c) => c.kind === "action");
+    const task = unique.filter((c) => c.kind === "task").slice(0, 5);
+    const ticket = unique.filter((c) => c.kind === "ticket").slice(0, 5);
+    const note = unique.filter((c) => c.kind === "note").slice(0, 8);
+    const diagram = unique.filter((c) => c.kind === "diagram").slice(0, 5);
+    const repo = unique
+      .filter((c) => c.kind === "repo" && Boolean(c.detail?.includes("changed") || c.detail?.includes("unpushed")))
+      .slice(0, 5);
+    return uniqueById([...recent, ...action, ...repo, ...task, ...ticket, ...note, ...diagram]);
+  }
+
+  const scored = unique
+    .map((c) => {
+      const parts = [c.label, c.detail, c.hint].filter(
+        (x): x is string => typeof x === "string" && x.trim().length > 0,
+      );
+      return { cmd: c, score: paletteCommandScore(query, parts) };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 40)
+    .map((x) => x.cmd);
+
+  const matchedPaths = new Set(
+    scored.filter((c) => c.kind === "note" || c.kind === "diagram").map((c) => c.detail ?? ""),
+  );
+  const dedupedContent = uniqueById(extras.contentResults ?? []).filter((c) => !matchedPaths.has(c.label));
+  return uniqueById([...scored, ...dedupedContent]).slice(0, 40);
+}

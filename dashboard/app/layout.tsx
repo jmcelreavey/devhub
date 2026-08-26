@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Instrument_Sans } from "next/font/google";
+import { Suspense } from "react";
 import {
   DEFAULT_THEME_MODE_SETTING,
   DEFAULT_THEME_PRESET_ID,
@@ -20,16 +21,17 @@ import { PWAInstallPrompt } from "@/components/shell/PWAInstallPrompt";
 import { ServiceWorkerRegister } from "@/components/shell/ServiceWorkerRegister";
 import { ThemeSystemSync } from "@/components/shell/ThemeSystemSync";
 import { KeyboardShortcuts } from "@/components/shell/KeyboardShortcuts";
+import { ExternalLinks } from "@/components/shell/ExternalLinks";
 import { DashboardShell } from "@/components/shell/DashboardShell";
 import { TabTitle } from "@/components/shell/TabTitle";
 import { ToastProvider } from "@/components/shell/ToastProvider";
 import { UpdateBanner } from "@/components/desktop/UpdateBanner";
 import { ConfirmProvider } from "@/components/shell/ConfirmDialog";
 import { HubTopBar } from "@/components/shell/HubTopBar";
+import { WorkspaceTabsProvider, WorkspaceTabStrip } from "@/components/shell/WorkspaceTabs";
 import { NavProgress } from "@/components/shell/NavProgress";
 import { PersistentChamber } from "@/components/persistent/PersistentChamber";
 import { PersistentOpenCode } from "@/components/persistent/PersistentOpenCode";
-import { PersistentCliTerminals } from "@/components/persistent/PersistentCliTerminal";
 import { PersistentRepoLearnDock } from "@/components/persistent/PersistentRepoLearnDock";
 import { UiPrefsBootstrap } from "@/components/shell/UiPrefsBootstrap";
 import { KonamiGate } from "@/components/shell/KonamiGate";
@@ -137,13 +139,18 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           Skip to main content
         </a>
         <ServiceWorkerRegister />
-        <RouteUsageRecorder />
+        <Suspense fallback={null}>
+          <RouteUsageRecorder />
+        </Suspense>
         <ThemeSystemSync />
         <ToastProvider>
           <ConfirmProvider>
+            <Suspense fallback={null}>
+            <WorkspaceTabsProvider>
             <NavProgress />
             <DashboardShell />
             <KeyboardShortcuts />
+            <ExternalLinks />
             <UiPrefsBootstrap />
             <TabTitle />
 
@@ -157,7 +164,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <MobileShell />
 
               {/* Desktop topbar - breadcrumbs + actions */}
-              <HubTopBar />
+              <Suspense fallback={null}>
+                <HubTopBar />
+              </Suspense>
+              <WorkspaceTabStrip />
 
               {/* Renders nothing outside the packaged desktop app. Placed above
                   <main> rather than inside it so it never scrolls away mid-download. */}
@@ -167,7 +177,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                   {children}
                   <PersistentChamber />
                   <PersistentOpenCode />
-                  <PersistentCliTerminals />
               </main>
             </div>
 
@@ -177,6 +186,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <TerminalTranscriptModal />
             <PWAInstallPrompt />
             <KonamiGate />
+            </WorkspaceTabsProvider>
+            </Suspense>
           </ConfirmProvider>
         </ToastProvider>
       </body>

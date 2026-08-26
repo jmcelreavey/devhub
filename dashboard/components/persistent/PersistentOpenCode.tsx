@@ -19,7 +19,7 @@ export function PersistentOpenCode() {
   const pathname = usePathname();
   const router = useRouter();
   const [sessionId, setSessionId] = useState<string | null>(() => consumePendingOpenCodeSession());
-  const { port, refresh } = useLazyServicePort(
+  const { port, error, refresh } = useLazyServicePort(
     pathname === "/opencode" || sessionId !== null,
     "/api/opencode/listen",
   );
@@ -49,6 +49,8 @@ export function PersistentOpenCode() {
       serviceId="opencode"
       serviceName="OpenCode"
       port={port}
+      error={error}
+      trustPort
       title="OpenCode"
       srcPath={sessionId ? `/session/${encodeURIComponent(sessionId)}` : null}
       onRestarted={refresh}

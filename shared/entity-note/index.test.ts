@@ -4,7 +4,10 @@ import {
   entityKey,
   extractTags,
   formatEntityRefLine,
+  defaultHrefForRef,
+  canonicalizeEntityRef,
   mergeEntityRefs,
+  parseJiraIssueKey,
   parseEntityLinksFromMarkdown,
   slugify,
   tagRefs,
@@ -23,6 +26,18 @@ describe("slugify / entityKey", () => {
   });
   it("keys kind+id", () => {
     expect(entityKey({ kind: "task", id: "abc" })).toBe("task:abc");
+  });
+});
+
+describe("defaultHrefForRef", () => {
+  it("links repository refs to their repo hub", () => {
+    expect(defaultHrefForRef({ kind: "repo", id: "affiliate-service", label: "affiliate-service" }))
+      .toBe("/repos/affiliate-service");
+  });
+
+  it("keeps GitHub repository refs out of local repo routes", () => {
+    expect(defaultHrefForRef({ kind: "repo", id: "owner/repo", label: "owner/repo" }))
+      .toBe("https://github.com/owner/repo");
   });
 });
 
@@ -187,4 +202,68 @@ describe("format + build + parse round-trip", () => {
     // No blank-line crater where the section used to be.
     expect(stripped).not.toMatch(/\n{3,}/);
   });
+
+  it("canonicalizes jira browse URLs to issue keys", () => {
+    expect(
+      canonicalizeEntityRef({
+        kind: "jira",
+        id: "https://example.atlassian.net/browse/PTF-4783",
+        label: "PTF-4783 — Acme comments count",
+        href: "https://example.atlassian.net/browse/PTF-4783",
+      }),
+    ).toMatchObject({ kind: "jira", id: "PTF-4783" });
+    expect(parseJiraIssueKey("https://x.atlassian.net/browse/DAD-1")).toBe("DAD-1");
+  });
+
+  it("parses jira markdown links as keys not browse URLs", () => {
+    const md = "## Links\n\n**Jira:** [PTF-4783 — title](https://example.atlassian.net/browse/PTF-4783)\n";
+    expect(parseEntityLinksFromMarkdown(md)).toEqual([
+      {
+        kind: "jira",
+        id: "PTF-4783",
+        label: "PTF-4783 — title",
+        href: "https://example.atlassian.net/browse/PTF-4783",
+      },
+    ]);
+  });
+
+  it("dedupes title-as-id notes against path-id notes with the same label", () => {
+    const soft = { kind: "note" as const, id: "WebView implementation plan", label: "WebView implementation plan" };
+    const pathRef = {
+      kind: "note" as const,
+      id: "projects/demo-app-article-screen-native-chrome-plan",
+      label: "WebView implementation plan",
+    };
+    const jiraUrl = {
+      kind: "jira" as const,
+      id: "https://example.atlassian.net/browse/PTF-4783",
+      label: "PTF-4783 — Acme comments count",
+      href: "https://example.atlassian.net/browse/PTF-4783",
+    };
+    const jiraKey = {
+      kind: "jira" as const,
+      id: "PTF-4783",
+      label: "PTF-4783 — Acme comments count",
+      href: "https://example.atlassian.net/browse/PTF-4783",
+    };
+    const merged = mergeEntityRefs([soft, jiraUrl], [pathRef, jiraKey]);
+    expect(merged.filter((r) => r.kind === "note")).toHaveLength(1);
+    expect(merged.find((r) => r.kind === "note")?.id).toBe(
+      "projects/demo-app-article-screen-native-chrome-plan",
+    );
+    expect(merged.filter((r) => r.kind === "jira")).toHaveLength(1);
+    expect(merged.find((r) => r.kind === "jira")?.id).toBe("PTF-4783");
+  });
+
+  it("drops unusable Open-in-Work task hops", () => {
+    expect(
+      canonicalizeEntityRef({
+        kind: "task",
+        id: "/work?tab=tasks",
+        label: "Open in Work",
+        href: "/work?tab=tasks",
+      }),
+    ).toBeNull();
+  });
+
 });

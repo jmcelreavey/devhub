@@ -1,6 +1,7 @@
 #!/usr/bin/env tsx
 /**
- * Peer boot: free leftover OpenCode on pinned ports (1338/4096), then exit.
+ * Peer boot: free leftover OpenCode on pinned ports (1338/4096), reap
+ * orphaned ephemeral `opencode serve` processes, then exit.
  * Next.js runs separately on PORT (default 1337) via concurrently.
  *
  * DevHub does not start always-on OpenCode or OpenChamber. Binding
@@ -21,7 +22,7 @@ import process from "node:process";
 import { loadEnvWithOnePasswordFallback } from "./op-secrets";
 import { ensureOpenChamberCurrent } from "../lib/openchamber-command";
 import { ensureOpenCodeCurrent } from "../lib/opencode/update";
-import { freePinnedOpenCodePorts } from "../lib/opencode/listen";
+import { freePinnedOpenCodePorts, reapOrphanOpenCodeServers } from "../lib/opencode/listen";
 import { evictStaleChamberListener } from "../lib/dev-peer-services";
 
 function log(msg: string): void {
@@ -39,6 +40,7 @@ async function main(): Promise<void> {
   }
 
   freePinnedOpenCodePorts(log);
+  reapOrphanOpenCodeServers(log);
   // After update checks so the version comparison uses the freshly-upgraded CLI.
   await evictStaleChamberListener(log);
   log("peer boot done — OpenCode and OpenChamber start when you open those tabs");

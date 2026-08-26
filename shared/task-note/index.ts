@@ -9,6 +9,8 @@
 import {
   buildEntityLinksSection,
   joinMarkdownLines,
+  mergeEntityRefs,
+  parseJiraIssueKey,
   slugify,
   type EntityRef,
 } from "../entity-note/index.ts";
@@ -78,3 +80,63 @@ export function buildTaskNoteMarkdown(task: TaskNoteSource): string {
     "- [ ] ",
   ]);
 }
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Point a task at a newly created Jira ticket: replace its current key with the
+ * new one, or prepend the new key when the task had none.
+ */
+export function rewriteTaskKey(text: string, oldKey: string | undefined, newKey: string): string {
+  if (oldKey) {
+    const re = new RegExp(`\\b${escapeRegExp(oldKey)}\\b`, "g");
+    if (re.test(text)) return text.replace(new RegExp(`\\b${escapeRegExp(oldKey)}\\b`, "g"), newKey);
+  }
+  return `${newKey} ${text}`.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * When a task gains a Jira hop-link and isn't already Jira-associated, prepend
+ * the issue key to the title so extractors / the Jira chip pick it up.
+ */
+export function textWithJiraLinkPromotion(
+  text: string,
+  jiraKey: string | undefined | null,
+  links: EntityRef[] | undefined,
+): string {
+  if (jiraKey) return text;
+  const jira = links?.find((l) => l.kind === "jira" && l.id);
+  if (!jira) return text;
+  const key = parseJiraIssueKey(jira.id) || jira.id.toUpperCase();
+  if (new RegExp(`\\b${escapeRegExp(key)}\\b`, "i").test(text)) return text;
+  return rewriteTaskKey(text, undefined, key);
+}
+
+function extractJiraKeyFromText(text: string): string | undefined {
+  return parseJiraIssueKey(text) ?? undefined;
+}
+
+/**
+ * Single write-path helper for UI + MCP: dedupe links and promote a Jira hop
+ * into `jiraKey` / title when the task isn't already associated.
+ */
+export function normalizeTaskLinkState(
+  text: string,
+  jiraKey: string | undefined | null,
+  links: EntityRef[] | undefined,
+): { text: string; jiraKey: string | undefined; links: EntityRef[] | undefined } {
+  const deduped = links?.length ? mergeEntityRefs(links) : undefined;
+  const nextLinks = deduped && deduped.length > 0 ? deduped : undefined;
+  let nextText = textWithJiraLinkPromotion(text, jiraKey || undefined, nextLinks);
+  let nextKey = jiraKey || undefined;
+  if (nextText !== text) {
+    nextKey = extractJiraKeyFromText(nextText);
+  } else if (!nextKey && nextLinks) {
+    const jira = nextLinks.find((l) => l.kind === "jira" && l.id);
+    if (jira) nextKey = parseJiraIssueKey(jira.id) || jira.id.toUpperCase();
+  }
+  return { text: nextText, jiraKey: nextKey || undefined, links: nextLinks };
+}
+

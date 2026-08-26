@@ -28,6 +28,8 @@ import {
   type DiagramFile,
   type DiagramFolder,
 } from "@/lib/diagram-utils";
+import { extractTags } from "@/lib/entity-note";
+import { useTagMenuGroup, withTagsGroup } from "@/lib/hooks/use-tag-menu";
 import { useToast } from "@/lib/hooks/use-toast";
 import { broadcastNoteAutosaveInvalidation } from "@/lib/notes/autosave-invalidation";
 import { renameNoteFile } from "@/lib/notes/path";
@@ -241,6 +243,14 @@ export function DiagramFileCard({
     },
   });
 
+  const { group: tagsGroup, modal: tagsModal } = useTagMenuGroup({
+    kind: "diagram",
+    id: file.path,
+    label: file.name,
+    extraTags: extractTags(file.name),
+    enabled: menu.target !== null,
+  });
+
   return (
     <div className="card p-3 flex flex-col gap-2 group" {...menu.bindRow("row")}>
       <Link href={href} className="block" onContextMenu={(event) => event.preventDefault()}>
@@ -266,10 +276,11 @@ export function DiagramFileCard({
       <ContextMenu
         open={menu.target !== null}
         position={menu.position}
-        groups={groups}
+        groups={withTagsGroup(groups, tagsGroup)}
         onClose={menu.close}
         label={`${file.name} actions`}
       />
+      {tagsModal}
       <OneTimeShareButton
         vaultId="notes"
         path={file.path}
@@ -358,6 +369,14 @@ export function DiagramRecentRow({
     },
   });
 
+  const { group: tagsGroup, modal: tagsModal } = useTagMenuGroup({
+    kind: "diagram",
+    id: file.path,
+    label: file.name,
+    extraTags: extractTags(file.name),
+    enabled: menu.target !== null,
+  });
+
   return (
     <li className="lib-recent-item group" {...menu.bindRow("row")}>
       {children}
@@ -368,10 +387,11 @@ export function DiagramRecentRow({
       <ContextMenu
         open={menu.target !== null}
         position={menu.position}
-        groups={groups}
+        groups={withTagsGroup(groups, tagsGroup)}
         onClose={menu.close}
         label={`${file.name} actions`}
       />
+      {tagsModal}
       <OneTimeShareButton
         vaultId="notes"
         path={file.path}

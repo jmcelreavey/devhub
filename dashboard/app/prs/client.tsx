@@ -2,21 +2,25 @@
 
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { GitPullRequest, RefreshCw, X } from "lucide-react";
+import { GitPullRequest, RefreshCw, RotateCcw, X } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import type { GithubPrsApiPayload, GithubPrRow, RecentlyReviewedPr } from "@/lib/github/prs";
+import type { SkippedPrRecord } from "@/lib/github/skipped-prs";
+import { mutate as globalMutate } from "swr";
 import { filterPrRows, type PrSearchRow } from "@/lib/github/pr-search";
 import { useGithubPrSearch } from "@/lib/hooks/use-github-pr-search";
 import { useMarkPrsSeen } from "@/lib/hooks/use-sidebar-counts";
 import { parseGithubPrRef } from "@/lib/entity-links/parse-pr";
 import { PrRow } from "@/components/PrRow";
+import { useToast } from "@/lib/hooks/use-toast";
 import { FetchError, EmptyState, InlineSearch, SkeletonRows } from "@/components";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 
-type PrTab = "authored" | "reviews" | "recent";
+type PrTab = "authored" | "reviews" | "recent" | "skipped";
 
 const EMPTY_PR_ROWS: GithubPrRow[] = [];
 const EMPTY_RECENTLY_REVIEWED: RecentlyReviewedPr[] = [];
+const EMPTY_SKIPPED: SkippedPrRecord[] = [];
 /** Keep the GitHub-wide fallback a hint, not a second inbox. */
 const MAX_REMOTE_RESULTS = 10;
 
@@ -26,6 +30,10 @@ function PrCard({ row, mode }: { row: GithubPrRow; mode: "authored" | "reviews" 
 
 function RecentlyReviewedCard({ row }: { row: RecentlyReviewedPr }) {
   return <PrRow row={row} kind="reviewed" density="comfortable" />;
+}
+
+function skippedAsRow(r: SkippedPrRecord): GithubPrRow {
+  return { number: r.number, title: r.title, url: r.url, repo: r.repo, updatedAt: r.updatedAt };
 }
 
 function StateBadge({ state }: { state: PrSearchRow["prState"] }) {
@@ -42,11 +50,32 @@ export default function PrsPage() {
   const [query, setQuery] = useState("");
   const [pinned, setPinned] = useState<GithubPrRow[]>([]);
   const { data, error, isLoading, mutate, isValidating } = useLive<GithubPrsApiPayload>("/api/github/prs");
+  const skippedState = useLive<{ skipped: SkippedPrRecord[] }>("/api/github/prs/skip");
+  const toast = useToast();
   const boot = useBootGate(data !== undefined || !!error);
 
   const authored = data?.authored ?? EMPTY_PR_ROWS;
   const reviews = data?.reviews ?? EMPTY_PR_ROWS;
   const recentlyReviewed = data?.recentlyReviewed ?? EMPTY_RECENTLY_REVIEWED;
+  const skipped = skippedState.data?.skipped ?? EMPTY_SKIPPED;
+
+  const unskip = async (row: SkippedPrRecord) => {
+    // Optimistic: drop from the Skipped tab now; the Review-requested refetch
+    // takes seconds, so let it settle in the background.
+    await skippedState.mutate(
+      (cur) => (cur ? { ...cur, skipped: cur.skipped.filter((r) => r.url !== row.url) } : cur),
+      { revalidate: false },
+    );
+    try {
+      const res = await fetch(`/api/github/prs/skip?url=${encodeURIComponent(row.url)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(String(res.status));
+      toast.info(`${row.repo}#${row.number} is back in Review requested.`);
+    } catch {
+      toast.error("Couldn't unskip PR.");
+      await skippedState.mutate();
+    }
+    void globalMutate("/api/github/prs");
+  };
   useMarkPrsSeen();
 
   const trimmed = query.trim();
@@ -67,9 +96,14 @@ export default function PrsPage() {
     () => (isFiltering ? filterPrRows(recentlyReviewed, trimmed) : recentlyReviewed),
     [recentlyReviewed, trimmed, isFiltering],
   );
+  const skippedRows = useMemo(() => skipped.map(skippedAsRow), [skipped]);
+  const filteredSkipped = useMemo(
+    () => (isFiltering ? filterPrRows(skippedRows, trimmed) : skippedRows),
+    [skippedRows, trimmed, isFiltering],
+  );
 
   const localMatchCount =
-    filteredAuthored.length + filteredReviews.length + filteredRecent.length;
+    filteredAuthored.length + filteredReviews.length + filteredRecent.length + filteredSkipped.length;
 
   // Only trawl GitHub when the query is a phrase, not a URL we're about to pin.
   const remote = useGithubPrSearch(trimmed, isFiltering);
@@ -83,7 +117,13 @@ export default function PrsPage() {
   );
 
   const activePrs =
-    prTab === "authored" ? filteredAuthored : prTab === "reviews" ? filteredReviews : filteredRecent;
+    prTab === "authored"
+      ? filteredAuthored
+      : prTab === "reviews"
+        ? filteredReviews
+        : prTab === "recent"
+          ? filteredRecent
+          : filteredSkipped;
 
   const addPinnedPr = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -194,8 +234,8 @@ export default function PrsPage() {
         )}
       </div>
 
-      <div className="flex gap-1 mb-4" style={{ borderBottom: "1px solid var(--border-muted)" }}>
-        {(["authored", "reviews", "recent"] as const).map((t) => (
+        <div className="flex gap-1 mb-4" style={{ borderBottom: "1px solid var(--border-muted)" }}>
+        {(["authored", "reviews", "recent", "skipped"] as const).map((t) => (
           <button
             key={t}
             type="button"
@@ -210,13 +250,15 @@ export default function PrsPage() {
             }}
             aria-pressed={prTab === t}
           >
-            {t === "authored" ? "Mine" : t === "reviews" ? "Review requested" : "Recently reviewed"}
+            {t === "authored" ? "Mine" : t === "reviews" ? "Review requested" : t === "recent" ? "Recently reviewed" : "Skipped"}
             <span className="ml-1 badge badge-muted" style={{ fontSize: 12 }}>
               {t === "authored"
                 ? filteredAuthored.length
                 : t === "reviews"
                   ? filteredReviews.length
-                  : filteredRecent.length}
+                  : t === "recent"
+                    ? filteredRecent.length
+                    : filteredSkipped.length}
             </span>
           </button>
         ))}
@@ -229,21 +271,52 @@ export default function PrsPage() {
           ? (activePrs as RecentlyReviewedPr[]).map((row) => (
               <RecentlyReviewedCard key={`${row.repo}-${row.number}`} row={row} />
             ))
-          : activePrs.map((row) => (
-              <PrCard key={`${row.repo}-${row.number}`} row={row} mode={prTab as "authored" | "reviews"} />
-            ))}
+          : prTab === "skipped"
+            ? filteredSkipped.map((row) => {
+                const record = skipped.find((r) => r.url === row.url);
+                return (
+                  <div key={row.url} className="flex items-start gap-1">
+                    <div className="min-w-0 flex-1">
+                      <PrCard row={row} mode="reviews" />
+                    </div>
+                    <button
+                      type="button"
+                      className="mt-2 rounded p-1 transition-colors hover:bg-[var(--bg-muted)] shrink-0"
+                      onClick={() => record && void unskip(record)}
+                      style={{ color: "var(--text-subtle)" }}
+                      aria-label={`Unskip ${row.repo}#${row.number}`}
+                      title="Show in Review requested again"
+                    >
+                      <RotateCcw size={14} aria-hidden />
+                    </button>
+                  </div>
+                );
+              })
+            : activePrs.map((row) => (
+                <PrCard key={`${row.repo}-${row.number}`} row={row} mode={prTab as "authored" | "reviews"} />
+              ))}
       </div>
 
       {!isLoading && !error && activePrs.length === 0 && data?.configured && (
         <EmptyState
           title={
             isFiltering
-              ? `No ${prTab === "authored" ? "authored" : prTab === "reviews" ? "review-requested" : "recently reviewed"} PRs match “${trimmed}”.`
+              ? `No ${
+                  prTab === "authored"
+                    ? "authored"
+                    : prTab === "reviews"
+                      ? "review-requested"
+                      : prTab === "recent"
+                        ? "recently reviewed"
+                        : "skipped"
+                } PRs match “${trimmed}”.`
               : prTab === "authored"
                 ? "No open authored PRs."
                 : prTab === "reviews"
                   ? "No PRs awaiting your review."
-                  : "No recently reviewed PRs in the last 7 days."
+                  : prTab === "recent"
+                    ? "No recently reviewed PRs in the last 7 days."
+                    : "No skipped PRs. Right-click a review request to skip it."
           }
           quips={
             !isFiltering && prTab === "reviews"

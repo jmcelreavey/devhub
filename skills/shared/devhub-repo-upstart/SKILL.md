@@ -73,6 +73,29 @@ store path instead.
   `process.env.PORT || <default>` bind to 1337 and collide with DevHub. Before
   install/start: `unset NODE_ENV` and `unset PORT` (or set the project's real
   port; install with `--include=dev` if needed).
+- **Inherited-but-empty vars beat `.env`.** `dotenv` (and most equivalents) never
+  overwrite a key already present in the environment, and an *empty* value still
+  counts as present. zsh exports `ENV` (the POSIX startup-file path) as an empty
+  string, so an app reading `process.env.ENV` gets `''` and dies on startup even
+  though `.env` sets a real value. Symptom: "environment variable X is missing"
+  for a key you can see in `.env`. Before starting, clear every var that is set
+  but empty and also defined in `.env`:
+
+  ```bash
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)= ]] || continue
+    key="${BASH_REMATCH[1]}"
+    [[ -n "${!key+set}" && -z "${!key}" ]] && unset "$key"
+  done <.env
+  ```
+- **Reconcile `.env` against `.env.example` on every run, do not just create it
+  when absent.** A checkout that has run for months has a stale `.env`; when the
+  repo adds a key, apps that validate all env up front (NestJS config factories,
+  zod/Joi schemas) crash on boot — and only report the *first* missing key, so
+  the user fixes one and hits the next. Append the example's line verbatim for
+  any key `.env` lacks, never overwrite an existing value, and print what was
+  added so the user knows those are placeholders. Warn (do not guess) for keys
+  present but empty.
 - After `npm install`, verify CLIs used by start scripts exist under
   `node_modules/.bin` (nest, next, vite, etc.). Fail fast with a clear message
   if missing — do not assume `npm run` will magically find them.
@@ -107,8 +130,13 @@ store path instead.
 - From the **target repo root**, run install (with `NODE_ENV` unset / `--include=dev`
   as above), confirm start-script CLIs exist under `node_modules/.bin`, then
   briefly start the app (or the same `npm run …` the upstart uses) until it is
-  past binary resolution — then kill it. Do not hand off an upstart that only
-  “looks right” on paper.
+  past binary resolution **and past env/config validation** — then kill it.
+  "Compiled 0 errors" is not a passing boot; wait for the app's own ready line.
+  Do not hand off an upstart that only “looks right” on paper.
+- Smoke-test by running **the upstart script itself**, not the commands inside
+  it, and from a shell with the same inherited env DevHub uses. Running
+  `npm run dev` by hand in a clean shell hides exactly the `NODE_ENV` / `PORT` /
+  empty-`ENV` collisions the script exists to neutralise.
 - If a full start will trap the agent, smoke-test the start command in the
   background and kill after the first healthy log line or a short timeout; still
   treat immediate `command not found` as a failed verification.

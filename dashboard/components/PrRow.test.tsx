@@ -40,7 +40,25 @@ describe("PrRow", () => {
     expect(screen.queryByRole("button", { name: /copy request/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /request review/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /open in cursor/i })).toBeNull();
+    expect(screen.queryByLabelText("Approved")).toBeNull();
+    expect(screen.queryByLabelText("Merged")).toBeNull();
 
+    vi.unstubAllGlobals();
+  });
+
+  it("shows an approved check when the PR is approved", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+    render(<PrRow row={{ ...row, approved: true }} kind="authored" density="compact" />);
+    expect(screen.getByLabelText("Approved")).toBeTruthy();
+    expect(screen.queryByLabelText("Merged")).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it("shows a merge icon when the PR is merged", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+    render(<PrRow row={{ ...row, prState: "merged", approved: true }} kind="reviewed" density="compact" />);
+    expect(screen.getByLabelText("Merged")).toBeTruthy();
+    expect(screen.queryByLabelText("Approved")).toBeNull();
     vi.unstubAllGlobals();
   });
 });

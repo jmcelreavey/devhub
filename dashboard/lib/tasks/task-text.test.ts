@@ -2,9 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   escapeRegExp,
   stripLinkedJiraKeyFromText,
+  stripTagToken,
   rewriteTaskKey,
   textWithJiraLinkPromotion,
   parseMarkdownLinks,
+  splitTagTokens,
   detectBareUrl,
   clearedLineForToday,
   matchesTaskSearch,
@@ -101,6 +103,30 @@ describe("textWithJiraLinkPromotion", () => {
         { kind: "pr", id: "org/repo#1", label: "PR" },
       ]),
     ).toBe("fix login");
+  });
+});
+
+describe("splitTagTokens", () => {
+  it("returns plain text untouched when there are no tags", () => {
+    expect(splitTagTokens("no tags here")).toEqual([{ type: "text", text: "no tags here" }]);
+  });
+
+  it("splits a tag with its boundary preserved", () => {
+    expect(splitTagTokens("ship the #auth fix")).toEqual([
+      { type: "text", text: "ship the " },
+      { type: "tag", text: "#auth", tag: "auth" },
+      { type: "text", text: " fix" },
+    ]);
+  });
+
+  it("matches a tag at the very start", () => {
+    expect(splitTagTokens("#auth first")[0]).toEqual({ type: "tag", text: "#auth", tag: "auth" });
+  });
+
+  it("ignores hash fragments inside URLs and longer tokens", () => {
+    // "/" is not a valid tag boundary, and #auth-old must not yield #auth.
+    const parts = splitTagTokens("see site.com/#section or #auth-old");
+    expect(parts.filter((p) => p.type === "tag").map((p) => p.tag)).toEqual(["auth-old"]);
   });
 });
 
@@ -227,5 +253,15 @@ describe("matchesTaskSearch", () => {
     });
     expect(matchesTaskSearch(withLink, "meta feed")).toBe(true);
     expect(matchesTaskSearch(withLink, "syndication-services#46")).toBe(true);
+  });
+});
+
+describe("stripTagToken", () => {
+  it("removes a hashtag without eating the rest of the title", () => {
+    expect(stripTagToken("QA pass #devhub #qa-walk", "qa-walk")).toBe("QA pass #devhub");
+  });
+
+  it("is a no-op when the tag is absent", () => {
+    expect(stripTagToken("QA pass #devhub", "qa-walk")).toBe("QA pass #devhub");
   });
 });

@@ -3,33 +3,14 @@
  * Shared by task.links PATCH and note ## Links upsert.
  */
 
-import type { EntityKind, EntityRef } from "@/lib/entity-note";
+import { parseJiraIssueKey, type EntityKind, type EntityRef } from "@/lib/entity-note";
+export { parseJiraIssueKey };
 import { parseGithubPrUrl } from "@/lib/entity-links/parse-pr";
 import {
   isDiagramStoragePath,
   stripDiagramsPrefix,
   toDiagramStoragePath,
 } from "@/lib/diagram-utils";
-
-/** `PROJ-123` — the only shape Jira issue keys take (exact match). */
-const JIRA_KEY_EXACT_RE = /^[A-Z][A-Z0-9]*-\d+$/;
-/** Key embedded in a browse URL or free text. */
-const JIRA_KEY_EMBEDDED_RE = /\b([A-Z][A-Z0-9]*-\d+)\b/;
-
-/**
- * Accept a bare key (`PTF-1234`) or a browse URL
- * (`https://….atlassian.net/browse/PTF-1234`).
- */
-export function parseJiraIssueKey(rawInput: string): string | null {
-  const raw = rawInput.trim();
-  if (!raw) return null;
-  const exact = raw.toUpperCase();
-  if (JIRA_KEY_EXACT_RE.test(exact)) return exact;
-  const fromBrowse = raw.match(/\/browse\/([A-Za-z][A-Za-z0-9]*-\d+)/);
-  if (fromBrowse?.[1]) return fromBrowse[1].toUpperCase();
-  const embedded = exact.match(JIRA_KEY_EMBEDDED_RE);
-  return embedded?.[1] ?? null;
-}
 
 /**
  * Vault-relative, no traversal. The result is persisted into note bodies and
