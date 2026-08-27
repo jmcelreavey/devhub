@@ -304,7 +304,7 @@ The dashboard treats rooted file trees as **vaults** with shared storage, API, a
 
 Docs default to a **read-first site** (`lib/docs/markdown-ast.ts` → `DocArticleView`): frontmatter-driven nav, table of contents, backlinks, Mermaid diagrams, GitHub callouts, and full-text search (`GET /api/docs/search`). Click **Edit** (or append `?edit=1`) to open the BlockNote editor with markdown round-trip via `shared/markdown-convert/`. Scoped git sync (`Sync content`) includes `docs/` alongside `notes/`, `collections/`, and `tasks/`.
 
-Embedded media in docs can reference private note assets — a lone markdown link to `/api/notes-assets/.../*.mp4` renders as an inline `<video>` player. See [DevHub Documentation](../README.md) for frontmatter conventions and contributor guardrails (`npm run docs:diagrams`, `npm run docs:frontmatter -- --check`).
+Embedded media in docs can reference private note assets — a lone markdown link to `/api/notes-assets/.../*.mp4` renders as an inline `<video>` player. See [DevHub Documentation](../README.md) for frontmatter conventions and contributor guardrails (`npm run docs:diagrams`).
 
 Open **Docs** under **Library** (`/docs`) for the landing page, section indexes, file tree, and search. Command palette content search includes docs via `/api/search` (notes by default; `?vault=docs` for docs-only API calls). Prefer editing architecture and guides here or in git — the automation that maintains this tree expects markdown on disk.
 

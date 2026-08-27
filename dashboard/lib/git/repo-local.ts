@@ -1,10 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { execFile, spawnSync } from "node:child_process";
-import { promisify } from "node:util";
+import { spawnSync } from "node:child_process";
+import { execExternal, isExecTimeout } from "@/lib/exec-external";
 import { augmentedPathEnv, scrubDesktopRuntimeEnv } from "@/lib/process-env";
-
-const execFileAsync = promisify(execFile);
 
 const GH_GIT_CREDENTIAL_CONFIG = [
   "-c",
@@ -37,6 +35,13 @@ export function isGitNetworkCommand(args: string[]): boolean {
 
 /** Default cap for fetch/pull/push so a hung credential helper or network never stalls the API forever. */
 export const GIT_NETWORK_TIMEOUT_MS = 600_000;
+/**
+ * Local git still needs a ceiling. `status` against a held `index.lock`, or any
+ * command that trips a hook waiting on stdin, blocks forever otherwise — and a
+ * blocked git call inside a request handler is indistinguishable from a hung
+ * dashboard. Generous enough that a big repo's `log` finishes comfortably.
+ */
+export const GIT_LOCAL_TIMEOUT_MS = 60_000;
 export const GIT_MAX_BUFFER_BYTES = 50 * 1024 * 1024;
 
 function outputLimitError(args: string[], maxBuffer: number): string {
@@ -93,14 +98,15 @@ export async function runGitRepoAsync(
 ): Promise<GitRepoRunResult> {
   const useGh = opts?.useGhCredentials ?? isGitNetworkCommand(args);
   const timeout =
-    opts?.timeout ?? (isGitNetworkCommand(args) ? GIT_NETWORK_TIMEOUT_MS : undefined);
+    opts?.timeout ??
+    (isGitNetworkCommand(args) ? GIT_NETWORK_TIMEOUT_MS : GIT_LOCAL_TIMEOUT_MS);
   const maxBuffer = opts?.maxBuffer ?? GIT_MAX_BUFFER_BYTES;
   try {
-    const { stdout, stderr } = await execFileAsync("git", gitArgsForRepo(repoRoot, args, useGh), {
-      encoding: "utf-8",
+    const { stdout, stderr } = await execExternal("git", gitArgsForRepo(repoRoot, args, useGh), {
       env: gitEnv(),
       maxBuffer,
-      timeout,
+      timeoutMs: timeout,
+      label: `git:${args[0] ?? "?"}`,
     });
     return { stdout, stderr, status: 0 };
   } catch (err: unknown) {
@@ -112,8 +118,7 @@ export async function runGitRepoAsync(
       signal?: NodeJS.Signals | string;
       message?: string;
     };
-    const timedOut =
-      typeof timeout === "number" && (e.killed || e.signal === "SIGTERM");
+    const timedOut = isExecTimeout(e);
     const outputExceeded = isOutputLimitError(e);
     const cmd = args[0] ?? "git";
     return {

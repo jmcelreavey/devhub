@@ -116,6 +116,70 @@ function normalizeLanAddresses(lan: { addresses: unknown }): string[] {
     : [];
 }
 
+interface ExecStatus {
+  inFlight: {
+    command: string;
+    label?: string;
+    cwd?: string;
+    runningMs: number;
+    timeoutMs: number;
+    overdue: boolean;
+  }[];
+  slowest: { command: string; durationMs: number; ok: boolean; timedOut: boolean }[];
+}
+
+/**
+ * External commands in flight, plus the slowest recent ones.
+ *
+ * A blocked subprocess blocks the whole server, so "the dashboard is hanging"
+ * and "one git call is stuck" are the same picture from outside. This is the
+ * panel that tells them apart — an overdue entry names the command and the repo.
+ */
+function ExternalCommandsPanel() {
+  const { data } = useLive<ExecStatus>("/api/status/exec", { refreshInterval: 5_000 });
+  const inFlight = data?.inFlight ?? [];
+  const slowest = data?.slowest ?? [];
+  if (inFlight.length === 0 && slowest.length === 0) return null;
+  return (
+    <>
+      <SectionLabel>External commands</SectionLabel>
+      <div className="card card-body min-w-0 flex flex-col gap-2">
+        {inFlight.length > 0 ? (
+          <ul className="flex flex-col gap-1">
+            {inFlight.map((call) => (
+              <li key={`${call.command}-${call.runningMs}`} className="flex items-center gap-2 text-xs">
+                <span className={call.overdue ? "badge badge-danger" : "badge badge-muted"}>
+                  {Math.round(call.runningMs / 1000)}s
+                </span>
+                <span className="font-mono truncate">{call.command}</span>
+                {call.overdue ? <span className="text-danger">overdue</span> : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-text-subtle">Nothing running right now.</p>
+        )}
+        {slowest.length > 0 ? (
+          <details>
+            <summary className="text-xs text-text-subtle">Slowest recent ({slowest.length})</summary>
+            <ul className="mt-2 flex flex-col gap-1">
+              {slowest.slice(0, 10).map((call, i) => (
+                <li key={`${call.command}-${i}`} className="flex items-center gap-2 text-xs">
+                  <span className={call.timedOut ? "badge badge-danger" : "badge badge-muted"}>
+                    {Math.round(call.durationMs)}ms
+                  </span>
+                  <span className="font-mono truncate">{call.command}</span>
+                  {call.timedOut ? <span className="text-danger">timed out</span> : null}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
     <div className="text-[11px] font-semibold px-0.5" style={{ color: "var(--text-subtle)", letterSpacing: "-0.01em" }}>
@@ -983,6 +1047,7 @@ export default function StatusPage() {
 
         {statusTab === "runtime" && (
         <>
+        <ExternalCommandsPanel />
         {/* Services + MCP + BI: shared row on large screens */}
         <SectionLabel>Services &amp; Integrations</SectionLabel>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,0.9fr)] lg:items-stretch">

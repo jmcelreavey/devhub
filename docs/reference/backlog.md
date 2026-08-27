@@ -68,5 +68,3 @@ search), not the parser.
 - `npm run docs:diagrams` renders every Mermaid block headlessly under both light
   and dark theme variables. Diagram syntax errors are otherwise invisible — a bad
   diagram renders as an empty box with nothing in the console.
-- `npm run docs:frontmatter -- --check` verifies every doc still has curated
-  metadata after files move.

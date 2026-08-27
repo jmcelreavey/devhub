@@ -39,25 +39,25 @@ npm run dev
      /opencode -> GET /api/opencode/listen -> ephemeral loopback OpenCode
 ```
 
-`start-peer-services.ts` only frees pinned OpenCode ports (and, in the packaged app, runs update checks). `terminal-pty-server.ts` is the docked shell. `npm run dev` starts dashboard + peers boot + terminal + optional LAN proxy via `concurrently`. Peer boot calls `loadEnvWithOnePasswordFallback` so provider keys can be resolved from 1Password when local env vars are empty.
+`start-peer-services.ts` only frees pinned OpenCode ports. `terminal-pty-server.ts` is the docked shell. `npm run dev` starts dashboard + peers boot + terminal + optional LAN proxy via `concurrently`. Peer boot calls `loadEnvWithOnePasswordFallback` so provider keys can be resolved from 1Password when local env vars are empty.
 
-### Peer Version Updates
+### Peer Versions
 
-On every DevHub start (`npm run dev` / `npm run start`), `ensure-peers-current.ts` best-effort upgrades both peers before binding ports:
+**DevHub does not update either peer.** They are tools you install and own; DevHub
+just calls them. Keep them current yourself:
 
-| Peer        | Mechanism                                              | Pin behavior                                                            |
-| ----------- | ------------------------------------------------------ | ----------------------------------------------------------------------- |
-| OpenCode    | Runs `opencode upgrade` (no-op when already current)   | Updates the user-installed binary; takes effect on the next clean start |
-| OpenChamber | Runs `openchamber update` (no-op when already current) | Updates the user-installed binary; takes effect on the next clean start |
+```bash
+opencode upgrade
+openchamber update
+```
 
-Both checks are **non-fatal** — offline, registry errors, or upgrade failures keep the existing binary and DevHub continues.
+DevHub used to run both on every start. That cost ~7s of a ~24s boot to almost
+always discover nothing had changed, and the OpenChamber path could trigger an
+`npm install` that rewrote `node_modules` while Next was compiling — a hazard the
+rest of the startup ordering existed to work around.
 
-| Variable                         | Set to | Effect                             |
-| -------------------------------- | ------ | ---------------------------------- |
-| `DEVHUB_SKIP_OPENCODE_UPDATE`    | `1`    | Skip `opencode upgrade` on start   |
-| `DEVHUB_SKIP_OPENCHAMBER_UPDATE` | `1`    | Skip `openchamber update` on start |
-
-See [Environment Variables](../reference/environment-variables.md) for the full list.
+A missing binary is not an error: the relevant tab is simply hidden and the rest
+of the dashboard works.
 
 ### Port Reuse
 

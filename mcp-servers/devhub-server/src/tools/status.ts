@@ -29,6 +29,57 @@ export function registerStatusTools(server: McpServer, ctx: Context): void {
   );
 
   server.registerTool(
+    "status_exec",
+    {
+      description:
+        "External commands the dashboard is running right now, plus the slowest recent ones. Use this FIRST when the dashboard is hanging, a page never loads, or a request is slow: a call with a large runningMs — especially one marked overdue — is what is blocking. Covers git and gh subprocesses. Requires the dashboard running (if it does not answer at all, the server itself is wedged).",
+    },
+    async () =>
+      withDashboardErrors(async () => {
+        const data = await dashboard.get<{
+          inFlight: {
+            command: string;
+            label?: string;
+            runningMs: number;
+            timeoutMs: number;
+            overdue: boolean;
+            cwd?: string;
+          }[];
+          slowest: {
+            command: string;
+            label?: string;
+            durationMs: number;
+            ok: boolean;
+            timedOut: boolean;
+          }[];
+        }>("/api/status/exec");
+
+        const running = data.inFlight.length
+          ? data.inFlight
+              .map(
+                (c) =>
+                  `- ${c.overdue ? "OVERDUE " : ""}${Math.round(c.runningMs / 1000)}s (limit ${Math.round(c.timeoutMs / 1000)}s): ${c.command}${c.cwd ? ` [${c.cwd}]` : ""}`,
+              )
+              .join("\n")
+          : "- none";
+        const slow = data.slowest.length
+          ? data.slowest
+              .slice(0, 10)
+              .map(
+                (c) =>
+                  `- ${Math.round(c.durationMs)}ms${c.timedOut ? " TIMED OUT" : c.ok ? "" : " failed"}: ${c.command}`,
+              )
+              .join("\n")
+          : "- none recorded";
+        return {
+          content: [
+            { type: "text", text: `In flight now:\n${running}\n\nSlowest recent:\n${slow}` },
+          ],
+        };
+      }),
+  );
+
+  server.registerTool(
     "status_git",
     {
       description:

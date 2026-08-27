@@ -12,16 +12,15 @@
  *   /opencode  → ephemeral loopback OpenCode
  *   /chamber   → OpenChamber on 1336 with a clean env (no skip-start / port pin)
  *
- * Update checks live in scripts/ensure-peers-current.ts, which runs serially
- * in `predev`/`prestart` BEFORE this concurrently step. That keeps the
- * OpenChamber `npm install` (which rewrites node_modules) from racing the
- * Next compile. Packaged startup has no npm lifecycle, so this script still
- * runs those checks when DEVHUB_PACKAGED_RUNTIME=1.
+ * DevHub does not update either binary. They are user-installed tools it
+ * happens to call, so keeping them current is the user's business — `opencode
+ * upgrade` / `openchamber update` when they want it. Doing it on every start
+ * cost ~7s of a ~24s boot to almost always discover nothing had changed, and
+ * an auto-`npm install` that rewrote node_modules mid-boot was a hazard the
+ * rest of the startup ordering existed to work around.
  */
 import process from "node:process";
 import { loadEnvWithOnePasswordFallback } from "./op-secrets";
-import { ensureOpenChamberCurrent } from "../lib/openchamber-command";
-import { ensureOpenCodeCurrent } from "../lib/opencode/update";
 import { freePinnedOpenCodePorts, reapOrphanOpenCodeServers } from "../lib/opencode/listen";
 import { evictStaleChamberListener } from "../lib/dev-peer-services";
 
@@ -32,16 +31,8 @@ function log(msg: string): void {
 async function main(): Promise<void> {
   await loadEnvWithOnePasswordFallback(process.cwd());
 
-  // Dev startup runs this in predev. Packaged startup has no npm lifecycle,
-  // so perform the same best-effort check here.
-  if (process.env.DEVHUB_PACKAGED_RUNTIME === "1") {
-    ensureOpenCodeCurrent(log);
-    ensureOpenChamberCurrent(log);
-  }
-
   freePinnedOpenCodePorts(log);
   reapOrphanOpenCodeServers(log);
-  // After update checks so the version comparison uses the freshly-upgraded CLI.
   await evictStaleChamberListener(log);
   log("peer boot done — OpenCode and OpenChamber start when you open those tabs");
 }

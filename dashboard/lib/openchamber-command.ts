@@ -120,8 +120,8 @@ export function resolveOpenChamberBind(
  * already on 1.19.0. Collect every candidate and pick the highest
  * `@openchamber/web` package version. `OPENCHAMBER_BIN` still wins outright.
  *
- * The result is cached for the process lifetime; `ensureOpenChamberCurrent`
- * clears the cache after `openchamber update` in case the install moved.
+ * The result is cached for the process lifetime. If the user installs or moves
+ * their OpenChamber mid-session, restart DevHub to pick it up.
  */
 let cachedOpenChamberBin: string | null | undefined;
 
@@ -301,46 +301,7 @@ export function findOpenChamberBin(): string | null {
   return cachedOpenChamberBin;
 }
 
-function resetOpenChamberBinCache(): void {
-  cachedOpenChamberBin = undefined;
-}
 
-/** Best-effort update for the system-managed OpenChamber install. */
-export function ensureOpenChamberCurrent(log: (msg: string) => void): void {
-  if (process.env.DEVHUB_SKIP_OPENCHAMBER_UPDATE) {
-    log("OpenChamber auto-update skipped (DEVHUB_SKIP_OPENCHAMBER_UPDATE)");
-    return;
-  }
-
-  const binary = findOpenChamberBin();
-  if (!binary) {
-    log("OpenChamber update check skipped (binary not installed)");
-    return;
-  }
-
-  const before = openChamberInstallVersion(binary);
-  log(`checking OpenChamber${before ? ` ${before}` : ""} for updates…`);
-  const res = spawnSync(binary, ["update"], {
-    stdio: "inherit",
-    env: cleanOpenChamberEnv(),
-    timeout: 120_000,
-  });
-  if (res.error) {
-    log(`OpenChamber update check skipped (${res.error.message}); using existing binary`);
-    return;
-  }
-  if (res.status !== 0) {
-    log(`OpenChamber update failed (exit ${res.status ?? "signal"}); keeping existing binary`);
-  }
-
-  // `update` may write a different prefix than the one we invoked (nvm vs brew).
-  resetOpenChamberBinCache();
-  const latest = findOpenChamberBin();
-  const after = latest ? openChamberInstallVersion(latest) : null;
-  if (latest && latest !== binary) {
-    log(`OpenChamber install is now ${latest}${after ? ` (${after})` : ""}`);
-  }
-}
 
 /**
  * True when the process on Chamber's port is an older (or different) install

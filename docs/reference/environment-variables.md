@@ -182,8 +182,6 @@ See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md). Do not config
 | `DEVHUB_OPENCODE_BINARY`                | —                               | Override path to the `opencode` binary                                                                                                                                         |
 | `OPENCHAMBER_BIN`                       | —                               | Override path to the `openchamber` CLI. Otherwise DevHub uses `openchamber` on `PATH`; if neither exists the Chamber tab is hidden.                                            |
 | `OPENCHAMBER_DATA_DIR`                  | `~/.config/openchamber`         | OpenChamber's data dir. DevHub seeds its default theme into `<dir>/settings.json` and copies themes into `<dir>/themes`.                                                       |
-| `DEVHUB_SKIP_OPENCODE_UPDATE`           | —                               | Set to `1` to skip `opencode upgrade` on peer startup                                                                                                                          |
-| `DEVHUB_SKIP_OPENCHAMBER_UPDATE`        | —                               | Set to `1` to skip `openchamber update` on peer startup                                                                                                                        |
 
 Do not set `OPENCODE_HOST` or `OPENCODE_SKIP_START` either — Chamber Setup cannot restart an OpenCode process DevHub pinned.
 

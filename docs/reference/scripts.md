@@ -160,8 +160,6 @@ Run from repo root (dashboard scripts):
 | Command | Purpose |
 | ------- | ------- |
 | `npm run docs:diagrams` | Headlessly render every Mermaid block in `docs/` under light and dark theme variables — catches syntax errors that would render as empty boxes in the read view |
-| `npm run docs:frontmatter` | Apply or refresh YAML frontmatter on doc files (title, description, section, order, icon, tags, related) |
-| `npm run docs:frontmatter -- --check` | Verify every doc has curated frontmatter without writing — used in CI guardrails |
 
 `npm run test` also runs `lib/docs/docs-tree.test.ts`, which fails on broken relative links, dead heading anchors, missing frontmatter, or unresolved doc icons.
 

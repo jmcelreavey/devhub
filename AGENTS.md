@@ -69,6 +69,16 @@ DevHub uses a **tier-2 plugin system**. Private modules (BI ops, CAPI scripts, e
 
 ### Gotchas
 
+- **Dashboard hanging or a page never loading?** One blocked subprocess blocks
+  every route, so "the app is dead" and "one git call is stuck" look identical.
+  Call `status_exec` (or `GET /api/status/exec`) first — it names the command.
+  Full ladder: the `devhub-debug-hang` skill.
+- **Writing dashboard UI?** Read `docs/reference/ui-vocabulary.md` first — the
+  components, CSS primitives and hooks that already exist. Cheaper than
+  rediscovering them, and stops a second near-identical warning style existing.
+- **Running an external command?** Use `execExternal` (`lib/exec-external.ts`),
+  never `execFile`/`spawn` directly. It enforces a timeout; the default is to
+  hang forever.
 - **Safe-Chain is required** for `npm install` (dashboard `preinstall` and `scripts/install.sh`). Install globally: `npm install -g @aikidosec/safe-chain@1.1.10`, run `safe-chain setup`, restart the terminal. See README.md.
 - **Cloud VMs without sudo:** install Safe-Chain to a user prefix and put it on `PATH` before `npm install`: `npm install -g @aikidosec/safe-chain@1.1.10 --prefix "$HOME/.npm-global"` then `export PATH="$HOME/.npm-global/bin:$PATH"`. The VM update script does this automatically.
 - **Tasks vs notes paths:** daily tasks live under repo-root `tasks/YYYY-MM-DD.json` (not under `notes/`). Notes vault files are under `notes/`.

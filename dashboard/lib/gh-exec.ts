@@ -1,8 +1,5 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { execExternal, isExecTimeout } from "@/lib/exec-external";
 import { augmentedPathEnv } from "./process-env";
-
-const execFileAsync = promisify(execFile);
 
 export const GH_AUTH_REQUIRED_MESSAGE =
   "GitHub CLI auth is required. Run `gh auth login` in your terminal.";
@@ -25,12 +22,10 @@ export function ghEnv(): NodeJS.ProcessEnv {
 const defaultMaxBuffer = 20 * 1024 * 1024;
 
 /**
- * Hard ceiling on any `gh` call.
- *
- * A degraded GitHub makes `gh` hang rather than fail, and `execFile` waits
- * forever by default — one search held a page load for 14 minutes. The 504
- * mapping below can only fire once the process actually terminates, so this
- * timeout is what makes the stale-cache fallback reachable at all.
+ * `gh`-specific ceiling. A degraded GitHub makes `gh` hang rather than fail,
+ * and the 504 mapping below can only fire once the process actually
+ * terminates — so this timeout is what makes the stale-cache fallback
+ * reachable at all.
  */
 const defaultTimeoutMs = Number(process.env.DEVHUB_GH_TIMEOUT_MS ?? 30_000);
 
@@ -38,12 +33,12 @@ export async function execGh(
   args: string[],
   opts?: { maxBuffer?: number; cwd?: string; timeoutMs?: number },
 ): Promise<{ stdout: string; stderr: string }> {
-  return execFileAsync("gh", args, {
+  return execExternal("gh", args, {
     maxBuffer: opts?.maxBuffer ?? defaultMaxBuffer,
     env: ghEnv(),
     cwd: opts?.cwd,
-    timeout: opts?.timeoutMs ?? defaultTimeoutMs,
-    killSignal: "SIGKILL",
+    timeoutMs: opts?.timeoutMs ?? defaultTimeoutMs,
+    label: `gh:${args[0] ?? "?"}`,
   });
 }
 
@@ -80,20 +75,13 @@ const GH_TIMED_OUT_INFO: GithubCliErrorInfo = {
   httpStatus: 504,
 };
 
-/** True when `execGh` killed the process for exceeding its timeout. */
-function isTimeoutKill(err: unknown): boolean {
-  if (!err || typeof err !== "object") return false;
-  const { killed, signal } = err as { killed?: boolean; signal?: string | null };
-  return killed === true && (signal === "SIGKILL" || signal === "SIGTERM");
-}
-
 export function githubCliErrorInfo(
   err: unknown,
   fallback = "GitHub CLI command failed",
 ): GithubCliErrorInfo {
   // A process we killed on timeout reports `killed`/`signal` rather than a
   // message worth grepping, so check the structure before matching text.
-  if (isTimeoutKill(err)) return GH_TIMED_OUT_INFO;
+  if (isExecTimeout(err)) return GH_TIMED_OUT_INFO;
   const message = err instanceof Error ? err.message : String(err);
   const lower = message.toLowerCase();
   if (lower.includes("spawn gh") || lower.includes("enoent")) {

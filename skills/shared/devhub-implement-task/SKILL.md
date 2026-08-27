@@ -135,6 +135,14 @@ In the target repo:
   merges it must be re-anchored to the updated base before it is pushed.
 - Understand the relevant code first (entry points, conventions, existing
   utilities). Reuse before you add.
+- **Touching dashboard UI? Read `docs/reference/ui-vocabulary.md` first.** It
+  lists the components, CSS primitives, hooks and server helpers that already
+  exist. One read is far cheaper than the greps it replaces, and it is the
+  difference between reusing `tone-panel--warning-banner` and inventing a
+  second warning style that looks almost the same.
+- **Never call `execFile`/`spawn` directly** — use `execExternal`
+  (`lib/exec-external.ts`). It applies a mandatory timeout and registers the
+  call for `/api/status/exec`. An un-timed subprocess blocks every route.
 - **Minimal diffs.** Smallest change that does the job. No speculative
   abstractions, no "while we're here" refactors, no drive-by formatting.
 - **No unnecessary comments.** Comments explain _why_, never _what_. If code

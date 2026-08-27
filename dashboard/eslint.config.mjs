@@ -17,6 +17,24 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    /**
+     * React Compiler's correctness rules, run by ESLint.
+     *
+     * The compiler transform is off for the dev server (see next.config.ts), so
+     * without these a violation — a ref read during render, state set during
+     * render — would only surface at build time. Here it surfaces in the editor.
+     *
+     * Free to enable: the codebase already passes all four, and they add no
+     * measurable lint time because the plugin does this analysis regardless.
+     */
+    rules: {
+      "react-hooks/refs": "error",
+      "react-hooks/set-state-in-render": "error",
+      "react-hooks/purity": "error",
+      "react-hooks/immutability": "error",
+    },
+  },
 ]);
 
 export default eslintConfig;

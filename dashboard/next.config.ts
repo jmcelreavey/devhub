@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -105,6 +106,7 @@ const nextConfig: NextConfig = {
    * (14 updates x 2 frames ~= 224ms) rather than React. If you re-evaluate this,
    * measure the synchronous span around the dispatch — see PF3.
    */
+  /** Overridden per-phase at the default export: builds yes, dev server no. */
   reactCompiler: true,
   // experimental.viewTransition: REMOVED — see the Traps section in
   // CONTRIBUTING.md. It made Next call
@@ -197,4 +199,26 @@ function withOptionalAnalyzer(config: NextConfig): NextConfig {
   }
 }
 
-export default withOptionalAnalyzer(nextConfig);
+/**
+ * React Compiler runs for builds, not for the dev server.
+ *
+ * Measured on a cold `next dev`: the transform costs ~5s of the ~24s startup
+ * and ~1s on each first route compile, and its benefit — the ~18% less render
+ * work measured above — is a production concern.
+ *
+ * Its other job, catching rule violations (a ref read during render, state set
+ * during render), is covered earlier and faster by the `react-hooks/*`
+ * compiler rules enabled in `eslint.config.mjs`. Those run in the editor, so
+ * dropping the dev transform moves that feedback *earlier*, not later.
+ *
+ * Keyed on `phase` deliberately: `npm run build` runs `env -u NODE_ENV`, so a
+ * `NODE_ENV === "production"` check reads false during a production build and
+ * would silently ship an unoptimised bundle.
+ */
+const configForPhase = (phase: string): NextConfig =>
+  withOptionalAnalyzer({
+    ...nextConfig,
+    reactCompiler: phase !== PHASE_DEVELOPMENT_SERVER,
+  });
+
+export default configForPhase;
