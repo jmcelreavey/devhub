@@ -179,3 +179,9 @@ for plugin_path in $PLUGIN_PATHS; do
 done
 
 log "SHIP DONE"
+log ""
+# Keep these two menu paths in step with
+# dashboard/lib/desktop/packaged-checkout-copy.ts (bash cannot import it).
+log "If you use the installed DevHub.app, it still serves the bundled dashboard until you refresh it:"
+log "  View → Rebuild Dashboard…     (copy this checkout into the .app)"
+log "  View → Attach to Dev Server…   (hot reload via npm run dev in the checkout)"

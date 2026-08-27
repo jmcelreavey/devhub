@@ -286,7 +286,7 @@ export default function ReposPage() {
         </div>
       )}
 
-      <div className="hub-tabs mb-3" role="tablist" aria-label="Repo groups">
+      <div className="hub-tabs mb-3" role="tablist" aria-label="Repo groups (filter this page)">
         <button
           type="button"
           role="tab"

@@ -79,6 +79,19 @@ export function githubCliErrorInfo(
   ) {
     return { kind: "auth", message: GH_AUTH_REQUIRED_MESSAGE, httpStatus: 401 };
   }
+  if (
+    lower.includes("http 504") ||
+    lower.includes("504 gateway") ||
+    lower.includes("gateway timeout") ||
+    lower.includes("timed out") ||
+    lower.includes("timeout")
+  ) {
+    return {
+      kind: "other",
+      message: "GitHub timed out — showing the last cached PR list if available.",
+      httpStatus: 504,
+    };
+  }
   const trimmed = message.trim() || fallback;
   return { kind: "other", message: trimmed, httpStatus: 500 };
 }

@@ -281,3 +281,55 @@ export function readTerminalSelection(dt: DataTransfer): string {
 export function previewBlockCommand(command: string, max = 42): string {
   return previewPromptCommand(command, max);
 }
+
+/** Adjacent command bursts in the blocks view — split on idle gaps. */
+export interface TerminalBlockGroup {
+  blocks: TerminalCommandBlock[];
+  startedAt: number;
+  endedAt?: number;
+}
+
+const GROUP_GAP_MS = 90_000;
+
+/** Group consecutive blocks separated by more than `gapMs` idle time. */
+export function groupCommandBlocks(
+  blocks: TerminalCommandBlock[],
+  gapMs = GROUP_GAP_MS,
+): TerminalBlockGroup[] {
+  if (blocks.length === 0) return [];
+  const groups: TerminalBlockGroup[] = [];
+  let batch: TerminalCommandBlock[] = [blocks[0]!];
+
+  for (let i = 1; i < blocks.length; i++) {
+    const prev = blocks[i - 1]!;
+    const block = blocks[i]!;
+    const prevEnd = prev.endedAt ?? (prev.pending ? Date.now() : prev.startedAt);
+    if (block.startedAt - prevEnd > gapMs) {
+      groups.push(finishBlockGroup(batch));
+      batch = [block];
+    } else {
+      batch.push(block);
+    }
+  }
+  groups.push(finishBlockGroup(batch));
+  return groups;
+}
+
+function finishBlockGroup(blocks: TerminalCommandBlock[]): TerminalBlockGroup {
+  return {
+    blocks,
+    startedAt: blocks[0]!.startedAt,
+    endedAt: blocks[blocks.length - 1]!.endedAt,
+  };
+}
+
+/**
+ * Concatenate commands + output for clipboard / Agent.
+ *
+ * Takes the blocks rather than a group: "copy everything on screen" has no
+ * group to hand over, and building a throwaway one just to satisfy the
+ * signature was pure ceremony — the timestamps were never read.
+ */
+export function formatBlocksForClipboard(blocks: TerminalCommandBlock[]): string {
+  return blocks.map((b) => formatBlockForAgent(b)).join("\n\n");
+}

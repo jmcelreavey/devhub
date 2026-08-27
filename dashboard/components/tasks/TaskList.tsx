@@ -25,7 +25,7 @@ import { todayISO } from "@/lib/utils";
 // callers keep working.
 export type { Task } from "@/lib/tasks/types";
 export { matchesTaskSearch } from "@/lib/tasks/task-text";
-export { renderTaskTextContent } from "@/components/tasks/TaskText";
+export { TaskTextContent } from "@/components/tasks/TaskText";
 export { TaskItem } from "@/components/tasks/TaskItem";
 
 interface JiraStatus {

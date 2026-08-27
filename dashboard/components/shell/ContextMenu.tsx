@@ -12,10 +12,23 @@ import {
   type ReactNode,
 } from "react";
 import { MoreHorizontal } from "lucide-react";
+import {
+  ROW_LONG_PRESS_MOVE_PX,
+  ROW_LONG_PRESS_MS,
+  createLongPressBind,
+  type LongPressState,
+} from "@/lib/long-press";
 
-export const ROW_LONG_PRESS_MS = 500;
-export const ROW_LONG_PRESS_MOVE_PX = 8;
-/** Chips/tags own their context menu — bindRow must not steal the event. */
+// Re-exported: these were defined here first and several modules still import
+// them from this path. The gesture itself now lives in lib/long-press.ts.
+export { ROW_LONG_PRESS_MOVE_PX, ROW_LONG_PRESS_MS };
+
+/**
+ * Chips/tags own their context menu — bindRow must not steal the event.
+ *
+ * The data attribute is the contract; the class names are legacy chips that
+ * predate it and have not been migrated yet.
+ */
 export const ENTITY_CHIP_SELECTOR = "[data-entity-chip], .entity-link-chip, .jira-key-chip";
 
 export interface ContextMenuItem {
@@ -348,15 +361,7 @@ export function ContextMenu({
  */
 export function useContextMenu<T>() {
   const [state, setState] = useState<{ target: T; position: ContextMenuPosition } | null>(null);
-  const pressRef = useRef<{
-    pointerId: number;
-    x: number;
-    y: number;
-    target: T;
-    host: HTMLElement;
-    timer: ReturnType<typeof setTimeout>;
-    opened: boolean;
-  } | null>(null);
+  const pressRef = useRef<LongPressState | null>(null);
   const suppressClickRef = useRef(false);
   const hostRef = useRef<HTMLElement | null>(null);
 
@@ -410,84 +415,36 @@ export function useContextMenu<T>() {
     [openAtPoint],
   );
 
-  const clearPress = useCallback(() => {
-    const press = pressRef.current;
-    if (!press) return;
-    clearTimeout(press.timer);
-    pressRef.current = null;
-  }, []);
-
   const bindRow = useCallback(
-    (target: T): RowMenuBind => ({
-      "data-context-menu-host": true,
-      onContextMenu: (event) => {
-        const hit = event.target;
-        if (hit instanceof Element && hit.closest(ENTITY_CHIP_SELECTOR)) return;
-        openAt(event, target);
-      },
-      onPointerDown: (event) => {
-        if (event.pointerType === "mouse") return;
-        event.stopPropagation();
-        clearPress();
-        const x = event.clientX;
-        const y = event.clientY;
-        const host = event.currentTarget as HTMLElement;
-        try {
-          event.currentTarget.setPointerCapture(event.pointerId);
-        } catch {
-          // Capture is best-effort; move/cancel still fire on the row when they can.
-        }
-        pressRef.current = {
-          pointerId: event.pointerId,
-          x,
-          y,
-          target,
-          host,
-          opened: false,
-          timer: setTimeout(() => {
-            const press = pressRef.current;
-            if (!press || press.pointerId !== event.pointerId) return;
-            press.opened = true;
-            suppressClickRef.current = true;
-            openAtPoint(press.x, press.y, press.target, press.host);
-          }, ROW_LONG_PRESS_MS),
-        };
-      },
-      onPointerMove: (event) => {
-        const press = pressRef.current;
-        if (!press || press.pointerId !== event.pointerId) return;
-        const dx = event.clientX - press.x;
-        const dy = event.clientY - press.y;
-        if (dx * dx + dy * dy > ROW_LONG_PRESS_MOVE_PX * ROW_LONG_PRESS_MOVE_PX) {
-          clearPress();
-        }
-      },
-      onPointerUp: () => {
-        const opened = pressRef.current?.opened;
-        clearPress();
-        if (!opened) return;
-        // Some browsers never fire click after a long-press. Drop the flag so
-        // the next tap on another row isn't eaten.
-        window.setTimeout(() => {
-          suppressClickRef.current = false;
-        }, 400);
-      },
-      onPointerCancel: () => clearPress(),
-      onClick: (event) => {
-        if (!suppressClickRef.current) return;
-        suppressClickRef.current = false;
-        event.preventDefault();
-        event.stopPropagation();
-      },
-      onKeyDown: (event) => {
-        if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey)) return;
-        event.preventDefault();
-        event.stopPropagation();
-        const rect = event.currentTarget.getBoundingClientRect();
-        openAtPoint(rect.left + 12, rect.bottom - 4, target, event.currentTarget as HTMLElement);
-      },
-    }),
-    [clearPress, openAt, openAtPoint],
+    (target: T): RowMenuBind => {
+      // One press is tracked at a time (the gesture clears any previous press
+      // on pointerdown), so the closed-over `target` is always the live one.
+      const press = createLongPressBind(
+        {
+          stopPropagation: true,
+          onLongPress: ({ x, y, host }) => openAtPoint(x, y, target, host),
+        },
+        { press: pressRef, suppressClick: suppressClickRef },
+      );
+
+      return {
+        "data-context-menu-host": true,
+        onContextMenu: (event) => {
+          const hit = event.target;
+          if (hit instanceof Element && hit.closest(ENTITY_CHIP_SELECTOR)) return;
+          openAt(event, target);
+        },
+        ...press,
+        onKeyDown: (event) => {
+          if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          const rect = event.currentTarget.getBoundingClientRect();
+          openAtPoint(rect.left + 12, rect.bottom - 4, target, event.currentTarget as HTMLElement);
+        },
+      };
+    },
+    [openAt, openAtPoint],
   );
 
   return {

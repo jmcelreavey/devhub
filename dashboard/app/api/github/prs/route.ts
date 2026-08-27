@@ -4,6 +4,7 @@ import {
   fetchRecentlyReviewedPrs,
   isRepoArchived,
   readGithubPrsListCache,
+  readStaleGithubPrsListCache,
   writeGithubPrsListCache,
   type GithubPrRow,
 } from "@/lib/github/prs";
@@ -74,6 +75,19 @@ export async function GET() {
   } catch (error) {
     console.error("[api:github:prs]", error);
     const mapped = mapGithubCliError(error);
+    // Upstream faults only (504 included) — a 401/404 means the request itself
+    // was wrong, and papering over that with old data hides the real problem.
+    const stale = mapped.status >= 500 ? readStaleGithubPrsListCache() : null;
+    if (stale) {
+      return NextResponse.json({
+        ...stale,
+        reviews: sortReviews(stale.reviews),
+        cached: true,
+        stale: true,
+        configured: true,
+        warning: mapped.error,
+      });
+    }
     return NextResponse.json({ error: mapped.error }, { status: mapped.status });
   }
 }

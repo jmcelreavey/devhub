@@ -17,22 +17,22 @@ export const PERSONA_SOURCE_META: Record<PersonaSourceId, PersonaSourceMeta> = {
     id: "identity",
     layer: "L0",
     loadLabel: "Every message (keep tiny)",
-    syncLabel: "Synced to all tools + repo AGENTS.md",
-    tokenHint: "~200",
+    syncLabel: "Synced to Claude/Codex/OpenCode + Cursor rules. Repo AGENTS.md is a pointer.",
+    tokenHint: "~250",
   },
   "shared-persona": {
     id: "shared-persona",
     layer: "L1",
     loadLabel: "Every session",
-    syncLabel: "Synced to all tools + repo AGENTS.md",
-    tokenHint: "~685",
+    syncLabel: "Synced to Claude/Codex/OpenCode + Cursor rules. Repo AGENTS.md is a pointer.",
+    tokenHint: "~400",
   },
   "deep-preferences": {
     id: "deep-preferences",
     layer: "L2",
-    loadLabel: "On demand via deep-preferences skill",
-    syncLabel: "Not synced — repo + skill only",
-    tokenHint: "~500 total (per-mode files are smaller)",
+    loadLabel: "On demand — read persona/modes/<mode>.md directly",
+    syncLabel: "Not synced — repo + skill description only",
+    tokenHint: "~200 per mode",
   },
 };
 
@@ -47,6 +47,12 @@ export const MARKER_START = "<!-- ai-dotfiles:shared-persona:start -->";
 export const MARKER_END = "<!-- ai-dotfiles:shared-persona:end -->";
 export const IDENTITY_MARKER_START = "<!-- ai-dotfiles:identity:start -->";
 export const IDENTITY_MARKER_END = "<!-- ai-dotfiles:identity:end -->";
+
+/** Repo AGENTS.md must not inline L0/L1 — Cursor already always-applies the .mdc copies. */
+export const AGENTS_IDENTITY_STUB =
+  "Cursor: L0 is always-on via `~/.cursor/rules/devhub-persona-identity.mdc`. Cloud: read `persona/identity.txt` before the first substantial reply.";
+export const AGENTS_SHARED_STUB =
+  "Cursor: L1 is always-on via `~/.cursor/rules/devhub-persona-shared.mdc`. Cloud: read `persona/shared-persona.md` before the first substantial reply.";
 
 /** Extract payload between HTML comment markers. */
 export function extractPersonaBlock(

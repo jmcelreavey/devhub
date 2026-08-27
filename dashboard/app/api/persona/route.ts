@@ -92,8 +92,8 @@ const TARGETS: PersonaTarget[] = [
     label: "Shared persona (engineering standards)",
     filepath: "persona/shared-persona.md",
     description:
-      "L1 — core engineering standards loaded every session (~685 tokens). " +
-      "Synced into marker blocks in Claude, Codex, OpenCode, Cursor, and repo AGENTS.md.",
+      "L1 — core engineering standards loaded every session (~400 tokens). " +
+      "Synced into Claude/Codex/OpenCode and Cursor rules. Repo AGENTS.md gets a pointer.",
     kind: "source",
   },
   {
@@ -101,8 +101,8 @@ const TARGETS: PersonaTarget[] = [
     label: "Identity / personality",
     filepath: "persona/identity.txt",
     description:
-      "L0 — tone, role, and how to work with you (~200 tokens). " +
-      "Synced everywhere including repo AGENTS.md. Keep this file small.",
+      "L0 — tone, role, and how to work with you (~250 tokens). " +
+      "Synced to Claude/Codex/OpenCode and Cursor rules. Repo AGENTS.md is a pointer. Keep this file small.",
     kind: "source",
   },
   {
@@ -111,14 +111,14 @@ const TARGETS: PersonaTarget[] = [
     filepath: "persona/deep-preferences.md",
     description:
       "L2 — index for context-specific modes under persona/modes/. " +
-      "Not synced. Use the deep-preferences skill to load only the matching mode file(s).",
+      "Not synced. Open persona/modes/<mode>.md directly; do not load a wrapper skill body first.",
     kind: "source",
   },
   {
     id: "agents",
     label: "AGENTS.md — repo root",
     filepath: "AGENTS.md",
-    description: "Build output: identity + shared-persona marker blocks.",
+    description: "Build output: L0/L1 pointers (full text lives in Cursor rules).",
     kind: "synced",
   },
   {

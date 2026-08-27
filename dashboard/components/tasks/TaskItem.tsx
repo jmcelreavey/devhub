@@ -11,7 +11,7 @@
 import { useState, useEffect, useRef, type HTMLAttributes } from "react";
 import { useRouter } from "next/navigation";
 import { type Task } from "@/lib/tasks/types";
-import { renderTaskTextContent } from "@/components/tasks/TaskText";
+import { TaskTextContent } from "@/components/tasks/TaskText";
 import { stripLinkedJiraKeyFromText, stripTagToken } from "@/lib/tasks/task-text";
 import { extractTags } from "@/lib/entity-note";
 import { useTagMenuGroup, withTagsGroup } from "@/lib/hooks/use-tag-menu";
@@ -450,8 +450,8 @@ export function TaskItem({
           ) : (
             <span className="task-row-title text-sm leading-snug" style={textStyle}>
               {task.jiraKey && !isAbandoned
-                ? renderTaskTextContent(displayText)
-                : renderTaskTextContent(task.text)}
+                ? <TaskTextContent text={displayText} />
+                : <TaskTextContent text={task.text} />}
             </span>
           )}
 
@@ -531,6 +531,7 @@ export function TaskItem({
             hostTags={hostTags}
             hideCompanionNotes={noteExists}
             maxVisible={denseLinks ? 2 : 4}
+            onHostContextMenu={(e) => menu.openAt(e, task)}
             onRemoveSeed={
               readOnly || isInactive
                 ? undefined

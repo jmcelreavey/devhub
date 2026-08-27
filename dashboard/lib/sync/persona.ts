@@ -3,11 +3,17 @@
  *
  * Reads persona/shared-persona.md and persona/identity.txt from the repo
  * and injects them between marker comments. Anything outside markers is preserved.
+ *
+ * Repo AGENTS.md gets a pointer, not the full L0/L1 text — Cursor already
+ * always-applies ~/.cursor/rules/devhub-persona-*.mdc, so inlining both
+ * would load the same blocks twice.
  */
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  AGENTS_IDENTITY_STUB,
+  AGENTS_SHARED_STUB,
   IDENTITY_MARKER_END,
   IDENTITY_MARKER_START,
   MARKER_END,
@@ -220,11 +226,13 @@ export async function syncPersona(opts: SyncPersonaOptions): Promise<number> {
   let updated = 0;
   for (const t of targets) {
     emit(`[${t.id}]`);
-    if (identityContent) {
+    const identityPayload = t.id === "generic-agents" ? AGENTS_IDENTITY_STUB : identityContent;
+    const sharedPayload = t.id === "generic-agents" ? AGENTS_SHARED_STUB : personaContent;
+    if (identityPayload) {
       if (
         injectBetweenMarkers(
           t.filepath,
-          identityContent,
+          identityPayload,
           IDENTITY_MARKER_START,
           IDENTITY_MARKER_END,
           opts.dryRun ?? false,
@@ -237,7 +245,7 @@ export async function syncPersona(opts: SyncPersonaOptions): Promise<number> {
     if (
       injectBetweenMarkers(
         t.filepath,
-        personaContent,
+        sharedPayload,
         MARKER_START,
         MARKER_END,
         opts.dryRun ?? false,

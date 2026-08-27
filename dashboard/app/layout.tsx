@@ -26,6 +26,7 @@ import { DashboardShell } from "@/components/shell/DashboardShell";
 import { TabTitle } from "@/components/shell/TabTitle";
 import { ToastProvider } from "@/components/shell/ToastProvider";
 import { UpdateBanner } from "@/components/desktop/UpdateBanner";
+import { PackagedCheckoutBanner } from "@/components/desktop/PackagedCheckoutBanner";
 import { ConfirmProvider } from "@/components/shell/ConfirmDialog";
 import { HubTopBar } from "@/components/shell/HubTopBar";
 import { WorkspaceTabsProvider, WorkspaceTabStrip } from "@/components/shell/WorkspaceTabs";
@@ -172,6 +173,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               {/* Renders nothing outside the packaged desktop app. Placed above
                   <main> rather than inside it so it never scrolls away mid-download. */}
               <UpdateBanner />
+              <PackagedCheckoutBanner />
 
               <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto relative">
                   {children}

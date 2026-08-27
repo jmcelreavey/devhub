@@ -42,7 +42,7 @@ npm run test
 npm run verify    # lint + typecheck + test + production build
 ```
 
-Dashboard dev server: `npm run dev` (port 1337). Webpack is required (not Turbopack) so `../shared/` vault imports resolve.
+Dashboard webpack: `npm run dev` (webpack, not Turbopack, so `../shared/` vault imports resolve). **Do not verify UI against localhost:1337** — that port is almost always the packaged DevHub.app production bundle. Load `devhub-dashboard-verify` and use a free-port webpack origin instead.
 
 ## Sync And Catalog Rules
 

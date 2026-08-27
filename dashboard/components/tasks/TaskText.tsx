@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { parseMarkdownLinks, splitTagTokens } from "@/lib/tasks/task-text";
 import { ContextMenu, useContextMenu } from "@/components/shell/ContextMenu";
 import { buildEntityRefMenuGroups } from "@/lib/entity-ref-menu";
@@ -10,16 +10,49 @@ import type { EntityRef } from "@/lib/entity-note";
 import { copyTextAndToast } from "@/lib/pr-slack";
 import { useToast } from "@/lib/hooks/use-toast";
 
+/** Opens the shared menu for one chip. */
+type OpenChipMenu = (event: ReactMouseEvent, ref: EntityRef) => void;
+
 /**
  * Render task text with its markdown links and #tags live.
  *
- * The rendering half of the extraction; the parsing half is pure and lives in
- * `lib/tasks/task-text.ts` so it can be tested without React.
+ * A component, not a `render*` helper, because the #tag chips share one context
+ * menu. Giving every chip its own `useContextMenu` + `<ContextMenu>` mounted two
+ * menus per visible task row and rebuilt their groups on every render — the same
+ * mistake `EntityLinkChips` already avoids by hoisting one menu over its chips.
+ *
+ * The parsing half is pure and lives in `lib/tasks/task-text.ts` so it can be
+ * tested without React.
  */
-export function renderTaskTextContent(text: string): ReactNode {
+export function TaskTextContent({ text }: { text: string }) {
+  const router = useRouter();
+  const toast = useToast();
+  const menu = useContextMenu<EntityRef>();
+  const target = menu.target;
+
+  return (
+    <>
+      {renderTaskTextNodes(text, menu.openAt)}
+      {target && (
+        <ContextMenu
+          open
+          position={menu.position}
+          groups={buildEntityRefMenuGroups(target, {
+            onOpen: () => target.href && router.push(target.href),
+            onCopy: (value, copied) => void copyTextAndToast(value, copied, toast),
+          })}
+          onClose={menu.close}
+          label={`${target.label} actions`}
+        />
+      )}
+    </>
+  );
+}
+
+function renderTaskTextNodes(text: string, openChipMenu: OpenChipMenu): ReactNode {
   const parts = parseMarkdownLinks(text);
   if (parts.length === 0 || (parts.length === 1 && parts[0].type === "text")) {
-    return renderTaggedText(text);
+    return renderTaggedText(text, openChipMenu);
   }
   return parts.map((part, i) => {
     if (part.type === "link" && part.url) {
@@ -48,40 +81,32 @@ export function renderTaskTextContent(text: string): ReactNode {
         </a>
       );
     }
-    return <span key={i}>{renderTaggedText(part.text)}</span>;
+    return <span key={i}>{renderTaggedText(part.text, openChipMenu)}</span>;
   });
 }
 
-function HashtagChip({ tag, text }: { tag: string; text: string }) {
-  const router = useRouter();
-  const toast = useToast();
-  const menu = useContextMenu<EntityRef>();
+function HashtagChip({
+  tag,
+  text,
+  onOpenMenu,
+}: {
+  tag: string;
+  text: string;
+  onOpenMenu: OpenChipMenu;
+}) {
   const href = `/work?tag=${encodeURIComponent(tag)}`;
   const ref: EntityRef = { kind: "tag", id: tag, label: text, href };
-  const groups = buildEntityRefMenuGroups(ref, {
-    onOpen: () => router.push(href),
-    onCopy: (value, copied) => void copyTextAndToast(value, copied, toast),
-  });
   return (
-    <>
-      <Link
-        href={href}
-        onClick={(e) => e.stopPropagation()}
-        onContextMenu={(e) => menu.openAt(e, ref)}
-        className="entity-link-chip"
-        data-entity-chip=""
-        data-kind="tag"
-      >
-        {text}
-      </Link>
-      <ContextMenu
-        open={menu.target !== null}
-        position={menu.position}
-        groups={groups}
-        onClose={menu.close}
-        label={`${text} actions`}
-      />
-    </>
+    <Link
+      href={href}
+      onClick={(e) => e.stopPropagation()}
+      onContextMenu={(e) => onOpenMenu(e, ref)}
+      className="entity-link-chip"
+      data-entity-chip=""
+      data-kind="tag"
+    >
+      {text}
+    </Link>
   );
 }
 
@@ -95,7 +120,7 @@ const MAX_TITLE_TAGS = 2;
  * them as one block instead of interleaving pills mid-wrap, and anything past
  * MAX_TITLE_TAGS collapses into a single "+N" chip at the end of the title.
  */
-function renderTaggedText(text: string): ReactNode {
+function renderTaggedText(text: string, openChipMenu: OpenChipMenu): ReactNode {
   const parts = splitTagTokens(text);
   if (!parts.some((p) => p.type === "tag")) return text;
 
@@ -117,7 +142,9 @@ function renderTaggedText(text: string): ReactNode {
   parts.forEach((part, i) => {
     if (part.type === "tag") {
       if (shown < MAX_TITLE_TAGS) {
-        cluster.push(<HashtagChip key={i} tag={part.tag!} text={part.text} />);
+        cluster.push(
+          <HashtagChip key={i} tag={part.tag!} text={part.text} onOpenMenu={openChipMenu} />,
+        );
         shown += 1;
       } else {
         hidden.push(part.tag!);

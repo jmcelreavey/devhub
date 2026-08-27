@@ -16,6 +16,8 @@ import {
 import { proposeTerminalRun } from "@/lib/terminal-inject";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useLaunchChamberDesktop } from "@/lib/launch/chamber";
+import { checkImplementGuardrails } from "@/lib/tasks/implement-guardrails";
+import { copyTextToClipboard } from "@/lib/clipboard";
 
 type ImplementationTarget = TaskImplementationProvider | "openchamber";
 
@@ -61,7 +63,7 @@ export function ImplementTaskDialog({
 
   const copyPrompt = async () => {
     try {
-      await navigator.clipboard.writeText(buildPrompt());
+      await copyTextToClipboard(buildPrompt());
       toast.success("Implementation prompt copied");
     } catch {
       toast.error("Couldn't copy the implementation prompt");
@@ -72,8 +74,13 @@ export function ImplementTaskDialog({
     if (launching) return;
     setLaunching(true);
     try {
+      const guard = await checkImplementGuardrails();
+      if (guard.blocked) {
+        toast.error(guard.reason ?? "Too many agent runs queued.");
+        return;
+      }
       if (provider === "openchamber") {
-        await navigator.clipboard.writeText(buildPrompt());
+        await copyTextToClipboard(buildPrompt());
         await launchChamber();
         toast.success("Implementation prompt copied for OpenChamber");
         onClose();

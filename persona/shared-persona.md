@@ -1,70 +1,39 @@
 # Shared Persona — Core Engineering Standards (L1)
 
-This file contains the engineering standards and preferences that apply across all sessions. Loaded at session start (~685 tokens).
+Always-on. Keep this short. L2 modes load on demand — read `persona/modes/<mode>.md` directly, not a wrapper skill.
 
-## Code Standards
+## Code
 
-### General
-- Follow existing project conventions unless they're actively harmful
-- Prefer explicit over implicit — naming should make intent clear
-- Functions should do one thing well; if it needs "and", consider splitting
-- Error handling: handle what you can, propagate what you can't, never silently swallow
-- Comments explain *why*, not *what* — the code should explain what
+- Follow existing conventions unless they're harmful
+- Explicit names; a function does one thing
+- Handle what you can, propagate what you can't, never swallow errors
+- Comments explain *why*, not *what*
+- TypeScript by default: `interface` for objects, `const` by default, async/await, no `any`, early returns
+- Git: conventional commits (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`); small PRs; never commit secrets; rebase onto main before merge
 
-### TypeScript / JavaScript
-- Use TypeScript by default for any new project
-- Prefer `interface` over `type` for object shapes
-- Use `const` by default, `let` only when reassignment is needed
-- Prefer async/await over raw promises
-- No `any` — use `unknown` and narrow, or define the type
-- Prefer early returns over deep nesting
+## When implementing
 
-### Python
-- Type hints on function signatures, optional on internals
-- Use dataclasses or pydantic models for structured data
-- Follow PEP 8, but don't be pedantic about line length if readability suffers
-- Prefer pathlib over os.path
-- Use f-strings, not .format() or %
+- Don't write code you wouldn't ship. Keep validation, security, and error handling.
+- If you're copy-pasting, you're doing it wrong.
 
-### Git
-- Write conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`
-- Keep PRs small and focused — one concern per PR
-- Don't commit secrets, ever
-- Rebase feature branches onto main before merging
+## When debugging
 
-## Architecture Preferences
+- Reproduce first, theorize second, fix third
+- Read the logs. Isolate what changed. Don't patch symptoms.
 
-### Project Structure
-- Flat structure over deep nesting — if you need more than 3 levels, reconsider
-- Colocate related files (component + test + styles) in feature folders
-- Keep configuration at the project root, not buried in subdirectories
+## Repo shape
 
-### API Design
-- REST for CRUD, consider GraphQL for complex data relationships
-- Consistent error response format across all endpoints
-- Version APIs from day one
-- Document with OpenAPI/Swagger for any public-facing API
+- Flat over deep nesting — reconsider more than 3 levels
+- Colocate related files (component + test + styles)
+- Config at the project root
 
-### Database
-- Use migrations, never hand-write schema changes in prod
-- Index for actual query patterns, not hypothetical ones
-- Prefer UUIDs over auto-increment IDs for distributed systems
+## Security
 
-## Security Defaults
-- Never hardcode secrets — use environment variables or a secrets manager
-- Validate and sanitize all user input, even if you control the client
-- Use parameterized queries, never string interpolation for SQL
-- Set sensible CORS policies, not `*`
+- No hardcoded secrets — env or a secrets manager
+- Validate user input even if you own the client
+- Parameterized queries, never string-built SQL
+- Sensible CORS, not `*`
 
-## Notes System
+## Recap
 
-This repo includes a two-tier notes system for capturing and reusing knowledge:
-- After significant work, capture notes using the `session-notes` skill
-- Reference past learnings via the `learnings` skill
-- Notes are stored in `notes/` and synced with this repo via git
-
-For full details on the notes architecture, see `docs/architecture/token-budget.md`.
-
-## Context-specific modes (L2)
-
-Teaching, code review, debugging, scaffolding, and other modes live under `persona/modes/`. Load them **on demand** via the **`deep-preferences`** skill — not on every session. See `persona/deep-preferences.md` for the index.
+Don't volunteer session notes. If they ask to capture the work, use `devhub-recap`.

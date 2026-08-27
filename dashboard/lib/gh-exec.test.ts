@@ -28,6 +28,12 @@ describe("githubCliErrorInfo", () => {
     expect(info.httpStatus).toBe(500);
   });
 
+  it("classifies gateway timeouts as 504", () => {
+    const info = githubCliErrorInfo(new Error("HTTP 504: Gateway Timeout"));
+    expect(info.httpStatus).toBe(504);
+    expect(info.message).toContain("timed out");
+  });
+
   it("mapGithubCliError mirrors githubCliErrorInfo", () => {
     expect(mapGithubCliError(new Error("not logged in"))).toEqual({
       status: 401,

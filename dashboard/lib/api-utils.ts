@@ -113,11 +113,23 @@ export function isSameOriginStrict(req: NextRequest): boolean {
   return origin === `http://${host}` || origin === `https://${host}`;
 }
 
+/** Verbs that cannot change state, so a forgeable proof-of-origin is tolerable. */
+const SAFE_METHODS = new Set(["GET", "HEAD"]);
+
 /**
+ * Weak same-origin proof, accepted on **safe methods only**.
+ *
  * Browsers omit Origin on same-origin GET `fetch` (Chrome 150+, Safari,
- * WKWebView). They still send Referer. Curl does not, unless you pass `-e`.
+ * WKWebView) but still send Referer, which is the whole reason this exists.
+ *
+ * Referer is exactly as forgeable as Origin — any local process can send
+ * `curl -e http://localhost:1337/`. So it is not proof of identity, only
+ * evidence that a request is not a naive cross-origin one. Honouring it on a
+ * mutating verb would reopen the LAN hole `isSameOriginStrict` exists to
+ * close, so anything but GET/HEAD is rejected here.
  */
 export function isSameOriginReferer(req: NextRequest): boolean {
+  if (!SAFE_METHODS.has(req.method.toUpperCase())) return false;
   const referer = req.headers.get("referer");
   const host = req.headers.get("host") ?? "";
   if (!referer || !host) return false;
@@ -138,9 +150,14 @@ export function isSameOriginReferer(req: NextRequest): boolean {
  * 1. `X-DevHub-Secret` matching `DEVHUB_API_SECRET` (MCP / local tooling),
  * 2. The packaged-app bootstrap cookie / `x-devhub-token`,
  * 3. Origin matching Host, or
- * 4. Referer matching Host (same-origin GET fetch omits Origin).
+ * 4. **on GET/HEAD only**, Referer matching Host — same-origin GET `fetch`
+ *    omits Origin, and a forged header cannot change state on a read.
  *
- * Bare curl with neither header is still rejected.
+ * Mutating verbs still require the secret, the desktop session, or a real
+ * Origin. Any local process can forge Referer, so accepting it on POST would
+ * reopen the LAN hole rule 3 exists to close. Prefer setting
+ * `DEVHUB_API_SECRET` when the dashboard is reachable off localhost.
+ * See README + `.env.example`.
  */
 export function requireDashboardAuth(req: NextRequest): { ok: true } | { ok: false; response: NextResponse } {
   const secret = process.env.DEVHUB_API_SECRET?.trim();

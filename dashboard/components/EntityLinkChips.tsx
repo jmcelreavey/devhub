@@ -10,7 +10,7 @@
  * should not re-echo the full task title.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -153,6 +153,7 @@ export function EntityLinkChips({
   maxVisible = CHIP_LIMIT,
   onRemoveSeed,
   className,
+  onHostContextMenu,
 }: {
   kind: EntityKind;
   id: string;
@@ -170,6 +171,8 @@ export function EntityLinkChips({
   maxVisible?: number;
   onRemoveSeed?: (ref: EntityRef) => void | Promise<void>;
   className?: string;
+  /** When set, tag chips delegate right-click to the host row menu (chip parity). */
+  onHostContextMenu?: (e: MouseEvent, ref: EntityRef) => void;
 }) {
   const seedKey = JSON.stringify(seed ?? []);
   const seedKeys = useMemo(
@@ -313,7 +316,13 @@ export function EntityLinkChips({
             key={refKey(ref)}
             className={removable ? "entity-link-chip-item" : undefined}
             data-entity-chip=""
-            onContextMenu={(e) => chipMenu.openAt(e, ref)}
+            onContextMenu={(e) => {
+              if (ref.kind === "tag" && onHostContextMenu) {
+                onHostContextMenu(e, ref);
+                return;
+              }
+              chipMenu.openAt(e, ref);
+            }}
           >
             {target ? (
               <Link

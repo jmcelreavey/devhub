@@ -49,6 +49,9 @@ export interface GithubPrsApiPayload {
   reviews: GithubPrRow[];
   recentlyReviewed: RecentlyReviewedPr[];
   cached?: boolean;
+  /** True when served from an expired cache after GitHub timed out (504). */
+  stale?: boolean;
+  warning?: string;
 }
 
 const MAX_REPOS = 100;
@@ -239,6 +242,20 @@ const LIST_CACHE_TTL_MS = 2 * 60 * 1000;
 
 export function readGithubPrsListCache(): GithubPrsApiPayload | null {
   if (!listCache || Date.now() - listCache.ts >= LIST_CACHE_TTL_MS) return null;
+  return listCache.data;
+}
+
+/**
+ * How far past the TTL a cached list may still be served when GitHub is down.
+ *
+ * Unbounded staleness is worse than an error: a three-day-old PR list looks
+ * current, and "stale" in the banner reads as minutes, not days.
+ */
+export const STALE_CACHE_MAX_AGE_MS = 30 * 60 * 1000;
+
+/** Last good payload past TTL but within {@link STALE_CACHE_MAX_AGE_MS}. */
+export function readStaleGithubPrsListCache(): GithubPrsApiPayload | null {
+  if (!listCache || Date.now() - listCache.ts >= STALE_CACHE_MAX_AGE_MS) return null;
   return listCache.data;
 }
 

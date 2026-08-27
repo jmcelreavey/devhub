@@ -48,8 +48,8 @@ describe("requireDashboardAuth", () => {
     else process.env.DEVHUB_BOOTSTRAP_TOKEN = savedToken;
   });
 
-  function request(headers: Record<string, string>): NextRequest {
-    return new NextRequest("http://localhost:1337/api/opencode/listen", { headers });
+  function request(headers: Record<string, string>, method = "GET"): NextRequest {
+    return new NextRequest("http://localhost:1337/api/opencode/listen", { headers, method });
   }
 
   it("rejects a GET with neither Origin, Referer, nor a desktop session", async () => {
@@ -71,6 +71,35 @@ describe("requireDashboardAuth", () => {
       request({ host: "localhost:1337", referer: "https://evil.example/opencode" }),
     );
     expect(result.ok).toBe(false);
+  });
+
+  /**
+   * Referer is forgeable by any local process (`curl -e http://localhost:1337/`),
+   * so it may only stand in for Origin where a forgery cannot change anything.
+   * Honouring it on POST would reopen the exact LAN hole `isSameOriginStrict`
+   * was tightened to close.
+   */
+  it("does NOT accept Referer on a mutating verb", () => {
+    for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+      const result = requireDashboardAuth(
+        request({ host: "localhost:1337", referer: "http://localhost:1337/opencode" }, method),
+      );
+      expect(result.ok, `${method} must not pass on Referer alone`).toBe(false);
+    }
+  });
+
+  it("still accepts a POST carrying a real Origin", () => {
+    const result = requireDashboardAuth(
+      request({ host: "localhost:1337", origin: "http://localhost:1337" }, "POST"),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("still accepts a POST from the desktop session", () => {
+    const result = requireDashboardAuth(
+      request({ host: "localhost:1337", cookie: `${DESKTOP_COOKIE}=${TOKEN}` }, "POST"),
+    );
+    expect(result.ok).toBe(true);
   });
 
   it("accepts the desktop bootstrap cookie when Origin is missing", () => {

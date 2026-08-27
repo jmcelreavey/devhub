@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronRight,
@@ -36,6 +36,8 @@ import { openTerminal, openTerminalTranscript } from "@/lib/terminal-launch";
 import { focusAgentComposer, openAgentChat } from "@/lib/agent-chat";
 import { openInteractiveAgentSession } from "@/lib/agent-job";
 import { openInBrowser } from "@/lib/desktop/bridge";
+import { useIsMobile } from "@/lib/hooks/use-is-mobile";
+import { usePaletteRowPress } from "@/lib/palette-row-press";
 
 type CommandKind =
   | "nav"
@@ -115,6 +117,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const inputRef = useRef<HTMLInputElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   const contentSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMobile = useIsMobile();
   const { data: setup } = useLive<SetupGateStatus>("/api/setup/status", { refreshInterval: 0 });
 
   // Load index data when opened. The `open` change drives a remount via `key`,
@@ -639,6 +642,9 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     }
   };
 
+  const highlighted = filtered[highlightIdx];
+  const highlightedNavigates = highlighted ? commandNavigates(highlighted) : false;
+
   if (!open) return null;
 
   return (
@@ -646,6 +652,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       role="dialog"
       aria-modal="true"
       aria-label="Command palette"
+      data-command-palette=""
       className="palette-overlay"
       style={{
         position: "fixed",
@@ -689,12 +696,15 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Search notes, tasks, tickets, actions… (Esc to close)"
+            placeholder={
+              isMobile
+                ? "Search notes, tasks, repos…"
+                : "Search notes, tasks, tickets, actions… (Esc to close)"
+            }
             className="palette-input"
             aria-controls="cmd-palette-list"
-            aria-activedescendant={
-              filtered[highlightIdx] ? `cmd-${filtered[highlightIdx].id}` : undefined
-            }
+            aria-activedescendant={highlighted ? `cmd-${highlighted.id}` : undefined}
+            style={{ flex: 1, minWidth: 0 }}
           />
         </div>
 
@@ -709,56 +719,57 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             </div>
           )}
           {filtered.map((cmd, idx) => (
-            <button
+            <PaletteResultRow
               key={cmd.id}
-              id={`cmd-${cmd.id}`}
-              type="button"
-              role="option"
-              aria-selected={idx === highlightIdx}
-              onMouseEnter={() => setHighlightIdx(idx)}
-              onClick={(e) => void select(cmd, { newTab: e.shiftKey })}
-              style={{
-                width: "100%",
-                textAlign: "left",
-                padding: "8px 14px",
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                background: idx === highlightIdx ? "var(--bg-elevated)" : "transparent",
-                border: "none",
-                color: "var(--text)",
-                fontSize: 13,
-                cursor: "pointer",
-              }}
-            >
-              <CommandIcon kind={cmd.kind} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div
-                  style={{
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
+              cmd={cmd}
+              idx={idx}
+              highlightIdx={highlightIdx}
+              isMobile={isMobile}
+              onHighlight={() => setHighlightIdx(idx)}
+              onSelect={select}
+            />
+          ))}
+        </div>
+        {isMobile ? (
+          /*
+            One "new tab" affordance, not three. This footer previously sat
+            alongside a second New tab button next to the search input *and*
+            the long-press gesture, all doing the same thing to the same row.
+            The footer stays because it is the only one that is discoverable;
+            long-press is the shortcut it advertises.
+          */
+          <div
+            className="palette-mobile-footer"
+            style={{ borderTop: "1px solid var(--border-muted)", color: "var(--text-subtle)" }}
+          >
+            {highlighted && highlightedNavigates ? (
+              <div
+                className="flex items-center gap-2 px-3 py-2"
+                style={{ borderBottom: "1px solid var(--border-muted)" }}
+              >
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ flex: 1, fontSize: 13 }}
+                  onClick={() => void select(highlighted, { newTab: false })}
                 >
-                  {cmd.label}
-                </div>
-                {cmd.detail && (
-                  <div
-                    style={{ fontSize: 12, color: "var(--text-subtle)", marginTop: 2 }}
-                  >
-                    {cmd.detail}
-                  </div>
-                )}
+                  Open
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ flex: 1, fontSize: 13 }}
+                  onClick={() => void select(highlighted, { newTab: true })}
+                >
+                  New tab
+                </button>
               </div>
-              {cmd.hint && (
-                <span style={{ fontSize: 11, color: "var(--text-subtle)" }}>{cmd.hint}</span>
-              )}
-              {commandNavigates(cmd) && (
-                <ChevronRight size={12} className="text-text-subtle" aria-hidden />
-              )}
-              </button>
-            ))}
+            ) : null}
+            <p className="px-4 py-2 text-[11px] text-center m-0" aria-hidden>
+              Tap to open · Hold for new tab
+            </p>
           </div>
+        ) : (
           <div
             aria-hidden
             className="flex items-center justify-center gap-3 px-4 py-2 text-[11px]"
@@ -769,8 +780,81 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             <span>⇧↵ new tab</span>
             <span>esc close</span>
           </div>
-        </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+function PaletteResultRow({
+  cmd,
+  idx,
+  highlightIdx,
+  isMobile,
+  onHighlight,
+  onSelect,
+}: {
+  cmd: Command;
+  idx: number;
+  highlightIdx: number;
+  isMobile: boolean;
+  onHighlight: () => void;
+  onSelect: (cmd: Command, opts?: { newTab?: boolean }) => void | Promise<void>;
+}) {
+  const touchBind = usePaletteRowPress(
+    () => void onSelect(cmd, { newTab: false }),
+    () => void onSelect(cmd, { newTab: true }),
+  );
+
+  const active = idx === highlightIdx;
+
+  // Mobile spreads `touchBind` whole: it is already exactly the handler set the
+  // row needs, and re-listing its five keys only gave them room to drift.
+  return (
+    <button
+      id={`cmd-${cmd.id}`}
+      type="button"
+      role="option"
+      aria-selected={active}
+      onMouseEnter={onHighlight}
+      {...(isMobile
+        ? touchBind
+        : { onClick: (e: MouseEvent) => void onSelect(cmd, { newTab: e.shiftKey }) })}
+      style={{
+        width: "100%",
+        textAlign: "left",
+        padding: "8px 14px",
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        background: active ? "var(--bg-elevated)" : "transparent",
+        border: "none",
+        color: "var(--text)",
+        fontSize: 13,
+        cursor: "pointer",
+        touchAction: isMobile ? "manipulation" : undefined,
+      }}
+    >
+      <CommandIcon kind={cmd.kind} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {cmd.label}
+        </div>
+        {cmd.detail && (
+          <div style={{ fontSize: 12, color: "var(--text-subtle)", marginTop: 2 }}>{cmd.detail}</div>
+        )}
+      </div>
+      {cmd.hint && <span style={{ fontSize: 11, color: "var(--text-subtle)" }}>{cmd.hint}</span>}
+      {commandNavigates(cmd) && (
+        <ChevronRight size={12} className="text-text-subtle" aria-hidden />
+      )}
+    </button>
   );
 }
 

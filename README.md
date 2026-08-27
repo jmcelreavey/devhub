@@ -258,16 +258,16 @@ The persona is split into three layers to minimize token usage:
 
 | Layer | File                                                 | Tokens | When Loaded                          |
 | ----- | ---------------------------------------------------- | ------ | ------------------------------------ |
-| L0    | `persona/identity.txt`                               | ~200   | Every message                        |
-| L1    | `persona/shared-persona.md`                          | ~800   | Every session                        |
-| L2    | `persona/deep-preferences.md` + `persona/modes/*.md` | ~500   | On demand (`deep-preferences` skill) |
+| L0    | `persona/identity.txt`                               | ~250   | Every message (Cursor `.mdc`; not inlined in `AGENTS.md`) |
+| L1    | `persona/shared-persona.md`                          | ~400   | Every session (same)                                      |
+| L2    | `persona/modes/*.md`                                 | ~200   | On demand — open the matching mode file, not a wrapper skill |
 
-**Why split?** L0 loads on every single message, so it needs to be lean. L1 loads once per session and contains core engineering standards. L2 only loads when the session involves teaching, code review, debugging, or other specific contexts — saving ~500 tokens on every session that doesn't need it.
+**Why split?** L0/L1 stay short and load once. L2 is a single mode file when teaching/review/greenfield actually needs it — not a wrapper skill, not the whole modes directory.
 
 Persona is delivered to AI tools via two mechanisms:
 
-1. **AGENTS.md** (primary) — Placed at repo root, read automatically by Claude Code, Codex CLI, OpenCode, and Cursor. This is the universal standard.
-2. **HTML comment injection** (fallback) — `syncPersona()` injects L0/L1 into tool configs (CLAUDE.md, .cursorrules, etc.) and writes always-on Cursor rules under `~/.cursor/rules/devhub-persona-*.mdc`.
+1. **Cursor `.mdc` + tool configs** — `syncPersona()` writes full L0/L1 into Claude/Codex/OpenCode marker blocks and always-on Cursor rules under `~/.cursor/rules/devhub-persona-*.mdc`.
+2. **Repo `AGENTS.md`** — Cloud/plugin/gotcha rules plus L0/L1 **pointers**. Cursor already has the full text from `.mdc`; inlining both would load it twice.
 
 ### Customizing Your Persona
 
@@ -286,7 +286,7 @@ Nothing here runs on a timer by itself — **you (or the AI using skills) invoke
 ```
 After significant work (manual)
     ↓
-session-notes skill → notes/sessions/YYYY-MM-DD-HHMM.md
+devhub-recap skill (when asked) → notes/sessions/YYYY-MM-DD-HHMM.md
     ↓
 When you choose to run it: learnings / optimize skills → notes/learnings/{topic}.md
     ↓
@@ -295,7 +295,7 @@ notes/index.md updated (manually or via skill guidance)
 Next session: AI reads index.md → loads relevant learnings on demand
 ```
 
-**Tier 1 — Session Notes** (`notes/sessions/`): Raw captures written after significant work (via the `session-notes` skill when you run it). These are not meant to be fully loaded into context (too verbose).
+**Tier 1 — Session Notes** (`notes/sessions/`): Raw captures written after significant work (via `devhub-recap` when you ask for it). These are not meant to be fully loaded into context (too verbose).
 
 **Tier 2 — Distilled Learnings** (`notes/learnings/`): Reusable insights, organized by topic. Populated when you run `learnings` / `optimize` (or edit by hand).
 
@@ -303,7 +303,7 @@ Next session: AI reads index.md → loads relevant learnings on demand
 
 ### Session Note Format
 
-Notes are captured using the `session-notes` skill after significant work. Each note includes:
+Notes are captured with `devhub-recap` when you ask — agents should not volunteer them. Each note includes:
 
 - Frontmatter (date, tools, models, projects, tags, rating)
 - What was asked, what happened, key outputs
@@ -327,7 +327,7 @@ Shared skills live in `skills/shared/`. Each skill has a `SKILL.md` describing w
 | Skill             | Purpose                                                    | When to Use                                           |
 | ----------------- | ---------------------------------------------------------- | ----------------------------------------------------- |
 | **ai-sync**       | Sync repo skills and persona to local tools                | After pulling changes, on new machine setup           |
-| **session-notes** | Capture structured notes after significant work            | After completing non-trivial tasks                    |
+| **devhub-recap**  | Capture structured notes after significant work            | When you ask to recap — not volunteered               |
 | **learnings**     | Reference distilled knowledge from past sessions           | At session start, when encountering familiar problems |
 | **optimize**      | Self-learning loop: review notes, propose improvements     | Weekly, or when you feel prompts aren't improving     |
 | **rubber-duck**   | Independent second-opinion review of the current direction | Before major decisions, when something feels off      |
@@ -422,7 +422,7 @@ The `optimize` skill is the automation layer on top of the notes system. It revi
 
 #### Skill Changes
 
-- [ ] session-notes/SKILL.md: Add "token_cost" field (consistently missing)
+- [ ] devhub-recap/SKILL.md: Add "token_cost" field (consistently missing)
 
 #### Learnings Actions
 
@@ -481,9 +481,9 @@ See [`docs/reference/platform-support.md`](docs/reference/platform-support.md) f
 
 ## Workflow Summary
 
-1. **Session start**: AI reads `AGENTS.md` → loads L0 persona → checks `notes/index.md` for relevant context
+1. **Session start**: Cursor already has L0/L1 via `.mdc`. Cloud reads `persona/identity.txt` then `persona/shared-persona.md` if those rules are missing. Then `notes/index.md` if relevant.
 2. **During work**: AI uses shared skills and follows persona standards
-3. **End of task**: Ask AI to run `session-notes` skill to capture what happened
+3. **End of task**: Ask AI to run `devhub-recap` if you want a session note (agents should not volunteer this)
 4. **Weekly**: Ask AI to run `optimize` skill to review patterns and propose improvements
 5. **Periodic**: Optional **Scheduled Jobs** in the dashboard (in-process scheduler) can run Update & Sync / Validate while DevHub is running
 

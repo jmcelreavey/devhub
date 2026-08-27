@@ -18,7 +18,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import {
   dashboardDir,
@@ -34,6 +34,25 @@ const require = createRequire(import.meta.url);
 
 function log(msg) {
   process.stdout.write(`[stage-dashboard] ${msg}\n`);
+}
+
+/** Git commit the bundle is built from — compared at runtime to the linked checkout. */
+function writeBundleSourceMarker() {
+  const res = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+  if (res.status !== 0) {
+    log("warning: could not read checkout commit for bundle-source.json — stale banner will stay quiet");
+    return;
+  }
+  const commit = res.stdout.trim();
+  if (!commit) return;
+  fs.writeFileSync(
+    path.join(serverDir, "bundle-source.json"),
+    `${JSON.stringify({ commit, builtAt: new Date().toISOString() }, null, 2)}\n`,
+  );
+  log(`recorded bundle source ${commit.slice(0, 7)}`);
 }
 
 function copyDir(from, to) {
@@ -169,6 +188,7 @@ function stageServer() {
   materialiseExternalPackages();
   stripEnvFiles();
   stripForeignNativeBinaries();
+  writeBundleSourceMarker();
 }
 
 /**

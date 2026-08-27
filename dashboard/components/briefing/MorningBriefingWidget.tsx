@@ -7,6 +7,7 @@ import { useLive } from "@/lib/hooks/use-fetch";
 import type { DailyBriefing } from "@/lib/morning-briefing";
 import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
 import { DashboardBriefingWeather } from "@/components/briefing/DashboardBriefingWeather";
+import { BriefingOwnedReposDigest, type BriefingRepoAttentionRow } from "@/components/briefing/BriefingOwnedReposDigest";
 
 interface BriefingResponse {
   ok: boolean;
@@ -15,6 +16,7 @@ interface BriefingResponse {
   cached?: boolean;
   code?: string;
   message?: string;
+  ownedRepoAttention?: BriefingRepoAttentionRow[];
 }
 
 interface MorningBriefingWidgetProps {
@@ -88,6 +90,9 @@ export function MorningBriefingWidget({ collapsed = false, onToggle }: MorningBr
           ) : (
             <div key={data?.generatedAt ?? "briefing"} className="briefing-settle space-y-2.5">
               {b.weather && <DashboardBriefingWeather weather={b.weather} />}
+              {data?.ownedRepoAttention?.length ? (
+                <BriefingOwnedReposDigest rows={data.ownedRepoAttention} />
+              ) : null}
             </div>
           )}
         </>

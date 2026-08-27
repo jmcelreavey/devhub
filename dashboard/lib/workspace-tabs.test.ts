@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_WORKSPACE_TABS,
   activateTab,
   applyPaletteNavigation,
+  canOpenTab,
   closeTab,
   createTab,
   cycleTab,
@@ -9,6 +11,8 @@ import {
   jumpToIndex,
   navigateCurrent,
   normalizeHref,
+  openBlank,
+  openNew,
   parseStored,
   serializeState,
 } from "./workspace-tabs";
@@ -70,6 +74,44 @@ describe("navigateCurrent / openNew", () => {
     const next = applyPaletteNavigation(state(["/", "/repos/demo-app"], 0), "/repos/demo-app", true);
     expect(next.tabs).toHaveLength(2);
     expect(next.activeId).toBe("id-1");
+  });
+});
+
+describe("openBlank", () => {
+  it("opens a fresh Today tab and focuses it", () => {
+    const next = openBlank(state(["/work"]));
+    expect(next.tabs.map((t) => t.href)).toEqual(["/work", "/"]);
+    expect(next.tabs[1]?.title).toBe("Today");
+    expect(next.activeId).toBe(next.tabs[1]?.id);
+  });
+
+  /**
+   * The whole point of the "+" button: `openNew` would focus the existing
+   * Today tab, which looks like the button did nothing.
+   */
+  it("duplicates rather than focusing when that href is already open", () => {
+    const next = openBlank(state(["/"]));
+    expect(next.tabs).toHaveLength(2);
+    expect(next.tabs.map((t) => t.href)).toEqual(["/", "/"]);
+    expect(next.activeId).toBe(next.tabs[1]?.id);
+  });
+
+  it("takes an explicit href", () => {
+    expect(openBlank(state(["/"]), "/repos/acme-api").tabs[1]?.href).toBe("/repos/acme-api");
+  });
+
+  /** Storage truncates to the cap on read, so opening past it lost tabs silently. */
+  it("stops at the cap instead of opening a tab that will not survive a reload", () => {
+    const full = state(Array.from({ length: MAX_WORKSPACE_TABS }, (_, i) => `/repos/r${i}`));
+    expect(canOpenTab(full)).toBe(false);
+    expect(openBlank(full)).toBe(full);
+    expect(openNew(full, "/brand-new")).toBe(full);
+  });
+
+  it("allows opening one below the cap", () => {
+    const nearly = state(Array.from({ length: MAX_WORKSPACE_TABS - 1 }, (_, i) => `/repos/r${i}`));
+    expect(canOpenTab(nearly)).toBe(true);
+    expect(openBlank(nearly).tabs).toHaveLength(MAX_WORKSPACE_TABS);
   });
 });
 

@@ -17,6 +17,17 @@ export interface WorkspaceTabsState {
 export const WORKSPACE_TABS_STORAGE_KEY = "devhub.workspace-tabs";
 const STORAGE_VERSION = 1;
 
+/**
+ * Hard cap on open tabs.
+ *
+ * Storage already truncated to this on read, so anything above it was a tab
+ * that silently disappeared on the next reload. Enforce it when opening too.
+ */
+export const MAX_WORKSPACE_TABS = 24;
+
+/** Where the "+" button lands — Today, the same place a cold start opens. */
+export const NEW_TAB_HREF = "/";
+
 let idSeq = 0;
 
 export function createTabId(): string {
@@ -103,8 +114,31 @@ export function openNew(state: WorkspaceTabsState, href: string): WorkspaceTabsS
   const n = normalizeHref(href);
   const existing = findByHref(state, n);
   if (existing) return { tabs: state.tabs, activeId: existing.id };
-  const tab = createTab(n);
+  return appendTab(state, n);
+}
+
+/**
+ * The "+" button: always a fresh tab, even when one already shows this href.
+ *
+ * Deliberately not `openNew` — that focuses a matching tab, so pressing "+"
+ * with a Today tab already open would look like nothing happened.
+ */
+export function openBlank(
+  state: WorkspaceTabsState,
+  href: string = NEW_TAB_HREF,
+): WorkspaceTabsState {
+  return appendTab(state, normalizeHref(href));
+}
+
+function appendTab(state: WorkspaceTabsState, normalizedHref: string): WorkspaceTabsState {
+  if (state.tabs.length >= MAX_WORKSPACE_TABS) return state;
+  const tab = createTab(normalizedHref);
   return { tabs: [...state.tabs, tab], activeId: tab.id };
+}
+
+/** False when the strip is full — the "+" button disables rather than no-oping. */
+export function canOpenTab(state: WorkspaceTabsState): boolean {
+  return state.tabs.length < MAX_WORKSPACE_TABS;
 }
 
 export function applyPaletteNavigation(
@@ -167,7 +201,7 @@ export function parseStored(raw: string | null, fallbackHref: string): Workspace
   try {
     const data = JSON.parse(raw) as StoredV1;
     if (data?.v !== STORAGE_VERSION || !Array.isArray(data.tabs)) return seedState(fallbackHref);
-    const tabs = data.tabs.filter(isTab).slice(0, 24);
+    const tabs = data.tabs.filter(isTab).slice(0, MAX_WORKSPACE_TABS);
     if (tabs.length === 0) return seedState(fallbackHref);
     const activeId = tabs.some((t) => t.id === data.activeId) ? data.activeId : tabs[0]!.id;
     return { tabs, activeId };

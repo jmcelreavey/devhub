@@ -1,0 +1,11 @@
+{
+  "kind": "cold-read",
+  "repo": "org/widgets",
+  "sha": "abc123def456",
+  "material": {
+    "title": "Cold read · org/widgets",
+    "prompt": "Read this diff cold — what changed and why?",
+    "files": ["src/handler.ts", "src/handler.test.ts"]
+  },
+  "answer": "Adds empty-payload guard in handler.ts."
+}

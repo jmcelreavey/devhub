@@ -154,6 +154,10 @@ post-implementation step.** If they fail, fix or report - do not offer a PR
 on a red baseline. Check the final diff for unrelated changes and record the
 exact verification commands/results in the task note summary.
 
+If the target is the DevHub dashboard UI, load `devhub-dashboard-verify` before
+opening a browser. **localhost:1337 is the packaged production app**, not
+webpack — do not test checkout changes there.
+
 ## 4.5 Pre-commit review gate
 
 Before offering commit/push, invoke the `pr-explain-review` skill in local-diff

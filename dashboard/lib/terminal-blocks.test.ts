@@ -11,6 +11,8 @@ import {
   parseOsc133,
   parseStructuredExit,
   previewBlockCommand,
+  groupCommandBlocks,
+  formatBlocksForClipboard,
   readTerminalSelection,
   setTerminalSelectionDrag,
   shouldRecordTypedCommand,
@@ -234,6 +236,42 @@ describe("stripRightPrompt with an icon (Nerd Font) prompt", () => {
 
   it("does not mistake a redirect for the prompt glyph", () => {
     expect(shouldRecordTypedCommand("echo hi > out.txt", `${"\uf07c  ~/dev \u276f"} echo hi > out.txt`)).toBe(true);
+  });
+});
+
+describe("groupCommandBlocks", () => {
+  const mk = (
+    id: string,
+    startedAt: number,
+    endedAt: number,
+    pending = false,
+  ) => ({
+    id,
+    command: id,
+    output: `${id}\n`,
+    startedAt,
+    endedAt,
+    source: "typed" as const,
+    pending,
+  });
+
+  it("returns one group for a short burst", () => {
+    const blocks = [mk("a", 0, 100), mk("b", 200, 400)];
+    expect(groupCommandBlocks(blocks)).toHaveLength(1);
+    expect(groupCommandBlocks(blocks)[0]!.blocks).toHaveLength(2);
+  });
+
+  it("splits on long idle gaps", () => {
+    const blocks = [mk("a", 0, 100), mk("b", 200_000, 200_100)];
+    expect(groupCommandBlocks(blocks)).toHaveLength(2);
+  });
+
+  it("formats blocks for clipboard", () => {
+    expect(formatBlocksForClipboard([mk("a", 0, 100)])).toBe("$ a\na");
+  });
+
+  it("separates multiple blocks with a blank line", () => {
+    expect(formatBlocksForClipboard([mk("a", 0, 100), mk("b", 200, 400)])).toBe("$ a\na\n\n$ b\nb");
   });
 });
 

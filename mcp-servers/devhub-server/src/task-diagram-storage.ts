@@ -5,15 +5,12 @@ import { NotesStorage } from "./storage.ts";
 import { NOTE_SIZE, geoHeight, indexKeyAt, noteGrowY } from "./diagram-geometry.ts";
 import { buildGraphRecords, type GraphSpec } from "./diagram-graph.ts";
 import { normalizeTaskLinkState } from "../../../shared/task-note/index.ts";
+// The shared type, not a hand-copied one. The local duplicate was missing the
+// "tag" kind, so refs coming back from `normalizeTaskLinkState` no longer fit
+// the field they were being written into.
+import type { EntityRef } from "../../../shared/entity-note/index.ts";
 
-// keep in sync with dashboard/lib/tasks/types.ts Task
-export interface EntityRef {
-  kind: "task" | "meeting" | "pr" | "note" | "diagram" | "calendar" | "jira" | "repo";
-  id: string;
-  label: string;
-  href?: string;
-  marker?: string;
-}
+export type { EntityRef };
 
 export interface Task {
   id: string;
@@ -55,16 +52,20 @@ export class TasksStorage {
     return path.join(this.dir, `${date}.json`);
   }
 
+  /**
+   * Reads are verbatim.
+   *
+   * This used to run `normalizeTaskLinkState` over every task on every read,
+   * so callers saw a `text`/`jiraKey` that was never on disk — a migration
+   * that never migrated, and one any later write would have persisted by
+   * accident. Normalisation belongs on the write path (`update`), which is
+   * where it now happens exclusively.
+   */
   private read(date: string): Task[] {
     const fp = this.file(date);
     if (!fs.existsSync(fp)) return [];
     try {
-      const tasks = JSON.parse(fs.readFileSync(fp, "utf-8")) as Task[];
-      return tasks.map((task) => {
-        if (task.jiraKey || !task.links?.some((l) => l.kind === "jira")) return task;
-        const normalized = normalizeTaskLinkState(task.text, task.jiraKey, task.links);
-        return { ...task, text: normalized.text, jiraKey: normalized.jiraKey, links: normalized.links };
-      });
+      return JSON.parse(fs.readFileSync(fp, "utf-8")) as Task[];
     } catch {
       return [];
     }

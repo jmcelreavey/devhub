@@ -7,7 +7,7 @@ import { HoverTip } from "@/components/ui/HoverTip";
 import { SearchInput } from "@/components/ui/SearchInput";
 import {
   TaskList,
-  renderTaskTextContent,
+  TaskTextContent,
   matchesTaskSearch,
 } from "@/components/tasks/TaskList";
 import type { Task } from "@/components/tasks/TaskList";
@@ -260,7 +260,7 @@ export function TasksOverlay({ open, onClose }: TasksOverlayProps) {
                         opacity: task.abandonedAt ? 0.5 : 0.7,
                       }}
                     >
-                      {renderTaskTextContent(task.text)}
+                      <TaskTextContent text={task.text} />
                     </span>
                     {task.abandonedAt && task.abandonReason && (
                       <span

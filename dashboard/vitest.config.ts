@@ -17,6 +17,7 @@ export default defineConfig({
      * looks like a regression. A genuinely hung test still fails, just in 30s.
      */
     testTimeout: 30_000,
+    hookTimeout: 30_000,
     /**
      * Default `node` — almost everything under test is pure logic, and booting
      * a DOM per file would be overhead for no gain.

@@ -180,7 +180,12 @@ export default function PrsPage() {
         </div>
       </div>
 
-      {error && <FetchError message="Couldn't reach GitHub." onRetry={() => mutate()} />}
+      {error && !data?.stale && <FetchError message="Couldn't reach GitHub." onRetry={() => mutate()} />}
+      {data?.stale && data.warning && (
+        <p className="mb-3 text-xs text-warning" role="status">
+          {data.warning}
+        </p>
+      )}
 
       {/* One box: type to filter, paste a PR URL to pin it. */}
       <div className="mb-4 space-y-2">

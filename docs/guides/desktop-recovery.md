@@ -164,6 +164,14 @@ The installed `.app` ships a **frozen** Next.js build inside `Contents/Resources
 
 If rebuild fails, open **View → Show Logs** or **System → Logs** (`/logs`) for compiler output before retrying.
 
+### Automatic nudge
+
+Staging writes `bundle-source.json` (git commit) beside the packaged `server.js`. When the sidecar sets `DEVHUB_PACKAGED_RUNTIME=1` and your **linked checkout** HEAD differs from that commit, the dashboard shows an amber banner above the main content with **View → Rebuild Dashboard…** and **View → Attach to Dev Server…**. Poll `GET /api/status/packaged-checkout` for `{ stale, bundleCommit, checkoutCommit, reason }`.
+
+After `scripts/devhub-ship.sh` completes, the script prints the same next steps — shipping does not rebuild the `.app`.
+
+Pre-marker installs (no `bundle-source.json` yet) stay quiet until the next Rebuild or app update.
+
 ## Rebuilding from source
 
 If you have the repository:

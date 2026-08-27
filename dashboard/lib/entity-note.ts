@@ -13,6 +13,7 @@ export {
   canonicalizeEntityRef,
   defaultHrefForRef,
   entityKey,
+  escapeRegExp,
   extractTags,
   formatEntityRefLine,
   joinMarkdownLines,

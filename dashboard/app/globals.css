@@ -2061,24 +2061,45 @@ body[data-grid-resizing="true"] * {
 
 /* Browser-style workspace tabs — routes, not iframes. Below the top bar. */
 .workspace-tabs {
-  display: none;
+  display: block;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-muted);
   background: var(--bg-sidebar);
 }
+/*
+ * Mobile-only, and the component only renders it on /repos — the one page that
+ * puts a second tablist (repo group filters) directly under this strip.
+ */
+.workspace-tabs-hint {
+  padding: 0 10px 4px;
+  font-size: 10px;
+  color: var(--text-subtle);
+  letter-spacing: 0.02em;
+}
 @media (min-width: 768px) {
-  .workspace-tabs {
-    display: block;
+  .workspace-tabs-hint {
+    display: none;
   }
+}
+/* The "+" sits outside the scroller so it stays reachable once tabs overflow.
+   Bottom-aligned, because the scroller's top padding is what seats the tabs. */
+.workspace-tabs-bar {
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
 }
 .workspace-tabs-scroll {
   display: flex;
+  /* Shrink-only: growing would push the "+" to the far right of the bar,
+     stranding it away from the last tab. */
+  flex: 0 1 auto;
   flex-wrap: nowrap;
   align-items: stretch;
   gap: 2px;
   overflow-x: auto;
   overflow-y: hidden;
   padding: 4px 8px 0;
+  min-width: 0;
   scrollbar-width: thin;
 }
 .workspace-tab {
@@ -2148,6 +2169,56 @@ body[data-grid-resizing="true"] * {
   color: var(--text);
   background: var(--bg-elevated);
 }
+
+.workspace-tab-new {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin: 0 0 1px -4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition:
+    background 220ms var(--ease-swift),
+    color 220ms var(--ease-swift);
+}
+.workspace-tab-new:hover:not(:disabled) {
+  color: var(--text);
+  background: color-mix(in oklab, var(--bg-elevated) 70%, transparent);
+}
+.workspace-tab-new:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Touch sizing — after the base rules it overrides, not spliced into the
+   middle of them. `min-*` is what makes the 16px close button reach 32px. */
+@media (max-width: 767px) {
+  .workspace-tabs-scroll {
+    padding: 6px 8px 0;
+    -webkit-overflow-scrolling: touch;
+  }
+  .workspace-tab {
+    max-width: 140px;
+    min-height: 36px;
+    height: 36px;
+    font-size: 11px;
+  }
+  .workspace-tab-close {
+    min-width: 32px;
+    min-height: 32px;
+  }
+  .workspace-tab-new {
+    min-width: 36px;
+    min-height: 36px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .workspace-tab {
     transition: none;
@@ -3132,6 +3203,53 @@ body[data-density="compact"] .card {
   .briefing-settle {
     animation: none;
   }
+}
+
+.briefing-repos-digest {
+  border-top: 1px solid var(--border-muted);
+  padding-top: var(--space-2);
+}
+.briefing-repos-digest-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.briefing-repos-digest-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.briefing-repos-digest-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.briefing-repos-digest-row:hover {
+  color: var(--text);
+}
+.briefing-repos-digest-name {
+  font-weight: 500;
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.briefing-repos-digest-reason {
+  flex-shrink: 0;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--warning);
 }
 
 /* ── Morning briefing: weather-driven atmosphere ── */

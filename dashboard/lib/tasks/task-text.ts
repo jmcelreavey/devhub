@@ -11,17 +11,19 @@
  * `components/tasks/TaskText.tsx`.
  */
 import { todayISO } from "@/lib/utils";
-import { TAG_RE, type EntityRef } from "@/lib/entity-note";
+import { TAG_RE, escapeRegExp } from "@/lib/entity-note";
 import type { Task } from "@/lib/tasks/types";
+
+// Jira-key rewriting lives in `shared/task-note` — MCP writes tasks too, and
+// the dashboard's private copy had already drifted (it upper-cased the ref id
+// where shared runs it through `parseJiraIssueKey` first).
+export { rewriteTaskKey, textWithJiraLinkPromotion } from "@/lib/task-note";
+export { escapeRegExp };
 
 export const MD_LINK_RE = /\[([^\]]+)\]\(([^)]+)\)/g;
 
 /** A bare URL, excluding one already inside a markdown link's parentheses. */
 export const BARE_URL_RE = /(?<!\(\s?)https?:\/\/[^\s)\]]+/;
-
-export function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 /** Remove a Jira key from the task text once it's shown as a chip instead. */
 export function stripLinkedJiraKeyFromText(text: string, jiraKey: string): string {
@@ -34,46 +36,12 @@ export function stripLinkedJiraKeyFromText(text: string, jiraKey: string): strin
     .trim();
 }
 
-/**
- * Point a task at a newly created Jira ticket: replace its current key with the
- * new one (so the chip/status/link all track the new ticket), or prepend the
- * new key when the task had none.
- */
-
 /** Remove a hashtag from task text once it is shown as a chip instead. */
 export function stripTagToken(text: string, tag: string): string {
   return text
     .replace(new RegExp(`#${escapeRegExp(tag)}\\b`, "gi"), "")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-export function rewriteTaskKey(text: string, oldKey: string | undefined, newKey: string): string {
-  if (oldKey) {
-    const re = new RegExp(`\\b${escapeRegExp(oldKey)}\\b`, "g");
-    if (re.test(text)) return text.replace(new RegExp(`\\b${escapeRegExp(oldKey)}\\b`, "g"), newKey);
-  }
-  return `${newKey} ${text}`.replace(/\s+/g, " ").trim();
-}
-
-/**
- * When a task gains a Jira hop-link and isn't already Jira-associated, prepend
- * the issue key to the title so `extractJiraKey` / the Jira chip pick it up.
- *
- * Does not demote on link removal — edit the title (or clear the key) to change
- * association. Skips when the key is already in the text.
- */
-export function textWithJiraLinkPromotion(
-  text: string,
-  jiraKey: string | undefined,
-  links: EntityRef[] | undefined,
-): string {
-  if (jiraKey) return text;
-  const jira = links?.find((l) => l.kind === "jira" && l.id);
-  if (!jira) return text;
-  const key = jira.id.toUpperCase();
-  if (new RegExp(`\\b${escapeRegExp(key)}\\b`, "i").test(text)) return text;
-  return rewriteTaskKey(text, undefined, key);
 }
 
 export interface TextPart {

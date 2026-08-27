@@ -10,31 +10,42 @@ related:
 ---
 
 # Token Budget
+
 DevHub keeps AI context useful by separating always-loaded guidance from on-demand knowledge.
+
 ## Why Token Budget Matters
+
 AI tools have limited context. Loading too much stale or irrelevant information makes sessions slower and less focused.
-DevHub uses layers so the assistant sees the right amount of context at the right time.
+
 ## Persona Layers
-| Layer | Size Goal | Purpose |
-| --- | --- | --- |
-| L0 Identity | Very small (~200 tok) | Communication style and role |
-| L1 Shared persona | Small (~685 tok) | Core engineering standards |
-| L2 Deep preferences | On demand (~500 tok total) | Mode files under `persona/modes/` via `deep-preferences` skill |
+
+| Layer | Size Goal | Purpose | Where it loads |
+| --- | --- | --- | --- |
+| L0 Identity | Tiny (~250 tok) | Tone and how to work with JM | Cursor: `~/.cursor/rules/devhub-persona-identity.mdc`. Claude/Codex/OpenCode: marker blocks. **Not** inlined in repo `AGENTS.md`. |
+| L1 Shared persona | Small (~400 tok) | Engineering standards that actually apply here | Same as L0. Repo `AGENTS.md` is a pointer. |
+| L2 Deep preferences | On demand (~200 tok per mode) | Teaching, review, greenfield, Python/API/DB, etc. | Read `persona/modes/<mode>.md` directly. Do not load a wrapper skill body first. |
+
+Repo `AGENTS.md` keeps Cloud/plugin/gotcha rules only. Inlining L0/L1 there **and** in Cursor `.mdc` files loaded the same text twice.
+
 ## Notes Layers
+
 | Layer | Purpose |
 | --- | --- |
 | Daily notes | Current working context |
 | Learnings | Distilled reusable knowledge |
-| Index or map | Helps decide what to load |
+| Recap | On request via `devhub-recap` — do not volunteer session notes |
+
 ## Good Practices
+
 - Keep always-loaded files short.
+- One copy of L0/L1 per tool. Don't sync the same block into two always-on Cursor surfaces.
 - Move detailed examples into on-demand docs or learnings.
-- Distill repeated session notes into focused learnings.
-- Archive old notes when they stop being useful.
 - Avoid duplicating the same instruction in many places.
+
 ## What Not To Put In Persona
+
 - Long project documentation.
 - Temporary task context.
 - Secrets.
 - Facts that change often.
-Use docs and notes for those instead.
+- Generic SaaS defaults this repo does not run (public REST/GraphQL, SQL migrations, Python). Those live in L2 `project-setup` / `tool-preferences`.

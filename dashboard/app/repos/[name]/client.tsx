@@ -122,7 +122,9 @@ export function RepoHub({ name }: { name: string }) {
       <div className="repo-hub-columns mt-5">
         <section>
           <h2 className="text-sm font-semibold text-text mb-2">Open PRs</h2>
-          {prs.loading ? <SkeletonRows count={3} /> : prs.error ? <p className="text-xs text-danger">Could not load PRs.</p> : prs.results.length ? (
+          {prs.loading ? <SkeletonRows count={3} /> : prs.error ? (
+            <FetchError message={prs.error} onRetry={prs.retry} />
+          ) : prs.results.length ? (
             <div className="divide-y divide-border">{prs.results.map((row) => <PrRow key={row.url} row={row} kind="reviewed" />)}</div>
           ) : <p className="text-xs text-text-subtle">No open PRs.</p>}
         </section>

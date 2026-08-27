@@ -9,3 +9,6 @@ When scaffolding a new project:
 - Create a `.env.example` with all required variables documented
 - Include a basic CI pipeline (even if it only runs tests and lint)
 - Write a README with: what it does, how to run it, how to test it
+- REST for CRUD; GraphQL only if the relationships are actually complex
+- Version public APIs from day one; OpenAPI if anything is public
+- Migrations for schema changes; index real query patterns; UUIDs if it's distributed

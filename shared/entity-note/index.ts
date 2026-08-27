@@ -57,6 +57,17 @@ export function entityKey(ref: Pick<EntityRef, "kind" | "id">): string {
   return `${ref.kind}:${ref.id}`;
 }
 
+/**
+ * Escape a string for literal use inside a RegExp.
+ *
+ * Lives here because tags, Jira keys and note titles all get spliced into
+ * patterns on both sides of the vault boundary; three private copies had
+ * already accumulated across dashboard and MCP.
+ */
+export function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export function joinMarkdownLines(lines: Array<string | null | undefined>): string {
   return lines.filter((line): line is string => line != null).join("\n");
 }

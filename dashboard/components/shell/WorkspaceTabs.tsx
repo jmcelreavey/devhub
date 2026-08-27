@@ -8,19 +8,24 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { FileText, FolderGit2, LayoutGrid, X } from "lucide-react";
+import { FileText, FolderGit2, LayoutGrid, Plus, X } from "lucide-react";
 import { workspaceTabChordFromEvent } from "@/lib/app-shortcuts";
+import { workspaceTabHrefFromClick } from "@/lib/workspace-tab-links";
 import {
+  MAX_WORKSPACE_TABS,
   activateTab,
+  canOpenTab,
   closeTab,
   cycleTab,
   jumpToIndex,
   loadWorkspaceTabs,
   navigateCurrent,
   normalizeHref,
+  openBlank,
   openNew,
   saveWorkspaceTabs,
   seedState,
@@ -33,6 +38,9 @@ interface WorkspaceTabsApi {
   tabs: WorkspaceTab[];
   activeId: string;
   openHref: (href: string, opts?: { newTab?: boolean }) => void;
+  /** The "+" button: always a fresh tab, never a focus of an existing one. */
+  newTab: (href?: string) => void;
+  canOpen: boolean;
   activate: (id: string) => void;
   close: (id: string) => void;
 }
@@ -126,6 +134,13 @@ export function WorkspaceTabsProvider({ children }: { children: ReactNode }) {
     [apply],
   );
 
+  const newTab = useCallback(
+    (nextHref?: string) => {
+      apply(openBlank(stateRef.current, nextHref));
+    },
+    [apply],
+  );
+
   const activate = useCallback(
     (id: string) => {
       apply(activateTab(stateRef.current, id));
@@ -155,9 +170,41 @@ export function WorkspaceTabsProvider({ children }: { children: ReactNode }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [apply]);
 
+  /**
+   * Shift / ⌘ / middle-click on an in-app link opens a workspace tab.
+   *
+   * Capture phase, because Next's `<Link>` deliberately passes modified clicks
+   * through to the browser — by the time a bubbled handler ran, the browser had
+   * already been told to open a window. Capture also lets one listener cover
+   * every internal link in the app instead of each row wiring its own.
+   */
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      const nextHref = workspaceTabHrefFromClick(event, window.location.origin);
+      if (!nextHref) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openHref(nextHref, { newTab: true });
+    };
+    document.addEventListener("click", onClick, true);
+    document.addEventListener("auxclick", onClick, true);
+    return () => {
+      document.removeEventListener("click", onClick, true);
+      document.removeEventListener("auxclick", onClick, true);
+    };
+  }, [openHref]);
+
   const api = useMemo<WorkspaceTabsApi>(
-    () => ({ tabs: state.tabs, activeId: state.activeId, openHref, activate, close }),
-    [state.tabs, state.activeId, openHref, activate, close],
+    () => ({
+      tabs: state.tabs,
+      activeId: state.activeId,
+      openHref,
+      newTab,
+      canOpen: canOpenTab(state),
+      activate,
+      close,
+    }),
+    [state, openHref, newTab, activate, close],
   );
 
   return <WorkspaceTabsContext.Provider value={api}>{children}</WorkspaceTabsContext.Provider>;
@@ -178,55 +225,130 @@ function TabKindIcon({ kind }: { kind: WorkspaceTabKind }) {
 
 export function WorkspaceTabStrip() {
   const ctx = useContext(WorkspaceTabsContext);
+  const pathname = usePathname();
+  const stripRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Arrow keys move between tabs, Home/End jump to the ends.
+   *
+   * These are `<div role="tab">`, so none of it comes for free — before this
+   * the strip was unreachable by keyboard entirely. The ⌘1-9 / Ctrl+Tab chords
+   * worked, but they are undiscoverable and do nothing for a screen reader
+   * walking the tablist.
+   */
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>, id: string, index: number) => {
+    if (!ctx) return;
+    const last = ctx.tabs.length - 1;
+    const to =
+      event.key === "ArrowRight"
+        ? Math.min(index + 1, last)
+        : event.key === "ArrowLeft"
+          ? Math.max(index - 1, 0)
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? last
+              : null;
+
+    if (to !== null) {
+      event.preventDefault();
+      const next = ctx.tabs[to];
+      if (!next) return;
+      ctx.activate(next.id);
+      // Follow-the-focus, matching how a click behaves.
+      stripRef.current?.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(next.id)}"]`)?.focus();
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      ctx.activate(id);
+    }
+  };
+
   if (!ctx) {
     return <div className="workspace-tabs" aria-hidden />;
   }
-  const { tabs, activeId, activate, close } = ctx;
+  const { tabs, activeId, activate, close, newTab, canOpen } = ctx;
   const canClose = tabs.length > 1;
+  // Only where the confusion actually exists: /repos renders its own tablist of
+  // repo-group filters right below this one. Everywhere else the hint was
+  // permanent chrome explaining something that wasn't on screen.
+  const showGroupHint = pathname === "/repos";
 
   return (
-    <div className="workspace-tabs" role="tablist" aria-label="Workspace tabs">
-      <div className="workspace-tabs-scroll">
-        {tabs.map((tab, i) => {
-          const active = tab.id === activeId;
-          return (
-            <div
-              key={tab.id}
-              role="tab"
-              aria-selected={active}
-              data-active={active || undefined}
-              className="workspace-tab"
-              onClick={() => activate(tab.id)}
-              onAuxClick={(e) => {
-                if (e.button !== 1 || !canClose) return;
-                e.preventDefault();
-                e.stopPropagation();
-                close(tab.id);
-              }}
-            >
-              <span className="workspace-tab-icon">
-                <TabKindIcon kind={tab.kind} />
-              </span>
-              <span className="workspace-tab-title">
-                {tab.title}
-                <span className="sr-only">{i < 9 ? ` (⌘${i + 1})` : ""}</span>
-              </span>
-              {canClose ? (
-                <button
-                  type="button"
-                  className="workspace-tab-close"
-                  aria-label={`Close ${tab.title}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    close(tab.id);
-                  }}
-                >
-                  <X size={11} aria-hidden />
-                </button>
-              ) : null}
-            </div>
-          );
-        })}
+    <div className="workspace-tabs">
+      {showGroupHint && (
+        <p className="workspace-tabs-hint">Workspace tabs — repo group filters are below</p>
+      )}
+      <div className="workspace-tabs-bar">
+        {/*
+          The tablist wraps only the tabs. The hint and the "+" button used to
+          sit inside it, and a tablist that owns non-tab children reports the
+          wrong tab count and position to assistive tech.
+        */}
+        <div
+          className="workspace-tabs-scroll"
+          role="tablist"
+          aria-label="Workspace tabs"
+          ref={stripRef}
+        >
+          {tabs.map((tab, i) => {
+            const active = tab.id === activeId;
+            return (
+              <div
+                key={tab.id}
+                role="tab"
+                data-tab-id={tab.id}
+                aria-selected={active}
+                // Roving tabindex: one stop for the whole strip, then arrows.
+                tabIndex={active ? 0 : -1}
+                data-active={active || undefined}
+                className="workspace-tab"
+                onClick={() => activate(tab.id)}
+                onKeyDown={(e) => onKeyDown(e, tab.id, i)}
+                onAuxClick={(e) => {
+                  if (e.button !== 1 || !canClose) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  close(tab.id);
+                }}
+              >
+                <span className="workspace-tab-icon">
+                  <TabKindIcon kind={tab.kind} />
+                </span>
+                <span className="workspace-tab-title">
+                  {tab.title}
+                  <span className="sr-only">{i < 9 ? ` (⌘${i + 1})` : ""}</span>
+                </span>
+                {canClose ? (
+                  <button
+                    type="button"
+                    className="workspace-tab-close"
+                    tabIndex={active ? 0 : -1}
+                    aria-label={`Close ${tab.title}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      close(tab.id);
+                    }}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <X size={11} aria-hidden />
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          className="workspace-tab-new"
+          onClick={() => newTab()}
+          disabled={!canOpen}
+          aria-label="New tab"
+          title={canOpen ? "New tab" : `Tab limit reached (${MAX_WORKSPACE_TABS})`}
+        >
+          <Plus size={13} aria-hidden />
+        </button>
       </div>
     </div>
   );

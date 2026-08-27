@@ -8,6 +8,7 @@
 
 import {
   buildEntityLinksSection,
+  escapeRegExp,
   joinMarkdownLines,
   mergeEntityRefs,
   parseJiraIssueKey,
@@ -81,20 +82,39 @@ export function buildTaskNoteMarkdown(task: TaskNoteSource): string {
   ]);
 }
 
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 /**
  * Point a task at a newly created Jira ticket: replace its current key with the
  * new one, or prepend the new key when the task had none.
  */
 export function rewriteTaskKey(text: string, oldKey: string | undefined, newKey: string): string {
   if (oldKey) {
-    const re = new RegExp(`\\b${escapeRegExp(oldKey)}\\b`, "g");
-    if (re.test(text)) return text.replace(new RegExp(`\\b${escapeRegExp(oldKey)}\\b`, "g"), newKey);
+    // One regex, one pass. Building it twice was a workaround for `/g` leaving
+    // `lastIndex` moved after `.test()`; comparing the result sidesteps that.
+    const replaced = text.replace(new RegExp(`\\b${escapeRegExp(oldKey)}\\b`, "g"), newKey);
+    if (replaced !== text) return replaced;
   }
   return `${newKey} ${text}`.replace(/\s+/g, " ").trim();
+}
+
+/** The issue key a hop-link points at, normalised. */
+function refJiraKey(ref: EntityRef): string {
+  return parseJiraIssueKey(ref.id) || ref.id.toUpperCase();
+}
+
+/**
+ * The Jira key a task should carry, given its links.
+ *
+ * Returns null when the task is already associated or has no Jira hop — the
+ * single place that decision is made, so text and `jiraKey` cannot disagree.
+ */
+function promotableJiraKey(
+  jiraKey: string | undefined | null,
+  links: EntityRef[] | undefined,
+): string | null {
+  if (jiraKey) return null;
+  const jira = links?.find((l) => l.kind === "jira" && l.id);
+  if (!jira) return null;
+  return refJiraKey(jira);
 }
 
 /**
@@ -106,16 +126,10 @@ export function textWithJiraLinkPromotion(
   jiraKey: string | undefined | null,
   links: EntityRef[] | undefined,
 ): string {
-  if (jiraKey) return text;
-  const jira = links?.find((l) => l.kind === "jira" && l.id);
-  if (!jira) return text;
-  const key = parseJiraIssueKey(jira.id) || jira.id.toUpperCase();
+  const key = promotableJiraKey(jiraKey, links);
+  if (!key) return text;
   if (new RegExp(`\\b${escapeRegExp(key)}\\b`, "i").test(text)) return text;
   return rewriteTaskKey(text, undefined, key);
-}
-
-function extractJiraKeyFromText(text: string): string | undefined {
-  return parseJiraIssueKey(text) ?? undefined;
 }
 
 /**
@@ -129,14 +143,13 @@ export function normalizeTaskLinkState(
 ): { text: string; jiraKey: string | undefined; links: EntityRef[] | undefined } {
   const deduped = links?.length ? mergeEntityRefs(links) : undefined;
   const nextLinks = deduped && deduped.length > 0 ? deduped : undefined;
-  let nextText = textWithJiraLinkPromotion(text, jiraKey || undefined, nextLinks);
-  let nextKey = jiraKey || undefined;
-  if (nextText !== text) {
-    nextKey = extractJiraKeyFromText(nextText);
-  } else if (!nextKey && nextLinks) {
-    const jira = nextLinks.find((l) => l.kind === "jira" && l.id);
-    if (jira) nextKey = parseJiraIssueKey(jira.id) || jira.id.toUpperCase();
-  }
-  return { text: nextText, jiraKey: nextKey || undefined, links: nextLinks };
+  // Derive the key once and reuse it for the title, rather than promoting the
+  // text and then re-parsing the key back out of it three different ways.
+  const promoted = promotableJiraKey(jiraKey, nextLinks);
+  return {
+    text: promoted ? textWithJiraLinkPromotion(text, jiraKey, nextLinks) : text,
+    jiraKey: jiraKey || promoted || undefined,
+    links: nextLinks,
+  };
 }
 

@@ -51,7 +51,7 @@ export function MobileTopBar() {
           type="button"
           className="hub-icon-btn"
           onClick={() => window.dispatchEvent(new CustomEvent("devhub:palette-toggle"))}
-          aria-label="Search"
+          aria-label="Search — tap a result to open, hold or use New tab to open in a workspace tab"
         >
           <Search size={15} aria-hidden />
         </button>

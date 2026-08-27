@@ -12,15 +12,19 @@ export interface GithubPrSearchState {
   ghQuery: string;
   loading: boolean;
   error: string | null;
+  retry: () => void;
 }
 
-interface InternalState extends GithubPrSearchState {
+interface InternalState extends Snapshot {
   /** The query these results belong to, so a stale response never renders. */
   query: string;
 }
 
-const IDLE: GithubPrSearchState = { results: [], ghQuery: "", loading: false, error: null };
-const PENDING: GithubPrSearchState = { ...IDLE, loading: true };
+/** `retry` is a live callback, so the shared shapes stop just short of it. */
+type Snapshot = Omit<GithubPrSearchState, "retry">;
+
+const IDLE: Snapshot = { results: [], ghQuery: "", loading: false, error: null };
+const PENDING: Snapshot = { ...IDLE, loading: true };
 const INITIAL: InternalState = { ...IDLE, query: "" };
 
 /**
@@ -67,6 +71,11 @@ export function useGithubPrSearch(
     }
   }, []);
 
+  const retry = useCallback(() => {
+    if (!active) return;
+    void run(trimmed);
+  }, [active, run, trimmed]);
+
   useEffect(() => {
     if (!active) {
       // Drop any in-flight response on the floor; the hook reports IDLE below.
@@ -77,8 +86,14 @@ export function useGithubPrSearch(
     return () => clearTimeout(timer);
   }, [trimmed, active, debounceMs, run]);
 
-  if (!active) return IDLE;
+  if (!active) return { ...IDLE, retry };
   // Debouncing, or waiting on the response for the query currently typed.
-  if (state.query !== trimmed) return PENDING;
-  return { results: state.results, ghQuery: state.ghQuery, loading: false, error: state.error };
+  if (state.query !== trimmed) return { ...PENDING, retry };
+  return {
+    results: state.results,
+    ghQuery: state.ghQuery,
+    loading: state.loading,
+    error: state.error,
+    retry,
+  };
 }

@@ -24,6 +24,7 @@ import { useNotesAiConfigured } from "@/lib/notes-ai/use-notes-ai-configured";
 import { ChecklistIcon } from "@/lib/checklists/icons";
 import { collectCheckboxBlocks } from "@/lib/notes/task-sync";
 import { copyTextToClipboard } from "@/lib/clipboard";
+import { escapeRegExp } from "@/lib/entity-note";
 import { NoteEditorProvider } from "@/lib/notes/editor-context";
 import {
   getLinkHrefFromEvent,
@@ -48,10 +49,6 @@ type SearchableBlock = DevHubPartialBlock & {
   content?: unknown;
   children?: SearchableBlock[];
 };
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 function countInText(text: string, query: string, caseSensitive: boolean) {
   if (!query) return 0;
