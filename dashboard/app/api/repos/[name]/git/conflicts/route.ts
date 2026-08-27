@@ -11,6 +11,7 @@ import {
   resolveConflictSide,
 } from "@/lib/git/conflicts";
 import { runGitRepo } from "@/lib/git/repo-local";
+import { parseUnifiedDiff, type DiffLine } from "@/lib/repos/git-parsers";
 import { withScannedRepo, type RepoParams } from "../_shared";
 
 const BodySchema = z.discriminatedUnion("action", [
@@ -25,6 +26,32 @@ const BodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("abort") }),
 ]);
 
+function comparisonLines(
+  repoRoot: string,
+  filePath: string,
+  ours: string | null,
+  theirs: string | null,
+  binary: boolean,
+): DiffLine[] {
+  if (binary) return [];
+  if (ours !== null && theirs !== null) {
+    const diff = runGitRepo(repoRoot, [
+      "diff",
+      "--no-ext-diff",
+      "--no-color",
+      "--unified=3",
+      `:2:${filePath}`,
+      `:3:${filePath}`,
+      "--",
+    ]);
+    if (diff.status === 0 && diff.stdout.trim()) return parseUnifiedDiff(diff.stdout);
+  }
+  return [
+    ...(ours ?? "").split("\n").map((text) => ({ type: "del" as const, text: `-${text}` })),
+    ...(theirs ?? "").split("\n").map((text) => ({ type: "add" as const, text: `+${text}` })),
+  ];
+}
+
 export async function GET(_req: NextRequest, { params }: RepoParams) {
   const { name } = await params;
   const resolved = withScannedRepo(name);
@@ -34,12 +61,14 @@ export async function GET(_req: NextRequest, { params }: RepoParams) {
   const conflicts = detectGitConflicts(repoRoot).map((conflict) => {
     const sides = readConflictSides(repoRoot, conflict.path);
     const content = readConflictFileContent(repoRoot, conflict.path);
+    const binary = sides.binary || Boolean(content?.includes("\0"));
     return {
       ...conflict,
       content,
       ...sides,
-      binary: sides.binary || Boolean(content?.includes("\0")),
+      binary,
       hasStages: sides.base !== null || sides.ours !== null || sides.theirs !== null,
+      comparison: comparisonLines(repoRoot, conflict.path, sides.ours, sides.theirs, binary),
     };
   });
 

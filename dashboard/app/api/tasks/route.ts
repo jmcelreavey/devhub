@@ -20,7 +20,7 @@ export const POST = withErrorHandler(async (req: Request) => {
   if (!parsed.success) {
     return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
   }
-  const task = await addTask(parsed.data.text.trim(), parsed.data.date, parsed.data.due);
+  const task = await addTask(parsed.data.text.trim(), parsed.data.date, parsed.data.due, parsed.data.links);
   return NextResponse.json(task, { status: 201 });
 }, "tasks.post");
 

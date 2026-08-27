@@ -162,4 +162,15 @@ describe("resolveEntityLinks", () => {
     expect(linkingTasks).toHaveLength(1);
     expect(linkingTasks[0]?.id).toBe("today-id");
   });
+
+  it("finds the tickets/KEY companion note for a Jira entity", () => {
+    fs.mkdirSync(path.join(root, "notes", "tickets"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "notes", "tickets", "PTF-1.json"),
+      JSON.stringify([{ type: "paragraph", content: [{ type: "text", text: "Ticket note" }] }]),
+    );
+
+    const result = resolveEntityLinks("jira", "PTF-1");
+    expect(result.notes.some((note) => note.id === "tickets/PTF-1")).toBe(true);
+  });
 });

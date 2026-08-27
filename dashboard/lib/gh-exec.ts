@@ -24,14 +24,26 @@ export function ghEnv(): NodeJS.ProcessEnv {
 
 const defaultMaxBuffer = 20 * 1024 * 1024;
 
+/**
+ * Hard ceiling on any `gh` call.
+ *
+ * A degraded GitHub makes `gh` hang rather than fail, and `execFile` waits
+ * forever by default — one search held a page load for 14 minutes. The 504
+ * mapping below can only fire once the process actually terminates, so this
+ * timeout is what makes the stale-cache fallback reachable at all.
+ */
+const defaultTimeoutMs = Number(process.env.DEVHUB_GH_TIMEOUT_MS ?? 30_000);
+
 export async function execGh(
   args: string[],
-  opts?: { maxBuffer?: number; cwd?: string },
+  opts?: { maxBuffer?: number; cwd?: string; timeoutMs?: number },
 ): Promise<{ stdout: string; stderr: string }> {
   return execFileAsync("gh", args, {
     maxBuffer: opts?.maxBuffer ?? defaultMaxBuffer,
     env: ghEnv(),
     cwd: opts?.cwd,
+    timeout: opts?.timeoutMs ?? defaultTimeoutMs,
+    killSignal: "SIGKILL",
   });
 }
 
@@ -62,10 +74,26 @@ export async function isGithubCliAuthenticated(): Promise<boolean> {
   }
 }
 
+const GH_TIMED_OUT_INFO: GithubCliErrorInfo = {
+  kind: "other",
+  message: "GitHub timed out — showing the last cached PR list if available.",
+  httpStatus: 504,
+};
+
+/** True when `execGh` killed the process for exceeding its timeout. */
+function isTimeoutKill(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const { killed, signal } = err as { killed?: boolean; signal?: string | null };
+  return killed === true && (signal === "SIGKILL" || signal === "SIGTERM");
+}
+
 export function githubCliErrorInfo(
   err: unknown,
   fallback = "GitHub CLI command failed",
 ): GithubCliErrorInfo {
+  // A process we killed on timeout reports `killed`/`signal` rather than a
+  // message worth grepping, so check the structure before matching text.
+  if (isTimeoutKill(err)) return GH_TIMED_OUT_INFO;
   const message = err instanceof Error ? err.message : String(err);
   const lower = message.toLowerCase();
   if (lower.includes("spawn gh") || lower.includes("enoent")) {
@@ -86,11 +114,7 @@ export function githubCliErrorInfo(
     lower.includes("timed out") ||
     lower.includes("timeout")
   ) {
-    return {
-      kind: "other",
-      message: "GitHub timed out — showing the last cached PR list if available.",
-      httpStatus: 504,
-    };
+    return GH_TIMED_OUT_INFO;
   }
   const trimmed = message.trim() || fallback;
   return { kind: "other", message: trimmed, httpStatus: 500 };

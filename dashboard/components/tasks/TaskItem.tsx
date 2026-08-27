@@ -77,6 +77,9 @@ export function TaskItem({
   isDragging = false,
   isDropTarget = false,
   denseLinks = false,
+  cwd,
+  repoName,
+  suppressLinks,
 }: {
   task: Task;
   /** Day file this task lives in (YYYY-MM-DD). Defaults to today. */
@@ -96,6 +99,11 @@ export function TaskItem({
   isDropTarget?: boolean;
   /** Narrow surfaces (tasks sidebar) show fewer hop chips. */
   denseLinks?: boolean;
+  /** Hub checkout — Implement launches here instead of guessing from the plan. */
+  cwd?: string;
+  repoName?: string;
+  /** Links the surrounding list already shows once in its header. */
+  suppressLinks?: readonly EntityRef[];
 }) {
   const toast = useToast();
   const router = useRouter();
@@ -530,6 +538,8 @@ export function TaskItem({
             suppressJiraKey={task.jiraKey}
             hostTags={hostTags}
             hideCompanionNotes={noteExists}
+            suppressRepo={repoName}
+            suppressRefs={suppressLinks}
             maxVisible={denseLinks ? 2 : 4}
             onHostContextMenu={(e) => menu.openAt(e, task)}
             onRemoveSeed={
@@ -571,6 +581,8 @@ export function TaskItem({
         open={implementOpen}
         task={task}
         date={taskDate}
+        cwd={cwd}
+        repoName={repoName}
         onClose={() => setImplementOpen(false)}
       />
       <ContextMenu

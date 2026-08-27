@@ -303,6 +303,31 @@ export async function getWeekEvents(): Promise<Record<string, CalendarEvent[]>> 
   return grouped;
 }
 
+/** Inclusive local-day window: last `daysBack` days through next `daysForward` days. */
+export async function getEventsInRange(daysBack: number, daysForward: number): Promise<CalendarEvent[]> {
+  if (!isGoogleCalendarConfigured()) return [];
+  const auth = getOAuthClient();
+  if (!auth) return [];
+
+  const cal = google.calendar({ version: "v3", auth });
+  const allCalendars = await listCalendars();
+  const calendarIds = resolveActiveCalendarIds(allCalendars);
+  const calendarsById = new Map(allCalendars.map((c) => [c.id, c]));
+
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysBack);
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysForward + 1);
+
+  return fetchEventsForCalendars(
+    cal,
+    calendarIds,
+    calendarsById,
+    start.toISOString(),
+    end.toISOString(),
+    250,
+  );
+}
+
 /** Google OAuth authorize URL (`redirectUri` must match the callback route and GCP credential config). */
 export function getAuthUrl(redirectUri: string): string | null {
   const { clientId, clientSecret } = getResolvedGoogleCalendarEnv();

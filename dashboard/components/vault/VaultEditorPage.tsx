@@ -932,13 +932,14 @@ export function VaultEditorPage({
           onClose={() => setLinkOpen(false)}
           defaultKind="calendar"
           description="Link a calendar event, PR, note, diagram, repo, task, or Jira issue to this note."
-          onSave={async (ref) => {
+          existing={linkOpen ? parseEntityLinksFromMarkdown(blocksToText(blocks)) : undefined}
+          onSave={async (refs) => {
             const md = blocksToText(blocks);
-            const nextRefs = mergeEntityRefs(parseEntityLinksFromMarkdown(md), [ref]);
+            const nextRefs = mergeEntityRefs(parseEntityLinksFromMarkdown(md), refs);
             const nextMd = upsertEntityLinksInMarkdown(md, nextRefs);
             const nextBlocks = textToBlocks(nextMd) as DevHubPartialBlock[];
             await persistBlocksImmediate(nextBlocks);
-            toast.success("Link added");
+            toast.success(refs.length === 1 ? "Link added" : `${refs.length} links added`);
           }}
         />
       ) : null}

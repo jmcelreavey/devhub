@@ -3,12 +3,14 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BranchesPayload } from "./shared";
 
-const { confirmMock } = vi.hoisted(() => ({
+const { confirmMock, decisionMock } = vi.hoisted(() => ({
   confirmMock: vi.fn(async () => false),
+  decisionMock: vi.fn(async () => null as string | null),
 }));
 
 vi.mock("@/components/shell/ConfirmDialog", () => ({
   useConfirm: () => confirmMock,
+  useDecision: () => decisionMock,
   usePrompt: () => vi.fn(async () => null),
 }));
 
@@ -61,6 +63,8 @@ beforeEach(() => {
   posts.length = 0;
   confirmMock.mockReset();
   confirmMock.mockResolvedValue(false);
+  decisionMock.mockReset();
+  decisionMock.mockResolvedValue(null);
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -195,5 +199,55 @@ describe("BranchesPanel refresh", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("BranchesPanel checkout", () => {
+  it("switches only on double-click", async () => {
+    await renderPanel();
+    const branch = screen.getByTitle("Double-click to check out feature/x");
+
+    fireEvent.click(branch);
+    expect(posts).toEqual([]);
+
+    fireEvent.dblClick(branch);
+    await waitFor(() => {
+      expect(posts).toEqual([expect.objectContaining({ action: "checkout", branch: "feature/x" })]);
+    });
+    expect(confirmMock).not.toHaveBeenCalled();
+  });
+
+  it("offers stash or merge only after Git says local work conflicts", async () => {
+    await renderPanel();
+    decisionMock.mockResolvedValueOnce("stash");
+    let checkoutPosts = 0;
+    vi.mocked(fetch).mockImplementation(async (_input, init) => {
+      if (init?.method !== "POST") return jsonResponse(payload);
+      posts.push(JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>);
+      checkoutPosts += 1;
+      if (checkoutPosts === 1) {
+        return {
+          ok: false,
+          status: 409,
+          text: async () => JSON.stringify({
+            code: "checkout_would_conflict",
+            branch: "feature/x",
+            error: "would be overwritten",
+            canMerge: true,
+          }),
+        } as Response;
+      }
+      return jsonResponse({});
+    });
+
+    fireEvent.dblClick(screen.getByTitle("Double-click to check out feature/x"));
+
+    await waitFor(() => expect(decisionMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      expect(posts).toEqual([
+        { action: "checkout", branch: "feature/x" },
+        { action: "checkout", branch: "feature/x", strategy: "stash" },
+      ]);
+    });
   });
 });

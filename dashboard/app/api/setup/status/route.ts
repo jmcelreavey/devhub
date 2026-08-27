@@ -60,11 +60,10 @@ export async function GET() {
   const calendarClientSecretPreview =
     google.clientId && google.clientSecret && !calendar ? google.clientSecret : null;
 
-  const jira = !!(
-    resolveEnvValue("JIRA_DOMAIN", overrides) &&
-    resolveEnvValue("JIRA_EMAIL", overrides) &&
-    resolveEnvValue("JIRA_API_TOKEN", overrides)
-  );
+  const jiraDomain = resolveEnvValue("JIRA_DOMAIN", overrides) ?? "";
+  const jiraEmail = resolveEnvValue("JIRA_EMAIL", overrides) ?? "";
+  const jiraApiToken = resolveEnvValue("JIRA_API_TOKEN", overrides);
+  const jira = !!(jiraDomain && jiraEmail && jiraApiToken);
 
   const effectiveNotesDir = resolveEnvValue("NOTES_DIR", overrides) ?? defaultNotesDir;
   /**
@@ -149,9 +148,11 @@ export async function GET() {
     calendarClientIdPreview,
     calendarClientSecretPreview,
     jiraVars: {
-      hasDomain: !!resolveEnvValue("JIRA_DOMAIN", overrides),
-      hasEmail: !!resolveEnvValue("JIRA_EMAIL", overrides),
-      hasApiToken: !!resolveEnvValue("JIRA_API_TOKEN", overrides),
+      hasDomain: !!jiraDomain,
+      hasEmail: !!jiraEmail,
+      hasApiToken: !!jiraApiToken,
+      domain: jiraDomain,
+      email: jiraEmail,
     },
     githubVars: {
       authenticated: github,

@@ -5,8 +5,16 @@
  * every card's FileText affordance.
  */
 
+import { mutate } from "swr";
 import { textToBlocks } from "@/lib/markdown-convert";
 import { getVaultClient } from "@/lib/vault/vault-client";
+
+/**
+ * SWR key for the shared note-slug index backing every row's "has a note?"
+ * badge. Lives here so writing a note can invalidate it without the writer
+ * importing UI code.
+ */
+export const NOTE_INDEX_KEY = "/api/notes-index";
 
 export interface CreateVaultNoteResult {
   path: string;
@@ -21,12 +29,6 @@ export function vaultNoteHref(path: string): string {
 
 export function vaultNoteApi(path: string): string {
   return `${getVaultClient("notes").apiPrefix}/${path}`;
-}
-
-/** Cheap existence check for card badges / open-vs-create labels. */
-export async function vaultNoteExists(path: string): Promise<boolean> {
-  const res = await fetch(vaultNoteApi(path), { cache: "no-store" });
-  return res.ok;
 }
 
 /**
@@ -57,5 +59,7 @@ export async function createOrOpenVaultNote(options: {
   });
   if (!res.ok) throw new Error(await res.text());
   notes.paths.notifyTreeChanged();
+  // A new slug exists now — refresh the index so open-vs-create labels flip.
+  void mutate(NOTE_INDEX_KEY);
   return { path: options.path, href, wrote: true };
 }

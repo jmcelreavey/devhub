@@ -28,6 +28,12 @@ import type { DiffLine, GraphCommitRaw } from "@/lib/repos/git-parsers";
 import type { BranchOpenPr } from "@/lib/github/branch-pr";
 import { jiraBrowseUrl } from "@/lib/utils";
 import { lookupByEmail } from "@/lib/people/identity";
+import {
+  isMergedIntoDefaultBranch,
+  isOnDefaultBranch,
+  shouldOfferSwitchToDefault,
+  shortDefaultBranchName,
+} from "@/lib/repos/branch-relation";
 import { layoutCommitGraph, type GraphLaneCommit } from "@/lib/repos/git-graph";
 import {
   type GraphColumnsPartial,
@@ -149,6 +155,8 @@ export function HistoryPanel({
   onFocusUnpushedConsumed,
   focusCommit = null,
   onFocusCommitConsumed,
+  collapsed = false,
+  defaultScope = "all",
 }: {
   repoName: string;
   repoPath: string;
@@ -168,6 +176,10 @@ export function HistoryPanel({
   /** Select this commit on arrival — used by Blame's "Open in History". */
   focusCommit?: string | null;
   onFocusCommitConsumed?: () => void;
+  /** Hub only: hide the graph, keep fetch/relation/switch. Git modal omits this. */
+  collapsed?: boolean;
+  /** Hub defaults to the current branch; the Git modal still walks every ref. */
+  defaultScope?: "all" | "current";
 }) {
   const toast = useToast();
   const confirm = useConfirm();
@@ -184,7 +196,7 @@ export function HistoryPanel({
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [searching, setSearching] = useState(false);
   /** All branches, or just HEAD and the default remote tip. */
-  const [scope, setScope] = useState<"all" | "current">("all");
+  const [scope, setScope] = useState<"all" | "current">(defaultScope);
   const historyGeneration = useRef(0);
   const [selected, setSelected] = useState<string | null>(null);
   /** Set while an externally focused commit should survive filter recalculation. */
@@ -303,6 +315,33 @@ export function HistoryPanel({
     setLoading(true);
     setLoadingMore(false);
     try {
+      if (collapsed) {
+        const branchJson = await fetchGitJson<BranchesPayload>(repoApi(repoName, "/branches"));
+        if (generation !== historyGeneration.current) return;
+        const currentBranch = branchJson.currentBranch ?? "HEAD";
+        const mainBranch = branchJson.mainBranch ?? null;
+        const aheadMain = branchJson.aheadMain ?? 0;
+        setRelation({
+          currentBranch,
+          mainBranch,
+          mainShort: shortDefaultBranchName(mainBranch),
+          aheadMain,
+          behindMain: branchJson.behindMain ?? 0,
+          onMain: isOnDefaultBranch(currentBranch, mainBranch),
+          mergedIntoMain: isMergedIntoDefaultBranch({ currentBranch, mainBranch, aheadMain }),
+          upstream: branchJson.upstream ?? null,
+          behindUpstream: branchJson.behind ?? 0,
+          aheadUpstream: branchJson.ahead ?? 0,
+          lastFetchAt: branchJson.lastFetchAt ?? null,
+        });
+        const next = new Set<string>();
+        for (const c of branchJson.unpushedCommits ?? []) {
+          if (c.hash) next.add(c.hash);
+          if (c.shortHash) next.add(c.shortHash);
+        }
+        setUnpushedHashes(next);
+        return;
+      }
       const [logJson, branchJson] = await Promise.all([
         fetchGitJson<LogPayload>(repoApi(repoName, logQuery())),
         fetchGitJson<BranchesPayload>(repoApi(repoName, "/branches")).catch(() => null),
@@ -347,9 +386,10 @@ export function HistoryPanel({
     } finally {
       if (generation === historyGeneration.current) setLoading(false);
     }
-  }, [repoName, toast, logQuery]);
+  }, [repoName, toast, logQuery, collapsed]);
 
   useEffect(() => {
+    if (collapsed) return;
     // Deliberately not awaited with the log. This is one network call behind
     // `gh`, and the commit list must not wait on it — avatars arrive late and
     // swap in over the initials, which is the same thing that happens when
@@ -373,7 +413,7 @@ export function HistoryPanel({
     return () => {
       live = false;
     };
-  }, [repoName]);
+  }, [repoName, collapsed]);
 
   /**
    * email → the identity to draw for it. Built from people rather than raw
@@ -884,6 +924,35 @@ export function HistoryPanel({
     return true;
   }
 
+  async function switchToDefault() {
+    const main = relation?.mainShort;
+    if (!main) return;
+    setActing("switch-default");
+    try {
+      const fetched = await postGitAction(repoApi(repoName, "/branches"), { action: "fetch" });
+      if (!fetched.ok) {
+        toast.error(fetched.kind === "error" ? fetched.message : "Fetch failed");
+        return;
+      }
+      if (!(await checkoutBranch(main))) return;
+      const pulled = await postGitAction(repoApi(repoName, "/branches"), { action: "pull" });
+      if (!pulled.ok) {
+        if (pulled.kind === "conflict") await onConflict?.(pulled.conflict);
+        else toast.error(pulled.kind === "error" ? pulled.message : "Pull failed");
+        onMutate();
+        await refresh();
+        return;
+      }
+      toast.success(`Switched to ${main}`);
+      onMutate();
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not switch branch");
+    } finally {
+      setActing(null);
+    }
+  }
+
   /** Drag a commit onto a branch chip → apply it relative to that branch. */
   const branchDrag = usePointerDrag<GraphLaneCommit>({
     dropSelector: "[data-drop-branch]",
@@ -1036,6 +1105,34 @@ export function HistoryPanel({
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps -- confirmedBranchesAction is a stable-enough closure; menu rebuilds per open
   }, [dropMenu.target, acting]);
+
+  if (collapsed) {
+    return (
+      <div className="repo-git-history" data-collapsed>
+        <div className="repo-git-changes-toolbar">
+          <button type="button" className="btn btn-ghost" onClick={() => void refresh()}>
+            <RefreshCw size={11} className={loading ? "animate-spin" : undefined} /> Refresh
+          </button>
+        </div>
+        {relation?.mainBranch ? (
+          <BranchRelationStrip
+            relation={relation}
+            acting={acting}
+            pushing={pushing}
+            unpushedCount={unpushedHashes.size}
+            openPr={openPr}
+            onFetch={() => void incoming("fetch")}
+            onPull={() => void incoming("pull")}
+            onPullRebase={() => void incoming("pull-rebase")}
+            onPullMerge={() => void incoming("pull-merge")}
+            onSync={() => void syncWithMain()}
+            onPush={onPush}
+            onSwitchToDefault={() => void switchToDefault()}
+          />
+        ) : null}
+      </div>
+    );
+  }
 
   if (loading && commits.length === 0) return <SkeletonRows count={8} height={32} />;
 
@@ -1221,6 +1318,7 @@ export function HistoryPanel({
           onPullMerge={() => void incoming("pull-merge")}
           onSync={() => void syncWithMain()}
           onPush={onPush}
+          onSwitchToDefault={() => void switchToDefault()}
         />
       ) : null}
       <RepoSplit
@@ -1607,6 +1705,7 @@ function BranchRelationStrip({
   onPullMerge,
   onSync,
   onPush,
+  onSwitchToDefault,
 }: {
   relation: BranchRelation;
   acting: string | null;
@@ -1620,6 +1719,7 @@ function BranchRelationStrip({
   onPullMerge: () => void;
   onSync: () => void;
   onPush?: () => void;
+  onSwitchToDefault?: () => void;
 }) {
   const main = relation.mainShort ?? "main";
   const ahead = relation.aheadMain;
@@ -1756,8 +1856,14 @@ function BranchRelationStrip({
               </span>
             </a>
           )}
-          <span className="text-text-subtle">vs</span>
-          <span className="font-mono">{main}</span>
+          {/* On the default branch there is nothing to compare against — "main
+              vs main" reads like a bug. The counts below already guard on this. */}
+          {!relation.onMain && (
+            <>
+              <span className="text-text-subtle">vs</span>
+              <span className="font-mono">{main}</span>
+            </>
+          )}
         </div>
         <div className="repo-git-branch-relation-status">{status}</div>
       </div>
@@ -1768,6 +1874,24 @@ function BranchRelationStrip({
         </div>
       )}
       <div className="repo-git-branch-relation-actions">
+        {onSwitchToDefault &&
+        shouldOfferSwitchToDefault({ onMain: relation.onMain, mergedIntoMain: relation.mergedIntoMain }) ? (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            data-active
+            disabled={acting !== null}
+            onClick={onSwitchToDefault}
+            title={`Fetch, check out ${main}, then pull --ff-only. Dirty work is auto-stashed; unmerged conflicts block the switch.`}
+          >
+            {acting === "switch-default" ? (
+              <RefreshCw size={11} className="animate-spin" aria-hidden />
+            ) : (
+              <GitBranch size={11} aria-hidden />
+            )}
+            Switch to {main} & fetch
+          </button>
+        ) : null}
         {fetchAgeLabel && (
           <span
             className="repo-git-fetch-age"

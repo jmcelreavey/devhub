@@ -11,6 +11,42 @@ interface EntityLinksTagPayload {
   related: EntityRef[];
 }
 
+type TagMenuLookup = Pick<
+  UseTagMenuGroupParams,
+  "kind" | "id" | "date" | "label" | "href" | "meetingTitle" | "prRepo" | "prNumber" | "extraTags"
+>;
+
+/** Merge client-side #tags with /api/entity-links related — menu count and modal list both use this. */
+export function collectTagMenuRefs(
+  extraTags: string[] | undefined,
+  related: EntityRef[] | undefined,
+): EntityRef[] {
+  const seen = new Set<string>();
+  const refs: EntityRef[] = [];
+  for (const tag of extraTags ?? []) {
+    const refKey = `tag:${tag}`;
+    if (seen.has(refKey)) continue;
+    seen.add(refKey);
+    refs.push({
+      kind: "tag",
+      id: tag,
+      label: `#${tag}`,
+      href: `/work?tag=${encodeURIComponent(tag)}`,
+    });
+  }
+  for (const ref of related ?? []) {
+    const refKey = `${ref.kind}:${ref.id}`;
+    if (seen.has(refKey)) continue;
+    seen.add(refKey);
+    refs.push(ref);
+  }
+  return refs;
+}
+
+export function tagMenuCountLabel(count: number): string {
+  return count > 0 ? `${count} linked` : "No tags yet";
+}
+
 export interface UseTagMenuGroupParams {
   /** Entity kind /api/entity-links understands; null skips the server lookup (extraTags only). */
   kind: EntityKind | null;
@@ -68,37 +104,65 @@ export function useTagMenuGroup({
   onTagContextMenu,
 }: UseTagMenuGroupParams): TagMenuResult {
   const [open, setOpen] = useState(false);
-  // ContextMenu closes the row menu (enabled -> false) before the "View tags"
-  // item's onSelect runs, so the fetch must stay keyed while the modal itself
-  // is open too — otherwise the key nulls out right as the modal appears and
-  // it opens on stale/empty data.
-  const key = useMemo(() => {
-    if (!(enabled || open) || !kind) return null;
-    const qs = new URLSearchParams({ kind, id });
-    if (date) qs.set("date", date);
-    if (label) qs.set("label", label);
-    if (href) qs.set("href", href);
-    if (meetingTitle) qs.set("meetingTitle", meetingTitle);
-    if (prRepo) qs.set("prRepo", prRepo);
-    if (prNumber != null) qs.set("prNumber", String(prNumber));
-    return `/api/entity-links?${qs}`;
-  }, [enabled, open, kind, id, date, label, href, meetingTitle, prRepo, prNumber]);
-  const { data } = useLive<EntityLinksTagPayload>(key);
+  const live: TagMenuLookup = {
+    kind,
+    id,
+    date,
+    label,
+    href,
+    meetingTitle,
+    prRepo,
+    prNumber,
+    extraTags,
+  };
+  const [held, setHeld] = useState(live);
+  // ContextMenu calls onClose in the same click as "View tags" onSelect, so
+  // `enabled` flips false and chip-derived kind/id/extraTags go empty before
+  // the modal paints. Hold the lookup from the last enabled render and keep
+  // using it while the modal is open — fetch key, count, and list all read
+  // this snapshot, otherwise the modal opens on "Nothing tagged yet."
+  const extraTagsKey = (live.extraTags ?? []).join("\0");
+  const heldKey = (held.extraTags ?? []).join("\0");
+  if (
+    enabled &&
+    (held.kind !== live.kind ||
+      held.id !== live.id ||
+      held.date !== live.date ||
+      held.label !== live.label ||
+      held.href !== live.href ||
+      held.meetingTitle !== live.meetingTitle ||
+      held.prRepo !== live.prRepo ||
+      held.prNumber !== live.prNumber ||
+      heldKey !== extraTagsKey)
+  ) {
+    setHeld(live);
+  }
+  const lookup = enabled ? live : open ? held : live;
 
-  const seen = new Set<string>();
-  const refs: EntityRef[] = [];
-  for (const tag of extraTags ?? []) {
-    const refKey = `tag:${tag}`;
-    if (seen.has(refKey)) continue;
-    seen.add(refKey);
-    refs.push({ kind: "tag", id: tag, label: `#${tag}`, href: `/work?tag=${encodeURIComponent(tag)}` });
-  }
-  for (const ref of data?.related ?? []) {
-    const refKey = `${ref.kind}:${ref.id}`;
-    if (seen.has(refKey)) continue;
-    seen.add(refKey);
-    refs.push(ref);
-  }
+  const key = useMemo(() => {
+    if (!(enabled || open) || !lookup.kind) return null;
+    const qs = new URLSearchParams({ kind: lookup.kind, id: lookup.id });
+    if (lookup.date) qs.set("date", lookup.date);
+    if (lookup.label) qs.set("label", lookup.label);
+    if (lookup.href) qs.set("href", lookup.href);
+    if (lookup.meetingTitle) qs.set("meetingTitle", lookup.meetingTitle);
+    if (lookup.prRepo) qs.set("prRepo", lookup.prRepo);
+    if (lookup.prNumber != null) qs.set("prNumber", String(lookup.prNumber));
+    return `/api/entity-links?${qs}`;
+  }, [
+    enabled,
+    open,
+    lookup.kind,
+    lookup.id,
+    lookup.date,
+    lookup.label,
+    lookup.href,
+    lookup.meetingTitle,
+    lookup.prRepo,
+    lookup.prNumber,
+  ]);
+  const { data } = useLive<EntityLinksTagPayload>(key);
+  const refs = collectTagMenuRefs(lookup.extraTags, data?.related);
 
   const group: ContextMenuGroup = {
     id: "tags",
@@ -107,7 +171,7 @@ export function useTagMenuGroup({
       {
         id: "view-tags",
         label: "View tags",
-        description: refs.length > 0 ? `${refs.length} linked` : "No tags yet",
+        description: tagMenuCountLabel(refs.length),
         icon: <Hash size={12} aria-hidden />,
         onSelect: () => setOpen(true),
       },
@@ -118,8 +182,8 @@ export function useTagMenuGroup({
     <TagsModal
       open={open}
       onClose={() => setOpen(false)}
-      kind={kind ?? undefined}
-      title={label}
+      kind={lookup.kind ?? undefined}
+      title={lookup.label}
       refs={refs}
       onAddTag={onAddTag}
       onRemoveRef={onRemoveRef}

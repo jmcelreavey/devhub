@@ -8,6 +8,7 @@ import {
   Trash2,
   ExternalLink,
   RefreshCw,
+  RotateCcw,
   AlertTriangle,
   ClipboardCopy,
   FileText,
@@ -39,15 +40,21 @@ function expiryLabel(share: ShareRecord, now = Date.now()): string {
   return `Expires in ${days} day${days === 1 ? "" : "s"}`;
 }
 
+function canRecoverShare(share: ShareStatus, now = Date.now()): boolean {
+  return share.missing && now < shareExpiresAt(share);
+}
+
 function LiveLinkRow({
   share,
   busy,
   onUpdate,
+  onRecover,
   onRemove,
 }: {
   share: ShareStatus;
   busy: boolean;
   onUpdate: () => void;
+  onRecover: () => void;
   onRemove: () => void;
 }) {
   const router = useRouter();
@@ -55,6 +62,7 @@ function LiveLinkRow({
   const menu = useContextMenu<"row">();
   const href = noteHref(share);
   const canUpdate = share.stale && !share.missing;
+  const canRecover = canRecoverShare(share);
   const groups: ContextMenuGroup[] = [
     {
       id: "open",
@@ -89,15 +97,28 @@ function LiveLinkRow({
             );
           },
         },
-        {
-          id: "update",
-          label: busy ? "Updating…" : "Update",
-          description: "Push current content to the live link",
-          icon: <RefreshCw {...icon} aria-hidden />,
-          disabled: busy || !canUpdate,
-          disabledReason: canUpdate ? undefined : "Source is up to date.",
-          onSelect: onUpdate,
-        },
+        canRecover
+          ? {
+              id: "recover",
+              label: busy ? "Recovering…" : "Recover",
+              description: "Restore the deleted file from the live gist",
+              icon: <RotateCcw {...icon} aria-hidden />,
+              disabled: busy,
+              onSelect: onRecover,
+            }
+          : {
+              id: "update",
+              label: busy ? "Updating…" : "Update",
+              description: "Push current content to the live link",
+              icon: <RefreshCw {...icon} aria-hidden />,
+              disabled: busy || !canUpdate,
+              disabledReason: share.missing
+                ? "Source is missing — recover it first."
+                : canUpdate
+                  ? undefined
+                  : "Source is up to date.",
+              onSelect: onUpdate,
+            },
       ],
     },
     {
@@ -149,6 +170,18 @@ function LiveLinkRow({
       >
         {expiryLabel(share)}
       </span>
+      {canRecover && (
+        <button
+          type="button"
+          className="btn btn-ghost"
+          style={{ fontSize: "12px", padding: "4px 10px" }}
+          onClick={onRecover}
+          disabled={busy}
+        >
+          <RotateCcw size={12} className={busy ? "animate-spin" : ""} aria-hidden />
+          {busy ? "Recovering…" : "Recover"}
+        </button>
+      )}
       <RowMenuKebab
         label={`Actions for ${share.title}`}
         onOpen={(x, y) => menu.openAtPoint(x, y, "row")}
@@ -188,6 +221,28 @@ export default function SharedClient() {
       toast.success("Live link updated.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not update.");
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const recoverOne = async (share: ShareStatus) => {
+    setBusyKey(share.key);
+    try {
+      const res = await fetch("/api/share/recover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vault: share.vault, path: share.path }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? res.statusText);
+      }
+      await mutate();
+      getVaultClient(share.vault).paths.notifyTreeChanged();
+      toast.success("Source restored from gist.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not recover.");
     } finally {
       setBusyKey(null);
     }
@@ -284,6 +339,7 @@ export default function SharedClient() {
               share={share}
               busy={busyKey === share.key}
               onUpdate={() => void pushUpdate(share)}
+              onRecover={() => void recoverOne(share)}
               onRemove={() => void removeOne(share)}
             />
           ))}

@@ -1,7 +1,9 @@
 /** @vitest-environment jsdom */
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useEffect } from "react";
 import {
+  WorkspaceTabPanels,
   WorkspaceTabStrip,
   WorkspaceTabsProvider,
   useWorkspaceTabs,
@@ -9,11 +11,12 @@ import {
 import { WORKSPACE_TABS_STORAGE_KEY } from "@/lib/workspace-tabs";
 
 const pathname = vi.hoisted(() => ({ current: "/" }));
+const routerPush = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
   usePathname: () => pathname.current,
   useSearchParams: () => new URLSearchParams(),
-  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  useRouter: () => ({ push: routerPush, refresh: vi.fn() }),
 }));
 
 /** Opens tabs from inside the provider so the strip has something to render. */
@@ -149,5 +152,132 @@ describe("WorkspaceTabStrip keyboard navigation", () => {
     const inactive = tabs.find((t) => t.getAttribute("aria-selected") !== "true")!;
     const close = within(inactive).getByRole("button", { name: /^Close / });
     expect(close).toHaveAttribute("tabindex", "-1");
+  });
+});
+
+describe("WorkspaceTabPanels keep-alive", () => {
+  it("does not unmount a tab's page when switching away and back", () => {
+    const unmounted: string[] = [];
+    function Probe({ id }: { id: string }) {
+      useEffect(() => {
+        return () => {
+          unmounted.push(id);
+        };
+      }, [id]);
+      return (
+        <div data-testid={`probe-${id}`}>
+          {id}
+          <iframe data-testid={`frame-${id}`} src="about:blank" title={id} />
+        </div>
+      );
+    }
+
+    const tree = (page: string) => (
+      <WorkspaceTabsProvider>
+        <Seed hrefs={["/work"]} />
+        <WorkspaceTabStrip />
+        <WorkspaceTabPanels>
+          <Probe id={page} />
+        </WorkspaceTabPanels>
+      </WorkspaceTabsProvider>
+    );
+
+    const view = render(tree("today"));
+    fireEvent.click(screen.getByText("seed"));
+
+    pathname.current = "/work";
+    view.rerender(tree("work"));
+
+    expect(screen.getByTestId("probe-today")).toBeInTheDocument();
+    expect(screen.getByTestId("probe-work")).toBeInTheDocument();
+    expect(screen.getByTestId("frame-today")).toHaveAttribute("src", "about:blank");
+
+    routerPush.mockClear();
+    unmounted.length = 0;
+    const todayTab = screen.getAllByRole("tab").find((t) => t.textContent?.includes("Today"));
+    fireEvent.click(todayTab!);
+
+    expect(unmounted).toEqual([]);
+    expect(routerPush).not.toHaveBeenCalled();
+    expect(screen.getByTestId("probe-today")).toBeInTheDocument();
+    expect(screen.getByTestId("probe-work")).toBeInTheDocument();
+    expect(screen.getByTestId("frame-today")).toHaveAttribute("src", "about:blank");
+    expect(screen.getByTestId("frame-work")).toHaveAttribute("src", "about:blank");
+    expect(screen.getByTestId("probe-today").closest("[data-workspace-tab-panel]")).not.toHaveAttribute(
+      "hidden",
+    );
+    expect(screen.getByTestId("probe-work").closest("[data-workspace-tab-panel]")).toHaveAttribute(
+      "hidden",
+    );
+  });
+
+  it("does not paint Next's live tree into a pushState-active tab", () => {
+    function Probe({ id }: { id: string }) {
+      return <div data-testid={`probe-${id}`}>{id}</div>;
+    }
+    const tree = (page: string) => (
+      <WorkspaceTabsProvider>
+        <Seed hrefs={["/work"]} />
+        <WorkspaceTabStrip />
+        <WorkspaceTabPanels>
+          <Probe id={page} />
+        </WorkspaceTabPanels>
+      </WorkspaceTabsProvider>
+    );
+
+    const view = render(tree("today"));
+    fireEvent.click(screen.getByText("seed"));
+    pathname.current = "/work";
+    view.rerender(tree("work"));
+
+    const todayTab = screen.getAllByRole("tab").find((t) => t.textContent?.includes("Today"));
+    fireEvent.click(todayTab!);
+
+    // Next still rendering /work after pushState. A stale RSC/HMR payload must
+    // update the live /work tab, not clobber Today's frozen tree.
+    view.rerender(tree("work-stale"));
+    expect(screen.getByTestId("probe-today")).toHaveTextContent("today");
+    expect(screen.getByTestId("probe-work-stale")).toHaveTextContent("work-stale");
+    expect(screen.queryByTestId("probe-work")).toBeNull();
+    expect(screen.getByTestId("probe-today").closest("[data-workspace-tab-panel]")).not.toHaveAttribute(
+      "hidden",
+    );
+  });
+
+  it("gives the active panel a definite height so full-bleed pages fill main", () => {
+    render(
+      <WorkspaceTabsProvider>
+        <WorkspaceTabPanels>
+          <div>today</div>
+        </WorkspaceTabPanels>
+      </WorkspaceTabsProvider>,
+    );
+    const panel = document.querySelector("[data-workspace-tab-panel]");
+    expect(panel).toHaveClass("workspace-tab-panel");
+    expect(panel?.parentElement).toHaveClass("workspace-tab-panels");
+  });
+
+  it("drops a closed tab's panel so it can remount next time", () => {
+    function Probe({ id }: { id: string }) {
+      return <div data-testid={`probe-${id}`}>{id}</div>;
+    }
+    const tree = (page: string) => (
+      <WorkspaceTabsProvider>
+        <Seed hrefs={["/work"]} />
+        <WorkspaceTabStrip />
+        <WorkspaceTabPanels>
+          <Probe id={page} />
+        </WorkspaceTabPanels>
+      </WorkspaceTabsProvider>
+    );
+
+    const view = render(tree("today"));
+    fireEvent.click(screen.getByText("seed"));
+    pathname.current = "/work";
+    view.rerender(tree("work"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Close Today" }));
+    expect(screen.queryByTestId("probe-today")).toBeNull();
+    expect(screen.getByTestId("probe-work")).toBeInTheDocument();
   });
 });

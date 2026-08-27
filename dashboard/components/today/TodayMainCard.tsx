@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { FileText, ListTodo, MoreHorizontal, Trash2 } from "lucide-react";
 import { TaskList } from "@/components/tasks/TaskList";
 import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
+import { onTodayCardHeaderClick, TodayViewAllLink } from "@/components/today/TodayViewAllLink";
 import { StandupCopyButton } from "@/components/StandupCopyButton";
 import type { DevHubPartialBlock } from "@/lib/blocknote/schema";
 import { SaveStatusPill } from "./SaveStatusPill";
@@ -93,7 +94,7 @@ export function TodayMainCard({
       data-collapsed={mainCollapsed ? "true" : undefined}
       aria-label={tab === "tasks" ? "Today's tasks" : "Today's notes"}
     >
-      <header className="hub-card-head today-grid-drag-handle">
+      <header className="hub-card-head today-grid-drag-handle" onClick={onTodayCardHeaderClick}>
         <div className="hub-tabs" role="tablist" aria-label="Today view">
           <TabButton
             active={tab === "tasks"}
@@ -119,6 +120,7 @@ export function TodayMainCard({
               /{tasksTotal} done
             </span>
           )}
+          <TodayViewAllLink href={tab === "notes" ? "/notes" : "/work?tab=tasks"} />
           <div className="relative today-grid-drag-cancel">
             <button
               ref={triggerRef}

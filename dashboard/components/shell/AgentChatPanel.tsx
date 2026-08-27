@@ -10,6 +10,7 @@ import {
   AGENT_COMPOSER_FOCUS_EVENT,
   AGENT_COMPOSER_INSERT_EVENT,
   clearAgentChatHistory,
+  formatAgentWaitElapsed,
   newAgentChatId,
   readAgentChatHistory,
   sendAgentChat,
@@ -45,6 +46,47 @@ const ACCEPT =
   "image/png,image/jpeg,image/gif,image/webp,.txt,.md,.json,.ts,.tsx,.js,.jsx,.py,.go,.rs,.css,.html,.yml,.yaml,.toml,.sh,.svg,.csv";
 /** Keep in step with .agent-chat-input's max-height in terminal-agent.css. */
 const COMPOSER_MAX_HEIGHT = 160;
+
+function AgentWaitingState({
+  startedAt,
+  providerLabel,
+  workspace,
+}: {
+  startedAt: number;
+  providerLabel?: string;
+  workspace?: string;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [startedAt]);
+
+  const agent = providerLabel?.trim() || "Agent";
+  const location = workspace?.trim();
+
+  return (
+    <div
+      className="agent-chat-bubble agent-chat-pending"
+      role="status"
+      aria-label={`${agent} is working. ETA unavailable.`}
+    >
+      <div className="agent-chat-pending-head">
+        <span className="agent-chat-pending-dot" aria-hidden />
+        <strong>{agent} is working</strong>
+      </div>
+      <p>
+        {location ? `Running in ${location}. ` : ""}
+        Tool and reasoning steps aren&apos;t exposed for this run.
+      </p>
+      <div className="agent-chat-pending-meta">
+        <span aria-hidden>{formatAgentWaitElapsed(now - startedAt)} elapsed</span>
+        <span>ETA unavailable</span>
+      </div>
+    </div>
+  );
+}
 
 export function AgentChatPanel({
   tabId,
@@ -436,11 +478,13 @@ export function AgentChatPanel({
               </div>
             );
           })}
-        {sending && last?.role !== "assistant" ? (
+        {sending && last?.role === "user" ? (
           <div className="agent-chat-row is-ai">
-            <div className="agent-chat-bubble agent-chat-pending" aria-label="Waiting for reply">
-              <span className="agent-chat-shimmer" />
-            </div>
+            <AgentWaitingState
+              startedAt={last.createdAt}
+              providerLabel={providerLabel}
+              workspace={shellContext?.repoName || cwd?.split("/").filter(Boolean).pop()}
+            />
           </div>
         ) : null}
       </div>

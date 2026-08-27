@@ -29,7 +29,7 @@ import { UpdateBanner } from "@/components/desktop/UpdateBanner";
 import { PackagedCheckoutBanner } from "@/components/desktop/PackagedCheckoutBanner";
 import { ConfirmProvider } from "@/components/shell/ConfirmDialog";
 import { HubTopBar } from "@/components/shell/HubTopBar";
-import { WorkspaceTabsProvider, WorkspaceTabStrip } from "@/components/shell/WorkspaceTabs";
+import { WorkspaceTabsProvider, WorkspaceTabStrip, WorkspaceTabPanels } from "@/components/shell/WorkspaceTabs";
 import { NavProgress } from "@/components/shell/NavProgress";
 import { PersistentChamber } from "@/components/persistent/PersistentChamber";
 import { PersistentOpenCode } from "@/components/persistent/PersistentOpenCode";
@@ -176,7 +176,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <PackagedCheckoutBanner />
 
               <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto relative">
-                  {children}
+                  <WorkspaceTabPanels>{children}</WorkspaceTabPanels>
                   <PersistentChamber />
                   <PersistentOpenCode />
               </main>

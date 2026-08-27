@@ -21,6 +21,7 @@ export function TaskLinkButton({
   open: openProp,
   onOpenChange,
   showTrigger = true,
+  defaultKind = "repo",
 }: {
   taskId: string;
   date: string;
@@ -29,6 +30,7 @@ export function TaskLinkButton({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   showTrigger?: boolean;
+  defaultKind?: EntityRef["kind"];
 }) {
   const toast = useToast();
   const [uncontrolled, setUncontrolled] = useState(false);
@@ -60,11 +62,12 @@ export function TaskLinkButton({
       <EntityLinkDialog
         open={open}
         onClose={() => setOpen(false)}
-        defaultKind="calendar"
+        defaultKind={defaultKind}
         excludeTaskId={taskId}
-        description="Link a calendar event, PR, note, diagram, Jira issue, or another task."
-        onSave={async (ref) => {
-          const next = mergeEntityRefs(existing ?? [], [ref]);
+        existing={existing}
+        description="Link a calendar event, PR, note, diagram, repo, Jira issue, or another task."
+        onSave={async (refs) => {
+          const next = mergeEntityRefs(existing ?? [], refs);
           const res = await fetch("/api/tasks", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -72,7 +75,7 @@ export function TaskLinkButton({
           });
           if (!res.ok) throw new Error(await res.text());
           onChanged?.(next);
-          toast.success("Link added");
+          toast.success(refs.length === 1 ? "Link added" : `${refs.length} links added`);
         }}
       />
     </>

@@ -10,6 +10,7 @@ import type { OncallStatus } from "@/lib/datadog/oncall";
 import { HUB_STRIP_ICON_PX, hubStripSetupLinkStyle, hubStripSetupLinkClassName } from "@/lib/hub-strip";
 import { HubSignalStrip } from "@/components/shell/HubSignalStrip";
 import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
+import { onTodayCardHeaderClick, TodayViewAllLink } from "@/components/today/TodayViewAllLink";
 import { DatadogInvestigateButton } from "@/components/DatadogInvestigateButton";
 
 /** `true` once Datadog is configured *and* this user is on call — Today only cares when it's your pager. */
@@ -184,12 +185,13 @@ export function DatadogTodayStrip({
   if (onToggle) {
     return (
       <div className="card" data-collapsed={collapsed ? "true" : undefined} aria-label="Datadog alerts today">
-        <div className="card-header today-grid-drag-handle">
+        <div className="card-header today-grid-drag-handle" onClick={onTodayCardHeaderClick}>
           <span className="flex min-w-0 items-center gap-1.5">
             <LineChart size={12} aria-hidden /> Datadog · today
           </span>
           <span className="flex min-w-0 items-center gap-2">
             {collapsed && collapsedSummary ? <span className="today-collapsed-summary">{collapsedSummary}</span> : null}
+            <TodayViewAllLink href="/datadog" />
             <TodayCollapseButton collapsed={collapsed} label="Datadog" onToggle={onToggle} />
           </span>
         </div>
@@ -210,16 +212,15 @@ export function DatadogTodayStrip({
       aria-label="Datadog alerts today"
       data-collapsed={collapsed ? "true" : undefined}
     >
-      <div className="today-signal-head">
+      <div className="today-signal-head" onClick={onTodayCardHeaderClick}>
         <span className="today-signal-title text-text">
           <LineChart size={HUB_STRIP_ICON_PX} className="text-accent" aria-hidden />
           Datadog · today
         </span>
-        {(collapsed && collapsedSummary) && (
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="today-collapsed-summary">{collapsedSummary}</span>
-          </span>
-        )}
+        <span className="flex min-w-0 items-center gap-2">
+          {collapsed && collapsedSummary ? <span className="today-collapsed-summary">{collapsedSummary}</span> : null}
+          <TodayViewAllLink href="/datadog" />
+        </span>
       </div>
       {!collapsed ? <div className="today-signal-body">{inner}</div> : null}
     </HubSignalStrip>

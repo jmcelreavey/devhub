@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { appShortcutFromEvent, workspaceTabChordFromEvent } from "./app-shortcuts";
+import {
+  appShortcutFromEvent,
+  repoDrillInNameFromPath,
+  repoPageOwnsShortcut,
+  repoShortcutFromEvent,
+  workspaceTabChordFromEvent,
+} from "./app-shortcuts";
 
 function event(partial: Partial<Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey">>) {
   return {
@@ -35,6 +41,42 @@ describe("appShortcutFromEvent", () => {
   it("does not treat ⌘⇧P as palette (print-adjacent) or steal Alt chords", () => {
     expect(appShortcutFromEvent(event({ key: "p", metaKey: true, shiftKey: true }))).toBeNull();
     expect(appShortcutFromEvent(event({ key: "t", metaKey: true, altKey: true }))).toBeNull();
+  });
+});
+
+describe("repoShortcutFromEvent", () => {
+  it("maps ⌘Enter / Ctrl+Enter to upstart and ⌘⇧T to terminal", () => {
+    expect(repoShortcutFromEvent(event({ key: "Enter", metaKey: true }))).toBe("upstart");
+    expect(repoShortcutFromEvent(event({ key: "Enter", ctrlKey: true }))).toBe("upstart");
+    expect(repoShortcutFromEvent(event({ key: "t", metaKey: true, shiftKey: true }))).toBe("terminal");
+    expect(repoShortcutFromEvent(event({ key: "t", ctrlKey: true, shiftKey: true }))).toBe("terminal");
+  });
+
+  it("does not steal ⌘T (tasks), ⌘⇧Enter, or Alt chords", () => {
+    expect(repoShortcutFromEvent(event({ key: "t", metaKey: true }))).toBeNull();
+    expect(repoShortcutFromEvent(event({ key: "Enter", metaKey: true, shiftKey: true }))).toBeNull();
+    expect(repoShortcutFromEvent(event({ key: "Enter", metaKey: true, altKey: true }))).toBeNull();
+  });
+});
+
+describe("repoDrillInNameFromPath", () => {
+  it("returns the repo name for a drill-in, not the list", () => {
+    expect(repoDrillInNameFromPath("/repos/acme-api")).toBe("acme-api");
+    expect(repoDrillInNameFromPath("/repos/acme-api?tab=git")).toBe("acme-api");
+    expect(repoDrillInNameFromPath("/repos")).toBeNull();
+    expect(repoDrillInNameFromPath("/notes")).toBeNull();
+  });
+});
+
+describe("repoPageOwnsShortcut", () => {
+  it("claims ⌘Enter / ⌘⇧T only on a repo drill-in", () => {
+    const enter = event({ key: "Enter", metaKey: true });
+    const shiftT = event({ key: "t", metaKey: true, shiftKey: true });
+    expect(repoPageOwnsShortcut(enter, "/repos/acme-api")).toBe(true);
+    expect(repoPageOwnsShortcut(shiftT, "/repos/acme-api")).toBe(true);
+    expect(repoPageOwnsShortcut(enter, "/repos")).toBe(false);
+    expect(repoPageOwnsShortcut(shiftT, "/work")).toBe(false);
+    expect(repoPageOwnsShortcut(event({ key: "t", metaKey: true }), "/repos/acme-api")).toBe(false);
   });
 });
 

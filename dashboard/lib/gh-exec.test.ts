@@ -34,6 +34,30 @@ describe("githubCliErrorInfo", () => {
     expect(info.message).toContain("timed out");
   });
 
+  /**
+   * The real-world failure: a degraded GitHub makes `gh` hang, so `execGh`
+   * kills it. That error carries no "timeout" text — only `killed`/`signal` —
+   * so message sniffing alone would misfile it as a generic 500 and the stale
+   * PR cache would never be served.
+   */
+  it("classifies a timeout-killed process as 504, not 500", () => {
+    const killed = Object.assign(new Error("Command failed: gh search prs"), {
+      killed: true,
+      signal: "SIGKILL",
+    });
+    const info = githubCliErrorInfo(killed);
+    expect(info.httpStatus).toBe(504);
+    expect(info.message).toContain("timed out");
+  });
+
+  it("does not treat a non-killed failure as a timeout", () => {
+    const failed = Object.assign(new Error("Command failed: gh search prs"), {
+      killed: false,
+      signal: null,
+    });
+    expect(githubCliErrorInfo(failed).httpStatus).toBe(500);
+  });
+
   it("mapGithubCliError mirrors githubCliErrorInfo", () => {
     expect(mapGithubCliError(new Error("not logged in"))).toEqual({
       status: 401,

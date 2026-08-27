@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -14,6 +15,7 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FileText, FolderGit2, LayoutGrid, Plus, X } from "lucide-react";
 import { workspaceTabChordFromEvent } from "@/lib/app-shortcuts";
+import { PanelVisibilityContext } from "@/lib/hooks/panel-visibility";
 import { workspaceTabHrefFromClick } from "@/lib/workspace-tab-links";
 import {
   MAX_WORKSPACE_TABS,
@@ -47,6 +49,16 @@ interface WorkspaceTabsApi {
 
 const WorkspaceTabsContext = createContext<WorkspaceTabsApi | null>(null);
 
+interface WorkspaceKeepAlive {
+  /** Href Next last rendered into `{children}` — not a pushState-only switch. */
+  liveHref: string;
+  /** After history.pushState, `{children}` still belongs to `liveHref`. */
+  pushStateHold: boolean;
+  reportMounted: (ids: ReadonlySet<string>) => void;
+}
+
+const KeepAliveContext = createContext<WorkspaceKeepAlive | null>(null);
+
 function currentHref(pathname: string, search: string): string {
   return search ? `${pathname}?${search}` : pathname;
 }
@@ -66,6 +78,16 @@ export function WorkspaceTabsProvider({ children }: { children: ReactNode }) {
   const hrefRef = useRef(href);
   const skipSyncRef = useRef(false);
   const scrollById = useRef<Record<string, number>>({});
+  const mountedPanelsRef = useRef(new Set<string>());
+  const [liveHref, setLiveHref] = useState(href);
+  const [pushStateHold, setPushStateHold] = useState(false);
+  const reportMounted = useCallback((ids: ReadonlySet<string>) => {
+    mountedPanelsRef.current = new Set(ids);
+  }, []);
+  const keepAlive = useMemo<WorkspaceKeepAlive>(
+    () => ({ liveHref, pushStateHold, reportMounted }),
+    [liveHref, pushStateHold, reportMounted],
+  );
 
   const [state, setState] = useState<WorkspaceTabsState>(() => seedState(href));
   const stateRef = useRef(state);
@@ -106,9 +128,21 @@ export function WorkspaceTabsProvider({ children }: { children: ReactNode }) {
       const tab = next.tabs.find((t) => t.id === next.activeId);
       setState(next);
       if (tab && normalizeHref(tab.href) !== normalizeHref(hrefRef.current)) {
-        skipSyncRef.current = true;
+        const previousHref = hrefRef.current;
         hrefRef.current = tab.href;
-        router.push(tab.href);
+        const cached =
+          prevActive !== next.activeId && mountedPanelsRef.current.has(next.activeId);
+        if (cached) {
+          // Next 14.1+: pushState updates usePathname without replacing {children}.
+          skipSyncRef.current = true;
+          setPushStateHold(true);
+          setLiveHref(previousHref);
+          window.history.pushState(null, "", tab.href);
+        } else {
+          setPushStateHold(false);
+          skipSyncRef.current = true;
+          router.push(tab.href);
+        }
         restoreScroll(next.activeId);
       }
     },
@@ -121,6 +155,8 @@ export function WorkspaceTabsProvider({ children }: { children: ReactNode }) {
       hrefRef.current = href;
       return;
     }
+    setPushStateHold(false);
+    setLiveHref(href);
     if (normalizeHref(hrefRef.current) === normalizeHref(href)) return;
     hrefRef.current = href;
     setState((prev) => navigateCurrent(prev, href));
@@ -207,13 +243,101 @@ export function WorkspaceTabsProvider({ children }: { children: ReactNode }) {
     [state, openHref, newTab, activate, close],
   );
 
-  return <WorkspaceTabsContext.Provider value={api}>{children}</WorkspaceTabsContext.Provider>;
+  return (
+    <WorkspaceTabsContext.Provider value={api}>
+      <KeepAliveContext.Provider value={keepAlive}>
+        {children}
+      </KeepAliveContext.Provider>
+    </WorkspaceTabsContext.Provider>
+  );
 }
 
 export function useWorkspaceTabs(): WorkspaceTabsApi {
   const ctx = useContext(WorkspaceTabsContext);
   if (!ctx) throw new Error("useWorkspaceTabs must be used inside WorkspaceTabsProvider");
   return ctx;
+}
+
+/**
+ * Keeps each workspace tab's page tree mounted and hidden instead of swapping
+ * `{children}` on every activate. First visit still goes through Next; after
+ * that, apply() uses history.pushState so this cache is not overwritten.
+ *
+ * Next's `{children}` is one live tree. Snapshot it only into the tab that
+ * owns `liveHref`. After pushState, pathname follows the active tab but
+ * `{children}` is still the previous route — writing that into the active
+ * tab is what made idle tabs show Today.
+ */
+export function WorkspaceTabPanels({ children }: { children: ReactNode }) {
+  const ctx = useContext(WorkspaceTabsContext);
+  const keepAlive = useContext(KeepAliveContext);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [cache, setCache] = useState<ReadonlyMap<string, ReactNode>>(() => new Map());
+  const [seenChildren, setSeenChildren] = useState<ReactNode>(undefined);
+
+  useLayoutEffect(() => {
+    if (!keepAlive) return;
+    keepAlive.reportMounted(new Set(cache.keys()));
+  }, [cache, keepAlive]);
+
+  if (!ctx || !keepAlive) return children;
+
+  const { tabs, activeId } = ctx;
+  const href = currentHref(pathname, searchParams.toString());
+  const ownerHref = keepAlive.pushStateHold ? keepAlive.liveHref : href;
+  const ownerTab = tabs.find((t) => normalizeHref(t.href) === normalizeHref(ownerHref));
+  const liveIds = new Set(tabs.map((t) => t.id));
+
+  let next: Map<string, ReactNode> | null = null;
+  const ensure = (): Map<string, ReactNode> => {
+    if (!next) next = new Map(cache);
+    return next;
+  };
+
+  for (const id of cache.keys()) {
+    if (!liveIds.has(id)) ensure().delete(id);
+  }
+
+  const childrenChanged = seenChildren !== children;
+  const panels = next ?? cache;
+  const hasActive = panels.has(activeId);
+
+  if (childrenChanged) {
+    setSeenChildren(children);
+    if (ownerTab) ensure().set(ownerTab.id, children);
+  } else if (!hasActive && ownerTab?.id === activeId && !keepAlive.pushStateHold) {
+    ensure().set(activeId, children);
+  }
+
+  if (next) setCache(next);
+
+  const tree = next ?? cache;
+
+  return (
+    <div className="workspace-tab-panels">
+      {tabs.map((tab) => {
+        if (!tree.has(tab.id)) return null;
+        const active = tab.id === activeId;
+        return (
+          <div
+            key={tab.id}
+            data-workspace-tab-panel={tab.id}
+            role="tabpanel"
+            hidden={!active}
+            {...(!active ? { inert: true } : {})}
+            className="workspace-tab-panel"
+          >
+            {/* Pauses this tab's pollers while it is hidden — the tree stays
+                mounted, so without it every tab ever opened keeps fetching. */}
+            <PanelVisibilityContext.Provider value={active}>
+              {tree.get(tab.id)}
+            </PanelVisibilityContext.Provider>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function TabKindIcon({ kind }: { kind: WorkspaceTabKind }) {

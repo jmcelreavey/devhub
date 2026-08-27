@@ -2,7 +2,7 @@
 
 import { Suspense, useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { appShortcutFromEvent } from "@/lib/app-shortcuts";
+import { appShortcutFromEvent, repoPageOwnsShortcut } from "@/lib/app-shortcuts";
 
 /**
  * All five surfaces here are keyboard-summoned and invisible at boot, but this
@@ -101,6 +101,8 @@ export function NotesOverlayProvider() {
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
+      // Visible `/repos/:name` owns ⌘Enter / ⌘⇧T (upstart / repo terminal).
+      if (repoPageOwnsShortcut(e, window.location.pathname)) return;
       const shortcut = appShortcutFromEvent(e);
       if (!shortcut) return;
       e.preventDefault();

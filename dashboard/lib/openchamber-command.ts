@@ -155,11 +155,22 @@ function whichAllOnPath(cmd: string): string[] {
   return single ? [single] : [];
 }
 
+/**
+ * Resolve `cmd` through a *non-interactive* login shell.
+ *
+ * `-l` is what we actually want: it sources the profile that sets up nvm/brew
+ * PATH. `-i` additionally sources the interactive rc, and that is a trap — a
+ * `.zshrc` doing anything blocking (this repo's own 1Password helper calls
+ * `op whoami`, which blocks while the vault is locked) hangs the probe. The
+ * `timeout` below does not save us: it kills the shell, but a grandchild that
+ * inherited the stdout pipe keeps it open and `spawnSync` waits on the pipe,
+ * blocking the Node event loop and wedging the whole dashboard.
+ */
 function whichViaLoginShell(cmd: string): string | null {
   if (process.platform === "win32") return null;
   const shell = process.env.SHELL || "/bin/zsh";
   try {
-    const res = spawnSync(shell, ["-lic", `command -v ${cmd}`], {
+    const res = spawnSync(shell, ["-lc", `command -v ${cmd}`], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
       timeout: 5_000,

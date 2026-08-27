@@ -240,6 +240,8 @@ export function resolveEntityLinks(kind: EntityKind, id: string, opts?: {
       // relations panel, same as task tags.
       related.push(...tagRefs(md));
     }
+  } else if (kind === "jira") {
+    pushNote(`tickets/${id}`, id);
   }
 
   // Any task that links to (or has jiraKey ==) this entity — the reverse of

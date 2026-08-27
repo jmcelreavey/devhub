@@ -92,6 +92,15 @@ export interface StashConflictPayload {
   stashed?: boolean;
 }
 
+/** HTTP 409 body when checkout would overwrite local work. */
+export interface CheckoutConflictPayload {
+  code: "checkout_would_conflict";
+  branch: string;
+  error: string;
+  /** Untracked-file collisions cannot be represented as merge conflicts safely. */
+  canMerge: boolean;
+}
+
 /** HTTP 422 body when a git hook blocks commit/push/amend. */
 export type { GitHookFailurePayload } from "@/lib/git/hook-failure";
 

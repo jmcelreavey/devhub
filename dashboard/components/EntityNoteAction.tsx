@@ -6,13 +6,11 @@
  * everywhere; probes existence so the label reads Open vs Create.
  */
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { FileText } from "lucide-react";
-import {
-  createOrOpenVaultNote,
-  vaultNoteExists,
-} from "@/lib/create-vault-note";
+import { createOrOpenVaultNote, NOTE_INDEX_KEY } from "@/lib/create-vault-note";
+import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
 import { HoverTip } from "@/components/ui/HoverTip";
 
@@ -31,18 +29,17 @@ interface EntityNoteActionProps {
   errorMessage?: string;
 }
 
+/**
+ * Does a note exist at `path`?
+ *
+ * Answered from one shared, SWR-deduped index rather than a GET per row: the
+ * previous version fetched each note body just to read `res.ok`, so a page of
+ * a dozen rows fired a dozen concurrent 404s on first paint.
+ */
 export function useVaultNoteExists(path: string): boolean {
-  const [exists, setExists] = useState(false);
-  useEffect(() => {
-    let live = true;
-    void vaultNoteExists(path).then((ok) => {
-      if (live) setExists(ok);
-    });
-    return () => {
-      live = false;
-    };
-  }, [path]);
-  return exists;
+  const { data } = useLive<{ slugs: string[] }>(NOTE_INDEX_KEY, { refreshInterval: 0 });
+  const slugs = useMemo(() => new Set(data?.slugs ?? []), [data?.slugs]);
+  return slugs.has(path);
 }
 
 export function EntityNoteAction({
@@ -57,17 +54,7 @@ export function EntityNoteAction({
   const router = useRouter();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const [exists, setExists] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    void vaultNoteExists(path).then((ok) => {
-      if (!cancelled) setExists(ok);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [path]);
+  const exists = useVaultNoteExists(path);
 
   const label = exists ? "Open note" : "Create note";
   const aria = exists
@@ -78,7 +65,6 @@ export function EntityNoteAction({
     setBusy(true);
     try {
       const result = await createOrOpenVaultNote({ path, markdown, overwrite });
-      if (result.wrote) setExists(true);
       router.push(result.href);
     } catch (e) {
       console.error("entity note action:", e);

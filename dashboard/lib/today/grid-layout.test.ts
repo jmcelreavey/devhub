@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyCollapsedHeights,
   applyHeightPatchAndCompact,
   mergeTodayGridLayouts,
   preserveHiddenTodayGridLayouts,
+  TODAY_GRID_COLLAPSED_HEIGHT,
   TODAY_GRID_DEFAULT_LAYOUTS,
   type TodayGridBreakpoint,
   type TodayGridSlotId,
@@ -54,6 +56,12 @@ describe("categorizeGridSize", () => {
     expect(categorizeGridSize(12, 6)).toBe("3x2");
     expect(categorizeGridSize(12, 5)).toBe("3x1");
   });
+
+  it("treats a tall narrow column as a list, not a 1x1 stub", () => {
+    expect(categorizeGridSize(4, 14)).toBe("2x1");
+    expect(categorizeGridSize(3, 8)).toBe("2x1");
+    expect(categorizeGridSize(4, 4)).toBe("1x1");
+  });
 });
 
 describe("collapsing past minH", () => {
@@ -87,5 +95,30 @@ describe("collapsing past minH", () => {
       new Set(["briefing"]) as never,
     );
     expect((out as never as Record<string, { minH?: number }[]>).lg[0].minH).toBe(6);
+  });
+});
+
+describe("applyCollapsedHeights after remount merge", () => {
+  it("restores collapsed briefing/calendar after merge lifts short saved heights", () => {
+    const persisted = layouts([
+      { i: "briefing", x: 0, y: 2, w: 8, h: TODAY_GRID_COLLAPSED_HEIGHT, minW: 4, minH: 6 },
+      { i: "calendar", x: 8, y: 2, w: 4, h: TODAY_GRID_COLLAPSED_HEIGHT, minW: 3, minH: 2 },
+      { i: "main", x: 0, y: 9, w: 8, h: TODAY_GRID_COLLAPSED_HEIGHT, minW: 5, minH: 6 },
+    ]);
+    const visible = new Set<TodayGridSlotId>(["briefing", "calendar", "main"]);
+    const merged = mergeTodayGridLayouts(persisted, visible);
+    expect(merged.lg?.find((item) => item.i === "briefing")?.h).toBeGreaterThan(TODAY_GRID_COLLAPSED_HEIGHT);
+    expect(merged.lg?.find((item) => item.i === "calendar")?.h).toBeGreaterThan(TODAY_GRID_COLLAPSED_HEIGHT);
+    expect(merged.lg?.find((item) => item.i === "main")?.h).toBeGreaterThan(TODAY_GRID_COLLAPSED_HEIGHT);
+
+    const collapsed = applyCollapsedHeights(
+      merged,
+      new Set<TodayGridSlotId>(["briefing", "calendar", "main"]),
+    );
+    expect(collapsed.lg?.find((item) => item.i === "briefing")?.h).toBe(TODAY_GRID_COLLAPSED_HEIGHT);
+    expect(collapsed.lg?.find((item) => item.i === "calendar")?.h).toBe(TODAY_GRID_COLLAPSED_HEIGHT);
+    expect(collapsed.lg?.find((item) => item.i === "main")?.h).toBe(TODAY_GRID_COLLAPSED_HEIGHT);
+    expect(collapsed.lg?.find((item) => item.i === "briefing")?.minH).toBe(6);
+    expect(collapsed.lg?.find((item) => item.i === "main")?.minH).toBe(6);
   });
 });

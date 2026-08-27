@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Search, X } from "lucide-react";
+import { SEARCH_QUERY_INPUT_ATTRS } from "@/components/ui/SearchInput";
 
 export interface InlineSearchProps {
   id: string;
@@ -47,6 +48,7 @@ export function InlineSearch({
         id={id}
         type="text"
         autoFocus={autoFocus}
+        {...SEARCH_QUERY_INPUT_ATTRS}
         placeholder={placeholder ?? label}
         value={value}
         onChange={(event) => onChange(event.target.value)}

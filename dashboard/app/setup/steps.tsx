@@ -6,7 +6,7 @@ import { GoogleSetupSteps } from "@/components/setup/GoogleSetupSteps";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { FieldError } from "@/components/ui/FieldError";
-import { FeatureCard, TipCard, type PathCheck, type SetupStatus, type SetupStepMeta } from "./shared";
+import { FeatureCard, TipCard, SECRET_FIELD_MASK, type PathCheck, type SetupStatus, type SetupStepMeta } from "./shared";
 import { FormField } from "./FormField";
 import { desktopInfo } from "@/lib/desktop/bridge";
 import {
@@ -938,6 +938,7 @@ export function JiraStep({
   checking,
   onCheckConnection,
   error,
+  checkOk,
 }: {
   form: { domain: string; email: string; apiToken: string };
   setForm: (f: { domain: string; email: string; apiToken: string }) => void;
@@ -947,6 +948,7 @@ export function JiraStep({
   checking: boolean;
   onCheckConnection: () => void;
   error: string;
+  checkOk?: string;
 }) {
   const statusRow = (
     <div
@@ -973,7 +975,7 @@ export function JiraStep({
           fontWeight: 500,
         }}
       >
-        {configured ? "Jira is connected" : "Jira is not connected yet"}
+        {configured ? "Jira credentials saved" : "Jira is not connected yet"}
       </span>
     </div>
   );
@@ -997,7 +999,6 @@ export function JiraStep({
         </a>.
       </p>
 
-      {!configured && (
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         <FormField
           label="Domain"
@@ -1014,15 +1015,18 @@ export function JiraStep({
           secret={false}
         />
         <FormField
-          label="API Token"
+          label={configured ? "Replace API token" : "API Token"}
           value={form.apiToken}
           onChange={(v) => setForm({ ...form, apiToken: v })}
-          placeholder="ATTxxxxxxxxxxxx"
+          placeholder={configured ? "Paste a new token to replace" : "ATTxxxxxxxxxxxx"}
           secret={!showSecrets["jira-token"]}
           onToggleSecret={() => toggleSecret("jira-token")}
+          onFocus={() => {
+            if (form.apiToken === SECRET_FIELD_MASK) setForm({ ...form, apiToken: "" });
+          }}
+          hint={configured ? "Leave blank to keep the saved token. Check connection verifies against Jira, not just that a value exists." : undefined}
         />
       </div>
-      )}
 
       {statusRow}
       <button
@@ -1033,6 +1037,11 @@ export function JiraStep({
       >
         {checking ? "Checking..." : "Check connection"}
       </button>
+      {checkOk && (
+        <p className="mt-2 text-[12px] leading-snug" style={{ color: "var(--accent)" }}>
+          {checkOk}
+        </p>
+      )}
 
       {error && <FieldError>{error}</FieldError>}
     </div>

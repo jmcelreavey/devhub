@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createEmptyDiagram, type TldrawDiagramData } from "@/lib/diagram-utils";
-import { tldrawToShareMarkdown } from "@/lib/share/share-content";
+import { parseTldrawShareMarkdown, tldrawToShareMarkdown } from "@/lib/share/share-content";
 
 function diagramWithShape(label = "Auth service"): TldrawDiagramData {
   return {
@@ -39,5 +39,11 @@ describe("tldrawToShareMarkdown", () => {
     const a = tldrawToShareMarkdown("Flow", content);
     const b = tldrawToShareMarkdown("Flow", content);
     expect(a).toBe(b);
+  });
+
+  it("round-trips through parseTldrawShareMarkdown", () => {
+    const content = diagramWithShape("Gateway");
+    const md = tldrawToShareMarkdown("Legal architecture overview", content);
+    expect(parseTldrawShareMarkdown(md)).toEqual(content);
   });
 });

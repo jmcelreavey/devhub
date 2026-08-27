@@ -51,6 +51,13 @@ const SHORTCUT_SECTIONS: { title: string; items: ShortcutEntry[] }[] = [
     ],
   },
   {
+    title: "Repo page",
+    items: [
+      { keys: ["⌘", "↵"], action: "Upstart this repo" },
+      { keys: ["⌘", "⇧", "T"], action: "Terminal in this repo" },
+    ],
+  },
+  {
     title: "Terminal",
     items: [
       { keys: ["⌃", "`"], action: "Toggle terminal dock" },

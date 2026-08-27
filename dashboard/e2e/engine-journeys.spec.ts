@@ -353,7 +353,10 @@ test.describe("command palette", () => {
     await page.goto("/");
     await hydrated(page);
 
-    await page.keyboard.press("ControlOrMeta+k");
+    // ⌘P, not ⌘K — `appShortcutFromEvent` has only ever mapped "p" to the
+    // palette, and that is what the search field advertises. This pressed ⌘K,
+    // which maps to nothing, so the palette never opened.
+    await page.keyboard.press("ControlOrMeta+p");
     const palette = page
       .getByRole("dialog")
       .or(page.locator("[data-command-palette]"))

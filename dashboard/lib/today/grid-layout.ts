@@ -86,6 +86,27 @@ export function applyHeightPatchAndCompact(
   return out;
 }
 
+/**
+ * Grid rows a collapsed card occupies — header only, aligned across slots.
+ *
+ * Persisted `h` is not trustworthy here: `normalizeSavedItem` lifts short
+ * briefing/calendar tiles and clamps to `minH`, so a remount reads collapsed
+ * storage as expanded height. Re-apply from the collapse flags after merge.
+ */
+export const TODAY_GRID_COLLAPSED_HEIGHT = 3;
+
+export function applyCollapsedHeights(
+  layouts: ResponsiveLayouts<TodayGridBreakpoint>,
+  collapsedSlots: ReadonlySet<TodayGridSlotId>,
+): ResponsiveLayouts<TodayGridBreakpoint> {
+  if (collapsedSlots.size === 0) return layouts;
+  const patch: Partial<Record<TodayGridSlotId, number>> = {};
+  for (const id of collapsedSlots) {
+    patch[id] = TODAY_GRID_COLLAPSED_HEIGHT;
+  }
+  return applyHeightPatchAndCompact(layouts, patch, collapsedSlots);
+}
+
 const LG: LayoutItem[] = [
   { i: "welcome", x: 0, y: 0, w: 12, h: 2, minW: 12, maxW: 12, minH: 2 },
   /* Side-by-side with calendar at matching height so the top row reads as one band. */

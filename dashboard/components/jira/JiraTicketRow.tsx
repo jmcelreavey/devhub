@@ -18,6 +18,7 @@ import {
   useContextMenu,
   type ContextMenuGroup,
 } from "@/components/shell/ContextMenu";
+import { QueueRow } from "@/components/ui/QueueRow";
 import { useTagMenuGroup, withTagsGroup } from "@/lib/hooks/use-tag-menu";
 import { useToast } from "@/lib/hooks/use-toast";
 
@@ -36,22 +37,14 @@ function formatUpdatedShort(iso: string): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export function JiraTicketRow({
-  ticket,
-  density = "compact",
-  showUpdated = true,
-}: {
-  ticket: JiraTicket;
-  density?: "compact" | "comfortable";
-  showUpdated?: boolean;
-}) {
+/** Same actions as the wide Jira ticket row — compact QueueRow hosts this too. */
+export function useJiraTicketMenu(ticket: JiraTicket) {
   const toast = useToast();
   const router = useRouter();
   const [transitionOpen, setTransitionOpen] = useState(false);
   const menu = useContextMenu<JiraTicket>();
   const notePath = ticketNotePath(ticket.key);
   const noteExists = useVaultNoteExists(notePath);
-  const compact = density === "compact";
 
   const openNote = async () => {
     try {
@@ -113,6 +106,89 @@ export function JiraTicketRow({
     ],
     tagsGroup,
   );
+
+  const menuUi = (
+    <>
+      <ContextMenu
+        open={menu.target !== null}
+        position={menu.position}
+        groups={groups}
+        onClose={menu.close}
+        label={`${ticket.key} actions`}
+      />
+      {tagsModal}
+      <JiraTransitionModal
+        open={transitionOpen}
+        jiraKey={ticket.key}
+        title="Update Jira status"
+        skipLabel="Cancel"
+        suggest={ticket.status}
+        onCancel={() => setTransitionOpen(false)}
+        onConfirm={async (transitionId) => {
+          setTransitionOpen(false);
+          if (!transitionId) return;
+          try {
+            const res = await fetch(`/api/jira/ticket/${ticket.key}/transition`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ transitionId }),
+            });
+            if (!res.ok) throw new Error("Transition failed");
+            toast.success(`Updated ${ticket.key}`);
+          } catch {
+            toast.error(`Couldn't transition ${ticket.key}`);
+          }
+        }}
+      />
+    </>
+  );
+
+  return { menu, groups, noteExists, menuUi };
+}
+
+/** Single-line compact row for small Today tiles — same menu as {@link JiraTicketRow}. */
+export function JiraTicketQueueRow({ ticket }: { ticket: JiraTicket }) {
+  const { menu, menuUi } = useJiraTicketMenu(ticket);
+  return (
+    <div className="flex items-center gap-1.5 pr-2" role="listitem" {...menu.bindRow(ticket)}>
+      {ticket.assignee ? (
+        <PersonChip
+          name={ticket.assignee.displayName}
+          email={ticket.assignee.email}
+          avatarUrl={ticket.assignee.avatarUrl}
+          size={16}
+          nameClassName="sr-only"
+          className="pl-2"
+        />
+      ) : null}
+      <QueueRow
+        className="min-w-0 flex-1"
+        monoKey={ticket.key}
+        title={ticket.summary}
+        size="compact"
+        href={ticket.url}
+        statusPill={<JiraStatusPill ticketKey={ticket.key} status={ticket.status} />}
+      />
+      <RowMenuKebab
+        label={`Actions for ${ticket.key}`}
+        onOpen={(x, y) => menu.openAtPoint(x, y, ticket)}
+      />
+      {menuUi}
+    </div>
+  );
+}
+
+export function JiraTicketRow({
+  ticket,
+  density = "compact",
+  showUpdated = true,
+}: {
+  ticket: JiraTicket;
+  density?: "compact" | "comfortable";
+  showUpdated?: boolean;
+}) {
+  const { menu, noteExists, menuUi } = useJiraTicketMenu(ticket);
+  const compact = density === "compact";
 
   return (
     <div
@@ -177,37 +253,7 @@ export function JiraTicketRow({
           onOpen={(x, y) => menu.openAtPoint(x, y, ticket)}
         />
       </div>
-      <ContextMenu
-        open={menu.target !== null}
-        position={menu.position}
-        groups={groups}
-        onClose={menu.close}
-        label={`${ticket.key} actions`}
-      />
-      {tagsModal}
-      <JiraTransitionModal
-        open={transitionOpen}
-        jiraKey={ticket.key}
-        title="Update Jira status"
-        skipLabel="Cancel"
-        suggest={ticket.status}
-        onCancel={() => setTransitionOpen(false)}
-        onConfirm={async (transitionId) => {
-          setTransitionOpen(false);
-          if (!transitionId) return;
-          try {
-            const res = await fetch(`/api/jira/ticket/${ticket.key}/transition`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ transitionId }),
-            });
-            if (!res.ok) throw new Error("Transition failed");
-            toast.success(`Updated ${ticket.key}`);
-          } catch {
-            toast.error(`Couldn't transition ${ticket.key}`);
-          }
-        }}
-      />
+      {menuUi}
     </div>
   );
 }

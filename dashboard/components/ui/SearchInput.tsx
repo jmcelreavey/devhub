@@ -1,7 +1,20 @@
 "use client";
 
-import type { Ref } from "react";
+import type { InputHTMLAttributes, Ref } from "react";
 import { Clock, Search, X } from "lucide-react";
+
+/**
+ * Browser spellcheck and writing-suggestions intercept ArrowUp/ArrowDown
+ * (and can rewrite the query) before result-navigation handlers run.
+ * `writingsuggestions` is the Safari 18 / Chrome chip; not in React's input types yet.
+ */
+export const SEARCH_QUERY_INPUT_ATTRS = {
+  autoComplete: "off",
+  autoCorrect: "off",
+  autoCapitalize: "off",
+  spellCheck: false,
+  writingsuggestions: "false",
+} as InputHTMLAttributes<HTMLInputElement>;
 
 interface SearchInputProps {
   id?: string;
@@ -45,6 +58,7 @@ export function SearchInput({
         ref={inputRef}
         type="search"
         autoFocus={autoFocus}
+        {...SEARCH_QUERY_INPUT_ATTRS}
         className={`search-field__input ${inputClassName}`.trim()}
         aria-label={placeholder}
         placeholder={placeholder}

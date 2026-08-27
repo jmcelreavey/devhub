@@ -74,32 +74,49 @@ interface JiraSearchResponse {
   issues?: JiraIssue[];
 }
 
-export async function getMyTickets(): Promise<JiraTicket[]> {
-  const j = getResolvedJiraEnv();
-  if (!j) return [];
+/**
+ * Jira Cloud `POST /search/jql` returns 200 + `issues: []` when the request
+ * is unauthenticated — identical to a real empty inbox. Probe `/myself`
+ * before treating an empty page as "no tickets".
+ */
+async function assertJiraAuth(j: ResolvedJira): Promise<void> {
+  const res = await fetch(`${apiBase(j)}/myself`, { headers: jsonHeaders(j) });
+  if (!res.ok) {
+    throw new Error(
+      `Jira authentication failed (${res.status}). Check JIRA_EMAIL and JIRA_API_TOKEN.`,
+    );
+  }
+}
 
+async function searchJql(j: ResolvedJira, body: Record<string, unknown>): Promise<JiraIssue[]> {
   const res = await fetch(`${apiBase(j)}/search/jql`, {
     method: "POST",
-    headers: {
-      Authorization: authHeader(j),
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      jql: "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
-      fields: ["summary", "status", "priority", "issuetype", "project", "updated", "assignee"],
-      maxResults: 100,
-    }),
+    headers: jsonHeaders(j),
+    body: JSON.stringify(body),
   });
-
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Jira API ${res.status}: ${text}`);
   }
-
   const data = (await res.json()) as JiraSearchResponse;
+  const issues = data.issues ?? [];
+  if (issues.length === 0) {
+    await assertJiraAuth(j);
+  }
+  return issues;
+}
 
-  return (data.issues ?? []).map((issue) => ({
+export async function getMyTickets(): Promise<JiraTicket[]> {
+  const j = getResolvedJiraEnv();
+  if (!j) return [];
+
+  const issues = await searchJql(j, {
+    jql: "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
+    fields: ["summary", "status", "priority", "issuetype", "project", "updated", "assignee"],
+    maxResults: 100,
+  });
+
+  return issues.map((issue) => ({
     key: issue.key,
     summary: issue.fields.summary ?? "",
     status: issue.fields.status?.name ?? "Unknown",
@@ -129,28 +146,13 @@ export async function getMyAssignedTicketsTouchedInRange(
 
   const jql = `assignee = currentUser() AND updated >= "${localStartYmd} ${startTime}" AND updated <= "${localEndYmd} ${endTime}" ORDER BY updated DESC`;
 
-  const res = await fetch(`${apiBase(j)}/search/jql`, {
-    method: "POST",
-    headers: {
-      Authorization: authHeader(j),
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      jql,
-      fields: ["summary", "status", "priority", "issuetype", "project", "updated", "resolution", "assignee"],
-      maxResults: 50,
-    }),
+  const issues = await searchJql(j, {
+    jql,
+    fields: ["summary", "status", "priority", "issuetype", "project", "updated", "resolution", "assignee"],
+    maxResults: 50,
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Jira API ${res.status}: ${text}`);
-  }
-
-  const data = (await res.json()) as JiraSearchResponse;
-
-  return (data.issues ?? []).map((issue) => {
+  return issues.map((issue) => {
     const resField = issue.fields.resolution;
     const resolutionName =
       resField && typeof resField === "object" && "name" in resField && resField.name

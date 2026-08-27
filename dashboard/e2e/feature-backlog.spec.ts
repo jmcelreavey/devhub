@@ -32,6 +32,7 @@ test.describe("feature backlog mocks", () => {
    * half is unit-tested in `lib/github/prs-cache.test.ts`.
    */
   test("PR list renders the stale-cache warning after a GitHub timeout", async ({ page }) => {
+    const prRow = page.getByRole("link", { name: "Cached PR" });
     let refreshPass = false;
     await page.route("**/api/github/prs/skip**", async (route) => {
       await fulfillJson(route, { skipped: [] });
@@ -52,7 +53,10 @@ test.describe("feature backlog mocks", () => {
     await expect(page.getByRole("heading", { name: "Pull Requests" })).toBeVisible({
       timeout: 30_000,
     });
-    await expect(page.getByText("Cached PR")).toBeVisible({ timeout: 15_000 });
+    // The PR row specifically: `getByText("Cached PR")` also substring-matches
+    // the warning copy ("Showing cached PRs — …"), so once that banner appears
+    // the bare text locator is ambiguous and fails strict mode.
+    await expect(prRow).toBeVisible({ timeout: 15_000 });
     // The warning must not already be present, or the assertion below proves nothing.
     await expect(page.getByText(/GitHub timed out/i)).toHaveCount(0);
 
@@ -66,7 +70,7 @@ test.describe("feature backlog mocks", () => {
     // Only the warning. `Cached PR` was on screen before the click, so an
     // `or`-ed assertion here passed whether or not the fallback ever rendered.
     await expect(page.getByText(/GitHub timed out/i)).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText("Cached PR")).toBeVisible();
+    await expect(prRow).toBeVisible();
   });
 
   test("radar renders owned-repo attention rows from the personal API", async ({ page }) => {

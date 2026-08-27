@@ -38,6 +38,7 @@ import { openInteractiveAgentSession } from "@/lib/agent-job";
 import { openInBrowser } from "@/lib/desktop/bridge";
 import { useIsMobile } from "@/lib/hooks/use-is-mobile";
 import { usePaletteRowPress } from "@/lib/palette-row-press";
+import { SEARCH_QUERY_INPUT_ATTRS } from "@/components/ui/SearchInput";
 
 type CommandKind =
   | "nav"
@@ -702,6 +703,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                 : "Search notes, tasks, tickets, actions… (Esc to close)"
             }
             className="palette-input"
+            {...SEARCH_QUERY_INPUT_ATTRS}
             aria-controls="cmd-palette-list"
             aria-activedescendant={highlighted ? `cmd-${highlighted.id}` : undefined}
             style={{ flex: 1, minWidth: 0 }}

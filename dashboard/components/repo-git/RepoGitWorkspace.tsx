@@ -88,6 +88,9 @@ interface RepoGitWorkspaceProps {
   hideTrigger?: boolean;
   /** Tab selected when the modal opens (controlled or uncontrolled). */
   initialTab?: RepoGitTabId;
+  /** Select this working-tree path on the Changes tab (hub file click). */
+  focusPath?: string | null;
+  onFocusPathConsumed?: () => void;
 }
 
 export function RepoGitWorkspace({
@@ -100,6 +103,8 @@ export function RepoGitWorkspace({
   onOpenChange,
   hideTrigger = false,
   initialTab,
+  focusPath = null,
+  onFocusPathConsumed,
 }: RepoGitWorkspaceProps) {
   const [openUncontrolled, setOpenUncontrolled] = useState(false);
   const controlled = openControlled !== undefined;
@@ -449,6 +454,10 @@ export function RepoGitWorkspace({
     }
     wasOpen.current = open;
   }, [open, initialTab, setTab]);
+
+  useEffect(() => {
+    if (focusPath) setTab("changes");
+  }, [focusPath, setTab]);
 
   useEffect(() => {
     if (!open) return;
@@ -812,6 +821,8 @@ export function RepoGitWorkspace({
                       onVisibleDirtyChange={setLiveVisibleDirty}
                       pushing={pushing}
                       onPush={pushRepo}
+                      focusPath={focusPath}
+                      onFocusPathConsumed={onFocusPathConsumed}
                     />
                   )}
                   {tab === "branches" && (

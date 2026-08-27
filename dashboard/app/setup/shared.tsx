@@ -30,7 +30,13 @@ export interface SetupStatus {
   calendarVars: { hasClientId: boolean; hasClientSecret: boolean; hasRefreshToken: boolean };
   calendarClientIdPreview: string | null;
   calendarClientSecretPreview: string | null;
-  jiraVars: { hasDomain: boolean; hasEmail: boolean; hasApiToken: boolean };
+  jiraVars: {
+    hasDomain: boolean;
+    hasEmail: boolean;
+    hasApiToken: boolean;
+    domain: string;
+    email: string;
+  };
   biVars: { awsProfile: string | null; account: string | null; capiRepoPath: string | null };
   agentVars: {
     cli: "opencode" | "cursor" | "chatgpt";

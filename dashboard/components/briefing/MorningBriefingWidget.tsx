@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { Sun, RefreshCw } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import type { DailyBriefing } from "@/lib/morning-briefing";
 import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
+import { onTodayCardHeaderClick, TodayViewAllLink } from "@/components/today/TodayViewAllLink";
 import { DashboardBriefingWeather } from "@/components/briefing/DashboardBriefingWeather";
 import { BriefingOwnedReposDigest, type BriefingRepoAttentionRow } from "@/components/briefing/BriefingOwnedReposDigest";
 
@@ -52,15 +52,13 @@ export function MorningBriefingWidget({ collapsed = false, onToggle }: MorningBr
       data-collapsed={collapsed ? "true" : undefined}
       style={{ padding: "var(--space-3) var(--space-3)" }}
     >
-      <div className="flex items-center gap-2" style={{ marginBottom: "var(--space-2)" }}>
+      <div className="flex items-center gap-2" style={{ marginBottom: "var(--space-2)" }} onClick={onTodayCardHeaderClick}>
         <Sun size={13} className="text-warning" aria-hidden />
         <span className="text-xs font-semibold text-text">
           Morning briefing
         </span>
         <span className="ml-auto flex min-w-0 items-center gap-2">
-          <Link href="/briefing" className="text-xs today-grid-drag-cancel text-accent">
-            View all →
-          </Link>
+          <TodayViewAllLink href="/briefing" />
           <button
             type="button"
             onClick={() => void refresh()}

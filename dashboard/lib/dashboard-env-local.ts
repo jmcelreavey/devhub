@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getEnvFilePath } from "@/lib/desktop/runtime-paths";
+import { defaultAppDataDir, getEnvFilePath } from "@/lib/desktop/runtime-paths";
 
 /** Managed keys written by /api/setup/save and calendar OAuth callback. */
 export const DASHBOARD_MANAGED_ENV_KEYS = [
@@ -181,11 +181,10 @@ function parseEnvFile(filePath: string): Map<string, string> {
   return result;
 }
 
-export function readDashboardEnvLocalFile(): {
+function readManagedEnvFile(envPath: string): {
   overrides: Map<string, string>;
   passthrough: string[];
 } {
-  const envPath = getDashboardEnvLocalPath();
   const overrides = new Map<string, string>();
   const passthrough: string[] = [];
   if (!fs.existsSync(envPath)) return { overrides, passthrough };
@@ -203,6 +202,33 @@ export function readDashboardEnvLocalFile(): {
       passthrough.push(line);
     }
   }
+  return { overrides, passthrough };
+}
+
+function writeManagedEnvFile(
+  envPath: string,
+  overrides: Map<string, string>,
+  passthrough: string[],
+): void {
+  const rendered = [
+    ...DASHBOARD_MANAGED_ENV_KEYS.filter((k) => overrides.has(k)).map((k) => `${k}=${overrides.get(k)}`),
+    ...passthrough,
+  ];
+  ensureEnvFileParent(envPath);
+  fs.writeFileSync(envPath, rendered.join("\n") + "\n", "utf-8");
+  try {
+    fs.chmodSync(envPath, 0o600);
+  } catch {
+    /* non-POSIX filesystem */
+  }
+}
+
+export function readDashboardEnvLocalFile(): {
+  overrides: Map<string, string>;
+  passthrough: string[];
+} {
+  const envPath = getDashboardEnvLocalPath();
+  const { overrides, passthrough } = readManagedEnvFile(envPath);
 
   const parentEnvPath = path.resolve(path.dirname(envPath), "..", ".env.local");
   if (parentEnvPath !== envPath && fs.existsSync(parentEnvPath)) {
@@ -222,18 +248,43 @@ export function writeDashboardEnvLocalFile(
   overrides: Map<string, string>,
   passthrough: string[],
 ): void {
-  const rendered = [
-    ...DASHBOARD_MANAGED_ENV_KEYS.filter((k) => overrides.has(k)).map((k) => `${k}=${overrides.get(k)}`),
-    ...passthrough,
-  ];
-  const envPath = getDashboardEnvLocalPath();
-  ensureEnvFileParent(envPath);
-  fs.writeFileSync(envPath, rendered.join("\n") + "\n", "utf-8");
-  try {
-    fs.chmodSync(envPath, 0o600);
-  } catch {
-    /* non-POSIX filesystem */
+  writeManagedEnvFile(getDashboardEnvLocalPath(), overrides, passthrough);
+}
+
+/**
+ * Packaged DevHub.app reads `~/Library/Application Support/DevHub/config/.env.local`.
+ * Checkout `npm run dev` writes `dashboard/.env.local`. Setup from either process
+ * should still update the packaged file so Tickets work after Save.
+ *
+ * `DEVHUB_MIRROR_ENV_FILE` overrides the destination (tests). Vitest skips the
+ * real Application Support path so a unit test cannot clobber a live token.
+ */
+export function getPackagedUserEnvFilePath(): string | null {
+  const override = process.env.DEVHUB_MIRROR_ENV_FILE?.trim();
+  if (override) return path.resolve(override);
+  if (process.env.VITEST) return null;
+  return path.join(defaultAppDataDir(), "config", ".env.local");
+}
+
+/** Copy selected keys into another env file without rewriting unrelated values. */
+export function patchEnvFileKeys(
+  envPath: string,
+  patch: Map<string, string>,
+  keys: readonly string[],
+): void {
+  if (!envPath || !fs.existsSync(envPath)) return;
+  if (path.resolve(envPath) === path.resolve(getDashboardEnvLocalPath())) return;
+  const { overrides, passthrough } = readManagedEnvFile(envPath);
+  let changed = false;
+  for (const key of keys) {
+    const v = patch.get(key)?.trim();
+    if (!v) continue;
+    if (overrides.get(key) !== v) {
+      overrides.set(key, v);
+      changed = true;
+    }
   }
+  if (changed) writeManagedEnvFile(envPath, overrides, passthrough);
 }
 
 /**

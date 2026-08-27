@@ -47,6 +47,15 @@ export default defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: process.env.PLAYWRIGHT_VIDEO === "1" ? "on" : "off",
+    /**
+     * `public/sw.js` is network-first with a cache fallback over `GET /api/*`.
+     * Requests a service worker makes are invisible to `page.route`, so every
+     * API mock in `e2e/` was silently bypassed whenever the worker happened to
+     * be active — and the worker's cache could replay one test's API response
+     * into another. That made mocked specs pass or fail on timing. Blocking
+     * service workers keeps route mocks authoritative.
+     */
+    serviceWorkers: "block",
   },
 
   /**

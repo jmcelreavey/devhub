@@ -77,3 +77,20 @@ export async function deleteGist(gistId: string): Promise<void> {
     throw err;
   }
 }
+
+/**
+ * Read the published markdown of an existing gist. Does not create or edit.
+ * Gists we publish are a single `.md` file; `--raw` dumps that file's body.
+ */
+export async function fetchGistMarkdown(gistId: string): Promise<string> {
+  try {
+    const { stdout } = await execGh(["gist", "view", gistId, "--raw"]);
+    return stdout;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/not found|404/i.test(message)) {
+      throw new Error("Gist not found");
+    }
+    throw err;
+  }
+}

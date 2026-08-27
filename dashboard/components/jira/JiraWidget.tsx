@@ -2,16 +2,13 @@
 
 import { useMemo } from "react";
 import { Ticket, AlertCircle } from "lucide-react";
-import Link from "next/link";
 import { useLive } from "@/lib/hooks/use-fetch";
 import type { JiraTicket } from "@/lib/jira/client";
 import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
+import { onTodayCardHeaderClick, TodayViewAllLink } from "@/components/today/TodayViewAllLink";
 import { type SeverityTone } from "@/components/ui/Severity";
-import { JiraStatusPill } from "@/components/jira/JiraStatusPill";
-import { JiraTicketRow } from "@/components/jira/JiraTicketRow";
+import { JiraTicketQueueRow, JiraTicketRow } from "@/components/jira/JiraTicketRow";
 import { useGridSize } from "@/lib/hooks/use-grid-size";
-import { QueueRow } from "@/components/ui/QueueRow";
-import { PersonChip } from "@/components/PersonChip";
 
 interface JiraResponse {
   tickets?: JiraTicket[];
@@ -94,15 +91,13 @@ export function JiraWidget({ collapsed = false, collapsedSummary, onToggle }: Ji
 
   return (
     <div className="card" data-collapsed={collapsed ? "true" : undefined}>
-      <div className="card-header today-grid-drag-handle">
+      <div className="card-header today-grid-drag-handle" onClick={onTodayCardHeaderClick}>
         <span className="flex min-w-0 items-center gap-1.5">
           <Ticket size={12} aria-hidden /> My Tickets
         </span>
         <span className="flex min-w-0 items-center gap-2">
           {collapsed ? <span className="today-collapsed-summary">{collapsedSummary}</span> : null}
-          <Link href="/tickets" className="text-xs today-grid-drag-cancel text-accent">
-            View all →
-          </Link>
+          <TodayViewAllLink href="/work?tab=jira" />
           {onToggle ? <TodayCollapseButton collapsed={collapsed} label="Jira" onToggle={onToggle} /> : null}
         </span>
       </div>
@@ -121,34 +116,10 @@ export function JiraWidget({ collapsed = false, collapsedSummary, onToggle }: Ji
               </div>
             </div>
           ) : gridSize === "2x1" ? (
-            <div role="list" aria-label="Your Jira tickets">
-              {sortedTickets.slice(0, 4).map((t) => (
-                <div key={t.key} className="flex items-center gap-1.5 pr-2">
-                  {t.assignee ? (
-                    <PersonChip
-                      name={t.assignee.displayName}
-                      email={t.assignee.email}
-                      avatarUrl={t.assignee.avatarUrl}
-                      size={16}
-                      nameClassName="sr-only"
-                      className="pl-2"
-                    />
-                  ) : null}
-                  <QueueRow
-                    className="min-w-0 flex-1"
-                    monoKey={t.key}
-                    title={t.summary}
-                    size="compact"
-                    href={t.url}
-                    statusPill={<JiraStatusPill ticketKey={t.key} status={t.status} />}
-                  />
-                </div>
+            <div className="min-h-0 overflow-auto" role="list" aria-label="Your Jira tickets">
+              {sortedTickets.map((t) => (
+                <JiraTicketQueueRow key={t.key} ticket={t} />
               ))}
-              {sortedTickets.length > 4 && (
-                <div className="px-3 py-1 text-[11px] text-text-subtle">
-                  +{sortedTickets.length - 4} more
-                </div>
-              )}
             </div>
           ) : (
             <div className="jira-widget-ticket-scroll stagger-children" role="list" aria-label="Your Jira tickets, newest activity first">

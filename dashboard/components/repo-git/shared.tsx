@@ -1,11 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
+import type { DecisionOption } from "@/components/shell/ConfirmDialog";
 import {
   parseHookFailurePayload,
   type GitHookFailurePayload,
 } from "@/lib/git/hook-failure";
-import type { StashConflictPayload } from "@/app/repos/types";
+import type { CheckoutConflictPayload, StashConflictPayload } from "@/app/repos/types";
 
 /* ─── Shared types ─── */
 
@@ -164,6 +165,54 @@ export function parseStashConflict(body: string): StashConflictPayload | null {
   }
 }
 
+export function parseCheckoutConflict(body: string): CheckoutConflictPayload | null {
+  try {
+    const json = JSON.parse(body) as Partial<CheckoutConflictPayload>;
+    if (json.code !== "checkout_would_conflict" || typeof json.branch !== "string") return null;
+    return {
+      code: "checkout_would_conflict",
+      branch: json.branch,
+      error: typeof json.error === "string" ? json.error : "Local changes block checkout",
+      canMerge: json.canMerge !== false,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function chooseCheckoutStrategy(
+  decide: (opts: {
+    title: string;
+    message: string;
+    cancelLabel: string;
+    options: DecisionOption[];
+  }) => Promise<string | null>,
+  conflict: CheckoutConflictPayload,
+): Promise<"stash" | "merge" | null> {
+  const choice = await decide({
+    title: `Local changes block ${conflict.branch}`,
+    message: "Git found local work that the target branch would overwrite. Choose how to preserve it.",
+    cancelLabel: "Stay here",
+    options: [
+      {
+        value: "stash",
+        label: "Stash & switch",
+        description: "Safest: stash local work, switch branches, then re-apply it.",
+      },
+      {
+        value: "merge",
+        label: "Switch & resolve conflicts",
+        description: conflict.canMerge
+          ? "Keep local edits in place and let Git create conflicts for the resolver."
+          : "Unavailable because untracked files would be overwritten; Git cannot merge those safely.",
+        variant: "danger",
+        disabled: !conflict.canMerge,
+      },
+    ],
+  });
+  return choice === "stash" || choice === "merge" ? choice : null;
+}
+
 /** GET a git API payload; throws a user-facing Error on failure. */
 export async function fetchGitJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -173,6 +222,7 @@ export async function fetchGitJson<T>(url: string): Promise<T> {
 
 export type GitActionFailure =
   | { kind: "conflict"; conflict: StashConflictPayload }
+  | { kind: "checkout-conflict"; conflict: CheckoutConflictPayload; message: string }
   | { kind: "hook"; hook: GitHookFailurePayload }
   | { kind: "error"; message: string; status: number };
 
@@ -202,6 +252,15 @@ export async function postGitAction<T = Record<string, unknown>>(
   if (res.status === 409) {
     const conflict = parseStashConflict(text);
     if (conflict) return { ok: false, kind: "conflict", conflict };
+    const checkoutConflict = parseCheckoutConflict(text);
+    if (checkoutConflict) {
+      return {
+        ok: false,
+        kind: "checkout-conflict",
+        conflict: checkoutConflict,
+        message: checkoutConflict.error,
+      };
+    }
   }
   const hook = parseHookFailurePayload(text);
   if (hook) return { ok: false, kind: "hook", hook };

@@ -5,6 +5,7 @@ import { useLive } from "@/lib/hooks/use-fetch";
 import type { CalendarEvent } from "@/lib/google-calendar";
 import { formatTime } from "@/lib/utils";
 import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
+import { onTodayCardHeaderClick, TodayViewAllLink } from "@/components/today/TodayViewAllLink";
 import { CalendarEventRow, eventJoinIsUrgent } from "@/components/briefing/CalendarEventRow";
 
 interface CalendarResponse {
@@ -84,7 +85,7 @@ export function CalendarWidget({ collapsed = false, collapsedSummary, onToggle }
       data-collapsed={collapsed ? "true" : undefined}
       style={{ padding: "10px 14px" }}
     >
-      <div className="today-card-inline-head mb-2">
+      <div className="today-card-inline-head mb-2" onClick={onTodayCardHeaderClick}>
         <div className="flex min-w-0 items-center gap-2">
           <Calendar size={13} aria-hidden />
           <span className="text-xs font-semibold text-text-muted">
@@ -96,7 +97,10 @@ export function CalendarWidget({ collapsed = false, collapsedSummary, onToggle }
               : "No events today"}
           </span>
         </div>
-        {onToggle ? <TodayCollapseButton collapsed={collapsed} label="Calendar" onToggle={onToggle} /> : null}
+        <span className="flex min-w-0 items-center gap-2">
+          <TodayViewAllLink href="/calendar" />
+          {onToggle ? <TodayCollapseButton collapsed={collapsed} label="Calendar" onToggle={onToggle} /> : null}
+        </span>
       </div>
 
       {collapsed ? <div className="today-collapsed-summary">{collapsedSummary}</div> : null}

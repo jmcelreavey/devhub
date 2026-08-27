@@ -1,6 +1,6 @@
 "use client";
 
-import type { AriaRole, ReactNode } from "react";
+import { useState, type AriaRole, type ReactNode } from "react";
 import Link from "next/link";
 import { GitPullRequest } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
@@ -14,6 +14,8 @@ import { ConditionalList } from "@/components/ui/EmptyStateRow";
 import { useGridSize } from "@/lib/hooks/use-grid-size";
 
 const EMPTY_PR_ROWS: GithubPrRow[] = [];
+
+type PrSection = "authored" | "reviews";
 
 function PrRowLink({ row, kind }: { row: GithubPrRow; kind: PrRowKind }) {
   return (
@@ -41,6 +43,51 @@ function SubList({ title, rows, kind }: { title: string; rows: GithubPrRow[]; ki
         </div>
       )}
     />
+  );
+}
+
+function SectionToggle({
+  authoredCount,
+  reviewCount,
+  active,
+  onSelect,
+}: {
+  authoredCount: number;
+  reviewCount: number;
+  active: PrSection;
+  onSelect: (section: PrSection) => void;
+}) {
+  return (
+    <div className="flex gap-3 text-[12px]">
+      {authoredCount > 0 ? (
+        <button
+          type="button"
+          className="today-grid-drag-cancel bg-transparent p-0"
+          aria-pressed={active === "authored"}
+          onClick={() => onSelect("authored")}
+          style={{
+            color: active === "authored" ? "var(--text)" : "var(--text-subtle)",
+            fontWeight: active === "authored" ? 600 : 400,
+          }}
+        >
+          <span className="tabular-nums">{authoredCount}</span> mine
+        </button>
+      ) : null}
+      {reviewCount > 0 ? (
+        <button
+          type="button"
+          className="today-grid-drag-cancel bg-transparent p-0"
+          aria-pressed={active === "reviews"}
+          onClick={() => onSelect("reviews")}
+          style={{
+            color: active === "reviews" ? "var(--text)" : "var(--text-subtle)",
+            fontWeight: active === "reviews" ? 600 : 400,
+          }}
+        >
+          <span className="tabular-nums">{reviewCount}</span> review
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -163,8 +210,17 @@ export function GithubPrsPanel({
 }: GithubPrsPanelProps) {
   const { data, error, isLoading } = useLive<GithubPrsApiPayload>("/api/github/prs");
   const gridSize = useGridSize("github");
+  const [section, setSection] = useState<PrSection>("reviews");
   const authored = data?.authored ?? EMPTY_PR_ROWS;
   const reviews = data?.reviews ?? EMPTY_PR_ROWS;
+  const active: PrSection =
+    section === "reviews" && reviews.length === 0 && authored.length > 0
+      ? "authored"
+      : section === "authored" && authored.length === 0 && reviews.length > 0
+        ? "reviews"
+        : section;
+  const activeRows = active === "reviews" ? reviews : authored;
+  const activeKind: PrRowKind = active === "reviews" ? "reviews" : "authored";
 
   if (isLoading && !data) {
     const skeleton = <div className="skeleton" style={{ height: 14, width: "40%" }} />;
@@ -255,50 +311,37 @@ export function GithubPrsPanel({
   }
 
   const compact1x1 = (
-    <div className="px-3 py-2.5 space-y-1.5">
-      <div className="flex gap-3 text-[12px] text-text-subtle">
-        {authored.length > 0 && <span><span style={{ color: "var(--text)", fontWeight: 600 }}>{authored.length}</span> mine</span>}
-        {reviews.length > 0 && <span><span style={{ color: "var(--text)", fontWeight: 600 }}>{reviews.length}</span> review</span>}
-      </div>
-      {authored[0] && (
-        <a href={authored[0].url} target="_blank" rel="noopener noreferrer" className="block truncate text-[12px] no-underline hover:underline text-text">
-          {authored[0].title}
-        </a>
-      )}
+    <div className="space-y-1.5">
+      <SectionToggle
+        authoredCount={authored.length}
+        reviewCount={reviews.length}
+        active={active}
+        onSelect={setSection}
+      />
+      {activeRows[0] ? <PrRow row={activeRows[0]} kind={activeKind} density="compact" /> : null}
     </div>
   );
 
-  const compact2x1 = (
-    <div className="divide-y" style={{ borderColor: "var(--border-muted)" }}>
-      {authored.length > 0 && (
-        <div className="px-3 py-2">
-          <div className="text-[10px] font-medium tracking-tight mb-1" style={{ color: "var(--text-muted)", fontWeight: 600 }}>Mine</div>
-          {authored.slice(0, 3).map((r) => (
-            <a key={r.url} href={r.url} target="_blank" rel="noopener noreferrer" className="block truncate text-[12px] py-0.5 no-underline hover:underline text-text">
-              {r.title}
-            </a>
-          ))}
-          {authored.length > 3 && <span className="text-[11px] text-text-subtle">+{authored.length - 3} more</span>}
-        </div>
-      )}
-      {reviews.length > 0 && (
-        <div className="px-3 py-2">
-          <div className="text-[10px] font-medium tracking-tight mb-1" style={{ color: "var(--text-muted)", fontWeight: 600 }}>Review</div>
-          {reviews.slice(0, 3).map((r) => (
-            <a key={r.url} href={r.url} target="_blank" rel="noopener noreferrer" className="block truncate text-[12px] py-0.5 no-underline hover:underline text-text">
-              {r.title}
-            </a>
-          ))}
-          {reviews.length > 3 && <span className="text-[11px] text-text-subtle">+{reviews.length - 3} more</span>}
-        </div>
-      )}
+  const compactColumn = (
+    <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+      <SectionToggle
+        authoredCount={authored.length}
+        reviewCount={reviews.length}
+        active={active}
+        onSelect={setSection}
+      />
+      <ul className="m-0 min-h-0 list-none space-y-0.5 overflow-auto p-0">
+        {activeRows.map((r) => (
+          <PrRowLink key={`${r.repo}-${r.number}`} row={r} kind={activeKind} />
+        ))}
+      </ul>
     </div>
   );
 
   const lists = gridSize === "1x1"
     ? compact1x1
     : gridSize === "2x1"
-    ? compact2x1
+    ? compactColumn
     : (
     <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
       <SubList title="Mine (open)" rows={authored} kind="authored" />

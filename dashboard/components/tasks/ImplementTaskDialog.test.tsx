@@ -124,4 +124,31 @@ describe("ImplementTaskDialog", () => {
     const prompt = mocks.taskImplementationCommand.mock.calls[0]?.[1] as string;
     expect(prompt).not.toContain(" in the businessinsider/");
   });
+
+  it("uses the hub cwd instead of guessing from the plan", async () => {
+    mocks.fetch.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ repoPath: "/wrong/path" }),
+    });
+    render(
+      <ImplementTaskDialog
+        open
+        task={task}
+        date="2026-08-25"
+        cwd="/Users/me/app-poc"
+        repoName="app-poc"
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Launch agent" }));
+
+    await waitFor(() => expect(mocks.proposeTerminalRun).toHaveBeenCalled());
+    expect(mocks.proposeTerminalRun).toHaveBeenCalledWith(
+      expect.objectContaining({ cwd: "/Users/me/app-poc", repoName: "app-poc" }),
+    );
+    const launched = mocks.taskImplementationCommand.mock.calls[0]?.[1] as string;
+    expect(launched).toContain("Working tree: /Users/me/app-poc");
+    expect(launched).toContain(" in the app-poc repo");
+  });
 });

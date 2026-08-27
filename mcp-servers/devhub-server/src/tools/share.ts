@@ -75,7 +75,11 @@ export function registerShareTools(server: McpServer, ctx: Context): void {
           lines.push("_none_");
         } else {
           for (const s of live.shares) {
-            const flag = s.missing ? " **source deleted**" : s.stale ? " **stale**" : "";
+            const flag = s.missing
+              ? " **source deleted** — share_recover to restore from the gist"
+              : s.stale
+                ? " **stale**"
+                : "";
             lines.push(`- ${s.title} (${s.vault}:${s.path})${flag}\n  ${s.url}`);
           }
         }
@@ -112,6 +116,27 @@ export function registerShareTools(server: McpServer, ctx: Context): void {
             {
               type: "text",
               text: `Live: ${body.share.title}\n${body.share.url}\n\nAnyone with this link can read it. Expires 14 days after first publish.`,
+            },
+          ],
+        };
+      }),
+  );
+
+  server.registerTool(
+    "share_recover",
+    {
+      description:
+        "Restore a deleted note/doc/diagram from its still-live gist. Writes the gist content back to the original vault path and keeps the existing URL. Fails if a different file already occupies that path, or if the gist is gone. Does not create a new gist.",
+      inputSchema: { vault: vaultParam, path: pathParam },
+    },
+    async ({ vault, path }) =>
+      withDashboardErrors(async () => {
+        const body = await dashboard.post<{ share: ShareStatus }>("/api/share/recover", { vault, path });
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Restored ${body.share.vault}:${body.share.path} from the live gist.\n${body.share.url}`,
             },
           ],
         };

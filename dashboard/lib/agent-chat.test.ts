@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   flattenAgentChatMessages,
+  formatAgentWaitElapsed,
   injectKindForPropose,
   insertAgentComposer,
   parseAgentChatStore,
@@ -120,6 +121,12 @@ describe("canvasRegenFailureMessage", () => {
 });
 
 describe("agent chat helpers", () => {
+  it("formats wait time without pretending to know an ETA", () => {
+    expect(formatAgentWaitElapsed(-1)).toBe("0s");
+    expect(formatAgentWaitElapsed(59_999)).toBe("59s");
+    expect(formatAgentWaitElapsed(83_000)).toBe("1m 23s");
+  });
+
   it("flattens a single user turn as the raw prompt", () => {
     expect(flattenAgentChatMessages([{ role: "user", content: "Review PR #123" }])).toEqual({
       prompt: "Review PR #123",

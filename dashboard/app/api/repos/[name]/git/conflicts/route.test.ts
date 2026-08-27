@@ -19,9 +19,9 @@ vi.mock("@/lib/git/conflicts", () => ({
   resolveConflictSide: vi.fn(() => ({ ok: true })),
 }));
 
-import { detectGitConflicts, resolveConflictSide } from "@/lib/git/conflicts";
+import { detectGitConflicts, readConflictSides, resolveConflictSide } from "@/lib/git/conflicts";
 import { runGitRepo } from "@/lib/git/repo-local";
-import { POST } from "./route";
+import { GET, POST } from "./route";
 
 const params = { params: Promise.resolve({ name: "test-repo" }) };
 
@@ -32,6 +32,35 @@ function request(body: Record<string, unknown>): NextRequest {
     headers: { "content-type": "application/json" },
   });
 }
+
+describe("GET /api/repos/[name]/git/conflicts", () => {
+  it("returns the ours/theirs diff used by the split resolver", async () => {
+    vi.mocked(detectGitConflicts).mockReturnValue([
+      { path: "src/a.ts", source: "unmerged", status: "UU" },
+    ]);
+    vi.mocked(readConflictSides).mockReturnValue({
+      base: "const value = 0;",
+      ours: "const value = 1;",
+      theirs: "const value = 2;",
+      binary: false,
+    });
+    vi.mocked(runGitRepo).mockReturnValue({
+      status: 0,
+      stdout: "@@ -1 +1 @@\n-const value = 1;\n+const value = 2;\n",
+      stderr: "",
+    });
+
+    const response = await GET(new NextRequest("http://test"), params);
+    const json = await response.json();
+
+    expect(json.conflicts[0].comparison).toEqual([
+      { type: "hunk", text: "@@ -1 +1 @@" },
+      { type: "del", text: "-const value = 1;" },
+      { type: "add", text: "+const value = 2;" },
+      { type: "ctx", text: "" },
+    ]);
+  });
+});
 
 describe("POST /api/repos/[name]/git/conflicts", () => {
   beforeEach(() => {

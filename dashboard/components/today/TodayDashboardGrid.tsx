@@ -14,6 +14,7 @@ import type { LayoutItem } from "react-grid-layout";
 import "react-resizable/css/styles.css";
 import { ResizeHandle } from "@/components/shell/ResizeHandle";
 import {
+  applyCollapsedHeights,
   applyHeightPatchAndCompact,
   contentPxToGridHeight,
   mergeTodayGridLayouts,
@@ -21,6 +22,7 @@ import {
   readTodayGridLayoutsFromStorage,
   writeTodayGridLayoutsToStorage,
   TODAY_GRID_BREAKPOINTS,
+  TODAY_GRID_COLLAPSED_HEIGHT,
   TODAY_GRID_COLS,
   TODAY_GRID_MARGIN,
   TODAY_GRID_ROW_HEIGHT,
@@ -141,17 +143,29 @@ function afterLayout(fn: () => void): () => void {
 }
 
 /**
- * Grid rows a collapsed card occupies.
+ * Merge persisted layout, then force collapsed slots to the header height.
  *
- * A fixed value, not a measurement. Measuring gave every collapsed card a
- * different height depending on how much summary text it happened to show,
- * which looks like a bug even though each individual number was "correct".
- * Minimised things should line up.
- *
- * 3 rows x 20px + margins ≈ the card header, which is exactly what remains
- * visible when a card is collapsed.
+ * `normalizeSavedItem` lifts short briefing/calendar tiles and clamps to
+ * `minH`, so a remount would otherwise paint collapsed cards at expanded `h`.
  */
-const COLLAPSED_GRID_HEIGHT = 3;
+function mergeVisibleLayouts(
+  persisted: ResponsiveLayouts<TodayGridBreakpoint> | null,
+  visible: ReadonlySet<TodayGridSlotId>,
+  collapsedSlots: ReadonlySet<TodayGridSlotId>,
+): ResponsiveLayouts<TodayGridBreakpoint> {
+  return applyCollapsedHeights(mergeTodayGridLayouts(persisted, visible), collapsedSlots);
+}
+
+function heightForSlot(
+  layouts: ResponsiveLayouts<TodayGridBreakpoint>,
+  id: TodayGridSlotId,
+): number | null {
+  for (const items of Object.values(layouts)) {
+    const found = (items as readonly LayoutItem[] | undefined)?.find((it) => it.i === id);
+    if (found) return found.h;
+  }
+  return null;
+}
 
 function querySlotElement(id: TodayGridSlotId): HTMLDivElement | null {
   if (typeof document === "undefined") return null;
@@ -172,8 +186,12 @@ function TodayDashboardGridBody({
   ready,
 }: TodayDashboardGridBodyProps) {
   const [layouts, setLayouts] = useState<ResponsiveLayouts<TodayGridBreakpoint>>(() =>
-    mergeTodayGridLayouts(readTodayGridLayoutsFromStorage(), visible),
+    mergeVisibleLayouts(readTodayGridLayoutsFromStorage(), visible, collapsedSlots),
   );
+  const layoutsRef = useRef(layouts);
+  useLayoutEffect(() => {
+    layoutsRef.current = layouts;
+  });
 
   const slotRefs = useRef<Partial<Record<TodayGridSlotId, HTMLDivElement | null>>>({});
   const contentAutoLayoutDoneRef = useRef(false);
@@ -202,11 +220,11 @@ function TodayDashboardGridBody({
   useEffect(() => {
     const onApply = () => {
       const saved = readTodayGridLayoutsFromStorage();
-      if (saved) setLayouts(mergeTodayGridLayouts(saved, visible));
+      if (saved) setLayouts(mergeVisibleLayouts(saved, visible, collapsedSlots));
     };
     window.addEventListener("devhub:grid-preset-apply", onApply);
     return () => window.removeEventListener("devhub:grid-preset-apply", onApply);
-  }, [visible]);
+  }, [visible, collapsedSlots]);
 
   useLayoutEffect(() => {
     if (!settledRef.current) return;
@@ -229,6 +247,10 @@ function TodayDashboardGridBody({
       const patch: Partial<Record<TodayGridSlotId, number>> = {};
       for (const id of TODAY_GRID_SLOT_ORDER) {
         if (!visible.has(id)) continue;
+        if (collapsedSlots.has(id)) {
+          patch[id] = TODAY_GRID_COLLAPSED_HEIGHT;
+          continue;
+        }
         const el = slotRefs.current[id] ?? querySlotElement(id);
         if (!el) continue;
         const px = measureSlotContentPx(el);
@@ -236,7 +258,7 @@ function TodayDashboardGridBody({
       }
       if (Object.keys(patch).length === 0) return;
       setLayouts((prev) => {
-        const next = applyHeightPatchAndCompact(prev, patch);
+        const next = applyHeightPatchAndCompact(prev, patch, collapsedSlots);
         if (settledRef.current) {
           writeTodayGridLayoutsToStorage(preserveHiddenTodayGridLayouts(next, readTodayGridLayoutsFromStorage()));
         }
@@ -244,7 +266,7 @@ function TodayDashboardGridBody({
       });
     });
     return cancel;
-  }, [visibleKey, visible]);
+  }, [visibleKey, visible, collapsedSlots]);
 
   const onLayoutChange = useCallback((_layout: Layout, all: ResponsiveLayouts<TodayGridBreakpoint>) => {
     setLayouts(all);
@@ -253,27 +275,14 @@ function TodayDashboardGridBody({
     }
   }, []);
 
-  /**
-   * The height a slot currently has in the live layout.
-   *
-   * Read from the layout rather than the DOM: the layout is the thing we are
-   * about to write back to, and a slot that has just been resized by the user
-   * has its new height here before the DOM settles.
-   */
-  const currentHeightFor = useCallback(
-    (id: TodayGridSlotId): number | null => {
-      for (const items of Object.values(layouts)) {
-        const found = (items as readonly LayoutItem[] | undefined)?.find((it) => it.i === id);
-        if (found) return found.h;
-      }
-      return null;
-    },
-    [layouts],
-  );
-
   useLayoutEffect(() => {
     const previous = previousCollapsedRef.current;
     previousCollapsedRef.current = new Set(collapsedSlots);
+
+    // First paint already applied collapsed heights from `collapsedSlots`.
+    // Treating "currently collapsed" as a transition would remember the
+    // collapsed `h` as the restore height.
+    if (previous == null) return;
 
     const cancel = afterLayout(() => {
       const marginY = TODAY_GRID_MARGIN[1];
@@ -282,16 +291,15 @@ function TodayDashboardGridBody({
       for (const id of TODAY_GRID_SLOT_ORDER) {
         if (!visible.has(id)) continue;
         const isCollapsed = collapsedSlots.has(id);
-        const changed = previous == null ? isCollapsed : previous.has(id) !== isCollapsed;
-        if (!changed) continue;
+        if (previous.has(id) === isCollapsed) continue;
         const el = slotRefs.current[id] ?? querySlotElement(id);
         if (!el) continue;
 
         if (isCollapsed) {
           // Remember the size to come back to, then shrink to the header.
-          const current = currentHeightFor(id);
+          const current = heightForSlot(layoutsRef.current, id);
           if (current != null) heightBeforeCollapseRef.current[id] = current;
-          patch[id] = COLLAPSED_GRID_HEIGHT;
+          patch[id] = TODAY_GRID_COLLAPSED_HEIGHT;
           // The briefing and tasks cards declare minH: 6, which would otherwise
           // hold them at six rows while every other card collapses to three.
           collapsing.add(id);
@@ -326,7 +334,9 @@ function TodayDashboardGridBody({
       });
     });
     return cancel;
-  }, [collapsedKey, collapsedSlots, visible, currentHeightFor]);
+    // Intentionally omit `layouts`: a remount fires `onLayoutChange`, which
+    // used to retrigger this effect and cancel the collapse patch mid-flight.
+  }, [collapsedKey, collapsedSlots, visible]);
 
   const rowHeight = TODAY_GRID_ROW_HEIGHT;
   const margin = TODAY_GRID_MARGIN;

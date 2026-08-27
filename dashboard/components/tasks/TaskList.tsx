@@ -9,15 +9,19 @@ import {
   matchesTaskSearch,
 } from "@/lib/tasks/task-text";
 import { TaskItem } from "@/components/tasks/TaskItem";
-import { Plus, CheckCircle2, Link as LinkIcon, ChevronRight, ChevronDown } from "lucide-react";
+import { Plus, CheckCircle2, Link as LinkIcon, ChevronRight, ChevronDown, FolderGit2, X } from "lucide-react";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { AddToJiraModal } from "@/components/tasks/AddToJiraModal";
 import { JiraTransitionModal } from "@/components/jira/JiraTransitionModal";
+import { EntityLinkDialog } from "@/components/EntityLinkDialog";
+import { KIND_ICON } from "@/components/EntityLinkChips";
 import { SortableList } from "@/components/ui/SortableList";
 import { HoverTip } from "@/components/ui/HoverTip";
 import { useGridSize } from "@/lib/hooks/use-grid-size";
+import { defaultHrefForRef, entityKey, mergeEntityRefs, type EntityRef } from "@/lib/entity-note";
 import { todayISO } from "@/lib/utils";
+import Link from "next/link";
 
 // Task now lives in lib/tasks/types.ts, shared with the server storage layer.
 // It was duplicated here and had drifted (missing rolledFromId/rolledFromDate).
@@ -51,6 +55,8 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
   const [exitingIds, setExitingIds] = useState<Set<string>>(() => new Set());
   const [detectedUrl, setDetectedUrl] = useState<string | null>(null);
   const [linkName, setLinkName] = useState("");
+  const [pendingLinks, setPendingLinks] = useState<EntityRef[]>([]);
+  const [linkOpen, setLinkOpen] = useState(false);
   /** Open while the text ends in `#fragment` — tag autocomplete for the composer. */
   const [tagSugs, setTagSugs] = useState<{ items: string[]; active: number } | null>(null);
   const [jiraStatuses, setJiraStatuses] = useState<Record<string, JiraStatus>>({});
@@ -202,11 +208,15 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
       const res = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({
+          text,
+          ...(pendingLinks.length > 0 ? { links: pendingLinks } : {}),
+        }),
       });
       if (!res.ok) throw new Error(await res.text());
       const task = (await res.json()) as Task;
       setNewText("");
+      setPendingLinks([]);
       setDetectedUrl(null);
       setLinkName("");
       setTagSugs(null);
@@ -222,7 +232,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
       console.error("add task:", e);
       toast.error("Couldn't add task.");
     }
-  }, [newText, toast, mutate]);
+  }, [newText, pendingLinks, toast, mutate]);
 
   const toggleTask = useCallback(
     async (id: string) => {
@@ -807,6 +817,53 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
             ))}
           </ul>
         )}
+        {pendingLinks.length > 0 ? (
+          <ul className="entity-link-chips" aria-label="Repos to link">
+            {pendingLinks.map((ref) => {
+              const text = ref.label || ref.id;
+              const href = defaultHrefForRef(ref);
+              const Icon = KIND_ICON[ref.kind] ?? FolderGit2;
+              return (
+                <li key={entityKey(ref)} className="entity-link-chip-item" data-entity-chip="">
+                  {href ? (
+                    <Link href={href} className="entity-link-chip" data-kind={ref.kind} title={text}>
+                      <Icon size={10} aria-hidden />
+                      <span>{text}</span>
+                    </Link>
+                  ) : (
+                    <span className="entity-link-chip" data-kind={ref.kind} title={text}>
+                      <Icon size={10} aria-hidden />
+                      <span>{text}</span>
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="entity-link-chip-remove"
+                    aria-label={`Remove ${text} link`}
+                    onClick={() =>
+                      setPendingLinks((prev) => prev.filter((r) => entityKey(r) !== entityKey(ref)))
+                    }
+                  >
+                    <X size={10} aria-hidden />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+        <HoverTip label="Associate repo" pos="top-end">
+          <button
+            type="button"
+            className="task-icon-action"
+            aria-label="Associate repo"
+            aria-haspopup="dialog"
+            aria-expanded={linkOpen}
+            data-linked={pendingLinks.some((ref) => ref.kind === "repo") || undefined}
+            onClick={() => setLinkOpen(true)}
+          >
+            <FolderGit2 size={14} aria-hidden />
+          </button>
+        </HoverTip>
         <HoverTip label="Add task" pos="top-end">
           <button
             type="button"
@@ -819,6 +876,18 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
           </button>
         </HoverTip>
       </div>
+
+      <EntityLinkDialog
+        open={linkOpen}
+        onClose={() => setLinkOpen(false)}
+        defaultKind="repo"
+        existing={pendingLinks}
+        title="Link repo"
+        description="Link a local repository. The task shows up on that repo's hub."
+        onSave={async (refs) => {
+          setPendingLinks((prev) => mergeEntityRefs(prev, refs));
+        }}
+      />
 
       {detectedUrl && (
         <div

@@ -487,7 +487,10 @@ describe("POST /api/repos/[name]/branches", () => {
       throw new Error(`Unexpected git command: ${command}`);
     });
 
-    const response = await POST(request({ action: "checkout", branch: "feature/ok" }), params);
+    const response = await POST(
+      request({ action: "checkout", branch: "feature/ok", strategy: "stash" }),
+      params,
+    );
 
     expect(response.status).toBe(500);
     await expect(response.json()).resolves.toMatchObject({
@@ -495,6 +498,37 @@ describe("POST /api/repos/[name]/branches", () => {
       stashed: true,
     });
     expect(calls).toContain("stash pop stash@{0}");
+  });
+
+  it("asks for a strategy only when checkout would overwrite local changes", async () => {
+    vi.mocked(runGitRepoAsync).mockResolvedValue({
+      status: 1,
+      stdout: "",
+      stderr:
+        "error: Your local changes to the following files would be overwritten by checkout:\n\tsrc/a.ts\n",
+    });
+
+    const response = await POST(request({ action: "checkout", branch: "feature/ok" }), params);
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "checkout_would_conflict",
+      branch: "feature/ok",
+      canMerge: true,
+    });
+    expect(runGitRepoAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses checkout's three-way merge when the user keeps local changes", async () => {
+    vi.mocked(runGitRepoAsync).mockResolvedValue({ status: 0, stdout: "", stderr: "" });
+
+    const response = await POST(
+      request({ action: "checkout", branch: "feature/ok", strategy: "merge" }),
+      params,
+    );
+
+    expect(response.status).toBe(200);
+    expect(runGitRepoAsync).toHaveBeenCalledWith("/tmp/test-repo", ["checkout", "-m", "feature/ok"]);
   });
 
   it("discards the working tree with reset --hard and clean -fd", async () => {

@@ -158,7 +158,12 @@ export async function saveTasks(date: string, tasks: Task[]): Promise<void> {
   await writeAtomic(tasksFile(date), JSON.stringify(tasks, null, 2));
 }
 
-export async function addTask(text: string, date?: string, due?: string): Promise<Task> {
+export async function addTask(
+  text: string,
+  date?: string,
+  due?: string,
+  links?: Task["links"],
+): Promise<Task> {
   const target = date ?? todayISO();
   return withMutex(tasksFile(target), async () => {
     const tasks = getTasks(target);
@@ -169,6 +174,7 @@ export async function addTask(text: string, date?: string, due?: string): Promis
       jiraKey: extractJiraKey(text),
       due,
       createdAt: new Date().toISOString(),
+      ...(links && links.length > 0 ? { links } : {}),
     };
     tasks.push(task);
     await saveTasks(target, tasks);

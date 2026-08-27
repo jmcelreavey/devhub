@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { blocksToPortableMarkdown, blocksToText } from "@/lib/markdown-convert";
+import { blocksToPortableMarkdown, blocksToText, textToBlocks } from "@/lib/markdown-convert";
 import {
   firstHeadingFromMarkdown,
   titleFromDocMarkdown,
@@ -44,6 +44,38 @@ export function tldrawToShareMarkdown(title: string, content: TldrawDiagramData)
     "```",
     "",
   ].join("\n");
+}
+
+/** Inverse of `tldrawToShareMarkdown` — pull the tldraw JSON out of a gist snapshot. */
+export function parseTldrawShareMarkdown(markdown: string): TldrawDiagramData {
+  const match = /```json\s*([\s\S]*?)\s*```/.exec(markdown);
+  if (!match?.[1]) {
+    throw new Error("Gist is not a diagram snapshot");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(match[1]);
+  } catch {
+    throw new Error("Gist diagram JSON is invalid");
+  }
+  if (!isTldrawContent(parsed)) {
+    throw new Error("Gist diagram JSON is invalid");
+  }
+  return parsed;
+}
+
+/**
+ * Turn published gist markdown back into vault write content.
+ * Docs stay markdown; diagrams become tldraw JSON; notes become BlockNote blocks.
+ */
+export function vaultContentFromShareMarkdown(
+  vault: VaultId,
+  sharePath: string,
+  markdown: string,
+): unknown {
+  if (vault === "docs") return markdown;
+  if (isDiagramStoragePath(sharePath)) return parseTldrawShareMarkdown(markdown);
+  return textToBlocks(markdown);
 }
 
 /** Resolve a vault note/doc/diagram to the markdown we would publish, or null if gone. */

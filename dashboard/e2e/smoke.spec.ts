@@ -154,6 +154,13 @@ test.describe("app shell", () => {
     await page.keyboard.press("ControlOrMeta+p");
     await expect(page.getByRole("dialog").or(page.locator("[data-command-palette]")))
       .toBeVisible({ timeout: 10_000 });
+
+    const input = page.locator("#cmd-palette-input");
+    await expect(input).toHaveAttribute("spellcheck", "false");
+    await expect(input).toHaveAttribute("autocomplete", "off");
+    await expect(input).toHaveAttribute("autocorrect", "off");
+    await expect(input).toHaveAttribute("autocapitalize", "off");
+    await expect(input).toHaveAttribute("writingsuggestions", "false");
   });
 
   test("list rows keep their title readable on a phone", async ({ page }) => {

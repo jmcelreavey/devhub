@@ -12,6 +12,7 @@ import {
   type SetupStatus,
   type SetupStepMeta,
 } from "./shared";
+import { jiraSetupSavePayload, shouldSaveBeforeNext } from "./save-payload";
 import {
   isStepComplete,
   WelcomeStep,
@@ -151,6 +152,7 @@ export default function SetupPage() {
   >(null);
   const [saveResult, setSaveResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [error, setError] = useState("");
+  const [checkOk, setCheckOk] = useState("");
   const [allowLan, setAllowLan] = useState(true);
   const [chamberUiPassword, setChamberUiPassword] = useState("");
   const [calendarConnectBusy, setCalendarConnectBusy] = useState(false);
@@ -210,13 +212,11 @@ export default function SetupPage() {
           clientSecret: data.calendarClientSecretPreview ?? "",
         });
       }
-      if (data.jira) {
-        setJiraForm({
-          domain: SECRET_FIELD_MASK,
-          email: SECRET_FIELD_MASK,
-          apiToken: SECRET_FIELD_MASK,
-        });
-      }
+      setJiraForm({
+        domain: data.jiraVars.domain || "",
+        email: data.jiraVars.email || "",
+        apiToken: "",
+      });
       // Email + schedule id are not secrets — prefill them either way so the
       // step shows what's configured (the email is what gates Datadog).
       setDatadogForm((prev) => ({
@@ -392,12 +392,14 @@ export default function SetupPage() {
   const goNext = useCallback(() => {
     setSaveResult(null);
     setError("");
+    setCheckOk("");
     setCurrentStep((i) => Math.min(i + 1, steps.length - 1));
   }, [steps.length]);
 
   const goBack = () => {
     setSaveResult(null);
     setError("");
+    setCheckOk("");
     setCurrentStep((i) => Math.max(i - 1, 0));
   };
 
@@ -405,6 +407,7 @@ export default function SetupPage() {
     async (kind: "github" | "datadog" | "jira" | "calendar") => {
       setCheckConnectionBusy(kind);
       setError("");
+      setCheckOk("");
       try {
         if (kind === "datadog") {
           // Test exactly what's in the form. Masked/blank secrets are omitted so
@@ -429,6 +432,28 @@ export default function SetupPage() {
           return;
         }
 
+        if (kind === "jira") {
+          const domain = jiraForm.domain.trim();
+          const email = jiraForm.email.trim();
+          const apiToken = jiraForm.apiToken.trim();
+          const r = await fetch("/api/setup/check/jira", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...(domain && domain !== SECRET_FIELD_MASK ? { domain } : {}),
+              ...(email && email !== SECRET_FIELD_MASK ? { email } : {}),
+              ...(apiToken && apiToken !== SECRET_FIELD_MASK ? { apiToken } : {}),
+            }),
+          });
+          const result = (await r.json()) as { ok?: boolean; code?: string; message?: string; error?: string };
+          if (!r.ok || !result.ok) {
+            setError(result.message ?? result.error ?? "Jira connection failed.");
+            return;
+          }
+          setCheckOk(result.message ?? "Connected to Jira successfully.");
+          return;
+        }
+
         const data = await loadSetupStatus();
         if (!data) {
           setError("Could not load setup status.");
@@ -436,12 +461,6 @@ export default function SetupPage() {
         }
         if (kind === "github" && !data.github) {
           setError("GitHub is not connected yet. Run `gh auth login` in your terminal, then try again.");
-          return;
-        }
-        if (kind === "jira" && !data.jira) {
-          setError(
-            "Jira is not connected yet. Enter your site, email, and API token below, save, then check again (or skip this step).",
-          );
           return;
         }
         if (kind === "calendar" && !data.calendar) {
@@ -456,7 +475,7 @@ export default function SetupPage() {
         setCheckConnectionBusy(null);
       }
     },
-    [loadSetupStatus, datadogForm],
+    [loadSetupStatus, datadogForm, jiraForm],
   );
 
   const startGoogleCalendarOAuth = useCallback(async () => {
@@ -557,12 +576,10 @@ export default function SetupPage() {
           ...(cs && cs !== SECRET_FIELD_MASK ? { clientSecret: cs } : {}),
         };
       }
-      if (step.id === "jira" && !status?.jira) {
-        body.jira = {
-          domain: jiraForm.domain,
-          email: jiraForm.email,
-          apiToken: jiraForm.apiToken,
-        };
+      if (step.id === "jira") {
+        const payload = jiraSetupSavePayload(jiraForm, status?.jira === true);
+        if (!payload.ok) throw new Error(payload.error);
+        if (payload.jira) body.jira = payload.jira;
       }
       if (step.id === "bi") {
         body.bi = { capiRepoPath: biForm.capiRepoPath };
@@ -594,6 +611,7 @@ export default function SetupPage() {
     if (i < 0 || i >= steps.length || i === currentStep) return;
     setSaveResult(null);
     setError("");
+    setCheckOk("");
     setCurrentStep(i);
   };
 
@@ -623,9 +641,9 @@ export default function SetupPage() {
       (!pathsForm.reposDir || !!pathChecks.reposDir?.ok) &&
       (!pathsForm.repoRoot || !!pathChecks.repoRoot?.ok));
 
-  // Agent CLI is marked configured (a default always exists) so the rail shows
-  // a check — but Next used to skip save() and drop the model back to 4.5.
-  const saveBeforeNext = !step.configured || step.id === "agent";
+  // Jira/Datadog stay "configured" whenever env vars exist — including a dead
+  // token. Agent has a default too. Next must still persist replacements.
+  const saveBeforeNext = shouldSaveBeforeNext(step.id, step.configured);
 
   return (
     <div className="page-wrapper h-full min-h-0 overflow-y-auto">
@@ -803,6 +821,7 @@ export default function SetupPage() {
               checking={checkConnectionBusy === "jira"}
               onCheckConnection={() => void checkConnection("jira")}
               error={error}
+              checkOk={checkOk}
             />
           )}
           {step.id === "bi" && (

@@ -20,6 +20,14 @@ interface ConfirmOptions {
   };
 }
 
+export interface DecisionOption {
+  value: string;
+  label: string;
+  description: string;
+  variant?: "default" | "danger";
+  disabled?: boolean;
+}
+
 /**
  * Each request carries an `id`.
  *
@@ -33,6 +41,11 @@ interface ConfirmOptions {
 type PendingConfirm = { id: number } & (
   | (ConfirmOptions & { kind: "confirm"; resolve: (ok: boolean) => void })
   | (ConfirmOptions & { kind: "prompt"; resolve: (value: string | null) => void })
+  | (ConfirmOptions & {
+      kind: "decision";
+      options: DecisionOption[];
+      resolve: (value: string | null) => void;
+    })
 );
 
 let nextPendingId = 0;
@@ -40,6 +53,9 @@ let nextPendingId = 0;
 interface ConfirmContextValue {
   request: (opts: ConfirmOptions) => Promise<boolean>;
   requestString: (opts: ConfirmOptions) => Promise<string | null>;
+  requestDecision: (
+    opts: ConfirmOptions & { options: DecisionOption[] },
+  ) => Promise<string | null>;
 }
 
 const ConfirmContext = createContext<ConfirmContextValue | null>(null);
@@ -58,6 +74,15 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       setPending({ ...opts, id: (nextPendingId += 1), kind: "prompt", resolve });
     });
   }, []);
+
+  const requestDecision = useCallback(
+    (opts: ConfirmOptions & { options: DecisionOption[] }): Promise<string | null> => {
+      return new Promise<string | null>((resolve) => {
+        setPending({ ...opts, id: (nextPendingId += 1), kind: "decision", resolve });
+      });
+    },
+    [],
+  );
 
   const closeConfirm = useCallback(
     (ok: boolean) => {
@@ -79,7 +104,19 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     [pending],
   );
 
-  const value = useMemo(() => ({ request, requestString }), [request, requestString]);
+  const closeDecision = useCallback(
+    (value: string | null) => {
+      if (!pending || pending.kind !== "decision") return;
+      pending.resolve(value);
+      setPending(null);
+    },
+    [pending],
+  );
+
+  const value = useMemo(
+    () => ({ request, requestString, requestDecision }),
+    [request, requestString, requestDecision],
+  );
 
   return (
     <ConfirmContext.Provider value={value}>
@@ -90,6 +127,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           pending={pending}
           onConfirm={closeConfirm}
           onPrompt={closePrompt}
+          onDecision={closeDecision}
         />
       )}
     </ConfirmContext.Provider>
@@ -100,10 +138,12 @@ function ConfirmDialogView({
   pending,
   onConfirm,
   onPrompt,
+  onDecision,
 }: {
   pending: PendingConfirm;
   onConfirm: (ok: boolean) => void;
   onPrompt: (value: string | null) => void;
+  onDecision: (value: string | null) => void;
 }) {
   const titleId = "confirm-dialog-title";
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -121,6 +161,7 @@ function ConfirmDialogView({
     if (dialog && !dialog.open) {
       if (typeof dialog.showModal !== "function") {
         if (pending.kind === "prompt") onPrompt(null);
+        else if (pending.kind === "decision") onDecision(null);
         else onConfirm(false);
         return;
       }
@@ -136,6 +177,8 @@ function ConfirmDialogView({
         e.preventDefault();
         if (pending.kind === "prompt") {
           onPrompt(null);
+        } else if (pending.kind === "decision") {
+          onDecision(null);
         } else {
           onConfirm(false);
         }
@@ -147,7 +190,7 @@ function ConfirmDialogView({
       if (dialog?.open) dialog.close();
       previousFocus.current?.focus?.();
     };
-  }, [pending, onConfirm, onPrompt]);
+  }, [pending, onConfirm, onPrompt, onDecision]);
 
   function handleConfirm() {
     if (pending.kind === "prompt") {
@@ -182,12 +225,15 @@ function ConfirmDialogView({
       onCancel={(e) => {
         e.preventDefault();
         if (pending.kind === "prompt") onPrompt(null);
+        else if (pending.kind === "decision") onDecision(null);
         else onConfirm(false);
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           if (pending.kind === "prompt") {
             onPrompt(null);
+          } else if (pending.kind === "decision") {
+            onDecision(null);
           } else {
             onConfirm(false);
           }
@@ -244,6 +290,30 @@ function ConfirmDialogView({
             )}
           </>
         )}
+        {pending.kind === "decision" && (
+          <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+            {pending.options.map((option, index) => (
+              <button
+                key={option.value}
+                ref={index === 0 ? confirmRef : undefined}
+                type="button"
+                className={option.variant === "danger" ? "btn btn-danger-ghost" : "btn btn-ghost"}
+                disabled={option.disabled}
+                style={{ height: "auto", padding: "10px 12px", alignItems: "flex-start", textAlign: "left" }}
+                onClick={() => onDecision(option.value)}
+              >
+                <span>
+                  <strong style={{ display: "block", color: "var(--text)", fontWeight: 600 }}>
+                    {option.label}
+                  </strong>
+                  <span style={{ display: "block", marginTop: 2, color: "var(--text-muted)", fontSize: 12, fontWeight: 400 }}>
+                    {option.description}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button
             type="button"
@@ -252,6 +322,8 @@ function ConfirmDialogView({
             onClick={() => {
               if (pending.kind === "prompt") {
                 onPrompt(null);
+              } else if (pending.kind === "decision") {
+                onDecision(null);
               } else {
                 onConfirm(false);
               }
@@ -259,7 +331,7 @@ function ConfirmDialogView({
           >
             {pending.cancelLabel ?? "Cancel"}
           </button>
-          <button
+          {pending.kind !== "decision" && <button
             ref={confirmRef}
             type="button"
             className={pending.variant === "danger" ? "btn btn-danger-ghost" : "btn btn-primary"}
@@ -267,7 +339,7 @@ function ConfirmDialogView({
             onClick={handleConfirm}
           >
             {pending.confirmLabel ?? "Confirm"}
-          </button>
+          </button>}
         </div>
       </div>
     </dialog>
@@ -298,6 +370,17 @@ export function usePrompt() {
         return Promise.resolve(value);
       }
       return ctx.requestString(opts);
+    },
+    [ctx],
+  );
+}
+
+export function useDecision() {
+  const ctx = useContext(ConfirmContext);
+  return useCallback(
+    (opts: ConfirmOptions & { options: DecisionOption[] }): Promise<string | null> => {
+      if (!ctx) return Promise.resolve(null);
+      return ctx.requestDecision(opts);
     },
     [ctx],
   );

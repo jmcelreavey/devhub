@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Layers, Tag } from "lucide-react";
 import { ContextMenu, useContextMenu } from "@/components/shell/ContextMenu";
-import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
+import { useConfirm, useDecision, usePrompt } from "@/components/shell/ConfirmDialog";
 import { useToast } from "@/lib/hooks/use-toast";
 import { openInBrowser } from "@/lib/desktop/bridge";
 import type { GitHookFailurePayload, StashConflictPayload } from "@/app/repos/types";
@@ -12,7 +12,7 @@ import {
   buildBranchMenuGroups,
   type BranchMenuTarget,
 } from "./branchMenuGroups";
-import { fetchGitJson, postGitAction, repoApi, type RepoGitTabId } from "./shared";
+import { chooseCheckoutStrategy, fetchGitJson, postGitAction, repoApi, type RepoGitTabId } from "./shared";
 export interface RailSummary {
   currentBranch: string;
   upstream: string | null;
@@ -105,6 +105,7 @@ export function GitRail({
 }) {
   const toast = useToast();
   const confirm = useConfirm();
+  const decide = useDecision();
   const prompt = usePrompt();
   const branchMenu = useContextMenu<BranchMenuTarget>();
   const [busyBranch, setBusyBranch] = useState<string | null>(null);
@@ -158,13 +159,7 @@ export function GitRail({
     };
   }, [repoName]);
 
-  /**
-   * Switching branches is confirm-first, never click-through: a misclick
-   * mid-review moves HEAD and (with a dirty tree) triggers the auto-stash
-   * dance. The copy scales with risk — clean tree gets one line, dirty warns
-   * about the stash, open conflicts say the switch will be blocked.
-   */
-  async function confirmCheckout(branch: string): Promise<boolean> {
+  function canCheckout(branch: string): boolean {
     // Git refuses a second checkout of a branch held by another worktree —
     // say so up front instead of failing after the confirm.
     const wtPath = summary?.branches.find((b) => b.name === branch)?.worktreePath;
@@ -176,30 +171,33 @@ export function GitRail({
       return false;
     }
     const conflicts = summary?.conflicts ?? 0;
-    const dirty = (summary?.staged ?? 0) + (summary?.unstaged ?? 0);
-    const message =
-      conflicts > 0
-        ? `${conflicts} unresolved conflict${conflicts === 1 ? "" : "s"} in this repo. Git blocks branch switches until they are resolved or the operation is aborted.`
-        : dirty > 0
-          ? `Your ${dirty} changed file${dirty === 1 ? "" : "s"} will be auto-stashed and restored after the switch.`
-          : "Working tree is clean — nothing will be stashed.";
-    return confirm({
-      title: `Check out ${branch}?`,
-      message,
-      confirmLabel: "Check out",
-      variant: conflicts > 0 || dirty > 0 ? "danger" : "default",
-    });
+    if (conflicts > 0) {
+      toast.info(
+        `Resolve or abort ${conflicts} existing conflict${conflicts === 1 ? "" : "s"} before switching branches.`,
+      );
+      return false;
+    }
+    return true;
   }
 
   async function checkout(branch: string) {
     if (busyBranch) return;
-    if (!(await confirmCheckout(branch))) return;
+    if (!canCheckout(branch)) return;
     setBusyBranch(branch);
     try {
-      const result = await postGitAction(repoApi(repoName, "/branches"), {
+      let result = await postGitAction(repoApi(repoName, "/branches"), {
         action: "checkout",
         branch,
       });
+      if (!result.ok && result.kind === "checkout-conflict") {
+        const strategy = await chooseCheckoutStrategy(decide, result.conflict);
+        if (!strategy) return;
+        result = await postGitAction(repoApi(repoName, "/branches"), {
+          action: "checkout",
+          branch,
+          strategy,
+        });
+      }
       if (!result.ok) {
         if (result.kind === "conflict") {
           await onConflict(result.conflict);
@@ -304,14 +302,24 @@ export function GitRail({
   async function checkoutRemote(remoteRef: string) {
     const suggested = remoteRef.replace(/^[^/]+\//, "");
     if (busyBranch) return;
-    if (!(await confirmCheckout(suggested))) return;
+    if (!canCheckout(suggested)) return;
     setBusyBranch(remoteRef);
     try {
-      const result = await postGitAction<{ branch?: string }>(repoApi(repoName, "/branches"), {
+      let result = await postGitAction<{ branch?: string }>(repoApi(repoName, "/branches"), {
         action: "checkout-remote",
         branch: remoteRef,
         newBranch: suggested,
       });
+      if (!result.ok && result.kind === "checkout-conflict") {
+        const strategy = await chooseCheckoutStrategy(decide, result.conflict);
+        if (!strategy) return;
+        result = await postGitAction<{ branch?: string }>(repoApi(repoName, "/branches"), {
+          action: "checkout-remote",
+          branch: remoteRef,
+          newBranch: suggested,
+          strategy,
+        });
+      }
       if (!result.ok) {
         if (result.kind === "conflict") {
           await onConflict(result.conflict);
@@ -369,9 +377,12 @@ export function GitRail({
                         ? `${b.name} — checked out in another worktree (${b.worktreePath})`
                         : b.staleDays !== undefined
                           ? `${b.name} — last commit ${b.staleDays}d ago · Check out (right-click for more)`
-                          : `Check out ${b.name} (right-click for more)`
+                          : `Double-click to check out ${b.name} (right-click for more)`
               }
-              onClick={() => void checkout(b.name)}
+              onDoubleClick={() => void checkout(b.name)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void checkout(b.name);
+              }}
               onContextMenu={railMenuBind({
                 name: b.name,
                 current: b.current,
@@ -440,8 +451,11 @@ export function GitRail({
                 type="button"
                 className="repo-git-rail-branch"
                 disabled={busyBranch !== null}
-                title={`Create local ${r.localName} tracking this branch`}
-                onClick={() => void checkoutRemote(r.name)}
+                title={`Double-click to create local ${r.localName} tracking this branch`}
+                onDoubleClick={() => void checkoutRemote(r.name)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void checkoutRemote(r.name);
+                }}
                 onContextMenu={railMenuBind({
                   name: r.name,
                   current: false,

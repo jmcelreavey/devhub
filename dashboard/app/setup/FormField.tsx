@@ -10,6 +10,7 @@ export function FormField({
   secret,
   onToggleSecret,
   hint,
+  onFocus,
 }: {
   label: string;
   value: string;
@@ -18,6 +19,7 @@ export function FormField({
   secret?: boolean;
   onToggleSecret?: () => void;
   hint?: string;
+  onFocus?: () => void;
 }) {
   return (
     <div>
@@ -39,6 +41,9 @@ export function FormField({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           spellCheck={false}
+          autoComplete={secret ? "new-password" : "off"}
+          autoCorrect="off"
+          autoCapitalize="off"
           style={{
             width: "100%",
             padding: onToggleSecret ? "8px 36px 8px 12px" : "8px 12px",
@@ -51,12 +56,20 @@ export function FormField({
             boxSizing: "border-box",
             fontFamily: "monospace",
           }}
-          onFocus={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; }}
-          onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = "var(--accent)";
+            onFocus?.();
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = "var(--border)";
+          }}
         />
         {onToggleSecret && (
           <button
+            type="button"
             onClick={onToggleSecret}
+            aria-label={secret ? `Show ${label}` : `Hide ${label}`}
+            aria-pressed={!secret}
             style={{
               position: "absolute",
               right: "8px",
@@ -69,7 +82,7 @@ export function FormField({
               padding: "2px",
             }}
           >
-            {secret ? <EyeOff size={14} /> : <Eye size={14} />}
+            {secret ? <Eye size={14} /> : <EyeOff size={14} />}
           </button>
         )}
       </div>

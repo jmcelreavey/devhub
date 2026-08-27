@@ -103,7 +103,16 @@ export default function TicketsPage() {
         </div>
       </div>
 
-      {error && <FetchError message="Couldn't reach Jira." onRetry={() => mutate()} />}
+      {error && (
+        <FetchError
+          message={
+            /authentication failed/i.test(error.message)
+              ? "Jira authentication failed. Mint a new API token and paste it in /setup."
+              : "Couldn't reach Jira."
+          }
+          onRetry={() => mutate()}
+        />
+      )}
 
       {/* Status filter tabs */}
       <div className="flex gap-1 mb-4" style={{ borderBottom: "1px solid var(--border-muted)" }}>

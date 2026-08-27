@@ -935,6 +935,10 @@ body[data-motion="off"] .search-field {
   justify-content: space-between;
   margin-bottom: var(--space-5);
   gap: var(--space-3);
+  /* Action bars grow with the page (repo pages carry branch badges plus
+     Terminal/IDE/Upstart launchers). Without wrapping they run off a phone
+     viewport and the last control is clipped at the edge. */
+  flex-wrap: wrap;
 }
 
 .page-title {
@@ -1055,6 +1059,13 @@ a:focus-visible {
 /* <main> is focus-targeted by the skip link; never show a focus ring for it. */
 #main-content:focus {
   outline: none;
+}
+
+/* Flex column so keep-alive panels can fill the viewport (Briefing iframe)
+   and still grow with long pages so this scroller remains the overflow. */
+#main-content {
+  display: flex;
+  flex-direction: column;
 }
 
 /* ─── Visually-hidden label ─── */
@@ -2194,6 +2205,26 @@ body[data-grid-resizing="true"] * {
 .workspace-tab-new:disabled {
   opacity: 0.35;
   cursor: default;
+}
+
+/*
+ * Keep-alive route trees sit inside #main-content. Pages like Briefing use
+ * height:100% for a full-bleed iframe; without a definite-height wrapper the
+ * canvas collapses to the iframe's intrinsic ~150px and the rest of main is
+ * a solid empty --bg rectangle.
+ */
+.workspace-tab-panels {
+  flex: 1 0 auto;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.workspace-tab-panel {
+  flex: 1 0 auto;
+  min-height: 100%;
+}
+.workspace-tab-panel[hidden] {
+  display: none;
 }
 
 /* Touch sizing — after the base rules it overrides, not spliced into the
@@ -6633,10 +6664,151 @@ body[data-motion="off"] .evolution-arrow {
   border-radius: var(--radius-lg, 12px);
   background: var(--bg-elevated);
 }
+.repo-hub-history[data-collapsed] {
+  height: auto;
+}
 .repo-hub-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 24px;
+  align-items: start;
+}
+.repo-hub-working-tree-list {
+  max-height: 220px;
+  overflow: auto;
+}
+.repo-hub-cluster {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-surface);
+}
+.repo-hub-cluster[data-in-progress] {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+}
+.repo-hub-cluster + .repo-hub-cluster {
+  margin-top: 8px;
+}
+.repo-hub-row {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  text-decoration: none;
+  transition: background var(--dur-quick) var(--ease-swift);
+}
+.repo-hub-row:hover {
+  background: var(--bg-muted);
+}
+.repo-hub-row-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+.repo-hub-row-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-decoration: none;
+}
+.repo-hub-row-title:hover {
+  text-decoration: underline;
+}
+.repo-hub-row-meta {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+.lib-row-menu-host .repo-hub-row {
+  flex: 1;
+  min-width: 0;
+}
+.repo-hub-show-more {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+.repo-hub-show-more:hover {
+  color: var(--text);
+}
+.repo-hub-section-count {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-muted);
+  color: var(--text-subtle);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.repo-hub-section-shared {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.repo-hub-section-shared .entity-link-chips {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+.repo-hub-section-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  color: var(--text-subtle);
+}
+.repo-hub-section-search .input {
+  flex: 1;
+  font-size: 12px;
+}
+.repo-hub-archive-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.repo-hub-archive-row[data-abandoned] {
+  opacity: 0.6;
+}
+.repo-hub-archive-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: line-through;
+  text-decoration-color: var(--text-subtle);
+}
+.repo-hub-other-prs {
+  margin-top: 8px;
+}
+.repo-hub-other-prs > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+.repo-hub-other-prs > summary::-webkit-details-marker {
+  display: none;
+}
+.repo-git-commit-split .launch-menu-wrap {
+  display: inline-flex;
 }
 @media (max-width: 900px) {
   .repo-hub-columns {
@@ -8485,39 +8657,29 @@ button.repo-git-avatar-zoom:focus-visible {
   min-height: 0;
   overflow: auto;
 }
-.repo-git-conflict-sides {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.repo-git-conflict-compare {
+  max-height: min(44vh, 460px);
+  overflow: auto;
   border-bottom: 1px solid var(--border);
 }
-.repo-git-conflict-side {
-  min-width: 0;
+.repo-git-conflict-compare-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+}
+.repo-git-conflict-compare-head span {
+  padding: 6px 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
   border-right: 1px solid var(--border);
 }
-.repo-git-conflict-side:last-child {
+.repo-git-conflict-compare-head span:last-child {
   border-right: 0;
-}
-.repo-git-conflict-side > div {
-  padding: 6px 8px;
-  color: var(--text-subtle);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-bottom: 1px solid var(--border);
-}
-.repo-git-conflict-side pre {
-  min-height: 72px;
-  max-height: 180px;
-  margin: 0;
-  padding: 8px;
-  overflow: auto;
-  color: var(--text);
-  background: var(--bg);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 10px;
-  line-height: 1.4;
-  white-space: pre-wrap;
 }
 .repo-git-conflict-note {
   padding: 6px 10px;
@@ -8548,14 +8710,11 @@ button.repo-git-avatar-zoom:focus-visible {
   padding: 8px 12px;
   border-top: 1px solid var(--border);
 }
-@media (max-width: 900px) {
-  .repo-git-conflict-sides {
-    grid-template-columns: 1fr;
-  }
-  .repo-git-conflict-side {
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
-  }
+.repo-git-conflict-result {
+  display: flex;
+  flex: 1;
+  min-height: 180px;
+  flex-direction: column;
 }
 .repo-git-conflict-textarea {
   flex: 1;
@@ -9911,12 +10070,17 @@ button.entity-link-chip-more {
   background: var(--bg-overlay);
 }
 
-/* Keyboard selection is driven from the search field, so the row itself must
-   carry a visible marker rather than relying on DOM focus. */
+/* Keyboard highlight is driven from the search field, so the row itself must
+   carry a visible marker rather than relying on DOM focus. Selected rows keep
+   the accent bar; the active (keyboard) row gets a lighter bar when unselected. */
 .entity-link-cal-item[data-selected="true"] {
   background: var(--accent-dim);
   color: var(--accent);
   box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.entity-link-cal-item[data-active="true"]:not([data-selected="true"]) {
+  box-shadow: inset 2px 0 0 color-mix(in oklab, var(--accent) 45%, transparent);
 }
 
 .entity-link-cal-item:focus-visible {
@@ -11025,7 +11189,11 @@ body[data-motion="off"] .lib-card-icon {
 }
 .repo-git-branch-relation-copy {
   min-width: 0;
-  flex: 1;
+  /* A bare `flex: 1` lets this collapse to nothing, so the row never reaches
+     its wrap point and the Fetch/Pull actions crowd the branch name on a phone.
+     A real basis makes the actions wrap to their own line instead; `min-width:
+     0` still allows a long branch name to truncate. */
+  flex: 1 1 10rem;
 }
 .repo-git-branch-relation-title {
   display: flex;

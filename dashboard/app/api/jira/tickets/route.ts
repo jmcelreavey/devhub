@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getMyTickets } from "@/lib/jira/client";
+import { getResolvedJiraEnv } from "@/lib/jira/env";
 import {
   getJiraTicketsCache,
   setJiraTicketsCache,
@@ -7,7 +8,7 @@ import {
 } from "@/lib/jira/tickets-cache";
 
 export async function GET() {
-  if (!process.env.JIRA_DOMAIN) {
+  if (!getResolvedJiraEnv()) {
     return NextResponse.json({ tickets: [], configured: false });
   }
 

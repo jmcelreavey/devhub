@@ -16,6 +16,8 @@ import {
   agentStashConflictPrompt,
 } from "@/lib/terminal-launch";
 import { fetchGitJson, postGitAction, repoApi } from "./shared";
+import { GitDiffView } from "./GitDiffView";
+import type { DiffLine } from "@/lib/repos/git-parsers";
 
 interface ConflictItem {
   path: string;
@@ -27,6 +29,7 @@ interface ConflictItem {
   theirs: string | null;
   binary: boolean;
   hasStages: boolean;
+  comparison: DiffLine[];
 }
 
 type ConflictOperation = "merge" | "cherry-pick" | "revert" | "rebase";
@@ -252,11 +255,20 @@ export function ConflictsPanel({
           <div className="repo-git-conflict-editor">
             {active && (
               <>
-                <div className="repo-git-conflict-sides">
-                  <ConflictSide label="Base" content={active.base} binary={active.binary} />
-                  <ConflictSide label="Ours" content={active.ours} binary={active.binary} />
-                  <ConflictSide label="Theirs" content={active.theirs} binary={active.binary} />
-                </div>
+                {!active.binary && active.comparison.length > 0 && (
+                  <div className="repo-git-conflict-compare">
+                    <div className="repo-git-conflict-compare-head">
+                      <span>Ours</span>
+                      <span>Theirs</span>
+                    </div>
+                    <GitDiffView
+                      lines={active.comparison}
+                      filePath={active.path}
+                      view="split"
+                      emptyMessage="Both sides are identical."
+                    />
+                  </div>
+                )}
                 {operation === "rebase" && (
                   <div className="repo-git-conflict-note">
                     During rebase, ours is the target branch and theirs is the commit being replayed.
@@ -290,13 +302,16 @@ export function ConflictsPanel({
                 {active.binary ? (
                   <div className="repo-git-empty-sm">Binary conflict: choose a whole-file version above, or delete the result.</div>
                 ) : (
-                  <textarea
-                    className="repo-git-conflict-textarea"
-                    value={content}
-                    spellCheck={false}
-                    aria-label={`Resolved content for ${active.path}`}
-                    onChange={(event) => setDraft(event.target.value)}
-                  />
+                  <div className="repo-git-conflict-result">
+                    <div className="repo-git-section-label">Resolved result</div>
+                    <textarea
+                      className="repo-git-conflict-textarea"
+                      value={content}
+                      spellCheck={false}
+                      aria-label={`Resolved content for ${active.path}`}
+                      onChange={(event) => setDraft(event.target.value)}
+                    />
+                  </div>
                 )}
                 <div className="repo-git-commit-actions repo-git-conflict-footer">
                   {!active.binary && (
@@ -313,23 +328,6 @@ export function ConflictsPanel({
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function ConflictSide({
-  label,
-  content,
-  binary,
-}: {
-  label: string;
-  content: string | null;
-  binary: boolean;
-}) {
-  return (
-    <div className="repo-git-conflict-side">
-      <div>{label}</div>
-      <pre>{content === null ? "(deleted or unavailable)" : binary ? "(binary content)" : content}</pre>
     </div>
   );
 }

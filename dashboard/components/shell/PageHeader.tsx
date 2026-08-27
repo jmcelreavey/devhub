@@ -16,7 +16,7 @@ export function PageHeader({ title, subtitle, badge, actions }: PageHeaderProps)
           <div className="text-xs mt-1 text-text-subtle">{subtitle}</div>
         ) : null}
       </div>
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex flex-wrap items-center justify-end gap-2">
         {badge}
         {actions}
       </div>

@@ -19,6 +19,7 @@ export interface LaunchMenuItem {
  */
 export function LaunchMenu({
   label,
+  hideLabel = false,
   icon,
   items,
   align = "right",
@@ -27,6 +28,7 @@ export function LaunchMenu({
   disabled = false,
 }: {
   label: string;
+  hideLabel?: boolean;
   icon?: ReactNode;
   items: LaunchMenuItem[];
   align?: "left" | "right";
@@ -160,9 +162,10 @@ export function LaunchMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
+        aria-label={label}
       >
         {icon}
-        <span>{label}</span>
+        <span className={hideLabel ? "sr-only" : undefined}>{label}</span>
         <ChevronDown size={12} aria-hidden />
       </button>
       <div

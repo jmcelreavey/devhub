@@ -225,12 +225,16 @@ export function ChangesPanel({
   onVisibleDirtyChange,
   pushing,
   onPush,
+  focusPath = null,
+  onFocusPathConsumed,
 }: GitPanelHandlers & {
   repoName: string;
   repoPath: string;
   onVisibleDirtyChange?: (count: number) => void;
   pushing: boolean;
   onPush: () => Promise<void>;
+  focusPath?: string | null;
+  onFocusPathConsumed?: () => void;
 }) {
   const toast = useToast();
   const confirm = useConfirm();
@@ -317,6 +321,16 @@ export function ChangesPanel({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch status on mount / repo change
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!focusPath || !status) return;
+    const visible = status.files.filter((file) => !isGitNoisePath(file.path));
+    const match = visible.find((file) => file.path === focusPath);
+    if (match) {
+      setSelected({ path: match.path, staged: match.unstaged ? false : Boolean(match.staged) }); // eslint-disable-line react-hooks/set-state-in-effect -- hub file click selects this path
+    }
+    onFocusPathConsumed?.();
+  }, [focusPath, status, onFocusPathConsumed]);
 
   useEffect(() => {
     if (!selected) {

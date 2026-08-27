@@ -26,6 +26,14 @@ describe("TaskCreateSchema", () => {
     const r = TaskCreateSchema.safeParse({ text: "a".repeat(501) });
     expect(r.success).toBe(false);
   });
+
+  it("accepts optional entity links", () => {
+    const r = TaskCreateSchema.safeParse({
+      text: "Ship footer",
+      links: [{ kind: "repo", id: "atlas", label: "atlas" }],
+    });
+    expect(r.success).toBe(true);
+  });
 });
 
 describe("TaskPatchSchema", () => {

@@ -30,6 +30,7 @@ import { defaultHrefForRef, entityKey, extractTags, mergeEntityRefs } from "@/li
 import { ContextMenu, useContextMenu, type ContextMenuGroup } from "@/components/shell/ContextMenu";
 import { useTagMenuGroup } from "@/lib/hooks/use-tag-menu";
 import { buildEntityRefMenuGroups } from "@/lib/entity-ref-menu";
+import { repoLinkMatches } from "@/lib/repos/repo-link-match";
 import { JiraTransitionModal } from "@/components/jira/JiraTransitionModal";
 import { copyTextAndToast } from "@/lib/pr-slack";
 import { useToast } from "@/lib/hooks/use-toast";
@@ -54,6 +55,61 @@ export const KIND_ICON: Record<EntityKind, typeof FileText> = {
 const NOTE_LABEL_MAX = 28;
 const CHIP_LIMIT = 4;
 
+/**
+ * Read-only chips for links that belong to a whole list rather than one row —
+ * a section header, not a card. No remove control: these stand for links held
+ * by every row underneath, and one X could not sensibly unlink them all.
+ */
+export function SharedEntityChips({
+  refs,
+  label,
+  className,
+}: {
+  refs: readonly EntityRef[];
+  /** Screen-reader name, e.g. "Shared by every backlog item". */
+  label: string;
+  className?: string;
+}) {
+  if (refs.length === 0) return null;
+  return (
+    <ul className={`entity-link-chips ${className ?? ""}`.trim()} aria-label={label}>
+      {refs.map((ref) => {
+        const Icon = KIND_ICON[ref.kind] ?? ExternalLink;
+        const target = defaultHrefForRef(ref);
+        const text = chipDisplayLabel(ref);
+        const external = !!target && /^https?:\/\//i.test(target);
+        const inner = (
+          <>
+            <Icon size={10} aria-hidden />
+            <span>{text}</span>
+            {external ? <ExternalLink size={9} aria-hidden className="entity-link-chip-out" /> : null}
+          </>
+        );
+        return (
+          <li key={entityKey(ref)} data-entity-chip="">
+            {target ? (
+              <Link
+                href={target}
+                className="entity-link-chip"
+                data-entity-chip=""
+                data-kind={ref.kind}
+                title={ref.label || text}
+                {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+              >
+                {inner}
+              </Link>
+            ) : (
+              <span className="entity-link-chip" data-entity-chip="" data-kind={ref.kind}>
+                {inner}
+              </span>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function normalizeLabel(s: string): string {
   return s.replace(/\s+/g, " ").trim().toLowerCase();
 }
@@ -73,8 +129,18 @@ function refKey(ref: EntityRef): string {
 /** Hide chips the host row already shows (title Jira pill, inline #tags, companion note glyph). */
 export function isRedundantChip(
   ref: EntityRef,
-  opts: { suppressJiraKey?: string; hostTags?: string[]; hideCompanionNotes?: boolean },
+  opts: {
+    suppressJiraKey?: string;
+    hostTags?: string[];
+    hideCompanionNotes?: boolean;
+    suppressRepo?: string;
+    suppressKeys?: ReadonlySet<string>;
+  },
 ): boolean {
+  if (opts.suppressKeys?.has(entityKey(ref))) return true;
+  if (opts.suppressRepo && ref.kind === "repo" && repoLinkMatches(ref.id, opts.suppressRepo, null)) {
+    return true;
+  }
   if (
     opts.suppressJiraKey &&
     ref.kind === "jira" &&
@@ -150,6 +216,10 @@ export function EntityLinkChips({
   suppressJiraKey,
   hostTags,
   hideCompanionNotes,
+  /** When set, hide repo chips for this repo — the surface already is that repo. */
+  suppressRepo,
+  /** Links the surrounding list already shows once in its header. */
+  suppressRefs,
   maxVisible = CHIP_LIMIT,
   onRemoveSeed,
   className,
@@ -168,12 +238,19 @@ export function EntityLinkChips({
   suppressJiraKey?: string;
   hostTags?: string[];
   hideCompanionNotes?: boolean;
+  suppressRepo?: string;
+  suppressRefs?: readonly EntityRef[];
   maxVisible?: number;
   onRemoveSeed?: (ref: EntityRef) => void | Promise<void>;
   className?: string;
   /** When set, tag chips delegate right-click to the host row menu (chip parity). */
   onHostContextMenu?: (e: MouseEvent, ref: EntityRef) => void;
 }) {
+  const suppressKey = (suppressRefs ?? []).map(refKey).join("|");
+  const suppressKeys = useMemo(
+    () => new Set(suppressKey ? suppressKey.split("|") : []),
+    [suppressKey],
+  );
   const seedKey = JSON.stringify(seed ?? []);
   const seedKeys = useMemo(
     () => new Set((JSON.parse(seedKey) as EntityRef[]).map(refKey)),
@@ -240,6 +317,8 @@ export function EntityLinkChips({
       suppressJiraKey,
       hostTags: hostTags ?? extractTags(label ?? ""),
       hideCompanionNotes,
+      suppressRepo,
+      suppressKeys,
     })) {
       continue;
     }

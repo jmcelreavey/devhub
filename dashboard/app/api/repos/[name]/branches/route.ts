@@ -20,7 +20,7 @@ import {
 import { detectGitHookFailure, type GitHookPhase } from "@/lib/git/hook-failure";
 import { withPersistedLog } from "@/lib/git/hook-failure-persist";
 import { resolveScannedRepo } from "@/lib/scanned-repo";
-import type { StashConflictPayload } from "@/app/repos/types";
+import type { CheckoutConflictPayload, StashConflictPayload } from "@/app/repos/types";
 import {
   isSafeBranchName,
   parseChangedFiles,
@@ -41,6 +41,11 @@ type Params = { params: Promise<{ name: string }> };
 function looksLikeStashConflict(stderr: string, stdout: string): boolean {
   const text = `${stderr}\n${stdout}`;
   return /conflict/i.test(text) || /unmerged paths/i.test(text);
+}
+
+function looksLikeCheckoutConflict(stderr: string, stdout: string): boolean {
+  const text = `${stderr}\n${stdout}`;
+  return /local changes[\s\S]*would be overwritten|would be overwritten by checkout|untracked working tree files[\s\S]*would be overwritten/i.test(text);
 }
 
 function stashConflictResponse(
@@ -427,6 +432,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     checkout?: boolean;
     /** push: which remote to send to. Defaults to origin when absent. */
     remote?: string;
+    /** checkout: retry behavior after Git reports local changes would be overwritten. */
+    strategy?: "stash" | "merge";
   };
 
   switch (body.action) {
@@ -465,11 +472,9 @@ export async function POST(req: NextRequest, { params }: Params) {
           { status: 409 },
         );
       }
-      const status = await runGitRepoAsync(rp, ["status", "--porcelain"]);
-      const hasChanges = (status.stdout || "").trim().length > 0;
       let stashed = false;
 
-      if (hasChanges) {
+      if (body.strategy === "stash") {
         const prep = prepareGitIndexWrite(rp);
         if (!prep.ok) return indexLockResponse(rp, prep.error);
 
@@ -490,17 +495,41 @@ export async function POST(req: NextRequest, { params }: Params) {
         stashed = true;
       }
 
+      if (body.strategy === "merge") {
+        const prep = prepareGitIndexWrite(rp);
+        if (!prep.ok) return indexLockResponse(rp, prep.error);
+      }
+
+      const checkoutArgs = remoteCheckout
+        ? ["checkout", ...(body.strategy === "merge" ? ["-m"] : []), "--track", "-b", checkoutName, body.branch]
+        : ["checkout", ...(body.strategy === "merge" ? ["-m"] : []), body.branch];
       const out = await runGitRepoAsync(
         rp,
-        remoteCheckout
-          ? ["checkout", "--track", "-b", checkoutName, body.branch]
-          : ["checkout", body.branch],
+        checkoutArgs,
       );
       if (out.status !== 0) {
         // Auto-stash already ran — pop it so a failed checkout doesn't leave
         // a clean tree and a hidden stash the user never asked for.
         if (stashed) {
           await runGitRepoAsync(rp, ["stash", "pop", "stash@{0}"]);
+        }
+        const conflictFiles = detectUnmergedFiles(rp);
+        if (body.strategy === "merge" && conflictFiles.length > 0) {
+          return stashConflictResponse("checkout", rp, out.stderr.trim() || out.stdout.trim(), {
+            branch: checkoutName,
+            switched: true,
+            stashed: false,
+          });
+        }
+        if (!body.strategy && looksLikeCheckoutConflict(out.stderr, out.stdout)) {
+          const text = `${out.stderr}\n${out.stdout}`;
+          const payload: CheckoutConflictPayload = {
+            code: "checkout_would_conflict",
+            branch: checkoutName,
+            error: out.stderr.trim() || out.stdout.trim() || "Local changes block checkout",
+            canMerge: !/untracked working tree files[\s\S]*would be overwritten/i.test(text),
+          };
+          return NextResponse.json(payload, { status: 409 });
         }
         return NextResponse.json(
           {
@@ -509,6 +538,14 @@ export async function POST(req: NextRequest, { params }: Params) {
           },
           { status: 500 },
         );
+      }
+
+      if (body.strategy === "merge" && detectUnmergedFiles(rp).length > 0) {
+        return stashConflictResponse("checkout", rp, "Switched branches with local merge conflicts", {
+          branch: checkoutName,
+          switched: true,
+          stashed: false,
+        });
       }
 
       if (stashed) {

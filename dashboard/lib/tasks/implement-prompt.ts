@@ -4,6 +4,8 @@ export interface TaskImplementPromptInput {
   taskId: string;
   date: string;
   repoName?: string;
+  cwd?: string;
+  jiraKey?: string;
 }
 
 export function taskImplementPlanUrl(input: TaskImplementPromptInput): string {
@@ -13,10 +15,15 @@ export function taskImplementPlanUrl(input: TaskImplementPromptInput): string {
 export function buildTaskImplementPrompt(input: TaskImplementPromptInput): string {
   const planUrl = taskImplementPlanUrl(input);
   const repo = input.repoName ? ` in the ${input.repoName} repo` : "";
-  return [
+  const lines = [
     `Use the devhub-implement-task skill to implement this DevHub task end-to-end${repo}.`,
     `Plan URL (curl it first - tags, linked notes/repos, Jira ticket, note path): ${planUrl}`,
+  ];
+  if (input.cwd) lines.push(`Working tree: ${input.cwd}. Stay in this checkout.`);
+  if (input.jiraKey) lines.push(`Jira ticket: ${input.jiraKey}.`);
+  lines.push(
     "The DevHub notes MCP is available for the task note, tag lookups (tags_lookup), Jira (jira_ticket_get / jira_ticket_transition), and updating the task.",
     "Work interactively: ask me before each post-implementation step (commit/push, PR, PR review note, Jira transition, completing the task). Never commit without asking.",
-  ].join("\n");
+  );
+  return lines.join("\n");
 }

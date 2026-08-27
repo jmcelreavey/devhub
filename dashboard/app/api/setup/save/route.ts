@@ -6,6 +6,8 @@ import { normalizeAgentCli } from "@/lib/agent/cli-env";
 import { normalizeAiProvider, toAgentLaunchCli } from "@/lib/ai/preference";
 
 import {
+  getPackagedUserEnvFilePath,
+  patchEnvFileKeys,
   readDashboardEnvLocalFile,
   syncAgentProcessEnvFromOverrides,
   syncBiProcessEnvFromOverrides,
@@ -16,6 +18,7 @@ import {
   writeDashboardEnvLocalFile,
 } from "@/lib/dashboard-env-local";
 import { parseBody } from "@/lib/api-utils";
+import { invalidateJiraTicketsCache } from "@/lib/jira/tickets-cache";
 import { SetupSaveSchema } from "@/lib/schemas";
 
 export const dynamic = "force-dynamic";
@@ -131,9 +134,10 @@ export async function POST(req: NextRequest) {
   }
 
   if (jira) {
-    if (jira.domain) overrides.set("JIRA_DOMAIN", jira.domain);
-    if (jira.email) overrides.set("JIRA_EMAIL", jira.email);
-    if (jira.apiToken) overrides.set("JIRA_API_TOKEN", jira.apiToken);
+    if (jira.domain?.trim()) overrides.set("JIRA_DOMAIN", jira.domain.trim());
+    if (jira.email?.trim()) overrides.set("JIRA_EMAIL", jira.email.trim());
+    if (jira.apiToken?.trim()) overrides.set("JIRA_API_TOKEN", jira.apiToken.trim());
+    invalidateJiraTicketsCache();
   } else if (jira === null) {
     overrides.delete("JIRA_DOMAIN");
     overrides.delete("JIRA_EMAIL");
@@ -228,6 +232,12 @@ export async function POST(req: NextRequest) {
 
 
   writeDashboardEnvLocalFile(overrides, passthrough);
+  if (jira) {
+    const packaged = getPackagedUserEnvFilePath();
+    if (packaged) {
+      patchEnvFileKeys(packaged, overrides, ["JIRA_DOMAIN", "JIRA_EMAIL", "JIRA_API_TOKEN"]);
+    }
+  }
   syncGoogleProcessEnvFromOverrides(overrides);
   syncJiraProcessEnvFromOverrides(overrides);
   syncDatadogProcessEnvFromOverrides(overrides);

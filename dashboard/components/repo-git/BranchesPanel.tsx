@@ -20,7 +20,7 @@ import {
   useContextMenu,
   type ContextMenuGroup,
 } from "@/components/shell/ContextMenu";
-import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
+import { useConfirm, useDecision, usePrompt } from "@/components/shell/ConfirmDialog";
 import { groupBranches } from "@/lib/repos/branch-grouping";
 import { RemotesSection } from "./RemotesSection";
 import { useToast } from "@/lib/hooks/use-toast";
@@ -31,6 +31,7 @@ import {
 } from "./branchMenuGroups";
 import { RangeCompareModal } from "./RangeCompareModal";
 import {
+  chooseCheckoutStrategy,
   fetchGitJson,
   postGitAction,
   repoApi,
@@ -54,6 +55,7 @@ export function BranchesPanel({
 }) {
   const toast = useToast();
   const confirm = useConfirm();
+  const decide = useDecision();
   const prompt = usePrompt();
   const [data, setData] = useState<BranchesPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -105,12 +107,21 @@ export function BranchesPanel({
     async (action: string, extra?: Record<string, unknown>) => {
       setActing(action);
       try {
-        const result = await postGitAction<{
+        let result = await postGitAction<{
           alreadyUpToDate?: boolean;
           message?: string;
           branch?: string;
           backupBranch?: string | null;
         }>(repoApi(repoName, "/branches"), { action, ...extra });
+        if (!result.ok && result.kind === "checkout-conflict") {
+          const strategy = await chooseCheckoutStrategy(decide, result.conflict);
+          if (!strategy) return false;
+          result = await postGitAction(repoApi(repoName, "/branches"), {
+            action,
+            ...extra,
+            strategy,
+          });
+        }
         if (!result.ok) {
           if (result.kind === "conflict") {
             await onConflict(result.conflict);
@@ -149,23 +160,14 @@ export function BranchesPanel({
         setActing(null);
       }
     },
-    [repoName, onConflict, onHookFailure, onMutate, refresh, toast],
+    [decide, repoName, onConflict, onHookFailure, onMutate, refresh, toast],
   );
 
   const checkoutBranch = useCallback(
     async (branch: string) => {
-      const dirty = Boolean(data?.hasChanges);
-      const ok = await confirm({
-        title: `Switch to ${branch}?`,
-        message: dirty
-          ? `Working tree has uncommitted changes. DevHub will auto-stash them, check out ${branch}, then re-apply the stash (conflicts go to the Conflicts tab).`
-          : `Check out branch “${branch}”. Local HEAD will move; uncommitted work is none right now.`,
-        confirmLabel: "Switch branch",
-      });
-      if (!ok) return;
       await act("checkout", { branch });
     },
-    [act, confirm, data?.hasChanges],
+    [act],
   );
 
   const createBranch = useCallback(async () => {
@@ -470,7 +472,7 @@ export function BranchesPanel({
           aria-label="Filter branches"
         />
       </label>
-      <div className="repo-git-branch-hint">Right-click or ⋮ a branch for merge, rebase, rename and more.</div>
+      <div className="repo-git-branch-hint">Double-click to switch. Right-click or ⋮ for merge, rebase, rename and more.</div>
       <div className="repo-git-branch-list">
         {localGroups.length === 0 && branchQuery.trim() && (
           <div className="repo-git-empty-sm">No local branch matches “{branchQuery.trim()}”.</div>
@@ -494,7 +496,11 @@ export function BranchesPanel({
               type="button"
               className="repo-git-branch-main"
               disabled={b.current || acting !== null}
-              onClick={() => void checkoutBranch(b.name)}
+              title={b.current ? `${b.name} is checked out` : `Double-click to check out ${b.name}`}
+              onDoubleClick={() => void checkoutBranch(b.name)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void checkoutBranch(b.name);
+              }}
             >
               {b.current ? <Check size={12} className="text-accent" /> : <CornerDownLeft size={12} className="text-text-subtle" />}
               <span style={{ fontWeight: b.current ? 600 : 400 }}>{b.name}</span>
@@ -532,11 +538,17 @@ export function BranchesPanel({
                   type="button"
                   className="repo-git-branch-main"
                   disabled={acting !== null}
-                  onClick={() =>
+                  title={`Double-click to check out ${branch.name}`}
+                  onDoubleClick={() =>
                     branch.trackedLocalName
                       ? void checkoutBranch(branch.trackedLocalName)
                       : void checkoutRemoteBranch(branch)
                   }
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return;
+                    if (branch.trackedLocalName) void checkoutBranch(branch.trackedLocalName);
+                    else void checkoutRemoteBranch(branch);
+                  }}
                 >
                   <Download size={12} className="text-text-subtle" />
                   <span>{branch.name}</span>
