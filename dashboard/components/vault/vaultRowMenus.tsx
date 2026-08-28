@@ -17,6 +17,26 @@ import type { VaultRowKind } from "@/lib/vault/vault-file-actions";
 
 const icon = { size: 12 as const };
 
+export const SPAWN_TASKS_FROM_PLAN = {
+  id: "spawn-tasks-from-plan",
+  label: "Spawn tasks from plan",
+  description: "Jira sub-tasks and DevHub tasks from PR sections",
+} as const;
+
+/** Launch-menu row for dashboard card menus (Today notes panel, etc.). */
+export function SpawnTasksFromPlanLaunchMenuItem({ onSelect }: { onSelect: () => void }) {
+  return (
+    <button type="button" role="menuitem" className="launch-menu-item" onClick={onSelect}>
+      <span className="launch-menu-icon">
+        <ListTodo size={12} aria-hidden />
+      </span>
+      <span className="launch-menu-copy">
+        <span className="launch-menu-label">{SPAWN_TASKS_FROM_PLAN.label}</span>
+      </span>
+    </button>
+  );
+}
+
 export interface VaultFileMenuActions {
   itemLabel: string;
   kind: VaultRowKind;
@@ -104,9 +124,9 @@ export function buildVaultFileMenuGroups(actions: VaultFileMenuActions): Context
     ...(actions.onCreateTasksFrom
       ? [
           {
-            id: "spawn-tasks-from-plan",
-            label: "Spawn tasks from plan",
-            description: "Jira sub-tasks and DevHub tasks from PR sections",
+            id: SPAWN_TASKS_FROM_PLAN.id,
+            label: SPAWN_TASKS_FROM_PLAN.label,
+            description: SPAWN_TASKS_FROM_PLAN.description,
             icon: <ListTodo {...icon} aria-hidden />,
             onSelect: actions.onCreateTasksFrom,
           },
