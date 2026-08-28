@@ -7,7 +7,9 @@ import { FileText, ListTodo, MoreHorizontal, Trash2 } from "lucide-react";
 import { TaskList } from "@/components/tasks/TaskList";
 import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
 import { onTodayCardHeaderClick, TodayViewAllLink } from "@/components/today/TodayViewAllLink";
+import { CreateTasksFromDialog } from "@/components/notes/CreateTasksFromDialog";
 import { StandupCopyButton } from "@/components/StandupCopyButton";
+import { SpawnTasksFromPlanLaunchMenuItem } from "@/components/vault/vaultRowMenus";
 import type { DevHubPartialBlock } from "@/lib/blocknote/schema";
 import { SaveStatusPill } from "./SaveStatusPill";
 import { TabButton } from "./TabButton";
@@ -58,6 +60,7 @@ export function TodayMainCard({
   onNoteChange: (blocks: DevHubPartialBlock[]) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [createTasksOpen, setCreateTasksOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -136,6 +139,14 @@ export function TodayMainCard({
             {menuOpen && menuStyle && typeof document !== "undefined" ? createPortal(
               <div ref={menuRef} role="menu" aria-label="Card actions" className="today-actions-menu pop-soft" data-portal style={menuStyle}>
               <StandupCopyButton variant="compact" />
+              {tab === "notes" && !mainCollapsed ? (
+                <SpawnTasksFromPlanLaunchMenuItem
+                  onSelect={() => {
+                    setMenuOpen(false);
+                    setCreateTasksOpen(true);
+                  }}
+                />
+              ) : null}
               {tab === "notes" && !mainCollapsed && (
                 <button
                   type="button"
@@ -185,6 +196,13 @@ export function TodayMainCard({
               </div>
             ))}
         </div>
+      ) : null}
+      {tab === "notes" ? (
+        <CreateTasksFromDialog
+          open={createTasksOpen}
+          notePath={todayPath}
+          onClose={() => setCreateTasksOpen(false)}
+        />
       ) : null}
     </section>
   );
