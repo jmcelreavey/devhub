@@ -7,6 +7,11 @@
  * Used by /api/entity-links and (via client) EntityLinkChips / RelationsPanel.
  * MCP and plugins should prefer the shared EntityRef builders; this module is
  * the server-side read model.
+ *
+ * Links are stored one-way — A links to B, B is never touched — so the reverse
+ * direction is reconstructed here on read. That keeps a single owner per edge
+ * (unlink from the side that made it) and works retroactively on links already
+ * on disk.
  */
 
 import fs from "node:fs";
@@ -34,6 +39,125 @@ export interface EntityLinksResult {
   notes: EntityRef[];
   /** Other entities reachable from notes + task.links. */
   related: EntityRef[];
+}
+
+export interface ResolveEntityOpts {
+  date?: string;
+  label?: string;
+  href?: string;
+  meetingTitle?: string;
+  prRepo?: string;
+  prNumber?: number;
+}
+
+interface TaskNode {
+  task: Task;
+  date: string;
+}
+
+/**
+ * Every task on disk, parsed once per request.
+ *
+ * `findTask` and the reverse scan each used to walk the whole tasks dir, and
+ * depth-2 expansion re-enters the resolver once per direct link — two walks
+ * would have become N. One index threaded through is fewer reads than before,
+ * and it is the only place that has to know about rollover lineage.
+ */
+interface TaskIndex {
+  byId: Map<string, TaskNode>;
+  /** rolledFromId -> id of the copy rollover made from it. */
+  succ: Map<string, string>;
+  all: TaskNode[];
+}
+
+function buildTaskIndex(): TaskIndex {
+  const dir = getTasksDir();
+  const byId = new Map<string, TaskNode>();
+  const succ = new Map<string, string>();
+  const all: TaskNode[] = [];
+
+  let files: string[];
+  try {
+    files = fs.readdirSync(dir).filter((f) => f.endsWith(".json"));
+  } catch {
+    return { byId, succ, all };
+  }
+
+  for (const file of files) {
+    let tasks: Task[];
+    try {
+      tasks = JSON.parse(fs.readFileSync(path.join(dir, file), "utf8")) as Task[];
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(tasks)) continue;
+    const date = file.replace(/\.json$/, "");
+    for (const task of tasks) {
+      if (!task || typeof task.id !== "string") continue;
+      const node: TaskNode = { task, date };
+      byId.set(task.id, node);
+      all.push(node);
+      if (task.rolledFromId) succ.set(task.rolledFromId, task.id);
+    }
+  }
+  return { byId, succ, all };
+}
+
+/**
+ * Every id this task has carried across rollover days.
+ *
+ * Rollover mints a fresh uuid per copy but leaves stored links pointing at the
+ * old one, so a `task:<uuid>` edge would go dead overnight without this. Walks
+ * `rolledFromId` back to the original and `succ` forward to today's copy.
+ */
+function taskLineageIds(idx: TaskIndex, id: string): Set<string> {
+  const ids = new Set<string>([id]);
+  const queue = [id];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const prev = idx.byId.get(current)?.task.rolledFromId;
+    if (prev && !ids.has(prev)) {
+      ids.add(prev);
+      queue.push(prev);
+    }
+    const next = idx.succ.get(current);
+    if (next && !ids.has(next)) {
+      ids.add(next);
+      queue.push(next);
+    }
+  }
+  return ids;
+}
+
+/** Newest live copy in a lineage — where a stale `task:<uuid>` ref should now point. */
+function currentTaskNode(idx: TaskIndex, id: string): TaskNode | null {
+  const lineage = taskLineageIds(idx, id);
+  let live: TaskNode | null = null;
+  let newest: TaskNode | null = null;
+  for (const lid of lineage) {
+    const node = idx.byId.get(lid);
+    if (!node) continue;
+    if (!newest || node.date > newest.date) newest = node;
+    if (node.task.movedAt) continue;
+    if (!live || node.date > live.date) live = node;
+  }
+  // A lineage of nothing but moved ghosts shouldn't drop the chip entirely.
+  return live ?? newest;
+}
+
+/** Re-point a stored task ref at the live copy; rollover renamed the target. */
+function freshenTaskRef(idx: TaskIndex, ref: EntityRef): EntityRef {
+  if (ref.kind !== "task") return ref;
+  const node = currentTaskNode(idx, ref.id);
+  if (!node) return ref;
+  return {
+    ...ref,
+    id: node.task.id,
+    label: node.task.text || ref.label,
+    // Beats defaultHrefForRef's generic /work?tab=tasks — a chip that lands on
+    // the wrong day is barely better than a dead one.
+    href: `/work?date=${node.date}`,
+  };
 }
 
 function noteHref(notePath: string): string {
@@ -71,59 +195,27 @@ function readNoteMarkdown(relPath: string): string | null {
   }
 }
 
-function findTask(id: string, date?: string): { task: Task; date: string } | null {
-  const dir = getTasksDir();
-  if (!fs.existsSync(dir)) return null;
-  const prefer = date ?? todayISO();
-  const files = [
-    `${prefer}.json`,
-    ...fs.readdirSync(dir).filter((f) => f.endsWith(".json") && f !== `${prefer}.json`),
-  ];
-  for (const file of files) {
-    try {
-      const tasks = JSON.parse(fs.readFileSync(path.join(dir, file), "utf8")) as Task[];
-      const task = tasks.find((t) => t.id === id);
-      if (task) return { task, date: file.replace(/\.json$/, "") };
-    } catch {
-      /* skip */
-    }
-  }
-  return null;
-}
-
 /**
- * Every task (any day) whose `task.links` or `task.jiraKey` points at
- * (kind, id) — the reverse of the "task" branch below, so a Jira ticket,
- * note, or PR right-clicked on its own row shows the tasks that reference it.
+ * Every task whose `task.links` or `task.jiraKey` points at (kind, id) — the
+ * reverse of the "task" branch below, so a Jira ticket, note, PR or *task*
+ * shows what references it.
+ *
+ * `ids` is a set, not a single id, because a task's stored id changes at
+ * rollover: a link made yesterday names yesterday's uuid.
  */
-function findLinkingTasks(kind: EntityKind, id: string): EntityRef[] {
-  const dir = getTasksDir();
-  let files: string[];
-  try {
-    files = fs.readdirSync(dir).filter((f) => f.endsWith(".json"));
-  } catch {
-    return [];
-  }
+function findLinkingTasks(idx: TaskIndex, kind: EntityKind, ids: ReadonlySet<string>): EntityRef[] {
+  const jiraKeys = kind === "jira" ? new Set([...ids].map((i) => i.toUpperCase())) : null;
   const out: EntityRef[] = [];
-  for (const file of files) {
-    let tasks: Task[];
-    try {
-      tasks = JSON.parse(fs.readFileSync(path.join(dir, file), "utf8")) as Task[];
-    } catch {
-      continue;
-    }
-    const date = file.replace(/\.json$/, "");
-    for (const task of tasks) {
-      // Rollover leaves the prior day's task behind marked `movedAt`, with a
-      // fresh id carrying the same links into today's file — skip the stale
-      // copy or every linked entity shows the same task listed twice.
-      if (task.movedAt) continue;
-      const jiraMatch =
-        kind === "jira" && typeof task.jiraKey === "string" && task.jiraKey.toUpperCase() === id.toUpperCase();
-      const linkMatch = task.links?.some((l) => l.kind === kind && l.id === id);
-      if (!jiraMatch && !linkMatch) continue;
-      out.push({ kind: "task", id: task.id, label: task.text, href: `/work?date=${date}` });
-    }
+  for (const { task, date } of idx.all) {
+    // Rollover leaves the prior day's task behind marked `movedAt`, with a
+    // fresh id carrying the same links into today's file — skip the stale
+    // copy or every linked entity shows the same task listed twice.
+    if (task.movedAt) continue;
+    const jiraMatch =
+      jiraKeys != null && typeof task.jiraKey === "string" && jiraKeys.has(task.jiraKey.toUpperCase());
+    const linkMatch = task.links?.some((l) => l.kind === kind && ids.has(l.id));
+    if (!jiraMatch && !linkMatch) continue;
+    out.push({ kind: "task", id: task.id, label: task.text, href: `/work?date=${date}` });
   }
   return out;
 }
@@ -160,14 +252,20 @@ function refsFromNote(notePath: string): EntityRef[] {
  * Resolve links for a given entity. Cheap path: check stable note path first,
  * then scan area notes that mention the entity id (bounded).
  */
-export function resolveEntityLinks(kind: EntityKind, id: string, opts?: {
-  date?: string;
-  label?: string;
-  href?: string;
-  meetingTitle?: string;
-  prRepo?: string;
-  prNumber?: number;
-}): EntityLinksResult {
+export function resolveEntityLinks(
+  kind: EntityKind,
+  id: string,
+  opts?: ResolveEntityOpts,
+): EntityLinksResult {
+  return resolveWithIndex(buildTaskIndex(), kind, id, opts);
+}
+
+function resolveWithIndex(
+  idx: TaskIndex,
+  kind: EntityKind,
+  id: string,
+  opts?: ResolveEntityOpts,
+): EntityLinksResult {
   const entity: EntityRef = {
     kind,
     id,
@@ -185,15 +283,19 @@ export function resolveEntityLinks(kind: EntityKind, id: string, opts?: {
   };
 
   let suppressJiraKey: string | undefined;
+  // For tasks the reverse scan matches the whole rollover chain, not one uuid.
+  const lineage = kind === "task" ? taskLineageIds(idx, id) : new Set([id]);
 
   if (kind === "task") {
-    const found = findTask(id, opts?.date);
+    const found = idx.byId.get(id) ?? null;
     const date = found?.date ?? opts?.date ?? todayISO();
     const text = found?.task.text ?? opts?.label ?? id;
     suppressJiraKey = found?.task.jiraKey;
     // Companion note chip sits under the task title — don't re-echo the title.
     pushNote(taskNotePath({ id, text, date }), "Note");
-    if (found?.task.links?.length) related.push(...found.task.links);
+    if (found?.task.links?.length) {
+      related.push(...found.task.links.map((l) => freshenTaskRef(idx, l)));
+    }
     // Free-form #tags typed in the task text are links too — they show as
     // chips and hop to a filtered work view.
     related.push(...tagRefs(text));
@@ -245,21 +347,72 @@ export function resolveEntityLinks(kind: EntityKind, id: string, opts?: {
   }
 
   // Any task that links to (or has jiraKey ==) this entity — the reverse of
-  // the "task" branch's own task.links read above.
-  if (kind !== "task") {
-    related.push(...findLinkingTasks(kind, id));
-  }
+  // the "task" branch's own task.links read above. Tasks included: a task
+  // linked to another task should say so from both ends.
+  related.push(...findLinkingTasks(idx, kind, lineage));
 
-  // Deduplicate notes/related excluding the queried entity itself
-  const selfKey = entityKey(entity);
+  // Deduplicate notes/related excluding the queried entity itself — for a task
+  // that means every id in its lineage, or yesterday's copy shows as related.
+  const selfKeys = new Set([...lineage].map((lid) => entityKey({ kind, id: lid })));
   const suppress = suppressJiraKey?.toUpperCase();
   return {
     entity,
     notes: mergeEntityRefs(notes),
     related: mergeEntityRefs(related).filter((r) => {
-      if (entityKey(r) === selfKey) return false;
+      if (selfKeys.has(entityKey(r))) return false;
       if (suppress && r.kind === "jira" && r.id.toUpperCase() === suppress) return false;
       return true;
     }),
   };
+}
+
+export interface EntityContextResult extends EntityLinksResult {
+  /** One hop past `related` — what the direct links themselves link to. */
+  expanded: EntityRef[];
+}
+
+/**
+ * Kinds worth another hop. `repo` and `tag` are deliberately excluded: they fan
+ * out to every task that ever touched them, which is a listing, not context.
+ */
+const EXPANDABLE_KINDS: ReadonlySet<EntityKind> = new Set(["note", "task", "jira", "pr"]);
+
+const DEFAULT_MAX_EXPANDED = 25;
+
+/**
+ * `resolveEntityLinks` plus, at depth 2, what each direct link links to.
+ *
+ * Built for agents: the implement plan hands over the whole neighbourhood in
+ * one response so a skill doesn't crawl it with N sequential MCP round-trips
+ * (and stop at depth 1 anyway). Depth 1 is the default, so chip callers are
+ * unchanged.
+ */
+export function resolveEntityContext(
+  kind: EntityKind,
+  id: string,
+  opts?: ResolveEntityOpts & { depth?: number; maxRefs?: number },
+): EntityContextResult {
+  const idx = buildTaskIndex();
+  const base = resolveWithIndex(idx, kind, id, opts);
+  if ((opts?.depth ?? 1) < 2) return { ...base, expanded: [] };
+
+  const maxRefs = opts?.maxRefs ?? DEFAULT_MAX_EXPANDED;
+  const seen = new Set<string>([entityKey(base.entity)]);
+  for (const ref of [...base.notes, ...base.related]) seen.add(entityKey(ref));
+
+  const expanded: EntityRef[] = [];
+  for (const ref of base.related) {
+    if (expanded.length >= maxRefs) break;
+    if (!EXPANDABLE_KINDS.has(ref.kind)) continue;
+    const hop = resolveWithIndex(idx, ref.kind, ref.id, { label: ref.label, href: ref.href });
+    for (const next of mergeEntityRefs(hop.notes, hop.related)) {
+      if (expanded.length >= maxRefs) break;
+      const key = entityKey(next);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      expanded.push(next);
+    }
+  }
+
+  return { ...base, expanded: mergeEntityRefs(expanded) };
 }

@@ -19,7 +19,7 @@ metadata:
 ## Overview
 
 Take one DevHub task from "text in a list" to "implemented, verified, and
-handed back to the human". Three rules govern everything:
+handed back to the human". Five rules govern everything:
 
 1. **Ask before remote/workflow state changes.** Code changes are yours to
    make; commits, pushes, PRs, later Jira transitions, and task completion are
@@ -35,6 +35,9 @@ handed back to the human". Three rules govern everything:
    local-diff review — persisted as a real note linked to the repo, not just a
    line in the task note — proves the change is understandable, scoped, and
    actually fits the task before asking to commit it.
+5. **Findings are notes, code is the repo.** Everything you learn on the way —
+   contracts, evidence, decisions — lands in the vault. The repo gets code and
+   the rules for editing it, nothing else. See §2.5.
 
 ## 0. Fetch the plan
 
@@ -48,6 +51,18 @@ It returns JSON: `id`, `date`, `text`, `done`, `tags`, `jiraKey`, `jira`
 (summary + status), `notePath`, `links` (EntityRefs), and `repos` (candidate
 repos from task links).
 
+It also returns the resolved neighbourhood, so you don't have to crawl it:
+
+- `notes` — notes that represent or link to this task.
+- `related` — the direct neighbourhood: the task's own links, **plus whatever
+  links back at it**. Links are stored one-way, so a prerequisite task that
+  names this one only shows up here.
+- `context` — one hop further: what those links themselves link to (a related
+  ticket's plan note, a linked note's ticket).
+
+`repos` deliberately comes from the task's own links only — never pick a
+checkout from something in `related`.
+
 If more than one repo is listed and the notes don't disambiguate, ask the
 user which repo to work in **before** writing any code.
 
@@ -57,10 +72,13 @@ With the plan in hand, pull the surrounding context via the notes MCP:
 
 - `notes_read` the task note at `notePath` (if it exists) - it may hold a
   plan, decisions, or prior attempts.
-- Run `entity_links_read` on the task note, then read every directly linked
-  note/repo/PR resource. A linked
-  implementation-plan note is required reading; a PR link means review its
-  state first.
+- Read every `note` in `related` — a linked implementation-plan note is
+  required reading, and a PR link means review its state first.
+- Skim `context` for anything that changes the approach: a prerequisite task's
+  PR state, a related ticket's plan note. Read the ones that do; ignore the
+  rest. The plan already walked this graph — don't re-walk it.
+- Use `entity_links_resolve` only for something the plan didn't cover (a repo
+  or ticket you reached some other way). It reads both directions too.
 - If `jiraKey` is set and the plan's Jira summary is thin,
   `jira_ticket_get` it; read acceptance criteria carefully.
 - When the topic is unfamiliar, a quick `recall` query on the task text
@@ -123,6 +141,38 @@ Treat tags as durable context, not decoration:
 Tags are inline `#tokens`; adding a normalized token to task/note text creates
 the tag. Before writing a note, read it first. Use a single `Tags: #one #two`
 line (or the note's existing tags line) and preserve all existing content.
+
+## 2.5 Where prose goes
+
+Investigation produces writing — a service contract you reverse-engineered,
+probe results, an ownership trail, a decision record. **That output is a DevHub
+note, never a file in the target repo.** Default to
+`discovery/<TICKET>-<short-slug>`, matching the vault's existing
+`discovery/PTF-xxxx-*` notes, with a `## Links` section carrying **Jira**,
+**Repo**, and **Task** entries plus the canonical tags — otherwise the ticket
+and the task have no way to find it.
+
+The repo gets only what a future editor of *that code* must not break, in the
+form the repo already uses for it:
+
+| Output | Home |
+| --- | --- |
+| Contract discovery, probe evidence, ownership, decisions, open questions | note: `discovery/<TICKET>-<slug>` |
+| Rules the next person editing this directory must follow | the narrowest `AGENTS.md` in that subtree |
+| How *this repo* is wired, for every reader of the repo | `docs/` — only if the repo already keeps that kind of page there |
+| Reusable gotcha worth surfacing beyond this ticket | `learnings/` note (step 7) |
+
+A repo's `docs/` tree is a trap when it already holds pages about external
+services: those describe how this repo talks to them, and yours will
+pattern-match right into the set. Two tests — if the page goes stale the moment
+the ticket ships, or means nothing to someone who never saw the ticket, it is a
+note, not a doc.
+
+Never let a question decide this for you. When `AskUserQuestion` offers a scope
+choice, keep artifact locations out of the option text: the user is answering
+"how much work", not ratifying a path, and a path buried in an option reads as
+approved when it was never considered. Settle the destination from the table
+above before asking, then state it as a fact when you report back.
 
 ## 3. Implement
 
@@ -196,13 +246,28 @@ update this same note in place with the PR link and GitHub conversation
 context — see step 5.4. Never create a second review note for the same
 change.
 
+**Then open the review beside the code.** Once the note is final, call
+`notes_cursor_open` with that note path and the local repo name (the same
+"Open with Cursor" action the dashboard's note rows use). It puts a Markdown
+working copy of the review in Cursor next to the checkout, so the review and
+the diff are readable together — which is the point of asking for a commit
+decision at all. Do this **before** the step 5.1 question, not after, and
+mention it in one short line when you ask.
+
+Use `notes_cursor_open`, not `prs_open_in_cursor`, at this stage: the branch is
+already checked out with uncommitted work, and `prs_open_in_cursor` stashes and
+re-checks-out. It is the right call only later, when reviewing an existing PR
+from a clean tree. If the user edits the working copy, `notes_cursor_apply`
+brings their edits back into the note.
+
 ## 5. Post-implementation checklist
 
 Summarize first: what changed (files + approach) and how it's tested. Then
 walk this list, **asking the user before each step** and respecting their
 answer:
 
-1. **Commit & push?** Only after the pre-commit review gate passes, propose a conventional-commit message
+1. **Commit & push?** Only after the pre-commit review gate passes and its note
+   is open in Cursor (§4.5), propose a conventional-commit message
    (`feat:`/`fix:`/...), confirm branch naming, then commit and push. Never
    commit without an explicit yes.
 2. **Create a PR?** Ask draft vs ready. Use the `create-pr` skill; keep the

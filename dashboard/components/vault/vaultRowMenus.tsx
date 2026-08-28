@@ -7,6 +7,7 @@ import {
   Flame,
   FolderInput,
   FolderPlus,
+  ListTodo,
   Pencil,
   Share2,
   Trash2,
@@ -27,6 +28,7 @@ export interface VaultFileMenuActions {
   onCopyLocation: () => void;
   onCopyMarkdown?: () => void;
   onShare?: () => void;
+  onCreateTasksFrom?: () => void;
   onOneTime?: () => void;
   onRename?: () => void;
   onDuplicate?: () => void;
@@ -96,6 +98,17 @@ export function buildVaultFileMenuGroups(actions: VaultFileMenuActions): Context
             description: "Secret gist — link copied",
             icon: <Share2 {...icon} aria-hidden />,
             onSelect: actions.onShare,
+          },
+        ]
+      : []),
+    ...(actions.onCreateTasksFrom
+      ? [
+          {
+            id: "spawn-tasks-from-plan",
+            label: "Spawn tasks from plan",
+            description: "Jira sub-tasks and DevHub tasks from PR sections",
+            icon: <ListTodo {...icon} aria-hidden />,
+            onSelect: actions.onCreateTasksFrom,
           },
         ]
       : []),

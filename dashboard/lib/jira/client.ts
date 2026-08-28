@@ -1,5 +1,10 @@
 import { pickAtlassianAvatarUrl, rememberAtlassianAvatar } from "@/lib/jira/avatars";
 import { getResolvedJiraEnv, authHeader, apiBase, jsonHeaders, type ResolvedJira } from "@/lib/jira/env";
+import {
+  getJiraTicketsCache,
+  setJiraTicketsCache,
+  JIRA_TICKETS_TTL_MS,
+} from "@/lib/jira/tickets-cache";
 
 export interface JiraPerson {
   displayName: string;
@@ -128,6 +133,21 @@ export async function getMyTickets(): Promise<JiraTicket[]> {
     updatedAt: issue.fields.updated ?? "",
     assignee: mapJiraAssignee(issue.fields),
   }));
+}
+
+/**
+ * {@link getMyTickets} behind the shared 2-minute TTL cache that backs
+ * `/api/jira/tickets`. Mutations already call `invalidateJiraTicketsCache()`,
+ * so the repo hub and the tickets page no longer each pay a live JQL call.
+ */
+export async function getMyTicketsCached(): Promise<JiraTicket[]> {
+  const cached = getJiraTicketsCache();
+  if (cached && Date.now() - cached.ts < JIRA_TICKETS_TTL_MS) {
+    return cached.data as JiraTicket[];
+  }
+  const tickets = await getMyTickets();
+  setJiraTicketsCache(tickets);
+  return tickets;
 }
 
 /**

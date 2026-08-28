@@ -119,6 +119,51 @@ export function clampMenuPosition(
   return needsScroll ? { top, left, maxHeight: availableHeight } : { top, left };
 }
 
+/**
+ * Capture-phase `scroll` fires for every nested scroller. Closing on all of
+ * them means a terminal buffer jumping to the bottom dismisses a menu on the
+ * page behind it. Only dismiss when that scroll actually moved the host row
+ * (or the window itself).
+ */
+export function scrollShouldCloseMenu(
+  event: Event,
+  menu: HTMLElement,
+  host: HTMLElement | null,
+): boolean {
+  const target = event.target;
+  if (target instanceof Node && menu.contains(target)) return false;
+  if (event.type === "resize") return true;
+  if (
+    target === document ||
+    target === document.documentElement ||
+    target === document.body
+  ) {
+    return true;
+  }
+  if (host && target instanceof Node) return target.contains(host);
+  return true;
+}
+
+function preventSecondaryButtonSelectStart(event: Event) {
+  const buttons = "buttons" in event ? Number((event as { buttons: number }).buttons) : undefined;
+  if (buttons != null && (buttons & 2) === 0) return;
+  event.preventDefault();
+}
+
+function clearNativeSelection() {
+  window.getSelection()?.removeAllRanges();
+}
+
+function setHostTextSelect(host: HTMLElement, enabled: boolean) {
+  if (enabled) {
+    host.style.removeProperty("user-select");
+    host.style.removeProperty("-webkit-user-select");
+    return;
+  }
+  host.style.setProperty("user-select", "none");
+  host.style.setProperty("-webkit-user-select", "none");
+}
+
 export interface RowMenuBind {
   /** Marks the host so kebab / elementFromPoint can resolve the open target. */
   "data-context-menu-host": true;
@@ -258,8 +303,10 @@ export function ContextMenu({
       onClose();
     };
     const onScroll = (event: Event) => {
-      // Wheel / arrow-focus inside a tall menu must not dismiss it.
-      if (el.contains(event.target as Node)) return;
+      const host = document.querySelector<HTMLElement>(
+        "[data-context-menu-host][data-context-menu='open']",
+      );
+      if (!scrollShouldCloseMenu(event, el, host)) return;
       onClose();
     };
 
@@ -293,6 +340,8 @@ export function ContextMenu({
         margin: 0,
         maxHeight: placed?.maxHeight,
         overflowY: placed?.maxHeight != null ? "auto" : undefined,
+        userSelect: "none",
+        WebkitUserSelect: "none",
       }}
       hidden={!open ? true : undefined}
       onKeyDown={(event) => {
@@ -369,6 +418,7 @@ export function useContextMenu<T>() {
     const host = hostRef.current;
     if (!host) return;
     host.removeAttribute("data-context-menu");
+    setHostTextSelect(host, true);
     hostRef.current = null;
   }, []);
 
@@ -376,9 +426,13 @@ export function useContextMenu<T>() {
     (host: HTMLElement | null) => {
       if (hostRef.current && hostRef.current !== host) {
         hostRef.current.removeAttribute("data-context-menu");
+        setHostTextSelect(hostRef.current, true);
       }
       hostRef.current = host;
-      if (host) host.setAttribute("data-context-menu", "open");
+      if (host) {
+        host.setAttribute("data-context-menu", "open");
+        setHostTextSelect(host, false);
+      }
     },
     [],
   );
@@ -400,6 +454,7 @@ export function useContextMenu<T>() {
 
   const openAtPoint = useCallback(
     (x: number, y: number, target: T, host?: HTMLElement | null) => {
+      clearNativeSelection();
       markHostHighlight(host ?? resolveHostNearPoint(x, y));
       setState({ target, position: { x, y } });
     },
@@ -435,6 +490,15 @@ export function useContextMenu<T>() {
           openAt(event, target);
         },
         ...press,
+        onPointerDown: (event) => {
+          if (event.button === 2) {
+            document.addEventListener("selectstart", preventSecondaryButtonSelectStart, {
+              capture: true,
+              once: true,
+            });
+          }
+          press.onPointerDown(event);
+        },
         onKeyDown: (event) => {
           if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey)) return;
           event.preventDefault();

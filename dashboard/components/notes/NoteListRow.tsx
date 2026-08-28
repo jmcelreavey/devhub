@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { CreateTasksFromDialog } from "@/components/notes/CreateTasksFromDialog";
 import { OneTimeShareButton } from "@/components/OneTimeShareButton";
 import {
   ContextMenu,
@@ -47,6 +48,7 @@ export function NoteListRow({
   const prompt = usePrompt();
   const menu = useContextMenu<NoteListRowItem>();
   const [oneTimeOpen, setOneTimeOpen] = useState(false);
+  const [createTasksOpen, setCreateTasksOpen] = useState(false);
   const vault = getVaultClient("notes");
   const rowKind = fileKindForRow("notes", note.slug, note.href);
   const canShare = rowKind !== "diagrams";
@@ -86,6 +88,13 @@ export function NoteListRow({
           );
         }
       : undefined,
+    onCreateTasksFrom:
+      rowKind === "notes"
+        ? () => {
+            menu.close();
+            setCreateTasksOpen(true);
+          }
+        : undefined,
     onOneTime: canShare ? () => setOneTimeOpen(true) : undefined,
     onRename: () => {
       void (async () => {
@@ -175,6 +184,13 @@ export function NoteListRow({
           hideTrigger
           open={oneTimeOpen}
           onOpenChange={setOneTimeOpen}
+        />
+      ) : null}
+      {rowKind === "notes" ? (
+        <CreateTasksFromDialog
+          open={createTasksOpen}
+          notePath={note.slug}
+          onClose={() => setCreateTasksOpen(false)}
         />
       ) : null}
     </div>

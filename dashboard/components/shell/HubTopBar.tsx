@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Bot, ExternalLink, Monitor, Search, Settings, Terminal } from "lucide-react";
-import { useSessionHistory } from "@/lib/hooks/use-session-history";
+import { useWorkspaceTabs } from "@/components/shell/WorkspaceTabs";
 import { SectionTabs } from "@/components/shell/SectionTabs";
 import { AccentPicker } from "@/components/shell/AccentPicker";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
@@ -29,7 +29,7 @@ export function HubTopBar() {
   const searchParams = useSearchParams();
   const query = searchParams.toString();
   const currentHref = query ? `${pathname}?${query}` : pathname;
-  const trail = useSessionHistory().slice(-5);
+  const trail = useWorkspaceTabs().history.slice(-5);
   const isOnChamber = pathname === "/chamber";
   const isOnOpenCode = pathname === "/opencode";
   const launchChamberDesktop = useLaunchChamberDesktop();

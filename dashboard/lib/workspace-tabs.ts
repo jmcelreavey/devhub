@@ -1,4 +1,8 @@
 import { ALL_NAV_DESTINATIONS } from "@/lib/nav";
+import {
+  appendSessionHistory,
+  type SessionHistoryEntry,
+} from "@/lib/session-history";
 
 export type WorkspaceTabKind = "repo" | "nav" | "note" | "other";
 
@@ -7,6 +11,8 @@ export interface WorkspaceTab {
   href: string;
   title: string;
   kind: WorkspaceTabKind;
+  /** In-tab trail for HubTopBar. Optional on disk; hydrated on read. */
+  history: SessionHistoryEntry[];
 }
 
 export interface WorkspaceTabsState {
@@ -79,10 +85,14 @@ export function describeHref(href: string): { title: string; kind: WorkspaceTabK
   }
 }
 
+function seedHistory(href: string, title: string, ts = Date.now()): SessionHistoryEntry[] {
+  return [{ href, label: title, ts }];
+}
+
 export function createTab(href: string, id: string = createTabId()): WorkspaceTab {
   const n = normalizeHref(href);
   const { title, kind } = describeHref(n);
-  return { id, href: n, title, kind };
+  return { id, href: n, title, kind, history: seedHistory(n, title) };
 }
 
 export function seedState(href: string): WorkspaceTabsState {
@@ -95,33 +105,54 @@ function findByHref(state: WorkspaceTabsState, href: string): WorkspaceTab | und
   return state.tabs.find((t) => t.href === n);
 }
 
-/** Enter in the palette: reuse a tab with this href, otherwise replace the current one. */
-export function navigateCurrent(state: WorkspaceTabsState, href: string): WorkspaceTabsState {
+/**
+ * URL changed in the active tab (in-tab nav / href-sync). Never steals a
+ * neighbour that happens to already show this href — that's what made
+ * shift-click rewrite the tab to the right.
+ */
+export function syncActiveHref(state: WorkspaceTabsState, href: string): WorkspaceTabsState {
   const n = normalizeHref(href);
-  const existing = findByHref(state, n);
-  if (existing) return { tabs: state.tabs, activeId: existing.id };
   const active = state.tabs.find((t) => t.id === state.activeId) ?? state.tabs[0];
   if (!active) return seedState(n);
-  const updated = createTab(n, active.id);
+  if (active.href === n) return state;
+  const { title, kind } = describeHref(n);
+  const history = appendSessionHistory(active.history ?? [], {
+    href: n,
+    label: title,
+    ts: Date.now(),
+  });
+  const last = history.at(-1);
+  const updated: WorkspaceTab = {
+    id: active.id,
+    href: n,
+    title: last?.label ?? title,
+    kind,
+    history,
+  };
   return {
     tabs: state.tabs.map((t) => (t.id === active.id ? updated : t)),
     activeId: active.id,
   };
 }
 
-/** Shift+Enter / Shift+click: open a new tab, or focus one that already has this href. */
-export function openNew(state: WorkspaceTabsState, href: string): WorkspaceTabsState {
+/** Enter in the palette: reuse a tab with this href, otherwise replace the current one. */
+export function navigateCurrent(state: WorkspaceTabsState, href: string): WorkspaceTabsState {
   const n = normalizeHref(href);
   const existing = findByHref(state, n);
   if (existing) return { tabs: state.tabs, activeId: existing.id };
-  return appendTab(state, n);
+  return syncActiveHref(state, n);
+}
+
+/** Shift+Enter / Shift+click: always a new tab, inserted to the right of active. */
+export function openNew(state: WorkspaceTabsState, href: string): WorkspaceTabsState {
+  return insertAfterActive(state, normalizeHref(href));
 }
 
 /**
  * The "+" button: always a fresh tab, even when one already shows this href.
  *
- * Deliberately not `openNew` — that focuses a matching tab, so pressing "+"
- * with a Today tab already open would look like nothing happened.
+ * Deliberately not `openNew` — that inserts beside the active tab, while "+"
+ * appends at the end like a browser.
  */
 export function openBlank(
   state: WorkspaceTabsState,
@@ -136,6 +167,17 @@ function appendTab(state: WorkspaceTabsState, normalizedHref: string): Workspace
   return { tabs: [...state.tabs, tab], activeId: tab.id };
 }
 
+function insertAfterActive(state: WorkspaceTabsState, normalizedHref: string): WorkspaceTabsState {
+  if (state.tabs.length >= MAX_WORKSPACE_TABS) return state;
+  const tab = createTab(normalizedHref);
+  const idx = state.tabs.findIndex((t) => t.id === state.activeId);
+  const at = idx === -1 ? state.tabs.length : idx + 1;
+  return {
+    tabs: [...state.tabs.slice(0, at), tab, ...state.tabs.slice(at)],
+    activeId: tab.id,
+  };
+}
+
 /** False when the strip is full — the "+" button disables rather than no-oping. */
 export function canOpenTab(state: WorkspaceTabsState): boolean {
   return state.tabs.length < MAX_WORKSPACE_TABS;
@@ -147,6 +189,44 @@ export function applyPaletteNavigation(
   newTab: boolean,
 ): WorkspaceTabsState {
   return newTab ? openNew(state, href) : navigateCurrent(state, href);
+}
+
+/** Publish a loaded display title onto the active tab and matching crumb. */
+export function publishActiveLabel(
+  state: WorkspaceTabsState,
+  href: string,
+  label: string,
+): WorkspaceTabsState {
+  const trimmed = label.trim();
+  if (!trimmed) return state;
+  const n = normalizeHref(href);
+  const active = state.tabs.find((t) => t.id === state.activeId);
+  if (!active) return state;
+  const title = active.href === n ? trimmed : active.title;
+  const history = (active.history ?? []).map((entry) =>
+    normalizeHref(entry.href) === n && entry.label !== trimmed ? { ...entry, label: trimmed } : entry,
+  );
+  const historyChanged = history.some((entry, i) => entry !== (active.history ?? [])[i]);
+  if (title === active.title && !historyChanged) return state;
+  return {
+    tabs: state.tabs.map((t) => (t.id === active.id ? { ...active, title, history } : t)),
+    activeId: state.activeId,
+  };
+}
+
+export function updateTabTitle(
+  state: WorkspaceTabsState,
+  id: string,
+  title: string,
+): WorkspaceTabsState {
+  const trimmed = title.trim();
+  if (!trimmed) return state;
+  const tab = state.tabs.find((t) => t.id === id);
+  if (!tab || tab.title === trimmed) return state;
+  return {
+    tabs: state.tabs.map((t) => (t.id === id ? { ...t, title: trimmed } : t)),
+    activeId: state.activeId,
+  };
 }
 
 /** Never closes the last tab. Activates a neighbour when the active tab goes. */
@@ -184,9 +264,29 @@ interface StoredV1 {
   activeId: string;
 }
 
-function isTab(value: unknown): value is WorkspaceTab {
+function isHistoryEntry(value: unknown): value is SessionHistoryEntry {
   if (!value || typeof value !== "object") return false;
-  const t = value as WorkspaceTab;
+  const e = value as SessionHistoryEntry;
+  return typeof e.href === "string" && typeof e.label === "string" && typeof e.ts === "number";
+}
+
+function parseHistory(value: unknown): SessionHistoryEntry[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const entries = value.filter(isHistoryEntry);
+  return entries.length > 0 ? entries : undefined;
+}
+
+interface StoredTab {
+  id: string;
+  href: string;
+  title: string;
+  kind: WorkspaceTabKind;
+  history?: unknown;
+}
+
+function isStoredTab(value: unknown): value is StoredTab {
+  if (!value || typeof value !== "object") return false;
+  const t = value as StoredTab;
   return (
     typeof t.id === "string" &&
     t.id.length > 0 &&
@@ -196,12 +296,22 @@ function isTab(value: unknown): value is WorkspaceTab {
   );
 }
 
+function hydrateTab(tab: StoredTab): WorkspaceTab {
+  return {
+    id: tab.id,
+    href: tab.href,
+    title: tab.title,
+    kind: tab.kind,
+    history: parseHistory(tab.history) ?? seedHistory(tab.href, tab.title, 0),
+  };
+}
+
 export function parseStored(raw: string | null, fallbackHref: string): WorkspaceTabsState {
   if (!raw) return seedState(fallbackHref);
   try {
     const data = JSON.parse(raw) as StoredV1;
     if (data?.v !== STORAGE_VERSION || !Array.isArray(data.tabs)) return seedState(fallbackHref);
-    const tabs = data.tabs.filter(isTab).slice(0, MAX_WORKSPACE_TABS);
+    const tabs = data.tabs.filter(isStoredTab).slice(0, MAX_WORKSPACE_TABS).map(hydrateTab);
     if (tabs.length === 0) return seedState(fallbackHref);
     const activeId = tabs.some((t) => t.id === data.activeId) ? data.activeId : tabs[0]!.id;
     return { tabs, activeId };

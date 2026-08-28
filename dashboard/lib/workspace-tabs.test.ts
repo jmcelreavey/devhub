@@ -14,7 +14,10 @@ import {
   openBlank,
   openNew,
   parseStored,
+  publishActiveLabel,
   serializeState,
+  syncActiveHref,
+  updateTabTitle,
 } from "./workspace-tabs";
 
 function state(hrefs: string[], active = 0) {
@@ -70,10 +73,79 @@ describe("navigateCurrent / openNew", () => {
     expect(next.activeId).toBe("id-1");
   });
 
-  it("Shift+Enter on an already-open href also switches, not duplicates", () => {
-    const next = applyPaletteNavigation(state(["/", "/repos/demo-app"], 0), "/repos/demo-app", true);
-    expect(next.tabs).toHaveLength(2);
-    expect(next.activeId).toBe("id-1");
+  it("Shift+click always inserts a new tab after the active one when a neighbour exists", () => {
+    const next = openNew(state(["/", "/work"], 0), "/notes/x");
+    expect(next.tabs.map((t) => t.href)).toEqual(["/", "/notes/x", "/work"]);
+    expect(next.tabs[2]?.id).toBe("id-1");
+    expect(next.tabs[2]?.href).toBe("/work");
+    expect(next.activeId).toBe(next.tabs[1]?.id);
+  });
+
+  it("Shift+click duplicates an already-open href instead of focusing or replacing a neighbour", () => {
+    const next = openNew(state(["/", "/work"], 0), "/work");
+    expect(next.tabs.map((t) => t.href)).toEqual(["/", "/work", "/work"]);
+    expect(next.tabs[2]?.id).toBe("id-1");
+    expect(next.activeId).toBe(next.tabs[1]?.id);
+    expect(next.activeId).not.toBe("id-1");
+  });
+});
+
+describe("syncActiveHref", () => {
+  it("updates only the active tab and does not steal a neighbour with the same href", () => {
+    const s = state(["/notes/a", "/notes/b"], 0);
+    const next = syncActiveHref(s, "/notes/b");
+    expect(next.activeId).toBe("id-0");
+    expect(next.tabs.map((t) => t.href)).toEqual(["/notes/b", "/notes/b"]);
+    expect(next.tabs[1]?.id).toBe("id-1");
+  });
+
+  it("is a no-op when the active tab already has this href (href-sync after openNew)", () => {
+    const s = openNew(state(["/", "/work"], 0), "/notes/x");
+    const next = syncActiveHref(s, "/notes/x");
+    expect(next.tabs.map((t) => t.href)).toEqual(["/", "/notes/x", "/work"]);
+    expect(next).toBe(s);
+  });
+});
+
+describe("per-tab history", () => {
+  it("seeds a new tab with its own trail, not the previous tab's", () => {
+    const s = navigateCurrent(state(["/"]), "/notes/a");
+    const next = openNew(s, "/notes/b");
+    expect(next.tabs[0]?.history?.map((e) => e.href)).toEqual(["/", "/notes/a"]);
+    expect(next.tabs[1]?.history?.map((e) => e.href)).toEqual(["/notes/b"]);
+  });
+
+  it("does not append history when switching tabs", () => {
+    const s = state(["/", "/work"], 0);
+    const before = s.tabs.map((t) => t.history);
+    const next = activateTab(s, "id-1");
+    expect(next.tabs.map((t) => t.history)).toEqual(before);
+  });
+
+  it("records in-tab navigation on the active tab only", () => {
+    const next = navigateCurrent(state(["/", "/work"], 0), "/notes/hello");
+    expect(next.tabs[0]?.history?.map((e) => e.href)).toEqual(["/", "/notes/hello"]);
+    expect(next.tabs[1]?.history?.map((e) => e.href)).toEqual(["/work"]);
+  });
+});
+
+describe("note title override", () => {
+  it("publishes a content title onto the active tab and its crumb", () => {
+    const href = "/notes/pr-reviews/app-poc-ptf-4785-bookmark-backend";
+    const s = state([href]);
+    expect(s.tabs[0]?.title).toBe("app-poc-ptf-4785-bookmark-backend");
+    const next = publishActiveLabel(s, href, "Bookmark backend contract and data layer");
+    expect(next.tabs[0]?.title).toBe("Bookmark backend contract and data layer");
+    expect(next.tabs[0]?.history?.at(-1)?.label).toBe(
+      "Bookmark backend contract and data layer",
+    );
+  });
+
+  it("updateTabTitle leaves other tabs alone", () => {
+    const s = state(["/", "/work"], 0);
+    const next = updateTabTitle(s, "id-0", "Home");
+    expect(next.tabs[0]?.title).toBe("Home");
+    expect(next.tabs[1]?.title).toBe("Work");
   });
 });
 
@@ -86,8 +158,8 @@ describe("openBlank", () => {
   });
 
   /**
-   * The whole point of the "+" button: `openNew` would focus the existing
-   * Today tab, which looks like the button did nothing.
+   * The whole point of the "+" button: focusing an existing Today tab looks
+   * like the button did nothing.
    */
   it("duplicates rather than focusing when that href is already open", () => {
     const next = openBlank(state(["/"]));
@@ -153,6 +225,17 @@ describe("persist", () => {
     const restored = parseStored(serializeState(s), "/");
     expect(restored.tabs.map((t) => t.href)).toEqual(["/", "/repos/acme-api"]);
     expect(restored.activeId).toBe("id-1");
+    expect(restored.tabs[1]?.history?.map((e) => e.href)).toEqual(["/repos/acme-api"]);
+  });
+
+  it("hydrates tabs saved without history", () => {
+    const raw = JSON.stringify({
+      v: 1,
+      activeId: "id-0",
+      tabs: [{ id: "id-0", href: "/work", title: "Work", kind: "nav" }],
+    });
+    const restored = parseStored(raw, "/");
+    expect(restored.tabs[0]?.history).toEqual([{ href: "/work", label: "Work", ts: 0 }]);
   });
 
   it("falls back on garbage", () => {

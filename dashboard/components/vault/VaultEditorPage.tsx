@@ -17,6 +17,7 @@ import {
   GitPullRequest,
   Link2,
   ListChecks,
+  ListTodo,
   Loader2,
   MoreHorizontal,
   Save,
@@ -36,6 +37,7 @@ import { getMasterForNotePath, parentScopePath } from "@/lib/checklists/paths";
 import { notesChecklistsHref } from "@/lib/checklists/notes-url";
 import type { DevHubPartialBlock } from "@/lib/blocknote/schema";
 import { NotePageTitle } from "@/components/notes/NotePageTitle";
+import { CreateTasksFromDialog } from "@/components/notes/CreateTasksFromDialog";
 import { ShareControls } from "@/components/ShareControls";
 import { OneTimeShareButton } from "@/components/OneTimeShareButton";
 import { VaultEditorNav } from "@/components/vault/VaultEditorNav";
@@ -105,6 +107,7 @@ export function VaultEditorPage({
   /** Bumped when ## Links are written outside the editor so BlockNote remounts. */
   const [editorEpoch, setEditorEpoch] = useState(0);
   const [linkOpen, setLinkOpen] = useState(false);
+  const [createTasksOpen, setCreateTasksOpen] = useState(false);
   const [oneTimeOpen, setOneTimeOpen] = useState(false);
   const [cursorDraft, setCursorDraft] = useState<{ notePath: string; repoName: string } | null>(null);
   const [applyingCursorDraft, setApplyingCursorDraft] = useState(false);
@@ -479,7 +482,7 @@ export function VaultEditorPage({
   // Only pass content-derived titles; truncation of machine filenames is NotePageTitle's job.
   const headerDisplayTitle = fromContent ? displayTitle : undefined;
   const headerLabel = displayTitle;
-  useRouteHistoryLabel(headerLabel);
+  useRouteHistoryLabel(headerDisplayTitle);
 
   const handleRenamed = useCallback(
     (newSlug: string) => {
@@ -715,19 +718,21 @@ export function VaultEditorPage({
             <>
               <ShareControls vaultId={vaultId} path={filePath} />
               {isNotes && blocks ? (
-                <button
-                  type="button"
-                  className="btn btn-ghost text-xs flex items-center gap-1 shrink-0"
-                  title="Add link"
-                  aria-label="Add link"
-                  onClick={() => {
-                    window.dispatchEvent(new Event("devhub:dismiss-hovertips"));
-                    setLinkOpen(true);
-                  }}
-                >
-                  <Link2 size={14} aria-hidden />
-                  Link
-                </button>
+                <>
+<button
+                    type="button"
+                    className="btn btn-ghost text-xs flex items-center gap-1 shrink-0"
+                    title="Add link"
+                    aria-label="Add link"
+                    onClick={() => {
+                      window.dispatchEvent(new Event("devhub:dismiss-hovertips"));
+                      setLinkOpen(true);
+                    }}
+                  >
+                    <Link2 size={14} aria-hidden />
+                    Link
+                  </button>
+                </>
               ) : null}
               <LaunchMenu
                 label="More"
@@ -742,6 +747,20 @@ export function VaultEditorPage({
                     icon: <Flame size={14} aria-hidden />,
                     onSelect: () => setOneTimeOpen(true),
                   },
+                  ...(isNotes && blocks
+                    ? [
+                        {
+                          id: "spawn-tasks-from-plan",
+                          label: "Spawn tasks from plan",
+                          description: "Jira sub-tasks and DevHub tasks from PR sections",
+                          icon: <ListTodo size={14} aria-hidden />,
+                          onSelect: () => {
+                            window.dispatchEvent(new Event("devhub:dismiss-hovertips"));
+                            setCreateTasksOpen(true);
+                          },
+                        },
+                      ]
+                    : []),
                   ...(isNotes && linkedRepos.length > 0
                     ? linkedRepos.map((repo) => ({
                         id: `open-cursor-${repo}`,
@@ -923,6 +942,15 @@ export function VaultEditorPage({
           notePath={filePath}
           blocks={blocks}
           onAddLink={() => setLinkOpen(true)}
+        />
+      ) : null}
+
+      {isNotes && !isNew && blocks ? (
+        <CreateTasksFromDialog
+          open={createTasksOpen}
+          notePath={filePath}
+          noteMarkdown={blocksToText(blocks)}
+          onClose={() => setCreateTasksOpen(false)}
         />
       ) : null}
 

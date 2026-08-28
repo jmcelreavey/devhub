@@ -3,7 +3,7 @@ import { withErrorHandler } from "@/lib/api-utils";
 import { extractTags, mergeEntityRefs } from "@/lib/entity-note";
 import { resolveEntityLinks } from "@/lib/entity-links/resolve";
 import { getEventsInRange } from "@/lib/google-calendar";
-import { getMyTickets } from "@/lib/jira/client";
+import { getMyTicketsCached } from "@/lib/jira/client";
 import { getNoteIndex } from "@/lib/notes/note-index";
 import { loadIndex } from "@/lib/recall/store";
 import { rowFromSearchItem, searchIssues } from "@/lib/github/prs";
@@ -156,7 +156,7 @@ export const GET = withErrorHandler(
     // repo page's critical path.
     const [rolled, ticketsResult, eventsResult, prsResult] = await Promise.all([
       rolloverTasks(),
-      settle(getMyTickets()),
+      settle(getMyTicketsCached()),
       settle(getEventsInRange(HUB_CALENDAR_WINDOW_DAYS, HUB_CALENDAR_WINDOW_DAYS)),
       settle(openPrsForRepo(fullName)),
     ]);

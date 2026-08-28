@@ -434,4 +434,58 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
       };
     },
   );
+
+  server.registerTool(
+    "entity_links_resolve",
+    {
+      description:
+        "Everything linked to a task, ticket, PR, note or repo — in both directions. Links are stored one-way, so this is the only way to see what points AT something. Call it before starting work: related tickets and their plan notes usually carry context the item's own text doesn't. depth 2 also returns what those links link to.",
+      inputSchema: {
+        kind: z
+          .enum(["task", "meeting", "pr", "note", "diagram", "calendar", "jira", "repo"])
+          .describe("Entity kind"),
+        id: z
+          .string()
+          .describe("Task uuid, Jira key, owner/repo#n, note path, or repo name"),
+        date: z.string().optional().describe("YYYY-MM-DD — narrows a task lookup"),
+        depth: z
+          .number()
+          .int()
+          .min(1)
+          .max(2)
+          .optional()
+          .describe("1 (default) = direct links only; 2 also expands them one hop"),
+      },
+    },
+    async ({ kind, id, date, depth }) =>
+      // Dashboard-backed on purpose, same reasoning as tags: the graph walk and
+      // rollover lineage live in the dashboard process. A second copy here
+      // would be a second thing to keep in sync.
+      withDashboardErrors(async () => {
+        const data = await dashboard.get<{
+          notes: EntityRef[];
+          related: EntityRef[];
+          expanded: EntityRef[];
+        }>("/api/entity-links", { kind, id, date, depth });
+        const line = (r: EntityRef) =>
+          `- ${r.kind}:${r.id} — ${r.label}${r.href ? ` (${r.href})` : ""}`;
+        const sections: string[] = [];
+        if (data.notes?.length) sections.push(`Notes:\n${data.notes.map(line).join("\n")}`);
+        if (data.related?.length) sections.push(`Related:\n${data.related.map(line).join("\n")}`);
+        if (data.expanded?.length) {
+          sections.push(`One hop further:\n${data.expanded.map(line).join("\n")}`);
+        }
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                sections.length === 0
+                  ? `Nothing linked to ${kind}:${id}`
+                  : `${kind}:${id}\n\n${sections.join("\n\n")}`,
+            },
+          ],
+        };
+      }),
+  );
 }

@@ -155,8 +155,13 @@ describe("WorkspaceTabStrip keyboard navigation", () => {
   });
 });
 
-describe("WorkspaceTabPanels keep-alive", () => {
-  it("does not unmount a tab's page when switching away and back", () => {
+describe("WorkspaceTabPanels isolation", () => {
+  /**
+   * Keep-alive left every notes/repo page subscribed to the live App Router
+   * URL. Hidden + inert + memo do not freeze usePathname, so opening a note
+   * in a new tab rewrote the previous tab's tree. Inactive panels unmount.
+   */
+  it("unmounts a tab's page when switching away", () => {
     const unmounted: string[] = [];
     function Probe({ id }: { id: string }) {
       useEffect(() => {
@@ -164,12 +169,7 @@ describe("WorkspaceTabPanels keep-alive", () => {
           unmounted.push(id);
         };
       }, [id]);
-      return (
-        <div data-testid={`probe-${id}`}>
-          {id}
-          <iframe data-testid={`frame-${id}`} src="about:blank" title={id} />
-        </div>
-      );
+      return <div data-testid={`probe-${id}`}>{id}</div>;
     }
 
     const tree = (page: string) => (
@@ -188,60 +188,21 @@ describe("WorkspaceTabPanels keep-alive", () => {
     pathname.current = "/work";
     view.rerender(tree("work"));
 
-    expect(screen.getByTestId("probe-today")).toBeInTheDocument();
     expect(screen.getByTestId("probe-work")).toBeInTheDocument();
-    expect(screen.getByTestId("frame-today")).toHaveAttribute("src", "about:blank");
+    expect(screen.queryByTestId("probe-today")).toBeNull();
 
     routerPush.mockClear();
     unmounted.length = 0;
     const todayTab = screen.getAllByRole("tab").find((t) => t.textContent?.includes("Today"));
     fireEvent.click(todayTab!);
 
-    expect(unmounted).toEqual([]);
-    expect(routerPush).not.toHaveBeenCalled();
+    expect(routerPush).toHaveBeenCalledWith("/");
+    expect(unmounted).toContain("work");
+
+    pathname.current = "/";
+    view.rerender(tree("today"));
     expect(screen.getByTestId("probe-today")).toBeInTheDocument();
-    expect(screen.getByTestId("probe-work")).toBeInTheDocument();
-    expect(screen.getByTestId("frame-today")).toHaveAttribute("src", "about:blank");
-    expect(screen.getByTestId("frame-work")).toHaveAttribute("src", "about:blank");
-    expect(screen.getByTestId("probe-today").closest("[data-workspace-tab-panel]")).not.toHaveAttribute(
-      "hidden",
-    );
-    expect(screen.getByTestId("probe-work").closest("[data-workspace-tab-panel]")).toHaveAttribute(
-      "hidden",
-    );
-  });
-
-  it("does not paint Next's live tree into a pushState-active tab", () => {
-    function Probe({ id }: { id: string }) {
-      return <div data-testid={`probe-${id}`}>{id}</div>;
-    }
-    const tree = (page: string) => (
-      <WorkspaceTabsProvider>
-        <Seed hrefs={["/work"]} />
-        <WorkspaceTabStrip />
-        <WorkspaceTabPanels>
-          <Probe id={page} />
-        </WorkspaceTabPanels>
-      </WorkspaceTabsProvider>
-    );
-
-    const view = render(tree("today"));
-    fireEvent.click(screen.getByText("seed"));
-    pathname.current = "/work";
-    view.rerender(tree("work"));
-
-    const todayTab = screen.getAllByRole("tab").find((t) => t.textContent?.includes("Today"));
-    fireEvent.click(todayTab!);
-
-    // Next still rendering /work after pushState. A stale RSC/HMR payload must
-    // update the live /work tab, not clobber Today's frozen tree.
-    view.rerender(tree("work-stale"));
-    expect(screen.getByTestId("probe-today")).toHaveTextContent("today");
-    expect(screen.getByTestId("probe-work-stale")).toHaveTextContent("work-stale");
     expect(screen.queryByTestId("probe-work")).toBeNull();
-    expect(screen.getByTestId("probe-today").closest("[data-workspace-tab-panel]")).not.toHaveAttribute(
-      "hidden",
-    );
   });
 
   it("gives the active panel a definite height so full-bleed pages fill main", () => {
@@ -257,27 +218,47 @@ describe("WorkspaceTabPanels keep-alive", () => {
     expect(panel?.parentElement).toHaveClass("workspace-tab-panels");
   });
 
-  it("drops a closed tab's panel so it can remount next time", () => {
-    function Probe({ id }: { id: string }) {
-      return <div data-testid={`probe-${id}`}>{id}</div>;
+  it("does not rewrite a neighbour after openHref newTab plus href-sync", () => {
+    function Probe({ hrefs }: { hrefs: string[] }) {
+      const { openHref, tabs } = useWorkspaceTabs();
+      return (
+        <>
+          <button type="button" onClick={() => openHref("/notes/b", { newTab: true })}>
+            shift-open
+          </button>
+          <ul>
+            {tabs.map((t) => (
+              <li key={t.id} data-testid={`tab-href-${t.href}`}>
+                {t.href}
+              </li>
+            ))}
+          </ul>
+          <span data-testid="hrefs">{hrefs.join(",")}</span>
+        </>
+      );
     }
-    const tree = (page: string) => (
+
+    const tree = () => (
       <WorkspaceTabsProvider>
         <Seed hrefs={["/work"]} />
         <WorkspaceTabStrip />
-        <WorkspaceTabPanels>
-          <Probe id={page} />
-        </WorkspaceTabPanels>
+        <Probe hrefs={[]} />
       </WorkspaceTabsProvider>
     );
 
-    const view = render(tree("today"));
+    const view = render(tree());
     fireEvent.click(screen.getByText("seed"));
-    pathname.current = "/work";
-    view.rerender(tree("work"));
+    fireEvent.click(screen.getByText("shift-open"));
 
-    fireEvent.click(screen.getByRole("button", { name: "Close Today" }));
-    expect(screen.queryByTestId("probe-today")).toBeNull();
-    expect(screen.getByTestId("probe-work")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Today/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Work/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /b/ })).toBeInTheDocument();
+
+    pathname.current = "/notes/b";
+    view.rerender(tree());
+
+    const titles = screen.getAllByRole("tab").map((t) => t.textContent);
+    expect(titles.some((t) => t?.includes("Work"))).toBe(true);
+    expect(titles.filter((t) => t?.includes("Work"))).toHaveLength(1);
   });
 });

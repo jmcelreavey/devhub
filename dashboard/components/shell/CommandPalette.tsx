@@ -30,7 +30,6 @@ import { isDiagramStoragePath, toDiagramRoutePath } from "@/lib/diagram-utils";
 import { flattenTreeFiles } from "@/lib/tree-utils";
 import { clearFocusSession, readFocusSession, writeFocusSession } from "@/lib/focus-session-storage";
 import { clearRouteUsage, summariseRouteUsage } from "@/lib/route-usage";
-import { useSessionHistory } from "@/lib/hooks/use-session-history";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { openTerminal, openTerminalTranscript } from "@/lib/terminal-launch";
 import { focusAgentComposer, openAgentChat } from "@/lib/agent-chat";
@@ -113,7 +112,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentHref = searchParams.size ? `${pathname}?${searchParams}` : pathname;
-  const history = useSessionHistory();
+  const history = tabs.history;
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);

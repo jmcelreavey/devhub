@@ -106,7 +106,11 @@ export function RepoWorkHub({
   onMutate: () => void;
 }) {
   const toast = useToast();
-  const work = useLive<RepoWorkPayload>(`/api/repos/${encodeURIComponent(repo.name)}/work`);
+  // External edits (MCP, a teammate, another tab) land via poll or refocus;
+  // 20s keeps that lag short without hammering the Jira/GitHub fan-out.
+  const work = useLive<RepoWorkPayload>(`/api/repos/${encodeURIComponent(repo.name)}/work`, {
+    refreshInterval: 20_000,
+  });
   const authored = useLive<GithubPrsApiPayload>("/api/github/prs", { refreshInterval: 0 });
   const fullName = work.data?.fullName ?? null;
   const prs = useGithubPrSearch(fullName ? `repo:${fullName} is:open` : "", Boolean(fullName), 0);
@@ -306,7 +310,11 @@ export function RepoWorkHub({
                 />
               ))}
               {shownBacklogTickets.map((ticket) => (
-                <JiraTicketQueueRow key={ticket.key} ticket={asHubJiraTicket(ticket)} />
+                <JiraTicketQueueRow
+                  key={ticket.key}
+                  ticket={asHubJiraTicket(ticket)}
+                  onTransitioned={() => void work.mutate()}
+                />
               ))}
             </div>
           )}

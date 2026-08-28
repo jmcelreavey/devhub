@@ -2208,10 +2208,10 @@ body[data-grid-resizing="true"] * {
 }
 
 /*
- * Keep-alive route trees sit inside #main-content. Pages like Briefing use
- * height:100% for a full-bleed iframe; without a definite-height wrapper the
- * canvas collapses to the iframe's intrinsic ~150px and the rest of main is
- * a solid empty --bg rectangle.
+ * The active workspace tab's page sits inside #main-content. Pages like
+ * Briefing use height:100% for a full-bleed iframe; without a definite-height
+ * wrapper the canvas collapses to the iframe's intrinsic ~150px and the rest
+ * of main is a solid empty --bg rectangle.
  */
 .workspace-tab-panels {
   flex: 1 0 auto;

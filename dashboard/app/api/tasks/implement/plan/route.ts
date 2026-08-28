@@ -3,6 +3,7 @@ import { getTasks } from "@/lib/tasks/storage";
 import { extractTags } from "@/lib/entity-note";
 import { taskNotePath } from "@/lib/task-note";
 import { getTicket } from "@/lib/jira/client";
+import { resolveEntityContext } from "@/lib/entity-links/resolve";
 import { resolveLocalGithubRepos } from "@/lib/repos/resolution";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,8 @@ export async function GET(req: NextRequest) {
 
   const tags = extractTags(task.text);
   const links = task.links ?? [];
+  // Repo choice must come from the task's OWN links: a back-link from a task in
+  // another repo must not silently change which checkout the agent works in.
   const repoIds = links.filter((link) => link.kind === "repo").map((link) => link.id);
   const notePath = taskNotePath({
     id: task.id,
@@ -28,6 +31,11 @@ export async function GET(req: NextRequest) {
     date,
     jiraKey: task.jiraKey,
   });
+  // The agent used to crawl this itself, one MCP call per hop, and only ever
+  // reached depth 1. Resolve it here instead: `related` is the direct
+  // neighbourhood (outbound links + whatever links back), `context` is one hop
+  // further — a prerequisite task's plan note, a linked ticket's PR.
+  const graph = resolveEntityContext("task", task.id, { date, label: task.text, depth: 2 });
   const jira = task.jiraKey ? await getTicket(task.jiraKey).catch(() => null) : null;
   const localRepos = repoIds.length === 1 ? await resolveLocalGithubRepos().catch(() => []) : [];
   const repoId = repoIds[0]?.toLowerCase();
@@ -48,6 +56,9 @@ export async function GET(req: NextRequest) {
     jira: jira ? { key: jira.key, summary: jira.summary, status: jira.status.name, issuetype: jira.issuetype } : null,
     notePath,
     links,
+    notes: graph.notes,
+    related: graph.related,
+    context: graph.expanded,
     repos: repoIds,
     repoPath: localRepo?.repo.path ?? null,
   });

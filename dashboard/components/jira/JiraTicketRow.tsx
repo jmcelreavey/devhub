@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { mutate } from "swr";
 import { Copy, ExternalLink, FileText, Link2, RefreshCw } from "lucide-react";
 import type { JiraTicket } from "@/lib/jira/client";
 import { extractTags } from "@/lib/entity-note";
@@ -38,7 +39,7 @@ function formatUpdatedShort(iso: string): string {
 }
 
 /** Same actions as the wide Jira ticket row — compact QueueRow hosts this too. */
-export function useJiraTicketMenu(ticket: JiraTicket) {
+export function useJiraTicketMenu(ticket: JiraTicket, onTransitioned?: () => void) {
   const toast = useToast();
   const router = useRouter();
   const [transitionOpen, setTransitionOpen] = useState(false);
@@ -135,6 +136,9 @@ export function useJiraTicketMenu(ticket: JiraTicket) {
             });
             if (!res.ok) throw new Error("Transition failed");
             toast.success(`Updated ${ticket.key}`);
+            void mutate("/api/jira/tickets");
+            void mutate("/api/sidebar/counts");
+            onTransitioned?.();
           } catch {
             toast.error(`Couldn't transition ${ticket.key}`);
           }
@@ -147,8 +151,14 @@ export function useJiraTicketMenu(ticket: JiraTicket) {
 }
 
 /** Single-line compact row for small Today tiles — same menu as {@link JiraTicketRow}. */
-export function JiraTicketQueueRow({ ticket }: { ticket: JiraTicket }) {
-  const { menu, menuUi } = useJiraTicketMenu(ticket);
+export function JiraTicketQueueRow({
+  ticket,
+  onTransitioned,
+}: {
+  ticket: JiraTicket;
+  onTransitioned?: () => void;
+}) {
+  const { menu, menuUi } = useJiraTicketMenu(ticket, onTransitioned);
   return (
     <div className="flex items-center gap-1.5 pr-2" role="listitem" {...menu.bindRow(ticket)}>
       {ticket.assignee ? (
@@ -167,7 +177,9 @@ export function JiraTicketQueueRow({ ticket }: { ticket: JiraTicket }) {
         title={ticket.summary}
         size="compact"
         href={ticket.url}
-        statusPill={<JiraStatusPill ticketKey={ticket.key} status={ticket.status} />}
+        statusPill={
+          <JiraStatusPill ticketKey={ticket.key} status={ticket.status} onChanged={onTransitioned} />
+        }
       />
       <RowMenuKebab
         label={`Actions for ${ticket.key}`}

@@ -10,6 +10,7 @@ import {
   ROW_LONG_PRESS_MS,
   RowMenuKebab,
   useContextMenu,
+  scrollShouldCloseMenu,
   type ContextMenuGroup,
 } from "@/components/shell/ContextMenu";
 
@@ -150,9 +151,11 @@ describe("useContextMenu host highlight", () => {
 
     fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
     expect(row.getAttribute("data-context-menu")).toBe("open");
+    expect(row.style.userSelect).toBe("none");
 
     fireEvent.click(screen.getByTestId("close"));
     expect(row.getAttribute("data-context-menu")).toBeNull();
+    expect(row.style.userSelect).toBe("");
   });
 
   it("marks the host via elementFromPoint when kebab opens without an explicit host", () => {
@@ -359,6 +362,107 @@ describe("useContextMenu bindRow chip skip", () => {
     render(<ChipSkipHarness onOpen={onOpen} />);
     fireEvent.contextMenu(screen.getByTestId("row"));
     expect(onOpen).toHaveBeenCalled();
+  });
+});
+
+describe("scrollShouldCloseMenu", () => {
+  it("ignores scroll inside the menu", () => {
+    const menu = document.createElement("div");
+    const inner = document.createElement("div");
+    menu.appendChild(inner);
+    expect(scrollShouldCloseMenu({ type: "scroll", target: inner } as unknown as Event, menu, null)).toBe(
+      false,
+    );
+  });
+
+  it("ignores scroll in an unrelated pane", () => {
+    const menu = document.createElement("div");
+    const host = document.createElement("div");
+    const terminal = document.createElement("div");
+    expect(
+      scrollShouldCloseMenu({ type: "scroll", target: terminal } as unknown as Event, menu, host),
+    ).toBe(false);
+  });
+
+  it("closes when the host's scroller moves", () => {
+    const menu = document.createElement("div");
+    const scroller = document.createElement("div");
+    const host = document.createElement("div");
+    scroller.appendChild(host);
+    expect(
+      scrollShouldCloseMenu({ type: "scroll", target: scroller } as unknown as Event, menu, host),
+    ).toBe(true);
+  });
+
+  it("closes on document scroll", () => {
+    const menu = document.createElement("div");
+    expect(
+      scrollShouldCloseMenu({ type: "scroll", target: document } as unknown as Event, menu, null),
+    ).toBe(true);
+  });
+
+  it("closes on resize", () => {
+    const menu = document.createElement("div");
+    expect(
+      scrollShouldCloseMenu({ type: "resize", target: window } as unknown as Event, menu, null),
+    ).toBe(true);
+  });
+});
+
+describe("useContextMenu native selection", () => {
+  it("clears the window selection when the menu opens", () => {
+    const removeAllRanges = vi.fn();
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      removeAllRanges,
+    } as unknown as Selection);
+
+    render(<HostHighlightHarness />);
+    fireEvent.contextMenu(screen.getByTestId("row"), { clientX: 40, clientY: 80 });
+
+    expect(removeAllRanges).toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+
+  it("prevents selectstart after a secondary-button pointerdown", () => {
+    render(<HostHighlightHarness />);
+    fireEvent.pointerDown(screen.getByTestId("row"), { button: 2, pointerType: "mouse" });
+
+    const selectStart = new Event("selectstart", { cancelable: true, bubbles: true });
+    document.dispatchEvent(selectStart);
+    expect(selectStart.defaultPrevented).toBe(true);
+  });
+});
+
+describe("ContextMenu unrelated scroll", () => {
+  it("does not close when a sibling pane scrolls", () => {
+    const onClose = vi.fn();
+    render(
+      <div>
+        <div data-context-menu-host="" data-context-menu="open" data-testid="host">
+          Row
+        </div>
+        <div data-testid="terminal">term</div>
+        <ContextMenu open position={{ x: 16, y: 16 }} groups={groups} onClose={onClose} />
+      </div>,
+    );
+
+    screen.getByTestId("terminal").dispatchEvent(new Event("scroll", { bubbles: false }));
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("closes when the host's ancestor scroller moves", () => {
+    const onClose = vi.fn();
+    render(
+      <div data-testid="page">
+        <div data-context-menu-host="" data-context-menu="open" data-testid="host">
+          Row
+        </div>
+        <ContextMenu open position={{ x: 16, y: 16 }} groups={groups} onClose={onClose} />
+      </div>,
+    );
+
+    screen.getByTestId("page").dispatchEvent(new Event("scroll", { bubbles: false }));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
 

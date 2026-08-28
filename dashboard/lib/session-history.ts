@@ -10,13 +10,32 @@ let entries: SessionHistoryEntry[] = [];
 const labels = new Map<string, string>();
 const listeners = new Set<() => void>();
 
+/**
+ * Keep in sync with `normalizeHref` in workspace-tabs.ts. Duplicated here so
+ * this module does not import workspace-tabs (that file imports us).
+ */
+function hrefKey(href: string): string {
+  if (!href) return "/";
+  const qIndex = href.indexOf("?");
+  const path = qIndex === -1 ? href : href.slice(0, qIndex);
+  const query = qIndex === -1 ? "" : href.slice(qIndex + 1);
+  const trimmed = path !== "/" ? path.replace(/\/+$/, "") : "/";
+  return query ? `${trimmed}?${query}` : trimmed;
+}
+
 export function appendSessionHistory(
   history: readonly SessionHistoryEntry[],
   entry: SessionHistoryEntry,
   limit = LIMIT,
 ): SessionHistoryEntry[] {
-  const next = history.at(-1)?.href === entry.href ? [...history.slice(0, -1), entry] : [...history, entry];
-  return next.slice(-limit);
+  const href = hrefKey(entry.href);
+  const last = history.at(-1);
+  const back = history.at(-2);
+  if (back && hrefKey(back.href) === href) return history.slice(0, -1);
+  if (last && hrefKey(last.href) === href) {
+    return [...history.slice(0, -1), { ...last, ts: entry.ts }];
+  }
+  return [...history, { ...entry, href }].slice(-limit);
 }
 
 function emit(): void {
