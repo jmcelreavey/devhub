@@ -86,13 +86,41 @@ Daily notes are for current work:
 
 They are easy to search and safe to edit from the dashboard or MCP tools.
 
+## Create tasks from plan
+
+Turn a planning note into Jira sub-tasks, DevHub tasks, and bidirectional entity links. This **does not implement** anything — it only creates, links, and reports the ticket/task map. The inverse (implement a task) is [Dashboard — Implement with agent](dashboard.md#implement-with-agent).
+
+### Entry points
+
+| Surface | Label |
+| ------- | ----- |
+| Note editor / file-tree row | **Spawn tasks from plan** |
+| Notes list row | Same overflow item |
+| Today notes panel | Same launch-menu item |
+
+The dialog (`CreateTasksFromDialog`) previews work items from `GET /api/notes/create-tasks/plan?notePath=`. Optional fields: parent Jira key, project key (default from the parent prefix or `PTF`), parent summary, extra repo names. **Launch agent…** opens `SkillAgentDialog` with the `devhub-create-tasks-from` skill.
+
+### How slices are parsed
+
+`parsePlanWorkItems` looks for headings like `PR 1 — WebApp: auth rewrite`. Fallback: level-2 headings that mention `PR`. Empty `workItems` disables Launch until you add those headings (the agent can still ask how to slice if you launch from MCP with a raw note).
+
+### What the agent does
+
+1. `curl` the plan URL (markdown, parsed slices, linked repos/Jira, `jiraMeta`).
+2. `share_publish` the note for a stable gist URL.
+3. Create or reuse a Jira parent, then one sub-task per work item. Sprint/team go on the **parent only** — sub-tasks inherit.
+4. `tasks_create` one DevHub task per item with links to the note, gist, repo(s), and Jira key.
+5. Write everything back into the plan note `## Links` and the parent Jira description.
+
+Do not create duplicates for items already linked in `## Links` — call `entity_links_resolve` first. See the skill at `skills/shared/devhub-create-tasks-from/SKILL.md`.
+
 ## Cross-entity linking
 
 Tasks, calendar events, pull requests, and notes share one **EntityRef** contract so you can hop between related work without hunting paths. The shape lives in `shared/entity-note/` and is re-exported from `dashboard/lib/entity-note.ts` after plugin materialize.
 
 | Field    | Meaning                                                                                  |
 | -------- | ---------------------------------------------------------------------------------------- |
-| `kind`   | `task`, `meeting`, `calendar`, `pr`, `note`, `repo`, or `jira`                           |
+| `kind`   | `task`, `meeting`, `calendar`, `pr`, `note`, `repo`, `jira`, or `diagram` |
 | `id`     | Stable id within the kind (task UUID, `owner/repo#123`, calendar event id, note path, …) |
 | `label`  | Human-readable text for chips and the `## Links` section                                 |
 | `href`   | Optional in-app or external URL for hop-around                                           |
@@ -170,9 +198,9 @@ Pickers load once per kind when the dialog opens; filtering is in-memory (no per
 
 ### API and MCP
 
-- `GET /api/entity-links?kind=&id=` — returns `{ entity, notes[], related[] }`. Optional query params: `date`, `label`, `href`, `meetingTitle`, `prRepo`, `prNumber`. See [API Routes](../reference/api-routes.md).
+- `GET /api/entity-links?kind=&id=` — returns `{ entity, notes[], related[], expanded? }`. Optional query params: `date`, `label`, `href`, `meetingTitle`, `prRepo`, `prNumber`, `depth` (`1` default, `2` fills `expanded` with one extra hop). `kind` includes `diagram` and `repo`. See [API Routes](../reference/api-routes.md).
 - `PATCH /api/tasks` with `{ id, links: EntityRef[] }` replaces hop-around links on a task.
-- MCP: `notes_create_task`, `notes_create_meeting`, `notes_create_pr`, `entity_links_read`, `notes_cursor_open`, `notes_cursor_apply`, `notes_cursor_delete`; `tasks_create` / `tasks_update` accept `links` and optional `withNote`.
+- MCP: `notes_create_task`, `notes_create_meeting`, `notes_create_pr`, `entity_links_read`, `entity_links_resolve` (dashboard-backed reverse lookup), `notes_cursor_open`, `notes_cursor_apply`, `notes_cursor_delete`; `tasks_create` / `tasks_update` accept `links` and optional `withNote`.
 
 Plugins should import `shared/entity-note` (or `@/lib/entity-note` after materialize) rather than defining their own link shapes.
 

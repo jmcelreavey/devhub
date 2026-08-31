@@ -82,6 +82,10 @@ Common shortcuts include:
 | `g f`         | Go to Diagrams                                              |
 | `Cmd+Shift+O` | Toggle notes panel                                          |
 | `Cmd+Shift+T` | Toggle tasks panel                                          |
+| `⌘1`–`⌘9`     | Jump to workspace tab 1–9                                   |
+| `Ctrl+Tab`    | Cycle workspace tabs (DevHub.app; Chrome swallows this)     |
+
+Workspace tabs: ⌘/Ctrl-click, Shift-click, or middle-click an in-app link to open it in a new tab. Cap 24. See [Dashboard — Workspace tabs](../architecture/dashboard.md#workspace-tabs).
 
 ## Tips
 

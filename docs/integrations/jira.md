@@ -55,6 +55,12 @@ Each task row has an **Add to Jira** action (Jira icon) when Jira is configured.
 | `GET /api/jira/meta?project=<KEY>&reference=<parentKey>?` | Board, sprint, Team field ids/values, and assignee for the modal                                                                   |
 | `POST /api/jira/issue`                                    | Body: `{ projectKey, summary, description?, parentKey?, issuetypeName?, assignToMe?, sprintId? }` — returns `{ key, url }` (`201`) |
 
+## Create tickets from a plan note
+
+The inverse of **Add to Jira** (one task → one ticket) is **Spawn tasks from plan**: one planning note → parent + sub-tasks + DevHub tasks with links. Entry points, heading format (`PR N — …`), and the agent skill are in [Notes System — Create tasks from plan](../architecture/notes-system.md#create-tasks-from-plan).
+
+Sprint and Team custom fields belong on the **parent** only. Sub-tasks inherit; setting those fields on a sub-task is a known Jira failure mode.
+
 ## Workflow Transitions
 
 When you complete or abandon a task that includes a Jira key, DevHub can prompt you to move the ticket to a new workflow state.

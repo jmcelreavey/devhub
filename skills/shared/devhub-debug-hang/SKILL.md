@@ -69,9 +69,9 @@ The stuck child names the cause. Two that have actually happened here:
 `status_exec`'s `slowest` list is recent calls over ~1s. If the same command
 appears repeatedly, you have a repetition problem, not a latency one:
 
-- Workspace tabs keep every visited route mounted. `useLive` pauses polling in
-  hidden panels (`PanelVisibilityContext`) — if a new fetch bypasses `useLive`,
-  it will poll from every background tab forever.
+- Inactive workspace tabs unmount, so their pollers die with them. `useLive`
+  pauses polling while `PanelVisibilityContext` is false (overlays, docks). A
+  fetch that bypasses `useLive` will keep polling from a hidden overlay.
 - Check for one-request-per-row patterns. Existence checks belong in the list
   payload or a shared index, never a request per row.
 
