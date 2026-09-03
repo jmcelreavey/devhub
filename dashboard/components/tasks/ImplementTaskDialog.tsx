@@ -25,7 +25,7 @@ export function ImplementTaskDialog({
   repoName?: string;
 }) {
   const repoLinks = task.links?.filter((link) => link.kind === "repo") ?? [];
-  const inferred = repoLinks.length === 1 ? repoLinks[0]?.id : undefined;
+  const inferred = repoLinks[0]?.id;
   const repoName = hubRepoName ?? inferred;
 
   const promptInput = (): TaskImplementPromptInput => ({

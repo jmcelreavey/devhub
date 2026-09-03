@@ -51,9 +51,24 @@ let nextId = 1;
  */
 const SECRET_ARG = /^(gh[pousr]_|github_pat_|xox[baprs]-|sk-|ey[A-Za-z0-9_-]{10,})/;
 
+/**
+ * Database connection URIs, which carry their credentials inline.
+ *
+ * The userinfo is what has to go; the host is the useful half and is what makes
+ * a stuck query identifiable at all. RDS IAM auth tokens are several hundred
+ * characters of signed query string, and Atlas SigV4 puts the STS session token
+ * in `authMechanismProperties`, so the query string goes too.
+ */
+const DB_URI = /^(postgres(?:ql)?|mongodb(?:\+srv)?|mysql|mariadb|redis|rediss):\/\/(?:[^@/]*@)?([^/?#]*)/i;
+
 export function redactArgs(args: readonly string[]): string[] {
   return args.map((arg) => {
     if (SECRET_ARG.test(arg)) return "‹redacted›";
+    const uri = arg.match(DB_URI);
+    if (uri) return `${uri[1]}://‹redacted›@${uri[2]}/…`;
+    // `PGPASSWORD=abc`, `MYSQL_PWD=abc` — env assignments passed as argv.
+    const envAssign = arg.match(/^([A-Z][A-Z0-9_]*(?:PASSWORD|PASSWD|PWD|TOKEN|SECRET))=/);
+    if (envAssign) return `${envAssign[1]}=‹redacted›`;
     // `--token=abc`, `--password=abc`
     const named = arg.match(/^(--[a-z-]*(?:token|password|secret|key))=/i);
     return named ? `${named[1]}=‹redacted›` : arg;

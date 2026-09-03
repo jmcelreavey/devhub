@@ -30,6 +30,13 @@ dashboard/output/
 # Trace artifacts at repo root
 /.next/
 
+# Database client state. In a checkout the app-data dir *is* the repo root, so
+# these land here. `db-connections.json` can hold a database password, which
+# must never be committed — not even to this private mirror, which is the one
+# place personal data is otherwise expected.
+/db-connections.json
+/db-history.json
+
 # Local automation artifacts
 .agent-screenshots/
 

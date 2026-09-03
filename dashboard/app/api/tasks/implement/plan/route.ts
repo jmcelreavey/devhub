@@ -37,7 +37,8 @@ export async function GET(req: NextRequest) {
   // further — a prerequisite task's plan note, a linked ticket's PR.
   const graph = resolveEntityContext("task", task.id, { date, label: task.text, depth: 2 });
   const jira = task.jiraKey ? await getTicket(task.jiraKey).catch(() => null) : null;
-  const localRepos = repoIds.length === 1 ? await resolveLocalGithubRepos().catch(() => []) : [];
+  // More than one linked repo: take the first rather than handing the agent nothing.
+  const localRepos = repoIds.length > 0 ? await resolveLocalGithubRepos().catch(() => []) : [];
   const repoId = repoIds[0]?.toLowerCase();
   const localRepo = repoId
     ? localRepos.find(({ fullName, repo }) =>

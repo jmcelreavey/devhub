@@ -75,7 +75,10 @@ export function WorkspaceTabsProvider({ children }: { children: ReactNode }) {
   const pendingHrefRef = useRef<string | null>(null);
   const scrollById = useRef<Record<string, number>>({});
 
-  const [state, setState] = useState<WorkspaceTabsState>(() => seedState(href));
+  // The first state renders on both the server and the client. A random tab id
+  // here made those trees differ on every page load; hydration replaces this
+  // seed from localStorage immediately after mount anyway.
+  const [state, setState] = useState<WorkspaceTabsState>(() => seedState(href, "initial-tab"));
   const stateRef = useRef(state);
   const [hydrated, setHydrated] = useState(false);
 

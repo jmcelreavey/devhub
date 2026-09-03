@@ -33,6 +33,18 @@ it names the command and the repo it is running in. Common shapes:
   on stdin.
 - Many entries at once → not a hang, a stampede. See step 4.
 
+The same response carries `dbQueries` (in-flight database queries), `dbSlowest`
+and `dbConnections` (pooled connections, with the credential expiry behind
+each). A query with `overdue: true` is the database-client equivalent of a
+stuck `git` call — it names the connection and a redacted statement. Cancel it
+from the `/db` Query tab, or `POST /api/db/<id>/cancel`.
+
+Driver calls are async and do not block the event loop on their own, so a
+`dbQueries` entry usually means a slow query rather than a wedged app — with
+one exception: **SQLite is synchronous**, which is why it runs in a worker
+thread. If SQLite work ever appears to block every route, that worker boundary
+is what broke.
+
 **If `/api/status/exec` itself does not answer, the event loop is already
 blocked.** That is the diagnosis: skip to step 2.
 

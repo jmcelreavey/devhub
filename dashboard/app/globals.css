@@ -6411,6 +6411,15 @@ body[data-motion="off"] .evolution-arrow {
 .tone-dot--muted {
   background: var(--text-subtle);
 }
+/* `--success` had a token but no dot modifier, so "healthy" rendered grey. */
+.tone-dot--success {
+  background: var(--success);
+}
+/* Dots inside a flex row centre themselves; the default top margin is for
+   baseline-aligned list items and pushes them off-centre. */
+.tone-dot--inline {
+  margin-top: 0;
+}
 
 .dd-link-btn--danger {
   border-color: color-mix(in oklab, var(--danger) 40%, transparent);
@@ -11316,4 +11325,956 @@ a.repo-git-context-chip[data-kind="pr"][data-checks="pending"] {
 }
 .repo-git-fetch-age[data-stale] {
   color: var(--warning, #f0883e);
+}
+
+/* ─────────────────────────── Database workspace (/db) ───────────────────────
+   Layout mirrors the git workspace: a rail of things you can open, a tabbed
+   pane over the one you did. Colours come from tokens only — the environment
+   stripe is the single deliberate use of --danger as an ambient signal, because
+   knowing you are pointed at prd before you type is worth more than a label.  */
+
+/*
+ * Fill the content area exactly, rather than growing with the rail.
+ *
+ * `height: 100%` does not resolve here: the workspace tab panel is
+ * `min-height: 100%` with an auto height, so the percentage fell back to
+ * content height. A rail of sixteen connections then made the workspace taller
+ * than the viewport, `#main-content` scrolled, and the header with the tab bar
+ * scrolled out of sight — the page looked like it had no header at all.
+ *
+ * `#main-content` is `position: relative`, so absolute inset pins the workspace
+ * to the visible area and leaves each pane to scroll itself, which is what a
+ * two-rail layout wants anyway.
+ */
+.db-workspace {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  min-height: 0;
+  gap: 0;
+}
+
+/* Rail ------------------------------------------------------------------- */
+
+.db-rail {
+  width: 280px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+.db-rail-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+.db-rail-search {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+.db-rail-actions {
+  display: flex;
+  gap: var(--space-1);
+}
+.db-rail-errors {
+  margin: 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.db-rail-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-2) var(--space-4);
+}
+.db-rail-group + .db-rail-group {
+  margin-top: var(--space-4);
+}
+.db-rail-group-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0 var(--space-2) var(--space-1);
+}
+.db-rail-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.db-rail-row:hover {
+  background: var(--bg-elevated);
+}
+.db-rail-row.is-active {
+  background: var(--bg-elevated);
+  font-weight: 550;
+}
+.db-rail-row.is-unavailable {
+  opacity: 0.55;
+}
+/* The environment stripe. Neutral by default, so prd is the one that reads. */
+.db-rail-stripe {
+  position: absolute;
+  left: 3px;
+  top: 6px;
+  bottom: 6px;
+  width: 2.5px;
+  border-radius: 2px;
+  background: var(--db-row-tone, var(--border));
+}
+.db-rail-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.db-rail-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.db-rail-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Main pane -------------------------------------------------------------- */
+
+.db-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.db-main-empty {
+  padding: var(--space-5);
+}
+.db-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+.db-header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.db-header-title h1 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+.db-tabs {
+  display: flex;
+  gap: 2px;
+}
+.db-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    background 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.db-tab:hover {
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+.db-tab.is-active {
+  color: var(--text);
+  background: var(--bg-elevated);
+  font-weight: 550;
+}
+.db-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* Schema tree ------------------------------------------------------------ */
+
+.db-tree {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3);
+  border-right: 1px solid var(--border);
+}
+.db-tree-search {
+  margin-bottom: var(--space-2);
+}
+.db-tree-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.db-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 7px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.db-tree-row:hover,
+.db-tree-row.is-active {
+  background: var(--bg-elevated);
+}
+.db-tree-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.db-tree-count {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.db-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-4) var(--space-5);
+}
+
+/* Query editor ----------------------------------------------------------- */
+
+.db-query-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  gap: 10px;
+}
+.db-editor-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.db-editor {
+  height: 200px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-surface);
+}
+.db-run-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.db-run-bar kbd {
+  margin-left: 6px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-muted);
+  color: var(--text);
+}
+/* Inside a primary button the key cap sits on the accent fill, so it borrows
+   that button's foreground rather than the page's. */
+.btn-primary .db-run-key,
+.db-run-bar .btn-primary kbd {
+  border-color: currentColor;
+  background: transparent;
+  color: inherit;
+  opacity: 0.75;
+}
+.db-run-note {
+  font-size: 12px;
+  line-height: 1.55;
+}
+.db-run-note .input {
+  margin-top: 6px;
+  max-width: 320px;
+}
+
+/* Result grid ------------------------------------------------------------ */
+
+.db-grid {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+.db-grid-table {
+  border-collapse: collapse;
+  font-size: 12px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.db-grid-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 8px;
+  text-align: left;
+  font-weight: 600;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.db-grid-column-button,
+.db-grid-row-button {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+.db-grid-column-button:disabled {
+  cursor: default;
+}
+.db-grid-row-button {
+  height: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.db-grid-column-name {
+  display: block;
+}
+.db-grid-column-type {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.db-grid-gutter {
+  width: 48px;
+  padding: 0 8px;
+  text-align: right;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  background: var(--bg-elevated);
+  border-right: 1px solid var(--border);
+  user-select: none;
+}
+.db-grid-cell {
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 420px;
+  cursor: default;
+}
+.db-grid-cell.is-selected {
+  outline: 1.5px solid var(--accent);
+  outline-offset: -1.5px;
+}
+.db-grid-null {
+  color: var(--text-muted);
+  font-style: italic;
+}
+.db-result-footer {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  padding: 0 2px;
+}
+.db-result-identity {
+  flex: 1;
+  text-align: right;
+}
+
+/* Structure -------------------------------------------------------------- */
+
+.db-structure {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 900px;
+}
+.db-structure-note {
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0;
+}
+.db-structure-note--quiet {
+  color: var(--text-muted);
+  padding: 0 2px;
+}
+.db-meta-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.db-meta-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0 8px 4px 0;
+}
+.db-meta-table td {
+  padding: 3px 8px 3px 0;
+  border-top: 1px solid var(--border);
+  vertical-align: top;
+}
+.db-meta-name {
+  margin-right: 6px;
+}
+.db-meta-mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  color: var(--text-subtle);
+}
+.db-relations {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+}
+.db-relations li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.db-relation-inbound {
+  color: var(--text-muted);
+}
+.db-ddl {
+  margin: 0;
+  padding: 10px;
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* Preflight -------------------------------------------------------------- */
+
+.db-connect-problem {
+  font-size: 12px;
+  line-height: 1.55;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+}
+.db-connect-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text);
+}
+.db-connect-message {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.db-preflight {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.db-preflight li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.db-preflight li > .tone-dot {
+  margin-top: 0.45em;
+}
+.db-preflight-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+.db-preflight-copy > span,
+.db-connect-detail {
+  color: var(--text-muted);
+}
+.db-connect-detail summary {
+  width: fit-content;
+  cursor: pointer;
+}
+.db-connect-detail .db-connect-message {
+  margin-top: var(--space-2);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+
+/* History ---------------------------------------------------------------- */
+
+.db-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.db-history-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.db-history-row:hover {
+  background: var(--bg-elevated);
+}
+.db-history-statement {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+}
+.db-history-meta {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Add-connection dialog -------------------------------------------------- */
+
+.db-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  /* `--scrim`, like every other overlay here. A `bg-surface` veil would have
+     been near-white in light mode, and the blur is deliberately off across the
+     app — see `.modal-backdrop`. */
+  background: var(--scrim);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.db-dialog {
+  width: min(540px, 100%);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+.db-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.db-dialog-head h2 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+.db-dialog-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.db-dialog-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+}
+.db-dialog-note {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.db-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  flex: 1;
+}
+.db-field > span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.db-field--narrow {
+  max-width: 110px;
+}
+.db-field-row {
+  display: flex;
+  gap: 8px;
+}
+.db-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.db-checkbox em {
+  color: var(--text-muted);
+  font-style: normal;
+}
+.db-discovered {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.db-discovered-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.db-discovered-row:hover {
+  background: var(--bg-elevated);
+}
+.db-discovered-repo {
+  font-weight: 550;
+  flex-shrink: 0;
+}
+.db-discovered-path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.db-discovered-size {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* The app sidebar already consumes 232px. Keeping both database rails below
+   this point leaves the editor narrower than a useful query line. */
+@media (max-width: 1200px) {
+  .db-rail {
+    width: 220px;
+  }
+  .db-tree {
+    display: none;
+  }
+}
+
+/* ── Database workspace: menus, AI, row detail, sorting ──────────────────── */
+
+.db-rail-item {
+  display: flex;
+  flex-direction: column;
+}
+/* The one-click fix for "this needs a different profile", shown only on the
+   row you have selected so the rail is not a wall of buttons. */
+.db-rail-remedy {
+  margin: 2px 6px 6px 12px;
+  font-size: 11px;
+  justify-content: flex-start;
+  gap: 5px;
+}
+.db-rail-row.is-unavailable .db-rail-label {
+  color: var(--text-muted);
+}
+
+/* Sortable headers ------------------------------------------------------- */
+
+.db-grid-table thead th:not(.db-grid-gutter) {
+  cursor: pointer;
+  user-select: none;
+}
+.db-grid-table thead th:not(.db-grid-gutter):hover {
+  color: var(--text);
+}
+.db-grid-column-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.db-grid-gutter {
+  cursor: pointer;
+}
+.db-grid-hidden-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px 6px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* Row detail ------------------------------------------------------------- */
+
+.db-row-detail {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 50;
+  width: min(420px, 90vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 24px -12px var(--scrim);
+}
+.db-row-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.db-row-detail-head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.db-row-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.db-row-detail-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: 8px 12px 20px;
+}
+.db-row-detail-field {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.db-row-detail-field dt {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.db-row-detail-type {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  opacity: 0.7;
+}
+.db-row-detail-field dd {
+  margin: 2px 0 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.db-row-detail-field dd.is-null {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* AI bar ----------------------------------------------------------------- */
+
+.db-ai-triggers {
+  display: flex;
+  gap: 4px;
+}
+.db-ai-trigger {
+  font-size: 12px;
+}
+.db-ai {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.db-ai-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.db-ai-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.db-ai-input {
+  flex: 1;
+  min-width: 0;
+}
+.db-ai-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.db-ai-hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.db-ai-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+@media (max-width: 900px) {
+  .db-ai-hint {
+    display: none;
+  }
+  .db-row-detail {
+    width: 100vw;
+  }
+}
+
+/* ── Inline row editing ─────────────────────────────────────────────────── */
+
+/* A staged cell reads as pending, not as data. The left bar is what makes an
+   edited cell findable after scrolling away from it. */
+.db-grid-cell.is-edited {
+  background: color-mix(in oklab, var(--warning) 14%, transparent);
+  box-shadow: inset 2px 0 0 var(--warning);
+}
+.db-grid-table tbody tr.is-deleted .db-grid-cell,
+.db-grid-table tbody tr.is-deleted .db-grid-gutter {
+  opacity: 0.5;
+  text-decoration: line-through;
+  text-decoration-color: var(--danger);
+}
+.db-grid-input {
+  width: 100%;
+  padding: 0 2px;
+  border: none;
+  outline: 1.5px solid var(--accent);
+  outline-offset: -1.5px;
+  border-radius: 2px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.db-edit-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+.db-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.db-edit-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.db-edit-preview {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 180px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  line-height: 1.6;
+  white-space: pre;
+}
+.db-edit-confirm p {
+  margin: 0 0 6px;
+}
+.db-edit-confirm .input {
+  max-width: 320px;
+}
+.db-edit-error {
+  margin: 0;
+  color: var(--danger);
+}
+
+/* Preflight fixes — the buttons that make a failed connect actionable. */
+.db-connect-fixes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.db-connect-fixes .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
 }

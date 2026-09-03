@@ -37,6 +37,7 @@ const dashboardSchema = z
     paths: z.array(z.string().min(1)).min(1),
     overlays: z.array(z.string().min(1)).optional(),
     nav: z.array(pluginNavItemSchema).optional(),
+    connections: z.string().min(1).optional(),
   })
   .strict();
 
@@ -76,6 +77,16 @@ const requiresSchema = z
           .object({
             command: z.string().min(1),
             install: z.string().min(1).optional(),
+          })
+          .strict(),
+      )
+      .optional(),
+    dashboardPackages: z
+      .array(
+        z
+          .object({
+            package: z.string().min(1),
+            reason: z.string().min(1).optional(),
           })
           .strict(),
       )

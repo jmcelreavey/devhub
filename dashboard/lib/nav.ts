@@ -93,6 +93,10 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/search", label: "Search", icon: "search", group: "library" },
   { href: "/skills", label: "Skills", icon: "skills", group: "library" },
   { href: "/repos", label: "Repos", icon: "repos", group: "library", desktopOnly: true },
+  // Beside Repos, and desktop-only for the same reason: both reach local files
+  // and local CLIs. Ungated — SQLite connections need no setup at all, and BI
+  // connections simply don't appear without the plugin.
+  { href: "/db", label: "Databases", icon: "database", group: "library", desktopOnly: true },
 
   { href: "/datadog", label: "Datadog", icon: "datadog", group: "bi", gate: "datadog" },
 

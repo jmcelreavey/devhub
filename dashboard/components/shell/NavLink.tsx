@@ -30,6 +30,7 @@ import {
   Radar,
   BrainCircuit,
   ShieldCheck,
+  Database,
   type LucideIcon,
 } from "lucide-react";
 import type { NavItem } from "@/lib/nav";
@@ -60,6 +61,7 @@ const ICONS: Record<string, LucideIcon> = {
   status: Activity,
   skills: Zap,
   repos: FolderGit2,
+  database: Database,
   own: ShieldCheck,
   radar: Radar,
   recall: BrainCircuit,

@@ -4,7 +4,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SWRConfig } from "swr";
 import { PanelVisibilityContext } from "./panel-visibility";
-import { useLive } from "./use-fetch";
+import { defaultFetcher, useLive } from "./use-fetch";
 
 function Probe() {
   const { data } = useLive<{ ok: boolean }>("/api/thing");
@@ -64,5 +64,19 @@ describe("useLive panel pausing", () => {
       </SWRConfig>,
     );
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+  });
+});
+
+describe("defaultFetcher", () => {
+  it("surfaces an API error without dumping the JSON envelope", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: "Switch to dev-dad to connect.", code: "unavailable" }), {
+        status: 409,
+        statusText: "Conflict",
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(defaultFetcher("/api/db/test")).rejects.toThrow("Switch to dev-dad to connect.");
   });
 });

@@ -95,8 +95,8 @@ export function createTab(href: string, id: string = createTabId()): WorkspaceTa
   return { id, href: n, title, kind, history: seedHistory(n, title) };
 }
 
-export function seedState(href: string): WorkspaceTabsState {
-  const tab = createTab(href);
+export function seedState(href: string, id?: string): WorkspaceTabsState {
+  const tab = createTab(href, id);
   return { tabs: [tab], activeId: tab.id };
 }
 

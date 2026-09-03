@@ -25,13 +25,20 @@ describe("resolveColumns", () => {
   });
 });
 
+/**
+ * Track order is the contract, so these assert on the whole template.
+ *
+ * Splitting on spaces looks natural and is wrong: `minmax(0, 1fr)` contains
+ * one, so `split(" ")[1]` is the string `"minmax(0,"`. These tests were never
+ * collected by the vitest include globs, so that mistake sat here unnoticed —
+ * comparing the full string is both correct and a stronger assertion.
+ */
 describe("graphGridTemplate", () => {
   it("emits all tracks when everything is on", () => {
-    const t = graphGridTemplate(DEFAULT_GRAPH_COLUMNS);
     // hash | subject | refs | author | date | kebab
-    expect(t.split(" ").length).toBeGreaterThanOrEqual(6);
-    expect(t.startsWith("3.8rem")).toBe(true);
-    expect(t).toContain("minmax(0, 1fr)");
+    expect(graphGridTemplate(DEFAULT_GRAPH_COLUMNS)).toBe(
+      "3.8rem minmax(0, 1fr) minmax(0, 30%) minmax(7rem, 12rem) 5.5rem 24px",
+    );
   });
 
   it("drops tracks for hidden columns; subject and kebab always remain", () => {
@@ -45,10 +52,8 @@ describe("graphGridTemplate", () => {
   });
 
   it("keeps subject first after an optional hash", () => {
-    const t = graphGridTemplate({ hash: true, refs: false, author: true, date: false });
-    const tracks = t.split(" ");
-    expect(tracks[0]).toBe("3.8rem");
-    expect(tracks[1]).toBe("minmax(0, 1fr)");
-    expect(tracks[2]).toContain("7rem");
+    expect(graphGridTemplate({ hash: true, refs: false, author: true, date: false })).toBe(
+      "3.8rem minmax(0, 1fr) minmax(7rem, 12rem) 24px",
+    );
   });
 });

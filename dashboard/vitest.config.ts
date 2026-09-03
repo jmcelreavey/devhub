@@ -40,6 +40,10 @@ export default defineConfig({
       "lib/**/*.test.tsx",
       "app/**/*.test.ts",
       "components/**/*.test.tsx",
+      // `.ts` too: a hook or a pure helper beside its component needs no JSX,
+      // and without this its tests are silently never collected — which is the
+      // same failure mode the comment above describes, one glob along.
+      "components/**/*.test.ts",
       "scripts/**/*.test.ts",
       "../shared/notes-search/**/*.test.ts",
       "../shared/notes-assets/**/*.test.ts",

@@ -7,7 +7,14 @@ export const defaultFetcher = async (url: string): Promise<unknown> => {
   const res = await fetch(url);
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${res.statusText}: ${text}`);
+    let message = text;
+    try {
+      const payload = JSON.parse(text) as { error?: unknown };
+      if (typeof payload.error === "string") message = payload.error;
+    } catch {
+      // Plain-text responses are already suitable for display.
+    }
+    throw new Error(message || `Request failed (${res.status})`);
   }
   return res.json();
 };

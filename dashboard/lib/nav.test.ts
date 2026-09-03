@@ -14,8 +14,18 @@ import { PLUGIN_NAV_ITEMS } from "./plugin-nav.generated";
 const hrefs = (items: ReturnType<typeof filterNavBySetup>) => items.map((i) => i.href);
 
 describe("NAV_ITEMS (sidebar IA)", () => {
-  it("has exactly 17 core sidebar destinations", () => {
-    expect(NAV_ITEMS).toHaveLength(17);
+  it("has exactly 18 core sidebar destinations", () => {
+    expect(NAV_ITEMS).toHaveLength(18);
+  });
+
+  it("gives the database client a library slot beside Repos", () => {
+    const db = NAV_ITEMS.find((item) => item.href === "/db");
+    expect(db?.group).toBe("library");
+    // Desktop-only for the same reason Repos is: it reaches local files and
+    // local CLIs. Ungated on purpose — a SQLite file needs no integration, so
+    // gating it would hide the one part that works on a fresh machine.
+    expect(db?.desktopOnly).toBe(true);
+    expect(db?.gate).toBeUndefined();
   });
 
   it("folds owned repos into Repos instead of a competing sidebar slot", () => {

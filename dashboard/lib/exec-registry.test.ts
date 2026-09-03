@@ -21,6 +21,29 @@ describe("redactArgs", () => {
     expect(redactArgs(["--password=hunter2"])).toEqual(["--password=‹redacted›"]);
   });
 
+  /**
+   * The DB client hands `mongosh`/`psql` URIs that carry credentials inline —
+   * an Atlas SigV4 URI embeds the whole STS session token. Keep the host,
+   * because that is what makes a stuck query identifiable.
+   */
+  it("redacts credentials from database URIs but keeps the host", () => {
+    expect(
+      redactArgs([
+        "mongodb+srv://AKIA123:sEcReT@www-pl-1.cwbkm.mongodb.net/insider?authMechanism=MONGODB-AWS",
+      ]),
+    ).toEqual(["mongodb+srv://‹redacted›@www-pl-1.cwbkm.mongodb.net/…"]);
+    expect(redactArgs(["postgresql://usr_capi_read:tok@prd-capi.rds.amazonaws.com:5432/capi"])).toEqual([
+      "postgresql://‹redacted›@prd-capi.rds.amazonaws.com:5432/…",
+    ]);
+  });
+
+  it("redacts password-shaped env assignments passed as argv", () => {
+    expect(redactArgs(["PGPASSWORD=iam-auth-token", "psql"])).toEqual([
+      "PGPASSWORD=‹redacted›",
+      "psql",
+    ]);
+  });
+
   it("leaves ordinary arguments intact", () => {
     expect(redactArgs(["status", "--porcelain", "-C", "/repos/atlas"])).toEqual([
       "status",

@@ -63,6 +63,22 @@ export interface DashboardContribution {
   overlays?: string[];
   /** Optional palette / section-tab contributions for plugin pages. */
   nav?: PluginNavItem[];
+  /**
+   * Dashboard-relative module exporting a `DbConnectionProvider` as its default
+   * export, materialised into `lib/plugin-db-providers.generated.ts` and merged
+   * by the database client's registry.
+   *
+   * This is the first *runtime* extension point in the plugin system — every
+   * other contribution is a file copy or generated data. It follows the same
+   * codegen shape as `nav` (empty committed baseline, `skip-worktree` when
+   * active) rather than a dynamic `import()` of an absent module, because the
+   * bundler handles a missing module badly and this way core builds unchanged
+   * with no plugin installed.
+   *
+   * The path must also appear in `paths` — the module has to be materialised
+   * before anything can import it.
+   */
+  connections?: string;
 }
 
 /**
@@ -133,6 +149,25 @@ export interface PluginRequiredCommand {
   install?: string;
 }
 
+/**
+ * An npm package the plugin's dashboard code imports.
+ *
+ * Plugins cannot declare npm dependencies — their files are materialised into
+ * core and compiled by core's bundler against core's `node_modules`. So the
+ * dependency lands in `dashboard/package.json` regardless, and the only real
+ * question is whether that coupling is *declared* or discovered as a build
+ * failure the first time someone enables the plugin on a clean checkout. `pg`
+ * has been in core for exactly one consumer for a while with nothing recording
+ * why. Declaring it here does not move the dependency; it makes the preinstall
+ * check able to say which plugin needs it and what for.
+ */
+export interface PluginRequiredPackage {
+  /** npm package name as imported, e.g. "mongodb". */
+  package: string;
+  /** What the plugin uses it for, shown when it is missing. */
+  reason?: string;
+}
+
 /** Parsed `devhub-plugin.json` from a plugin repo root. */
 export interface PluginManifest {
   name: string;
@@ -147,7 +182,11 @@ export interface PluginManifest {
   /** Tier-3 whitelabel: theme, fonts, logo, OpenChamber theme, Electron icon. */
   branding?: BrandingContribution;
   /** Machine tooling this plugin needs (verified at install time, not by core). */
-  requires?: { commands?: PluginRequiredCommand[] };
+  requires?: {
+    commands?: PluginRequiredCommand[];
+    /** npm packages the plugin's dashboard code imports from core's node_modules. */
+    dashboardPackages?: PluginRequiredPackage[];
+  };
 }
 
 /** A registry entry resolved against the filesystem, with its manifest loaded. */

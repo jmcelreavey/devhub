@@ -25,6 +25,7 @@ import { registerShareTools } from "./tools/share.ts";
 import { registerWorkspaceTools } from "./tools/workspace.ts";
 import { registerOwnershipTools } from "./tools/ownership.ts";
 import { registerTerminalTools } from "./tools/terminal.ts";
+import { registerDbTools } from "./tools/db.ts";
 
 const server = new McpServer({
   name: "devhub",
@@ -60,6 +61,7 @@ registerTagsTools(server, ctx);
 registerShareTools(server, ctx);
 registerWorkspaceTools(server, ctx);
 registerTerminalTools(server, ctx);
+registerDbTools(server, ctx);
 
 async function main() {
   const transport = new StdioServerTransport();
