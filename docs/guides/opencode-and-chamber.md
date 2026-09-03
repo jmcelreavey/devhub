@@ -59,6 +59,22 @@ rest of the startup ordering existed to work around.
 A missing binary is not an error: the relevant tab is simply hidden and the rest
 of the dashboard works.
 
+### Which OpenChamber install wins
+
+Several global `@openchamber/web` copies can coexist — one per nvm node version, one in a Homebrew prefix, a leftover global. DevHub collects every candidate and launches the **highest version**, and re-detects on every Chamber start.
+
+That re-detection matters because OpenChamber's own in-app updater installs through whichever package manager owns the node it is running under, which is **not** necessarily the prefix the running daemon came from. A Homebrew-prefix daemon "updates" by writing a newer copy into nvm's prefix; the update reports success, and without re-detection DevHub relaunches the stale copy — the update looks like it silently rolled back.
+
+Check for duplicates when a version refuses to move:
+
+```bash
+which -a openchamber
+```
+
+Keep one. `OPENCHAMBER_BIN` pins the choice outright if you want to be explicit.
+
+> An OpenChamber older than 1.22.0 also fails its **OpenCode** update with a bare `Bad Request`: OpenCode's `/global/upgrade` requires an explicit version target and Chamber sent an empty body. Getting onto 1.22.0 is the fix.
+
 ### Port Reuse
 
 `ensureChamberListening()` is the single entry point (the `/chamber` tab, the desktop-app launcher, and Restart all call it; concurrent callers share one start). It reuses a healthy listener on 1336, but **replaces** a daemon whose env still has skip-start or `OPENCODE_PORT` (that leftover is what broke Setup). It also replaces a stale nvm binary. OpenCode listen never binds 1338/4096.
@@ -93,7 +109,7 @@ The PTY server binds **localhost only** and has no authentication — acceptable
 
 Visible dock tabs heartbeat to `GET`/`POST /api/terminal/sessions` so MCP `terminal_list` can see label, cwd, kind, and busy state. Empty until the dock has opened at least once this process.
 
-Agents that need a shell command use **propose-then-confirm**: `POST /api/terminal/propose` (MCP `terminal_propose_run`) stores an in-memory proposal (15 min TTL, max 20 pending). The dock must approve before inject. Poll `terminal_proposal_status` — do not assume the command ran. Destructive commands are flagged in the chip. `preferAgentTab` (default true) keeps long-running agents off a live `npm run dev` tab.
+Agents that need a shell command use **propose-then-confirm**: `POST /api/terminal/propose` (MCP `terminal_propose_run`) stores an in-memory proposal (15 min TTL, max 20 pending). The dock must approve before inject. Poll `terminal_proposal_status` — do not assume the command ran. Destructive commands are flagged in the chip. Every approved proposal opens its own tab, so a run never waits on another session.
 
 Each session's output is **tee'd to disk** (`DEVHUB_TERMINAL_LOG_DIR`, default `<tmpdir>/devhub-terminal-logs/<session-uuid>.log`) so **Copy all output** in the terminal drawer can return the full log via `GET /api/terminal/log?session=<uuid>`. Browser xterm scrollback is RAM-capped; the on-disk log is the source of truth for long PR reviews or builds. Session logs older than three days are pruned on terminal peer startup.
 

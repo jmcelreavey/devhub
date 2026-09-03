@@ -281,7 +281,9 @@ invalid manifests are skipped (logged), never fatal — one bad plugin can't bre
 
 ## Precedence and read-only
 
-- Order: **core → ai-tools → plugins** (registry order). First occurrence of a name wins.
+- Skill order: **core → vendor → plugins → ai-tools**. Enabled plugins are an
+  explicit local choice and override same-named ai-tools skills; core and vendor
+  skills still win. Plugin registry order resolves plugin-to-plugin collisions.
 - Plugin assets are **read-only** in DevHub — edit them in the plugin repo. The Skills
   and Agents APIs mark them `readOnly`, the UI hides edit/delete, mutating routes return
   403, and collect never pulls them back into `skills/shared` / `agents/shared`.

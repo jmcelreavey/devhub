@@ -51,7 +51,14 @@ export function useReposActions(opts: {
   }
 
   function openInTerminal(repo: { name: string; path: string }) {
-    openTerminal({ cwd: repo.path, label: repo.name, kind: "shell", repoName: repo.name });
+    // Always a fresh tab: reusing the repo's existing tab reads as "the click
+    // did nothing" when the dock is already open on that tab.
+    openTerminal({
+      cwd: repo.path,
+      label: repo.name,
+      kind: "shell",
+      repoName: repo.name,
+    });
   }
 
   async function openInGitKraken(name: string) {

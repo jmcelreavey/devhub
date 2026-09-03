@@ -145,11 +145,11 @@ Full provenance, the pinned upstream commit and the security review are recorded
 ## Precedence
 
 ```
-skills/shared  >  skills/vendor  >  ai-tools  >  plugins
+skills/shared  >  skills/vendor  >  plugins  >  ai-tools
 ```
 
-First match wins. Vendor sits directly below core, which is what makes
-overriding possible.
+First match wins. Vendor sits directly below core, while an explicitly enabled
+plugin overrides a same-named skill from the general ai-tools catalog.
 
 ## They are read-only — override, don't edit
 

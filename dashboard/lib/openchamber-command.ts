@@ -120,8 +120,8 @@ export function resolveOpenChamberBind(
  * already on 1.19.0. Collect every candidate and pick the highest
  * `@openchamber/web` package version. `OPENCHAMBER_BIN` still wins outright.
  *
- * The result is cached for the process lifetime. If the user installs or moves
- * their OpenChamber mid-session, restart DevHub to pick it up.
+ * The result is cached, and every path that (re)starts the daemon clears the
+ * cache first — see `resetOpenChamberBinCache`.
  */
 let cachedOpenChamberBin: string | null | undefined;
 
@@ -299,6 +299,20 @@ export function findOpenChamberBin(): string | null {
   const binName = process.platform === "win32" ? "openchamber.cmd" : "openchamber";
   cachedOpenChamberBin = selectNewestOpenChamberBin(collectOpenChamberBins(binName));
   return cachedOpenChamberBin;
+}
+
+/**
+ * Forget the resolved install.
+ *
+ * OpenChamber's in-app updater installs through whichever package manager owns
+ * the *node* it is running under, which is not necessarily the prefix the
+ * running daemon came from — a Homebrew-prefix copy gets "updated" by writing a
+ * newer one into nvm's. Resolution is cached for the process lifetime, so
+ * without this the dashboard keeps relaunching the stale copy for the rest of
+ * the session and the update looks like it silently rolled back.
+ */
+export function resetOpenChamberBinCache(): void {
+  cachedOpenChamberBin = undefined;
 }
 
 

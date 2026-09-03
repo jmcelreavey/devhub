@@ -88,7 +88,7 @@ export function registerCapabilityTools(server: McpServer, ctx: Context): void {
         "Run a Capability Radar scan across local repos (and optionally un-cloned GitHub repos). Writes a dated snapshot and returns what changed. Requires the dashboard running; may take a while with GitHub enabled.",
       inputSchema: {
         includeGithub: z.boolean().optional().describe("Also probe accessible un-cloned GitHub repos"),
-        githubFilter: z.string().optional().describe("Restrict remote scan to repos whose full name contains this (e.g. an org like 'businessinsider')"),
+        githubFilter: z.string().optional().describe("Restrict remote scan to repos whose full name contains this (e.g. an org like 'example-org')"),
       },
     },
     async ({ includeGithub, githubFilter }) =>

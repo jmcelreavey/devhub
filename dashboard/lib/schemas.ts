@@ -212,6 +212,11 @@ export const DatadogCheckSchema = z.object({
   applicationKey: z.string().max(200).optional(),
 });
 
+export const GithubDeviceLoginSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("start") }),
+  z.object({ action: z.literal("poll"), id: z.string().min(1).max(100) }),
+]);
+
 export const JiraCheckSchema = z.object({
   domain: z.string().max(300).optional(),
   email: z.string().max(300).optional(),

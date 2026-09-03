@@ -30,9 +30,9 @@ describe("clusterRepoWork — PR association", () => {
    * production or in tests.
    */
   const pr = {
-    url: "https://github.com/businessinsider/atlas/pull/42",
+    url: "https://github.com/example-org/atlas/pull/42",
     title: "Ship footer",
-    repo: "businessinsider/atlas",
+    repo: "example-org/atlas",
     number: 42,
   };
 
@@ -47,13 +47,13 @@ describe("clusterRepoWork — PR association", () => {
   it("attaches a PR to its cluster when the task links it by url", () => {
     const model = clusterRepoWork({
       repoName: "atlas",
-      fullName: "businessinsider/atlas",
+      fullName: "example-org/atlas",
       tasks: [
         {
           ...prTask,
           links: [
             ...prTask.links,
-            { kind: "pr" as const, id: "businessinsider/atlas#42", label: "atlas#42", href: pr.url },
+            { kind: "pr" as const, id: "example-org/atlas#42", label: "atlas#42", href: pr.url },
           ],
         },
       ],
@@ -69,7 +69,7 @@ describe("clusterRepoWork — PR association", () => {
   it("matches by owner/repo#number when the ref carries no href", () => {
     const model = clusterRepoWork({
       repoName: "atlas",
-      fullName: "businessinsider/atlas",
+      fullName: "example-org/atlas",
       tasks: [
         {
           ...prTask,
@@ -90,7 +90,7 @@ describe("clusterRepoWork — PR association", () => {
   it("leaves an unreferenced PR in leftoverPrs rather than dropping it", () => {
     const model = clusterRepoWork({
       repoName: "atlas",
-      fullName: "businessinsider/atlas",
+      fullName: "example-org/atlas",
       tasks: [prTask],
       tickets: [],
       notes: [],
@@ -106,7 +106,7 @@ describe("clusterRepoWork", () => {
   it("clusters a repo-linked task with one-hop jira and note, leftover notes stay out", () => {
     const model = clusterRepoWork({
       repoName: "atlas",
-      fullName: "businessinsider/atlas",
+      fullName: "example-org/atlas",
       tasks: [repoTask],
       tickets: [{ key: "PTF-1", summary: "Footer", status: "In Progress", url: "https://jira/PTF-1" }],
       notes: [
@@ -301,7 +301,7 @@ describe("clusterRepoWork", () => {
   it("keeps leftover calendar with a repo tag or explicit repo link inside the window", () => {
     const model = clusterRepoWork({
       repoName: "atlas",
-      fullName: "businessinsider/atlas",
+      fullName: "example-org/atlas",
       nowMs,
       tasks: [],
       tickets: [],
@@ -479,9 +479,9 @@ describe("calendar hub window", () => {
     expect(calendarEventBelongsOnHub({ tags: ["atlas"] }, "atlas", null)).toBe(true);
     expect(
       calendarEventBelongsOnHub(
-        { links: [{ kind: "repo", id: "businessinsider/atlas", label: "atlas" }] },
+        { links: [{ kind: "repo", id: "example-org/atlas", label: "atlas" }] },
         "atlas",
-        "businessinsider/atlas",
+        "example-org/atlas",
       ),
     ).toBe(true);
   });

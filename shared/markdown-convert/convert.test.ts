@@ -616,14 +616,14 @@ describe("blocksToPortableMarkdown", () => {
       { type: "text", text: "Pointing to ", styles: { italic: true, textColor: "green" } },
       {
         type: "link",
-        href: "https://www.businessinsider.com/terms",
+        href: "https://www.example-org.com/terms",
         content: [
           { type: "text", text: "standard BI T&Cs", styles: { italic: true, textColor: "green" } },
         ],
       },
     ]);
     expect(blocksToPortableMarkdown([block])).toBe(
-      "> $\\color{#4d6461}{\\textit{Pointing to }}$[$\\color{#4d6461}{\\textit{standard BI T\\&Cs}}$](https://www.businessinsider.com/terms)",
+      "> $\\color{#4d6461}{\\textit{Pointing to }}$[$\\color{#4d6461}{\\textit{standard BI T\\&Cs}}$](https://www.example-org.com/terms)",
     );
   });
 

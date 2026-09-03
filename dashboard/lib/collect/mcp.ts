@@ -20,6 +20,7 @@ import {
 import {
   MCP_TOOL_TARGETS,
   listSharedMcpServerNames,
+  mcpServersFromConfigFile,
   reverseSubstituteRepoRoot,
   sharedMcpDir,
   type Json,
@@ -47,18 +48,6 @@ export interface LocalMcpImportCandidate {
   unsupported: boolean;
 }
 
-function readJson(file: string): Record<string, Json> | null {
-  if (!fs.existsSync(file)) return null;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(file, "utf-8"));
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, Json>)
-      : null;
-  } catch {
-    return null;
-  }
-}
-
 function looksRemote(entry: Json): boolean {
   if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
   const e = entry as Record<string, Json>;
@@ -83,11 +72,9 @@ export function scanLocalMcpImportCandidates(repoRoot: string): LocalMcpImportCa
       tool.configPath(home),
     ];
     for (const configPath of configPaths) {
-      const cfg = readJson(configPath);
-      if (!cfg) continue;
-      const block = cfg[tool.topKey];
-      if (!block || typeof block !== "object" || Array.isArray(block)) continue;
-      for (const [name, entry] of Object.entries(block as Record<string, Json>)) {
+      const servers = mcpServersFromConfigFile(tool, configPath);
+      if (!servers) continue;
+      for (const [name, entry] of Object.entries(servers)) {
         const canonical = tool.fromTool(entry);
         const canonicalReversed = canonical
           ? (reverseSubstituteRepoRoot(
@@ -109,6 +96,8 @@ export function scanLocalMcpImportCandidates(repoRoot: string): LocalMcpImportCa
                 enabled: canonicalReversed.enabled,
                 oauth: canonicalReversed.oauth,
                 headers: canonicalReversed.headers,
+                startupTimeoutSec: canonicalReversed.startupTimeoutSec,
+                toolTimeoutSec: canonicalReversed.toolTimeoutSec,
               }
             : null,
           remote: looksRemote(entry),
@@ -203,6 +192,8 @@ export async function collectMcpServers(opts: CollectMcpServersOptions): Promise
       ...(source.canonical.headers && Object.keys(source.canonical.headers).length > 0
         ? { headers: source.canonical.headers }
         : {}),
+      ...(source.canonical.startupTimeoutSec ? { startupTimeoutSec: source.canonical.startupTimeoutSec } : {}),
+      ...(source.canonical.toolTimeoutSec ? { toolTimeoutSec: source.canonical.toolTimeoutSec } : {}),
     };
 
     if (opts.dryRun) {

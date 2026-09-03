@@ -73,6 +73,39 @@ describe("collect-mcp", () => {
     expect(atlassian!.sources.find((s) => s.tool === "opencode")?.canonical?.url).toBe("https://x.example/mcp");
   });
 
+  it("surfaces Codex servers from config.toml with environment and timeout settings", () => {
+    const { repo, home } = makeTempRepo();
+    const configPath = path.join(home, ".codex/config.toml");
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(
+      configPath,
+      [
+        'model = "gpt-5"',
+        "",
+        "[mcp_servers.devhub]",
+        'command = "/opt/devhub"',
+        'args = ["server.ts"]',
+        "startup_timeout_sec = 30",
+        "tool_timeout_sec = 360",
+        "",
+        "[mcp_servers.devhub.env]",
+        'DEVHUB_BASE_URL = "http://localhost:1337"',
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const candidate = scanLocalMcpImportCandidates(repo).find((entry) => entry.name === "devhub");
+    const codex = candidate?.sources.find((source) => source.tool === "codex")?.canonical;
+    expect(codex).toMatchObject({
+      command: "/opt/devhub",
+      args: ["server.ts"],
+      env: { DEVHUB_BASE_URL: "http://localhost:1337" },
+      startupTimeoutSec: 30,
+      toolTimeoutSec: 360,
+    });
+  });
+
   it("reverse-substitutes REPO_ROOT for paths under the repo", () => {
     const { repo, home } = makeTempRepo();
     writeJson(path.join(home, ".claude.json"), {

@@ -14,8 +14,8 @@ function link(href: string, label: string) {
 
 describe("buildReviewNoteRef", () => {
   it("takes repo and PR from an embedded PR link", () => {
-    const ref = buildReviewNoteRef("pr-reviews/businessinsider-capi-525.json", [
-      link("https://github.com/businessinsider/capi/pull/525", "PR 525"),
+    const ref = buildReviewNoteRef("pr-reviews/example-org-capi-525.json", [
+      link("https://github.com/example-org/capi/pull/525", "PR 525"),
       para("PTF-3774 hybrid search"),
     ]);
     expect(ref.repo).toBe("capi");
@@ -24,16 +24,16 @@ describe("buildReviewNoteRef", () => {
   });
 
   it("falls back to the filename when the note has no PR link", () => {
-    const ref = buildReviewNoteRef("pr-reviews/businessinsider-capi-543.json", [para("no links")]);
+    const ref = buildReviewNoteRef("pr-reviews/example-org-capi-543.json", [para("no links")]);
     expect(ref.prNumbers).toEqual([543]);
     // Org/repo can't be split reliably, so the whole prefix is kept and matched
     // by suffix later.
-    expect(ref.repo).toBe("businessinsider-capi");
+    expect(ref.repo).toBe("example-org-capi");
   });
 
   it("handles repo names containing hyphens", () => {
-    const ref = buildReviewNoteRef("pr-reviews/businessinsider-api-query-params-6.json", [
-      link("https://github.com/businessinsider/api-query-params/pull/6", "PR"),
+    const ref = buildReviewNoteRef("pr-reviews/example-org-api-query-params-6.json", [
+      link("https://github.com/example-org/api-query-params/pull/6", "PR"),
     ]);
     expect(ref.repo).toBe("api-query-params");
     expect(ref.prNumbers).toContain(6);
@@ -50,15 +50,15 @@ describe("buildReviewNoteRef", () => {
 describe("matchReviewNotes", () => {
   const notes: ReviewNoteRef[] = [
     {
-      path: "pr-reviews/businessinsider-capi-525.json",
-      title: "businessinsider-capi-525",
+      path: "pr-reviews/example-org-capi-525.json",
+      title: "example-org-capi-525",
       repo: "capi",
       prNumbers: [525],
       tickets: ["PTF-3774"],
     },
     {
-      path: "pr-reviews/businessinsider-posts-ai-38.json",
-      title: "businessinsider-posts-ai-38",
+      path: "pr-reviews/example-org-posts-ai-38.json",
+      title: "example-org-posts-ai-38",
       repo: "posts-ai",
       prNumbers: [38],
       tickets: ["DP-6144"],

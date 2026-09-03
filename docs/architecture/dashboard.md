@@ -26,7 +26,7 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 | Actions      | Safe script runner for maintenance tasks                                                                    |
 | Status       | Health checks for repo, services, MCP, sync health, merge conflicts, and network access                     |
 | Setup        | Environment and integration configuration                                                                   |
-| Repos        | Sibling checkout discovery, per-repo **work hub**, GitHub clone/search, Cursor/GitKraken launch, compose-up, and Repo Learning |
+| Repos        | Sibling git checkout discovery, GitHub clone/search, Cursor/GitKraken launch, compose-up, and Repo Learning |
 | Integrations | Calendar, Jira, Datadog, GitHub, and internal ops views                                                     |
 
 ## Walkthroughs
@@ -64,7 +64,7 @@ The sidebar is driven by `dashboard/lib/nav.ts` — **18** core sidebar destinat
 | Library  | `/notes`    | Top-bar tabs: Notes, Docs, Radar, Appraisal, Research, Diagrams, Live links (gated)      |
 | Recall   | `/recall`   | Hybrid retrieval over notes, docs, tasks, and the event spine — see [Recall](recall.md)   |
 | Agents   | `/skills`   | Skills, persona, MCP catalog                                                           |
-| Repos    | `/repos`    | Desktop nav only; sibling clones sorted by recent git activity. Click a card for `/repos/<name>` (work hub) |
+| Repos    | `/repos`    | Desktop nav only; sibling clones sorted by recent git activity                         |
 | Own      | `/own`      | Repo ownership radar (gated on `github`); see [Repo ownership](../guides/repo-ownership.md) |
 | Ops      | `/ops`      | BI group; from BI plugin (`gate: bi`)                                                  |
 | Datadog  | `/datadog`  | BI group; gated on `datadog`                                                           |
@@ -100,21 +100,6 @@ are AND-ed on every tab.
 Older URLs still work and remain reachable via **⌘K** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/appraisal`, `/one-on-one`, `/radar`, `/research`, `/tasks`, `/tickets`, `/search`, `/learnings`, `/diagrams`, `/docs`, `/shared`, `/actions`, `/setup`. They no longer have permanent sidebar slots — Library section tabs cover `/radar`, `/appraisal`, and `/research`; `/learnings` stays palette-only. `/ops` (plugin) and `/datadog` live under the **BI** sidebar group.
 
 On mobile, the bottom shelf uses **Work** (`/work`) instead of separate Tasks/Tickets entries.
-
-### Workspace tabs
-
-The strip under the top bar is an in-app tab bar (`WorkspaceTabs`), not browser tabs. State lives in `localStorage` (`devhub.workspace-tabs`), capped at **24**. The **+** button always opens Today (`/`).
-
-Inactive tabs **unmount**. An earlier keep-alive mount leaked notes/repos/docs across tabs when the URL changed; switching tabs now `router.push`es that tab's href and remounts the page. Autosave covers in-flight note edits. Overlays and docks stay mounted — `useLive` pauses via `PanelVisibilityContext` while they are hidden.
-
-| Action | How |
-| ------ | --- |
-| Open in a new tab | ⌘/Ctrl-click, Shift-click, or middle-click an in-app link (sidebar, chips, notes). Off-origin links still go to the system browser. Set `data-no-tab-intercept` on an anchor to opt out. |
-| Jump | ⌘1–⌘9 (or Ctrl+1–9) |
-| Cycle | Ctrl+Tab / Ctrl+Shift+Tab — **DevHub.app only**; Chrome swallows Ctrl+Tab |
-| Close | Tab close button or middle-click the tab |
-
-On `/repos`, a one-line hint distinguishes workspace tabs from the repo-group filter tablist below them. See [Command palette — Keyboard shortcuts](../guides/command-palette.md#keyboard-shortcuts).
 
 ### Repo-aware links
 
@@ -180,10 +165,10 @@ Completed and abandoned tasks stay in the file for history and standup; they are
 | Method              | Body                                          | Purpose                                              |
 | ------------------- | --------------------------------------------- | ---------------------------------------------------- |
 | `GET /api/tasks`    | —                                             | Runs rollover, returns `{ date, tasks[] }` for today |
-| `POST /api/tasks`   | `{ text, date?, due?, links? }`               | Creates a task (`201`); optional `links` EntityRef[] |
+| `POST /api/tasks`   | `{ text, date?, due? }`                       | Creates a task (`201`)                               |
 | `PATCH /api/tasks`  | `{ ids[], date? }`                            | Reorders open tasks — every open id exactly once     |
 | `PATCH /api/tasks`  | `{ id, done }`                                | Toggle complete                                      |
-| `PATCH /api/tasks`  | `{ id, text?, due?, links? }`                 | Edit text, due date, or hop-around links             |
+| `PATCH /api/tasks`  | `{ id, text?, due? }`                         | Edit text or due date                                |
 | `PATCH /api/tasks`  | `{ id, status: "abandoned", abandonReason? }` | Abandon                                              |
 | `PATCH /api/tasks`  | `{ id, status: "active" }`                    | Reactivate abandoned task                            |
 | `PATCH /api/tasks`  | `{ id, timer: "start" \| "stop", date? }`     | Focus timer (see below)                              |
@@ -192,16 +177,6 @@ Completed and abandoned tasks stay in the file for history and standup; they are
 ### Add to Jira
 
 When Jira is configured, each task exposes an **Add to Jira** action. The modal creates a Jira issue from the task text, optionally under the task's linked parent or another key, inherits Team/sprint context from `GET /api/jira/meta`, and rewrites the task with the new key on success. See [Jira integration](../integrations/jira.md#create-tickets-from-tasks).
-
-### Implement with agent
-
-Task overflow **Implement with Agent…** (Today, Work, and the repo hub) launches the `devhub-implement-task` skill in the Agent dock. It does not start until you pick a CLI.
-
-The agent curls `GET /api/tasks/implement/plan?taskId=&date=` first — tags, linked notes/repos, Jira ticket, and a depth-2 entity graph. Repo choice comes from the **task's own** `kind: "repo"` links (a back-link from another repo must not steal the checkout). Hub rows pass the hub's `cwd` so the agent stays in that tree.
-
-A guardrail (`lib/tasks/implement-guardrails.ts`) blocks a third launch when **two** agent-kind dock tabs are already busy. It reads `/api/terminal/sessions` (live heartbeats), not the proposal store — UI launches never create a server-side proposal. If the registry cannot be read, the guardrail fails open.
-
-The agent must ask before commit, PR, Jira transition, or completing the task. See [Notes System — Create tasks from plan](notes-system.md#create-tasks-from-plan) for the inverse flow (plan → tickets).
 
 ### Focus timer
 
@@ -402,7 +377,6 @@ The Status page (`/status`) aggregates Git, sync, services, and infra into one o
 | Services               | OpenChamber and OpenCode port probes                                                                                                 | Restart via `POST /api/status/services/restart`; cards hidden when setup disables a peer                                                                                                                                                                                                                                    |
 | MCP                    | Runtime scan of `mcp/shared/` only                                                                                                   | Idle = normal; missing binary = warning                                                                                                                                                                                                                                                                                     |
 | Infra                  | AWS profile/identity and kubectl context via `GET /api/bi` (plugin-backed)                                                           | Polls every 5 minutes; links to `/ops`                                                                                                                                                                                                                                                                                      |
-| External commands      | `GET /api/status/exec` — in-flight `execExternal` calls plus recent slow ones                                                        | Hidden when idle. An **overdue** row names the command holding the event loop. MCP: `status_exec`. See below.                                                                                                                                                                                                               |
 | LAN access             | Wi‑Fi IPv4 badge + QR                                                                                                                | Client builds `http://<ip>:<port>…` for phone access on the same network                                                                                                                                                                                                                                                    |
 | Dashboard rebuild      | `GET/POST /api/status/dashboard/rebuild`                                                                                             | **Rebuild & restart** runs `npm run restart` in the linked checkout (production build + relaunch). Unavailable when the desktop shell supervises the server (`DEVHUB_SHELL_SUPERVISED=1`) or in a packaged app — use **View → Rebuild Dashboard…** or **Check for Updates** instead. Reopening DevHub does **not** rebuild. |
 
@@ -415,29 +389,6 @@ On desktop, **System → Logs** (`/logs`, also in ⌘K) tails the rotating log f
 The page reloads on manual refresh and polls Git/services/MCP/LAN every 30 seconds in the background.
 
 Merge conflict recovery lives on Status through `ConflictResolverPanel`. It reads `GET /api/git/conflicts`, lets the user edit the conflicted file, and saves with `POST /api/git/conflicts`; the backend writes the resolved content and stages the file only after conflict markers are removed. The full content-sync runbook is in [Notes System -> Content sync workflow](notes-system.md#content-sync-workflow).
-
-### When the dashboard hangs
-
-One blocked subprocess blocks **every** route — "the app is dead" and "one `git`/`gh` call is stuck" look identical. Call `status_exec` (MCP) or `GET /api/status/exec` first; an entry with a large `runningMs` (especially `overdue: true`) names the command and cwd. If that route itself does not answer, the event loop is already blocked — diagnose from `ps`/`lsof`, not by restarting blindly. Full ladder: skill `devhub-debug-hang`.
-
-Every dashboard subprocess must go through `execExternal` (`lib/exec-external.ts`) with a timeout (default `DEVHUB_EXEC_TIMEOUT_MS`, 30s). There is no unbounded option. The Status **External commands** panel is idle-hidden; token-shaped args are redacted.
-
-### Repo work hub
-
-Click a card on `/repos` (or open `/repos/<name>`) for that clone's **work hub** — tasks, Jira, notes, PRs, and calendar clustered around the repo, plus inline git.
-
-`GET /api/repos/<name>/work` fans out tasks, Jira, calendar (±14 days), and open PRs in parallel. A failed optional integration is listed in `degraded[]` (Jira / Calendar / GitHub) instead of rendering a bare empty state. Membership:
-
-| Source | Belongs to this repo when… |
-| ------ | -------------------------- |
-| Task | `kind: "repo"` EntityRef, or a `#repo` tag in the text |
-| Note | Path under `projects/<repo>`, a path segment matching the name, a `#repo` tag in the title, or a recall `repo:<name>` ref |
-| Calendar | Repo link or `#repo` tag, and the event overlaps the ±14-day window |
-| Jira | In progress, or already tied to a repo-linked task |
-
-Clusters seed from repo-linked open tasks plus in-progress Jira whose one-hop graph touches the repo. Leftovers (tasks, notes, PRs, events) and open-but-not-in-progress tickets sit in **Backlog**. Finished tasks (up to 200) sit in **Done**. The composer at the top of Active work `POST`s a task with a repo link already set.
-
-Open PRs are partitioned mine/others; **Commits** is a collapsible History panel plus the same `RepoGitWorkspace` as the list-page **Open Git** control. Hub task rows can launch [Implement with agent](#implement-with-agent) with `cwd` pinned to this checkout.
 
 ### Repo Git workspace
 

@@ -21,6 +21,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { claudeDesktopMcpConfigPath } from "@/lib/mcp/claude-desktop-paths";
+import { readCodexMcpServers, writeCodexMcpServers } from "@/lib/mcp/codex-config";
 import { cursorMcpConfigPath, cursorMcpLegacyConfigPath } from "@/lib/mcp/cursor-paths";
 import { listPersonalMcpServerNames, readPersonalMcpServer } from "@/lib/mcp/personal";
 import { pluginAssetDirs } from "@/lib/plugins/registry";
@@ -40,6 +41,8 @@ export interface SharedMcpServer {
   enabled?: boolean;
   oauth?: Record<string, Json>;
   headers?: Record<string, string>;
+  startupTimeoutSec?: number;
+  toolTimeoutSec?: number;
 }
 
 export interface McpToolTarget {
@@ -70,6 +73,8 @@ export interface McpToolTarget {
    * above.
    */
   skipRemote?: boolean;
+  /** Codex keeps MCP tables inside config.toml; every other target is JSON-backed. */
+  format?: "json" | "codex-toml";
 }
 
 function stdioToTool(server: SharedMcpServer): Json {
@@ -110,6 +115,26 @@ function cursorToTool(server: SharedMcpServer): Json {
   return stdioToTool(server);
 }
 
+function codexToTool(server: SharedMcpServer): Json {
+  const entry = stdioToTool(server);
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return entry;
+  const codexEntry = { ...(entry as Record<string, Json>) };
+  delete codexEntry.type;
+  if (codexEntry.headers) {
+    codexEntry.http_headers = codexEntry.headers;
+    delete codexEntry.headers;
+  }
+  return {
+    ...codexEntry,
+    ...(server.startupTimeoutSec ? { startup_timeout_sec: server.startupTimeoutSec } : {}),
+    ...(server.toolTimeoutSec ? { tool_timeout_sec: server.toolTimeoutSec } : {}),
+  };
+}
+
+function positiveInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
 function sharedFromTool(entry: Json): SharedMcpServer | null {
   if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
   const url = (entry as { url?: unknown }).url;
@@ -117,19 +142,26 @@ function sharedFromTool(entry: Json): SharedMcpServer | null {
     const type = (entry as { type?: unknown }).type;
     const enabled = (entry as { enabled?: unknown }).enabled;
     const oauth = (entry as { oauth?: unknown }).oauth;
-    const headers = (entry as { headers?: unknown }).headers;
+    const headers = (entry as { headers?: unknown; http_headers?: unknown }).headers ??
+      (entry as { http_headers?: unknown }).http_headers;
+    const startupTimeoutSec = positiveInteger((entry as { startup_timeout_sec?: unknown }).startup_timeout_sec);
+    const toolTimeoutSec = positiveInteger((entry as { tool_timeout_sec?: unknown }).tool_timeout_sec);
     return {
       type: typeof type === "string" ? type : "remote",
       url,
       ...(typeof enabled === "boolean" ? { enabled } : {}),
       ...(oauth && typeof oauth === "object" && !Array.isArray(oauth) ? { oauth: oauth as Record<string, Json> } : {}),
       ...(headers && typeof headers === "object" && !Array.isArray(headers) ? { headers: headers as Record<string, string> } : {}),
+      ...(startupTimeoutSec ? { startupTimeoutSec } : {}),
+      ...(toolTimeoutSec ? { toolTimeoutSec } : {}),
     };
   }
   const cmd = (entry as { command?: unknown }).command;
   if (typeof cmd !== "string" || !cmd) return null;
   const args = (entry as { args?: unknown }).args;
   const env = (entry as { env?: unknown }).env;
+  const startupTimeoutSec = positiveInteger((entry as { startup_timeout_sec?: unknown }).startup_timeout_sec);
+  const toolTimeoutSec = positiveInteger((entry as { tool_timeout_sec?: unknown }).tool_timeout_sec);
   return {
     command: cmd,
     args: Array.isArray(args) ? args.filter((x): x is string => typeof x === "string") : undefined,
@@ -137,6 +169,8 @@ function sharedFromTool(entry: Json): SharedMcpServer | null {
       env && typeof env === "object" && !Array.isArray(env)
         ? (env as Record<string, string>)
         : undefined,
+    ...(startupTimeoutSec ? { startupTimeoutSec } : {}),
+    ...(toolTimeoutSec ? { toolTimeoutSec } : {}),
   };
 }
 
@@ -210,22 +244,23 @@ export const MCP_TOOL_TARGETS: McpToolTarget[] = [
   {
     id: "codex",
     label: "Codex",
-    configPath: (home) => path.join(home, ".codex", "mcp.json"),
+    configPath: (home) => path.join(home, ".codex", "config.toml"),
     topKey: "mcpServers",
     mergeRest: false,
-    toTool: stdioToTool,
+    toTool: codexToTool,
     fromTool: sharedFromTool,
+    format: "codex-toml",
   },
   {
-    // ChatGPT.app shares Codex MCP (~/.codex/mcp.json). Same file as `codex`
-    // so sync_mcp --tool chatgpt does not drop the system link.
+    // ChatGPT.app, Codex CLI, and the IDE extension share ~/.codex/config.toml.
     id: "chatgpt",
     label: "ChatGPT desktop",
-    configPath: (home) => path.join(home, ".codex", "mcp.json"),
+    configPath: (home) => path.join(home, ".codex", "config.toml"),
     topKey: "mcpServers",
     mergeRest: false,
-    toTool: stdioToTool,
+    toTool: codexToTool,
     fromTool: sharedFromTool,
+    format: "codex-toml",
   },
   {
     id: "cursor",
@@ -323,6 +358,8 @@ export function parseSharedMcpServerFile(file: string): SharedMcpServer | null {
       enabled: typeof raw.enabled === "boolean" ? raw.enabled : undefined,
       oauth: raw.oauth && typeof raw.oauth === "object" && !Array.isArray(raw.oauth) ? raw.oauth : undefined,
       headers: raw.headers && typeof raw.headers === "object" && !Array.isArray(raw.headers) ? raw.headers : undefined,
+      startupTimeoutSec: positiveInteger(raw.startupTimeoutSec),
+      toolTimeoutSec: positiveInteger(raw.toolTimeoutSec),
     };
   } catch {
     return null;
@@ -354,13 +391,14 @@ export function pluginMcpServers(
   return map;
 }
 
-function mcpServersFromConfigFile(
+export function mcpServersFromConfigFile(
+  tool: McpToolTarget,
   configPath: string,
-  topKey: McpToolTarget["topKey"],
 ): Record<string, Json> | null {
+  if (tool.format === "codex-toml") return readCodexMcpServers(configPath);
   const existing = readJsonObjectFile(configPath);
   if (!existing) return null;
-  const block = existing[topKey];
+  const block = existing[tool.topKey];
   if (!block || typeof block !== "object" || Array.isArray(block)) return {};
   return block as Record<string, Json>;
 }
@@ -373,7 +411,7 @@ export function mergedLocalMcpServersForTool(tool: McpToolTarget, home: string):
   ];
   let merged: Record<string, Json> = {};
   for (const configPath of readPaths) {
-    const servers = mcpServersFromConfigFile(configPath, tool.topKey);
+    const servers = mcpServersFromConfigFile(tool, configPath);
     if (servers) merged = { ...merged, ...servers };
   }
   return merged;
@@ -471,14 +509,22 @@ export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<numbe
 
   let writes = 0;
   let prunes = 0;
+  const syncedConfigPaths = new Set<string>();
 
   for (const tool of toolTargets) {
     const configPath = tool.configPath(home);
     emit(`[${tool.id}] ${configPath}`);
+    if (syncedConfigPaths.has(configPath)) {
+      emit("  SHARED: already synced by another target");
+      continue;
+    }
+    syncedConfigPaths.add(configPath);
 
-    const existing = readJsonObjectFile(configPath) ?? {};
+    const existing = tool.format === "codex-toml" ? {} : (readJsonObjectFile(configPath) ?? {});
     const existingServers = mergedLocalMcpServersForTool(tool, home);
     const nextServers: Record<string, Json> = { ...existingServers };
+    const upserts: Record<string, Json> = {};
+    const removals = new Set<string>();
 
     for (const name of selected) {
       const resolved = readCatalogMcpServer(repoRoot, home, name, pluginServerMap);
@@ -501,6 +547,8 @@ export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<numbe
           ...(typeof server.enabled === "boolean" ? { enabled: server.enabled } : {}),
           ...(server.oauth ? { oauth: server.oauth } : {}),
           ...(server.headers ? { headers: server.headers } : {}),
+          ...(server.startupTimeoutSec ? { startupTimeoutSec: server.startupTimeoutSec } : {}),
+          ...(server.toolTimeoutSec ? { toolTimeoutSec: server.toolTimeoutSec } : {}),
         } as Json,
         repoRoot,
       );
@@ -521,6 +569,8 @@ export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<numbe
         enabled: substituted.enabled,
         oauth: substituted.oauth,
         headers: substituted.headers,
+        startupTimeoutSec: substituted.startupTimeoutSec,
+        toolTimeoutSec: substituted.toolTimeoutSec,
       });
 
       if (opts.dryRun) {
@@ -529,6 +579,7 @@ export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<numbe
         continue;
       }
       nextServers[name] = entry;
+      upserts[name] = entry;
       emit(`  SYNCED: ${name} (${source})`);
       writes++;
     }
@@ -549,6 +600,7 @@ export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<numbe
           continue;
         }
         delete nextServers[existingName];
+        removals.add(existingName);
         emit(`  PRUNED: ${existingName}`);
         prunes++;
       }
@@ -556,9 +608,13 @@ export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<numbe
 
     if (opts.dryRun) continue;
 
-    const merged: Record<string, Json> = tool.mergeRest ? { ...existing } : {};
-    merged[tool.topKey] = nextServers;
-    writeJsonObjectFile(configPath, merged);
+    if (tool.format === "codex-toml") {
+      writeCodexMcpServers(configPath, upserts, removals);
+    } else {
+      const merged: Record<string, Json> = tool.mergeRest ? { ...existing } : {};
+      merged[tool.topKey] = nextServers;
+      writeJsonObjectFile(configPath, merged);
+    }
 
     for (const legacyPath of tool.extraReadConfigPaths?.(home) ?? []) {
       if (legacyPath === configPath || !fs.existsSync(legacyPath)) continue;

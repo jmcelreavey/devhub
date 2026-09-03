@@ -27,9 +27,11 @@
  *
  * Two checks close that, and both are required in the desktop app:
  *
- * - **Exact origin.** The handshake's `Origin` must be the dashboard's own
- *   origin, compared exactly. `SameSite` cookie rules are not reliably applied
- *   to WebSocket handshakes, so the origin cannot be skipped.
+ * - **Loopback origin.** The handshake's `Origin` must be a loopback host — a
+ *   remote page cannot forge it, and `SameSite` cookie rules are not reliably
+ *   applied to WebSocket handshakes, so the origin cannot be skipped. The port
+ *   is not pinned: any local dashboard (packaged app, checkout on a spare port)
+ *   may reuse whichever peer is already listening.
  * - **Bootstrap cookie.** The per-launch token the Tauri shell set. A page on
  *   another origin cannot send it and script cannot read it.
  *
@@ -347,14 +349,10 @@ function readRawLogTail(logFile: string | null): Buffer | null {
  * never started.
  */
 function verifyTerminalClient(req: IncomingMessage): { ok: true } | { ok: false; reason: string } {
-  const dashboardPort = Number.parseInt(process.env.PORT ?? "1337", 10);
-  if (!isAllowedTerminalOrigin(req.headers.origin, dashboardPort)) {
-    // Name the expected origin: the usual cause is a dashboard started on a
-    // non-default PORT while this peer still assumes 1337, and "rejected
-    // connection: origin ..." alone does not make that obvious.
+  if (!isAllowedTerminalOrigin(req.headers.origin)) {
     return {
       ok: false,
-      reason: `origin ${req.headers.origin ?? "(none)"} (expected port ${dashboardPort} — start this peer with PORT=<dashboard port>)`,
+      reason: `origin ${req.headers.origin ?? "(none)"} (loopback origins only)`,
     };
   }
 

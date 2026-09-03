@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Merged into the bundle's Info.plist by Tauri on macOS.
+
+  Every key here is a TCC usage description. macOS needs one for each protected
+  resource an app can touch: without it the permission dialog either shows a
+  blank reason or, for Apple Events, the request is refused outright and the
+  action fails with a errAEEventNotPermitted that surfaces as an unexplained
+  "nothing happened". The sidecars DevHub spawns (the Next server, the terminal
+  PTY, OpenCode, OpenChamber, agent CLIs) inherit the app's TCC identity, so
+  these cover them too — they are not separately grantable.
+-->
+<plist version="1.0">
+  <dict>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>DevHub serves its dashboard, OpenChamber and the docked terminal over localhost, and can proxy them to your other devices on the LAN.</string>
+
+    <key>NSAppleEventsUsageDescription</key>
+    <string>DevHub opens repositories, pull requests and terminals in your editor and other apps on request.</string>
+
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>DevHub reads and writes notes, tasks and repositories that live in your folders.</string>
+
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>DevHub reads and writes notes, tasks and repositories that live in your folders.</string>
+
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>DevHub reads and writes files you hand to it, such as imported notes and screenshots.</string>
+
+    <key>NSNetworkVolumesUsageDescription</key>
+    <string>DevHub can work with repositories stored on network volumes.</string>
+
+    <key>NSRemovableVolumesUsageDescription</key>
+    <string>DevHub can work with repositories stored on external drives.</string>
+  </dict>
+</plist>

@@ -92,8 +92,6 @@ export function SkillAgentDialog({
         kind: "agent",
         cwd: repoPath,
         repoName,
-        preferAgentTab: true,
-        forceNewTab: true,
         reason,
         source: "ui",
         mode: "interactive",

@@ -201,6 +201,7 @@ In the target repo:
   changelog/restates-the-diff comments, commented-out code. Only comment
   when there's a non-obvious constraint a future reader genuinely can't see.
 - Match existing style and patterns over your personal preferences.
+- Local upstarts and other long-running processes go through DevHub MCP `terminal_propose_run` (`kind: "upstart"`, distinct `label`) so logs are visible in the dock, in their own tab. Do not background them in the agent shell.
 - Never copy credentials, tokens, private connection strings, or raw customer
   data into task text, tags, notes, commits, or PRs.
 

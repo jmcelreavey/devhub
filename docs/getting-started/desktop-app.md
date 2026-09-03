@@ -7,6 +7,7 @@ tags: [setup, desktop]
 related:
   - architecture/desktop-shell
   - guides/desktop-recovery
+  - guides/macos-permissions
 ---
 
 # The DevHub desktop app
@@ -33,6 +34,11 @@ is a one-time step.
 This goes away once releases are signed with an Apple Developer ID. Until then
 it is the honest trade-off: no Apple Developer Program membership, one extra
 click on first launch.
+
+An ad-hoc signature also means macOS re-asks for Files & Folders, Local Network
+and Automation after every rebuild, because the signature it remembers them
+against changes each time. See [macOS permissions](../guides/macos-permissions.md)
+to grant them once and have it stick.
 
 ## First launch
 

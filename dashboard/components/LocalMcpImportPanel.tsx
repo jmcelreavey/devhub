@@ -120,7 +120,7 @@ export function LocalMcpImportPanel({ onImported }: Props) {
             Import from local tools
           </div>
           <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)", lineHeight: 1.4 }}>
-            Scan ~/.claude.json, ~/.codex/mcp.json, ~/.cursor/mcp.json (and legacy ~/.config/cursor/mcp.json) and
+            Scan ~/.claude.json, ~/.codex/config.toml, ~/.cursor/mcp.json (and legacy ~/.config/cursor/mcp.json) and
             ~/.config/opencode/opencode.json. Import as <strong>personal</strong> to sync everywhere without git (e.g.
             agentmemory).
           </div>

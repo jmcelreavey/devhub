@@ -22,6 +22,14 @@
  *      next to the server, so an older shell that only passes SERVER_DIR
  *      still restages Chamber/OpenCode)
  *
+ *   4. Re-signs the bundle, because steps 2 and 3 just broke its seal
+ *
+ * That last step is not cosmetic. `Resources/server` and `Resources/services`
+ * are sealed by the app's code signature, so rewriting them makes
+ * `codesign --verify` fail — and macOS keys TCC grants (Full Disk Access,
+ * Local Network, Automation) off that signature. An unsealed bundle is a
+ * bundle whose permissions macOS asks for again, every launch.
+ *
  * The shell sets DEVHUB_SERVER_DIR from resolve_paths().server_dir, and
  * DEVHUB_SERVICES_DIR from resolve_paths().services_dir when the binary
  * is new enough to pass it.
@@ -30,6 +38,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { stageDashboard } from "./stage-dashboard.mjs";
 import { serverDir as stagedServerDir, servicesDir as stagedServicesDir } from "./staging-paths.mjs";
+import { signBundle, verifyBundle } from "./codesign-bundle.mjs";
 
 function fail(msg) {
   process.stderr.write(`[rebuild-installed-server] ${msg}\n`);
@@ -125,7 +134,47 @@ export async function rebuildInstalledServer({
     throw new Error(`copy failed — ${resolvedServices}/supervisor.mjs missing after sync`);
   }
 
+  resealBundle(serverTarget);
+
   log("done");
+}
+
+/**
+ * The `.app` that owns `serverTarget`, or null when we are restaging the
+ * staging dir under `desktop:dev` (nothing to seal there).
+ */
+export function bundleRootFor(serverTarget) {
+  let dir = path.resolve(serverTarget);
+  while (dir !== path.dirname(dir)) {
+    if (dir.endsWith(".app")) return dir;
+    dir = path.dirname(dir);
+  }
+  return null;
+}
+
+function resealBundle(serverTarget) {
+  if (process.platform !== "darwin") return;
+  const app = bundleRootFor(serverTarget);
+  if (!app) return;
+
+  try {
+    const { identity, kind } = signBundle(app);
+    const verified = verifyBundle(app);
+    if (!verified.ok) {
+      log(`re-signed ${app} but it still fails verification: ${verified.output}`);
+      return;
+    }
+    log(
+      `re-signed ${app} with ${kind === "adhoc" ? "an ad-hoc signature" : identity}` +
+        (kind === "adhoc"
+          ? " — run `npm run desktop:sign:identity` so macOS stops re-asking for permissions"
+          : ""),
+    );
+  } catch (err) {
+    // A rebuild that ships working code but an unsealed bundle is still a
+    // usable app; it just re-prompts. Do not fail the rebuild over it.
+    log(`could not re-sign ${app}: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

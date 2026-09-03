@@ -22,7 +22,11 @@ import { findDbConnection } from "./registry";
 import { DbConnectionNotFoundError } from "./provider";
 import { runStatement } from "./pool";
 import { clampQueryTimeout } from "./timeouts";
-import { classifySqlBatch, type DbStatement, type DbStatementKind } from "./statement-kind";
+import {
+  classifySqlBatch,
+  type DbStatement,
+  type DbStatementKind,
+} from "./statement-kind";
 import { classifyMongoCommand, parseMongoCommand } from "./mongo/command";
 import { recordDbHistory } from "./history";
 import {
@@ -32,7 +36,7 @@ import {
   type DbResultSet,
 } from "./types";
 
-export type DbRefusalCode = "read_only" | "confirm_required";
+export type DbRefusalCode = "read_only" | "read_required" | "confirm_required";
 
 export class DbRefusedError extends Error {
   constructor(
@@ -51,6 +55,8 @@ export interface ExecuteOptions {
   statement: string;
   rowLimit?: number;
   timeoutMs?: number;
+  /** Restrict this execution surface to reads, even when the connection itself can write. */
+  requiredKind?: "read";
   /**
    * The connection's label, typed by the user, for a write against a dangerous
    * connection. Not a boolean: a checkbox is clicked by reflex, and typing
@@ -80,7 +86,8 @@ export interface ExecutePlan {
 }
 
 function clampRowLimit(requested: number | undefined): number {
-  if (!requested || !Number.isFinite(requested) || requested <= 0) return DB_DEFAULT_ROW_LIMIT;
+  if (!requested || !Number.isFinite(requested) || requested <= 0)
+    return DB_DEFAULT_ROW_LIMIT;
   return Math.min(Math.floor(requested), DB_MAX_ROW_LIMIT);
 }
 
@@ -99,7 +106,15 @@ export function planStatements(
     const { kind, reason } = classifyMongoCommand(command);
     return {
       kind,
-      statements: [{ sql: statement.trim(), kind, reason, start: 0, end: statement.length }],
+      statements: [
+        {
+          sql: statement.trim(),
+          kind,
+          reason,
+          start: 0,
+          end: statement.length,
+        },
+      ],
     };
   }
 
@@ -108,9 +123,25 @@ export function planStatements(
 }
 
 /** Decide whether a batch may run, without running it. */
-export function planExecution(connection: DbConnectionRef, statement: string): ExecutePlan {
+export function planExecution(
+  connection: DbConnectionRef,
+  statement: string,
+  requiredKind?: "read",
+): ExecutePlan {
   const { kind, statements } = planStatements(connection, statement);
   const offender = statements.find((s) => s.kind !== "read");
+
+  if (requiredKind === "read" && kind !== "read") {
+    return {
+      kind,
+      statements,
+      needsConfirmation: false,
+      refusal: {
+        code: "read_required",
+        message: `This endpoint accepts read statements only; the ${kind} statement was not run. Use the guarded write endpoint instead.`,
+      },
+    };
+  }
 
   if (kind !== "read" && connection.accessMode === "read") {
     return {
@@ -124,10 +155,17 @@ export function planExecution(connection: DbConnectionRef, statement: string): E
     };
   }
 
-  return { kind, statements, needsConfirmation: kind !== "read" && connection.dangerous };
+  return {
+    kind,
+    statements,
+    needsConfirmation: kind !== "read" && connection.dangerous,
+  };
 }
 
-function readOnlyMessage(connection: DbConnectionRef, offender?: DbStatement): string {
+function readOnlyMessage(
+  connection: DbConnectionRef,
+  offender?: DbStatement,
+): string {
   const detail = offender?.reason ? ` ${offender.reason}` : "";
   const what = offender ? ` (${firstWords(offender.sql)})` : "";
   return (
@@ -141,11 +179,13 @@ function firstWords(sql: string, count = 6): string {
   return words.length < sql.trim().length ? `${words}…` : words;
 }
 
-export async function executeStatement(opts: ExecuteOptions): Promise<ExecuteResult> {
+export async function executeStatement(
+  opts: ExecuteOptions,
+): Promise<ExecuteResult> {
   const connection = await findDbConnection(opts.connectionId);
   if (!connection) throw new DbConnectionNotFoundError(opts.connectionId);
 
-  const plan = planExecution(connection, opts.statement);
+  const plan = planExecution(connection, opts.statement, opts.requiredKind);
 
   if (plan.refusal) {
     throw new DbRefusedError(plan.refusal.code, plan.refusal.message);
@@ -173,7 +213,8 @@ export async function executeStatement(opts: ExecuteOptions): Promise<ExecuteRes
           // Read statements run in a read-only transaction even on a write
           // connection: a SELECT has no business being able to write, and the
           // narrower mode is free.
-          readOnly: connection.accessMode === "read" || statement.kind === "read",
+          readOnly:
+            connection.accessMode === "read" || statement.kind === "read",
         }),
       );
     }
@@ -205,7 +246,11 @@ export async function executeStatement(opts: ExecuteOptions): Promise<ExecuteRes
     connectionId: connection.id,
     kind: plan.kind,
     results,
-    statements: plan.statements.map((s) => ({ sql: s.sql, kind: s.kind, reason: s.reason })),
+    statements: plan.statements.map((s) => ({
+      sql: s.sql,
+      kind: s.kind,
+      reason: s.reason,
+    })),
     durationMs,
   };
 }

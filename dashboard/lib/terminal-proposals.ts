@@ -25,7 +25,6 @@ export interface TerminalProposal {
   summary?: string;
   kind?: TerminalSessionKind;
   repoName?: string;
-  preferAgentTab: boolean;
   reason?: string;
   source: "mcp" | "api";
   destructive: boolean;
@@ -63,6 +62,7 @@ export function createTerminalProposal(input: {
   kind?: TerminalSessionKind;
   repoName?: string;
   preferAgentTab?: boolean;
+  forceNewTab?: boolean;
   reason?: string;
   source?: "mcp" | "api";
 }): TerminalProposal {
@@ -83,7 +83,6 @@ export function createTerminalProposal(input: {
     summary: input.summary,
     kind: input.kind,
     repoName: input.repoName,
-    preferAgentTab: input.preferAgentTab !== false,
     reason: input.reason,
     source: input.source ?? "api",
     destructive: isDestructiveTerminalCommand(command),

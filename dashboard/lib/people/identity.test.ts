@@ -179,9 +179,9 @@ describe("indexByEmail / personForEmail", () => {
     const people = buildPeople(
       sightings(
         ["JustinFerrara", "justin.p.ferrara@gmail.com"],
-        ["JustinFerrara", "jferrara@businessinsider.com"],
+        ["JustinFerrara", "jferrara@example-org.com"],
       ),
-      { "jferrara@businessinsider.com": account("JustinFerrara", 14058449) },
+      { "jferrara@example-org.com": account("JustinFerrara", 14058449) },
     );
     const index = indexByEmail(people);
     const graphEmail = "justin.p.ferrara@gmail.com";

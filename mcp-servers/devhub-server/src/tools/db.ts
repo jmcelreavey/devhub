@@ -46,6 +46,208 @@ export function toPlainExplain(statement: string): string {
   return `EXPLAIN ${stripped}`;
 }
 
+/** Keep the production confirmation token unambiguous even when the label itself contains separators. */
+export function formatConnectionLine(
+  connection: Record<string, unknown>,
+): string {
+  const dangerousWrite =
+    connection.dangerous && connection.accessMode === "write";
+  const bits = [
+    String(connection.id),
+    String(connection.label),
+    String(connection.engine),
+    `${connection.accessMode}${connection.dangerous ? " ⚠ prd" : ""}`,
+    connection.open ? "open" : null,
+    connection.unavailable
+      ? `unavailable: ${String(connection.unavailable)}`
+      : null,
+    dangerousWrite
+      ? `confirmLabel: ${JSON.stringify(String(connection.label))}`
+      : null,
+  ].filter(Boolean);
+  return `- ${bits.join(" · ")}`;
+}
+
+interface DbResultPayload {
+  connectionId?: string;
+  kind?: string;
+  durationMs?: number;
+  results?: Array<{
+    columns?: Array<{ name?: string }>;
+    rows?: unknown[][];
+    rowsAffected?: number;
+    truncated?: boolean;
+    durationMs?: number;
+  }>;
+}
+
+interface DbSchemaPayload {
+  engine?: string;
+  namespaces?: Array<{ name?: string; system?: boolean }>;
+  objects?: Array<{
+    namespace?: string;
+    name?: string;
+    kind?: string;
+    estimatedRows?: number;
+    sizeBytes?: number;
+    comment?: string;
+  }>;
+}
+
+interface DbTablePayload {
+  namespace?: string;
+  name?: string;
+  kind?: string;
+  editable?: boolean;
+  columns?: Array<{
+    name?: string;
+    dataType?: string;
+    nullable?: boolean;
+    defaultValue?: string;
+    primaryKey?: boolean;
+  }>;
+  indexes?: Array<{
+    name?: string;
+    unique?: boolean;
+    primary?: boolean;
+    columns?: string[];
+  }>;
+  foreignKeys?: Array<{
+    columns?: string[];
+    referencedNamespace?: string;
+    referencedTable?: string;
+    referencedColumns?: string[];
+  }>;
+  referencedBy?: unknown[];
+}
+
+function compactValue(value: unknown): string {
+  if (value === null) return "null";
+  if (value === undefined) return "";
+  const rendered = typeof value === "string" ? value : JSON.stringify(value);
+  return rendered.replace(/\s+/g, " ").trim();
+}
+
+function plural(count: number, singular: string): string {
+  return `${count} ${singular}${count === 1 ? "" : "s"}`;
+}
+
+export function formatExecutionResult(data: DbResultPayload): string {
+  const results = data.results ?? [];
+  const heading = `${data.kind === "read" ? "Read" : "Executed"}${data.connectionId ? ` on ${data.connectionId}` : ""}${typeof data.durationMs === "number" ? ` in ${data.durationMs}ms` : ""}.`;
+  if (results.length === 0) return heading;
+
+  const blocks = results.map((result, index) => {
+    const columns = (result.columns ?? []).map(
+      (column) => column.name ?? "column",
+    );
+    const rows = result.rows ?? [];
+    const duration =
+      typeof result.durationMs === "number" ? ` in ${result.durationMs}ms` : "";
+    if (columns.length === 0) {
+      const count = result.rowsAffected ?? 0;
+      return `Statement ${index + 1}: ${plural(count, "row")} affected${duration}.`;
+    }
+
+    return [
+      `Result ${index + 1}: ${plural(rows.length, "row")}${result.truncated ? " (truncated)" : ""}${duration}.`,
+      columns.join("\t"),
+      ...rows.map((row) => row.map(compactValue).join("\t")),
+    ].join("\n");
+  });
+  return [heading, ...blocks].join("\n");
+}
+
+function humanBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KiB", "MiB", "GiB", "TiB"];
+  let value = bytes;
+  let unit = -1;
+  do {
+    value /= 1024;
+    unit++;
+  } while (value >= 1024 && unit < units.length - 1);
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`;
+}
+
+export function formatSchema(
+  data: DbSchemaPayload,
+  includeSystem = false,
+): string {
+  const systemNamespaces = new Set(
+    (data.namespaces ?? [])
+      .filter((namespace) => namespace.system)
+      .map((namespace) => namespace.name),
+  );
+  const objects = (data.objects ?? []).filter(
+    (object) => includeSystem || !systemNamespaces.has(object.namespace),
+  );
+  const lines = objects.map((object) => {
+    const bits = [
+      `${object.namespace ?? "default"}.${object.name ?? "unknown"}`,
+      object.kind,
+      typeof object.estimatedRows === "number"
+        ? `~${object.estimatedRows.toLocaleString()} rows`
+        : null,
+      typeof object.sizeBytes === "number"
+        ? humanBytes(object.sizeBytes)
+        : null,
+      object.comment,
+    ].filter(Boolean);
+    return `- ${bits.join(" · ")}`;
+  });
+  return [
+    `${data.engine ?? "Database"} objects (${objects.length}):`,
+    ...lines,
+  ].join("\n");
+}
+
+export function formatTable(data: DbTablePayload): string {
+  const columns = data.columns ?? [];
+  const lines = [
+    `${data.namespace ?? "default"}.${data.name ?? "unknown"} · ${data.kind ?? "object"}${data.editable === false ? " · read-only" : ""}`,
+    `Columns (${columns.length}):`,
+    ...columns.map((column) => {
+      const bits = [
+        column.name,
+        column.dataType,
+        column.nullable === false ? "required" : "nullable",
+        column.primaryKey ? "primary key" : null,
+        column.defaultValue ? `default ${column.defaultValue}` : null,
+      ].filter(Boolean);
+      return `- ${bits.join(" · ")}`;
+    }),
+  ];
+
+  const indexes = data.indexes ?? [];
+  if (indexes.length) {
+    lines.push(
+      `Indexes (${indexes.length}):`,
+      ...indexes.map(
+        (index) =>
+          `- ${index.name ?? "unnamed"}${index.primary ? " · primary" : index.unique ? " · unique" : ""} · (${(index.columns ?? []).join(", ")})`,
+      ),
+    );
+  }
+
+  const foreignKeys = data.foreignKeys ?? [];
+  if (foreignKeys.length) {
+    lines.push(
+      `Foreign keys (${foreignKeys.length}):`,
+      ...foreignKeys.map(
+        (key) =>
+          `- ${(key.columns ?? []).join(", ")} → ${key.referencedNamespace ?? "default"}.${key.referencedTable ?? "unknown"} (${(key.referencedColumns ?? []).join(", ")})`,
+      ),
+    );
+  }
+
+  if (data.referencedBy?.length)
+    lines.push(
+      `Referenced by: ${plural(data.referencedBy.length, "foreign key")}.`,
+    );
+  return lines.join("\n");
+}
+
 export function registerDbTools(server: McpServer, ctx: Context): void {
   const { dashboard } = ctx;
 
@@ -64,14 +266,20 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
       if (!hint) return result;
       const text = result.content.map((c) => c.text).join("\n");
       if (!/\b404\b|Not Found/i.test(text)) return result;
-      return { content: [{ type: "text" as const, text: `${hint}\n\n(${text})` }], isError: true };
+      return {
+        content: [{ type: "text" as const, text: `${hint}\n\n(${text})` }],
+        isError: true,
+      };
     });
 
   const connectionId = z
     .string()
-    .describe("Connection id from db_connections, e.g. bi:rds:capi:dev or local:app-cache");
+    .describe(
+      "Connection id from db_connections, e.g. bi:rds:capi:dev or local:app-cache",
+    );
 
-  const dbPath = (id: string, sub = "") => `/api/db/${encodeURIComponent(id)}${sub}`;
+  const dbPath = (id: string, sub = "") =>
+    `/api/db/${encodeURIComponent(id)}${sub}`;
 
   const jsonText = (data: unknown, fallback = "OK"): string => {
     if (typeof data === "string") return data || fallback;
@@ -87,47 +295,84 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
         refresh: z
           .boolean()
           .optional()
-          .describe("Re-derive the list instead of using the 30s cache (e.g. after switching AWS profile)"),
+          .describe(
+            "Re-derive the list instead of using the 30s cache (e.g. after switching AWS profile)",
+          ),
+        connectionId: z
+          .string()
+          .optional()
+          .describe("Return one exact connection id"),
+        env: z
+          .string()
+          .optional()
+          .describe("Restrict to an environment such as dev, sbx, or prd"),
+        engine: z.enum(["postgres", "mongodb", "sqlite"]).optional(),
+        service: z
+          .string()
+          .optional()
+          .describe("Case-insensitive match against connection id or label"),
+        includeUnavailable: z
+          .boolean()
+          .optional()
+          .describe("Include unavailable connections (default true)"),
       },
     },
-    async ({ refresh }) =>
+    async ({
+      refresh,
+      connectionId: requestedId,
+      env,
+      engine,
+      service,
+      includeUnavailable,
+    }) =>
       withDbErrors(async () => {
         const data = await dashboard.get<{
           connections: Array<Record<string, unknown>>;
           errors: Array<{ providerId: string; message: string }>;
         }>("/api/db/connections", { refresh: refresh ? "true" : undefined });
 
-        if (data.connections.length === 0) {
+        const serviceNeedle = service?.toLowerCase();
+        const connections = data.connections.filter((connection) => {
+          if (requestedId && connection.id !== requestedId) return false;
+          if (env && connection.env !== env) return false;
+          if (engine && connection.engine !== engine) return false;
+          if (includeUnavailable === false && connection.unavailable)
+            return false;
+          if (
+            serviceNeedle &&
+            !String(connection.id).toLowerCase().includes(serviceNeedle) &&
+            !String(connection.label).toLowerCase().includes(serviceNeedle)
+          ) {
+            return false;
+          }
+          return true;
+        });
+
+        if (connections.length === 0) {
           return {
             content: [
               {
                 type: "text",
-                text:
-                  "No database connections available.\n" +
-                  "BI connections need an AWS profile (switch one in Ops); local ones are added on the /db page.",
+                text: "No database connections matched the requested filters.",
               },
             ],
           };
         }
 
-        const lines = data.connections.map((c) => {
-          const bits = [
-            String(c.id),
-            String(c.label),
-            String(c.engine),
-            `${c.accessMode}${c.dangerous ? " ⚠ prd" : ""}`,
-            c.open ? "open" : null,
-            c.unavailable ? `unavailable: ${String(c.unavailable)}` : null,
-          ].filter(Boolean);
-          return `- ${bits.join(" · ")}`;
-        });
+        const lines = connections.map(formatConnectionLine);
 
-        const problems = data.errors.map((e) => `! ${e.providerId}: ${e.message}`);
+        const problems = data.errors.map(
+          (e) => `! ${e.providerId}: ${e.message}`,
+        );
         return {
           content: [
             {
               type: "text",
-              text: [`Connections (${data.connections.length}):`, ...lines, ...problems].join("\n"),
+              text: [
+                `Connections (${connections.length}):`,
+                ...lines,
+                ...problems,
+              ].join("\n"),
             },
           ],
         };
@@ -152,7 +397,10 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
         );
         return {
           content: [
-            { type: "text", text: [data.ok ? "Ready." : "Not ready.", ...lines].join("\n") },
+            {
+              type: "text",
+              text: [data.ok ? "Ready." : "Not ready.", ...lines].join("\n"),
+            },
           ],
         };
       }),
@@ -165,6 +413,12 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
         "Get a connection ready to use. Runs the preflight and, with fix:true, applies the fixes it can — signing in to the AWS profile the connection needs, or bringing Tailscale up — then re-checks. Use this instead of db_preflight when the goal is 'make it work', not 'tell me what is wrong'. Requires the dashboard running.",
       inputSchema: {
         connectionId,
+        accessMode: z
+          .enum(["read", "write"])
+          .optional()
+          .describe(
+            "Access needed after connecting. Defaults to read; use write before db_execute so BI signs into the team writer profile (for example dev-dad+).",
+          ),
         fix: z
           .boolean()
           .optional()
@@ -173,18 +427,29 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
           ),
       },
     },
-    async ({ connectionId: id, fix }) =>
+    async ({ connectionId: id, accessMode, fix }) =>
       withDbErrors(async () => {
         type Check = {
           label: string;
           status: string;
           detail?: string;
-          remedy?: { id: string; label: string; endpoint: string; body?: Record<string, unknown> };
+          remedy?: {
+            id: string;
+            label: string;
+            endpoint: string;
+            body?: Record<string, unknown>;
+          };
         };
 
-        const before = await dashboard.get<{ ok: boolean; checks: Check[] }>(dbPath(id, "/preflight"));
+        const preflightQuery = { accessMode: accessMode ?? "read" };
+        const before = await dashboard.get<{ ok: boolean; checks: Check[] }>(
+          dbPath(id, "/preflight"),
+          preflightQuery,
+        );
         if (before.ok) {
-          return { content: [{ type: "text", text: "Ready — nothing to fix." }] };
+          return {
+            content: [{ type: "text", text: "Ready — nothing to fix." }],
+          };
         }
 
         const blockers = before.checks.filter((c) => c.status === "fail");
@@ -207,7 +472,15 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
 
         if (fixable.length === 0) {
           return {
-            content: [{ type: "text", text: ["Not ready, and nothing is auto-fixable:", ...blockers.map(describe)].join("\n") }],
+            content: [
+              {
+                type: "text",
+                text: [
+                  "Not ready, and nothing is auto-fixable:",
+                  ...blockers.map(describe),
+                ].join("\n"),
+              },
+            ],
             isError: true,
           };
         }
@@ -222,21 +495,34 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
             await dashboard.post(remedy.endpoint, remedy.body ?? {}, 300_000);
             applied.push(remedy.label);
           } catch (err) {
-            failed.push(`${remedy.label} — ${err instanceof Error ? err.message : String(err)}`);
+            failed.push(
+              `${remedy.label} — ${err instanceof Error ? err.message : String(err)}`,
+            );
           }
         }
 
-        const after = await dashboard.get<{ ok: boolean; checks: Check[] }>(dbPath(id, "/preflight"));
+        const after = await dashboard.get<{ ok: boolean; checks: Check[] }>(
+          dbPath(id, "/preflight"),
+          preflightQuery,
+        );
         const lines = [
           applied.length ? `Applied: ${applied.join(", ")}.` : null,
           failed.length ? `Failed: ${failed.join("; ")}.` : null,
           "",
           after.ok
             ? "Ready — the connection can be opened now."
-            : ["Still not ready:", ...after.checks.filter((c) => c.status === "fail").map(describe)].join("\n"),
+            : [
+                "Still not ready:",
+                ...after.checks
+                  .filter((c) => c.status === "fail")
+                  .map(describe),
+              ].join("\n"),
         ].filter(Boolean);
 
-        return { content: [{ type: "text", text: lines.join("\n") }], isError: !after.ok };
+        return {
+          content: [{ type: "text", text: lines.join("\n") }],
+          isError: !after.ok,
+        };
       }),
   );
 
@@ -247,13 +533,38 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
         "List the schemas and tables (or collections) on a connection, with estimated row counts and sizes. Requires the dashboard running.",
       inputSchema: {
         connectionId,
-        namespace: z.string().optional().describe("Restrict to one schema / database"),
+        namespace: z
+          .string()
+          .optional()
+          .describe("Restrict to one schema / database"),
+        includeSystem: z
+          .boolean()
+          .optional()
+          .describe("Include system schemas and objects (default false)"),
+        format: z
+          .enum(["compact", "json"])
+          .optional()
+          .describe("Response format (default compact)"),
       },
     },
-    async ({ connectionId: id, namespace }) =>
+    async ({ connectionId: id, namespace, includeSystem, format }) =>
       withDbErrors(async () => {
-        const data = await dashboard.get<unknown>(dbPath(id, "/schema"), { namespace }, 60_000);
-        return { content: [{ type: "text", text: jsonText(data) }] };
+        const data = await dashboard.get<DbSchemaPayload>(
+          dbPath(id, "/schema"),
+          { namespace },
+          60_000,
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                format === "json"
+                  ? jsonText(data)
+                  : formatSchema(data, includeSystem),
+            },
+          ],
+        };
       }),
   );
 
@@ -264,14 +575,31 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
         "Describe one table or collection: columns, indexes, constraints, foreign keys in both directions, composed DDL, and whether its rows can be edited. For MongoDB the column list is inferred from a document sample, not a schema. Requires the dashboard running.",
       inputSchema: {
         connectionId,
-        namespace: z.string().describe("Schema (Postgres), database (Mongo), or 'main' (SQLite)"),
+        namespace: z
+          .string()
+          .describe("Schema (Postgres), database (Mongo), or 'main' (SQLite)"),
         name: z.string().describe("Table or collection name"),
+        detail: z
+          .enum(["summary", "full"])
+          .optional()
+          .describe("Detail level (default summary)"),
       },
     },
-    async ({ connectionId: id, namespace, name }) =>
+    async ({ connectionId: id, namespace, name, detail }) =>
       withDbErrors(async () => {
-        const data = await dashboard.get<unknown>(dbPath(id, "/table"), { namespace, name }, 60_000);
-        return { content: [{ type: "text", text: jsonText(data) }] };
+        const data = await dashboard.get<DbTablePayload>(
+          dbPath(id, "/table"),
+          { namespace, name },
+          60_000,
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: detail === "full" ? jsonText(data) : formatTable(data),
+            },
+          ],
+        };
       }),
   );
 
@@ -283,7 +611,13 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
       inputSchema: {
         connectionId,
         statement: z.string().describe("The query to run"),
-        rowLimit: z.number().int().positive().max(50_000).optional().describe("Max rows (default 500)"),
+        rowLimit: z
+          .number()
+          .int()
+          .positive()
+          .max(50_000)
+          .optional()
+          .describe("Max rows (MCP default 100)"),
         timeoutMs: z
           .number()
           .int()
@@ -291,34 +625,30 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
           .max(300_000)
           .optional()
           .describe("Query timeout in ms (default 60000)"),
+        format: z
+          .enum(["compact", "json"])
+          .optional()
+          .describe("Response format (default compact)"),
       },
     },
-    async ({ connectionId: id, statement, rowLimit, timeoutMs }) =>
+    async ({ connectionId: id, statement, rowLimit, timeoutMs, format }) =>
       withDbErrors(async () => {
-        // Planned first so a write reaching the read tool is reported as "use
-        // db_execute" rather than running under a tool that says read-only.
-        const plan = await dashboard.post<{ kind: string; refusal?: { message: string } }>(
+        const data = await dashboard.post<DbResultPayload>(
           dbPath(id, "/query"),
-          { statement, planOnly: true },
-        );
-        if (plan.kind !== "read") {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `db_query runs reads only; this statement is a ${plan.kind}. Use db_execute with confirm: true.`,
-              },
-            ],
-            isError: true,
-          };
-        }
-
-        const data = await dashboard.post<unknown>(
-          dbPath(id, "/query"),
-          { statement, rowLimit, timeoutMs },
+          { statement, rowLimit: rowLimit ?? 100, timeoutMs, readOnly: true },
           (timeoutMs ?? 60_000) + 10_000,
         );
-        return { content: [{ type: "text", text: jsonText(data) }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                format === "json"
+                  ? jsonText(data)
+                  : formatExecutionResult(data),
+            },
+          ],
+        };
       }),
   );
 
@@ -327,7 +657,10 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
     {
       description:
         "Show the query plan for one PostgreSQL or SQLite statement without running it. MongoDB explain is not yet exposed. Requires the dashboard running.",
-      inputSchema: { connectionId, statement: z.string().describe("The query to explain") },
+      inputSchema: {
+        connectionId,
+        statement: z.string().describe("The query to explain"),
+      },
     },
     async ({ connectionId: id, statement }) =>
       withDbErrors(async () => {
@@ -340,13 +673,20 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
         }>(dbPath(id, "/query"), { statement, planOnly: true });
         if (plan.statements.length !== 1) {
           return {
-            content: [{ type: "text", text: "db_explain accepts exactly one statement." }],
+            content: [
+              {
+                type: "text",
+                text: "db_explain accepts exactly one statement.",
+              },
+            ],
             isError: true,
           };
         }
         if (plan.connection.engine === "mongodb") {
           return {
-            content: [{ type: "text", text: "MongoDB explain is not exposed yet." }],
+            content: [
+              { type: "text", text: "MongoDB explain is not exposed yet." },
+            ],
             isError: true,
           };
         }
@@ -361,11 +701,13 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
     "db_execute",
     {
       description:
-        "Run a statement that modifies data or schema (INSERT/UPDATE/DELETE/DDL, or a Mongo write). Requires confirm:true. Refused outright on a read-only connection. On a production connection with write access, `confirmLabel` must exactly match the connection's label. Requires the dashboard running.",
+        "Run a statement that modifies data or schema (INSERT/UPDATE/DELETE/DDL, or a Mongo write). Requires confirm:true. Refused outright on a read-only connection; first use db_connect with accessMode:'write' and fix:true when BI credentials need elevating. On a production connection with write access, `confirmLabel` must exactly match the connection's label. Requires the dashboard running.",
       inputSchema: {
         connectionId,
         statement: z.string().describe("The statement to run"),
-        confirm: z.boolean().describe("Must be true to execute (this modifies data)"),
+        confirm: z
+          .boolean()
+          .describe("Must be true to execute (this modifies data)"),
         confirmLabel: z
           .string()
           .optional()
@@ -373,9 +715,20 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
             "Required for connections flagged dangerous (prd + write): the connection's exact label, from db_connections",
           ),
         timeoutMs: z.number().int().positive().max(300_000).optional(),
+        format: z
+          .enum(["compact", "json"])
+          .optional()
+          .describe("Response format (default compact)"),
       },
     },
-    async ({ connectionId: id, statement, confirm, confirmLabel, timeoutMs }) =>
+    async ({
+      connectionId: id,
+      statement,
+      confirm,
+      confirmLabel,
+      timeoutMs,
+      format,
+    }) =>
       withDbErrors(async () => {
         if (!confirm) {
           // The dry run is a real plan from the server, not a guess — so it
@@ -393,6 +746,9 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
           );
           const notes = [
             plan.refusal ? `REFUSED: ${plan.refusal.message}` : null,
+            plan.refusal?.code === "read_only"
+              ? `Connect with write credentials first: db_connect({ connectionId: ${JSON.stringify(id)}, accessMode: "write", fix: true }).`
+              : null,
             plan.needsConfirmation
               ? `This connection is production. Pass confirmLabel: ${JSON.stringify(plan.connection.label)}.`
               : null,
@@ -413,12 +769,22 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
           };
         }
 
-        const data = await dashboard.post<unknown>(
+        const data = await dashboard.post<DbResultPayload>(
           dbPath(id, "/query"),
           { statement, timeoutMs, confirm: confirmLabel },
           (timeoutMs ?? 60_000) + 10_000,
         );
-        return { content: [{ type: "text", text: jsonText(data, "Statement executed.") }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                format === "json"
+                  ? jsonText(data, "Statement executed.")
+                  : formatExecutionResult(data),
+            },
+          ],
+        };
       }),
   );
 
@@ -431,7 +797,10 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
     },
     async ({ connectionId: id }) =>
       withDbErrors(async () => {
-        const data = await dashboard.post<{ cancelled: boolean }>(dbPath(id, "/cancel"), {});
+        const data = await dashboard.post<{ cancelled: boolean }>(
+          dbPath(id, "/cancel"),
+          {},
+        );
         return {
           content: [
             {
@@ -451,8 +820,12 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
       description:
         "Compare the schemas of two connections — the 'works in dev, not in prd' question. Reports tables present on one side only, and for shared tables any column added, removed, retyped, or with different nullability or defaults, plus missing indexes. Read-only. Requires the dashboard running.",
       inputSchema: {
-        left: z.string().describe("Connection id for the left side, e.g. bi:rds:capi:dev"),
-        right: z.string().describe("Connection id for the right side, e.g. bi:rds:capi:prd"),
+        left: z
+          .string()
+          .describe("Connection id for the left side, e.g. bi:rds:capi:dev"),
+        right: z
+          .string()
+          .describe("Connection id for the right side, e.g. bi:rds:capi:prd"),
         namespace: z.string().optional().describe("Restrict to one schema"),
         tables: z
           .array(z.string())
@@ -489,8 +862,14 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
       description:
         "Recent database queries run through DevHub, newest first — what ran, against which connection, when, and whether it succeeded. Requires the dashboard running.",
       inputSchema: {
-        connectionId: z.string().optional().describe("Restrict to one connection"),
-        q: z.string().optional().describe("Substring search over the statement text"),
+        connectionId: z
+          .string()
+          .optional()
+          .describe("Restrict to one connection"),
+        q: z
+          .string()
+          .optional()
+          .describe("Substring search over the statement text"),
         limit: z.number().int().positive().max(200).optional(),
       },
     },

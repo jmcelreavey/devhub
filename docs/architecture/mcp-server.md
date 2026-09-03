@@ -83,7 +83,7 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 
 | Group      | Tools                                                                                                                                                                                                                                                                                                                                                         |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Notes      | `notes_list`, `notes_read`, `notes_write`, `notes_write_asset`, `notes_append`, `notes_search`, `notes_delete`, `notes_create_meeting`, `notes_create_task`, `notes_create_pr`, `entity_links_read`, `entity_links_resolve`, `notes_cursor_open`, `notes_cursor_apply`, `notes_cursor_delete` |
+| Notes      | `notes_list`, `notes_read`, `notes_write`, `notes_write_asset`, `notes_append`, `notes_search`, `notes_delete`, `notes_create_meeting`, `notes_create_task`, `notes_create_pr`, `entity_links_read`, `notes_cursor_open`, `notes_cursor_apply`, `notes_cursor_delete`                                                                                         |
 | Docs       | `docs_list`, `docs_read`, `docs_write`, `docs_append`, `docs_search`, `docs_delete`                                                                                                                                                                                                                                                                           |
 | Tasks      | `tasks_list`, `tasks_create`, `tasks_update`, `tasks_delete`, `tasks_history`                                                                                                                                                                                                                                                                                 |
 | Diagrams   | `diagrams_list`, `diagrams_read`, `diagrams_create`, `diagrams_update`, `diagrams_add_note`, `diagrams_delete`, `diagrams_rename`                                                                                                                                                                                                                             |
@@ -91,7 +91,7 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 | DX audit   | `dx_audit_list`, `dx_audit_read` — reads `reviews/dx-audit-<repo>-<date>` notes written by the `dx-audit` skill                                                                                                                                                                                                                                               |
 | Capability | `capability_radar`, `capability_scan`, `capability_digest`, `capability_get_lab`, `capability_complete_lab`                                                                                                                                                                                                                                                   |
 | Ship       | `repo_ship`, `repo_ship_status` — wraps `scripts/devhub-ship.sh` (detached; poll status while pre-push verify runs)                                                                                                                                                                                                                                           |
-| Status     | `status_exec`, `status_services`, `status_git`, `status_mcp`, `services_restart`                                                                                                                                                                                                                                                                               |
+| Status     | `status_services`, `status_git`, `status_mcp`, `services_restart`                                                                                                                                                                                                                                                                                             |
 | Briefing   | `briefing_get`                                                                                                                                                                                                                                                                                                                                                |
 | Calendar   | `calendar_week`, `calendar_list`                                                                                                                                                                                                                                                                                                                              |
 | Work       | `prs_list`, `prs_open_in_cursor`, `jira_tickets`, `jira_ticket_get`, `standup_markdown`, `tasks_weekly`, `jira_ticket_transition`                                                                                                                                                                                                                             |
@@ -196,9 +196,8 @@ Cross-entity edges use the shared `EntityRef` contract in `shared/entity-note/`.
 2. `notes_create_meeting` — scaffold `meetings/YYYY-MM-DD-<slug>` with calendar backrefs (same as the calendar **Note** button).
 3. `notes_create_pr` — scaffold `pr-reviews/<repo-slug>-<n>` with PR + repo EntityRefs (same as the PR row note action). `notes_write` on `pr-reviews/` upserts those links via the same `shared/pr-note` helper.
 4. `entity_links_read` — parse `## Links` from an existing note path.
-5. `entity_links_resolve` — reverse lookup (what points **at** this entity). Dashboard-backed `GET /api/entity-links`. `depth: 2` also returns what those links link to (`expanded`). Call this before creating tickets from a plan so you do not duplicate existing edges.
-6. `tasks_create` — optional `withNote: true` and/or `links: EntityRef[]` on the new task.
-7. `tasks_update` — pass `links` to replace hop-around refs on an existing task.
+5. `tasks_create` — optional `withNote: true` and/or `links: EntityRef[]` on the new task.
+6. `tasks_update` — pass `links` to replace hop-around refs on an existing task.
 
 Path helpers and markdown scaffolds live in `shared/task-note/`, `shared/meeting-note/`, and `shared/pr-note/`. When the dashboard is running, `GET /api/entity-links` resolves the combined read model (notes + related entities). See [Notes System — Cross-entity linking](notes-system.md#cross-entity-linking).
 
@@ -225,9 +224,7 @@ On the packaged desktop app, checkout-gated script IDs (`sync_skills`, `sync_not
 
 ### Check local health from an agent
 
-When the dashboard is hanging, a page never loads, or a request is slow, call **`status_exec` first**. It lists in-flight `git`/`gh` subprocesses plus recent slow calls. A large `runningMs` — especially `overdue` — is the blocker. If the tool cannot reach the dashboard at all, the server itself is wedged; see [Dashboard — When the dashboard hangs](dashboard.md#when-the-dashboard-hangs) and skill `devhub-debug-hang`.
-
-Use `status_services`, `status_git`, and `status_mcp` for peer services, repo dirty/sync state, and MCP process scan. These are dashboard-backed because they inspect live process and repo state.
+Use `status_services`, `status_git`, and `status_mcp` when the dashboard is running. These are dashboard-backed because they inspect live process and repo state.
 
 ### Recap an OpenCode session
 
@@ -245,7 +242,7 @@ The dashboard route redacts secrets (tokens, env values, URL credentials) before
 Terminal tools proxy `/api/terminal/sessions` and `/api/terminal/propose`. Start the dashboard and open the dock at least once so tabs register.
 
 1. `terminal_list` — visible dock tabs (label, cwd, kind, busy, session id). Empty until the dock has opened this process.
-2. `terminal_propose_run` with `command` (and optional `cwd`, `kind`, `preferAgentTab`). Returns a proposal id. **Does not execute.** Prefer `preferAgentTab: true` so a long-running agent does not stomp `npm run dev`.
+2. `terminal_propose_run` with `command` (and optional `cwd`, `kind`, `label`). Returns a proposal id. **Does not execute.** Prefer it over running a command in the agent shell — the dock is where the user can see it, keep it, and kill it. Always use it for upstarts and other user-visible long-running commands. Every approved proposal opens its own tab, so a run never waits on another session.
 3. `terminal_proposal_status` with that id — poll until `approved` / `injected` / `denied` / `expired` / `failed`. Pending means the human has not confirmed yet; do not proceed as if it ran.
 4. `terminal_tail` with a `sessionId` from `terminal_list` to read the cleaned log tail after inject.
 

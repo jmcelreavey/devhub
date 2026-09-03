@@ -12,8 +12,8 @@ function row(overrides: Partial<GithubPrRow> = {}): GithubPrRow {
   return {
     number: 46,
     title: "PTF-4382 - Add Meta feed delivery",
-    url: "https://github.com/businessinsider/syndication-services/pull/46",
-    repo: "businessinsider/syndication-services",
+    url: "https://github.com/example-org/syndication-services/pull/46",
+    repo: "example-org/syndication-services",
     author: { login: "lgcaobianco" },
     ...overrides,
   };
@@ -89,13 +89,13 @@ describe("hasSearchQualifier", () => {
 
 describe("buildPrSearchQuery", () => {
   it("scopes a bare phrase to the user's orgs", () => {
-    expect(buildPrSearchQuery("meta feed", ["businessinsider", "GCDTech"])).toBe(
-      "is:pr meta feed org:businessinsider org:GCDTech sort:updated-desc",
+    expect(buildPrSearchQuery("meta feed", ["example-org", "GCDTech"])).toBe(
+      "is:pr meta feed org:example-org org:GCDTech sort:updated-desc",
     );
   });
 
   it("leaves a qualified query unscoped", () => {
-    expect(buildPrSearchQuery("repo:bi/syndication-services meta", ["businessinsider"])).toBe(
+    expect(buildPrSearchQuery("repo:bi/syndication-services meta", ["example-org"])).toBe(
       "is:pr repo:bi/syndication-services meta sort:updated-desc",
     );
   });

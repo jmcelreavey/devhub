@@ -140,13 +140,16 @@ export function isValidTerminalTicket(candidate: string | null | undefined): boo
 }
 
 /**
- * Exact-origin check for the terminal WebSocket.
+ * Loopback-origin check for the terminal WebSocket.
  *
- * Still required alongside the ticket. The ticket proves the caller talked to
- * the dashboard; the origin proves the request came from the dashboard's own
- * page rather than from another local page that managed to obtain one.
+ * Still required alongside the ticket: a remote page cannot forge `Origin`, so
+ * this is what keeps the internet away from a shell. The *port* is deliberately
+ * not pinned — a checkout on a spare port, a second window, or an agent harness
+ * reusing an already-running peer was otherwise refused a shell over pure
+ * bookkeeping. What proves the caller is the dashboard is the ticket (desktop),
+ * not the port number.
  */
-export function isAllowedTerminalOrigin(origin: string | null | undefined, port: number): boolean {
+export function isAllowedTerminalOrigin(origin: string | null | undefined): boolean {
   if (!origin) return false;
   let parsed: URL;
   try {
@@ -155,7 +158,6 @@ export function isAllowedTerminalOrigin(origin: string | null | undefined, port:
     return false;
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
-  if (parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost") return false;
-  const originPort = parsed.port ? Number.parseInt(parsed.port, 10) : 80;
-  return originPort === port;
+  // `new URL` keeps IPv6 hosts bracketed.
+  return ["127.0.0.1", "localhost", "[::1]"].includes(parsed.hostname);
 }

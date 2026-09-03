@@ -21,6 +21,7 @@ import {
   uploadTerminalPasteImages,
 } from "@/lib/terminal-paste-image";
 import { copyTextToClipboard, readTextFromClipboard } from "@/lib/clipboard";
+import { openInBrowser } from "@/lib/desktop/bridge";
 import {
   isAppleTerminalPlatform,
   isTerminalCopyShortcut,
@@ -433,7 +434,16 @@ export function TerminalSession({
       searchAddonRef.current = search;
       // unicode11 fixes p10k/Nerd Font glyph widths; web-links makes URLs clickable.
       term.loadAddon(new Unicode11Addon());
-      term.loadAddon(new WebLinksAddon());
+      // Both link paths must route through the shell opener: the addon's default
+      // handler and xterm's OSC 8 handling both call `window.open`, which Tauri
+      // blocks silently, so every link in the desktop terminal was dead on click.
+      const activateLink = (event: MouseEvent | undefined, uri: string) => {
+        event?.preventDefault();
+        void openInBrowser(uri);
+      };
+      term.loadAddon(new WebLinksAddon(activateLink));
+      // OSC 8 hyperlinks (Claude Code emits these) never reach the addon.
+      term.options.linkHandler = { activate: activateLink };
       term.open(host);
       fit.fit();
       fitRef.current = fit;
@@ -823,7 +833,7 @@ export function TerminalSession({
        * A refused handshake used to leave an empty black pane and a grey dot.
        * The browser deliberately hides the HTTP status from script, so say what
        * was attempted and what usually causes it — the peer rejects any origin
-       * whose port is not the dashboard's own (see verifyTerminalClient).
+       * that is not loopback (see verifyTerminalClient).
        */
       const reportDisconnect = () => {
         if (disposed || reportedClose) return;
@@ -840,13 +850,10 @@ export function TerminalSession({
         term.writeln("\x1b[2mUsually one of:\x1b[0m");
         term.writeln("\x1b[2m  · the PTY server is not running — start it with `npm run dev`\x1b[0m");
         term.writeln(
-          `\x1b[2m  · it is running but expects a different dashboard port; this page is\x1b[0m`,
+          `\x1b[2m  · it is listening on another port — set NEXT_PUBLIC_TERMINAL_PORT (this page tried ${TERMINAL_PORT})\x1b[0m`,
         );
         term.writeln(
-          `\x1b[2m    on ${window.location.port || "80"}, so start it with PORT=${window.location.port || "80"}\x1b[0m`,
-        );
-        term.writeln(
-          `\x1b[2m  · set NEXT_PUBLIC_TERMINAL_PORT if the peer is not on ${TERMINAL_PORT}\x1b[0m`,
+          "\x1b[2m  · this page is not on a loopback host; the peer is never exposed over LAN\x1b[0m",
         );
       };
       socket.onclose = reportDisconnect;

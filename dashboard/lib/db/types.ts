@@ -26,6 +26,8 @@ export interface DbConnectionRef {
   id: string;
   label: string;
   engine: DbEngine;
+  /** Database bound by a single-database connection such as MongoDB. Safe metadata, not credentials. */
+  database?: string;
   /** Rail grouping header, e.g. "BI · prd". */
   group?: string;
   /** Environment name when the provider has one; drives `tone`. */

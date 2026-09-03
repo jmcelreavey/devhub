@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 import {
+  bundleRootFor,
   rebuildInstalledServer,
   replaceDirContents,
   resolveServicesTarget,
@@ -93,4 +94,17 @@ test("rebuildInstalledServer copies staged peers, not only the Next server", asy
 
   fs.rmSync(root, { recursive: true, force: true });
   fs.rmSync(stagedRoot, { recursive: true, force: true });
+});
+
+test("bundleRootFor finds the .app that owns the server tree", () => {
+  assert.equal(
+    bundleRootFor("/Applications/DevHub.app/Contents/Resources/server"),
+    "/Applications/DevHub.app",
+  );
+});
+
+test("bundleRootFor returns null outside a bundle", () => {
+  // desktop:dev restages into the checkout's staging dir. There is no seal to
+  // repair there, and signing a bare directory would fail.
+  assert.equal(bundleRootFor("/Users/me/devhub/desktop/staging/server"), null);
 });

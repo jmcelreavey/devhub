@@ -10,10 +10,10 @@ describe("pr-review-notes", () => {
   };
 
   it("builds a stable PR review note path", () => {
-    expect(prReviewNotePath(row)).toBe("pr-reviews/businessinsider-fancy-repo-123");
+    expect(prReviewNotePath(row)).toBe("pr-reviews/example-org-fancy-repo-123");
   });
 
   it("builds the matching notes href", () => {
-    expect(prReviewNoteHref(row)).toBe("/notes/pr-reviews/businessinsider-fancy-repo-123");
+    expect(prReviewNoteHref(row)).toBe("/notes/pr-reviews/example-org-fancy-repo-123");
   });
 });

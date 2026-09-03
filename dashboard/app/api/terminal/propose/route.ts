@@ -40,7 +40,6 @@ const ProposalCreateSchema = z.object({
   summary: z.string().optional(),
   kind: z.enum(TERMINAL_SESSION_KINDS).optional(),
   repoName: z.string().optional(),
-  preferAgentTab: z.boolean().optional(),
   reason: z.string().optional(),
   source: z.enum(["mcp", "api"]).default("api"),
 });

@@ -9,6 +9,7 @@
     "core:window:allow-set-focus",
     "core:event:allow-listen",
     "dialog:allow-open",
+    "notification:default",
     "opener:default",
     "updater:default"
   ],

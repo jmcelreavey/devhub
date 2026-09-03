@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { claudeDesktopMcpConfigPath } from "@/lib/mcp/claude-desktop-paths";
+import { readCodexMcpServers } from "@/lib/mcp/codex-config";
 import {
   reverseSubstituteRepoRoot,
   substituteRepoRoot,
@@ -52,12 +53,14 @@ describe("syncMcpServers", () => {
     return { repo, home, lines: [] };
   }
 
-  it("writes stdio entries to claude/codex/cursor and OpenCode-shape entries to opencode", async () => {
+  it("writes stdio entries to Claude/Codex/Cursor and OpenCode-shape entries to OpenCode", async () => {
     const { repo, home, lines } = makeTempRepo();
     writeJson(path.join(repo, "mcp", "shared", "notes.json"), {
       command: "REPO_ROOT/bin/notes",
       args: ["--port", "9"],
       env: { NOTES_DIR: "REPO_ROOT/notes" },
+      startupTimeoutSec: 30,
+      toolTimeoutSec: 360,
     });
 
     const code = await syncMcpServers({
@@ -73,8 +76,10 @@ describe("syncMcpServers", () => {
     expect(claude.mcpServers.notes.args).toEqual(["--port", "9"]);
     expect(claude.mcpServers.notes.env).toEqual({ NOTES_DIR: `${repo}/notes` });
 
-    const codex = JSON.parse(fs.readFileSync(path.join(home, ".codex/mcp.json"), "utf-8"));
-    expect(codex.mcpServers.notes.command).toBe(`${repo}/bin/notes`);
+    const codex = readCodexMcpServers(path.join(home, ".codex/config.toml"));
+    expect((codex.notes as Record<string, Json>).command).toBe(`${repo}/bin/notes`);
+    expect((codex.notes as Record<string, Json>).startup_timeout_sec).toBe(30);
+    expect((codex.notes as Record<string, Json>).tool_timeout_sec).toBe(360);
 
     const cursor = JSON.parse(fs.readFileSync(path.join(home, ".cursor/mcp.json"), "utf-8"));
     expect(cursor.mcpServers.notes.command).toBe(`${repo}/bin/notes`);
@@ -86,6 +91,89 @@ describe("syncMcpServers", () => {
     expect(opencode.mcp.notes.enabled).toBe(true);
     expect(opencode.mcp.notes.command).toEqual([`${repo}/bin/notes`, "--port", "9"]);
     expect(opencode.mcp.notes.env).toEqual({ NOTES_DIR: `${repo}/notes` });
+  });
+
+  it("preserves unrelated Codex TOML settings and comments byte-for-byte", async () => {
+    const { repo, home, lines } = makeTempRepo();
+    writeJson(path.join(repo, "mcp", "shared", "notes.json"), {
+      command: "REPO_ROOT/bin/notes",
+      env: { NOTES_DIR: "REPO_ROOT/notes" },
+    });
+    const configPath = path.join(home, ".codex/config.toml");
+    const unrelated = [
+      "# user-owned model comment",
+      'model = "gpt-5"',
+      "",
+      "[features]",
+      "# keep this too",
+      "multi_agent = true",
+      "",
+      "[mcp_servers.local-only]",
+      'command = "/usr/local/bin/server"',
+      "",
+    ].join("\n");
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, unrelated, "utf-8");
+
+    await syncMcpServers({ emit: (line) => lines.push(line), repoRoot: repo, tool: "codex" });
+
+    const synced = fs.readFileSync(configPath, "utf-8");
+    expect(synced.startsWith(unrelated)).toBe(true);
+    expect(synced).toContain("# user-owned model comment");
+    expect(synced).toContain("# keep this too");
+    expect(readCodexMcpServers(configPath)).toMatchObject({
+      "local-only": { command: "/usr/local/bin/server" },
+      notes: { command: `${repo}/bin/notes`, env: { NOTES_DIR: `${repo}/notes` } },
+    });
+
+    await syncMcpServers({ emit: (line) => lines.push(line), repoRoot: repo, tool: "codex" });
+    expect(fs.readFileSync(configPath, "utf-8")).toBe(synced);
+  });
+
+  it("updates and prunes only the named Codex MCP tables", async () => {
+    const { repo, home, lines } = makeTempRepo();
+    writeJson(path.join(repo, "mcp", "shared", "notes.json"), { command: "REPO_ROOT/new-notes" });
+    const configPath = path.join(home, ".codex/config.toml");
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(
+      configPath,
+      [
+        'model = "gpt-5"',
+        "",
+        "[mcp_servers.notes]",
+        'command = "/old-notes"',
+        "",
+        "[mcp_servers.stale]",
+        'command = "/stale"',
+        "",
+        "[profiles.work]",
+        'model = "gpt-5"',
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    await syncMcpServers({ emit: (line) => lines.push(line), repoRoot: repo, tool: "codex", prune: true });
+
+    const synced = fs.readFileSync(configPath, "utf-8");
+    expect(synced).toContain("[profiles.work]");
+    expect(synced).not.toContain("[mcp_servers.stale]");
+    expect(readCodexMcpServers(configPath)).toMatchObject({ notes: { command: `${repo}/new-notes` } });
+  });
+
+  it("writes Codex remote headers with Codex's http_headers table", async () => {
+    const { repo, home, lines } = makeTempRepo();
+    writeJson(path.join(repo, "mcp", "shared", "remote.json"), {
+      type: "remote",
+      url: "https://mcp.example.com",
+      headers: { "X-Client": "devhub" },
+    });
+
+    await syncMcpServers({ emit: (line) => lines.push(line), repoRoot: repo, tool: "codex" });
+
+    expect(readCodexMcpServers(path.join(home, ".codex/config.toml"))).toMatchObject({
+      remote: { url: "https://mcp.example.com", http_headers: { "X-Client": "devhub" } },
+    });
   });
 
   it("writes stdio entries to the Claude desktop app config, separately from the CLI", async () => {

@@ -75,7 +75,7 @@ touching colour.
 
 | Need | Use |
 | --- | --- |
-| Fetch + poll an API | `useLive` — pauses while `PanelVisibilityContext` is false (hidden overlays/docks). Inactive workspace tabs unmount, so their pollers die with them. |
+| Fetch + poll an API | `useLive` — already pauses in hidden workspace tabs |
 | Is this panel visible? | `usePanelVisible` |
 | Persist a small UI choice | `useStoredState`, `useStoredChoice`, `useStoredFraction` |
 | Toast | `useToast` |

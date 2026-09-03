@@ -20,6 +20,7 @@ import { PLUGIN_DB_PROVIDERS } from "@/lib/plugin-db-providers.generated";
 import {
   DbConnectionNotFoundError,
   type DbConnectionProvider,
+  type DbPreflightOptions,
 } from "./provider";
 import type { DbConnectionRef, DbPreflight, ResolvedDbConnection } from "./types";
 import { userConnectionProvider } from "./user-connections";
@@ -107,10 +108,13 @@ export async function resolveDbConnection(connectionId: string): Promise<Resolve
   return providerFor(connectionId).resolve(connectionId);
 }
 
-export async function preflightDbConnection(connectionId: string): Promise<DbPreflight> {
+export async function preflightDbConnection(
+  connectionId: string,
+  options?: DbPreflightOptions,
+): Promise<DbPreflight> {
   const provider = providerFor(connectionId);
   if (!provider.preflight) return { ok: true, checks: [] };
-  return provider.preflight(connectionId);
+  return provider.preflight(connectionId, options);
 }
 
 /** Tests only. */

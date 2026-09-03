@@ -67,7 +67,6 @@ export interface AgentChatOpenDetail {
   autoSend?: boolean;
   /** Put display/prompt in the composer; user hits send. */
   composerDraft?: boolean;
-  forceNewTab?: boolean;
   agentPhase?: "starting" | "running" | "ready" | "done" | "failed";
 }
 

@@ -753,6 +753,7 @@ export function DbWorkspace() {
                           schema={completionSchema}
                           schemas={completions.data?.schemas}
                           defaultSchema={completions.data?.defaultSchema}
+                          canWrite={active.accessMode === "write"}
                           placeholder={
                             active.engine === "mongodb"
                               ? 'db.collection.find({ field: "value" }).limit(50)'

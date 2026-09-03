@@ -28,6 +28,8 @@
     "clean": "npm run clean --prefix ./dashboard",
     "restart": "npm run restart --prefix ./dashboard",
     "desktop:sign": "node desktop/scripts/sign-local.mjs",
+    "desktop:sign:identity": "node desktop/scripts/ensure-signing-identity.mjs",
+    "desktop:sign:installed": "node desktop/scripts/sign-local.mjs --app /Applications/DevHub.app",
     "desktop:verify": "node desktop/scripts/verify-staging.mjs",
     "desktop:install": "node desktop/scripts/install-local.mjs"
   }

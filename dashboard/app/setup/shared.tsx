@@ -26,6 +26,8 @@ export interface SetupStatus {
     hasScheduleId: boolean;
     email: string;
     scheduleId: string;
+    /** Datadog web origin for this org's site, for direct links to the key pages. */
+    appOrigin: string;
   };
   calendarVars: { hasClientId: boolean; hasClientSecret: boolean; hasRefreshToken: boolean };
   calendarClientIdPreview: string | null;

@@ -21,13 +21,19 @@ describe("planStatements", () => {
 
   /** A Mongo command has no separator, so a batch is always exactly one. */
   it("treats a Mongo command as a single statement", () => {
-    const plan = planStatements(connection({ engine: "mongodb" }), "db.posts.find({})");
+    const plan = planStatements(
+      connection({ engine: "mongodb" }),
+      "db.posts.find({})",
+    );
     expect(plan.statements).toHaveLength(1);
     expect(plan.kind).toBe("read");
   });
 
   it("classifies a Mongo write", () => {
-    const plan = planStatements(connection({ engine: "mongodb" }), "db.posts.deleteMany({})");
+    const plan = planStatements(
+      connection({ engine: "mongodb" }),
+      "db.posts.deleteMany({})",
+    );
     expect(plan.kind).toBe("write");
   });
 });
@@ -54,7 +60,10 @@ describe("planExecution", () => {
   });
 
   it("carries the classifier's reason into the message", () => {
-    const plan = planExecution(connection(), "WITH d AS (DELETE FROM t RETURNING *) SELECT * FROM d");
+    const plan = planExecution(
+      connection(),
+      "WITH d AS (DELETE FROM t RETURNING *) SELECT * FROM d",
+    );
     expect(plan.refusal?.message).toMatch(/CTE contains DELETE/);
   });
 
@@ -65,9 +74,22 @@ describe("planExecution", () => {
   });
 
   it("allows a write on a write connection", () => {
-    const plan = planExecution(connection({ accessMode: "write" }), "UPDATE posts SET title = 'x'");
+    const plan = planExecution(
+      connection({ accessMode: "write" }),
+      "UPDATE posts SET title = 'x'",
+    );
     expect(plan.refusal).toBeUndefined();
     expect(plan.needsConfirmation).toBe(false);
+  });
+
+  it("refuses a write when the caller requires a read, even on a write connection", () => {
+    const plan = planExecution(
+      connection({ accessMode: "write" }),
+      "DELETE FROM posts",
+      "read",
+    );
+    expect(plan.refusal?.code).toBe("read_required");
+    expect(plan.refusal?.message).toContain("guarded write endpoint");
   });
 
   it("requires confirmation for a write on a dangerous connection", () => {

@@ -94,6 +94,7 @@ export function toConnectionRef(stored: StoredUserConnection): DbConnectionRef {
     id: userConnectionId(stored.slug),
     label: stored.label,
     engine: stored.engine,
+    database: stored.engine === "mongodb" ? stored.database ?? "admin" : undefined,
     group: stored.group ?? "Local",
     accessMode: stored.readOnly === false ? "write" : "read",
     // Nothing here is derived from an environment, so nothing here is prd. A

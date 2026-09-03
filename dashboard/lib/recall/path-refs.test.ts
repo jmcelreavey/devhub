@@ -4,7 +4,7 @@ import { refsFromSourcePath } from "./path-refs";
 describe("refsFromSourcePath", () => {
   it("resolves a flattened PR slug using the longest known repo name", () => {
     expect(
-      refsFromSourcePath("pr-reviews/businessinsider-affiliate-service-286", [
+      refsFromSourcePath("pr-reviews/example-org-affiliate-service-286", [
         "service",
         "affiliate-service",
       ]),
@@ -12,7 +12,7 @@ describe("refsFromSourcePath", () => {
   });
 
   it("does not guess a repo from an unmatched PR slug", () => {
-    expect(refsFromSourcePath("pr-reviews/businessinsider-affiliate-service-286", ["capi"]))
+    expect(refsFromSourcePath("pr-reviews/example-org-affiliate-service-286", ["capi"]))
       .toEqual([]);
   });
 

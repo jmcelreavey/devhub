@@ -9,6 +9,7 @@ import {
   resolveOpenChamberBind,
   resolveOpenChamberCommand,
   resolveOpenChamberPort,
+  resetOpenChamberBinCache,
   shouldReplaceOpenChamberListener,
 } from "./openchamber-command";
 import { freePinnedOpenCodePorts } from "./opencode/listen";
@@ -154,6 +155,10 @@ export async function startChamberPeer(log: PeerLog): Promise<ChamberPeerHandle>
   const { host, probe, note } = resolveOpenChamberBind();
   if (note) log(note);
 
+  // Chamber's own updater can land the new version in a different prefix than
+  // the one we last resolved, so re-detect on every start instead of trusting
+  // a resolution cached before the update ran.
+  resetOpenChamberBinCache();
   const bin = findOpenChamberBin();
   if ((await canConnect(port, probe)) && (await canReuseChamberListener(port, bin, log))) {
     return { reusedExisting: true };

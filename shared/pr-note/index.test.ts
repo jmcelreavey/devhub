@@ -10,8 +10,8 @@ import {
 
 describe("pr-note", () => {
   it("builds a stable path", () => {
-    expect(prNotePath({ repo: "businessinsider/syndication-services", number: 41 })).toBe(
-      "pr-reviews/businessinsider-syndication-services-41",
+    expect(prNotePath({ repo: "example-org/syndication-services", number: 41 })).toBe(
+      "pr-reviews/example-org-syndication-services-41",
     );
   });
 
@@ -33,17 +33,17 @@ describe("pr-note", () => {
 
   it("links the local repo from GitHub owner/name", () => {
     const refs = prEntityRefs({
-      repo: "businessinsider/insider-app",
+      repo: "example-org/insider-app",
       number: 12,
       title: "Fix search",
-      url: "https://github.com/businessinsider/insider-app/pull/12",
+      url: "https://github.com/example-org/insider-app/pull/12",
     });
     expect(refs).toEqual([
       {
         kind: "pr",
-        id: "businessinsider/insider-app#12",
-        label: "businessinsider/insider-app#12",
-        href: "https://github.com/businessinsider/insider-app/pull/12",
+        id: "example-org/insider-app#12",
+        label: "example-org/insider-app#12",
+        href: "https://github.com/example-org/insider-app/pull/12",
       },
       { kind: "repo", id: "insider-app", label: "insider-app" },
     ]);

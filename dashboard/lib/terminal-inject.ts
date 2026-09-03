@@ -30,8 +30,6 @@ export interface TerminalProposeDetail {
   providerLabel?: string;
   kind?: TerminalSessionKind;
   repoName?: string;
-  /** Prefer a dedicated Agent tab so we don't stomp long-running devservers. */
-  preferAgentTab?: boolean;
   /** Short reason shown in the chip/modal (MCP / agent source). */
   reason?: string;
   /** Source for audit UX. */
@@ -43,8 +41,6 @@ export interface TerminalProposeDetail {
    * (only for trusted first-party UI that already confirmed via prompt()).
    */
   skipConfirm?: boolean;
-  /** Always open a fresh tab — never reuse an idle shell/agent session. */
-  forceNewTab?: boolean;
 }
 
 export interface TerminalFocusDetail {
@@ -52,8 +48,6 @@ export interface TerminalFocusDetail {
   label?: string;
   kind?: TerminalSessionKind;
   repoName?: string;
-  /** Open a new tab when no match. */
-  createIfMissing?: boolean;
   command?: string;
 }
 

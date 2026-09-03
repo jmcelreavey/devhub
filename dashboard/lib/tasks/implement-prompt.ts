@@ -22,6 +22,7 @@ export function buildTaskImplementPrompt(input: TaskImplementPromptInput): strin
   if (input.cwd) lines.push(`Working tree: ${input.cwd}. Stay in this checkout.`);
   if (input.jiraKey) lines.push(`Jira ticket: ${input.jiraKey}.`);
   lines.push(
+    "Use the existing local repo checkout DevHub starts you in. Do not create a clone or worktree by default; switch/create the task branch in a clean checkout. If unrelated dirty work makes that unsafe, ask before using a worktree.",
     "The DevHub notes MCP is available for the task note, tag lookups (tags_lookup), Jira (jira_ticket_get / jira_ticket_transition), and updating the task.",
     "Work interactively: ask me before each post-implementation step (commit/push, PR, PR review note, Jira transition, completing the task). Never commit without asking.",
   );

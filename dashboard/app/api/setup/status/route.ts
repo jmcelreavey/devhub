@@ -4,6 +4,7 @@ import path from "node:path";
 import { readDashboardEnvLocalFile, resolveEnvValue } from "@/lib/dashboard-env-local";
 import { getReposDir, hasCheckout, isDesktopRuntime } from "@/lib/desktop/runtime-paths";
 import { resolveDatadogApplicationKey } from "@/lib/datadog/application-key";
+import { datadogAppOrigin } from "@/lib/datadog/links";
 import { getResolvedGoogleCalendarEnv } from "@/lib/google-calendar";
 import { isGithubCliAuthenticated } from "@/lib/repos";
 import { detectBiPresence } from "@/lib/bi-presence";
@@ -164,6 +165,14 @@ export async function GET() {
       hasScheduleId: datadogScheduleId,
       email: resolveEnvValue("BI_OPS_USER_EMAIL", overrides) ?? "",
       scheduleId: resolveEnvValue("DATADOG_ONCALL_SCHEDULE_ID", overrides) ?? "",
+      /**
+       * So setup can link straight to the key pages rather than describing
+       * where they are. EU and gov orgs live on different hosts, and a wrong
+       * link is worse than prose.
+       */
+      appOrigin: datadogAppOrigin(
+        resolveEnvValue("DD_SITE", overrides) ?? process.env.DD_SITE?.trim() ?? "datadoghq.com",
+      ),
     },
     agentVars: {
       ...readAgentCliSettings(),

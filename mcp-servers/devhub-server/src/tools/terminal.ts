@@ -137,11 +137,11 @@ export function registerTerminalTools(server: McpServer, ctx: Context): void {
     "terminal_propose_run",
     {
       description:
-        "Propose a command to run in the DevHub terminal dock. Does NOT execute it. The user must confirm/edit/deny in the dock UI. Prefer preferAgentTab for agent work so long-running devservers are not stomped. Requires the dashboard running.",
+        "Propose a command in the DevHub terminal dock (visible logs). Does NOT execute it — the user confirms in the dock. Prefer this over running a command in the agent/Cursor shell: the dock is where the user can see it, keep it, and kill it. Always use it for upstarts, dev servers, Expo, and anything long-running or user-visible. Every approved proposal opens its own tab, so nothing ever waits on another session. Requires the dashboard running.",
       inputSchema: {
         command: z.string().describe("Shell command to propose"),
         cwd: z.string().optional().describe("Absolute cwd under the user home"),
-        label: z.string().optional().describe("Tab label"),
+        label: z.string().optional().describe("Tab label — how the user tells this run apart in the dock"),
         summary: z
           .string()
           .optional()
@@ -150,16 +150,12 @@ export function registerTerminalTools(server: McpServer, ctx: Context): void {
           // Keep in sync with dashboard/lib/terminal-meta.ts TERMINAL_SESSION_KINDS
           .enum(["shell", "agent", "review", "upstart", "devserver", "capture"])
           .optional()
-          .describe("Session intent metadata"),
+          .describe("Tab chrome only; every kind gets its own tab"),
         repoName: z.string().optional(),
-        preferAgentTab: z
-          .boolean()
-          .optional()
-          .describe("Default true — use a dedicated Agent tab"),
         reason: z.string().optional().describe("Shown in the confirm chip"),
       },
     },
-    async ({ command, cwd, label, summary, kind, repoName, preferAgentTab, reason }) =>
+    async ({ command, cwd, label, summary, kind, repoName, reason }) =>
       withDashboardErrors(async () => {
         const created = await dashboard.post<{
           proposal: { id: string; destructive: boolean; status: string };
@@ -170,7 +166,6 @@ export function registerTerminalTools(server: McpServer, ctx: Context): void {
           summary,
           kind,
           repoName,
-          preferAgentTab: preferAgentTab !== false,
           reason,
           source: "mcp",
         });

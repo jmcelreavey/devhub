@@ -2,10 +2,10 @@
 
 import { DependencyChecklist } from "@/components/setup/DependencyChecklist";
 import { filterStepsByGoals, parseGoals, SETUP_GOALS_KEY, type GoalId } from "@/lib/setup/goals";
-import { useState, useEffect, useCallback, startTransition } from "react";
+import { useState, useEffect, useCallback, useRef, startTransition } from "react";
 import Link from "next/link";
 import { mutate as mutateSWR } from "swr";
-import { isDesktop, pickFolder } from "@/lib/desktop/bridge";
+import { isDesktop, openInBrowser, pickFolder } from "@/lib/desktop/bridge";
 import {
   SECRET_FIELD_MASK,
   type PathCheck,
@@ -17,6 +17,7 @@ import {
   isStepComplete,
   WelcomeStep,
   GitHubStep,
+  type GithubDeviceLogin,
   InfraStep,
   PathsStep,
   type PathsForm,
@@ -155,6 +156,10 @@ export default function SetupPage() {
   const [checkOk, setCheckOk] = useState("");
   const [allowLan, setAllowLan] = useState(true);
   const [chamberUiPassword, setChamberUiPassword] = useState("");
+  const [githubDevice, setGithubDevice] = useState<GithubDeviceLogin | null>(null);
+  const [githubLogin, setGithubLogin] = useState<string | null>(null);
+  /** Bumped to abandon an in-flight device-flow poll (restart or unmount). */
+  const githubPollRef = useRef(0);
   const [calendarConnectBusy, setCalendarConnectBusy] = useState(false);
   const [calendarBanner, setCalendarBanner] = useState("");
   const [biChecking, setBiChecking] = useState(false);
@@ -428,6 +433,9 @@ export default function SetupPage() {
             setError(result.message ?? "Datadog connection failed.");
             return;
           }
+          // Say so out loud: with the auto-check nobody pressed a button, so
+          // silence is indistinguishable from nothing having happened.
+          setCheckOk(result.message ?? "Connected to Datadog successfully.");
           await loadSetupStatus();
           return;
         }
@@ -477,6 +485,156 @@ export default function SetupPage() {
     },
     [loadSetupStatus, datadogForm, jiraForm],
   );
+
+  /**
+   * Verify credentials as soon as they are complete, without a button press.
+   *
+   * "Paste three values, then remember to press Check connection" is a step
+   * you can finish while it is silently broken — the wizard happily lets you
+   * continue, and the failure surfaces days later on the dashboard. So the
+   * check runs itself once every field it needs has a value.
+   *
+   * The signature ref is what keeps this honest: it only fires when the values
+   * actually changed, never on step entry with what was already saved, and
+   * never twice for the same input.
+   */
+  const autoCheckedRef = useRef<Record<string, string>>({});
+  const stepId = steps[currentStep]?.id;
+  /**
+   * `checkConnection` is rebuilt on every keystroke (it closes over the forms),
+   * so depending on it directly would clear the pending timer whenever any
+   * *other* field on the step changed — and since the signature had not moved,
+   * nothing would reschedule it. The check would just quietly never run.
+   */
+  const checkConnectionRef = useRef(checkConnection);
+  checkConnectionRef.current = checkConnection;
+
+  useEffect(() => {
+    if (stepId !== "datadog" && stepId !== "jira") return;
+
+    const signature =
+      stepId === "datadog"
+        ? [datadogForm.apiKey, datadogForm.applicationKey].join(" ")
+        : [jiraForm.domain, jiraForm.email, jiraForm.apiToken].join(" ");
+
+    const complete =
+      stepId === "datadog"
+        ? !!datadogForm.apiKey.trim() && !!datadogForm.applicationKey.trim()
+        : !!jiraForm.domain.trim() && !!jiraForm.email.trim() && !!jiraForm.apiToken.trim();
+
+    // First sight of this step's values is the baseline, not a trigger.
+    if (autoCheckedRef.current[stepId] === undefined) {
+      autoCheckedRef.current[stepId] = signature;
+      return;
+    }
+    if (!complete || autoCheckedRef.current[stepId] === signature) return;
+
+    // Long enough that typing a domain character by character doesn't fire a
+    // request per keystroke; short enough to feel like a response to a paste.
+    const timer = setTimeout(() => {
+      autoCheckedRef.current[stepId] = signature;
+      void checkConnectionRef.current(stepId);
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [
+    stepId,
+    datadogForm.apiKey,
+    datadogForm.applicationKey,
+    jiraForm.domain,
+    jiraForm.email,
+    jiraForm.apiToken,
+  ]);
+
+  /**
+   * Run GitHub's device flow from the wizard.
+   *
+   * Polling lives here rather than in a `useEffect` because the loop is
+   * naturally sequential — ask, wait the interval GitHub dictates, ask again —
+   * and GitHub rate-limits anything faster. `githubPollRef` is what stops it
+   * when the user navigates away mid-flow or restarts the sign-in.
+   */
+  const startGithubDeviceLogin = useCallback(async () => {
+    setError("");
+    setCheckOk("");
+    const run = ++githubPollRef.current;
+    try {
+      const r = await fetch("/api/setup/github/device", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "start" }),
+      });
+      const started = (await r.json()) as {
+        id?: string;
+        userCode?: string;
+        verificationUri?: string;
+        intervalMs?: number;
+        message?: string;
+      };
+      if (!r.ok || !started.id || !started.userCode || !started.verificationUri) {
+        setError(started.message ?? "Could not start GitHub sign-in.");
+        return;
+      }
+
+      setGithubDevice({
+        userCode: started.userCode,
+        verificationUri: started.verificationUri,
+        waiting: true,
+      });
+      /**
+       * Only in the desktop app. In a browser this open happens after the
+       * `await` above, i.e. outside the click gesture, so the popup blocker
+       * eats it and the user gets a failure toast instead of a tab. The link
+       * in the panel below is the reliable path there.
+       */
+      if (isDesktop()) void openInBrowser(started.verificationUri);
+
+      let intervalMs = started.intervalMs ?? 5000;
+      for (;;) {
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+        if (githubPollRef.current !== run) return;
+
+        const pr = await fetch("/api/setup/github/device", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "poll", id: started.id }),
+        });
+        const result = (await pr.json()) as {
+          status: "pending" | "connected" | "expired" | "error";
+          intervalMs?: number;
+          login?: string | null;
+          message?: string;
+        };
+        if (githubPollRef.current !== run) return;
+
+        if (result.status === "pending") {
+          intervalMs = result.intervalMs ?? intervalMs;
+          continue;
+        }
+        setGithubDevice(null);
+        if (result.status === "connected") {
+          setGithubLogin(result.login ?? null);
+          setCheckOk(
+            result.login ? `Connected to GitHub as ${result.login}.` : "Connected to GitHub.",
+          );
+          await loadSetupStatus();
+          return;
+        }
+        setError(
+          result.status === "expired"
+            ? "The GitHub code expired. Start sign-in again."
+            : (result.message ?? "GitHub sign-in failed."),
+        );
+        return;
+      }
+    } catch {
+      if (githubPollRef.current !== run) return;
+      setGithubDevice(null);
+      setError("Could not reach GitHub.");
+    }
+  }, [loadSetupStatus]);
+
+  // Abandon any in-flight device poll when setup unmounts.
+  useEffect(() => () => void ++githubPollRef.current, []);
 
   const startGoogleCalendarOAuth = useCallback(async () => {
     if (!status) return;
@@ -778,6 +936,9 @@ export default function SetupPage() {
               configured={status.github}
               checking={checkConnectionBusy === "github"}
               onCheckConnection={() => void checkConnection("github")}
+              onStartDeviceLogin={() => void startGithubDeviceLogin()}
+              device={githubDevice}
+              login={githubLogin}
               error={error}
             />
           )}
@@ -792,9 +953,11 @@ export default function SetupPage() {
               hasApplicationKey={status.datadogVars.hasApplicationKey}
               hasEmail={status.datadogVars.hasEmail}
               hasScheduleId={status.datadogVars.hasScheduleId}
+              appOrigin={status.datadogVars.appOrigin ?? "https://app.datadoghq.com"}
               checking={checkConnectionBusy === "datadog"}
               onCheckConnection={() => void checkConnection("datadog")}
               error={error}
+              checkOk={checkOk}
             />
           )}
           {step.id === "calendar" && (

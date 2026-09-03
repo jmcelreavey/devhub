@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Eye, EyeOff } from "lucide-react";
 
 export function FormField({
@@ -18,7 +19,7 @@ export function FormField({
   placeholder: string;
   secret?: boolean;
   onToggleSecret?: () => void;
-  hint?: string;
+  hint?: ReactNode;
   onFocus?: () => void;
 }) {
   return (

@@ -132,6 +132,69 @@ export async function openInBrowser(url: string): Promise<void> {
   }
 }
 
+export type NotifyPermission = "granted" | "denied" | "default" | "unsupported";
+
+/**
+ * Notification permission, in whichever runtime we are.
+ *
+ * WKWebView implements no part of the Web Notification API, so in the desktop
+ * app `window.Notification` is simply absent and every caller that gated on it
+ * silently did nothing. Native notifications come from the Tauri plugin
+ * instead; the web API is only the browser-mode fallback.
+ */
+export async function notifyPermission(): Promise<NotifyPermission> {
+  const api = tauri();
+  if (api) {
+    try {
+      const granted = await api.core.invoke<boolean | null>("plugin:notification|is_permission_granted");
+      // null means "not asked yet" — the plugin's own way of saying default.
+      return granted === null ? "default" : granted ? "granted" : "denied";
+    } catch {
+      return "unsupported";
+    }
+  }
+  if (typeof Notification === "undefined") return "unsupported";
+  return Notification.permission;
+}
+
+/** Prompt for notification permission and report where it landed. */
+export async function requestNotifyPermission(): Promise<NotifyPermission> {
+  const api = tauri();
+  if (api) {
+    try {
+      const result = await api.core.invoke<string>("plugin:notification|request_permission");
+      return result === "granted" ? "granted" : "denied";
+    } catch {
+      return "unsupported";
+    }
+  }
+  if (typeof Notification === "undefined") return "unsupported";
+  try {
+    return await Notification.requestPermission();
+  } catch {
+    return "unsupported";
+  }
+}
+
+/** Post an OS notification. Never throws — a missed notification is not an error. */
+export async function notify(title: string, body?: string): Promise<void> {
+  const api = tauri();
+  if (api) {
+    try {
+      await api.core.invoke("plugin:notification|notify", { options: { title, body } });
+    } catch {
+      /* notification failures are never fatal */
+    }
+    return;
+  }
+  if (typeof Notification === "undefined") return;
+  try {
+    new Notification(title, { body });
+  } catch {
+    /* notification failures are never fatal */
+  }
+}
+
 /** Record a concise desktop event without exposing URL paths or query strings. */
 export async function logDesktopEvent(
   phase: Extract<BridgeLogPhase, "nav:external-intercept">,

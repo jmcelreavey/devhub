@@ -266,3 +266,24 @@ export function writeGithubPrsListCache(data: GithubPrsApiPayload): void {
 export function invalidateGithubPrsCache(): void {
   listCache = null;
 }
+
+/**
+ * Drop one PR from the cached payload without discarding the rest.
+ *
+ * Skipping a PR used to invalidate the whole list, so the next poll re-ran two
+ * `gh` searches — work through a review queue and GitHub's secondary rate limit
+ * kicks in. The only thing that changed is that one row, so edit it out and
+ * leave the cache's TTL alone.
+ */
+export function dropPrFromGithubPrsCache(url: string): void {
+  if (!listCache) return;
+  const { data } = listCache;
+  listCache = {
+    ...listCache,
+    data: {
+      ...data,
+      authored: data.authored.filter((row) => row.url !== url),
+      reviews: data.reviews.filter((row) => row.url !== url),
+    },
+  };
+}

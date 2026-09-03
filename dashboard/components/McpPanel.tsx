@@ -295,7 +295,7 @@ export function McpPanel() {
         <strong className="text-text"> Personal</strong> servers live in{" "}
         <code>~/.config/devhub/mcp-personal/</code> (machine-only - sync to every tool, never committed).
         Click <strong className="text-text">Sync all tools</strong> to push repo + personal catalogs to{" "}
-        <code>~/.claude.json</code>, <code>~/.codex/mcp.json</code>,{" "}
+        <code>~/.claude.json</code>, <code>~/.codex/config.toml</code>,{" "}
         <code>~/.cursor/mcp.json</code>, and the <code>mcp</code> block in{" "}
         <code>~/.config/opencode/opencode.json</code>. Prune is off by default (same as Skills/Agents); enable it
         to remove recognized MCP servers in those configs that are no longer in the repo unless they are

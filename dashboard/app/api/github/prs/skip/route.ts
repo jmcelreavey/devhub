@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { parseBody } from "@/lib/api-utils";
 import { listSkippedPrs, skipPr, unskipPr } from "@/lib/github/skipped-prs";
-import { invalidateGithubPrsCache } from "@/lib/github/prs";
+import { dropPrFromGithubPrsCache, invalidateGithubPrsCache } from "@/lib/github/prs";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +22,10 @@ export async function POST(request: NextRequest) {
   const parsed = await parseBody(request, SkipBodySchema);
   if (!parsed.ok) return parsed.response;
   await skipPr(parsed.data);
-  invalidateGithubPrsCache();
+  // Prune the row rather than dumping the cache: a full invalidation makes the
+  // next poll re-run two `gh` searches, and skipping several PRs in a row then
+  // trips GitHub's secondary rate limit.
+  dropPrFromGithubPrsCache(parsed.data.url);
   return NextResponse.json({ ok: true });
 }
 

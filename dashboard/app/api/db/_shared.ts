@@ -30,6 +30,7 @@ export type ConnectionParams = { params: Promise<{ id: string }> };
  */
 export type DbErrorCode =
   | "read_only"
+  | "read_required"
   | "confirm_required"
   | "unavailable"
   | "not_found"
@@ -117,7 +118,7 @@ export function explainDriverError(message: string): string {
     return "That AWS profile is not configured on this machine. Pick one from Ops.";
   }
   if (text.includes("dbinstancenotfound")) {
-    return `${message} — the database may live in another AWS account. Cross-account services need an entry in bi-rds-services.ts.`;
+    return `${message} — the IAM/registry entry may be stale after decommissioning. If the database still exists in another account, it needs an explicit cross-account target.`;
   }
 
   if (text.includes("etimedout") || text.includes("connect timeout") || text.includes("timed out")) {

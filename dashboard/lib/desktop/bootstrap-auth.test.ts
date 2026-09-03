@@ -103,40 +103,42 @@ describe("request authentication", () => {
 
 describe("terminal origin", () => {
   it("accepts the dashboard's own origin", () => {
-    expect(isAllowedTerminalOrigin("http://127.0.0.1:1337", 1337)).toBe(true);
-    expect(isAllowedTerminalOrigin("http://localhost:1337", 1337)).toBe(true);
+    expect(isAllowedTerminalOrigin("http://127.0.0.1:1337")).toBe(true);
+    expect(isAllowedTerminalOrigin("http://localhost:1337")).toBe(true);
   });
 
   it("rejects a lookalike hostname", () => {
     // The prefix trap: these are ordinary internet domains.
-    expect(isAllowedTerminalOrigin("http://127.0.0.1.evil.com", 1337)).toBe(false);
-    expect(isAllowedTerminalOrigin("http://localhost.evil.com:1337", 1337)).toBe(false);
-    expect(isAllowedTerminalOrigin("http://notlocalhost:1337", 1337)).toBe(false);
+    expect(isAllowedTerminalOrigin("http://127.0.0.1.evil.com")).toBe(false);
+    expect(isAllowedTerminalOrigin("http://localhost.evil.com:1337")).toBe(false);
+    expect(isAllowedTerminalOrigin("http://notlocalhost:1337")).toBe(false);
   });
 
-  it("rejects another port on the same host", () => {
-    // OpenChamber and OpenCode also listen on loopback; neither may open a PTY.
-    expect(isAllowedTerminalOrigin("http://127.0.0.1:1338", 1337)).toBe(false);
-    expect(isAllowedTerminalOrigin("http://127.0.0.1", 1337)).toBe(false);
+  it("accepts any loopback port", () => {
+    // A checkout on a spare port, or a second dashboard reusing this peer, is
+    // still the user's own machine — the ticket, not the port, is the control.
+    expect(isAllowedTerminalOrigin("http://127.0.0.1:1338")).toBe(true);
+    expect(isAllowedTerminalOrigin("http://127.0.0.1")).toBe(true);
+    expect(isAllowedTerminalOrigin("http://[::1]:4000")).toBe(true);
   });
 
   it("rejects a missing or unparseable origin", () => {
     // A handshake with no Origin is a non-browser client — curl, a script, or
     // a native process. None of those are the dashboard.
-    expect(isAllowedTerminalOrigin(null, 1337)).toBe(false);
-    expect(isAllowedTerminalOrigin(undefined, 1337)).toBe(false);
-    expect(isAllowedTerminalOrigin("", 1337)).toBe(false);
-    expect(isAllowedTerminalOrigin("not a url", 1337)).toBe(false);
+    expect(isAllowedTerminalOrigin(null)).toBe(false);
+    expect(isAllowedTerminalOrigin(undefined)).toBe(false);
+    expect(isAllowedTerminalOrigin("")).toBe(false);
+    expect(isAllowedTerminalOrigin("not a url")).toBe(false);
   });
 
   it("rejects non-http schemes", () => {
-    expect(isAllowedTerminalOrigin("file://", 1337)).toBe(false);
-    expect(isAllowedTerminalOrigin("chrome-extension://abc", 1337)).toBe(false);
+    expect(isAllowedTerminalOrigin("file://")).toBe(false);
+    expect(isAllowedTerminalOrigin("chrome-extension://abc")).toBe(false);
   });
 
-  it("rejects a LAN origin even on the right port", () => {
+  it("rejects a LAN origin", () => {
     // LAN mode must never reach the terminal; it is not proxied for this reason.
-    expect(isAllowedTerminalOrigin("http://192.168.1.20:1337", 1337)).toBe(false);
+    expect(isAllowedTerminalOrigin("http://192.168.1.20:1337")).toBe(false);
   });
 });
 

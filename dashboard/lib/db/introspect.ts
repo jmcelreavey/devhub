@@ -24,13 +24,13 @@ async function engineOf(connectionId: string): Promise<{ engine: DbEngine; label
 /**
  * MongoDB's namespace is its database, which the URI already pins.
  *
- * The connection id encodes it for BI connections (`bi:mongo:unified:prd`), but
- * a user-added connection can name anything, so fall back to the driver's own
- * view rather than parsing the id.
+ * Providers expose the bound database as safe connection metadata. Parsing the
+ * connection id is wrong for named targets such as `bi:mongo:fantasy-stocks:dev`.
  */
-async function mongoDatabaseName(connectionId: string): Promise<string> {
-  const parts = connectionId.split(":");
-  return parts[2] ?? "database";
+export async function mongoDatabaseName(connectionId: string): Promise<string> {
+  const connection = await findDbConnection(connectionId);
+  if (!connection) throw new DbConnectionNotFoundError(connectionId);
+  return connection.database ?? "database";
 }
 
 export async function listNamespaces(connectionId: string): Promise<DbNamespace[]> {

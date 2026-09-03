@@ -17,8 +17,10 @@ export const GET = withErrorHandler(async (req: NextRequest, { params }: Connect
   if (denied) return denied;
 
   const { id } = await params;
+  const requestedAccessMode = req.nextUrl.searchParams.get("accessMode");
+  const accessMode = requestedAccessMode === "write" ? "write" : "read";
   try {
-    return NextResponse.json(await preflightDbConnection(id));
+    return NextResponse.json(await preflightDbConnection(id, { accessMode }));
   } catch (err) {
     return dbFailure(err);
   }

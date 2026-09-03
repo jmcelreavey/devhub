@@ -156,10 +156,14 @@ export function buildPrRowMenuGroups({
         });
         if (!res.ok) throw new Error(String(res.status));
         toast.info("Skipped — it comes back if the PR is updated.");
+        // No revalidate on success. The row is already gone locally and the
+        // server dropped its cache, so the next scheduled poll picks it up —
+        // refetching per skip means two `gh` searches each time, which trips
+        // GitHub's secondary rate limit when working through a review queue.
       } catch {
         toast.error("Couldn't skip PR.");
+        void globalMutate(key);
       }
-      void globalMutate(key);
     },
   };
 

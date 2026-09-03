@@ -14,10 +14,16 @@
  */
 
 import type {
+  DbAccessMode,
   DbConnectionRef,
   DbPreflight,
   ResolvedDbConnection,
 } from "./types";
+
+export interface DbPreflightOptions {
+  /** Access the caller intends to use after preflight. Defaults to least-privilege read access. */
+  accessMode?: DbAccessMode;
+}
 
 export interface DbConnectionProvider {
   /** Namespace for this provider's connection ids, e.g. `bi`. */
@@ -35,7 +41,7 @@ export interface DbConnectionProvider {
    * Machine-level readiness (VPN up, credentials unexpired). Optional: a
    * provider whose connections are local files has nothing to check.
    */
-  preflight?(id: string): Promise<DbPreflight>;
+  preflight?(id: string, options?: DbPreflightOptions): Promise<DbPreflight>;
 
   /**
    * Credentials for one connection. Throws with a message the user can act on

@@ -20,7 +20,7 @@ describe("familiarity scoring", () => {
   });
 
   it("keeps the busiest domain top of the ledger despite prior reviews", () => {
-    // Real numbers from businessinsider/capi: `deployments` had 265 commits and
+    // Real numbers from example-org/capi: `deployments` had 265 commits and
     // 6 of my reviews and scored 0, while a 2-commit dotfile directory ranked
     // third. The busiest domain must stay first.
     const deployments = score(133.02, familiarityScore(0, 6, null));

@@ -5,6 +5,7 @@ import { taskNotePath } from "@/lib/task-note";
 import { getTicket } from "@/lib/jira/client";
 import { resolveEntityContext } from "@/lib/entity-links/resolve";
 import { resolveLocalGithubRepos } from "@/lib/repos/resolution";
+import { selectTaskImplementationRepo } from "@/lib/tasks/implement-repo";
 
 export const dynamic = "force-dynamic";
 
@@ -40,11 +41,7 @@ export async function GET(req: NextRequest) {
   // More than one linked repo: take the first rather than handing the agent nothing.
   const localRepos = repoIds.length > 0 ? await resolveLocalGithubRepos().catch(() => []) : [];
   const repoId = repoIds[0]?.toLowerCase();
-  const localRepo = repoId
-    ? localRepos.find(({ fullName, repo }) =>
-        fullName.toLowerCase() === repoId || (!repoId.includes("/") && repo.name.toLowerCase() === repoId),
-      )
-    : null;
+  const localRepo = repoId ? selectTaskImplementationRepo(repoId, localRepos) : null;
 
   return NextResponse.json({
     id: task.id,

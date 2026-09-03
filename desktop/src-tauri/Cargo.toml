@@ -16,6 +16,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["image-png"] }
 tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-window-state = "2"
@@ -33,6 +34,14 @@ cocoa = "0.25"
 # Ships a devtools-enabled webview. Debug builds get it automatically; this is
 # for a release build you deliberately want to inspect.
 devtools = ["tauri/devtools"]
+
+[lints.rust]
+# `objc`'s `msg_send!`/`class!` macros expand to `#[cfg(feature = "cargo-clippy")]`,
+# a pattern deprecated years ago. The cfg is evaluated in *this* crate, which has
+# no such feature, so check-cfg flags all six call sites in `src/icon.rs`. objc
+# 0.2 is unmaintained, so declaring the value is the fix available to us.
+# Deliberately not a blanket allow: a genuine typo'd cfg here should still warn.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }
 
 [profile.release]
 # The bundle is dominated by the Node runtime and Next output, so the usual

@@ -29,7 +29,7 @@ graph LR
   personal --> merge
 
   merge --> claude["~/.claude.json"]
-  merge --> codex["~/.codex/mcp.json"]
+  merge --> codex["~/.codex/config.toml"]
   merge --> cursor["~/.cursor/mcp.json"]
   merge --> oc["OpenCode config"]
 ```
@@ -45,10 +45,12 @@ graph LR
 | Skills          | `skills/shared/` plus optional `ai-tools` checkout | Local tool skill directories    |
 | Agents          | Shared agent files     | Local tool agent directories    |
 | Persona         | Persona files          | Tool-specific instruction files |
-| MCP configs     | Core `mcp/shared/*.json`, enabled plugin `mcp/*.json`, and machine-local `~/.config/devhub/mcp-personal/` | `~/.claude.json`, `~/.codex/mcp.json`, `~/.cursor/mcp.json`, OpenCode `mcp` block |
+| MCP configs     | Core `mcp/shared/*.json`, enabled plugin `mcp/*.json`, and machine-local `~/.config/devhub/mcp-personal/` | `~/.claude.json`, `~/.codex/config.toml`, `~/.cursor/mcp.json`, OpenCode `mcp` block |
 | OpenCode config | `opencode/shared/opencode.json` | `~/.config/opencode/opencode.json` (curated keys only) |
 
 Only `model`, `small_model`, `provider`, and `theme` are merged. MCP entries, schema, and agent metadata that OpenCode maintains locally are preserved. Provider credentials use `{env:VAR}` in the repo; sync resolves them from the environment (including 1Password-backed vars) into the local file.
+
+Codex MCP sync edits only the matching `[mcp_servers.*]` tables in `~/.codex/config.toml`; unrelated settings, ordering, and comments remain untouched. Canonical `startupTimeoutSec` and `toolTimeoutSec` values are emitted as Codex's `startup_timeout_sec` and `tool_timeout_sec` fields.
 
 DevHub `skills/shared/` is the source of truth for personal and dotfiles skills. Optional upstream/shared team skills can stay canonical in an **ai-tools** checkout; DevHub reads a local clone (default `~/Developer/ai-tools`) and merges it at sync time. DevHub wins when the same skill name exists in both trees.
 
@@ -56,7 +58,7 @@ For compatibility with older shared catalogs, ai-tools skills are exposed with a
 catalog prefix unless the source directory already has that prefix. That prefix is a
 catalog naming convention, not a requirement that the upstream repo be company-specific.
 
-**Plugins generalise this.** Skills, agents, and MCP configs can also come from registered **plugins** (separate repos, e.g. the private `devhub-bi`), merged at sync time with the same "core wins on collision" rule and marked read-only. See [`plugins.md`](plugins.md) for the manifest, the machine-local registry (`~/.config/devhub/plugins.json`), and precedence (core → ai-tools → plugins).
+**Plugins generalise this.** Skills, agents, and MCP configs can also come from registered **plugins** (separate repos, e.g. the private `devhub-bi`) and are marked read-only. Core still wins collisions; for skills, an explicitly enabled plugin wins over the same name in the general ai-tools catalog. See [`plugins.md`](plugins.md) for the manifest, machine-local registry (`~/.config/devhub/plugins.json`), and complete precedence rules.
 
 Environment:
 

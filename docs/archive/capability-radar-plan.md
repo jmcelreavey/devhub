@@ -26,12 +26,12 @@ npx vitest run lib/capability          # unit tests (43)
 npm run dev                            # dev server binds :1337
 curl -s http://localhost:1337/api/capability/radar          # latest snapshot+diff
 curl -s -X POST http://localhost:1337/api/capability/scan \
-     -H 'Content-Type: application/json' -d '{"includeGithub":true,"githubFilter":"businessinsider"}'  # scan incl. un-cloned org repos
+     -H 'Content-Type: application/json' -d '{"includeGithub":true,"githubFilter":"example-org"}'  # scan incl. un-cloned org repos
 curl -s -X POST http://localhost:1337/api/capability/journey \
      -H 'Content-Type: application/json' -d '{"signalId":"flux"}'  # AI lab → Learnings + workspace (kitchen-sink/) + task
 curl -s -X POST http://localhost:1337/api/capability/journey/complete -d '{"category":"labs/eks-config/flux"}'  # mark done + tick task
 curl -s -X POST http://localhost:1337/api/capability/digest \
-     -H 'Content-Type: application/json' -d '{"includeGithub":true,"githubFilter":"businessinsider"}'  # weekly digest (honors GitHub toggle)
+     -H 'Content-Type: application/json' -d '{"includeGithub":true,"githubFilter":"example-org"}'  # weekly digest (honors GitHub toggle)
 open http://localhost:1337/radar
 ```
 
@@ -59,7 +59,7 @@ open http://localhost:1337/radar
 - **Live resumable Socratic session** — `components/LabTutor.tsx` + `/api/capability/journey/tutor` + `/api/capability/journey/session`. One combined surface: notes as reference + a live tutor that holds your hand, gives tasks in the workspace, and **checks your work** (asks you to paste output). Transcript persists per lab (`notes/.cache/capability/sessions/`) so you can **come and go**; Reset clears it.
 - **Shared lab UI** — extracted to `components/LabInline.tsx` (`useLab`, `LabButton`, `LabPanel`) so `/radar` and `LearnPanel` share one implementation.
 - **Task links** — follow-up tasks now use a markdown link to the note (`Lab: [<label>](/notes/learnings/<category>)`); existing tasks migrated.
-- **GitHub toggle fix** — the "This week" **Generate** now honors the *Also scan un-cloned GitHub repos* checkbox + org filter (e.g. `businessinsider`); previously it ignored them and returned instantly (local-only).
+- **GitHub toggle fix** — the "This week" **Generate** now honors the *Also scan un-cloned GitHub repos* checkbox + org filter (e.g. `example-org`); previously it ignored them and returned instantly (local-only).
 - **MCP coverage** — `mcp-servers/devhub-server/src/tools/capability.ts` exposes `capability_radar`, `capability_scan`, `capability_digest`, `capability_get_lab`, `capability_complete_lab` (registered in `mcp.ts`). Lab **generation** still runs from the UI or terminal skill; MCP reads existing labs by `signalId`.
 - **Mobile** — `/radar` no longer `desktopOnly` in `lib/nav.ts` (reachable on phones); lab panels/evidence/tutor use responsive wrapping + truncation; coverage labels shrink on narrow screens.
 - **UX polish** — reduced-motion-safe micro-interactions in `globals.css` (`.lab-panel-enter`, `.lab-msg-enter`, `.lab-evidence-link` hover, `.lab-done-pop`) + a spinner on the Build-lab button while generating.

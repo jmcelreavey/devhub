@@ -9,8 +9,6 @@ export interface TerminalLaunchOptions {
   command?: string;
   kind?: TerminalSessionKind;
   repoName?: string;
-  /** Prefer a dedicated Agent tab (default for kind agent|review). */
-  preferAgentTab?: boolean;
 }
 
 export interface TerminalTranscriptOptions {

@@ -15,6 +15,8 @@ interface SqlEditorProps {
   schemas?: string[];
   /** What an unqualified name resolves to, so `posts` completes as `blog.posts`. */
   defaultSchema?: string;
+  /** Whether Mongo write operations should appear in completion results. */
+  canWrite?: boolean;
   readOnly?: boolean;
   placeholder?: string;
 }
@@ -41,6 +43,7 @@ export function SqlEditor({
   schema,
   schemas,
   defaultSchema,
+  canWrite,
   readOnly,
   placeholder,
 }: SqlEditorProps) {
@@ -111,6 +114,23 @@ export function SqlEditor({
               upperCaseKeywords: true,
             });
 
+      const mongoCompletionSource = (context: {
+        explicit: boolean;
+        pos: number;
+        state: { sliceDoc: (from: number, to: number) => string };
+      }) => {
+        const suggestions = mongoCompletionSuggestions(
+          context.state.sliceDoc(0, context.pos),
+          schema ?? {},
+          Boolean(canWrite),
+        );
+        if (!suggestions && !context.explicit) return null;
+        return suggestions ?? {
+          from: context.pos,
+          options: MONGO_ROOT_COMPLETIONS,
+        };
+      };
+
       const runCurrent = (v: { state: { doc: { toString: () => string }; selection: { main: { from: number; to: number } } } }) => {
         const { from, to } = v.state.selection.main;
         const doc = v.state.doc.toString();
@@ -128,7 +148,9 @@ export function SqlEditor({
           indentOnInput(),
           bracketMatching(),
           syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-          autocompletion(),
+          engine === "mongodb"
+            ? autocompletion({ override: [mongoCompletionSource] })
+            : autocompletion(),
           language,
           placeholderExt(placeholder ?? ""),
           EditorState.readOnly.of(Boolean(readOnly)),
@@ -191,9 +213,113 @@ export function SqlEditor({
     // Rebuilt only when the language or schema genuinely changes — `value` is
     // deliberately absent, because the editor owns the document after mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engine, readOnly, placeholder, schema, schemas, defaultSchema]);
+  }, [engine, readOnly, placeholder, schema, schemas, defaultSchema, canWrite]);
 
   return <div className="db-editor" ref={host} />;
+}
+
+interface MongoCompletionOption {
+  label: string;
+  type: "class" | "function" | "keyword";
+  detail?: string;
+  apply?: string;
+}
+
+interface MongoCompletionResult {
+  from: number;
+  options: MongoCompletionOption[];
+}
+
+const MONGO_READ_OPERATIONS = [
+  "find",
+  "findOne",
+  "aggregate",
+  "countDocuments",
+  "estimatedDocumentCount",
+  "distinct",
+  "listIndexes",
+] as const;
+
+const MONGO_WRITE_OPERATIONS = [
+  "insertOne",
+  "insertMany",
+  "updateOne",
+  "updateMany",
+  "replaceOne",
+  "deleteOne",
+  "deleteMany",
+  "createIndex",
+  "dropIndex",
+  "drop",
+] as const;
+
+const MONGO_ROOT_COMPLETIONS: MongoCompletionOption[] = [
+  { label: "db", type: "keyword", detail: "current database" },
+];
+
+/**
+ * Complete the safe Mongo shell shorthand accepted by the server-side parser.
+ * Collection names come from live `listCollections`; operations mirror the
+ * parser allowlist and hide mutations when the active credentials are read-only.
+ */
+export function mongoCompletionSuggestions(
+  textBeforeCursor: string,
+  tables: Record<string, string[]>,
+  canWrite: boolean,
+): MongoCompletionResult | null {
+  const operationMatch = textBeforeCursor.match(
+    /db\s*\.\s*[A-Za-z_][\w$-]*\s*\.\s*([A-Za-z]*)$/,
+  );
+  if (operationMatch) {
+    const prefix = operationMatch[1];
+    const operations = canWrite
+      ? [...MONGO_READ_OPERATIONS, ...MONGO_WRITE_OPERATIONS]
+      : MONGO_READ_OPERATIONS;
+    return {
+      from: textBeforeCursor.length - prefix.length,
+      options: operations.map((operation) => ({
+        label: operation,
+        type: "function",
+        detail: MONGO_WRITE_OPERATIONS.includes(
+          operation as (typeof MONGO_WRITE_OPERATIONS)[number],
+        )
+          ? "write"
+          : "read",
+        apply: `${operation}()`,
+      })),
+    };
+  }
+
+  const collectionMatch = textBeforeCursor.match(/db\s*\.\s*([A-Za-z_$][\w$-]*)?$/);
+  if (collectionMatch) {
+    const prefix = collectionMatch[1] ?? "";
+    const collections = [...new Set(
+      Object.keys(tables)
+        .map((name) => name.slice(name.indexOf(".") + 1))
+        // Dot shorthand cannot represent every legal Mongo collection name.
+        // Those remain usable through db["name"], but suggesting invalid JS
+        // after `db.` would be worse than omitting it.
+        .filter((name) => /^[A-Za-z_$][\w$]*$/.test(name)),
+    )].sort();
+    return {
+      from: textBeforeCursor.length - prefix.length,
+      options: collections.map((collection) => ({
+        label: collection,
+        type: "class",
+        detail: "collection",
+      })),
+    };
+  }
+
+  const rootMatch = textBeforeCursor.match(/\b(d|db)$/);
+  if (rootMatch) {
+    return {
+      from: textBeforeCursor.length - rootMatch[1].length,
+      options: MONGO_ROOT_COMPLETIONS,
+    };
+  }
+
+  return null;
 }
 
 /**

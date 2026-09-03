@@ -1,42 +1,46 @@
 #!/usr/bin/env node
 /**
- * Ad-hoc sign a locally built `DevHub.app`.
+ * Sign a locally built (or locally installed) `DevHub.app`.
  *
- * This is **not** a substitute for Developer ID signing. An ad-hoc signature
- * has no identity behind it: macOS can verify the bundle has not been modified
- * since signing, but not who produced it. Gatekeeper still refuses to launch it
- * by double-click on a machine that did not build it, and notarisation is not
- * possible at all. Real distribution needs an Apple Developer ID — see
+ * This is **not** a substitute for Developer ID signing. Gatekeeper still
+ * refuses to launch a locally signed build by double-click on a machine that
+ * did not produce it, and notarisation is not possible at all. Real
+ * distribution needs an Apple Developer ID — see
  * `docs/guides/desktop-release.md`.
  *
- * What it *does* buy, on the machine that built it:
+ * What it *does* buy on this Mac: `codesign --verify --deep --strict` passes,
+ * so the bundle has an intact seal, and macOS has something stable to hang TCC
+ * grants (Full Disk Access, Local Network, Automation) on. Run
+ * `npm run desktop:sign:identity` first and those grants survive rebuilds; with
+ * a bare ad-hoc signature they are forgotten every time the cdhash changes.
  *
- * - `codesign --verify --deep --strict` passes, so the release pipeline's own
- *   verification step is exercised locally instead of only ever in CI.
- * - The bundle gets a stable identity for the keychain and for macOS's local
- *   network / automation permission prompts, which are otherwise re-asked on
- *   every rebuild because an unsigned app has no stable identity to remember.
- * - Tampering with the nested Node runtime is detected.
- *
- * Signing order is inside-out and that is load-bearing. Signing the bundle
- * first and the nested binaries afterwards invalidates the outer signature,
- * which is the single most common way "I signed it" produces a bundle that
- * fails verification.
+ * Usage:
+ *   node desktop/scripts/sign-local.mjs                # newest build output
+ *   node desktop/scripts/sign-local.mjs --target <t>   # a specific cargo target
+ *   node desktop/scripts/sign-local.mjs --app <path>   # e.g. the installed app
  */
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { tauriDir } from "./staging-paths.mjs";
+import { signBundle, verifyBundle } from "./codesign-bundle.mjs";
 
 if (process.platform !== "darwin") {
   process.stdout.write("[sign] not macOS — nothing to do\n");
   process.exit(0);
 }
 
-const targetArg = process.argv.indexOf("--target");
-const target = targetArg !== -1 ? process.argv[targetArg + 1] : null;
+function argValue(flag) {
+  const index = process.argv.indexOf(flag);
+  return index !== -1 ? process.argv[index + 1] : null;
+}
+
+const target = argValue("--target");
 
 function findApp() {
+  const explicit = argValue("--app");
+  if (explicit) return path.resolve(explicit);
+
   const base = path.join(tauriDir, "target");
   const dirs = [];
   if (target) dirs.push(path.join(base, target, "release"), path.join(base, target, "debug"));
@@ -49,7 +53,7 @@ function findApp() {
 }
 
 const app = findApp();
-if (!app) {
+if (!app || !fs.existsSync(app)) {
   process.stderr.write("[sign] no DevHub.app found — run npm run desktop:build first\n");
   process.exit(1);
 }
@@ -58,74 +62,28 @@ function log(msg) {
   process.stdout.write(`[sign] ${msg}\n`);
 }
 
-function sign(target) {
-  execFileSync(
-    "codesign",
-    ["--force", "--sign", "-", "--timestamp=none", target],
-    { stdio: ["ignore", "ignore", "pipe"] },
-  );
+const { identity, kind, nested } = signBundle(app);
+log(`signed ${nested} nested binaries`);
+log(`signed ${path.relative(process.cwd(), app)} with ${kind === "adhoc" ? "an ad-hoc signature" : identity}`);
+if (kind === "adhoc") {
+  log("no stable identity: macOS will re-ask for permissions after every rebuild.");
+  log("      Fix once with: npm run desktop:sign:identity");
 }
 
-/**
- * Every Mach-O the bundle carries, deepest first.
- *
- * `.node` files are native addons — Mach-O dylibs that macOS treats as code.
- * An unsigned one inside a signed bundle is exactly the mismatch that makes
- * `--strict` fail, and it is easy to miss because nothing about the filename
- * says "executable".
- */
-function nestedBinaries() {
-  const found = [];
-  const walk = (dir) => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-        continue;
-      }
-      if (entry.isSymbolicLink()) continue;
-      if (entry.name.endsWith(".node") || entry.name.endsWith(".dylib")) {
-        found.push(full);
-        continue;
-      }
-      // Extensionless files with the executable bit are the bundled runtime.
-      const stat = fs.statSync(full);
-      if (!path.extname(entry.name) && stat.mode & 0o111) found.push(full);
-    }
-  };
-  walk(path.join(app, "Contents"));
-  // Deepest first: a parent signed before its children is a parent whose
-  // signature the children then invalidate.
-  return found.sort((a, b) => b.split(path.sep).length - a.split(path.sep).length);
-}
-
-const binaries = nestedBinaries();
-for (const binary of binaries) {
-  sign(binary);
-}
-log(`signed ${binaries.length} nested binaries`);
-
-// The bundle last, so it seals everything above.
-sign(app);
-log(`signed ${path.relative(process.cwd(), app)}`);
-
-try {
-  execFileSync("codesign", ["--verify", "--deep", "--strict", "--verbose=2", app], {
-    stdio: ["ignore", "ignore", "pipe"],
-  });
-  log("codesign --verify --deep --strict passed");
-} catch (err) {
-  process.stderr.write(`[sign] verification FAILED:\n${err.stderr?.toString() ?? err.message}\n`);
+const verified = verifyBundle(app);
+if (!verified.ok) {
+  process.stderr.write(`[sign] verification FAILED:\n${verified.output}\n`);
   process.exit(1);
 }
+log("codesign --verify --deep --strict passed");
 
-// `spctl` is expected to reject an ad-hoc bundle. Reporting it rather than
-// hiding it keeps the limitation visible: this is why other people cannot
+// `spctl` is expected to reject a locally signed bundle. Reporting it rather
+// than hiding it keeps the limitation visible: this is why other people cannot
 // simply double-click your build.
 try {
   execFileSync("spctl", ["-a", "-vv", "-t", "exec", app], { stdio: ["ignore", "ignore", "pipe"] });
-  log("spctl accepted the bundle (unexpected for an ad-hoc signature)");
+  log("spctl accepted the bundle (unexpected without a Developer ID)");
 } catch {
-  log("spctl rejects it, as expected — ad-hoc signatures are not notarised.");
+  log("spctl rejects it, as expected — local signatures are not notarised.");
   log("      On this Mac: right-click → Open, once. Other machines need a Developer ID.");
 }

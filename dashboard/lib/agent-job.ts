@@ -121,7 +121,6 @@ function openFailedAgentTab(opts: {
     summary: cliUnavailableMessage(String(opts.provider)),
     providerLabel: providerDisplayName(opts.provider),
     autoSend: false,
-    forceNewTab: true,
     agentPhase: "failed",
   });
 }
@@ -153,7 +152,6 @@ function launchChatJob(opts: AgentJobOptions, provider: AgentJobProvider): Agent
     summary,
     providerLabel: providerDisplayName(String(provider)),
     autoSend: Boolean(prompt),
-    forceNewTab: Boolean(prompt),
   });
   return { channel: "chat", provider };
 }
@@ -203,7 +201,6 @@ export async function launchAgentJob(opts: AgentJobOptions): Promise<AgentJobRes
     providerLabel,
     kind,
     repoName: opts.repoName,
-    preferAgentTab: false,
     reason: opts.reason ?? summary,
     source: "agent-job",
     mode: opts.mode ?? "oneshot",

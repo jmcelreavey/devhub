@@ -29,6 +29,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import { tauriDir } from "./staging-paths.mjs";
+import { signBundle, verifyBundle } from "./codesign-bundle.mjs";
 
 const DRY_RUN = process.argv.includes("--dry-run");
 const KEEP_BACKUP = process.argv.includes("--keep-backup");
@@ -304,6 +305,22 @@ try {
   restoreAndDie(`Could not install: ${err.message}`);
 }
 
+// `ditto` preserves the signature, but `touch` above and any later in-place
+// edit do not. Re-seal so macOS has an intact signature to hang TCC grants on.
+let signedWith = null;
+try {
+  const { identity, kind } = signBundle(INSTALL_PATH);
+  const verified = verifyBundle(INSTALL_PATH);
+  if (verified.ok) {
+    signedWith = kind;
+    ok(`re-signed the installed bundle with ${kind === "adhoc" ? "an ad-hoc signature" : identity}`);
+  } else {
+    info(`installed bundle still fails codesign --verify: ${verified.output}`);
+  }
+} catch (err) {
+  info(`could not re-sign the installed bundle: ${err.message}`);
+}
+
 // 6. Prove the installed copy works from where it now lives.
 heading("Verifying the installed copy");
 const installedSelfTest = spawnSync(
@@ -371,5 +388,10 @@ if (backup && !KEEP_BACKUP) {
 process.stdout.write(
   `\nDone. DevHub ${builtInfo.version} is installed at ${INSTALL_PATH}.\n` +
     `Your notes, tasks, collections, upstarts and settings were not touched.\n` +
-    `\nThis build is ad-hoc signed, so the first launch needs: right-click the app → Open.\n`,
+    `\nThis build is not notarised, so the first launch needs: right-click the app → Open.\n` +
+    (signedWith === "adhoc"
+      ? `\nIt is ad-hoc signed, which means macOS will re-ask for Full Disk Access,\n` +
+        `Local Network and Automation after every rebuild. Run once to stop that:\n` +
+        `  npm run desktop:sign:identity\n`
+      : ``),
 );

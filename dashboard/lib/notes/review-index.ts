@@ -9,7 +9,7 @@
 import { parseCommitRefs } from "@/lib/git/commit-refs";
 
 export interface ReviewNoteRef {
-  /** Vault-relative path, e.g. `pr-reviews/businessinsider-capi-525.json`. */
+  /** Vault-relative path, e.g. `pr-reviews/example-org-capi-525.json`. */
   path: string;
   title: string;
   /** Repo the note is about, from its PR link or filename. */
@@ -27,7 +27,7 @@ export interface ReviewNoteMatch extends ReviewNoteRef {
 }
 
 const PR_URL_RE = /github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)/g;
-/** `businessinsider-capi-525.json` → org-repo prefix + trailing PR number. */
+/** `example-org-capi-525.json` → org-repo prefix + trailing PR number. */
 const FILENAME_RE = /^(.+)-(\d+)$/;
 
 /** Flatten BlockNote content to a searchable string, including link hrefs. */

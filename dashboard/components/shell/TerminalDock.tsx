@@ -44,13 +44,13 @@ import {
   type AgentChatOpenDetail,
 } from "@/lib/agent-chat";
 import { copyTextToClipboard, readTextFromClipboard } from "@/lib/clipboard";
+import { notify, notifyPermission, requestNotifyPermission } from "@/lib/desktop/bridge";
 import { resolveTerminalCopyText } from "@/lib/terminal-clipboard";
 import { TerminalPromptBar } from "@/components/shell/TerminalPromptBar";
 import { TerminalAskCard, type TerminalAskState } from "@/components/shell/TerminalAskCard";
 import { useToast } from "@/lib/hooks/use-toast";
 import {
   clampDockHeight,
-  findTabForOpen,
   readAlwaysExpandPref,
   clampPopoutPos,
   readDockHeight,
@@ -62,6 +62,7 @@ import {
   writeDockHeight,
   writePersistedDockState,
   writePopoutPos,
+  type NotificationPermissionState,
   type PopoutPos,
   type DockFrame,
 } from "@/lib/terminal-dock-state";
@@ -85,7 +86,7 @@ import {
 } from "@/lib/terminal-meta";
 import { openInteractiveAgentSession } from "@/lib/agent-job";
 import { lastTerminalBlock, saveTerminalCaptureNote } from "@/lib/terminal-capture";
-import { extractShellCommand, previewPromptCommand, PROMPT_ASK_SYSTEM } from "@/lib/terminal-prompt";
+import { extractShellCommand, PROMPT_ASK_SYSTEM } from "@/lib/terminal-prompt";
 import {
   capBlockOutput,
   dataTransferHasTerminalSelection,
@@ -170,12 +171,10 @@ interface OpenDetail {
   command?: string;
   kind?: TerminalSessionKind;
   repoName?: string;
-  preferAgentTab?: boolean;
   mode?: "oneshot" | "interactive";
   summary?: string;
   providerLabel?: string;
   agentPhase?: AgentUiPhase;
-  forceNewTab?: boolean;
   chatSeed?: AgentChatSeed;
 }
 
@@ -246,6 +245,9 @@ export function TerminalDock() {
   const promptInputsRef = useRef(new Map<number, HTMLTextAreaElement | null>());
   /** Commands waiting for a reattached/reused tab's reader to come online. */
   const pendingInjectRef = useRef(new Map<number, PendingInject>());
+  const addTabRef = useRef<(detail?: OpenDetail) => { id: number; created: boolean }>(
+    () => ({ id: -1, created: false }),
+  );
   /** Tabs opened only to host a proposal confirm — close on deny if unused. */
   const proposalScaffoldTabsRef = useRef(new Map<string, number>());
   const openRef = useRef(false);
@@ -300,6 +302,12 @@ export function TerminalDock() {
   const [altBufferTabs, setAltBufferTabs] = useState<Record<number, boolean>>({});
   /** OS notification when a long command finishes hidden. */
   const [notifyDone, setNotifyDone] = useState(false);
+  /**
+   * Cached notification permission. The busy handler decides synchronously, and
+   * the desktop permission check is an async plugin call, so it is read here and
+   * refreshed whenever the toggle moves.
+   */
+  const notifyPermissionRef = useRef<NotificationPermissionState>("default");
   /** Command-history rail dismissed in raw view. Remembered across sessions. */
   const [railHidden, setRailHidden] = useState(false);
   /** When each tab went busy — duration source for the notification. */
@@ -464,6 +472,9 @@ export function TerminalDock() {
       /* private mode */
     }
     /* eslint-enable react-hooks/set-state-in-effect */
+    void notifyPermission().then((state) => {
+      notifyPermissionRef.current = state;
+    });
   }, []);
 
   const zoomFont = useCallback((delta: number) => {
@@ -486,8 +497,12 @@ export function TerminalDock() {
       } catch {
         /* private mode */
       }
-      if (next && typeof Notification !== "undefined" && Notification.permission === "default") {
-        void Notification.requestPermission();
+      if (next) {
+        void (async () => {
+          const current = await notifyPermission();
+          notifyPermissionRef.current =
+            current === "default" ? await requestNotifyPermission() : current;
+        })();
       }
       return next;
     });
@@ -803,26 +818,9 @@ export function TerminalDock() {
         );
       };
 
-      const wait = (attempt: number) => {
+      const inject = () => {
         // Still queued in the map until write or fail — visible chip stays up.
         if (!pendingInjectRef.current.has(tabId)) return;
-        if (attempt > 240) {
-          // ~60s at 250ms — fail loudly rather than silent drop, and say
-          // what is actually hogging the shell.
-          const pendingBlocks = (commandBlocksRef.current[tabId] ?? []).filter((b) => b.pending);
-          const running = pendingBlocks[pendingBlocks.length - 1]?.command;
-          fail(
-            running
-              ? `Terminal is still running \`${previewPromptCommand(running, 60)}\` — command was not injected. Stop it or retry when idle.`
-              : "Terminal stayed busy — command was not injected. Deny or retry when idle.",
-          );
-          return;
-        }
-        if (reader.isBusy()) {
-          if (pending.proposalId) setInjectQueuedId(pending.proposalId);
-          window.setTimeout(() => wait(attempt + 1), 250);
-          return;
-        }
         const writeQuiet = () => {
           // Hide argv flash: echo off → clear+command → echo on.
           beginCommandBlock(tabId, pending.command, "inject");
@@ -861,76 +859,20 @@ export function TerminalDock() {
       };
       // Give a fresh session a beat to settle before typing.
       if (pending.proposalId) setInjectQueuedId(pending.proposalId);
-      window.setTimeout(() => wait(0), 200);
+      window.setTimeout(inject, 200);
     },
     [beginCommandBlock, toast],
   );
 
   const addTab = useCallback(
     (detail?: OpenDetail & { pendingProposalId?: string; serverTracked?: boolean }) => {
-      const preferAgent =
-        detail?.preferAgentTab === true ||
-        (detail?.preferAgentTab !== false && isAgentLikeKind(detail?.kind));
-
-      const reuse =
-        detail?.forceNewTab || detail?.agentPhase === "failed"
-          ? null
-          : findTabForOpen(tabsRef.current, {
-        cwd: detail?.cwd,
-        label: detail?.label,
-        command: detail?.command,
-        kind: detail?.kind,
-        repoName: detail?.repoName,
-        preferAgentTab: detail?.preferAgentTab,
-        mode: detail?.mode,
-      });
-
-      if (reuse) {
-        setActiveId(reuse.id);
-        if (detail?.mode || detail?.agentPhase || detail?.summary || detail?.providerLabel || detail?.chatSeed) {
-          setTabs((prev) =>
-            prev.map((t) =>
-              t.id === reuse.id
-                ? {
-                    ...t,
-                    ...(detail?.mode ? { lastMode: detail.mode } : {}),
-                    ...(detail?.agentPhase ? { agentPhase: detail.agentPhase } : {}),
-                    ...(detail?.summary ? { agentSummary: detail.summary } : {}),
-                    ...(detail?.providerLabel ? { agentProvider: detail.providerLabel } : {}),
-                    ...(detail?.chatSeed ? { chatSeed: detail.chatSeed } : {}),
-                  }
-                : t,
-            ),
-          );
-        }
-        if (
-          shouldExpandOnTerminalOpen({
-            userCollapsed: userCollapsedRef.current,
-            alwaysExpand: readAlwaysExpandPref(),
-          })
-        ) {
-          expandDock();
-        } else {
-          setUnread(true);
-        }
-        if (detail?.command && !isAgentLikeKind(detail.kind ?? reuse.kind)) {
-          pendingInjectRef.current.set(reuse.id, {
-            command: detail.command,
-            proposalId: detail.pendingProposalId,
-            serverTracked: detail.serverTracked,
-            quiet: false,
-            mode: detail.mode,
-          });
-          flushPendingInject(reuse.id);
-        }
-        return { id: reuse.id, created: false };
-      }
-
-      // Prefer-agent opens without a command still must not land on a
-      // dedicated tab by cwd — findTabForOpen already enforces that.
+      // Every open gets its own tab. "Is this one free?" has no reliable answer
+      // — a shell at a prompt, a quiet long-running server and a wedged process
+      // look identical from here — and guessing wrong queued a command behind a
+      // session that never went idle. A spare tab is the cheaper failure.
 
       const id = ++idRef.current;
-      const kind = detail?.kind ?? (preferAgent ? "agent" : "shell");
+      const kind = detail?.kind ?? "shell";
       const label = formatTerminalTabLabel({
         label: detail?.label,
         kind,
@@ -973,8 +915,12 @@ export function TerminalDock() {
       }
       return { id, created: true };
     },
-    [expandDock, flushPendingInject],
+    [expandDock],
   );
+
+  useEffect(() => {
+    addTabRef.current = addTab;
+  }, [addTab]);
 
   const closeTab = useCallback((id: number) => {
     const tab = tabsRef.current.find((t) => t.id === id);
@@ -1041,8 +987,6 @@ export function TerminalDock() {
           label: detail.label,
           kind: injectKind,
           repoName: detail.repoName,
-          preferAgentTab: false,
-          forceNewTab: detail.forceNewTab,
           mode: detail.mode,
           summary: detail.summary,
           providerLabel: detail.providerLabel,
@@ -1064,8 +1008,6 @@ export function TerminalDock() {
         label: detail.label,
         kind: injectKind,
         repoName: detail.repoName,
-        preferAgentTab: false,
-        forceNewTab: detail.forceNewTab,
         mode: detail.mode,
         summary: detail.summary,
         providerLabel: detail.providerLabel,
@@ -1095,11 +1037,9 @@ export function TerminalDock() {
         label: detail.title,
         kind: detail.kind ?? "agent",
         repoName: detail.repoName,
-        preferAgentTab: true,
         summary: detail.summary,
         providerLabel: detail.providerLabel,
         agentPhase: detail.agentPhase ?? (detail.autoSend ? "starting" : "ready"),
-        forceNewTab: detail.forceNewTab,
         chatSeed:
           prompt || display
             ? {
@@ -1119,7 +1059,7 @@ export function TerminalDock() {
         label: detail.label,
         kind: detail.kind,
         repoName: detail.repoName,
-        command: detail.createIfMissing === false ? undefined : detail.command,
+        command: detail.command,
       });
     };
     const onKey = (e: KeyboardEvent) => {
@@ -1222,7 +1162,6 @@ export function TerminalDock() {
             summary?: string;
             kind?: TerminalSessionKind;
             repoName?: string;
-            preferAgentTab?: boolean;
             reason?: string;
             source?: string;
           }>;
@@ -1238,7 +1177,6 @@ export function TerminalDock() {
           summary: next.summary,
           kind: next.kind ?? "shell",
           repoName: next.repoName,
-          preferAgentTab: next.preferAgentTab !== false,
           reason: next.reason,
           source: next.source === "mcp" ? "mcp" : "ui",
         }));
@@ -1261,7 +1199,6 @@ export function TerminalDock() {
             label: focus.label,
             kind: injectKindForPropose({ kind: focus.kind, source: focus.source }),
             repoName: focus.repoName,
-            preferAgentTab: false,
           });
           if (result.created) {
             proposalScaffoldTabsRef.current.set(focus.id, result.id);
@@ -1415,7 +1352,6 @@ export function TerminalDock() {
           cwd: tab.cwd,
           kind: tab.kind ?? "shell",
           repoName: tab.repoName,
-          preferAgentTab: false,
           summary: cmd,
           source: "ui",
         });
@@ -1488,7 +1424,6 @@ export function TerminalDock() {
           cwd: tab.cwd,
           kind: tab.kind ?? "shell",
           repoName: tab.repoName,
-          preferAgentTab: false,
           summary: cmd,
           reason: q,
           source: "ui",
@@ -1809,25 +1744,14 @@ export function TerminalDock() {
             const serverTracked = current.source === "mcp" || current.source === "ui";
             proposalScaffoldTabsRef.current.delete(current.id);
             setInjectError(null);
-            const found =
-              findTabForOpen(tabsRef.current, {
-                cwd: current.cwd,
-                label: current.label,
-                kind: injectKind,
-                repoName: current.repoName,
-                preferAgentTab: false,
-                mode: current.mode,
-              })?.id ?? null;
-            const target =
-              found ??
-              addTab({
-                cwd: current.cwd,
-                label: current.label,
-                kind: injectKind,
-                repoName: current.repoName,
-                preferAgentTab: false,
-                mode: current.mode,
-              }).id;
+            const openDetail = {
+              cwd: current.cwd,
+              label: current.label,
+              kind: injectKind,
+              repoName: current.repoName,
+              mode: current.mode,
+            };
+            const target = addTab(openDetail).id;
             setActiveId(target);
             if (current.mode) {
               setTabs((prev) =>
@@ -2177,7 +2101,6 @@ export function TerminalDock() {
                       cwd: tab.cwd ?? shellForAgent?.cwd,
                       kind: "shell",
                       repoName: tab.repoName ?? shellForAgent?.repoName,
-                      preferAgentTab: false,
                       summary: "Run in terminal",
                       source: "ui",
                     });
@@ -2250,19 +2173,10 @@ export function TerminalDock() {
                           notifyEnabled: notifyDone,
                           dockOpen: openRef.current,
                           documentHidden: document.hidden,
-                          permission:
-                            typeof Notification === "undefined"
-                              ? "unsupported"
-                              : Notification.permission,
+                          permission: notifyPermissionRef.current,
                         })
                       ) {
-                        try {
-                          new Notification("DevHub terminal", {
-                            body: `${tab.label} — command finished`,
-                          });
-                        } catch {
-                          /* notification failures are never fatal */
-                        }
+                        void notify("DevHub terminal", `${tab.label} — command finished`);
                       }
                     }
                     // With shell integration, OSC 133 D owns completion — the

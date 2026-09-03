@@ -26,7 +26,6 @@ import {
   resolveTerminalProposal,
 } from "./terminal-proposals";
 import {
-  findTabForOpen,
   formatProposePreview,
   parsePersistedDockState,
   previewTerminalCommand,
@@ -196,127 +195,7 @@ describe("terminal-capture", () => {
   });
 });
 
-describe("terminal-proposals", () => {
-  it("creates and resolves proposals without auto-inject", () => {
-    const p = createTerminalProposal({
-      command: "echo hello",
-      label: "agent · demo",
-      kind: "agent",
-      source: "mcp",
-      reason: "test",
-    });
-    expect(p.status).toBe("pending");
-    expect(p.destructive).toBe(false);
-    expect(listTerminalProposals({ status: "pending" }).some((x) => x.id === p.id)).toBe(true);
-    resolveTerminalProposal(p.id, "approve", { finalCommand: "echo hi" });
-    expect(getTerminalProposal(p.id)?.status).toBe("approved");
-    expect(getTerminalProposal(p.id)?.finalCommand).toBe("echo hi");
-    resolveTerminalProposal(p.id, "injected");
-    expect(getTerminalProposal(p.id)?.status).toBe("injected");
-  });
-
-  it("marks destructive proposals", () => {
-    const p = createTerminalProposal({ command: "sudo rm -rf /tmp/x", source: "mcp" });
-    expect(p.destructive).toBe(true);
-  });
-
-  it("lists pending FIFO and supports failed status", () => {
-    const a = createTerminalProposal({ command: "echo a", source: "mcp" });
-    const b = createTerminalProposal({ command: "echo b", source: "mcp" });
-    const pending = listTerminalProposals({ status: "pending" }).filter(
-      (p) => p.id === a.id || p.id === b.id,
-    );
-    expect(pending.map((p) => p.id)).toEqual([a.id, b.id]);
-    resolveTerminalProposal(a.id, "failed", { error: "busy timeout" });
-    expect(getTerminalProposal(a.id)?.status).toBe("failed");
-    expect(getTerminalProposal(a.id)?.error).toBe("busy timeout");
-  });
-
-  it("does not let injected overwrite denied", () => {
-    const p = createTerminalProposal({ command: "echo nope", source: "mcp" });
-    resolveTerminalProposal(p.id, "deny");
-    resolveTerminalProposal(p.id, "injected");
-    expect(getTerminalProposal(p.id)?.status).toBe("denied");
-  });
-});
-
-describe("terminal-dock-state metadata", () => {
-  it("persists kind and repoName", () => {
-    const state = parsePersistedDockState(
-      JSON.stringify({
-        tabs: [
-          {
-            id: 1,
-            label: "agent · widgets",
-            cwd: "/Users/jm/Developer/widgets",
-            sessionId: "11111111-1111-1111-1111-111111111111",
-            kind: "agent",
-            repoName: "widgets",
-          },
-        ],
-        activeId: 1,
-        nextId: 2,
-        open: true,
-        userCollapsed: false,
-      }),
-    );
-    expect(state?.tabs[0]?.kind).toBe("agent");
-    expect(state?.tabs[0]?.repoName).toBe("widgets");
-    expect(shouldExpandOnTerminalOpen({ userCollapsed: true })).toBe(false);
-  });
-});
-
-describe("findTabForOpen", () => {
-  const devserver = {
-    id: 1,
-    label: "Dev",
-    kind: "devserver" as const,
-    cwd: "/repo",
-    repoName: "widgets",
-    status: "open",
-  };
-  const agent = {
-    id: 2,
-    label: "Agent · widgets",
-    kind: "agent" as const,
-    cwd: "/repo",
-    repoName: "widgets",
-    status: "open",
-  };
-
-  it("never reuses a dedicated tab when preferAgentTab", () => {
-    expect(
-      findTabForOpen([devserver], {
-        cwd: "/repo",
-        repoName: "widgets",
-        preferAgentTab: true,
-        kind: "agent",
-      }),
-    ).toBeNull();
-  });
-
-  it("reuses an idle agent tab", () => {
-    expect(
-      findTabForOpen([devserver, agent], {
-        cwd: "/repo",
-        repoName: "widgets",
-        preferAgentTab: true,
-        kind: "agent",
-      })?.id,
-    ).toBe(2);
-  });
-
-  it("keeps upstart on upstart tabs only", () => {
-    expect(
-      findTabForOpen([agent], {
-        cwd: "/repo",
-        repoName: "widgets",
-        preferAgentTab: true,
-        kind: "upstart",
-      }),
-    ).toBeNull();
-  });
-
+describe("terminal chrome formatting", () => {
   it("truncates giant command previews", () => {
     expect(previewTerminalCommand("x".repeat(400)).endsWith("…")).toBe(true);
     expect(previewTerminalCommand("short")).toBe("short");
@@ -395,44 +274,75 @@ describe("findTabForOpen", () => {
       }),
     ).toBe("Cursor isn’t installed. Pick another provider in Setup.");
   });
+});
 
-
-  it("prefers same kind for plain shell opens", () => {
-    const shell = {
-      id: 3,
-      label: "widgets",
-      kind: "shell" as const,
-      cwd: "/repo",
-      repoName: "widgets",
-      status: "open",
-    };
-    expect(
-      findTabForOpen([agent, shell], {
-        cwd: "/repo",
-        repoName: "widgets",
-        kind: "shell",
-      })?.id,
-    ).toBe(3);
+describe("terminal-proposals", () => {
+  it("creates and resolves proposals without auto-inject", () => {
+    const p = createTerminalProposal({
+      command: "echo hello",
+      label: "agent · demo",
+      kind: "agent",
+      source: "mcp",
+      reason: "test",
+    });
+    expect(p.status).toBe("pending");
+    expect(p.destructive).toBe(false);
+    expect(listTerminalProposals({ status: "pending" }).some((x) => x.id === p.id)).toBe(true);
+    resolveTerminalProposal(p.id, "approve", { finalCommand: "echo hi" });
+    expect(getTerminalProposal(p.id)?.status).toBe("approved");
+    expect(getTerminalProposal(p.id)?.finalCommand).toBe("echo hi");
+    resolveTerminalProposal(p.id, "injected");
+    expect(getTerminalProposal(p.id)?.status).toBe("injected");
   });
 
-  it("reuses dedicated tabs instead of dueling on a port", () => {
-    expect(
-      findTabForOpen([devserver], {
-        label: "Dev",
-        kind: "devserver",
-        command: "npm run dev",
-      })?.id,
-    ).toBe(1);
+  it("marks destructive proposals", () => {
+    const p = createTerminalProposal({ command: "sudo rm -rf /tmp/x", source: "mcp" });
+    expect(p.destructive).toBe(true);
   });
 
-  it("does not reuse interactive agent tabs for inject", () => {
-    expect(
-      findTabForOpen([{ ...agent, lastMode: "interactive" }], {
-        cwd: "/repo",
-        repoName: "widgets",
-        preferAgentTab: true,
-        kind: "agent",
-      }),
-    ).toBeNull();
+  it("lists pending FIFO and supports failed status", () => {
+    const a = createTerminalProposal({ command: "echo a", source: "mcp" });
+    const b = createTerminalProposal({ command: "echo b", source: "mcp" });
+    const pending = listTerminalProposals({ status: "pending" }).filter(
+      (p) => p.id === a.id || p.id === b.id,
+    );
+    expect(pending.map((p) => p.id)).toEqual([a.id, b.id]);
+    resolveTerminalProposal(a.id, "failed", { error: "busy timeout" });
+    expect(getTerminalProposal(a.id)?.status).toBe("failed");
+    expect(getTerminalProposal(a.id)?.error).toBe("busy timeout");
+  });
+
+  it("does not let injected overwrite denied", () => {
+    const p = createTerminalProposal({ command: "echo nope", source: "mcp" });
+    resolveTerminalProposal(p.id, "deny");
+    resolveTerminalProposal(p.id, "injected");
+    expect(getTerminalProposal(p.id)?.status).toBe("denied");
   });
 });
+
+describe("terminal-dock-state metadata", () => {
+  it("persists kind and repoName", () => {
+    const state = parsePersistedDockState(
+      JSON.stringify({
+        tabs: [
+          {
+            id: 1,
+            label: "agent · widgets",
+            cwd: "/Users/jm/Developer/widgets",
+            sessionId: "11111111-1111-1111-1111-111111111111",
+            kind: "agent",
+            repoName: "widgets",
+          },
+        ],
+        activeId: 1,
+        nextId: 2,
+        open: true,
+        userCollapsed: false,
+      }),
+    );
+    expect(state?.tabs[0]?.kind).toBe("agent");
+    expect(state?.tabs[0]?.repoName).toBe("widgets");
+    expect(shouldExpandOnTerminalOpen({ userCollapsed: true })).toBe(false);
+  });
+});
+

@@ -6,9 +6,10 @@ import { GoogleSetupSteps } from "@/components/setup/GoogleSetupSteps";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { FieldError } from "@/components/ui/FieldError";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { FeatureCard, TipCard, SECRET_FIELD_MASK, type PathCheck, type SetupStatus, type SetupStepMeta } from "./shared";
 import { FormField } from "./FormField";
-import { desktopInfo } from "@/lib/desktop/bridge";
+import { desktopInfo, openInBrowser } from "@/lib/desktop/bridge";
 import {
   CheckCircle2,
   Circle,
@@ -195,15 +196,38 @@ export function WelcomeStep({
 }
 
 
+export interface GithubDeviceLogin {
+  userCode: string;
+  verificationUri: string;
+  /** True once the code is shown and DevHub is waiting on GitHub. */
+  waiting: boolean;
+}
+
+/**
+ * GitHub sign-in, done here rather than assigned as homework.
+ *
+ * This step used to say "run `gh auth login` in your terminal, then press
+ * Check connection" — a wizard telling you to leave the wizard. It now runs
+ * GitHub's device flow itself (the same thing `gh auth login --web` does):
+ * one button, a code to paste, and the step completes on its own the moment
+ * GitHub says yes. Manual `gh auth login` still works; the check button stays
+ * as the escape hatch for anyone who prefers it.
+ */
 export function GitHubStep({
   configured,
   checking,
   onCheckConnection,
+  onStartDeviceLogin,
+  device,
+  login,
   error,
 }: {
   configured: boolean;
   checking: boolean;
   onCheckConnection: () => void;
+  onStartDeviceLogin: () => void;
+  device: GithubDeviceLogin | null;
+  login: string | null;
   error: string;
 }) {
   return (
@@ -212,8 +236,8 @@ export function GitHubStep({
         GitHub
       </h2>
       <p style={{ color: "var(--text-subtle)", fontSize: "13px", marginBottom: "16px", lineHeight: 1.5 }}>
-        DevHub uses your local GitHub CLI session for repo workflows. Authenticate via{" "}
-        <code style={{ fontSize: "11px" }}>gh auth login</code>, then check connection below.
+        DevHub uses your local GitHub CLI session for repo workflows. Sign in below — DevHub hands
+        the token straight to <code style={{ fontSize: "11px" }}>gh</code> and never stores it itself.
       </p>
       <div
         style={{
@@ -228,17 +252,85 @@ export function GitHubStep({
       >
         {configured ? <CheckCircle2 size={18}  className="text-accent" /> : <Circle size={18} />}
         <span style={{ fontSize: "13px", color: configured ? "var(--accent)" : "var(--text-subtle)", fontWeight: 500 }}>
-          {configured ? "GitHub CLI is connected" : "GitHub CLI is not connected yet"}
+          {configured
+            ? login
+              ? `GitHub CLI is connected as ${login}`
+              : "GitHub CLI is connected"
+            : "GitHub CLI is not connected yet"}
         </span>
       </div>
-      <button
-        type="button"
-        onClick={onCheckConnection}
-        disabled={checking}
-        className="btn btn-primary mt-3.5"
-      >
-        {checking ? "Checking..." : "Check connection"}
-      </button>
+
+      {device && !configured && (
+        <div
+          style={{
+            marginTop: "12px",
+            padding: "16px",
+            borderRadius: "8px",
+            border: "1px solid var(--border)",
+            background: "var(--bg-elevated)",
+          }}
+        >
+          <p style={{ fontSize: "13px", color: "var(--text)", marginBottom: "10px" }}>
+            1. Enter this code on GitHub:
+          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            <code
+              style={{
+                fontSize: "22px",
+                fontWeight: 700,
+                letterSpacing: "3px",
+                color: "var(--accent)",
+                fontFamily: "monospace",
+              }}
+            >
+              {device.userCode}
+            </code>
+            <CopyButton text={device.userCode} label="Copy code" />
+          </div>
+          <p style={{ fontSize: "13px", color: "var(--text)", margin: "14px 0 8px" }}>
+            2. Approve it on GitHub:
+          </p>
+          <button
+            type="button"
+            onClick={() => void openInBrowser(device.verificationUri)}
+            className="btn btn-ghost"
+          >
+            {device.verificationUri.replace(/^https?:\/\//, "")} <ExternalLink size={12} />
+          </button>
+          {device.waiting && (
+            <p style={{ fontSize: "12px", color: "var(--text-subtle)", marginTop: "12px" }}>
+              Waiting for you to approve on GitHub… this page finishes on its own.
+            </p>
+          )}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: "8px", marginTop: "14px", flexWrap: "wrap" }}>
+        <button
+          type="button"
+          onClick={onStartDeviceLogin}
+          disabled={!!device?.waiting}
+          className="btn btn-primary"
+        >
+          {device?.waiting
+            ? "Waiting for GitHub…"
+            : configured
+              ? "Sign in again"
+              : "Sign in with GitHub"}
+        </button>
+        <button
+          type="button"
+          onClick={onCheckConnection}
+          disabled={checking}
+          className="btn btn-ghost"
+        >
+          {checking ? "Checking..." : "Check connection"}
+        </button>
+      </div>
+      <p style={{ fontSize: "11px", color: "var(--text-subtle)", marginTop: "10px", lineHeight: 1.5 }}>
+        Prefer the terminal? <code style={{ fontSize: "11px" }}>gh auth login</code> works too — then
+        use <em>Check connection</em>.
+      </p>
       {error && (
         <FieldError>{error}</FieldError>
       )}
@@ -624,9 +716,11 @@ export function DatadogStep({
   hasApplicationKey,
   hasEmail,
   hasScheduleId,
+  appOrigin,
   checking,
   onCheckConnection,
   error,
+  checkOk,
 }: {
   form: { apiKey: string; applicationKey: string; email: string; scheduleId: string };
   setForm: (f: { apiKey: string; applicationKey: string; email: string; scheduleId: string }) => void;
@@ -637,10 +731,30 @@ export function DatadogStep({
   hasApplicationKey: boolean;
   hasEmail: boolean;
   hasScheduleId: boolean;
+  /** Datadog web origin for this org's site (EU/gov orgs differ). */
+  appOrigin: string;
   checking: boolean;
   onCheckConnection: () => void;
   error: string;
+  checkOk?: string;
 }) {
+  /**
+   * The keys live on two different pages, and "go to Organization Settings"
+   * is a worse instruction than a link to the page itself.
+   */
+  const keyLink = (path: string, text: string) => (
+    <a
+      href={`${appOrigin.replace(/\/$/, "")}${path}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{ color: "var(--accent)", textDecoration: "underline" }}
+    >
+      {text}
+      <ExternalLink size={10} style={{ display: "inline", marginLeft: "2px", verticalAlign: "middle" }} />
+    </a>
+  );
+  const apiKeyHint = <>Open {keyLink("/organization-settings/api-keys", "API Keys")}, create one, and paste it here.</>;
+
   const checkLine = (done: boolean, text: string, primary = false) => (
     <div style={{ display: "flex", alignItems: "center", gap: "8px", paddingLeft: primary ? 0 : "26px" }}>
       {done ? (
@@ -719,7 +833,7 @@ export function DatadogStep({
             placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
             secret={!showSecrets["datadog-api-key"]}
             onToggleSecret={() => toggleSecret("datadog-api-key")}
-            hint="From Datadog Organization Settings → API Keys."
+            hint={apiKeyHint}
           />
         ) : (
           <FormField
@@ -729,7 +843,7 @@ export function DatadogStep({
             placeholder="Paste a new key to replace"
             secret={!showSecrets["datadog-api-key"]}
             onToggleSecret={() => toggleSecret("datadog-api-key")}
-            hint="From Datadog Organization Settings → API Keys."
+            hint={apiKeyHint}
           />
         )}
         <FormField
@@ -746,7 +860,13 @@ export function DatadogStep({
           placeholder={hasApplicationKey ? "Paste a new key to replace" : "Organization Settings → Application Keys"}
           secret={!showSecrets["datadog-app-key"]}
           onToggleSecret={() => toggleSecret("datadog-app-key")}
-          hint="Used with your API key for the Events search + On-Call read APIs, only on this machine."
+          hint={
+            <>
+              Used with your API key for the Events search + On-Call read APIs, only on this
+              machine. Create one under{" "}
+              {keyLink("/organization-settings/application-keys", "Application Keys")}.
+            </>
+          }
         />
         <FormField
           label="On-call schedule ID (optional - advanced override)"
@@ -765,6 +885,11 @@ export function DatadogStep({
       >
         {checking ? "Checking..." : "Check connection"}
       </button>
+      {checkOk && (
+        <p className="mt-2 text-[12px] leading-snug" style={{ color: "var(--accent)" }}>
+          {checkOk}
+        </p>
+      )}
       {error && <FieldError>{error}</FieldError>}
     </div>
   );

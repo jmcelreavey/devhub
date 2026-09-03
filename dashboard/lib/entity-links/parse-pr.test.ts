@@ -3,8 +3,8 @@ import { parseGithubPrRef, parseGithubPrUrl } from "./parse-pr";
 
 describe("parseGithubPrUrl", () => {
   it("parses GitHub pull request URLs and ignores page suffixes", () => {
-    expect(parseGithubPrUrl("https://github.com/businessinsider/posts-ai-content-pairing/pull/1/files?diff=split#top")).toEqual({
-      repo: "businessinsider/posts-ai-content-pairing",
+    expect(parseGithubPrUrl("https://github.com/example-org/posts-ai-content-pairing/pull/1/files?diff=split#top")).toEqual({
+      repo: "example-org/posts-ai-content-pairing",
       number: 1,
     });
   });

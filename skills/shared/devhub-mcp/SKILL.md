@@ -85,6 +85,12 @@ the latest audit as markdown; run new audits from the Repos page **DX Audit** bu
   `repos_git_push`, `repos_git_log`, `repos_git_show`, `repos_git_blame`,
   `repos_git_conflicts`. Mutating tools need `confirm:true`.
 - **Inventory/search** — `assets_list` (agents|skills|mcp|persona), `search` (notes|docs).
+- **Terminal** — `terminal_list`, `terminal_propose_run`, `terminal_proposal_status`, `terminal_tail`.
+  Prefer a dock tab over the agent/Cursor shell for anything the user should see: the dock is where
+  they can watch it, keep it, and kill it. Always use it for upstarts, Expo, `npm run dev` and other
+  long-running commands. Every approved proposal opens its own tab, so nothing waits on another
+  session — give each repo a distinct `label` so the dock stays readable. The user confirms in the
+  dock; poll status, then tail the session.
 
 **Confirmation contract:** any tool that mutates state (a mutating script, a service
 restart, a Jira transition) takes `confirm: true`. Without it the tool explains the effect

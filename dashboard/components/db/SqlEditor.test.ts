@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toCompletionSchema } from "./SqlEditor";
+import { mongoCompletionSuggestions, toCompletionSchema } from "./SqlEditor";
 
 describe("toCompletionSchema", () => {
   it("registers a table under both its qualified and bare name", () => {
@@ -54,5 +54,47 @@ describe("toCompletionSchema", () => {
 
   it("returns an empty map for an empty source", () => {
     expect(toCompletionSchema({})).toEqual({});
+  });
+});
+
+describe("mongoCompletionSuggestions", () => {
+  const tables = {
+    "fantasyStocks.leagues": [],
+    "fantasyStocks.users": [],
+    leagues: [],
+    users: [],
+  };
+
+  it.each([
+    {
+      name: "collections after db dot",
+      text: "db.u",
+      canWrite: false,
+      expected: ["leagues", "users"],
+    },
+    {
+      name: "read operations on a read profile",
+      text: "db.users.fi",
+      canWrite: false,
+      expected: ["find", "findOne", "aggregate"],
+    },
+    {
+      name: "write operations on a writer profile",
+      text: "db.users.up",
+      canWrite: true,
+      expected: ["updateOne", "updateMany"],
+    },
+  ])("offers $name", ({ text, canWrite, expected }) => {
+    const labels = mongoCompletionSuggestions(text, tables, canWrite)?.options.map(
+      (option) => option.label,
+    );
+    expect(labels).toEqual(expect.arrayContaining(expected));
+  });
+
+  it("does not advertise mutations on a read-only profile", () => {
+    const labels = mongoCompletionSuggestions("db.users.", tables, false)?.options.map(
+      (option) => option.label,
+    );
+    expect(labels).not.toContain("updateOne");
   });
 });

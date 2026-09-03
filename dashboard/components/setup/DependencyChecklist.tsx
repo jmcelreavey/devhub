@@ -1,9 +1,10 @@
 "use client";
 
-import { Check, AlertTriangle, Minus, ExternalLink } from "lucide-react";
+import { Check, AlertTriangle, Minus, ExternalLink, RotateCcw, TerminalSquare } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { LoadingLine } from "@/components/ui/LoadingLine";
+import { proposeTerminalRun } from "@/lib/terminal-inject";
 import type { DependencyReport } from "@/lib/setup/dependencies";
 
 /**
@@ -18,7 +19,7 @@ import type { DependencyReport } from "@/lib/setup/dependencies";
  * Nobody should have to guess why DevHub wants Docker.
  */
 export function DependencyChecklist() {
-  const { data, error, isLoading } = useLive<DependencyReport>("/api/setup/dependencies", {
+  const { data, error, isLoading, mutate } = useLive<DependencyReport>("/api/setup/dependencies", {
     refreshInterval: 0,
   });
 
@@ -36,12 +37,18 @@ export function DependencyChecklist() {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-        {data.availableCount} of {data.totalCount} tools available.
-        {data.ready
-          ? " Everything DevHub needs is installed."
-          : ` DevHub needs ${data.missingRequired.join(" and ")} to work.`}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+          {data.availableCount} of {data.totalCount} tools available.
+          {data.ready
+            ? " Everything DevHub needs is installed."
+            : ` DevHub needs ${data.missingRequired.join(" and ")} to work.`}
+        </p>
+        {/* Installs happen in the terminal, so the list needs a way to catch up. */}
+        <button type="button" onClick={() => void mutate()} className="btn btn-ghost">
+          <RotateCcw size={12} /> Re-check
+        </button>
+      </div>
 
       <Group title="Needed" tools={required} />
       <Group title="Optional - each one turns on a feature" tools={optional} />
@@ -91,6 +98,29 @@ function Group({ title, tools }: { title: string; tools: DependencyReport["tools
                 <div className="mt-1.5 flex flex-wrap items-center gap-2">
                   {t.installCommand && (
                     <>
+                      {/*
+                        The command stays visible next to the button. This runs
+                        something on the user's machine — offering "Install"
+                        without showing what that means would be worse than the
+                        copy-paste it replaces. The terminal dock still asks for
+                        confirmation before anything is injected.
+                      */}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          proposeTerminalRun({
+                            command: t.installCommand ?? "",
+                            label: `Install ${t.label}`,
+                            summary: `Install ${t.label}`,
+                            reason: t.unlocks,
+                            kind: "shell",
+                            source: "ui",
+                          })
+                        }
+                        className="btn btn-ghost"
+                      >
+                        <TerminalSquare size={12} /> Install
+                      </button>
                       <code
                         className="rounded px-1.5 py-0.5 font-mono text-[11px]"
                         style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}

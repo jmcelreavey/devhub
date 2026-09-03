@@ -553,7 +553,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         hint: "Chat",
         perform: () => {
           onClose();
-          openAgentChat({ title: "Agent", kind: "agent", forceNewTab: true, autoSend: false });
+          openAgentChat({ title: "Agent", kind: "agent", autoSend: false });
           window.setTimeout(() => focusAgentComposer(), 80);
         },
       },
@@ -591,11 +591,18 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   }, [notes, diagrams, tasks, tickets, repos, projects, router, toggleTaskDone, toast, setup, onClose]);
 
   const filtered = useMemo(() => {
+    // History records every visit, so a page you keep coming back to (Today,
+    // usually) would otherwise fill the Recent list with copies of itself.
+    const seenHrefs = new Set<string>([currentHref]);
     const recent: Command[] = query.trim()
       ? []
       : [...history]
           .reverse()
-          .filter((entry) => entry.href !== currentHref)
+          .filter((entry) => {
+            if (seenHrefs.has(entry.href)) return false;
+            seenHrefs.add(entry.href);
+            return true;
+          })
           .slice(0, 8)
           .map((entry) => ({
             id: `recent:${entry.href}:${entry.ts}`,

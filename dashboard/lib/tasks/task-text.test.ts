@@ -246,7 +246,7 @@ describe("matchesTaskSearch", () => {
       links: [
         {
           kind: "pr",
-          id: "businessinsider/syndication-services#46",
+          id: "example-org/syndication-services#46",
           label: "Add Meta feed delivery",
         },
       ],
