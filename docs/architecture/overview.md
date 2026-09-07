@@ -8,6 +8,7 @@ related:
   - architecture/dashboard
   - architecture/sync-engine
   - architecture/mcp-server
+  - architecture/database-client
 ---
 
 # Architecture Overview
@@ -26,6 +27,7 @@ It brings together a dashboard, shared agent configuration, persistent notes, ta
 | Sync engine   | Copies shared skills, persona, agents, and MCP configs to local tools |
 | Desktop shell | Tauri app: owns the window, the process tree and updates (`desktop/`) |
 | Integrations  | Calendar, Jira, Datadog, GitHub, and internal ops helpers             |
+| Database client | `/db` workspace + MCP `db_*` tools for Postgres, MongoDB, SQLite    |
 
 ## Mental Model
 
@@ -52,7 +54,7 @@ synced copies — never the other way round, unless you explicitly pull from a t
 
 DevHub is built for one user on a trusted machine or trusted LAN.
 
-There is no user login or session system. Mutating API routes are guarded globally by `dashboard/proxy.ts` via `requireDashboardAuth` (strict same-origin `Origin` **or** `X-DevHub-Secret` when `DEVHUB_API_SECRET` is set). Sensitive **GET** routes that need the same guard must enforce it per handler (OpenCode session recap does). See [API Routes — Common Behavior](../reference/api-routes.md#common-behavior) and [Environment Variables](../reference/environment-variables.md#core-variables).
+There is no user login or session system. Mutating API routes are guarded globally by `dashboard/proxy.ts` via `requireDashboardAuth` (strict same-origin `Origin` **or** `X-DevHub-Secret` when `DEVHUB_API_SECRET` is set). Sensitive **GET** routes that need the same guard must enforce it per handler — OpenCode recap/listen, OpenChamber listen, and every `/api/db` route. See [API Routes — Common Behavior](../reference/api-routes.md#common-behavior) and [Environment Variables](../reference/environment-variables.md#core-variables).
 
 Do not expose DevHub to the public internet without adding a proper perimeter auth layer on top of these guards.
 
@@ -68,6 +70,7 @@ DevHub stores most user-owned data as files:
 | Skills           | Markdown files in shared skill folders   |
 | Persona          | Plain text and Markdown files            |
 | Config templates | JSON files with environment placeholders |
+| Saved DB connections | App-data JSON (`db-connections.json`) — credentials never go to the browser. The client queries *your* Postgres/Mongo/SQLite; it does not store DevHub notes in those engines. See [Database client](database-client.md). |
 
 This keeps the system portable, inspectable, and easy to sync with Git.
 

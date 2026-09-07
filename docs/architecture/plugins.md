@@ -7,6 +7,7 @@ tags: [architecture, plugins]
 related:
   - contributing/creating-plugins
   - guides/theming
+  - architecture/database-client
 ---
 
 # Plugin System
@@ -102,6 +103,25 @@ writes them into `lib/plugin-nav.generated.ts`; core merges them into the sideba
 BI-owned destinations — Ops ships that way from `devhub-bi`. The `bi` gate is still
 computed by a dependency-free `lib/bi-presence.ts` detector so core holds no BI feature
 code.
+
+### Database connections
+
+A plugin can contribute database connections to `/db` without forking the client.
+`dashboard.connections` is a module path under the plugin's `lib/` that default-exports
+a `DbConnectionProvider` (`list()` cheap, `resolve(id)` may mint credentials).
+
+```json
+"dashboard": {
+  "root": "dashboard",
+  "paths": ["lib/bi-db-provider.ts"],
+  "connections": "lib/bi-db-provider.ts"
+}
+```
+
+`lib/plugins/db-materialize.ts` writes `lib/plugin-db-providers.generated.ts` with a real
+`import` (empty baseline when no plugin declares connections, same skip-worktree treatment
+as plugin nav). The module **must** also be covered by `dashboard.paths`, or the generated
+import would fail the whole build. See [Database client — The plugin seam](database-client.md#the-plugin-seam).
 
 ### Overlays (single-file extensions)
 

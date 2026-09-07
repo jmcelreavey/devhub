@@ -7,6 +7,7 @@ tags: [overview]
 related:
   - getting-started/installation
   - architecture/overview
+  - architecture/database-client
 ---
 
 # DevHub Documentation

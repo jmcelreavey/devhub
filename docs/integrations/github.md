@@ -7,6 +7,7 @@ tags: [integrations]
 related:
   - guides/standup
   - guides/repo-learning
+  - getting-started/setup
 ---
 
 # GitHub
@@ -27,13 +28,19 @@ DevHub uses GitHub data for pull request tracking, repo awareness, and standup g
 
 ## Recommended Setup
 
-Install and authenticate the GitHub CLI:
+DevHub uses your local GitHub CLI session. It does not store a separate GitHub token in `.env.local`.
+
+**From `/setup`:** click **Sign in with GitHub**. That is GitHub's device flow — a code plus `https://github.com/login/device` — the same protocol as `gh auth login --web`. DevHub polls until you approve, then runs `gh auth login --with-token` (and `gh auth setup-git`) on the server. The access token never reaches the browser. Device codes are held in process memory only and expire with the flow (~15 minutes) or a dashboard restart.
+
+**From a terminal** (still supported):
 
 ```bash
 gh auth login
 ```
 
-DevHub can then use your existing local GitHub authentication instead of storing a separate token.
+Then press **Check connection** on `/setup`. `GET /api/setup/status` reports `github` / `githubVars.authenticated` from that `gh` session.
+
+Scopes requested by the in-app flow match `gh auth login --web`: `repo`, `read:org`, `gist`, `workflow`. To use your own OAuth app, set `DEVHUB_GITHUB_OAUTH_CLIENT_ID` (the default is GitHub CLI's public client id, which is what makes the token acceptable to `gh`).
 
 ## Temporary Note And Doc Sharing
 

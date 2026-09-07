@@ -14,13 +14,13 @@ related:
 
 **Own** (`/own`) is a repo-centric workspace for the question "what is happening to code I am accountable for?" It complements **Repos** (clone and edit locally) and **PRs** (your authored and review-requested queue) by focusing on **inbound change** to repositories you mark owned.
 
-The sidebar entry is gated on GitHub (`gh auth login`); it appears once `GET /api/setup/status` reports `github: true`.
+The index is folded into **Repos**: `/own` **redirects** to `/repos?view=owned`. Per-repo pages stay at `/own/<owner>/<name>` and remain reachable from ⌘K, radar attention rows, and briefing links. The owned view is gated on GitHub (`gh auth login`); it appears once `GET /api/setup/status` reports `github: true`.
 
 ## Marking repos owned
 
 | Surface | Action |
 | ------- | ------ |
-| **Own** index (`/own`) | Enter `owner/repository` and click **Own repo**, or remove with **Stop owning** |
+| **Repos** owned view (`/repos?view=owned`, formerly `/own`) | Enter `owner/repository` and click **Own repo**, or remove with **Stop owning** |
 | **Repos** (`/repos`) | Toggle **Owned** on a card when the checkout has a GitHub remote |
 
 Ownership is stored in `.devhub/ownership/repos.json` under the DevHub checkout (`version: 1`, `repos[]` with `fullName`, `addedAt`, and optional `domains` / `teams` overrides). You do not need to edit this file by hand. Removing ownership only updates DevHub — it does not change GitHub permissions.
@@ -29,9 +29,9 @@ Per-repo familiarity (`learned[domainId] → ISO timestamp`) lives in `.devhub/o
 
 A local clone is helpful for blast-radius and digest panels but not required to list a repo; panels degrade gracefully when the repo is not in the sibling scan directory.
 
-## Index (`/own`)
+## Index (`/repos?view=owned`)
 
-The index lists every owned repository with a compact obligation strip per card:
+The owned view lists every owned repository with a compact obligation strip per card:
 
 - Open inbound PR count
 - Obligation cells (branch protection, required checks, stale reviews — tone-coded ok / bad / unknown)

@@ -153,6 +153,9 @@ Rules to know:
   (e.g. `{ href: "/ops", label: "Ops", icon: "ops", group: "bi" }`). Core materialises
   these into the sidebar / ⌘K. Prefer an existing group (`bi`, `library`, `system`) so
   the item lands under the right section header.
+- Database connections for `/db`: set `dashboard.connections` to a `lib/` module that
+  default-exports a `DbConnectionProvider`, and include that file in `dashboard.paths`.
+  See [Plugins — Database connections](../architecture/plugins.md#database-connections).
 
 ## 5a. (Optional) Overlay a core stub (single file)
 

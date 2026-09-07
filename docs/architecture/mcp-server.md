@@ -46,7 +46,7 @@ The server has two tool tiers:
 | Tier              | Source Of Truth                           | Dashboard Required | Tool Groups                                                                                                                                                                          |
 | ----------------- | ----------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Filesystem-backed | Local files under configured content dirs | No                 | Notes, docs, tasks, diagrams, appraisal, DX audit                                                                                                                                    |
-| Dashboard-backed  | DevHub HTTP routes on `DEVHUB_BASE_URL`   | Yes                | Status, briefing, calendar, work/PRs/Jira, assets, search, scripts, repos (list/open/reveal/clone/learn + full git workspace), capability, sessions, share, workspace reads, Datadog, terminal |
+| Dashboard-backed  | DevHub HTTP routes on `DEVHUB_BASE_URL`   | Yes                | Status, briefing, calendar, work/PRs/Jira, assets, search, scripts, repos (list/open/reveal/clone/learn + full git workspace), capability, sessions, share, workspace reads, Datadog, terminal, **database client (`db_*`)** |
 | Script-backed     | Local shell scripts under `REPO_ROOT`     | No (runs detached) | `repo_ship`, `repo_ship_status`                                                                                                                                                      |
 
 Filesystem-backed tools call the vault/storage layer directly and work headless.
@@ -107,6 +107,7 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 | Tags       | `tags_list`, `tags_lookup`, `tags_rename` — discover the existing `#tag` vocabulary before inventing near-duplicates, get everything tied to one tag, and rename globally (confirm-gated). There is no `tags_create`: writing `#tag` in a task or note body _is_ the create path                                                                              |
 | Ownership  | `owned_repos`, `repo_owner_brief`, `repo_pr_radar`, `repo_who_owns`, `repo_knowledge_gaps` — dashboard-backed proxies for `/api/own/*`                                                                                                                                                                                                                        |
 | Terminal   | `terminal_list`, `terminal_tail`, `terminal_propose_run`, `terminal_proposal_status` — dock tabs and propose-then-confirm command runs. **Never** injects stdin; the UI must confirm.                                                                                                                                                                         |
+| Database   | `db_connections`, `db_preflight`, `db_connect`, `db_schema`, `db_table`, `db_query`, `db_explain`, `db_execute`, `db_cancel`, `db_diff`, `db_history` — proxy `/api/db/*`. Reads via `db_query`; writes via `db_execute` (`confirm: true`, plus `confirmLabel` on dangerous connections). The MCP process never opens a database. See [Database client](database-client.md). |
 
 `recall` is the one an agent should reach for first. `search` answers "which
 files contain these words"; `recall` answers "what do I already know about
@@ -117,15 +118,17 @@ BI-specific MCP tools are contributed by the private BI plugin as a separate ser
 
 **Scope notes:** `notes_list` and `notes_search` cover the workspace slice only — `daily/` journals plus root-level `.json` scratch notes. Structured areas like `learnings/` need explicit paths via `notes_read`. `calendar_list` returns Google Calendar **accounts and selection state**, not events (use `calendar_week` for the week grid).
 
-Dashboard-backed tools that mutate runtime or external state require `confirm: true` (for example `services_restart`, mutating `scripts_run` entries, `repos_git_stage`, `repos_git_commit`, `repos_git_push`, `repos_git_branch`, `prs_open_in_cursor`, and `jira_ticket_transition`). Long-running actions return a `runId`; poll the matching status tool, such as `scripts_run_status`, until the run exits. MCP cannot stream the dashboard's live run log.
+Dashboard-backed tools that mutate runtime or external state require `confirm: true` (for example `services_restart`, mutating `scripts_run` entries, `repos_git_stage`, `repos_git_commit`, `repos_git_push`, `repos_git_branch`, `prs_open_in_cursor`, `jira_ticket_transition`, and `db_execute`). Long-running actions return a `runId`; poll the matching status tool, such as `scripts_run_status`, until the run exits. MCP cannot stream the dashboard's live run log.
 
 All `repos_git_*` tools proxy the Repo Git workspace HTTP routes (`/api/repos/<name>/git/*` and `/branches`) — they do not shell out to `git` directly from the MCP process. Start the dashboard before using them.
 
-Sensitive dashboard routes use `requireDashboardAuth` (mutating routes via global `proxy.ts`; `GET /api/opencode/recap` in-route). Set `DEVHUB_API_SECRET` in `dashboard/.env.local` and in the synced MCP env when LAN exposure or non-browser callers need access; `DashboardClient` sends `Origin` and `X-DevHub-Secret` automatically.
+All `db_*` tools proxy `/api/db/*` the same way. Start the dashboard before using them. Prefer `db_query` / `db_execute` over a shell `psql`/`mongosh` so the classifier, engine read-only mode, timeouts, and history stay in one place.
+
+Sensitive dashboard routes use `requireDashboardAuth` (mutating routes via global `proxy.ts`; GET `/api/opencode/recap`, GET listen routes, and every `/api/db` route in-handler). Set `DEVHUB_API_SECRET` in `dashboard/.env.local` and in the synced MCP env when LAN exposure or non-browser callers need access; `DashboardClient` sends `Origin` and `X-DevHub-Secret` automatically.
 
 ## Storage Model
 
-The MCP server uses local files, not a database.
+The MCP server itself uses local files, not a database. Notes, tasks, docs, and skills stay on disk. The `db_*` tools are a **dashboard proxy** for databases you already run (RDS, Atlas, SQLite files) — they do not store DevHub content in those engines.
 
 | Data      | Format                                  | Directory   |
 | --------- | --------------------------------------- | ----------- |
@@ -258,6 +261,19 @@ Proposals live in the dashboard process (15 min TTL, max 20 pending). Desktop WS
 
 For branch checkout, pull, fetch, and undo, use `repos_git_branches` (read) and `repos_git_branch` (mutate). Stash, log, show, blame, and conflict resolution have matching `repos_git_*` tools that proxy the same routes as the Repo Git workspace UI.
 
+### Query a database from an agent
+
+These proxy `/api/db/*`. Start the dashboard first. Full safety model: [Database client](database-client.md).
+
+1. `db_connections` — pick an id (filter with `env`, `engine`, `service`, or `connectionId`).
+2. If the row is `unavailable`, `db_connect` with `fix: true` (and `accessMode: "write"` before a mutation). `db_preflight` diagnoses without changing machine state.
+3. `db_schema` / `db_table` for the objects you need — do not dump every column of every table.
+4. `db_query` for reads. It sends `readOnly: true`; writes are refused here even on a write-capable connection.
+5. `db_execute` with `confirm: true` only for an authorized mutation. Production (`dangerous`) also needs `confirmLabel` matching the connection label from step 1.
+6. `db_explain` before tuning SQL (Postgres/SQLite; never `ANALYZE`). `db_cancel` if a run overruns. `db_history` to recall what already ran.
+
+Default MCP row cap is 100. Do not interpolate untrusted values into SQL.
+
 ### Open a PR in Cursor
 
 These proxy the same GitHub PR routes as the `/prs` row actions. Start the dashboard first.
@@ -372,7 +388,11 @@ plugin MCP packages. See [Plugin System](plugins.md) and
 | `tsx` is missing for `devhub`           | Run `cd mcp-servers/devhub-server && npm install`.                                                                                          |
 | Plugin MCP server fails to start        | Run `npm install` inside the plugin's `mcp-servers/<name>/` package and re-run MCP sync.                                                    |
 | A plugin MCP tool is missing            | Check plugin registration in `~/.config/devhub/plugins.json`, then run the sync action so plugin MCP configs are materialized.              |
-| Status page says a command is missing   | Bare commands such as `npx`, `tsx`, and `uvx` must resolve on `PATH`; absolute or relative command paths must exist on disk.                |
+| `db_*` 404                              | Packaged dashboard older than the checkout — rebuild/sync rather than retrying. Tools need the dashboard process.               |
+| `db_query` refuses a write              | Use `db_execute` with `confirm: true`. `db_query` always sends `readOnly: true`.                                                 |
+| `db_execute` `confirm_required`         | Pass `confirmLabel` equal to the connection label from `db_connections` (prd + privileged).                                      |
+| `db_connect` still unavailable          | Check Tailscale / AWS profile from Ops. `fix: true` only applies remedies the provider declared.                                 |
+| Status page says a command is missing   | Bare commands such as `npx`, `tsx`, and `uvx` must resolve on `PATH`; absolute or relative command paths must exist on disk.     |
 
 ## Safety Model
 

@@ -7,6 +7,7 @@ tags: [architecture, dashboard]
 related:
   - reference/api-routes
   - architecture/notes-system
+  - architecture/database-client
 ---
 
 # Dashboard Architecture
@@ -26,7 +27,8 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 | Actions      | Safe script runner for maintenance tasks                                                                    |
 | Status       | Health checks for repo, services, MCP, sync health, merge conflicts, and network access                     |
 | Setup        | Environment and integration configuration                                                                   |
-| Repos        | Sibling git checkout discovery, GitHub clone/search, Cursor/GitKraken launch, compose-up, and Repo Learning |
+| Repos        | Sibling git checkout discovery, GitHub clone/search, Cursor/GitKraken launch, compose-up, Repo Learning, and owned-repo radar (`?view=owned`) |
+| Databases    | In-app client for PostgreSQL, MongoDB, and SQLite (`/db`) — see [Database client](database-client.md)       |
 | Integrations | Calendar, Jira, Datadog, GitHub, and internal ops views                                                     |
 
 ## Walkthroughs
@@ -53,27 +55,27 @@ When allowlisted script runs failed since your last visit, Today shows a dismiss
 
 The sidebar is driven by `dashboard/lib/nav.ts` — **18** core sidebar destinations in `NAV_ITEMS` (plugin items such as Ops merge in separately), grouped into **Workspace**, **Library**, **BI**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`.
 
-| Sidebar  | Route       | Notes                                                                                  |
-| -------- | ----------- | -------------------------------------------------------------------------------------- |
-| Today    | `/`         | Daily hub                                                                              |
-| Briefing | `/briefing` | Full morning digest                                                                    |
-| Calendar | `/calendar` | Gated on `calendar`                                                                    |
-| Work     | `/work`     | Tasks + Jira + History tabs (see below)                                                |
-| PRs      | `/prs`      | Gated on `github`                                                                      |
-| Review   | `/review`   | Weekly retrospective; desktop nav only                                                 |
-| Library  | `/notes`    | Top-bar tabs: Notes, Docs, Radar, Appraisal, Research, Diagrams, Live links (gated)      |
-| Recall   | `/recall`   | Hybrid retrieval over notes, docs, tasks, and the event spine — see [Recall](recall.md)   |
-| Agents   | `/skills`   | Skills, persona, MCP catalog                                                           |
-| Repos    | `/repos`    | Desktop nav only; sibling clones sorted by recent git activity                         |
-| Own      | `/own`      | Repo ownership radar (gated on `github`); see [Repo ownership](../guides/repo-ownership.md) |
-| Ops      | `/ops`      | BI group; from BI plugin (`gate: bi`)                                                  |
-| Datadog  | `/datadog`  | BI group; gated on `datadog`                                                           |
-| System   | `/status`   | Top-bar tabs: Status, Logs (desktop), Actions (desktop), Setup                          |
-| Chamber  | `/chamber`  | Gated on `chamber`                                                                     |
-| OpenCode | `/opencode` | Gated on `opencode`                                                                    |
-| Claude   | `/claude`   | Gated on `claude`; desktop nav only                                                    |
-| Cursor   | `/cursor`   | Gated on `cursor`; desktop nav only                                                    |
-| ChatGPT  | `/chatgpt`  | Gated on `chatgpt`; desktop nav only. ChatGPT.app is the Codex desktop.                |
+| Sidebar    | Route       | Notes                                                                                         |
+| ---------- | ----------- | --------------------------------------------------------------------------------------------- |
+| Today      | `/`         | Daily hub                                                                                     |
+| Briefing   | `/briefing` | Full morning digest                                                                           |
+| Calendar   | `/calendar` | Gated on `calendar`                                                                           |
+| Work       | `/work`     | Tasks + Jira + History tabs (see below)                                                       |
+| PRs        | `/prs`      | Gated on `github`                                                                             |
+| Review     | `/review`   | Weekly retrospective; desktop nav only                                                        |
+| Notes      | `/notes`    | Library landing. Top-bar tabs: Notes, Search, Docs, Radar, Appraisal, Research, Diagrams, Live links (gated) |
+| Search     | `/search`   | Unified discovery (notes/docs + Recall). Library sidebar slot                                 |
+| Agents     | `/skills`   | Skills, persona, MCP catalog                                                                  |
+| Repos      | `/repos`    | Desktop nav only; sibling clones sorted by recent git activity. Owned radar at `?view=owned`  |
+| Databases  | `/db`       | Desktop nav only, **ungated**. SQLite works with no setup; BI connections appear with the plugin. See [Database client](database-client.md) |
+| Ops        | `/ops`      | BI group; from BI plugin (`gate: bi`)                                                         |
+| Datadog    | `/datadog`  | BI group; gated on `datadog`                                                                  |
+| System     | `/status`   | Top-bar tabs: Status, Logs (desktop), Actions (desktop), Setup                                |
+| Chamber    | `/chamber`  | Gated on `chamber`                                                                            |
+| OpenCode   | `/opencode` | Gated on `opencode`                                                                           |
+| Claude     | `/claude`   | Gated on `claude`; desktop nav only                                                           |
+| Cursor     | `/cursor`   | Gated on `cursor`; desktop nav only                                                           |
+| ChatGPT    | `/chatgpt`  | Gated on `chatgpt`; desktop nav only. ChatGPT.app is the Codex desktop.                       |
 
 ### Merged destinations
 
@@ -91,13 +93,13 @@ body text, Jira key, due date, abandon reason, and linked-entity labels/ids.
 **History** uses the same control for day summaries. Whitespace-separated terms
 are AND-ed on every tab.
 
-**Library** and **System** use `SectionTabs` in the top bar when you land on any sibling route (for example `/docs` or `/setup`). Gated tabs (Live links) appear only when setup enables them. **System** also includes a **Logs** tab (desktop only) for live tail of shell, sidecar, and renderer logs. **BI** is a sidebar group (Ops from the BI plugin, Datadog from core) — first-class items, not System tabs.
+**Library** and **System** use `SectionTabs` in the top bar when you land on any sibling route (for example `/docs` or `/setup`). Library tabs are Notes, Search, Docs, Radar, Appraisal, Research, Diagrams, and Live links. Gated tabs (Live links) appear only when setup enables them. **System** also includes a **Logs** tab (desktop only) for live tail of shell, sidecar, and renderer logs. **BI** is a sidebar group (Ops from the BI plugin, Datadog from core) — first-class items, not System tabs. **Search** and **Databases** are sidebar destinations, not Library tabs (Search also appears as a Library tab so it stays one click from Notes).
 
 **Diagrams** (`/diagrams`, Library tab) opens a browse-by-folder landing page — recent diagrams plus folder cards (`lib/diagrams/diagram-browse.ts`). Click a card or recent item to open the tldraw editor at `/diagrams/[...path]`.
 
 ### Legacy routes
 
-Older URLs still work and remain reachable via **⌘K** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/appraisal`, `/one-on-one`, `/radar`, `/research`, `/tasks`, `/tickets`, `/search`, `/learnings`, `/diagrams`, `/docs`, `/shared`, `/actions`, `/setup`. They no longer have permanent sidebar slots — Library section tabs cover `/radar`, `/appraisal`, and `/research`; `/learnings` stays palette-only. `/ops` (plugin) and `/datadog` live under the **BI** sidebar group.
+Older URLs still work and remain reachable via **⌘K** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/own`, `/appraisal`, `/one-on-one`, `/recall`, `/radar`, `/research`, `/learnings`, `/diagrams`, `/docs`, `/shared`, `/actions`, `/logs`, `/setup`. They no longer have permanent sidebar slots — Library section tabs cover `/radar`, `/appraisal`, `/research`, `/diagrams`, `/docs`, and `/shared`; `/learnings` stays palette-only. `/own` redirects to `/repos?view=owned`. `/tasks` and `/tickets` redirect to `/work` and are not in `ALL_NAV_DESTINATIONS`. `/ops` (plugin) and `/datadog` live under the **BI** sidebar group.
 
 On mobile, the bottom shelf uses **Work** (`/work`) instead of separate Tasks/Tickets entries.
 
@@ -279,9 +281,13 @@ The top strip on `/radar` is **not** generated by the capability scan. Edit `not
 
 See [Capability Radar plan](../archive/capability-radar-plan.md) for scan architecture and lab workflow.
 
+## Databases
+
+**Library → Databases** (`/db`, desktop nav, ungated) is the in-app client for PostgreSQL, MongoDB, and SQLite. Connections come from a local provider (hand-added + discovered `.db` files) and from a plugin `dashboard.connections` module (BI RDS/Atlas). The MCP `db_*` tools share the same pool and write gate. Full architecture: [Database client](database-client.md).
+
 ## Recall
 
-**Library → Recall** (`/recall`) is the interactive face of the derived memory layer described in [Recall](recall.md). It ranks passages from notes, docs, learnings, diagrams, task history, and the append-only event spine with hybrid BM25 + vector fusion, a token budget slider, and per-hit score breakdown.
+**Recall** (`/recall`) is palette/legacy, not a sidebar slot — Search is the unified-discovery entry. The page is the interactive face of the derived memory layer described in [Recall](recall.md). It ranks passages from notes, docs, learnings, diagrams, task history, and the append-only event spine with hybrid BM25 + vector fusion, a token budget slider, and per-hit score breakdown.
 
 | Surface | Route / tool | Behavior |
 | ------- | ------------ | -------- |
@@ -296,7 +302,7 @@ The context pack (`GET /api/context-pack`) also calls `recall` internally when r
 
 ## Own (repo ownership)
 
-**Library → Own** (`/own`, gated on GitHub) tracks repositories you are accountable for — inbound PRs, obligation health, knowledge gaps, and catch-up digests. Mark repos owned from `/repos` or the Own index; state lives in `.devhub/ownership/repos.json` (not hand-edited). Full workflow: [Repo ownership](../guides/repo-ownership.md).
+Ownership radar lives on **Repos** (`/repos?view=owned`, gated on GitHub). `/own` still works and **redirects** there; per-repo pages stay at `/own/<owner>/<name>`. Mark repos owned from a Repos card or the owned index; state lives in `.devhub/ownership/repos.json` (not hand-edited). Full workflow: [Repo ownership](../guides/repo-ownership.md).
 
 ## Morning Briefing
 

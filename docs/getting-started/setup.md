@@ -7,6 +7,7 @@ tags: [setup]
 related:
   - reference/environment-variables
   - getting-started/installation
+  - integrations/github
 ---
 
 # Setup
@@ -28,9 +29,19 @@ http://localhost:1337/setup
 | Google Calendar | Optional calendar widget and calendar page                                  |
 | Jira Cloud      | Optional ticket views and standup support                                   |
 | Datadog         | Optional alert summaries and deep links                                     |
-| GitHub          | Pull request and repo-related features, usually via the GitHub CLI          |
+| GitHub          | Pull request and repo-related features via the GitHub CLI — **Sign in with GitHub** on this page, or `gh auth login` in a terminal |
 | Infra           | Optional internal infrastructure helpers, when an infra plugin is installed |
 | Notes AI        | Optional OpenAI-compatible BlockNote AI — **env vars only** (see below)     |
+
+## GitHub sign-in
+
+The GitHub step runs GitHub's **device flow** (the same protocol as `gh auth login --web`) so you do not have to leave `/setup`:
+
+1. Click **Sign in with GitHub**.
+2. Enter the shown code at the GitHub verification URL (DevHub can open it).
+3. The step completes when GitHub approves. DevHub pipes the token into `gh auth login --with-token` and runs `gh auth setup-git`. The token is **never** returned to the browser and is **not** written to `.env.local`.
+
+Pending device codes live in dashboard process memory (~15 minutes) and die on restart. Manual `gh auth login` still works — **Check connection** is the escape hatch. Optional override: `DEVHUB_GITHUB_OAUTH_CLIENT_ID` (defaults to the GitHub CLI's public OAuth app so `gh` accepts the token). See [GitHub](../integrations/github.md#recommended-setup).
 
 ## Core Settings
 
@@ -97,6 +108,7 @@ The `/setup` wizard reads and writes configuration through local API routes (sam
 | `POST /api/setup/save` | Persists core paths, network/LAN settings, and integration credentials to `DEVHUB_ENV_FILE` (`dashboard/.env.local` in a checkout, `<app-data>/config/.env.local` when installed). |
 | `POST /api/setup/validate-path` | Validates `reposDir` (code folder), `notesDir`, or the optional `repoRoot` checkout before save. |
 | `POST /api/setup/check/datadog` | Tests Datadog API + application keys against the Events API. |
+| `POST /api/setup/github/device` | Starts or polls GitHub device-flow login (`action: "start"` \| `"poll"`). Token goes to `gh`, never to the browser. |
 
 The Status page service cards (`chamber`, `opencode`) also read `chamber` / `opencode` from `GET /api/setup/status` — they render only when the corresponding peer is enabled.
 
