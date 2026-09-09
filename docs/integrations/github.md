@@ -132,7 +132,7 @@ Review notes use a stable notes path:
 pr-reviews/<owner-repo-slug>-<pr-number>
 ```
 
-For example, `BusinessInsider/Fancy Repo#123` becomes
+For example, `Example-Org/Fancy Repo#123` becomes
 `pr-reviews/example-org-fancy-repo-123`. Once the note exists, the dashboard
 shows a **Notes** link beside that PR. After clicking **Review with agent**, the link polls
 for the note every few seconds; before a note exists, it renders nothing.

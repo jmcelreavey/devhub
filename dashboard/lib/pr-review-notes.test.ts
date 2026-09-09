@@ -3,10 +3,10 @@ import { prReviewNoteHref, prReviewNotePath } from "./pr-review-notes";
 
 describe("pr-review-notes", () => {
   const row = {
-    repo: "BusinessInsider/Fancy Repo",
+    repo: "Example-Org/Fancy Repo",
     number: 123,
     title: "Does not matter",
-    url: "https://github.com/BusinessInsider/Fancy Repo/pull/123",
+    url: "https://github.com/Example-Org/Fancy Repo/pull/123",
   };
 
   it("builds a stable PR review note path", () => {

@@ -75,7 +75,7 @@ describe("clusterRepoWork — PR association", () => {
           ...prTask,
           links: [
             ...prTask.links,
-            { kind: "pr" as const, id: "BusinessInsider/Atlas#42", label: "atlas#42" },
+            { kind: "pr" as const, id: "Example-Org/Atlas#42", label: "atlas#42" },
           ],
         },
       ],
