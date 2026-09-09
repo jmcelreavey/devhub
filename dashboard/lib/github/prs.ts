@@ -29,7 +29,7 @@ export interface GithubPrRow {
   /** PR author from the Search API `user` field. */
   author?: GithubPrAuthor;
   /**
-   * True when GitHub's review decision is APPROVED (ready-to-merge signal).
+   * True when the PR carries a standing approval from a write-access reviewer.
    * Filled for open authored / review-requested rows via a parallel search.
    */
   approved?: boolean;
@@ -144,38 +144,87 @@ async function searchOpenPrs(query: string): Promise<SearchIssueItem[]> {
   return searchIssues(query, MAX_LIST);
 }
 
-/** Best-effort: a 422 on the approval lookup must not take down the PR list. */
-async function searchOpenPrsIgnoringErrors(query: string): Promise<SearchIssueItem[]> {
+interface ApprovalSearchNode {
+  url?: string;
+  reviewDecision?: string | null;
+  latestOpinionatedReviews?: { nodes?: Array<{ state?: string } | null> | null } | null;
+}
+
+interface ApprovalSearchResponse {
+  data?: {
+    authored?: { nodes?: Array<ApprovalSearchNode | null> | null } | null;
+    reviewing?: { nodes?: Array<ApprovalSearchNode | null> | null } | null;
+  } | null;
+}
+
+const APPROVAL_SEARCH_QUERY = `
+query($authored: String!, $reviewing: String!) {
+  authored: search(query: $authored, type: ISSUE, first: 100) { nodes { ...approval } }
+  reviewing: search(query: $reviewing, type: ISSUE, first: 100) { nodes { ...approval } }
+}
+fragment approval on PullRequest {
+  url
+  reviewDecision
+  latestOpinionatedReviews(first: 50, writersOnly: true) { nodes { state } }
+}
+`;
+
+/**
+ * `reviewDecision` is null on repos that do not *require* reviews, so the old
+ * `review:approved` search silently missed approved PRs (businessinsider/app#98
+ * had a write-access APPROVED review on HEAD and still never got the tick).
+ * `latestOpinionatedReviews` is the per-reviewer latest verdict, so a later
+ * "changes requested" still cancels an earlier approval.
+ */
+function isApprovedNode(node: ApprovalSearchNode): boolean {
+  if (node.reviewDecision === "APPROVED") return true;
+  const states = (node.latestOpinionatedReviews?.nodes ?? [])
+    .map((r) => r?.state)
+    .filter((state): state is string => Boolean(state));
+  return states.includes("APPROVED") && !states.includes("CHANGES_REQUESTED");
+}
+
+/** Best-effort: a failed approval lookup must not take down the PR list. */
+async function fetchApprovedPrUrls(): Promise<Set<string>> {
   try {
-    return await searchOpenPrs(query);
+    const { stdout } = await execGh([
+      "api",
+      "graphql",
+      "-f",
+      `query=${APPROVAL_SEARCH_QUERY}`,
+      "-f",
+      "authored=author:@me is:pr state:open",
+      "-f",
+      "reviewing=review-requested:@me is:pr state:open",
+    ]);
+    const parsed = JSON.parse(stdout) as ApprovalSearchResponse;
+    const nodes = [
+      ...(parsed.data?.authored?.nodes ?? []),
+      ...(parsed.data?.reviewing?.nodes ?? []),
+    ];
+    return new Set(
+      nodes
+        .filter((node): node is ApprovalSearchNode => node !== null && node !== undefined)
+        .filter(isApprovedNode)
+        .map((node) => node.url?.trim())
+        .filter((url): url is string => Boolean(url)),
+    );
   } catch {
-    return [];
+    return new Set();
   }
 }
 
 /**
  * All open PRs you authored and PRs awaiting your review, using the GitHub Search API
  * across all repositories (not limited to locally cloned repos).
- *
- * GitHub Search returns HTTP 422 for `review:approved` combined with an OR group
- * (`(author:@me OR review-requested:@me)`), which used to 500 `/api/github/prs`.
- * Split into two valid queries instead.
  */
 export async function fetchMyGithubPrs(): Promise<{ authored: GithubPrRow[]; reviews: GithubPrRow[] }> {
-  // Parallel `review:approved` search is cheaper than N× `gh pr view --json reviewDecision`
-  // and matches GitHub's ready-to-merge decision (not "someone left an approve comment").
-  const [authoredItems, reviewItems, approvedAuthored, approvedReviewRequested] = await Promise.all([
+  // One parallel GraphQL lookup for approval state is cheaper than N× `gh pr view`.
+  const [authoredItems, reviewItems, approvedUrls] = await Promise.all([
     searchOpenPrs("author:@me is:pr state:open sort:updated-desc"),
     searchOpenPrs("review-requested:@me is:pr state:open sort:updated-desc"),
-    searchOpenPrsIgnoringErrors("author:@me is:pr state:open review:approved"),
-    searchOpenPrsIgnoringErrors("review-requested:@me is:pr state:open review:approved"),
+    fetchApprovedPrUrls(),
   ]);
-
-  const approvedUrls = new Set(
-    [...approvedAuthored, ...approvedReviewRequested]
-      .map((item) => item.html_url?.trim())
-      .filter((url): url is string => Boolean(url)),
-  );
 
   const withApproval = (item: SearchIssueItem): GithubPrRow => {
     const row = rowFromSearchItem(item);

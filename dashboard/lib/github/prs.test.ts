@@ -32,6 +32,30 @@ function searchWith(url: string): { stdout: string; stderr: string } {
   };
 }
 
+interface ApprovalNode {
+  url: string;
+  reviewDecision: string | null;
+  states?: string[];
+}
+
+function approvalSearch(authored: ApprovalNode[]): { stdout: string; stderr: string } {
+  const toNode = (n: ApprovalNode) => ({
+    url: n.url,
+    reviewDecision: n.reviewDecision,
+    latestOpinionatedReviews: { nodes: (n.states ?? []).map((state) => ({ state })) },
+  });
+  return {
+    stdout: JSON.stringify({
+      data: { authored: { nodes: authored.map(toNode) }, reviewing: { nodes: [] } },
+    }),
+    stderr: "",
+  };
+}
+
+function isGraphql(args: unknown): boolean {
+  return Array.isArray(args) && args[0] === "api" && args[1] === "graphql";
+}
+
 function queryFromCall(args: unknown): string {
   const path = Array.isArray(args) ? String(args[1] ?? "") : "";
   const qIndex = path.indexOf("q=");
@@ -44,32 +68,30 @@ describe("fetchMyGithubPrs", () => {
     vi.mocked(execGh).mockReset();
   });
 
-  it("does not send a grouped OR review:approved query (GitHub 422s it)", async () => {
-    vi.mocked(execGh).mockResolvedValue(emptySearch());
+  it("lists both queues and looks up approvals over GraphQL", async () => {
+    vi.mocked(execGh).mockImplementation(async (args) =>
+      isGraphql(args) ? approvalSearch([]) : emptySearch(),
+    );
 
     await fetchMyGithubPrs();
 
-    const queries = vi.mocked(execGh).mock.calls.map((call) => queryFromCall(call[0]));
-    expect(queries.some((q) => q.includes("review:approved") && /\bOR\b/.test(q))).toBe(false);
-    expect(queries).toEqual(
+    const calls = vi.mocked(execGh).mock.calls.map((call) => call[0]);
+    expect(calls.map(queryFromCall)).toEqual(
       expect.arrayContaining([
         "author:@me is:pr state:open sort:updated-desc",
         "review-requested:@me is:pr state:open sort:updated-desc",
-        "author:@me is:pr state:open review:approved",
-        "review-requested:@me is:pr state:open review:approved",
       ]),
     );
+    // `review:approved` misses PRs on repos that do not require reviews.
+    expect(calls.some((args) => queryFromCall(args).includes("review:approved"))).toBe(false);
+    expect(calls.filter(isGraphql)).toHaveLength(1);
   });
 
-  it("still returns authored and review queues when the approval lookup 422s", async () => {
+  it("still returns authored and review queues when the approval lookup fails", async () => {
     vi.mocked(execGh).mockImplementation(async (args) => {
+      if (isGraphql(args)) throw new Error("gh: Validation Failed (HTTP 422)");
       const q = queryFromCall(args);
-      if (q.includes("review:approved")) {
-        throw new Error("gh: Validation Failed (HTTP 422)");
-      }
-      if (q.includes("author:@me") && !q.includes("review-requested")) {
-        return searchWith("https://github.com/acme/demo/pull/1");
-      }
+      if (q.includes("author:@me")) return searchWith("https://github.com/acme/demo/pull/1");
       return searchWith("https://github.com/acme/demo/pull/2");
     });
 
@@ -77,6 +99,36 @@ describe("fetchMyGithubPrs", () => {
 
     expect(authored.map((r) => r.url)).toEqual(["https://github.com/acme/demo/pull/1"]);
     expect(reviews.map((r) => r.url)).toEqual(["https://github.com/acme/demo/pull/2"]);
+    expect(authored[0]?.approved).toBeUndefined();
+  });
+
+  it("marks a PR approved when reviewDecision is null but a writer approved HEAD", async () => {
+    const url = "https://github.com/acme/demo/pull/1";
+    vi.mocked(execGh).mockImplementation(async (args) => {
+      if (isGraphql(args)) return approvalSearch([{ url, reviewDecision: null, states: ["APPROVED"] }]);
+      const q = queryFromCall(args);
+      return q.includes("author:@me") ? searchWith(url) : emptySearch();
+    });
+
+    const { authored } = await fetchMyGithubPrs();
+
+    expect(authored[0]?.approved).toBe(true);
+  });
+
+  it("does not mark approved when a later review requests changes", async () => {
+    const url = "https://github.com/acme/demo/pull/1";
+    vi.mocked(execGh).mockImplementation(async (args) => {
+      if (isGraphql(args)) {
+        return approvalSearch([
+          { url, reviewDecision: "CHANGES_REQUESTED", states: ["APPROVED", "CHANGES_REQUESTED"] },
+        ]);
+      }
+      const q = queryFromCall(args);
+      return q.includes("author:@me") ? searchWith(url) : emptySearch();
+    });
+
+    const { authored } = await fetchMyGithubPrs();
+
     expect(authored[0]?.approved).toBeUndefined();
   });
 });
