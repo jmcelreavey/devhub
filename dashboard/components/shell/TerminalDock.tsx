@@ -12,6 +12,7 @@ import {
   History,
   ListTree,
   Plus,
+  Play,
   RotateCw,
   Scissors,
   Sparkles,
@@ -52,6 +53,9 @@ import { useToast } from "@/lib/hooks/use-toast";
 import {
   clampDockHeight,
   readAlwaysExpandPref,
+  readAutoRunPref,
+  writeAutoRunPref,
+  shouldAutoRunProposal,
   clampPopoutPos,
   readDockHeight,
   readPersistedDockState,
@@ -250,6 +254,8 @@ export function TerminalDock() {
   );
   /** Tabs opened only to host a proposal confirm — close on deny if unused. */
   const proposalScaffoldTabsRef = useRef(new Map<string, number>());
+  /** Server proposal ids this session already acted on (chip or auto-run). */
+  const handledProposalIdsRef = useRef(new Set<string>());
   const openRef = useRef(false);
   const tabsRef = useRef<DockTab[]>([]);
   const commandBlocksRef = useRef<Record<number, TerminalCommandBlock[]>>({});
@@ -310,6 +316,13 @@ export function TerminalDock() {
   const notifyPermissionRef = useRef<NotificationPermissionState>("default");
   /** Command-history rail dismissed in raw view. Remembered across sessions. */
   const [railHidden, setRailHidden] = useState(false);
+  /** Skip the confirm chip and inject proposals straight away. */
+  const [autoRun, setAutoRun] = useState(false);
+  /**
+   * Read by the propose handler and the MCP poll loop, which are memoised on
+   * deps that must not churn every time the toggle moves.
+   */
+  const autoRunRef = useRef(false);
   /** When each tab went busy — duration source for the notification. */
   const busySinceRef = useRef(new Map<number, number>());
   const proposal = proposalQueue[0] ?? null;
@@ -468,6 +481,7 @@ export function TerminalDock() {
     try {
       setNotifyDone(window.localStorage.getItem(NOTIFY_PREF_KEY) === "1");
       setRailHidden(window.localStorage.getItem(RAIL_PREF_KEY) === "1");
+      setAutoRun(readAutoRunPref());
     } catch {
       /* private mode */
     }
@@ -504,6 +518,19 @@ export function TerminalDock() {
             current === "default" ? await requestNotifyPermission() : current;
         })();
       }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    autoRunRef.current = autoRun;
+  }, [autoRun]);
+
+  const toggleAutoRun = useCallback(() => {
+    setAutoRun((prev) => {
+      const next = !prev;
+      writeAutoRunPref(next);
+      autoRunRef.current = next;
       return next;
     });
   }, []);
@@ -974,31 +1001,43 @@ export function TerminalDock() {
     if (!openRef.current) setUnread(true);
   }, []);
 
+  /**
+   * Open a tab and inject without raising a chip. Never puts the command on
+   * the new tab — it goes through the pending map after open so server status
+   * tracks a real write (no optimistic "injected" PATCH).
+   */
+  const injectProposalNow = useCallback(
+    (detail: TerminalProposeDetail) => {
+      const result = addTab({
+        cwd: detail.cwd,
+        label: detail.label,
+        kind: injectKindForPropose({ kind: detail.kind, source: detail.source }),
+        repoName: detail.repoName,
+        mode: detail.mode,
+        summary: detail.summary,
+        providerLabel: detail.providerLabel,
+      });
+      pendingInjectRef.current.set(result.id, {
+        command: detail.command,
+        proposalId: detail.id,
+        serverTracked: detail.source === "mcp" || detail.source === "ui",
+        quiet: false,
+        mode: detail.mode,
+      });
+      flushPendingInject(result.id);
+    },
+    [addTab, flushPendingInject],
+  );
+
   const handlePropose = useCallback(
     (detail: TerminalProposeDetail) => {
       expandDock();
-      const serverTracked = detail.source === "mcp" || detail.source === "ui";
       const injectKind = injectKindForPropose({ kind: detail.kind, source: detail.source });
-      if (detail.skipConfirm) {
-        // Never put command on the new tab — inject via pending map after open so
-        // server status tracks a real write (no optimistic "injected" PATCH).
-        const result = addTab({
-          cwd: detail.cwd,
-          label: detail.label,
-          kind: injectKind,
-          repoName: detail.repoName,
-          mode: detail.mode,
-          summary: detail.summary,
-          providerLabel: detail.providerLabel,
-        });
-        pendingInjectRef.current.set(result.id, {
-          command: detail.command,
-          proposalId: detail.id,
-          serverTracked,
-          quiet: false,
-          mode: detail.mode,
-        });
-        flushPendingInject(result.id);
+      if (
+        detail.skipConfirm ||
+        shouldAutoRunProposal({ autoRun: autoRunRef.current, command: detail.command })
+      ) {
+        injectProposalNow(detail);
         return;
       }
       enqueueProposal(detail);
@@ -1016,7 +1055,7 @@ export function TerminalDock() {
         proposalScaffoldTabsRef.current.set(detail.id, result.id);
       }
     },
-    [addTab, enqueueProposal, expandDock, flushPendingInject],
+    [addTab, enqueueProposal, expandDock, injectProposalNow],
   );
 
   useEffect(() => {
@@ -1181,18 +1220,32 @@ export function TerminalDock() {
           source: next.source === "mcp" ? "mcp" : "ui",
         }));
 
-        let additions: TerminalProposeDetail[] = [];
+        // An auto-run proposal never enters the queue, so the queue cannot be
+        // the dedupe key for it: the next 2.5s tick would still see it pending
+        // (the "injected" PATCH lands after the tab opens) and inject twice.
+        const fresh = mapped.filter((p) => !handledProposalIdsRef.current.has(p.id));
+        if (cancelled || fresh.length === 0) return;
+        for (const detail of fresh) handledProposalIdsRef.current.add(detail.id);
+
+        const chips: TerminalProposeDetail[] = [];
+        expandDock();
+        if (!openRef.current) setUnread(true);
+        for (const detail of fresh) {
+          if (shouldAutoRunProposal({ autoRun: autoRunRef.current, command: detail.command })) {
+            injectProposalNow(detail);
+          } else {
+            chips.push(detail);
+          }
+        }
+
+        if (chips.length === 0) return;
         setProposalQueue((curr) => {
           const known = new Set(curr.map((p) => p.id));
-          additions = mapped.filter((p) => !known.has(p.id));
+          const additions = chips.filter((p) => !known.has(p.id));
           if (additions.length === 0) return curr;
           return [...curr, ...additions];
         });
-
-        if (cancelled || additions.length === 0) return;
-        expandDock();
-        if (!openRef.current) setUnread(true);
-        const focus = additions[0];
+        const focus = chips[0];
         if (focus) {
           const result = addTab({
             cwd: focus.cwd,
@@ -1214,7 +1267,7 @@ export function TerminalDock() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [hydrated, addTab, expandDock]);
+  }, [hydrated, addTab, expandDock, injectProposalNow]);
 
   const setStatus = useCallback(
     (id: number, status: Status) => {
@@ -1973,6 +2026,25 @@ export function TerminalDock() {
               </button>
             </HoverTip>
           )}
+          <HoverTip
+            label={
+              autoRun
+                ? "Auto-run: on — proposals run without asking (destructive ones still confirm)"
+                : "Auto-run proposed commands without asking"
+            }
+            pos="top-end"
+          >
+            <button
+              type="button"
+              className="hub-icon-btn terminal-dock-btn"
+              data-on={autoRun || undefined}
+              onClick={toggleAutoRun}
+              aria-pressed={autoRun}
+              aria-label="Toggle auto-run for proposed commands"
+            >
+              <Play size={12} aria-hidden />
+            </button>
+          </HoverTip>
           {showSessionActions && (
             <HoverTip
               label={notifyDone ? "Notify on finished commands: on" : "Notify when long commands finish"}

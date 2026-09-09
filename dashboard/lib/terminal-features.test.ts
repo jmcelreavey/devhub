@@ -29,6 +29,7 @@ import {
   formatProposePreview,
   parsePersistedDockState,
   previewTerminalCommand,
+  shouldAutoRunProposal,
   shouldExpandOnTerminalOpen,
 } from "./terminal-dock-state";
 import {
@@ -346,3 +347,22 @@ describe("terminal-dock-state metadata", () => {
   });
 });
 
+describe("shouldAutoRunProposal", () => {
+  it("keeps the confirm chip while the pref is off", () => {
+    expect(shouldAutoRunProposal({ autoRun: false, command: "npm test" })).toBe(false);
+  });
+
+  it("runs ordinary commands without asking once the pref is on", () => {
+    expect(shouldAutoRunProposal({ autoRun: true, command: "npm test" })).toBe(true);
+  });
+
+  it.each([
+    "rm -rf node_modules",
+    "git push --force origin main",
+    "git reset --hard HEAD~3",
+    "kubectl delete pod api-0",
+    "sudo rm /etc/hosts",
+  ])("still confirms destructive command: %s", (command) => {
+    expect(shouldAutoRunProposal({ autoRun: true, command })).toBe(false);
+  });
+});

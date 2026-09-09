@@ -10,6 +10,7 @@ import {
   parseTerminalSessionKind,
   type TerminalSessionKind,
 } from "@/lib/terminal-meta";
+import { isDestructiveTerminalCommand } from "@/lib/terminal-inject";
 
 export const TERMINAL_DOCK_STORAGE_KEY = "devhub:terminal-dock.v1";
 
@@ -220,6 +221,39 @@ export function readAlwaysExpandPref(): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Optional localStorage pref — inject proposed commands straight into a tab
+ * instead of raising the confirm chip.
+ */
+export const TERMINAL_AUTORUN_KEY = "devhub:terminal-autorun";
+
+export function readAutoRunPref(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(TERMINAL_AUTORUN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function writeAutoRunPref(on: boolean): void {
+  try {
+    window.localStorage.setItem(TERMINAL_AUTORUN_KEY, on ? "1" : "0");
+  } catch {
+    /* private mode / quota */
+  }
+}
+
+/**
+ * Auto-run skips the chip, but never for the destructive patterns
+ * (`rm -rf`, `git push --force`, `kubectl delete`, …). An unattended inject is
+ * exactly where those are least recoverable, so they keep their modal.
+ */
+export function shouldAutoRunProposal(opts: { autoRun: boolean; command: string }): boolean {
+  if (!opts.autoRun) return false;
+  return !isDestructiveTerminalCommand(opts.command);
 }
 
 /** Truncate giant CLI prompts for the confirm chip preview. */
