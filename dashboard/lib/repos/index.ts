@@ -36,6 +36,11 @@ export interface RepoInfo {
    * Used to put recently touched clones first on /repos.
    */
   mtimeMs: number;
+  /**
+   * Owning repository path when this folder is a git worktree, else null.
+   * Worktrees list as repos of their own, so this is what tells them apart.
+   */
+  worktreeOf: string | null;
   /** DevHub private mirror has a reusable upstart script for this repo. */
   hasUpstart: boolean;
   /** Absolute path to the DevHub-managed upstart script (may not exist yet). */
@@ -130,6 +135,22 @@ function resolveCommonDir(repoPath: string): string | null {
   } catch {
     return gitDir;
   }
+}
+
+/**
+ * The repository a worktree folder belongs to, or null for an ordinary clone.
+ *
+ * A worktree's `.git` is a file pointing into the repository that owns it, so
+ * its common dir sits elsewhere; an ordinary clone's common dir is its own
+ * `.git`. Comparing the two is the cheapest reliable test, and the common dir's
+ * parent names the owning repository — which is what makes a folder like
+ * `app-poc-ptf-4930` legible as a second checkout rather than a stray clone.
+ */
+export function readWorktreeParent(repoPath: string): string | null {
+  const gitDir = resolveGitDir(repoPath);
+  const commonDir = resolveCommonDir(repoPath);
+  if (!gitDir || !commonDir || path.resolve(gitDir) === path.resolve(commonDir)) return null;
+  return path.dirname(path.resolve(commonDir));
 }
 
 function readHead(repoPath: string): string | null {
@@ -248,6 +269,7 @@ export async function listRepos(): Promise<RepoInfo[]> {
           path: repoPath,
           branch,
           remote,
+          worktreeOf: readWorktreeParent(repoPath),
           hasUpstart: detectRepoUpstart(e.name, repoPath),
           upstartPath: safeUpstartScriptPath(e.name),
           dirtyCount,

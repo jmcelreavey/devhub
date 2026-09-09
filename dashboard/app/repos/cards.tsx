@@ -13,6 +13,7 @@ import {
   ExternalLink,
   FolderOpen,
   GitBranch,
+  GitFork,
   MonitorPlay,
   Rocket,
   ScanSearch,
@@ -37,7 +38,7 @@ import { copyTextToClipboard } from "@/lib/clipboard";
 import { useToast } from "@/lib/hooks/use-toast";
 import { launchAgentJob } from "@/lib/agent-job";
 import { agentSkillCommand, claudeCliCommand, opencodeCliCommand, openTerminal } from "@/lib/terminal-launch";
-import type { GithubRepoInfo, RepoInfo } from "./types";
+import type { GithubRepoInfo, LocalRepoFilter, RepoInfo } from "./types";
 import type { RepoProject } from "@/lib/projects";
 
 interface RepoApps {
@@ -87,13 +88,15 @@ export function SearchCard({
   onLocalFilterChange,
   changedCount,
   unpushedCount,
+  worktreeCount,
 }: {
   query: string;
   onQueryChange: (value: string) => void;
-  localFilter: "changed" | "unpushed" | null;
-  onLocalFilterChange: (value: "changed" | "unpushed" | null) => void;
+  localFilter: LocalRepoFilter;
+  onLocalFilterChange: (value: LocalRepoFilter) => void;
   changedCount: number;
   unpushedCount: number;
+  worktreeCount: number;
   /** Named repo groups (e.g. frontend + its app); chips filter the grid. */
   projects?: RepoProject[];
   activeProjectId?: string | null;
@@ -135,7 +138,12 @@ export function SearchCard({
             tone="accent"
             onClick={() => onLocalFilterChange(localFilter === "unpushed" ? null : "unpushed")}
           />
-
+          <FilterChip
+            label="Worktrees"
+            count={worktreeCount}
+            active={localFilter === "worktree"}
+            onClick={() => onLocalFilterChange(localFilter === "worktree" ? null : "worktree")}
+          />
         </div>
       </div>
     </div>
@@ -496,10 +504,18 @@ export function LocalRepoCard({
                 </span>
               ) : null}
             </div>
-            {repo.branch && (
+            {(repo.branch || repo.worktreeOf) && (
               <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                <MetaChip icon={<GitBranch size={11} />} label={repo.branch} />
-                {githubUrl ? <RepoOpenPrLink repoName={repo.name} branch={repo.branch} /> : null}
+                {repo.branch && <MetaChip icon={<GitBranch size={11} />} label={repo.branch} />}
+                {repo.branch && githubUrl ? (
+                  <RepoOpenPrLink repoName={repo.name} branch={repo.branch} />
+                ) : null}
+                {repo.worktreeOf ? (
+                  <MetaChip
+                    icon={<GitFork size={11} />}
+                    label={`worktree of ${repo.worktreeOf.split("/").pop()}`}
+                  />
+                ) : null}
               </div>
             )}
           </div>

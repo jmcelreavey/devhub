@@ -21,7 +21,7 @@ import { useReposActions } from "./useReposActions";
 import { useToast } from "@/lib/hooks/use-toast";
 import { usePrompt } from "@/components/shell/ConfirmDialog";
 import OwnIndex from "@/app/own/client";
-import type { GithubReposApiPayload, RepoInfo, ReposApiPayload } from "./types";
+import type { GithubReposApiPayload, LocalRepoFilter, RepoInfo, ReposApiPayload } from "./types";
 import type { ResolvedOwnedRepo } from "@/lib/ownership/types";
 import type { RepoProject } from "@/lib/projects";
 
@@ -97,7 +97,7 @@ export default function ReposPage() {
     isValidating: isGithubValidating,
   } = useLive<GithubReposApiPayload>(githubKey, { refreshInterval: 120_000 });
   const scanDirDisplay = data?.scanDirDisplay ?? "";
-  const [localFilter, setLocalFilter] = useState<"changed" | "unpushed" | null>(null);
+  const [localFilter, setLocalFilter] = useState<LocalRepoFilter>(null);
   const learningRepoNameRef = useRef<string | null>(learnParam);
   const { data: apps } = useLive<{ gitkraken: boolean; revealLabel?: string }>("/api/repos/apps", {
     refreshInterval: 0,
@@ -122,6 +122,7 @@ export default function ReposPage() {
     if (normalizedLocalQuery && !repo.name.toLowerCase().includes(normalizedLocalQuery)) return false;
     if (localFilter === "changed") return repo.dirtyCount > 0;
     if (localFilter === "unpushed") return (repo.unpushedCount ?? 0) > 0;
+    if (localFilter === "worktree") return Boolean(repo.worktreeOf);
     return true;
   });
   const learningRepo = learnParam
@@ -129,6 +130,7 @@ export default function ReposPage() {
     : null;
   const changedRepos = repos.filter((repo) => repo.dirtyCount > 0).length;
   const unpushedRepos = repos.filter((repo) => (repo.unpushedCount ?? 0) > 0).length;
+  const worktreeRepos = repos.filter((repo) => Boolean(repo.worktreeOf)).length;
   const showGithubColumn = !!githubSearchQuery;
 
   useEffect(() => {
@@ -337,6 +339,7 @@ export default function ReposPage() {
         onLocalFilterChange={setLocalFilter}
         changedCount={changedRepos}
         unpushedCount={unpushedRepos}
+        worktreeCount={worktreeRepos}
         projects={projects}
         activeProjectId={activeProjectId}
         onProjectChange={setActiveProjectId}
@@ -352,9 +355,11 @@ export default function ReposPage() {
                 ? "Showing repos with local changes."
                 : localFilter === "unpushed"
                   ? "Showing repos with unpushed commits."
-                  : showGithubColumn
-                    ? "Repos already cloned next to this DevHub checkout."
-                    : "Local clones. Type above to also search GitHub."
+                  : localFilter === "worktree"
+                    ? "Showing worktrees — extra checkouts backed by another repo in this folder."
+                    : showGithubColumn
+                      ? "Repos already cloned next to this DevHub checkout."
+                      : "Local clones. Type above to also search GitHub."
             }
             actions={
               <>
@@ -415,6 +420,8 @@ export default function ReposPage() {
                 ? "No local repos with changes."
                 : localFilter === "unpushed"
                 ? "No local repos with unpushed commits."
+                : localFilter === "worktree"
+                ? "No worktrees here — every local repo is its own clone."
                 : scanDirDisplay
                 ? `No repos found in ${scanDirDisplay}${scanDirDisplay.endsWith("/") ? "" : "/"}.`
                 : "No repos found."}

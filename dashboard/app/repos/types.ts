@@ -12,6 +12,8 @@ export interface RepoInfo {
   unpushedCount?: number;
   /** Last git activity; optional on payloads cached before this field existed. */
   mtimeMs?: number;
+  /** Owning repo path when this folder is a git worktree; absent on older payloads. */
+  worktreeOf?: string | null;
   hasUpstart?: boolean;
   /** Absolute path to the DevHub-managed upstart script (may not exist yet). */
   upstartPath?: string;
@@ -151,3 +153,6 @@ export interface RepoLearnApiPayload {
   message?: string;
   ownership?: import("@/lib/ownership/types").RepoOwnershipEvidence;
 }
+
+/** Which local repos the /repos grid is narrowed to; null shows all of them. */
+export type LocalRepoFilter = "changed" | "unpushed" | "worktree" | null;

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { compareReposByMtime, repoMtimeMs } from "@/lib/repos";
+import { compareReposByMtime, readWorktreeParent, repoMtimeMs } from "@/lib/repos";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -82,5 +82,27 @@ describe("repoMtimeMs", () => {
 
     expect(Math.abs(repoMtimeMs(worktree) - worktreeWhen.getTime())).toBeLessThan(2000);
     expect(Math.abs(repoMtimeMs(repo) - mainWhen.getTime())).toBeLessThan(2000);
+  });
+});
+
+describe("readWorktreeParent", () => {
+  it("names the owning repository for a worktree", () => {
+    const repo = initRepo();
+    const worktree = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "devhub-wt-")), "feature");
+    dirs.push(path.dirname(worktree));
+    git(repo, ["worktree", "add", "-b", "feature", worktree]);
+
+    // fs.realpathSync: macOS temp dirs are symlinks through /private.
+    expect(readWorktreeParent(worktree)).toBe(fs.realpathSync(repo));
+  });
+
+  it("returns null for an ordinary clone", () => {
+    expect(readWorktreeParent(initRepo())).toBeNull();
+  });
+
+  it("returns null for a folder that is not a repo", () => {
+    const plain = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-plain-"));
+    dirs.push(plain);
+    expect(readWorktreeParent(plain)).toBeNull();
   });
 });
