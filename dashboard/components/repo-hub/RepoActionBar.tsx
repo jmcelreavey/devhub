@@ -11,6 +11,7 @@ import { isTypingTarget } from "@/lib/konami-sequence";
 import {
   chatgptCliCommand,
   claudeCliCommand,
+  cursorCliCommand,
   opencodeCliCommand,
   openTerminal,
 } from "@/lib/terminal-launch";
@@ -87,6 +88,13 @@ export function RepoActionBar({
             description: "Codex CLI in this repo",
             icon: <MessageSquare size={13} />,
             onSelect: () => openCli("ChatGPT", chatgptCliCommand()),
+          },
+          {
+            id: "cursor-cli",
+            label: "Cursor",
+            description: "Cursor Agent CLI in this repo",
+            icon: <Code2 size={13} />,
+            onSelect: () => openCli("Cursor", cursorCliCommand()),
           },
           {
             id: "opencode-cli",
