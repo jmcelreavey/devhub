@@ -165,7 +165,7 @@ export default function SetupPage() {
   const [biChecking, setBiChecking] = useState(false);
   const [biForm, setBiForm] = useState({ capiRepoPath: "" });
   const [agentForm, setAgentForm] = useState<{
-    provider: "cursor-cli" | "chatgpt-cli" | "opencode" | "api";
+    provider: "cursor-cli" | "chatgpt-cli" | "antigravity-cli" | "opencode" | "api";
     opencodeModel: string;
     cursorModel: string;
   }>({ provider: "opencode", opencodeModel: "", cursorModel: "" });
@@ -241,7 +241,9 @@ export default function SetupPage() {
               ? "cursor-cli"
               : data.agentVars.cli === "chatgpt"
                 ? "chatgpt-cli"
-                : "opencode"),
+                : data.agentVars.cli === "antigravity"
+                  ? "antigravity-cli"
+                  : "opencode"),
           opencodeModel: data.agentVars.opencodeModel,
           cursorModel: data.agentVars.cursorModel,
 
@@ -1016,6 +1018,7 @@ export default function SetupPage() {
               availability={{
                 cursorAgentInstalled: status.agentVars?.cursorAgentInstalled === true,
                 chatgptCliInstalled: status.agentVars?.chatgptCliInstalled === true,
+                antigravityCliInstalled: status.agentVars?.antigravityCliInstalled === true,
                 opencodeInstalled: status.agentVars?.opencodeInstalled === true,
                 apiConfigured: status.agentVars?.apiConfigured === true,
               }}

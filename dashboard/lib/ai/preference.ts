@@ -4,8 +4,8 @@
  * One switch covers in-app generation (learn-repo, briefings, …) and agent
  * launches. Local CLIs are preferred over requiring a third-party API key.
  *
- * Env: `DEVHUB_AI_PROVIDER` = cursor-cli | chatgpt-cli | opencode | api
- * Legacy: `DEVHUB_AGENT_CLI` = cursor | opencode | chatgpt still maps in.
+ * Env: `DEVHUB_AI_PROVIDER` = cursor-cli | chatgpt-cli | antigravity-cli | opencode | api
+ * Legacy: `DEVHUB_AGENT_CLI` = cursor | opencode | chatgpt | antigravity still maps in.
  */
 
 import fs from "node:fs";
@@ -14,17 +14,23 @@ import { isCursorAgentInstalled } from "@/lib/agent/cli-env";
 import { readDashboardEnvLocalFile, resolveEnvValue } from "@/lib/dashboard-env-local";
 import { isNotesAiConfigured } from "@/lib/notes-ai/config";
 import { resolveOpenCodeBinary } from "@/lib/opencode/command";
-import { isChatGPTConfigured, isOpenCodeConfigured } from "@/lib/peer-service-availability";
+import {
+  isAntigravityConfigured,
+  isChatGPTConfigured,
+  isOpenCodeConfigured,
+  resolveAgyBin,
+} from "@/lib/peer-service-availability";
 
-export const AI_PROVIDER_IDS = ["cursor-cli", "chatgpt-cli", "opencode", "api"] as const;
+export const AI_PROVIDER_IDS = ["cursor-cli", "chatgpt-cli", "antigravity-cli", "opencode", "api"] as const;
 export type AiProviderId = (typeof AI_PROVIDER_IDS)[number];
 
 /** Agent-launch ids used by terminal-launch / agent-job (short names). */
-export type AgentLaunchCli = "cursor" | "chatgpt" | "opencode";
+export type AgentLaunchCli = "cursor" | "chatgpt" | "antigravity" | "opencode";
 
 export interface AiProviderAvailability {
   "cursor-cli": boolean;
   "chatgpt-cli": boolean;
+  "antigravity-cli": boolean;
   opencode: boolean;
   api: boolean;
 }
@@ -40,7 +46,13 @@ export interface ResolvedAiProvider {
   setupHint: string | null;
 }
 
-const FALLBACK_ORDER: AiProviderId[] = ["cursor-cli", "chatgpt-cli", "opencode", "api"];
+const FALLBACK_ORDER: AiProviderId[] = [
+  "cursor-cli",
+  "chatgpt-cli",
+  "antigravity-cli",
+  "opencode",
+  "api",
+];
 
 const CHATGPT_APP_CODEX = "/Applications/ChatGPT.app/Contents/Resources/codex";
 
@@ -49,6 +61,7 @@ export function normalizeAiProvider(raw: string | undefined | null): AiProviderI
   if (!v) return null;
   if (v === "cursor-cli" || v === "cursor") return "cursor-cli";
   if (v === "chatgpt-cli" || v === "chatgpt" || v === "codex") return "chatgpt-cli";
+  if (v === "antigravity-cli" || v === "antigravity" || v === "agy") return "antigravity-cli";
   if (v === "opencode") return "opencode";
   if (v === "api" || v === "http" || v === "notes-ai") return "api";
   return null;
@@ -58,6 +71,7 @@ export function normalizeAiProvider(raw: string | undefined | null): AiProviderI
 export function toAgentLaunchCli(provider: AiProviderId): AgentLaunchCli {
   if (provider === "cursor-cli") return "cursor";
   if (provider === "chatgpt-cli") return "chatgpt";
+  if (provider === "antigravity-cli") return "antigravity";
   return "opencode";
 }
 
@@ -66,6 +80,7 @@ export function fromAgentLaunchCli(cli: string | undefined | null): AiProviderId
   const v = cli?.trim().toLowerCase();
   if (v === "cursor") return "cursor-cli";
   if (v === "chatgpt" || v === "codex") return "chatgpt-cli";
+  if (v === "antigravity" || v === "agy") return "antigravity-cli";
   if (v === "opencode") return "opencode";
   return null;
 }
@@ -85,6 +100,7 @@ export function detectAiProviderAvailability(): AiProviderAvailability {
   return {
     "cursor-cli": isCursorAgentInstalled(),
     "chatgpt-cli": isChatgptCliInstalled(),
+    "antigravity-cli": isAntigravityCliInstalled(),
     opencode: isOpenCodeConfigured(),
     api: isNotesAiConfigured(),
   };
@@ -94,6 +110,14 @@ export function detectAiProviderAvailability(): AiProviderAvailability {
 export function isChatgptCliInstalled(): boolean {
   // Peer gate already covers PATH + ChatGPT.app install detection.
   return isChatGPTConfigured();
+}
+
+export function isAntigravityCliInstalled(): boolean {
+  return isAntigravityConfigured();
+}
+
+export function resolveAgyCliBin(): string | null {
+  return resolveAgyBin();
 }
 
 function commandOnPath(cmd: string): boolean {
@@ -126,6 +150,8 @@ function setupHintFor(id: AiProviderId): string {
       return "Install cursor-agent (curl https://cursor.com/install -fsS | bash), then pick Cursor CLI under Setup → AI Provider.";
     case "chatgpt-cli":
       return "Install the ChatGPT app (bundled Codex CLI) or the Codex CLI, then pick ChatGPT CLI under Setup → AI Provider.";
+    case "antigravity-cli":
+      return "Install the Antigravity CLI (`agy`), then pick Antigravity CLI under Setup → AI Provider.";
     case "opencode":
       return "Install opencode, then pick OpenCode under Setup → AI Provider.";
     case "api":
@@ -167,7 +193,7 @@ export function resolveAiProvider(opts?: {
     fallback: false,
     setupHint: configured
       ? setupHintFor(configured)
-      : "Install cursor-agent, ChatGPT/Codex, or OpenCode — or set AI_API_KEY — then pick a default under Setup → AI Provider.",
+      : "Install cursor-agent, ChatGPT/Codex, Antigravity (`agy`), or OpenCode — or set AI_API_KEY — then pick a default under Setup → AI Provider.",
   };
 }
 
@@ -187,6 +213,7 @@ export function resolveAgentLaunchCli(resolved?: ResolvedAiProvider): AgentLaunc
   if (r.availability.opencode) return "opencode";
   if (r.availability["cursor-cli"]) return "cursor";
   if (r.availability["chatgpt-cli"]) return "chatgpt";
+  if (r.availability["antigravity-cli"]) return "antigravity";
   return "opencode";
 }
 
@@ -196,6 +223,8 @@ export function aiProviderLabel(id: AiProviderId): string {
       return "Cursor CLI";
     case "chatgpt-cli":
       return "ChatGPT CLI";
+    case "antigravity-cli":
+      return "Antigravity CLI";
     case "opencode":
       return "OpenCode";
     case "api":

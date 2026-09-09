@@ -9,6 +9,7 @@ export function providerDisplayName(provider: string): string {
   const id = provider.trim().toLowerCase();
   if (id === "cursor" || id === "cursor-cli") return "Cursor";
   if (id === "chatgpt" || id === "chatgpt-cli" || id === "codex") return "ChatGPT";
+  if (id === "antigravity" || id === "antigravity-cli" || id === "agy") return "Antigravity";
   if (id === "opencode") return "OpenCode";
   if (id === "api") return "HTTP API";
   return "Agent";
@@ -24,7 +25,7 @@ export function formatAgentJobSummary(opts: {
   if (opts.summary?.trim()) return opts.summary.trim();
   const title = opts.title.trim() || "Agent job";
   const whom = providerDisplayName(opts.provider);
-  if (/\b(cursor|chatgpt|opencode|codex)\b/i.test(title)) return title;
+  if (/\b(cursor|chatgpt|opencode|codex|antigravity|agy)\b/i.test(title)) return title;
   if (opts.kind === "review" || /^review\b/i.test(title) || /\bdx audit\b/i.test(title)) {
     return `${title} · ${whom}`;
   }
@@ -39,6 +40,9 @@ export function cliUnavailableMessage(provider: string): string {
   }
   if (id === "chatgpt" || id === "chatgpt-cli" || id === "codex") {
     return "ChatGPT isn’t installed. Pick another provider in Setup.";
+  }
+  if (id === "antigravity" || id === "antigravity-cli" || id === "agy") {
+    return "Antigravity isn’t installed. Pick another provider in Setup.";
   }
   if (id === "api") {
     return "No API key. Set AI_API_KEY in Setup.";

@@ -41,12 +41,13 @@ export interface SetupStatus {
   };
   biVars: { awsProfile: string | null; account: string | null; capiRepoPath: string | null };
   agentVars: {
-    cli: "opencode" | "cursor" | "chatgpt";
-    provider?: "cursor-cli" | "chatgpt-cli" | "opencode" | "api" | null;
+    cli: "opencode" | "cursor" | "chatgpt" | "antigravity";
+    provider?: "cursor-cli" | "chatgpt-cli" | "antigravity-cli" | "opencode" | "api" | null;
     opencodeModel: string;
     cursorModel: string;
     cursorAgentInstalled: boolean;
     chatgptCliInstalled?: boolean;
+    antigravityCliInstalled?: boolean;
     opencodeInstalled?: boolean;
     apiConfigured?: boolean;
   };

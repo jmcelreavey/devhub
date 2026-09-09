@@ -6,10 +6,10 @@
  * and are served by `/api/agent-cli`.
  */
 
-export type AgentCli = "opencode" | "cursor" | "chatgpt";
+export type AgentCli = "opencode" | "cursor" | "chatgpt" | "antigravity";
 
 /** Shared provider ids — keep in sync with `lib/ai/preference`. */
-export type AiProviderId = "cursor-cli" | "chatgpt-cli" | "opencode" | "api";
+export type AiProviderId = "cursor-cli" | "chatgpt-cli" | "antigravity-cli" | "opencode" | "api";
 
 export const DEFAULT_CURSOR_AGENT_MODEL = "cursor-grok-4.5-high";
 
@@ -20,8 +20,10 @@ export interface AgentCliConfig {
   /** Blank → OpenCode uses its `opencode.json` default model. */
   opencodeModel: string;
   cursorModel: string;
+  antigravityModel: string;
   cursorAgentInstalled: boolean;
   chatgptCliInstalled: boolean;
+  antigravityCliInstalled: boolean;
   apiConfigured: boolean;
   opencodeInstalled: boolean;
 }
@@ -31,8 +33,10 @@ export const AGENT_CLI_DEFAULTS: AgentCliConfig = {
   provider: null,
   opencodeModel: "",
   cursorModel: DEFAULT_CURSOR_AGENT_MODEL,
+  antigravityModel: "",
   cursorAgentInstalled: false,
   chatgptCliInstalled: false,
+  antigravityCliInstalled: false,
   apiConfigured: false,
   opencodeInstalled: false,
 };
@@ -43,11 +47,18 @@ let inflight: Promise<AgentCliConfig> | null = null;
 function sanitizeCli(raw: string | undefined): AgentCli {
   if (raw === "cursor") return "cursor";
   if (raw === "chatgpt") return "chatgpt";
+  if (raw === "antigravity") return "antigravity";
   return "opencode";
 }
 
 function sanitizeProvider(raw: string | null | undefined): AiProviderId | null {
-  if (raw === "cursor-cli" || raw === "chatgpt-cli" || raw === "opencode" || raw === "api") {
+  if (
+    raw === "cursor-cli" ||
+    raw === "chatgpt-cli" ||
+    raw === "antigravity-cli" ||
+    raw === "opencode" ||
+    raw === "api"
+  ) {
     return raw;
   }
   return null;
@@ -60,6 +71,7 @@ export function launchCliFromProvider(
 ): AgentCli {
   if (provider === "cursor-cli") return "cursor";
   if (provider === "chatgpt-cli") return "chatgpt";
+  if (provider === "antigravity-cli") return "antigravity";
   if (provider === "opencode") return "opencode";
   return fallback;
 }
@@ -74,8 +86,10 @@ function sanitize(raw: Partial<AgentCliConfig> | null | undefined): AgentCliConf
     provider,
     opencodeModel: raw?.opencodeModel?.trim() ?? "",
     cursorModel: raw?.cursorModel?.trim() || DEFAULT_CURSOR_AGENT_MODEL,
+    antigravityModel: raw?.antigravityModel?.trim() ?? "",
     cursorAgentInstalled: raw?.cursorAgentInstalled === true,
     chatgptCliInstalled: raw?.chatgptCliInstalled === true,
+    antigravityCliInstalled: raw?.antigravityCliInstalled === true,
     apiConfigured: raw?.apiConfigured === true,
     opencodeInstalled: raw?.opencodeInstalled === true,
   };
@@ -99,7 +113,7 @@ export function getAgentCliConfig(force = false): Promise<AgentCliConfig> {
 
 /** Persist changes to `.env.local` via the API and refresh the cache. */
 export async function saveAgentCliConfig(
-  update: Partial<Pick<AgentCliConfig, "cli" | "provider" | "opencodeModel" | "cursorModel">>,
+  update: Partial<Pick<AgentCliConfig, "cli" | "provider" | "opencodeModel" | "cursorModel" | "antigravityModel">>,
 ): Promise<AgentCliConfig> {
   const r = await fetch("/api/agent-cli", {
     method: "PUT",

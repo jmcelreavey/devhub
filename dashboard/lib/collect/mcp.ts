@@ -51,7 +51,7 @@ export interface LocalMcpImportCandidate {
 function looksRemote(entry: Json): boolean {
   if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
   const e = entry as Record<string, Json>;
-  if (typeof e.url === "string") return true;
+  if (typeof e.url === "string" || typeof e.serverUrl === "string") return true;
   if (typeof e.type === "string" && (e.type === "remote" || e.type === "sse" || e.type === "http")) {
     return true;
   }

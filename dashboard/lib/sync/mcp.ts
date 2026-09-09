@@ -115,6 +115,38 @@ function cursorToTool(server: SharedMcpServer): Json {
   return stdioToTool(server);
 }
 
+function antigravityToTool(server: SharedMcpServer): Json {
+  if (server.url) {
+    const out: { [key: string]: Json } = { serverUrl: server.url };
+    if (server.headers && Object.keys(server.headers).length > 0) out.headers = server.headers;
+    return out;
+  }
+  return stdioToTool(server);
+}
+
+function antigravityFromTool(entry: Json): SharedMcpServer | null {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+  const obj = entry as Record<string, Json>;
+  const serverUrl =
+    typeof obj.serverUrl === "string" && obj.serverUrl
+      ? obj.serverUrl
+      : typeof obj.url === "string" && obj.url
+        ? obj.url
+        : undefined;
+  if (serverUrl) {
+    const headers =
+      obj.headers && typeof obj.headers === "object" && !Array.isArray(obj.headers)
+        ? (obj.headers as Record<string, string>)
+        : undefined;
+    return {
+      type: "remote",
+      url: serverUrl,
+      ...(headers ? { headers } : {}),
+    };
+  }
+  return sharedFromTool(entry);
+}
+
 function codexToTool(server: SharedMcpServer): Json {
   const entry = stdioToTool(server);
   if (!entry || typeof entry !== "object" || Array.isArray(entry)) return entry;
@@ -280,6 +312,15 @@ export const MCP_TOOL_TARGETS: McpToolTarget[] = [
     mergeRest: true,
     toTool: opencodeToTool,
     fromTool: opencodeFromTool,
+  },
+  {
+    id: "antigravity",
+    label: "Antigravity",
+    configPath: (home) => path.join(home, ".gemini", "config", "mcp_config.json"),
+    topKey: "mcpServers",
+    mergeRest: true,
+    toTool: antigravityToTool,
+    fromTool: antigravityFromTool,
   },
 ];
 

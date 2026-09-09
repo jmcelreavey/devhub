@@ -16,6 +16,7 @@ import {
   agentStashConflictCommand,
   agentCommitMessageCommand,
   agentStashMessageCommand,
+  antigravityCliCommand,
   chatgptCliCommand,
   claudeCliCommand,
   cursorCliCommand,
@@ -319,6 +320,14 @@ describe("companion CLI launch commands", () => {
     expect(cmd.match(/--dangerously-bypass-approvals-and-sandbox/g)?.length).toBe(2);
     expect(cmd).toContain("Codex CLI not found");
   });
+
+  it("guards agy so a missing binary prints a hint and runs yolo", () => {
+    const cmd = antigravityCliCommand();
+    expect(cmd).toContain("command -v");
+    expect(cmd).toContain("agy");
+    expect(cmd).toContain("--dangerously-skip-permissions");
+    expect(cmd).toContain("Antigravity CLI not found");
+  });
 });
 
 describe("taskImplementationCommand", () => {
@@ -347,5 +356,15 @@ describe("taskImplementationCommand", () => {
 
     expect(result.command).toContain("--model 'cursor-model'");
     expect(result.command).toContain("--approve-mcps");
+  });
+
+  it("builds an interactive Antigravity command in yolo mode", async () => {
+    useConfig({ cli: "antigravity" });
+
+    const result = await taskImplementationCommand("antigravity", "Implement task 1");
+
+    expect(result.provider).toBe("antigravity");
+    expect(result.command).toContain("agy --dangerously-skip-permissions");
+    expect(result.command).toContain("-i 'Implement task 1'");
   });
 });

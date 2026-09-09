@@ -44,6 +44,7 @@ function providerFromConfig(c: AgentCliConfig): AiProviderId {
   if (c.provider) return c.provider;
   if (c.cli === "cursor") return "cursor-cli";
   if (c.cli === "chatgpt") return "chatgpt-cli";
+  if (c.cli === "antigravity") return "antigravity-cli";
   return "opencode";
 }
 
@@ -94,6 +95,7 @@ function AgentCliCard() {
     ? [
         { value: "cursor-cli", label: "Cursor CLI", available: config.cursorAgentInstalled },
         { value: "chatgpt-cli", label: "ChatGPT CLI", available: config.chatgptCliInstalled },
+        { value: "antigravity-cli", label: "Antigravity CLI", available: config.antigravityCliInstalled },
         { value: "opencode", label: "OpenCode", available: config.opencodeInstalled },
         { value: "api", label: "HTTP API", available: config.apiConfigured },
       ]

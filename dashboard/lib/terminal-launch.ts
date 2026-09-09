@@ -77,6 +77,17 @@ function agentCliSpec(config: AgentCliConfig): AgentCliSpec {
         `ChatGPT / Codex CLI not found. Install the ChatGPT app (or Codex CLI) to ${action}.`,
     };
   }
+  if (config.cli === "antigravity") {
+    const modelFlag = config.antigravityModel ? ` --model ${shellQuote(config.antigravityModel)}` : "";
+    return {
+      binary: "agy",
+      label: "Antigravity",
+      run: (prompt) => `agy -p ${shellQuote(prompt)} --dangerously-skip-permissions${modelFlag}`,
+      interactive: (prompt) => `agy -i ${shellQuote(prompt)} --dangerously-skip-permissions${modelFlag}`,
+      missing: (action) =>
+        `Antigravity CLI not found. Install agy to ${action}.`,
+    };
+  }
   // Blank model → omit the flag so opencode.json's default model applies.
   const modelFlag = config.opencodeModel ? `--model ${shellQuote(config.opencodeModel)} ` : "";
   return {
@@ -592,6 +603,9 @@ export async function agentInteractiveSessionCommand(): Promise<{
   if (config.cli === "chatgpt") {
     return { command: chatgptCliCommand(), label: spec.label, cli: "chatgpt" };
   }
+  if (config.cli === "antigravity") {
+    return { command: antigravityCliCommand(), label: spec.label, cli: "antigravity" };
+  }
   return { command: opencodeCliCommand(), label: spec.label, cli: "opencode" };
 }
 
@@ -648,6 +662,20 @@ export async function taskImplementationCommand(
     };
   }
 
+  if (selected === "antigravity") {
+    const selectedModel = requestedModel || config.antigravityModel;
+    const modelFlag = selectedModel ? ` --model ${shellQuote(selectedModel)}` : "";
+    return {
+      command: guardedCliCommand(
+        "agy",
+        `agy --dangerously-skip-permissions${modelFlag} -i ${shellQuote(prompt)}`,
+        "Antigravity CLI not found. Install agy to implement this task.",
+      ),
+      label: "Antigravity",
+      provider: selected,
+    };
+  }
+
   const selectedModel = requestedModel || config.opencodeModel;
   const modelFlag = selectedModel ? ` --model ${shellQuote(selectedModel)}` : "";
   return {
@@ -685,6 +713,15 @@ export function chatgptCliCommand(): string {
     "Codex CLI not found. Install the ChatGPT app, or install the Codex CLI.",
   );
   return `if [ -x ${bundled} ]; then ${bundled} ${bypass}; else ${onPath}; fi`;
+}
+
+export function antigravityCliCommand(): string {
+  return guardedCliCommand(
+    "agy",
+    // YOLO: auto-approve every tool. Same idea as Claude's skip-permissions.
+    "agy --dangerously-skip-permissions",
+    "Antigravity CLI not found. Install agy, then reopen this tab.",
+  );
 }
 
 export function guardedCliCommand(binary: string, command: string, missingMessage: string): string {

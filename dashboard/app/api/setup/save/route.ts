@@ -210,12 +210,12 @@ export async function POST(req: NextRequest) {
         // Keep existing agent CLI for tool jobs; only set the generation preference.
       } else {
         const launch = toAgentLaunchCli(provider);
-        if (launch === "cursor" || launch === "chatgpt") overrides.set("DEVHUB_AGENT_CLI", launch);
+        if (launch === "cursor" || launch === "chatgpt" || launch === "antigravity") overrides.set("DEVHUB_AGENT_CLI", launch);
         else overrides.delete("DEVHUB_AGENT_CLI");
       }
     } else if (agent.cli !== undefined) {
       const cli = normalizeAgentCli(agent.cli);
-      if (cli === "cursor" || cli === "chatgpt") overrides.set("DEVHUB_AGENT_CLI", cli);
+      if (cli === "cursor" || cli === "chatgpt" || cli === "antigravity") overrides.set("DEVHUB_AGENT_CLI", cli);
       else overrides.delete("DEVHUB_AGENT_CLI");
     }
     if (agent.opencodeModel !== undefined) {

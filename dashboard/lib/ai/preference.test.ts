@@ -27,13 +27,15 @@ vi.mock("@/lib/opencode/command", () => ({
 
 vi.mock("@/lib/peer-service-availability", () => ({
   isChatGPTConfigured: vi.fn(() => false),
+  isAntigravityConfigured: vi.fn(() => false),
   isOpenCodeConfigured: vi.fn(() => false),
+  resolveAgyBin: vi.fn(() => null),
 }));
 
 import { isCursorAgentInstalled } from "@/lib/agent/cli-env";
 import { readDashboardEnvLocalFile } from "@/lib/dashboard-env-local";
 import { isNotesAiConfigured } from "@/lib/notes-ai/config";
-import { isChatGPTConfigured, isOpenCodeConfigured } from "@/lib/peer-service-availability";
+import { isAntigravityConfigured, isChatGPTConfigured, isOpenCodeConfigured } from "@/lib/peer-service-availability";
 import {
   fromAgentLaunchCli,
   normalizeAiProvider,
@@ -49,6 +51,8 @@ describe("normalizeAiProvider", () => {
     expect(normalizeAiProvider("cursor")).toBe("cursor-cli");
     expect(normalizeAiProvider("chatgpt-cli")).toBe("chatgpt-cli");
     expect(normalizeAiProvider("codex")).toBe("chatgpt-cli");
+    expect(normalizeAiProvider("antigravity-cli")).toBe("antigravity-cli");
+    expect(normalizeAiProvider("agy")).toBe("antigravity-cli");
     expect(normalizeAiProvider("opencode")).toBe("opencode");
     expect(normalizeAiProvider("api")).toBe("api");
     expect(normalizeAiProvider("notes-ai")).toBe("api");
@@ -60,10 +64,13 @@ describe("toAgentLaunchCli / fromAgentLaunchCli", () => {
   it("round-trips launch ids", () => {
     expect(toAgentLaunchCli("cursor-cli")).toBe("cursor");
     expect(toAgentLaunchCli("chatgpt-cli")).toBe("chatgpt");
+    expect(toAgentLaunchCli("antigravity-cli")).toBe("antigravity");
     expect(toAgentLaunchCli("opencode")).toBe("opencode");
     expect(toAgentLaunchCli("api")).toBe("opencode");
     expect(fromAgentLaunchCli("cursor")).toBe("cursor-cli");
     expect(fromAgentLaunchCli("chatgpt")).toBe("chatgpt-cli");
+    expect(fromAgentLaunchCli("antigravity")).toBe("antigravity-cli");
+    expect(fromAgentLaunchCli("agy")).toBe("antigravity-cli");
   });
 });
 
@@ -82,6 +89,7 @@ describe("resolveAiProvider", () => {
     } as never);
     vi.mocked(isCursorAgentInstalled).mockReturnValue(false);
     vi.mocked(isChatGPTConfigured).mockReturnValue(false);
+    vi.mocked(isAntigravityConfigured).mockReturnValue(false);
     vi.mocked(isOpenCodeConfigured).mockReturnValue(false);
     vi.mocked(isNotesAiConfigured).mockReturnValue(false);
   });

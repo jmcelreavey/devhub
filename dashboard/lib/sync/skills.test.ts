@@ -149,6 +149,7 @@ describe("Cursor skill sync targets", () => {
   it("writes user skills to ~/.cursor/skills and ~/.agents/skills, not skills-cursor", () => {
     expect(TOOL_DIRS.cursor).toBe(".cursor/skills");
     expect(TOOL_DIRS.agents).toBe(".agents/skills");
+    expect(TOOL_DIRS.antigravity).toBe(".gemini/config/skills");
     expect(TOOL_DIRS.chatgpt).toBe(".codex/skills");
     expect(TOOL_DIRS.chatgpt).toBe(TOOL_DIRS.codex);
     expect(TOOL_DIRS).not.toHaveProperty("cursor-skills-cursor");

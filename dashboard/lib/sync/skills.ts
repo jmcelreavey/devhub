@@ -53,6 +53,7 @@ export const TOOL_DIRS: Record<string, string> = {
   // Agent Skills spec user root. Cursor Customize → Skills lists this, not skills-cursor
   // (that folder is Cursor's internal builtins and must not be a sync target).
   agents: ".agents/skills",
+  antigravity: ".gemini/config/skills",
   "ai-skills": ".ai-skills",
   "config-ai": ".config/ai/skills",
 };
@@ -64,6 +65,7 @@ export const AGENT_TOOL_DIRS: Array<{ tool: string; subdir: string }> = [
   { tool: "opencode", subdir: ".config/opencode/agent" },
   { tool: "opencode", subdir: ".config/opencode/agents" },
   { tool: "cursor", subdir: ".cursor/agents" },
+  { tool: "antigravity", subdir: ".gemini/config/agents" },
   { tool: "config-ai", subdir: ".config/ai/agents" },
 ];
 
@@ -267,8 +269,29 @@ export async function syncSkills(opts: SyncSkillsOptions): Promise<number> {
     }
   }
 
+  if (!opts.tool || opts.tool === "antigravity") {
+    writeAntigravitySkillsIndex(home, emit, opts.dryRun);
+  }
+
   emit(`Done. ${syncedTotal} skill(s) synced.`);
   return blocked.size > 0 ? 1 : 0;
+}
+
+function writeAntigravitySkillsIndex(
+  home: string,
+  emit: (line: string) => void,
+  dryRun?: boolean,
+): void {
+  const skillsDir = path.join(home, TOOL_DIRS.antigravity);
+  const indexPath = path.join(home, ".gemini", "config", "skills.json");
+  const payload = { entries: [{ path: skillsDir }] };
+  if (dryRun) {
+    emit(`[antigravity] WOULD WRITE ${indexPath}`);
+    return;
+  }
+  fs.mkdirSync(path.dirname(indexPath), { recursive: true });
+  fs.writeFileSync(indexPath, JSON.stringify(payload, null, 2) + "\n");
+  emit(`[antigravity] INDEX ${indexPath}`);
 }
 
 export interface VerifySyncOptions {

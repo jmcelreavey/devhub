@@ -19,6 +19,7 @@ import { getNotesDir } from "@/lib/content/dirs";
 import { getCheckoutRoot, getResourceRoot } from "@/lib/desktop/runtime-paths";
 import { augmentedPathEnv } from "@/lib/process-env";
 import {
+  resolveAgyCliBin,
   resolveChatgptCliBin,
   resolveOpencodeCliBin,
   type AiProviderId,
@@ -429,6 +430,16 @@ export async function generateTextViaCli(
       args.push("--model", settings.opencodeModel.trim());
     }
     args.push(prompt);
+    const text = await execCapture(bin, args, timeoutMs, cwd, opts?.abortSignal, idleTimeoutMs);
+    return { text, provider };
+  }
+
+  if (provider === "antigravity-cli") {
+    const bin = resolveAgyCliBin() ?? "agy";
+    const args = ["-p", prompt];
+    if (settings.antigravityModel.trim()) {
+      args.push("--model", settings.antigravityModel.trim());
+    }
     const text = await execCapture(bin, args, timeoutMs, cwd, opts?.abortSignal, idleTimeoutMs);
     return { text, provider };
   }

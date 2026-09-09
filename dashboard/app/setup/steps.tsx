@@ -1174,7 +1174,7 @@ export function JiraStep({
 }
 
 
-export type SetupAiProvider = "cursor-cli" | "chatgpt-cli" | "opencode" | "api";
+export type SetupAiProvider = "cursor-cli" | "chatgpt-cli" | "antigravity-cli" | "opencode" | "api";
 
 export function AgentCliStep({
   provider,
@@ -1194,6 +1194,7 @@ export function AgentCliStep({
   availability: {
     cursorAgentInstalled: boolean;
     chatgptCliInstalled: boolean;
+    antigravityCliInstalled: boolean;
     opencodeInstalled: boolean;
     apiConfigured: boolean;
   };
@@ -1218,6 +1219,13 @@ export function AgentCliStep({
       description: "Codex from ChatGPT.app (or codex on PATH) for generation and agent jobs.",
       available: availability.chatgptCliInstalled,
       hint: "Install the ChatGPT macOS app, or the Codex CLI.",
+    },
+    {
+      value: "antigravity-cli",
+      title: "Antigravity CLI",
+      description: "agy for generation and agent jobs. Launches with --dangerously-skip-permissions.",
+      available: availability.antigravityCliInstalled,
+      hint: "Install the Antigravity CLI (agy).",
     },
     {
       value: "opencode",

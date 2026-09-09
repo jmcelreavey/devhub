@@ -363,4 +363,26 @@ describe("syncMcpServers", () => {
     expect(legacy.mcpServers).toBeUndefined();
     expect(lines.some((l) => l.includes("MIGRATED"))).toBe(true);
   });
+
+  it("writes remote servers to Antigravity as serverUrl", async () => {
+    const { repo, home, lines } = makeTempRepo();
+    writeJson(path.join(repo, "mcp", "shared", "notes.json"), {
+      type: "remote",
+      url: "http://127.0.0.1:1337/mcp",
+    });
+
+    const code = await syncMcpServers({
+      emit: (l) => lines.push(l),
+      repoRoot: repo,
+      prune: true,
+    });
+    expect(code).toBe(0);
+
+    const agy = JSON.parse(
+      fs.readFileSync(path.join(home, ".gemini", "config", "mcp_config.json"), "utf-8"),
+    );
+    expect(agy.mcpServers.notes.serverUrl).toBe("http://127.0.0.1:1337/mcp");
+    expect(agy.mcpServers.notes.url).toBeUndefined();
+  });
+
 });

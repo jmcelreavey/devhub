@@ -1,11 +1,13 @@
 import fs from "node:fs";
 import http from "node:http";
+import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { DEV_SERVICES } from "./dev-services";
 import { findOpenChamberBin } from "./openchamber-command";
 import { resolveOpenCodeBinary } from "@/lib/opencode/command";
 import { getDevHubOpenCodePort } from "@/lib/opencode/listen";
 import { findInstalledApp } from "@/lib/launch/desktop";
+import { EXTRA_PATH_SEGMENTS } from "@/lib/process-env";
 
 function commandOnPath(cmd: string): boolean {
   const which = process.platform === "win32" ? "where" : "which";
@@ -59,6 +61,24 @@ export function isChatGPTConfigured(): boolean {
   return findInstalledApp("ChatGPT", "codex") !== null;
 }
 
+/**
+ * True when the Antigravity CLI (`agy`) is on PATH or in a known user bin.
+ * No desktop IDE — DevHub always launches the terminal CLI.
+ */
+export function isAntigravityConfigured(): boolean {
+  if (commandOnPath("agy")) return true;
+  return EXTRA_PATH_SEGMENTS.some((dir) => fs.existsSync(path.join(dir, "agy")));
+}
+
+export function resolveAgyBin(): string | null {
+  if (commandOnPath("agy")) return "agy";
+  for (const dir of EXTRA_PATH_SEGMENTS) {
+    const candidate = path.join(dir, "agy");
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
 export function checkServicePort(port: number, host: string): Promise<boolean> {
   return new Promise((resolve) => {
     const req = http.get(`http://${host}:${port}`, { timeout: 2_000 }, (res) => {
@@ -94,6 +114,7 @@ export async function getPeerServiceGateStatus(): Promise<{
   claude: boolean;
   cursor: boolean;
   chatgpt: boolean;
+  antigravity: boolean;
 }> {
   const [chamberActive, opencodeActive] = await Promise.all([
     isPeerServiceActive("openchamber"),
@@ -105,5 +126,6 @@ export async function getPeerServiceGateStatus(): Promise<{
   const claude = isClaudeConfigured();
   const cursor = isCursorConfigured();
   const chatgpt = isChatGPTConfigured();
-  return { chamber, opencode, claude, cursor, chatgpt };
+  const antigravity = isAntigravityConfigured();
+  return { chamber, opencode, claude, cursor, chatgpt, antigravity };
 }

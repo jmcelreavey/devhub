@@ -25,6 +25,7 @@ const PROVIDERS: Array<{
   { id: "claude", label: "Claude", description: "Claude Code CLI" },
   { id: "cursor", label: "Cursor", description: "Cursor agent CLI" },
   { id: "chatgpt", label: "ChatGPT", description: "ChatGPT / Codex CLI" },
+  { id: "antigravity", label: "Antigravity", description: "Antigravity CLI (agy)" },
   { id: "openchamber", label: "OpenChamber", description: "Copy prompt and open the desktop app" },
 ];
 

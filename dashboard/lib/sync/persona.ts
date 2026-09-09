@@ -41,6 +41,7 @@ function buildTargets(repoRoot: string): Target[] {
     { id: "codex", filepath: path.join(home, ".codex/AGENTS.md") },
     { id: "opencode", filepath: path.join(home, ".opencode/AGENTS.md") },
     { id: "cursor", filepath: path.join(home, ".cursor/.cursorrules") },
+    { id: "antigravity", filepath: path.join(home, ".gemini/GEMINI.md") },
     { id: "generic-agents", filepath: path.join(repoRoot, "AGENTS.md") },
   ];
 }

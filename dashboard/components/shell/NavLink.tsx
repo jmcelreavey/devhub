@@ -26,6 +26,7 @@ import {
   Bot,
   Code2,
   MessageSquare,
+  Sparkles,
   Newspaper,
   Radar,
   BrainCircuit,
@@ -36,6 +37,7 @@ import {
 import type { NavItem } from "@/lib/nav";
 import { HoverTip } from "@/components/ui/HoverTip";
 import {
+  antigravityCliCommand,
   chatgptCliCommand,
   claudeCliCommand,
   cursorCliCommand,
@@ -58,6 +60,7 @@ const ICONS: Record<string, LucideIcon> = {
   claude: Bot,
   cursor: Code2,
   chatgpt: MessageSquare,
+  antigravity: Sparkles,
   status: Activity,
   skills: Zap,
   repos: FolderGit2,
@@ -82,6 +85,7 @@ const TERMINAL_COMMANDS: Record<NonNullable<NavItem["terminal"]>, () => string> 
   claude: claudeCliCommand,
   cursor: cursorCliCommand,
   chatgpt: chatgptCliCommand,
+  antigravity: antigravityCliCommand,
 };
 
 /** Buttons need what `<a>` gets from the browser for free. */

@@ -286,7 +286,7 @@ export function parseAgentAttachPayload(raw: unknown): AgentAttachPayload[] {
 
 export function cliCannotUseImages(provider?: string | null): boolean {
   const id = (provider || "").trim().toLowerCase();
-  return id === "cursor" || id === "cursor-cli" || id === "opencode" || id === "chatgpt" || id === "chatgpt-cli";
+  return id === "cursor" || id === "cursor-cli" || id === "opencode" || id === "chatgpt" || id === "chatgpt-cli" || id === "antigravity" || id === "antigravity-cli";
 }
 
 /**

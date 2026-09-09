@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Code2, MessageSquare, Monitor, Rocket, TerminalSquare } from "lucide-react";
+import { Bot, Code2, MessageSquare, Monitor, Rocket, Sparkles, TerminalSquare } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { useLaunchChamberDesktop } from "@/lib/launch/chamber";
 import { useLaunchChatGPTDesktop } from "@/lib/launch/chatgpt";
@@ -9,6 +9,7 @@ import { useLaunchCursorDesktop } from "@/lib/launch/cursor";
 import { repoShortcutFromEvent } from "@/lib/app-shortcuts";
 import { isTypingTarget } from "@/lib/konami-sequence";
 import {
+  antigravityCliCommand,
   chatgptCliCommand,
   claudeCliCommand,
   cursorCliCommand,
@@ -88,6 +89,13 @@ export function RepoActionBar({
             description: "Codex CLI in this repo",
             icon: <MessageSquare size={13} />,
             onSelect: () => openCli("ChatGPT", chatgptCliCommand()),
+          },
+          {
+            id: "antigravity-cli",
+            label: "Antigravity",
+            description: "agy CLI in this repo (yolo)",
+            icon: <Sparkles size={13} />,
+            onSelect: () => openCli("Antigravity", antigravityCliCommand()),
           },
           {
             id: "cursor-cli",

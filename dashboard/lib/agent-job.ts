@@ -96,11 +96,13 @@ function isChatConfigured(
 ): boolean {
   if (provider === "cursor") return config.cursorAgentInstalled;
   if (provider === "chatgpt") return config.chatgptCliInstalled;
+  if (provider === "antigravity") return config.antigravityCliInstalled;
   if (provider === "opencode") return config.opencodeInstalled;
   if (provider === "api") return config.apiConfigured;
   return (
     config.cursorAgentInstalled ||
     config.chatgptCliInstalled ||
+    config.antigravityCliInstalled ||
     config.opencodeInstalled ||
     config.apiConfigured
   );

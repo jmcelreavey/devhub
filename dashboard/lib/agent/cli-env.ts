@@ -3,7 +3,8 @@
  * jobs (PR review, DX audit, labs, repo upstart) and optional model overrides.
  *
  * Stored in `.env.local` under managed keys (`DEVHUB_AI_PROVIDER`,
- * `DEVHUB_AGENT_CLI`, `DEVHUB_AGENT_OPENCODE_MODEL`, `DEVHUB_AGENT_CURSOR_MODEL`)
+ * `DEVHUB_AGENT_CLI`, `DEVHUB_AGENT_OPENCODE_MODEL`, `DEVHUB_AGENT_CURSOR_MODEL`,
+ * `DEVHUB_AGENT_ANTIGRAVITY_MODEL`)
  * so values can be populated by the 1Password `devhub` item like every other
  * managed config. Read/written via `/api/agent-cli` and the setup wizard.
  */
@@ -14,7 +15,7 @@ import path from "node:path";
 import { readDashboardEnvLocalFile, resolveEnvValue } from "@/lib/dashboard-env-local";
 import { EXTRA_PATH_SEGMENTS } from "@/lib/process-env";
 
-export type AgentCli = "opencode" | "cursor" | "chatgpt";
+export type AgentCli = "opencode" | "cursor" | "chatgpt" | "antigravity";
 
 /** Verify the exact slug with `cursor-agent --help` / the `/model` picker. */
 export const DEFAULT_CURSOR_AGENT_MODEL = "cursor-grok-4.5-high";
@@ -24,12 +25,14 @@ export interface AgentCliSettings {
   /** Blank → OpenCode uses its `opencode.json` default model. */
   opencodeModel: string;
   cursorModel: string;
+  antigravityModel: string;
 }
 
 export function normalizeAgentCli(raw: string | undefined): AgentCli {
   const v = raw?.trim().toLowerCase();
   if (v === "cursor") return "cursor";
   if (v === "chatgpt" || v === "codex") return "chatgpt";
+  if (v === "antigravity" || v === "agy") return "antigravity";
   return "opencode";
 }
 
@@ -41,6 +44,7 @@ function agentCliFromAiProviderEnv(raw: string | undefined): AgentCli | null {
   const v = raw?.trim().toLowerCase();
   if (v === "cursor-cli" || v === "cursor") return "cursor";
   if (v === "chatgpt-cli" || v === "chatgpt" || v === "codex") return "chatgpt";
+  if (v === "antigravity-cli" || v === "antigravity" || v === "agy") return "antigravity";
   if (v === "opencode") return "opencode";
   return null;
 }
@@ -55,6 +59,7 @@ export function readAgentCliSettings(): AgentCliSettings {
     opencodeModel: resolveEnvValue("DEVHUB_AGENT_OPENCODE_MODEL", overrides) ?? "",
     cursorModel:
       resolveEnvValue("DEVHUB_AGENT_CURSOR_MODEL", overrides) ?? DEFAULT_CURSOR_AGENT_MODEL,
+    antigravityModel: resolveEnvValue("DEVHUB_AGENT_ANTIGRAVITY_MODEL", overrides) ?? "",
   };
 }
 

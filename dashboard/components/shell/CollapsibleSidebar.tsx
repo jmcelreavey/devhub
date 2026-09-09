@@ -182,7 +182,8 @@ function NavSection({
             item.icon === "opencode" ||
             item.icon === "claude" ||
             item.icon === "cursor" ||
-            item.icon === "chatgpt")
+            item.icon === "chatgpt" ||
+            item.icon === "antigravity")
         ) {
           return (
             <div key={item.href} style={{ position: "relative" }}>

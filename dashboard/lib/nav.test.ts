@@ -15,7 +15,7 @@ const hrefs = (items: ReturnType<typeof filterNavBySetup>) => items.map((i) => i
 
 describe("NAV_ITEMS (sidebar IA)", () => {
   it("has exactly 18 core sidebar destinations", () => {
-    expect(NAV_ITEMS).toHaveLength(18);
+    expect(NAV_ITEMS).toHaveLength(19);
   });
 
   it("gives the database client a library slot beside Repos", () => {
@@ -155,6 +155,13 @@ describe("filterNavBySetup", () => {
   });
   it("shows ChatGPT only when installed", () => {
     expect(hrefs(filterNavBySetup(NAV_ITEMS, { chatgpt: true }))).toContain("/chatgpt");
+  });
+  it("hides Antigravity unless it is installed", () => {
+    expect(hrefs(filterNavBySetup(NAV_ITEMS, { antigravity: false }))).not.toContain("/antigravity");
+    expect(hrefs(filterNavBySetup(NAV_ITEMS, {}))).not.toContain("/antigravity");
+  });
+  it("shows Antigravity only when installed", () => {
+    expect(hrefs(filterNavBySetup(NAV_ITEMS, { antigravity: true }))).toContain("/antigravity");
   });
 });
 

@@ -18,7 +18,7 @@ const IDENTITY_MARKER_START = "<!-- ai-dotfiles:identity:start -->";
 const IDENTITY_MARKER_END = "<!-- ai-dotfiles:identity:end -->";
 
 export type PersonaSource = "shared-persona" | "identity";
-export type PersonaToolId = "claude" | "codex" | "opencode" | "cursor";
+export type PersonaToolId = "claude" | "codex" | "opencode" | "cursor" | "antigravity";
 
 interface ToolFile {
   id: PersonaToolId;
@@ -31,6 +31,7 @@ const TOOL_FILES: ToolFile[] = [
   { id: "codex", label: "Codex", filepath: (home) => path.join(home, ".codex/AGENTS.md") },
   { id: "opencode", label: "OpenCode", filepath: (home) => path.join(home, ".opencode/AGENTS.md") },
   { id: "cursor", label: "Cursor", filepath: (home) => path.join(home, ".cursor/.cursorrules") },
+  { id: "antigravity", label: "Antigravity", filepath: (home) => path.join(home, ".gemini/GEMINI.md") },
 ];
 
 interface SourceFile {

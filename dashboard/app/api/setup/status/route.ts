@@ -11,6 +11,7 @@ import { detectBiPresence } from "@/lib/bi-presence";
 import { getPeerServiceGateStatus, isOpenCodeConfigured } from "@/lib/peer-service-availability";
 import { isCursorAgentInstalled, readAgentCliSettings } from "@/lib/agent/cli-env";
 import {
+  isAntigravityCliInstalled,
   isChatgptCliInstalled,
   readConfiguredAiProvider,
 } from "@/lib/ai/preference";
@@ -116,6 +117,7 @@ export async function GET() {
     claude: peerServices.claude,
     cursor: peerServices.cursor,
     chatgpt: peerServices.chatgpt,
+    antigravity: peerServices.antigravity,
     allowLanNetwork,
     hasOpenchamberUiPassword,
     envPath: ".env.local",
@@ -179,6 +181,7 @@ export async function GET() {
       provider: readConfiguredAiProvider(),
       cursorAgentInstalled: isCursorAgentInstalled(),
       chatgptCliInstalled: isChatgptCliInstalled(),
+      antigravityCliInstalled: isAntigravityCliInstalled(),
       opencodeInstalled: isOpenCodeConfigured(),
       apiConfigured: isNotesAiConfigured(),
     },

@@ -272,6 +272,8 @@ describe("agent chat helpers", () => {
   it("uses product names in chrome, not CLI binary names", () => {
     expect(providerDisplayName("cursor-cli")).toBe("Cursor");
     expect(providerDisplayName("chatgpt")).toBe("ChatGPT");
+  expect(providerDisplayName("antigravity")).toBe("Antigravity");
+  expect(providerDisplayName("agy")).toBe("Antigravity");
     expect(providerDisplayName("opencode")).toBe("OpenCode");
   });
 

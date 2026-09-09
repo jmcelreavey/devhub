@@ -7,6 +7,7 @@ import {
 } from "@/lib/agent/cli-env";
 import {
   aiProviderLabel,
+  isAntigravityCliInstalled,
   isChatgptCliInstalled,
   normalizeAiProvider,
   readConfiguredAiProvider,
@@ -38,6 +39,7 @@ function providerPayload() {
     setupHint: resolved.setupHint,
     cursorAgentInstalled: isCursorAgentInstalled(),
     chatgptCliInstalled: isChatgptCliInstalled(),
+    antigravityCliInstalled: isAntigravityCliInstalled(),
     apiConfigured: isNotesAiConfigured(),
     opencodeInstalled: isOpenCodeConfigured(),
     availability: resolved.availability,
@@ -60,6 +62,7 @@ export async function PUT(req: NextRequest) {
     provider?: string;
     opencodeModel?: string;
     cursorModel?: string;
+    antigravityModel?: string;
   };
 
   const providerRaw =
@@ -73,18 +76,18 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
-        error: `Unknown AI provider "${body.provider}" — expected cursor-cli, chatgpt-cli, opencode, or api.`,
+        error: `Unknown AI provider "${body.provider}" — expected cursor-cli, chatgpt-cli, antigravity-cli, opencode, or api.`,
       },
       { status: 400 },
     );
   }
 
   if (body.cli !== undefined && body.provider === undefined) {
-    if (!["opencode", "cursor", "chatgpt"].includes(body.cli.trim().toLowerCase())) {
+    if (!["opencode", "cursor", "chatgpt", "antigravity"].includes(body.cli.trim().toLowerCase())) {
       return NextResponse.json(
         {
           ok: false,
-          error: `Unknown agent CLI "${body.cli}" — expected "opencode", "cursor", or "chatgpt".`,
+          error: `Unknown agent CLI "${body.cli}" — expected "opencode", "cursor", "chatgpt", or "antigravity".`,
         },
         { status: 400 },
       );
@@ -100,6 +103,12 @@ export async function PUT(req: NextRequest) {
   if (providerRaw === "chatgpt-cli" && !isChatgptCliInstalled()) {
     return NextResponse.json(
       { ok: false, error: "ChatGPT / Codex CLI is not installed on this machine." },
+      { status: 400 },
+    );
+  }
+  if (providerRaw === "antigravity-cli" && !isAntigravityCliInstalled()) {
+    return NextResponse.json(
+      { ok: false, error: "Antigravity CLI (agy) is not installed on this machine." },
       { status: 400 },
     );
   }
@@ -130,6 +139,12 @@ export async function PUT(req: NextRequest) {
         { status: 400 },
       );
     }
+    if (cli === "antigravity" && !isAntigravityCliInstalled()) {
+      return NextResponse.json(
+        { ok: false, error: "Antigravity CLI (agy) is not installed on this machine." },
+        { status: 400 },
+      );
+    }
   }
 
   const { overrides, passthrough } = readDashboardEnvLocalFile();
@@ -144,7 +159,7 @@ export async function PUT(req: NextRequest) {
   if (providerRaw) {
     overrides.set("DEVHUB_AI_PROVIDER", providerRaw);
     const launch = launchCliForProvider(providerRaw);
-    if (launch === "cursor" || launch === "chatgpt") {
+    if (launch === "cursor" || launch === "chatgpt" || launch === "antigravity") {
       overrides.set("DEVHUB_AGENT_CLI", launch);
     } else if (launch === "opencode") {
       overrides.delete("DEVHUB_AGENT_CLI");
@@ -152,16 +167,18 @@ export async function PUT(req: NextRequest) {
     // api → keep existing agent CLI for tool jobs; only set provider
   } else if (body.cli !== undefined) {
     const cli = normalizeAgentCli(body.cli);
-    if (cli === "cursor" || cli === "chatgpt") overrides.set("DEVHUB_AGENT_CLI", cli);
+    if (cli === "cursor" || cli === "chatgpt" || cli === "antigravity") overrides.set("DEVHUB_AGENT_CLI", cli);
     else overrides.delete("DEVHUB_AGENT_CLI");
     // Mirror into the shared preference when saving via legacy cli field
     if (cli === "cursor") overrides.set("DEVHUB_AI_PROVIDER", "cursor-cli");
     else if (cli === "chatgpt") overrides.set("DEVHUB_AI_PROVIDER", "chatgpt-cli");
+    else if (cli === "antigravity") overrides.set("DEVHUB_AI_PROVIDER", "antigravity-cli");
     else overrides.set("DEVHUB_AI_PROVIDER", "opencode");
   }
 
   setOrDelete("DEVHUB_AGENT_OPENCODE_MODEL", body.opencodeModel);
   setOrDelete("DEVHUB_AGENT_CURSOR_MODEL", body.cursorModel);
+  setOrDelete("DEVHUB_AGENT_ANTIGRAVITY_MODEL", body.antigravityModel);
 
   writeDashboardEnvLocalFile(overrides, passthrough);
   syncAgentProcessEnvFromOverrides(overrides);

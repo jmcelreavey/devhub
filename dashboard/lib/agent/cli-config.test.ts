@@ -5,6 +5,7 @@ describe("launchCliFromProvider", () => {
   it("maps provider ids to launch CLIs", () => {
     expect(launchCliFromProvider("cursor-cli", "opencode")).toBe("cursor");
     expect(launchCliFromProvider("chatgpt-cli", "opencode")).toBe("chatgpt");
+    expect(launchCliFromProvider("antigravity-cli", "opencode")).toBe("antigravity");
     expect(launchCliFromProvider("opencode", "cursor")).toBe("opencode");
     expect(launchCliFromProvider("api", "cursor")).toBe("cursor");
     expect(launchCliFromProvider(null, "chatgpt")).toBe("chatgpt");
@@ -16,8 +17,10 @@ describe("launchCliFromProvider", () => {
       provider: "cursor-cli",
       opencodeModel: "",
       cursorModel: "cursor-grok-4.5-high",
+      antigravityModel: "",
       cursorAgentInstalled: true,
       chatgptCliInstalled: false,
+      antigravityCliInstalled: false,
       apiConfigured: false,
       opencodeInstalled: true,
     });

@@ -8,13 +8,14 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { Bot, Code2, MessageSquare, Monitor, Play, TerminalSquare } from "lucide-react";
+import { Bot, Code2, MessageSquare, Monitor, Play, Sparkles, TerminalSquare } from "lucide-react";
 import { useLaunchChamberDesktop } from "@/lib/launch/chamber";
 import { useLaunchOpenCodeDesktop } from "@/lib/launch/opencode";
 import { useLaunchClaudeDesktop } from "@/lib/launch/claude";
 import { useLaunchCursorDesktop } from "@/lib/launch/cursor";
 import { useLaunchChatGPTDesktop } from "@/lib/launch/chatgpt";
 import {
+  antigravityCliCommand,
   chatgptCliCommand,
   claudeCliCommand,
   cursorCliCommand,
@@ -22,7 +23,7 @@ import {
   openTerminal,
 } from "@/lib/terminal-launch";
 
-type LaunchIcon = "chamber" | "opencode" | "claude" | "cursor" | "chatgpt";
+type LaunchIcon = "chamber" | "opencode" | "claude" | "cursor" | "chatgpt" | "antigravity";
 
 interface LaunchEntry {
   /**
@@ -31,7 +32,7 @@ interface LaunchEntry {
    * server DevHub already runs). Null → single "launch desktop app" button.
    */
   cli: { label: string; command: () => string } | null;
-  appDescription: string;
+  appDescription: string | null;
 }
 
 const ENTRIES: Record<LaunchIcon, LaunchEntry> = {
@@ -54,6 +55,10 @@ const ENTRIES: Record<LaunchIcon, LaunchEntry> = {
   chatgpt: {
     cli: { label: "ChatGPT", command: chatgptCliCommand },
     appDescription: "Launch the native ChatGPT desktop app.",
+  },
+  antigravity: {
+    cli: { label: "Antigravity", command: antigravityCliCommand },
+    appDescription: null,
   },
 };
 
@@ -78,6 +83,7 @@ function desktopIcon(icon: LaunchIcon) {
   if (icon === "claude") return <Bot size={13} />;
   if (icon === "cursor") return <Code2 size={13} />;
   if (icon === "chatgpt") return <MessageSquare size={13} />;
+  if (icon === "antigravity") return <Sparkles size={13} />;
   return <Monitor size={13} />;
 }
 
@@ -108,6 +114,7 @@ export function NavLaunchMenu({ icon, label }: { icon: LaunchIcon; label: string
     claude: launchClaude,
     cursor: launchCursor,
     chatgpt: launchChatGPT,
+    antigravity: undefined,
   }[icon];
 
   function updateMenuPosition() {
@@ -157,7 +164,7 @@ export function NavLaunchMenu({ icon, label }: { icon: LaunchIcon; label: string
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          void launchApp();
+          if (launchApp) void launchApp();
         }}
         title={`Launch ${label} Desktop`}
         aria-label={`Launch ${label} Desktop`}
@@ -219,6 +226,7 @@ export function NavLaunchMenu({ icon, label }: { icon: LaunchIcon; label: string
                 </span>
               </span>
             </button>
+            {entry.appDescription && launchApp && (
             <button
               type="button"
               className="launch-menu-item"
@@ -234,6 +242,7 @@ export function NavLaunchMenu({ icon, label }: { icon: LaunchIcon; label: string
                 <span className="launch-menu-description">{entry.appDescription}</span>
               </span>
             </button>
+            )}
           </div>,
           document.body,
         )}

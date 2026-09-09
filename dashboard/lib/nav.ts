@@ -2,7 +2,7 @@ import { PLUGIN_NAV_ITEMS, PLUGIN_SECTION_TABS } from "./plugin-nav.generated";
 
 export type NavGroup = "workspace" | "library" | "bi" | "system";
 
-export type NavGate = "always" | "calendar" | "github" | "jira" | "datadog" | "bi" | "chamber" | "opencode" | "claude" | "cursor" | "chatgpt";
+export type NavGate = "always" | "calendar" | "github" | "jira" | "datadog" | "bi" | "chamber" | "opencode" | "claude" | "cursor" | "chatgpt" | "antigravity";
 
 export interface NavItem {
   href: string;
@@ -17,7 +17,7 @@ export interface NavItem {
    * Not a route — clicking opens this CLI as a terminal-dock tab (see NavLink).
    * Excluded from ALL_NAV_DESTINATIONS; `href` only keys the sidebar row.
    */
-  terminal?: "claude" | "cursor" | "chatgpt";
+  terminal?: "claude" | "cursor" | "chatgpt" | "antigravity";
 }
 
 export const NAV_GROUPS: { id: NavGroup; label: string }[] = [
@@ -106,6 +106,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/claude", label: "Claude", icon: "claude", group: "system", gate: "claude", desktopOnly: true, terminal: "claude" },
   { href: "/cursor", label: "Cursor", icon: "cursor", group: "system", gate: "cursor", desktopOnly: true, terminal: "cursor" },
   { href: "/chatgpt", label: "ChatGPT", icon: "chatgpt", group: "system", gate: "chatgpt", desktopOnly: true, terminal: "chatgpt" },
+  { href: "/antigravity", label: "Antigravity", icon: "antigravity", group: "system", gate: "antigravity", desktopOnly: true, terminal: "antigravity" },
 ];
 
 /**
@@ -197,6 +198,7 @@ export interface SetupGateStatus {
   claude?: boolean;
   cursor?: boolean;
   chatgpt?: boolean;
+  antigravity?: boolean;
 }
 
 export function gateAllows(gate: NavGate | undefined, setup: SetupGateStatus | null): boolean {
