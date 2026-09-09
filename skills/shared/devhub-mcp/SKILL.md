@@ -90,7 +90,9 @@ the latest audit as markdown; run new audits from the Repos page **DX Audit** bu
   they can watch it, keep it, and kill it. Always use it for upstarts, Expo, `npm run dev` and other
   long-running commands. Every approved proposal opens its own tab, so nothing waits on another
   session — give each repo a distinct `label` so the dock stays readable. The user confirms in the
-  dock; poll status, then tail the session.
+  dock; poll status, then tail the session. Dock tabs outlive the agent session, so check
+  `terminal_list` before proposing — the service may already be up from an earlier one, and a
+  second start just races the first for the port.
 
 **Confirmation contract:** any tool that mutates state (a mutating script, a service
 restart, a Jira transition) takes `confirm: true`. Without it the tool explains the effect

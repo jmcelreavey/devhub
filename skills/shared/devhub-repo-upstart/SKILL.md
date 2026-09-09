@@ -117,6 +117,42 @@ store path instead.
   kill the process — do not leave servers hanging in the agent session. A bin
   check alone is not enough if the start script shells out to another tool.
 
+## Running It (DevHub Terminal Dock)
+
+The finished script is **started through the DevHub terminal dock**, never with a
+backgrounded `&` / `nohup` in the agent's own shell. Use
+`terminal_propose_run` (DevHub MCP) with `kind: "upstart"` — or `"devserver"`
+for a bare `npm run dev`-style start.
+
+The dock is where the user can see the run, keep it, and kill it. A server
+backgrounded inside an agent tool call is invisible to DevHub: it does not
+appear in the dock, its output only exists in whatever scratch log the agent
+chose, and when the agent session ends it survives as an orphan holding its port
+with nobody tracking it. That is the failure this section exists to prevent.
+
+- **It is a proposal, not an execution.** The user confirms it in the dock. Poll
+  `terminal_proposal_status` with the returned id and act on what it says —
+  `pending` / `approved` / `injected` / `denied` / `expired` / `failed`. Never
+  report a server as running because you proposed it.
+- **Give it a real `label`.** Every approved proposal opens its own tab, and the
+  label is the only thing distinguishing this run from the other five. Name the
+  repo and what is starting (`api · dev server`), not `bash`.
+- **Check `terminal_list` first.** Dock tabs outlive the agent session, so the
+  service may already be running from an earlier one. Reuse or tell the user
+  it is up; do not propose a second start that races the first for the port.
+- **Read output with `terminal_tail`**, using the session id from
+  `terminal_list`, rather than teeing the command into a log file of your own.
+- **Killing it is the user's call.** The tab is theirs; say the run is in the
+  dock and leave it. Only tear down processes you started in your own shell.
+- Requires the dashboard running. If `terminal_propose_run` is unavailable, say
+  the dock could not be reached and hand the user the command — do not silently
+  fall back to backgrounding it yourself.
+
+Short-lived, non-interactive checks — `npm install`, `--version`, binary
+resolution under `node_modules/.bin`, a boot that you start and kill within the
+call — stay in the agent shell. The dock is for what the user needs to watch,
+keep, or stop.
+
 ## Debugging
 
 - Ask what failed before rewriting the startup flow.
@@ -139,6 +175,9 @@ store path instead.
   empty-`ENV` collisions the script exists to neutralise.
 - If a full start will trap the agent, smoke-test the start command in the
   background and kill after the first healthy log line or a short timeout; still
-  treat immediate `command not found` as a failed verification.
+  treat immediate `command not found` as a failed verification. That
+  background-and-kill is a *check*, not the handoff — the run the user keeps goes
+  to the terminal dock (see Running It), so never leave the smoke-test alive and
+  call it started.
 - If you cannot start the project, leave the script printing clear next steps
   and explain the blocker.
