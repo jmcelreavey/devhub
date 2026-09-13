@@ -46,6 +46,8 @@ function useExclusivePanels() {
     setOpenPanel((prev) => (prev === panel ? null : panel));
   }, []);
 
+  const open = useCallback((panel: PanelKind) => setOpenPanel(panel), []);
+
   const close = useCallback(() => setOpenPanel(null), []);
 
   const isOpen = useCallback(
@@ -53,7 +55,7 @@ function useExclusivePanels() {
     [openPanel],
   );
 
-  return { toggle, close, isOpen };
+  return { toggle, open, close, isOpen };
 }
 
 /**
@@ -79,6 +81,8 @@ export function NotesOverlayProvider() {
   const { summon, hasSummoned } = useSummoned();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
+  /** Bumped per "open today's note" request so the overlay reacts even when already open. */
+  const [todayNoteRequest, setTodayNoteRequest] = useState(0);
 
   /** Toggling a panel is also what mounts it the first time. */
   const togglePanel = useCallback(
@@ -115,6 +119,11 @@ export function NotesOverlayProvider() {
     function onNotesToggle() {
       togglePanel("notes");
     }
+    function onNotesOpenToday() {
+      summon("notes");
+      panels.open("notes");
+      setTodayNoteRequest((n) => n + 1);
+    }
     function onTasksToggle() {
       togglePanel("tasks");
     }
@@ -130,6 +139,7 @@ export function NotesOverlayProvider() {
 
     document.addEventListener("keydown", handleKey);
     window.addEventListener("devhub:notes-toggle", onNotesToggle);
+    window.addEventListener("devhub:notes-open-today", onNotesOpenToday);
     window.addEventListener("devhub:tasks-toggle", onTasksToggle);
     window.addEventListener("devhub:diagrams-toggle", onDiagramsToggle);
     window.addEventListener("devhub:palette-toggle", onPaletteToggle);
@@ -137,12 +147,13 @@ export function NotesOverlayProvider() {
     return () => {
       document.removeEventListener("keydown", handleKey);
       window.removeEventListener("devhub:notes-toggle", onNotesToggle);
+      window.removeEventListener("devhub:notes-open-today", onNotesOpenToday);
       window.removeEventListener("devhub:tasks-toggle", onTasksToggle);
       window.removeEventListener("devhub:diagrams-toggle", onDiagramsToggle);
       window.removeEventListener("devhub:palette-toggle", onPaletteToggle);
       window.removeEventListener("devhub:capture-open", onCaptureOpen);
     };
-  }, [togglePanel, togglePalette, openCapture]);
+  }, [togglePanel, togglePalette, openCapture, panels, summon]);
 
   const closePalette = useCallback(() => setPaletteOpen(false), []);
 
@@ -158,7 +169,11 @@ export function NotesOverlayProvider() {
         </Suspense>
       )}
       {hasSummoned("notes") && (
-        <NotesOverlay open={panels.isOpen("notes")} onClose={panels.close} />
+        <NotesOverlay
+          open={panels.isOpen("notes")}
+          onClose={panels.close}
+          todayNoteRequest={todayNoteRequest}
+        />
       )}
       {hasSummoned("tasks") && (
         <TasksOverlay open={panels.isOpen("tasks")} onClose={panels.close} />

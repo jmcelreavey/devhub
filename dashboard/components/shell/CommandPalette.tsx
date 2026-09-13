@@ -484,6 +484,15 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         },
       },
       {
+        id: "action:today-note",
+        kind: "action",
+        label: "Open today's note",
+        hint: "Note",
+        perform: () => {
+          window.dispatchEvent(new Event("devhub:notes-open-today"));
+        },
+      },
+      {
         id: "action:standup-note",
         kind: "action",
         label: "Save standup as daily note",

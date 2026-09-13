@@ -4,11 +4,14 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { BlockNoteEditor } from "@/components/BlockNoteEditor";
 import {
   X,
+  CalendarDays,
   ExternalLink,
   FileText,
   RefreshCw,
   Plus,
 } from "lucide-react";
+import { EMPTY_NOTE_BLOCKS } from "@/components/today/note-helpers";
+import { dailyNotePath, formatDayLabel, todayISO } from "@/lib/utils";
 import { NewNotePathModal } from "@/components/NewNotePathModal";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/lib/hooks/use-toast";
@@ -37,9 +40,11 @@ interface FileGroup {
 interface NoteOverlayProps {
   open: boolean;
   onClose: () => void;
+  /** Increments each time something asks the panel to jump to today's daily note. */
+  todayNoteRequest?: number;
 }
 
-export function NotesOverlay({ open, onClose }: NoteOverlayProps) {
+export function NotesOverlay({ open, onClose, todayNoteRequest = 0 }: NoteOverlayProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [activeNote, setActiveNote] = useState<{
@@ -121,7 +126,7 @@ export function NotesOverlay({ open, onClose }: NoteOverlayProps) {
   }, [query]);
 
   const openNote = useCallback(
-    (notePath: string) => {
+    (notePath: string, allowMissing = false) => {
       const cleanPath = notePath.replace(/\.json$/, "");
       // Phones use the full-page editor; the notes layout files panel handles browsing.
       if (isMobileViewport()) {
@@ -131,6 +136,8 @@ export function NotesOverlay({ open, onClose }: NoteOverlayProps) {
       }
       fetch(`/api/notes/${notesApiPathFromSlug(cleanPath)}`)
         .then((r) => {
+          // Daily notes aren't written until you type, so a 404 means "blank page", not an error.
+          if (r.status === 404 && allowMissing) return { content: EMPTY_NOTE_BLOCKS };
           if (!r.ok) throw new Error("Not found");
           return r.json();
         })
@@ -148,6 +155,14 @@ export function NotesOverlay({ open, onClose }: NoteOverlayProps) {
     },
     [toast, onClose, router],
   );
+
+  const openTodayNote = useCallback(() => openNote(dailyNotePath(), true), [openNote]);
+
+  useEffect(() => {
+    if (open && todayNoteRequest > 0) openTodayNote();
+    // Fire once per request; re-running on `open`/`openTodayNote` churn would clobber navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayNoteRequest]);
 
   const handleSave = useCallback(
     (blocks: DevHubPartialBlock[]) => {
@@ -366,7 +381,20 @@ export function NotesOverlay({ open, onClose }: NoteOverlayProps) {
             })}
           </div>
         ) : (
-          <FileTree key={fileTreeKey} onSelect={openNote} />
+          <>
+            <div className="px-2 pt-2">
+              <button
+                type="button"
+                onClick={openTodayNote}
+                className="flex w-full min-w-0 items-center gap-2 rounded px-3 py-2 text-left text-xs hover:bg-[var(--bg-elevated)]"
+              >
+                <CalendarDays size={12} className="shrink-0 text-accent" aria-hidden />
+                <span className="font-medium text-text">Today&apos;s note</span>
+                <span className="ml-auto truncate text-text-subtle">{formatDayLabel(todayISO())}</span>
+              </button>
+            </div>
+            <FileTree key={fileTreeKey} onSelect={(path) => openNote(path)} />
+          </>
         )}
       </div>
 
