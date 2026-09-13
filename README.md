@@ -1,6 +1,60 @@
 # devhub
 
-Shared skills, persona, and MCP configs for Claude Code, Codex CLI, OpenCode, and Cursor. Designed for multi-machine, multi-platform use (macOS, Windows/WSL, iOS read-only).
+**A control layer that makes AI coding agents consistent, persistent, and self-improving across Claude Code, Codex CLI, Cursor, OpenCode, and Antigravity.**
+
+Every AI coding tool is feral by default: each one has its own idea of your standards, forgets everything between sessions, and repeats the mistake you corrected yesterday. DevHub defines who your agents are, what they know, what they can touch, and what they've learned — once, in git — and syncs it into every tool you use.
+
+## By the numbers
+
+Counted from this repo, not estimated.
+
+|             |                                                                                      |
+| ----------- | ------------------------------------------------------------------------------------ |
+| **29**      | shared skills, defined once in `skills/shared/` and synced into every supported tool |
+| **136**     | MCP tools agents can call — notes, tasks, repos, PRs, recall, databases, scripts     |
+| **5**       | tools kept in lockstep: Claude Code, Codex CLI, Cursor, OpenCode, Antigravity         |
+| **~500**    | tokens of always-on persona — standards everywhere without eating the context window |
+| **381**     | test files guarding the sync engine, dashboard, and MCP server                       |
+| **5 months** | of daily dogfooding since April 2026 — 840+ commits                                 |
+
+## What it controls
+
+| Pillar                | What it does                                                                                 | Lives in                    |
+| --------------------- | -------------------------------------------------------------------------------------------- | --------------------------- |
+| **Persona**           | Who the agents are and which engineering standards they enforce. Layered to keep tokens low. | `persona/`                  |
+| **Skills & agents**   | What the fleet knows how to do — reviews, PRs, incident triage, repo onboarding.             | `skills/shared/`, `agents/` |
+| **Memory**            | Distilled learnings and notes in plain files, retrievable by any agent via MCP.              | `notes/`                    |
+| **Access**            | Which MCP servers each tool gets, with paths resolved per machine at sync time.              | `mcp/`, `mcp-servers/`      |
+| **The learning loop** | Corrections become learnings; recurring learnings become rules; one sync ships them.         | see below                   |
+
+Change one coding standard, run one sync, and it's enforced in every tool. A new engineer clones the repo, runs install, and inherits every standard and lesson already captured.
+
+### The learning loop
+
+```mermaid
+graph LR
+  work["Agents work<br/><i>any tool</i>"] --> recap["devhub-recap<br/><i>what happened</i>"]
+  recap --> learn["devhub-learnings<br/><i>notes/learnings/</i>"]
+  learn --> recall["recall<br/><i>surfaced next session</i>"]
+  recall --> work
+  learn -. "recurring correction" .-> rules["persona / skill edit"]
+  rules -- "one sync" --> work
+```
+
+1. **Work** — agents follow the persona, use shared skills, and read/write context through the DevHub MCP server.
+2. **Recap** — `devhub-recap` summarizes a session: commands, file changes, failures, mutations.
+3. **Distill** — `devhub-learnings` turns the reusable part into a learning note, committed to git.
+4. **Recall** — the next session pulls relevant learnings back in via hybrid retrieval over notes, docs, and task history.
+5. **Promote** — a correction that keeps recurring becomes a persona rule or skill change, synced to every tool.
+
+A human approves what becomes a rule. Nothing rewrites your persona behind your back.
+
+## Why it holds up
+
+- **Vendor-neutral.** Standards and learnings live in your repo, not in any AI vendor's product. When the tool landscape churns, what you've accumulated moves with you.
+- **Knowledge that outlasts people.** Lessons are captured in git, not in someone's head. When people leave, the lessons stay.
+- **Local-first and guarded by default.** Services bind to `127.0.0.1`. Every mutating API route requires a same-origin request or a shared secret. Secrets come from 1Password or env, never the repo, and a leak scanner runs in CI and pre-push. The in-app terminal is never exposed to the network.
+- **Extensible without forking.** Team- or company-specific skills, agents, and MCP servers ship as [plugins](docs/architecture/plugins.md) in separate repos.
 
 ## Quick Start
 
@@ -85,9 +139,13 @@ After install, start a session in any supported AI tool. It will automatically r
 
 `install.sh` is **idempotent** — re-running it safely reinstalls deps and re-runs bootstrap. For deps-only refresh: `npm install` at the repo root (or `cd dashboard && npm install`).
 
+---
+
+_Everything below is reference documentation. The full docs live in [`docs/`](docs/README.md)._
+
 ## Dashboard (DevHub)
 
-A Next.js-based personal dev dashboard (default `http://localhost:1337`).
+A Next.js-based personal dev dashboard (default `http://localhost:1337`) — the cockpit for the control layer above.
 
 > **Trusted network only.** Mutating dashboard APIs (POST/PUT/PATCH/DELETE)
 > require either a matching `Origin` (browser same-origin) or `DEVHUB_API_SECRET`
@@ -242,96 +300,53 @@ Press `?` when DevHub (not the Chamber iframe) has focus to see all shortcuts:
 
 On viewports where the slim mobile header is shown, it includes **notes** and **tasks** buttons (same panels as the shortcuts above). On wider screens, use the shortcuts or open **Notes** from the sidebar.
 
-## What This Repo Does
-
-This repo solves three problems that come up when using multiple AI coding tools across multiple machines:
-
-1. **Consistent persona** — Your AI coding assistant should behave the same way whether you're using Claude Code, Codex CLI, OpenCode, or Cursor. This repo maintains a layered persona system that syncs across all tools and machines.
-
-2. **Shared skills** — Instead of configuring skills separately for each tool, define them once in `skills/shared/` and sync them everywhere. When you create a new skill locally, it can be collected back into the repo.
-
-3. **Persistent memory** — A git-based notes system captures what you learn across sessions and surfaces relevant context at the start of new sessions. No external database dependencies, no lossy compression, 100% retrieval accuracy.
-
 ## Persona System
 
 The persona is split into three layers to minimize token usage:
 
-| Layer | File                                                 | Tokens | When Loaded                          |
-| ----- | ---------------------------------------------------- | ------ | ------------------------------------ |
-| L0    | `persona/identity.txt`                               | ~250   | Every message (Cursor `.mdc`; not inlined in `AGENTS.md`) |
-| L1    | `persona/shared-persona.md`                          | ~400   | Every session (same)                                      |
-| L2    | `persona/modes/*.md`                                 | ~200   | On demand — open the matching mode file, not a wrapper skill |
+| Layer | File                        | Size        | When Loaded                                                  |
+| ----- | --------------------------- | ----------- | ------------------------------------------------------------ |
+| L0    | `persona/identity.txt`      | ~200 tokens | Every message (Cursor `.mdc`; not inlined in `AGENTS.md`)    |
+| L1    | `persona/shared-persona.md` | ~300 tokens | Every session (same)                                         |
+| L2    | `persona/modes/*.md`        | ~80–190 each | On demand — open the matching mode file, not a wrapper skill |
 
 **Why split?** L0/L1 stay short and load once. L2 is a single mode file when teaching/review/greenfield actually needs it — not a wrapper skill, not the whole modes directory.
 
 Persona is delivered to AI tools via two mechanisms:
 
-1. **Cursor `.mdc` + tool configs** — `syncPersona()` writes full L0/L1 into Claude/Codex/OpenCode marker blocks and always-on Cursor rules under `~/.cursor/rules/devhub-persona-*.mdc`.
+1. **Cursor `.mdc` + tool configs** — `syncPersona()` writes full L0/L1 into Claude/Codex/OpenCode/Antigravity marker blocks and always-on Cursor rules under `~/.cursor/rules/devhub-persona-*.mdc`.
 2. **Repo `AGENTS.md`** — Cloud/plugin/gotcha rules plus L0/L1 **pointers**. Cursor already has the full text from `.mdc`; inlining both would load it twice.
 
 ### Customizing Your Persona
 
 Edit the files in `persona/` directly. After editing, use **Skills → Persona & Agent configs → Sync persona** in the dashboard (or **Actions → Sync Persona**).
 
-The `optimize` skill can also propose persona changes based on patterns in your session notes (see Self-Learning Loop below).
-
 ## Notes System (Persistent Memory)
 
-A two-tier notes system captures knowledge across sessions without external dependencies.
+Notes are plain files in the repo — BlockNote JSON under `notes/`, synced across machines with `git push` / `git pull` like everything else. No external database.
 
-### How It Works
+- **Learnings** (`notes/learnings/`) — short, reusable lessons written by the `devhub-learnings` skill or by hand. This is the tier agents should reach for.
+- **Working notes** (`notes/`) — task notes, PR reviews, discovery, research, diagrams.
+- **Recall** — hybrid retrieval over notes, docs, learnings, and task history. Agents query it through the `recall` MCP tool; humans use `/recall`. See [docs/architecture/recall.md](docs/architecture/recall.md).
 
-Nothing here runs on a timer by itself — **you (or the AI using skills) invoke the steps.**
-
-```
-After significant work (manual)
-    ↓
-devhub-recap skill (when asked) → notes/sessions/YYYY-MM-DD-HHMM.md
-    ↓
-When you choose to run it: learnings / optimize skills → notes/learnings/{topic}.md
-    ↓
-notes/index.md updated (manually or via skill guidance)
-    ↓
-Next session: AI reads index.md → loads relevant learnings on demand
-```
-
-**Tier 1 — Session Notes** (`notes/sessions/`): Raw captures written after significant work (via `devhub-recap` when you ask for it). These are not meant to be fully loaded into context (too verbose).
-
-**Tier 2 — Distilled Learnings** (`notes/learnings/`): Reusable insights, organized by topic. Populated when you run `learnings` / `optimize` (or edit by hand).
-
-**Index** (`notes/index.md`): A ~200 token topic map that the AI reads at session start. This is the only always-loaded component of the notes system.
-
-### Session Note Format
-
-Notes are captured with `devhub-recap` when you ask — agents should not volunteer them. Each note includes:
-
-- Frontmatter (date, tools, models, projects, tags, rating)
-- What was asked, what happened, key outputs
-- What worked, what didn't work, corrections made
-- Raw learnings for later distillation
-
-### Pruning
-
-When learnings files exceed ~200 lines, older entries are archived to `notes/learnings/archive/YYYY-QN.md`. Session notes older than 90 days are moved to `notes/sessions/archive/`. This keeps the active files scannable and under token budget.
-
-### Cross-Machine Sync
-
-Notes are plain markdown files in the git repo. They sync across machines via `git push` and `git pull` — same as everything else.
+Session recaps are on request only (`devhub-recap`) — agents should not volunteer them. See [docs/architecture/notes-system.md](docs/architecture/notes-system.md) and [docs/architecture/memory.md](docs/architecture/memory.md).
 
 ## Skills
 
-Shared skills live in `skills/shared/`. Each skill has a `SKILL.md` describing when and how to use it. Skills are synced from the repo to your local tool directories by **TypeScript** (`dashboard/lib/sync-skills.ts`), triggered from the **Skills** or **Actions** UI.
+Shared skills live in `skills/shared/`. Each skill has a `SKILL.md` describing when and how to use it. Skills are synced from the repo to your local tool directories by **TypeScript** (`dashboard/lib/sync/skills.ts`), triggered from the **Skills** or **Actions** UI.
 
-### Built-in Skills
+### A few of the built-in skills
 
-| Skill             | Purpose                                                    | When to Use                                           |
-| ----------------- | ---------------------------------------------------------- | ----------------------------------------------------- |
-| **ai-sync**       | Sync repo skills and persona to local tools                | After pulling changes, on new machine setup           |
-| **devhub-recap**  | Capture structured notes after significant work            | When you ask to recap — not volunteered               |
-| **learnings**     | Reference distilled knowledge from past sessions           | At session start, when encountering familiar problems |
-| **optimize**      | Self-learning loop: review notes, propose improvements     | Weekly, or when you feel prompts aren't improving     |
-| **rubber-duck**   | Independent second-opinion review of the current direction | Before major decisions, when something feels off      |
-| **update-check**  | Check for repo updates and sync                            | At session start (optional, lightweight)              |
+| Skill                  | Purpose                                                              |
+| ---------------------- | -------------------------------------------------------------------- |
+| **devhub-recap**       | Summarize a session: commands, MCP calls, file changes, failures     |
+| **devhub-learnings**   | Distill a reusable lesson into `notes/learnings/`                    |
+| **rubber-duck**        | Independent second-opinion review of the current plan or direction   |
+| **pr-explain-review**  | Explain and review a PR with its conversation and linked ticket      |
+| **dx-audit**           | Developer-experience audit of any repo, written to notes             |
+| **devhub-sync**        | Keep core, private mirror, and plugin repos in sync                  |
+
+The **Skills** page lists all of them.
 
 ### Reverse Skill Sync
 
@@ -377,7 +392,7 @@ MCP (Model Context Protocol) servers extend tool capabilities. This repo configu
 A stdio MCP server (`mcp-servers/devhub-server`, wired from `mcp/shared/devhub.json`) exposes two tiers of tools:
 
 - **Filesystem-backed** (work without the dashboard): notes, docs, tasks, diagrams, appraisal.
-- **Dashboard-backed** (proxy `http://localhost:1337`): status, scripts/sync, briefing, calendar, work/PRs, repos, search. These need the dashboard running.
+- **Dashboard-backed** (proxy `http://localhost:1337`): status, scripts/sync, briefing, calendar, work/PRs, repos, search, recall, databases. These need the dashboard running.
 
 ```bash
 # Run the server directly (normally launched by your AI tool via the synced MCP config)
@@ -385,70 +400,13 @@ NOTES_DIR=~/devhub/notes DOCS_DIR=~/devhub/docs \
   mcp-servers/devhub-server/node_modules/.bin/tsx mcp-servers/devhub-server/src/mcp.ts
 ```
 
-MCP configs are installed to your tool directories by `install.sh` / Actions with the correct paths. The config substitutes `REPO_ROOT` (and `PLUGIN_ROOT` for plugin servers) at sync time. See the `devhub-mcp` skill for tool usage.
-
-### Web UI
-
-When the notes server is running, open `http://localhost:1337` to:
-
-- Browse and search all notes
-- Create and edit notes with a markdown editor
-- Dark mode support
-
-## Self-Learning Loop (Optimize Skill)
-
-The `optimize` skill is the automation layer on top of the notes system. It reviews accumulated sessions and proposes improvements to your persona, skills, and workflow.
-
-### How It Works
-
-1. **Gather** — Reads all session notes since the last optimize run
-2. **Identify patterns** — Finds recurring corrections, friction points, successful patterns, missing context, and token waste
-3. **Propose changes** — Presents a structured report with specific, actionable changes
-4. **Apply or confirm** — Either suggests changes for approval or applies non-destructive changes directly
-5. **Track** — Logs when it last ran so it only reviews new sessions
-
-### Example Output
-
-```markdown
-## Optimize Report — 2026-05-07
-
-### Sessions Reviewed: 8
-
-### Patterns Found: 3
-
-#### Persona Changes
-
-- [ ] shared-persona.md: Add "prefer early returns" rule (seen in 5 sessions)
-
-#### Skill Changes
-
-- [ ] devhub-recap/SKILL.md: Add "token_cost" field (consistently missing)
-
-#### Learnings Actions
-
-- [ ] Distill 3 session notes → notes/learnings/tools.md
-- [ ] Archive 12 old entries from notes/learnings/engineering.md
-```
-
-### Running It
-
-```
-"Run the optimize skill — review recent sessions and suggest improvements."
-```
-
-Or for automatic application of non-destructive changes:
-
-```
-"Run optimize and apply changes."
-```
-
-The optimize skill never modifies session notes (they're immutable records) and never deletes persona content without explicit approval. After persona changes, sync from **Skills** or **Actions** so tools pick up `AGENTS.md` / injected configs.
+MCP configs are installed to your tool directories by `install.sh` / Actions with the correct paths. The config substitutes `REPO_ROOT` (and `PLUGIN_ROOT` for plugin servers) at sync time. See the `devhub-mcp` skill for tool usage and [docs/architecture/mcp-server.md](docs/architecture/mcp-server.md) for the design.
 
 ## Sync Strategy
 
 ### Conflict Prevention
 
-**Update & Sync** (Actions) runs TypeScript (`dashboard/lib/sync-orchestrator.ts`): clean tree required for pull/collect/push; branch must be `main` or `master`; if you are **ahead and behind** remote, it stops until you rebase/merge. Advanced: skip the remote staleness guard from CLI with `cd dashboard && npx tsx scripts/run-action.ts update_and_sync --push --force` (not exposed in the UI).
+**Update & Sync** (Actions) runs TypeScript (`dashboard/lib/sync/orchestrator.ts`): clean tree required for pull/collect/push; branch must be `main` or `master`; if you are **ahead and behind** remote, it stops until you rebase/merge. Advanced: skip the remote staleness guard from CLI with `cd dashboard && npx tsx scripts/run-action.ts update_and_sync --push --force` (not exposed in the UI).
 
 See **Status → Repo** for live **dirty / ahead / behind** counts and suggested `git` commands when something blocks sync.
 
@@ -481,23 +439,27 @@ See [`docs/reference/platform-support.md`](docs/reference/platform-support.md) f
 
 ## Workflow Summary
 
-1. **Session start**: Cursor already has L0/L1 via `.mdc`. Cloud reads `persona/identity.txt` then `persona/shared-persona.md` if those rules are missing. Then `notes/index.md` if relevant.
-2. **During work**: AI uses shared skills and follows persona standards
-3. **End of task**: Ask AI to run `devhub-recap` if you want a session note (agents should not volunteer this)
-4. **Weekly**: Ask AI to run `optimize` skill to review patterns and propose improvements
-5. **Periodic**: Optional **Scheduled Jobs** in the dashboard (in-process scheduler) can run Update & Sync / Validate while DevHub is running
+1. **Session start**: Cursor already has L0/L1 via `.mdc`; other tools get it from synced config blocks. Cloud agents read `persona/identity.txt` then `persona/shared-persona.md` if those rules are missing.
+2. **During work**: agents use shared skills, follow persona standards, and pull context through `recall` and the notes tools.
+3. **End of task**: ask for `devhub-recap` if you want a summary, and `devhub-learnings` for anything worth keeping.
+4. **When a correction keeps recurring**: promote it into `persona/` or the relevant skill, then sync.
+5. **Periodic**: optional **Scheduled Jobs** in the dashboard (in-process scheduler) can run Update & Sync / Validate while DevHub is running.
 
 ## Documentation
 
-| Document                          | Purpose                                                        |
-| --------------------------------- | -------------------------------------------------------------- |
-| `docs/architecture/memory.md`          | Memory architecture: git-based notes + custom notes MCP server |
-| `docs/reference/platform-support.md`   | Platform capability matrix                                     |
-| `docs/architecture/token-budget.md`            | Token budget analysis and optimization tips                    |
-| `docs/guides/repo-learning.md`    | Repos page learning briefs, tutor, and NotebookLM source packs |
+| Document                                | Purpose                                                        |
+| --------------------------------------- | -------------------------------------------------------------- |
+| `docs/README.md`                        | Docs home — start here                                         |
+| `docs/architecture/overview.md`         | How the pieces fit together                                    |
+| `docs/getting-started/installation.md`  | Full install guide                                             |
+| `docs/architecture/memory.md`           | Memory architecture: git-based notes + notes MCP server        |
+| `docs/architecture/persona-system.md`   | Persona layers and delivery                                    |
+| `docs/architecture/token-budget.md`     | Token budget analysis and optimization tips                    |
+| `docs/reference/platform-support.md`    | Platform capability matrix                                     |
+| `docs/guides/repo-learning.md`          | Repos page learning briefs, tutor, and NotebookLM source packs |
 | `docs/contributing/creating-plugins.md` | Step-by-step guide to building a plugin                        |
-| `docs/architecture/plugins.md`    | Plugin system: manifest, registry, tier-1/tier-2, precedence   |
-| `CONTRIBUTING.md`                 | Private-mirror + upstream + backport fork workflow             |
+| `docs/architecture/plugins.md`          | Plugin system: manifest, registry, tier-1/tier-2, precedence   |
+| `CONTRIBUTING.md`                       | Private-mirror + upstream + backport fork workflow             |
 
 ## Troubleshooting
 
