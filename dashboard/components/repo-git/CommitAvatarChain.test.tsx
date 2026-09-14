@@ -28,14 +28,14 @@ describe("CommitAvatar source chain", () => {
   it("prefers GitHub's own attribution over anything derived locally", async () => {
     render(
       <CommitAvatar
-        author="Dave McIlhagga"
-        email="dmcilhagga@insider.com"
-        resolvedUrl="https://avatars.githubusercontent.com/u/310578580?v=4"
+        author="Dana Park"
+        email="dpark@work.example"
+        resolvedUrl="https://avatars.githubusercontent.com/u/1001?v=4"
       />,
     );
     // A private work address has no Gravatar, so without the resolved URL this
     // author could only ever be initials.
-    await waitFor(() => expect(avatarImg()?.src).toContain("avatars.githubusercontent.com/u/310578580"));
+    await waitFor(() => expect(avatarImg()?.src).toContain("avatars.githubusercontent.com/u/1001"));
   });
 
   it("asks GitHub for the size it renders at", async () => {
@@ -51,12 +51,12 @@ describe("CommitAvatar source chain", () => {
   });
 
   it("derives the avatar from a GitHub noreply address with no resolved map", async () => {
-    render(<CommitAvatar author="" email="68432290+Svetlana-Leonova@users.noreply.github.com" />);
-    await waitFor(() => expect(avatarImg()?.src).toContain("avatars.githubusercontent.com/u/68432290"));
+    render(<CommitAvatar author="" email="12345678+Sam-Lee@users.noreply.github.com" />);
+    await waitFor(() => expect(avatarImg()?.src).toContain("avatars.githubusercontent.com/u/12345678"));
   });
 
   it("falls back to Gravatar for an ordinary address", async () => {
-    render(<CommitAvatar author="John McElreavey" email="j.mcelreavey@gmail.com" />);
+    render(<CommitAvatar author="John Doe" email="john@example.com" />);
     await waitFor(() => expect(avatarImg()?.src).toContain("gravatar.com/avatar/"));
     // d=404 keeps a third-party placeholder from masquerading as a real avatar.
     expect(avatarImg()?.src).toContain("d=404");
@@ -65,9 +65,9 @@ describe("CommitAvatar source chain", () => {
   it("steps to the next candidate when one fails, then to initials", async () => {
     render(
       <CommitAvatar
-        author="Scott Fischer"
-        email="scott-fischer@users.noreply.github.com"
-        resolvedUrl="https://avatars.githubusercontent.com/u/8835133?v=4"
+        author="Sam Lee"
+        email="sam-lee@users.noreply.github.com"
+        resolvedUrl="https://avatars.githubusercontent.com/u/1002?v=4"
       />,
     );
     await waitFor(() => expect(avatarImg()).not.toBeNull());
@@ -76,7 +76,7 @@ describe("CommitAvatar source chain", () => {
     // login arrives lowercased because the log parser lowercases the whole
     // address; GitHub's profile URLs are case-insensitive, so it still resolves.
     avatarImg()!.dispatchEvent(new Event("error"));
-    await waitFor(() => expect(avatarImg()?.src).toContain("github.com/scott-fischer.png"));
+    await waitFor(() => expect(avatarImg()?.src).toContain("github.com/sam-lee.png"));
 
     // Exhaust the rest; the disc underneath is what is left.
     for (let i = 0; i < 3 && avatarImg(); i += 1) {
@@ -84,11 +84,11 @@ describe("CommitAvatar source chain", () => {
       await waitFor(() => true);
     }
     await waitFor(() => expect(avatarImg()).toBeNull());
-    expect(screen.getByText("SF")).toBeTruthy();
+    expect(screen.getByText("SL")).toBeTruthy();
   });
 
   it("shows initials immediately, before any network result", () => {
-    render(<CommitAvatar author="Dawin Camilo Cortés" email="dcamilo@insider.com" />);
+    render(<CommitAvatar author="Dana Carla Cortés" email="dana@work.example" />);
     // Rendered synchronously: there is never a frame with an empty circle, which
     // is what keeps the column stable offline.
     expect(screen.getByText("DC")).toBeTruthy();
@@ -119,22 +119,22 @@ describe("CommitAvatar source chain", () => {
     // the list stayed on initials while detail (mounted after the map) showed
     // the photo.
     const { rerender } = render(
-      <CommitAvatar author="JustinFerrara" email="justin.p.ferrara@gmail.com" />,
+      <CommitAvatar author="RileyMorgan" email="riley.morgan@example.com" />,
     );
     await waitFor(() => expect(avatarImg()?.src).toContain("gravatar.com/avatar/"));
     avatarImg()!.dispatchEvent(new Event("error"));
     await waitFor(() => expect(avatarImg()).toBeNull());
-    expect(screen.getByText("JU")).toBeTruthy();
+    expect(screen.getByText("RI")).toBeTruthy();
 
     rerender(
       <CommitAvatar
-        author="JustinFerrara"
-        email="justin.p.ferrara@gmail.com"
-        resolvedUrl="https://avatars.githubusercontent.com/u/14058449?v=4"
+        author="RileyMorgan"
+        email="riley.morgan@example.com"
+        resolvedUrl="https://avatars.githubusercontent.com/u/1003?v=4"
       />,
     );
     await waitFor(() =>
-      expect(avatarImg()?.src).toContain("avatars.githubusercontent.com/u/14058449"),
+      expect(avatarImg()?.src).toContain("avatars.githubusercontent.com/u/1003"),
     );
   });
 

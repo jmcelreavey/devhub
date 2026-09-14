@@ -43,10 +43,10 @@ describe("buildPeople", () => {
     // and without this rule he renders as two people on one screen.
     const people = buildPeople(
       sightings(
-        ["John McElreavey", "jmcelreavey@insider.com", 4],
-        ["John McElreavey", "j.mcelreavey@gmail.com", 34],
+        ["John McElreavey", "john@work.example", 4],
+        ["John McElreavey", "john@home.example", 34],
       ),
-      { "jmcelreavey@insider.com": account("jmcelreavey", 7) },
+      { "john@work.example": account("jmcelreavey", 7) },
     );
     expect(people).toHaveLength(1);
     expect(people[0]).toMatchObject({
@@ -54,7 +54,7 @@ describe("buildPeople", () => {
       displayName: "John McElreavey",
       commits: 38,
     });
-    expect(people[0]?.emails).toEqual(["j.mcelreavey@gmail.com", "jmcelreavey@insider.com"]);
+    expect(people[0]?.emails).toEqual(["john@home.example", "john@work.example"]);
   });
 
   it("never merges two addresses GitHub gave different logins", () => {
@@ -149,12 +149,12 @@ describe("buildPeople", () => {
     // keep the GitHub avatar on the combined person.
     const people = buildPeople(
       sightings(
-        ["John McElreavey", "jmcelreavey@insider.com", 4],
-        ["John McElreavey", "j.mcelreavey@gmail.com", 34],
+        ["John McElreavey", "john@work.example", 4],
+        ["John McElreavey", "john@home.example", 34],
       ),
-      { "jmcelreavey@insider.com": account("jmcelreavey", 7) },
+      { "john@work.example": account("jmcelreavey", 7) },
       {},
-      { "j.mcelreavey@gmail.com": atl },
+      { "john@home.example": atl },
     );
     expect(people).toHaveLength(1);
     expect(people[0]?.avatarUrl).toContain("avatars.githubusercontent.com");
@@ -174,23 +174,23 @@ describe("indexByEmail / personForEmail", () => {
   });
 
   it("gives graph rows and commit detail the same avatar URL for one person", () => {
-    // Justin commits as gmail on mainline merges and a work address on branches.
+    // Riley commits as gmail on mainline merges and a work address on branches.
     // GitHub only attributes one of them; name-merge must still share the photo.
     const people = buildPeople(
       sightings(
-        ["JustinFerrara", "justin.p.ferrara@gmail.com"],
-        ["JustinFerrara", "jferrara@example-org.com"],
+        ["RileyMorgan", "riley.morgan@example.com"],
+        ["RileyMorgan", "rmorgan@example-org.com"],
       ),
-      { "jferrara@example-org.com": account("JustinFerrara", 14058449) },
+      { "rmorgan@example-org.com": account("RileyMorgan", 1003) },
     );
     const index = indexByEmail(people);
-    const graphEmail = "justin.p.ferrara@gmail.com";
-    const detailEmail = "Justin.P.Ferrara@gmail.com";
+    const graphEmail = "riley.morgan@example.com";
+    const detailEmail = "Riley.Morgan@example.com";
     expect(lookupByEmail(index, graphEmail)?.avatarUrl).toBe(
       lookupByEmail(index, detailEmail)?.avatarUrl,
     );
     expect(lookupByEmail(index, graphEmail)?.avatarUrl).toContain(
-      "avatars.githubusercontent.com/u/14058449",
+      "avatars.githubusercontent.com/u/1003",
     );
   });
 

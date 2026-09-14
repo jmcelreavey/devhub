@@ -13,6 +13,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Internal service codenames that must never appear in public/shared content.
 DENY='sigyn|gefjon|bifrost|fenrir|svapi|heimdall|forseti|skadi'
+# Employer names and branding that belong in plugins or personal data, never core.
+# Bracketed letters keep this line from matching itself when a diff adding it is scanned.
+DENY="${DENY}|busines[s] ?insider|garnet[t]|@inside[r][.]com"
 # High-signal secret patterns.
 SECRET='AKIA[0-9A-Z]{16}|-----BEGIN[ A-Z]*PRIVATE KEY-----|xox[baprs]-[0-9A-Za-z-]{10,}|ghp_[0-9A-Za-z]{36}'
 PATTERN="${DENY}|${SECRET}"
@@ -26,9 +29,12 @@ case "$mode" in
   tree)
     # Tracked files, excluding this scanner, the strategy doc, internal review docs,
     # personal data, and the backport script (all legitimately reference the denylist).
+    # Generated plugin files are skip-worktree and hold the local plugin's output on disk;
+    # their committed content is covered by the backport's added-line scan instead.
     hits="$(cd "$ROOT" && git ls-files -- \
               ':!notes' ':!tasks' ':!collections' ':!upstarts' ':!TEMPLATE_AND_PLUGIN_PLAN.md' \
-              ':!scripts/scan-leaks.sh' ':!scripts/devhub-backport.sh' \
+              ':!scripts/scan-leaks.sh' ':!scripts/devhub-backport.sh' ':!scripts/make-public-seed.sh' \
+              ':(exclude,glob)dashboard/**/*.generated.*' \
               ':(exclude,glob)docs/codebase-review-*.md' \
             | tr '\n' '\0' \
             | xargs -0 grep -nEiI "$PATTERN" 2>/dev/null || true)"

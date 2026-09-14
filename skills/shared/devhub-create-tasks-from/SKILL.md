@@ -90,12 +90,11 @@ created under this parent (or under the creation parent per BI Jira hierarchy �
   the plan payload when present. Do not invent custom field ids — prefer Atlassian MCP
   `createJiraIssue` with `additional_fields` only when the dashboard meta is missing.
 
-**BI Jira defaults** (Business Insider cloud):
+**Jira site and assignee:**
 
-- `cloudId`: `750c6c09-b462-4997-8c11-c3441ac402ac`
-- Assignee John McElreavey: `712020:3fff01cc-7973-4f7c-8d5f-7860247941d8` (only when
-  the user explicitly chose that assignee; otherwise assign to the authenticated user
-  or leave unset per project rules).
+- `cloudId`: resolve with Atlassian MCP `getAccessibleAtlassianResources`; never hardcode it here.
+- Assignee: the authenticated user, or unset per project rules. Only assign someone else when
+  the user names them — look up their account id with `lookupJiraAccountId`.
 
 ### 3. Create Jira sub-tasks (one per work item)
 

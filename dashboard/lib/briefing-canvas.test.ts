@@ -10,7 +10,7 @@ function ctx(overrides: Partial<BriefingContext> = {}): BriefingContext {
   return {
     date: "2026-07-09",
     generatedAt: "2026-07-09T06:00:00.000Z",
-    location: { name: "Blackwatertown", lat: 54.4, lon: -6.7 },
+    location: { name: "Springfield", lat: 54.4, lon: -6.7 },
     profile: { techStack: [], interests: [], hasKids: false },
     weather: null,
     news: [],
@@ -32,7 +32,7 @@ describe("renderCanvasDocument", () => {
     const out = renderCanvasDocument("<!doctype html><html><head></head><body></body></html>", ctx());
     expect(out).toContain("window.__BRIEFING__=");
     expect(out).toContain("window.__BRIEFING_REFRESH__");
-    expect(out).toContain("Blackwatertown");
+    expect(out).toContain("Springfield");
     // boot script sits inside <head>
     expect(out.indexOf("window.__BRIEFING__=")).toBeLessThan(out.indexOf("</head>"));
   });

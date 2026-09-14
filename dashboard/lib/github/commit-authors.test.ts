@@ -11,19 +11,19 @@ function entry(email: string | null, login: string | null, avatar: string | null
 describe("parseCommitAuthors", () => {
   it("maps a commit email to the GitHub account that owns it", () => {
     const map = parseCommitAuthors([
-      entry("gocampos@truelogic.io", "gocampos", "https://avatars.githubusercontent.com/u/1672471?v=4"),
+      entry("octocat@example.com", "octocat", "https://avatars.githubusercontent.com/u/1004?v=4"),
     ]);
-    expect(map["gocampos@truelogic.io"]).toEqual({
-      login: "gocampos",
-      avatarUrl: "https://avatars.githubusercontent.com/u/1672471?v=4",
+    expect(map["octocat@example.com"]).toEqual({
+      login: "octocat",
+      avatarUrl: "https://avatars.githubusercontent.com/u/1004?v=4",
     });
   });
 
   it("lowercases the email so lookups match the parsed log", () => {
     const map = parseCommitAuthors([
-      entry("Scott-Fischer@Users.NoReply.GitHub.com", "Scott-Fischer", "https://avatars.githubusercontent.com/u/8835133?v=4"),
+      entry("Sam-Lee@Users.NoReply.GitHub.com", "Sam-Lee", "https://avatars.githubusercontent.com/u/1002?v=4"),
     ]);
-    expect(map["scott-fischer@users.noreply.github.com"]?.login).toBe("Scott-Fischer");
+    expect(map["sam-lee@users.noreply.github.com"]?.login).toBe("Sam-Lee");
   });
 
   it("skips commits GitHub could not attribute", () => {

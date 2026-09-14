@@ -14,7 +14,7 @@ function row(overrides: Partial<GithubPrRow> = {}): GithubPrRow {
     title: "PTF-4382 - Add Meta feed delivery",
     url: "https://github.com/example-org/syndication-services/pull/46",
     repo: "example-org/syndication-services",
-    author: { login: "lgcaobianco" },
+    author: { login: "octocat" },
     ...overrides,
   };
 }
@@ -51,7 +51,7 @@ describe("matchesPrSearch", () => {
   });
 
   it("matches on the author login", () => {
-    expect(matchesPrSearch(row(), "lgcaobianco")).toBe(true);
+    expect(matchesPrSearch(row(), "octocat")).toBe(true);
   });
 
   it("ANDs terms rather than ORing them", () => {

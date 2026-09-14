@@ -34,7 +34,7 @@ function hashString(input: string): number {
 
 /**
  * Up to two initials. Prefers the display name, falls back to the local part of
- * the email, because "J" beats an empty circle and "gocampos" still gives "GO".
+ * the email, because "J" beats an empty circle and "octocat" still gives "OC".
  */
 export function initialsOf(author: string, email: string): string {
   const local = email.split("@")[0] ?? "";

@@ -209,7 +209,7 @@ describe("buildBriefingSummary", () => {
     const summary = buildBriefingSummary({
       ...EMPTY,
       weather: {
-        location: "Blackwatertown",
+        location: "Springfield",
         currentTempC: 12.4,
         windKph: 14,
         sunrise: null,
@@ -229,7 +229,7 @@ describe("buildBriefingSummary", () => {
       news: [{ title: "a", url: "u" }],
       github: [{ name: "o/r", url: "u", description: null, stars: 10, language: "TypeScript" }],
     });
-    expect(summary).toContain("Blackwatertown 12°C, light rain");
+    expect(summary).toContain("Springfield 12°C, light rain");
     expect(summary).toContain("1 headline");
     expect(summary).toContain("1 trending repos");
   });

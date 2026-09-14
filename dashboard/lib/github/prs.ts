@@ -171,8 +171,8 @@ fragment approval on PullRequest {
 
 /**
  * `reviewDecision` is null on repos that do not *require* reviews, so the old
- * `review:approved` search silently missed approved PRs (businessinsider/app#98
- * had a write-access APPROVED review on HEAD and still never got the tick).
+ * `review:approved` search silently missed approved PRs (one with a write-access
+ * APPROVED review on HEAD still never got the tick).
  * `latestOpinionatedReviews` is the per-reviewer latest verdict, so a later
  * "changes requested" still cancels an earlier approval.
  */

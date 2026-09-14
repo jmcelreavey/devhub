@@ -19,7 +19,7 @@ function raw(email: string): GraphCommitRaw {
     shortHash: "166e902",
     parents: [],
     subject: "PTF-4546",
-    author: "JustinFerrara",
+    author: "RileyMorgan",
     authorEmail: email,
     relativeDate: "15 hours ago",
     refs: [],
@@ -32,21 +32,21 @@ describe("CommitGraph avatars", () => {
   it("passes the identity avatar URL into the row thumbnail", async () => {
     // `git log` preserves the case the author committed under; the identity
     // index is lowercased. Matching those is the whole point of the lookup.
-    const commits = layoutCommitGraph([raw("Justin.P.Ferrara@GMAIL.com")]);
+    const commits = layoutCommitGraph([raw("Riley.Morgan@EXAMPLE.com")]);
     render(
       <CommitGraph
         commits={commits}
         identityByEmail={{
-          "justin.p.ferrara@gmail.com": {
-            avatarUrl: "https://avatars.githubusercontent.com/u/14058449?v=4",
-            displayName: "JustinFerrara",
+          "riley.morgan@example.com": {
+            avatarUrl: "https://avatars.githubusercontent.com/u/1003?v=4",
+            displayName: "RileyMorgan",
           },
         }}
       />,
     );
     await waitFor(() => {
       const img = document.querySelector<HTMLImageElement>(".repo-git-avatar-img");
-      expect(img?.src).toContain("avatars.githubusercontent.com/u/14058449");
+      expect(img?.src).toContain("avatars.githubusercontent.com/u/1003");
     });
   });
 

@@ -67,14 +67,14 @@ export interface BriefingPrefs {
 }
 
 export const DEFAULT_BRIEFING_PREFS: BriefingPrefs = {
-  location: { name: "Blackwatertown", lat: 54.4486, lon: -6.7117 },
-  eventSearchAreas: ["Blackwatertown", "Moy", "Benburb", "Craigavon", "Portadown", "Dungannon"],
+  location: { name: "London", lat: 51.5074, lon: -0.1278 },
+  eventSearchAreas: ["London"],
   interests: [],
   techStack: ["typescript", "javascript", "react", "node"],
   hasKids: false,
-  attractionsArea: "Northern Ireland",
+  attractionsArea: "London",
   newsFeeds: [
-    { url: "https://feeds.bbci.co.uk/news/northern_ireland/rss.xml", label: "BBC News NI" },
+    { url: "https://feeds.bbci.co.uk/news/rss.xml", label: "BBC News" },
   ],
   newsRegion: "GB:en",
   repoLanguages: ["TypeScript", "JavaScript"],
