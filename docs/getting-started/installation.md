@@ -19,9 +19,9 @@ Before installing, make sure you have:
 
 | Requirement          | Notes                                                                                      |
 | -------------------- | ------------------------------------------------------------------------------------------ |
-| Node.js 20 or newer  | The dashboard and MCP server are Node-based                                                |
+| Node.js 22           | Pinned in `.nvmrc` — run `nvm install && nvm use`                                          |
 | Git                  | Used for repo sync, notes history, and workflow actions                                    |
-| npm                  | Used by the root scripts and dashboard scripts                                             |
+| npm 10               | Bundled with Node 22. `npm install` refuses npm 11, which rewrites the lockfile CI rejects  |
 | Aikido Safe-Chain    | Blocks malicious packages at install time (see below)                                      |
 | A supported terminal | macOS Terminal, iTerm, Warp, or a WSL terminal work well                                   |
 | 1Password CLI        | Recommended before first run so DevHub can load integration secrets from the `devhub` item |
@@ -146,6 +146,7 @@ This runs the dashboard lint, typecheck, and test commands.
 | Problem                         | Fix                                                                                                   |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `safe-chain not installed`      | Run `npm install -g @aikidosec/safe-chain@1.1.10`, then `safe-chain setup`, and restart your terminal |
+| `This project pins npm 10`      | Run `nvm use` (or install Node 22), then re-run the install                                           |
 | Port 1337 is already in use     | Stop whatever is listening. The desktop app will refuse to start and tell you, rather than killing it |
 | Optional integration is missing | Open `/setup` and add the relevant credentials                                                        |
 | Skills or MCP configs are stale | Run the sync actions from the dashboard                                                               |

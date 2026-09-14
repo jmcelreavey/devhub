@@ -17,7 +17,7 @@ Two recorders, two jobs:
 | Job | Tool |
 | --- | ---- |
 | In-app UI walkthroughs (notes, PRs, setup) | Playwright journeys with `PLAYWRIGHT_VIDEO=1` |
-| README control-layer GIF (`docs/assets/demos/control-layer.gif`) | `npm run demos:record` (VHS + a disposable fixture) |
+| README dashboard GIF (`docs/assets/demos/dashboard.gif`) | `npm run demos:record` (Playwright + a disposable fixture) |
 
 ## Playwright (feature pages)
 
@@ -31,23 +31,26 @@ PLAYWRIGHT_VIDEO=1 npm run test:e2e --prefix dashboard -- --project=chromium
 
 Playwright writes videos under `dashboard/test-results/`. Keep that directory local while reviewing and trimming the recordings.
 
-## README control-layer GIF
+## README dashboard GIF
 
-The README demo is a VHS tape (`scripts/demos/control-layer.tape`) that runs a real sync and real MCP calls. Pointed at a live machine it would overwrite tool configs and notes, so `scripts/demos/record.sh` builds a throwaway checkout (committed shared content only — no notes, tasks, collections, or `persona/identity.txt`) plus a throwaway `HOME`.
+The README demo walks the real dashboard: Today's tasks, a note, syncing the persona to every tool, and searching shared memory. The sync writes tool configs under `$HOME` and the walk writes tasks, so `scripts/demos/record.sh` never touches your machine's data:
+
+1. Builds a throwaway checkout from `git archive` (no notes, tasks, collections, reps, upstarts, or `persona/identity.txt`) and a throwaway `HOME`.
+2. Seeds demo notes and tasks through the real DevHub MCP server (`call-tool.mjs`).
+3. Starts the dashboard with `env -i` and only fixture paths, so no integration secrets, plugins, or 1Password lookups reach the recording.
+4. Runs `dashboard/scripts/record-readme-demo.ts`: Playwright drives Chromium, a CDP screencast captures frames, and sharp encodes the GIF. No ffmpeg or VHS.
 
 ```bash
-# Requires vhs (brew install vhs) and dashboard + MCP server node_modules
+# Requires dashboard + MCP server node_modules and Playwright's Chromium
 npm run demos:record
 ```
 
 Constraints:
 
-- The fixture is `git archive HEAD`. Uncommitted files are absent — commit `call-tool.mjs` and `dashboard/scripts/run-action.ts` before recording.
-- The tape refuses to run unless `DEVHUB_DEMO_FIXTURE` (default `/tmp/devhub-demo-fixture`) contains the `.devhub-demo-fixture` marker. It will not `rm -rf` a directory it did not create.
-- `devhub` in the recording is a shell function wrapping `dashboard/scripts/run-action.ts` and `mcp-servers/devhub-server/scripts/call-tool.mjs`.
-- `vhs` can exit 0 when ffmpeg wrote nothing — the script fails if the GIF is missing or empty.
-
-Override the fixture path with `DEVHUB_DEMO_FIXTURE`. Review every frame before publishing.
+- The fixture is `git archive $DEVHUB_DEMO_REF` (default `HEAD`). Uncommitted files are absent.
+- The fixture path shows on screen (Skills page, sync logs), so keep the default `/tmp/devhub-demo-fixture` or another path without your username. The script refuses to `rm -rf` a directory without its `.devhub-demo-fixture` marker.
+- The walk lives in `record-readme-demo.ts`. When a page's labels change, update its selectors there; the script fails loudly rather than recording a blank scene.
+- Key frames are written to `$DEVHUB_DEMO_FIXTURE/frames`. Review every one before publishing.
 
 ## Use safe data
 

@@ -261,7 +261,7 @@ async function main() {
   console.log(`DevHub ready on http://localhost:${port}`);
   if (process.env.WSL_DISTRO_NAME) {
     console.log(
-      "  · WSL2: phones use your Windows LAN IP (see README). Mirrored .wslconfig or scripts/wsl/forward-devhub.ps1.",
+      "  · WSL2: phones use your Windows LAN IP (see docs/reference/platform-support.md). Mirrored .wslconfig or scripts/wsl/forward-devhub.ps1.",
     );
   }
 }

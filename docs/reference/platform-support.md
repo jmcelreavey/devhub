@@ -25,8 +25,8 @@ DevHub is designed for local developer machines.
 
 | Tool        | Purpose                                     |
 | ----------- | ------------------------------------------- |
-| Node.js 20+ | Runs dashboard and tooling                  |
-| npm         | Installs dependencies and runs scripts      |
+| Node.js 22  | Runs dashboard and tooling (see `.nvmrc`)   |
+| npm 10      | Bundled with Node 22; `npm install` refuses other majors |
 | Git         | Repo sync, notes history, and status checks |
 
 ## Optional Tools
@@ -49,4 +49,21 @@ Do not expose DevHub directly to the public internet without adding authenticati
 
 ## WSL Notes
 
-For WSL2, mirrored networking is usually the simplest LAN option. NAT-mode WSL may require Windows port forwarding.
+LAN traffic hits **Windows** first, so Windows must accept and route it before DevHub's LAN mode (see [Setup](../getting-started/setup.md#localhost-vs-lan-access)) is reachable from other devices.
+
+**Mirrored networking (recommended, Windows 11 22H2+).** Add this to `%USERPROFILE%\.wslconfig`, then `wsl --shutdown` and reopen your distro:
+
+```ini
+[wsl2]
+networkingMode=mirrored
+```
+
+You may need Microsoft's [Hyper-V firewall rules](https://learn.microsoft.com/en-us/windows/wsl/networking#mirrored-mode-networking) once. Other devices use your **Windows** Wi‑Fi/Ethernet IPv4.
+
+**Default NAT mode.** From an **elevated** Windows PowerShell:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File "\\wsl$\YOUR_DISTRO_NAME\home\YOU\dev\devhub\scripts\wsl\forward-devhub.ps1"
+```
+
+That sets a `netsh` portproxy for ports `1337` and `1336` plus a firewall rule. Re-run it after a reboot if devices can't connect.

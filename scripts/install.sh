@@ -36,7 +36,7 @@ if ! command -v safe-chain &>/dev/null; then
     echo "  Install: npm install -g @aikidosec/safe-chain@1.1.10" >&2
     echo "  Then run: safe-chain setup" >&2
     echo "  Restart your terminal, then re-run: bash scripts/install.sh" >&2
-    echo "  See README.md (Safe-Chain) for details." >&2
+    echo "  See docs/getting-started/installation.md (Safe-Chain) for details." >&2
     exit 1
 fi
 
