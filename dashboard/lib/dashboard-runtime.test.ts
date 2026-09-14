@@ -77,7 +77,10 @@ describe("write / read", () => {
    * from starting.
    */
   it("does not throw when the file cannot be written", () => {
-    expect(() => writeDashboardRuntime("/proc/definitely/not/writable.json")).not.toThrow();
+    // Nest under a regular file so mkdir fails with ENOTDIR on every OS, even as root.
+    // A /proc path did this on macOS but spun forever in mkdirSync on Linux CI.
+    fs.writeFileSync(file, "");
+    expect(() => writeDashboardRuntime(path.join(file, "nested", "dashboard.json"))).not.toThrow();
   });
 });
 
