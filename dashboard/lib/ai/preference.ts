@@ -54,7 +54,7 @@ const FALLBACK_ORDER: AiProviderId[] = [
   "api",
 ];
 
-const CHATGPT_APP_CODEX = "/Applications/ChatGPT.app/Contents/Resources/codex";
+export const CHATGPT_APP_CODEX = "/Applications/ChatGPT.app/Contents/Resources/codex";
 
 export function normalizeAiProvider(raw: string | undefined | null): AiProviderId | null {
   const v = raw?.trim().toLowerCase();

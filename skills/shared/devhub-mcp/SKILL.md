@@ -85,7 +85,15 @@ the latest audit as markdown; run new audits from the Repos page **DX Audit** bu
   `repos_git_push`, `repos_git_log`, `repos_git_show`, `repos_git_blame`,
   `repos_git_conflicts`. Mutating tools need `confirm:true`.
 - **Inventory/search** — `assets_list` (agents|skills|mcp|persona), `search` (notes|docs).
-- **Terminal** — `terminal_list`, `terminal_propose_run`, `terminal_proposal_status`, `terminal_tail`.
+- **Agents** — `agent_providers`, `agent_dispatch`, `agent_race`, `agent_runs`, `agent_output`,
+  `agent_wait`, `agent_followup`, `agent_cancel`, `agent_diff`. Hands a task to another agent CLI
+  (Claude Code, Cursor, Codex, Gemini, OpenCode, or a custom one from
+  `~/.config/devhub/agent-providers.json`). Runs start immediately with approvals disabled in their
+  own dock tab the user can watch and stop, and edit `cwd` directly unless `worktree:true` (so
+  changes show in the IDE). Write a self-contained prompt; `agent_wait` then `agent_diff`.
+  A dispatched agent cannot dispatch further (`DEVHUB_AGENT_MAX_DEPTH`).
+- **Terminal** — `terminal_list`, `terminal_propose_run`, `terminal_proposal_status`, `terminal_tail`,
+  `terminal_wait_for` (block until output matches a regex instead of polling the tail).
   Prefer a dock tab over the agent/Cursor shell for anything the user should see: the dock is where
   they can watch it, keep it, and kill it. Always use it for upstarts, Expo, `npm run dev` and other
   long-running commands. Every approved proposal opens its own tab, so nothing waits on another
@@ -93,6 +101,18 @@ the latest audit as markdown; run new audits from the Repos page **DX Audit** bu
   dock; poll status, then tail the session. Dock tabs outlive the agent session, so check
   `terminal_list` before proposing — the service may already be up from an earlier one, and a
   second start just races the first for the port.
+- **History** (filesystem, no dashboard) — `mcp_history` traces every DevHub MCP call on a day
+  (redacted args, duration, outcome, client, dispatching agent run; filter by `tool: "agent_*"`,
+  `errorsOnly`, `agentRunId`); `mcp_history_summary` rolls a day up into totals, actions taken and
+  failures — use it for end-of-day recaps and standups instead of reconstructing from memory.
+  The dashboard's **Agent activity** page (`/agent-activity`) shows the same history plus agent
+  runs, and the standup gains an "Agent activity" section from it.
+- **Events** — `events_wait` blocks until something happens instead of you polling: `kind: "pr"`
+  (`repo`, `number`, `until: checks_done | review | merged_or_closed | any_change`), `script_run` /
+  `agent_run` (`runId`), `datadog_alert` / `recall_event` (optional title `match`). Max 300s; call
+  again on timeout.
+- **Prompts** — every skill in the checkout's `skills/` is also an MCP prompt (Claude Code:
+  `/mcp__devhub__<skill>`, optional `task` argument), so users can invoke a skill directly.
 
 **Confirmation contract:** any tool that mutates state (a mutating script, a service
 restart, a Jira transition) takes `confirm: true`. Without it the tool explains the effect

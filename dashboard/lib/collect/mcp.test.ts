@@ -45,6 +45,16 @@ describe("collect-mcp", () => {
     expect(entry!.sources.find((s) => s.tool === "cursor")?.configPath).toContain(".cursor/mcp.json");
   });
 
+  it("never offers AutoClaw's bundled servers for import", () => {
+    const { repo, home } = makeTempRepo();
+    writeJson(path.join(home, ".openclaw-autoclaw/workspace/config/mcporter.json"), {
+      imports: [],
+      mcpServers: { "autoclaw-productivity": { type: "http", url: "https://example.test/mcp" } },
+    });
+
+    expect(scanLocalMcpImportCandidates(repo).find((c) => c.name === "autoclaw-productivity")).toBeUndefined();
+  });
+
   it("surfaces stdio and remote servers", () => {
     const { repo, home } = makeTempRepo();
     writeJson(path.join(home, ".config/cursor/mcp.json"), {

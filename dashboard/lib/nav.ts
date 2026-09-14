@@ -101,6 +101,8 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/datadog", label: "Datadog", icon: "datadog", group: "bi", gate: "datadog" },
 
   { href: "/status", label: "System", icon: "status", group: "system" },
+  // What agents did through DevHub: dispatched runs and the MCP call history.
+  { href: "/agent-activity", label: "Agent activity", icon: "activity", group: "system" },
   { href: "/chamber", label: "Chamber", icon: "chamber", group: "system", gate: "chamber" },
   { href: "/opencode", label: "OpenCode", icon: "opencode", group: "system", gate: "opencode" },
   { href: "/claude", label: "Claude", icon: "claude", group: "system", gate: "claude", desktopOnly: true, terminal: "claude" },

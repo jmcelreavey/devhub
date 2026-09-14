@@ -75,6 +75,16 @@ export interface McpToolTarget {
   skipRemote?: boolean;
   /** Codex keeps MCP tables inside config.toml; every other target is JSON-backed. */
   format?: "json" | "codex-toml";
+  /**
+   * Sync only when this returns true. For apps whose MCP config lives inside
+   * their own data dir: writing it would create that dir where the app is absent.
+   */
+  installed?: (home: string) => boolean;
+  /**
+   * Never prune entries from this target. Its config also holds servers the app
+   * ships itself, which look exactly like ours and must survive a prune.
+   */
+  neverPrune?: boolean;
 }
 
 function stdioToTool(server: SharedMcpServer): Json {
@@ -322,6 +332,20 @@ export const MCP_TOOL_TARGETS: McpToolTarget[] = [
     toTool: antigravityToTool,
     fromTool: antigravityFromTool,
   },
+  {
+    // AutoClaw (an OpenClaw desktop agent) loads MCP servers through mcporter.
+    // The same file carries `imports` and AutoClaw's bundled servers, hence
+    // mergeRest and neverPrune.
+    id: "autoclaw",
+    label: "AutoClaw",
+    configPath: (home) => path.join(home, ".openclaw-autoclaw", "workspace", "config", "mcporter.json"),
+    topKey: "mcpServers",
+    mergeRest: true,
+    toTool: stdioToTool,
+    fromTool: sharedFromTool,
+    installed: (home) => fs.existsSync(path.join(home, ".openclaw-autoclaw")),
+    neverPrune: true,
+  },
 ];
 
 export function mcpToolById(id: string): McpToolTarget | undefined {
@@ -555,6 +579,10 @@ export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<numbe
   for (const tool of toolTargets) {
     const configPath = tool.configPath(home);
     emit(`[${tool.id}] ${configPath}`);
+    if (tool.installed && !tool.installed(home)) {
+      emit(`  SKIP: ${tool.label} is not installed`);
+      continue;
+    }
     if (syncedConfigPaths.has(configPath)) {
       emit("  SHARED: already synced by another target");
       continue;
@@ -625,7 +653,10 @@ export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<numbe
       writes++;
     }
 
-    if (opts.prune) {
+    if (opts.prune && tool.neverPrune) {
+      emit(`  NO PRUNE: ${tool.label} keeps its own servers in this file`);
+    }
+    if (opts.prune && !tool.neverPrune) {
       const personalCatalog = new Set(personalNames);
       for (const existingName of Object.keys(existingServers)) {
         if (selected.includes(existingName)) continue;

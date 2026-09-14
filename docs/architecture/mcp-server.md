@@ -45,8 +45,8 @@ The server has two tool tiers:
 
 | Tier              | Source Of Truth                           | Dashboard Required | Tool Groups                                                                                                                                                                          |
 | ----------------- | ----------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Filesystem-backed | Local files under configured content dirs | No                 | Notes, docs, tasks, diagrams, appraisal, DX audit                                                                                                                                    |
-| Dashboard-backed  | DevHub HTTP routes on `DEVHUB_BASE_URL`   | Yes                | Status, briefing, calendar, work/PRs/Jira, assets, search, scripts, repos (list/open/reveal/clone/learn + full git workspace), capability, sessions, share, workspace reads, Datadog, terminal, **database client (`db_*`)** |
+| Filesystem-backed | Local files under configured content dirs | No                 | Notes, docs, tasks, diagrams, appraisal, DX audit, MCP call history                                                                                                                  |
+| Dashboard-backed  | DevHub HTTP routes on `DEVHUB_BASE_URL`   | Yes                | Status, briefing, calendar, work/PRs/Jira, assets, search, scripts, repos (list/open/reveal/clone/learn + full git workspace), capability, sessions, share, workspace reads, Datadog, terminal, agent dispatch (`agent_*`), **database client (`db_*`)** |
 | Script-backed     | Local shell scripts under `REPO_ROOT`     | No (runs detached) | `repo_ship`, `repo_ship_status`                                                                                                                                                      |
 
 Filesystem-backed tools call the vault/storage layer directly and work headless.
@@ -116,8 +116,12 @@ Requires `tsx` in `mcp-servers/devhub-server/node_modules`. Used by `npm run dem
 | Recall     | `recall`, `recall_graph`, `recall_remember`, `recall_index`                                                                                                                                                                                                                                                                                                   |
 | Tags       | `tags_list`, `tags_lookup`, `tags_rename` — discover the existing `#tag` vocabulary before inventing near-duplicates, get everything tied to one tag, and rename globally (confirm-gated). There is no `tags_create`: writing `#tag` in a task or note body _is_ the create path                                                                              |
 | Ownership  | `owned_repos`, `repo_owner_brief`, `repo_pr_radar`, `repo_who_owns`, `repo_knowledge_gaps` — dashboard-backed proxies for `/api/own/*`                                                                                                                                                                                                                        |
-| Terminal   | `terminal_list`, `terminal_tail`, `terminal_propose_run`, `terminal_proposal_status` — dock tabs and propose-then-confirm command runs. The MCP process never injects stdin; the dock must confirm, unless the user has **Auto-run** on for a non-destructive command. |
+| Terminal   | `terminal_list`, `terminal_tail`, `terminal_propose_run`, `terminal_proposal_status`, `terminal_wait_for` — dock tabs, propose-then-confirm command runs, and blocking until output matches a pattern. The MCP process never injects stdin; the dock must confirm, unless the user has **Auto-run** on for a non-destructive command (agent dispatch's auto-run tabs are the one server-side exception). |
 | Database   | `db_connections`, `db_preflight`, `db_connect`, `db_schema`, `db_table`, `db_query`, `db_explain`, `db_execute`, `db_cancel`, `db_diff`, `db_history` — proxy `/api/db/*`. Reads via `db_query`; writes via `db_execute` (`confirm: true`, plus `confirmLabel` on dangerous connections). The MCP process never opens a database. See [Database client](database-client.md). |
+| Agents     | `agent_providers`, `agent_dispatch`, `agent_race`, `agent_runs`, `agent_output`, `agent_wait`, `agent_followup`, `agent_cancel`, `agent_diff` — hand a task to another agent CLI (Claude Code, Cursor, Codex, Gemini, OpenCode, Antigravity, or a custom CLI). Each run executes with approvals off in its own visible dock tab; proxies `/api/agent/runs`. See [Dispatch work to another agent](#dispatch-work-to-another-agent). |
+| History    | `mcp_history`, `mcp_history_summary` — filesystem-backed trace of every DevHub MCP tool call (redacted args, duration, outcome, client, dispatching run) and a per-day rollup. See [Trace what agents did](#trace-what-agents-did). |
+| Events     | `events_wait` — block until a PR's checks finish / it is reviewed / merged (`/api/github/pr-state`), a script or agent run ends, a new Datadog alert fires, or a new recall-spine event lands. Polls dashboard routes; max 300s per call. |
+| Prompts    | Not tools: every skill under the checkout's `skills/` (shared, vendor, root installs) is registered as an MCP **prompt** named after the skill, with an optional `task` argument. Clients show them as slash commands. Toolset name `prompts`; plugin skills are not included. |
 
 `recall` is the one an agent should reach for first. `search` answers "which
 files contain these words"; `recall` answers "what do I already know about
@@ -188,6 +192,22 @@ npm run dev
 
 Run `npm run dev` for dashboard-backed tools. Run the sync action after changing MCP
 catalog entries so client configs pick up the new command, args, and environment.
+
+### Connect over HTTP
+
+Clients that take a URL rather than launching a process can use the Streamable HTTP entry. It builds the same server (`src/server.ts`) — same tools, toolsets and history — with one MCP session per client.
+
+```bash
+(cd mcp-servers/devhub-server && npm run mcp:http)
+```
+
+- Endpoint: `http://127.0.0.1:1340/mcp` (`DEVHUB_MCP_HTTP_PORT`, `DEVHUB_MCP_HTTP_HOST`).
+- Every request needs `Authorization: Bearer <token>`. The token comes from `DEVHUB_MCP_HTTP_TOKEN`, or is generated once into `~/.config/devhub/mcp-http-token` (0600) and reused.
+- `Host` and any `Origin` must be loopback, which blocks DNS-rebinding pages. Add names such as a Tailscale hostname with `DEVHUB_MCP_HTTP_ALLOWED_HOSTS` (and bind a reachable `DEVHUB_MCP_HTTP_HOST`) only when a remote client needs it.
+
+The dashboard starts it at boot from the linked checkout (`dashboard/lib/mcp-http-peer.ts`, called from `instrumentation.ts`), pointed at that dashboard's URL and content dirs, with output in `~/.local/state/devhub/mcp-http.log`. It is skipped when `DEVHUB_MCP_HTTP=0`, there is no checkout, the MCP package has no `node_modules`, or the port already has a listener. Cloud-hosted agents (for example a Grok Bot box) cannot reach `127.0.0.1` on your machine; they need a tunnelled URL, which also exposes every tool the server has — narrow it with `DEVHUB_MCP_TOOLSETS` first.
+
+Clients that launch stdio servers (Claude Code, Cursor, Codex, OpenCode, AutoClaw via `mcporter.json`) should keep using the synced stdio config.
 
 ## Common Workflows
 
@@ -260,6 +280,27 @@ Terminal tools proxy `/api/terminal/sessions` and `/api/terminal/propose`. Start
 4. `terminal_tail` with a `sessionId` from `terminal_list` to read the cleaned log tail after inject.
 
 Proposals live in the dashboard process (15 min TTL, max 20 pending). Desktop WS tickets alone are not user intent.
+
+### Dispatch work to another agent
+
+Agent tools proxy `/api/agent/runs`. Start the dashboard and keep it open — a run starts when the terminal dock opens its tab.
+
+1. `agent_providers` — which CLIs are installed (built-ins plus `~/.config/devhub/agent-providers.json`).
+2. `agent_dispatch` with `provider`, a self-contained `prompt`, and `cwd`. Approvals are **off** for the dispatched CLI. Without `worktree` it edits `cwd` directly, so changes appear in the user's IDE; `worktree: true` isolates it on a `devhub/agent/<run>` branch under the repo's `.git/devhub-worktrees/`.
+3. `agent_wait` (blocks up to 300s and sends progress notifications) or `agent_output` with the returned `since` cursor.
+4. `agent_diff` shows what changed against HEAD at dispatch. `agent_followup` resumes the same CLI session (Claude Code, Cursor, or a custom CLI with `resumeArgs`); `agent_cancel` stops a run.
+5. `agent_race` sends one prompt to 2–4 providers, each in its own worktree, for side-by-side diffs.
+
+The runner (`dashboard/scripts/agent-run.ts`, bundled as `services/agent-run.cjs` in the desktop app) prints a readable stream into the tab and appends normalised events to `events.jsonl` under `DEVHUB_AGENT_RUNS_DIR`. It sets `DEVHUB_AGENT_DEPTH`, so an agent it started cannot dispatch another (`DEVHUB_AGENT_MAX_DEPTH`, default 1). At most `DEVHUB_AGENT_MAX_RUNS` (6) runs are queued or running at once.
+
+### Trace what agents did
+
+Every tool call through the server is appended to `~/.local/state/devhub/mcp-history/YYYY-MM-DD.jsonl` — arguments redacted and clipped, results not stored. The history tools read it without the dashboard.
+
+- `mcp_history_summary` — a day's totals, clients, busiest tools, actions taken, and failures. Good input for a standup or end-of-day recap.
+- `mcp_history` — the raw trace, newest first. Filter with `tool` (`agent_*` prefixes work), `errorsOnly`, `client`, or `agentRunId` to see exactly what a dispatched agent called.
+
+Turn recording off with `DEVHUB_MCP_HISTORY=0`; retention is `DEVHUB_MCP_HISTORY_DAYS` (default 30).
 
 ### Commit and push a sibling repo from an agent
 

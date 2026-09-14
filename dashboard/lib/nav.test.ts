@@ -14,8 +14,8 @@ import { PLUGIN_NAV_ITEMS } from "./plugin-nav.generated";
 const hrefs = (items: ReturnType<typeof filterNavBySetup>) => items.map((i) => i.href);
 
 describe("NAV_ITEMS (sidebar IA)", () => {
-  it("has exactly 18 core sidebar destinations", () => {
-    expect(NAV_ITEMS).toHaveLength(19);
+  it("has exactly 20 core sidebar destinations", () => {
+    expect(NAV_ITEMS).toHaveLength(20);
   });
 
   it("gives the database client a library slot beside Repos", () => {

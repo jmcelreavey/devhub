@@ -1,73 +1,18 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createContext } from "./context.ts";
-import { registerNotesTools } from "./tools/notes.ts";
-import { registerDocsTools } from "./tools/docs.ts";
-import { registerTasksTools } from "./tools/tasks.ts";
-import { registerDiagramsTools } from "./tools/diagrams.ts";
-import { registerAppraisalTools } from "./tools/appraisal.ts";
-import { registerDxAuditTools } from "./tools/dx-audit.ts";
-import { registerShipTools } from "./tools/ship.ts";
-import { registerStatusTools } from "./tools/status.ts";
-import { registerBriefingTools } from "./tools/briefing.ts";
-import { registerCalendarTools } from "./tools/calendar.ts";
-import { registerWorkTools } from "./tools/work.ts";
-import { registerAssetsTools } from "./tools/assets.ts";
-import { registerSearchTools } from "./tools/search.ts";
-import { registerScriptsTools } from "./tools/scripts.ts";
-import { registerReposTools } from "./tools/repos.ts";
-import { registerDatadogTools } from "./tools/datadog.ts";
-import { registerCapabilityTools } from "./tools/capability.ts";
-import { registerSessionTools } from "./tools/sessions.ts";
-import { registerRecallTools } from "./tools/recall.ts";
-import { registerTagsTools } from "./tools/tags.ts";
-import { registerShareTools } from "./tools/share.ts";
-import { registerWorkspaceTools } from "./tools/workspace.ts";
-import { registerOwnershipTools } from "./tools/ownership.ts";
-import { registerTerminalTools } from "./tools/terminal.ts";
-import { registerDbTools } from "./tools/db.ts";
+import { historyEnabled, mcpHistoryDir } from "./history.ts";
+import { createDevhubMcpServer, startupHousekeeping, TOOLSET_NAMES } from "./server.ts";
 
-const server = new McpServer({
-  name: "devhub",
-  version: "4.0.0",
-});
-
+/** stdio entry — what synced client configs launch. The HTTP entry is http.ts. */
 const ctx = createContext();
-
-// Filesystem-backed tools (work headless, no dashboard required).
-registerNotesTools(server, ctx);
-registerDocsTools(server, ctx);
-registerTasksTools(server, ctx);
-registerDiagramsTools(server, ctx);
-registerAppraisalTools(server, ctx);
-registerDxAuditTools(server, ctx);
-registerShipTools(server, ctx);
-
-// Dashboard-backed tools (proxy localhost:1337; need the dashboard running).
-registerStatusTools(server, ctx);
-registerBriefingTools(server, ctx);
-registerCalendarTools(server, ctx);
-registerWorkTools(server, ctx);
-registerAssetsTools(server, ctx);
-registerSearchTools(server, ctx);
-registerScriptsTools(server, ctx);
-registerReposTools(server, ctx);
-registerOwnershipTools(server, ctx);
-registerDatadogTools(server, ctx);
-registerCapabilityTools(server, ctx);
-registerSessionTools(server, ctx);
-registerRecallTools(server, ctx);
-registerTagsTools(server, ctx);
-registerShareTools(server, ctx);
-registerWorkspaceTools(server, ctx);
-registerTerminalTools(server, ctx);
-registerDbTools(server, ctx);
+startupHousekeeping();
+const { server, toolsets } = createDevhubMcpServer(ctx);
 
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(
-    `DevHub MCP server running (notes: ${ctx.notesDir}, docs: ${ctx.docsDir}, dashboard: ${ctx.dashboard.baseUrl})`,
+    `DevHub MCP server running (notes: ${ctx.notesDir}, docs: ${ctx.docsDir}, dashboard: ${ctx.dashboard.baseUrl}, toolsets: ${toolsets.names.length}/${TOOLSET_NAMES.length}, history: ${historyEnabled() ? mcpHistoryDir() : "off"})`,
   );
 }
 

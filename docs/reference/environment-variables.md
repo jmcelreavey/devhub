@@ -188,6 +188,27 @@ See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md). Do not config
 
 Do not set `OPENCODE_HOST` or `OPENCODE_SKIP_START` either — Chamber Setup cannot restart an OpenCode process DevHub pinned.
 
+## DevHub MCP: Agents, Toolsets, History
+
+The DevHub MCP's `agent_*` tools hand work to another agent CLI. Each run executes with approvals disabled in its own DevHub terminal tab, so the dashboard must be open. Built-in providers: Claude Code, Cursor, Codex, Gemini, OpenCode, Antigravity. Add any other CLI with a headless mode (or a wrapper script) in the custom providers file. GUI agent apps such as AutoClaw work the other way round: they connect to DevHub as MCP clients, and `sync` writes the DevHub server into AutoClaw's `mcporter.json` when AutoClaw is installed.
+
+| Variable                      | Default                                 | Purpose                                                                                                                                                           |
+| ----------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DEVHUB_AGENT_PROVIDERS_FILE` | `~/.config/devhub/agent-providers.json` | Custom providers: `{ "providers": [{ "id", "label", "command", "args" }] }`. `args` must contain `{prompt}`; optional `modelArgs` (`{model}`), `resumeArgs` (`{sessionId}`), and `format` (`text` default, or `claude-stream-json` / `cursor-stream-json` / `codex-json`). |
+| `DEVHUB_AGENT_RUNS_DIR`       | `<tmpdir>/devhub-agent-runs`            | Per-run `spec.json`, `status.json` and `events.jsonl`. Finished runs are pruned after 3 days.                                                                     |
+| `DEVHUB_AGENT_MAX_RUNS`       | `6`                                     | Queued plus running agent runs allowed at once                                                                                                                    |
+| `DEVHUB_AGENT_MAX_DEPTH`      | `1`                                     | How deep dispatch may nest. `1` means an agent that was itself dispatched cannot dispatch another.                                                                |
+| `DEVHUB_MCP_TOOLSETS`         | all                                     | Comma-separated tool groups the DevHub MCP registers, e.g. `notes,tasks,terminal,agents`. Trims the tool list every connected harness loads into context.         |
+| `DEVHUB_MCP_HISTORY`          | on                                      | Set `0` to stop recording DevHub MCP tool calls.                                                                                                                  |
+| `DEVHUB_MCP_HISTORY_DIR`      | `~/.local/state/devhub/mcp-history`     | One `YYYY-MM-DD.jsonl` per local day: tool, redacted/clipped args, duration, outcome, client, agent run id. Read with `mcp_history` / `mcp_history_summary`.        |
+| `DEVHUB_MCP_HISTORY_DAYS`     | `30`                                    | Day files older than this are deleted when an MCP server starts. `0` keeps everything.                                                                            |
+| `DEVHUB_MCP_HTTP`             | on                                      | The dashboard starts the HTTP MCP entry from the linked checkout at boot (skipped without a checkout, without `mcp-servers/devhub-server/node_modules`, or when the port is taken). Set `0` to stop that. Log: `~/.local/state/devhub/mcp-http.log`. |
+| `DEVHUB_MCP_HTTP_PORT`        | `1340`                                  | Port for the HTTP MCP entry (`npm run mcp:http` in `mcp-servers/devhub-server`), served at `/mcp`.                                                                  |
+| `DEVHUB_MCP_HTTP_HOST`        | `127.0.0.1`                             | Bind address for the HTTP MCP entry. Leave it on loopback unless a remote client must reach it.                                                                   |
+| `DEVHUB_MCP_HTTP_TOKEN`       | generated                               | Bearer token HTTP MCP clients must send (min 32 chars). Unset: generated once into `DEVHUB_MCP_HTTP_TOKEN_FILE`.                                                   |
+| `DEVHUB_MCP_HTTP_TOKEN_FILE`  | `~/.config/devhub/mcp-http-token`       | Where the generated HTTP MCP token is kept (0600).                                                                                                                |
+| `DEVHUB_MCP_HTTP_ALLOWED_HOSTS` | —                                     | Extra `Host`/`Origin` names the HTTP MCP entry accepts besides loopback, e.g. a Tailscale hostname.                                                               |
+
 ## 1Password Fallback (Optional)
 
 Used by `dashboard/scripts/op-secrets.ts` at dev/start to fill missing secrets into `dashboard/.env.local`.

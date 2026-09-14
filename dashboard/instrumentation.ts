@@ -10,4 +10,9 @@ export async function register() {
   startScheduler();
   const { startShareExpiry } = await import("./lib/share/share-expiry");
   startShareExpiry();
+  // URL-based MCP clients need a listener; off with DEVHUB_MCP_HTTP=0.
+  const { startMcpHttpPeer } = await import("./lib/mcp-http-peer");
+  void startMcpHttpPeer().catch((err: unknown) => {
+    console.error("[mcp-http] could not start:", err);
+  });
 }

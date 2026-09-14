@@ -185,4 +185,80 @@ export function registerTerminalTools(server: McpServer, ctx: Context): void {
         };
       }),
   );
+
+  server.registerTool(
+    "terminal_wait_for",
+    {
+      description:
+        "Block until output in a DevHub terminal session matches a regex (a dev server's \"ready on\" line, a test summary, an error) or the timeout passes. By default only output written after the call starts counts. Use instead of polling terminal_tail. Requires the dashboard running.",
+      inputSchema: {
+        sessionId: z.string().describe("Session UUID from terminal_list"),
+        pattern: z.string().min(1).max(500).describe("JavaScript regular expression, e.g. ready on|listening"),
+        flags: z
+          .string()
+          .regex(/^[imsu]*$/)
+          .optional()
+          .describe("Regex flags: any of i, m, s, u"),
+        // Under the 360s toolTimeoutSec harnesses get from mcp/shared/devhub.json.
+        timeoutSeconds: z.number().int().min(1).max(300).optional().describe("Default 60, max 300"),
+        includeExisting: z.boolean().optional().describe("Also match output that was already there"),
+      },
+    },
+    async ({ sessionId, pattern, flags, timeoutSeconds, includeExisting }, extra) =>
+      withDashboardErrors(async () => {
+        let regex: RegExp;
+        try {
+          regex = new RegExp(pattern, flags ?? "");
+        } catch (err) {
+          return {
+            content: [{ type: "text", text: `Invalid pattern: ${err instanceof Error ? err.message : String(err)}` }],
+            isError: true,
+          };
+        }
+        const readLog = async () => {
+          const raw = await dashboard.get<string>("/api/terminal/log", { session: sessionId });
+          return typeof raw === "string" ? raw : String(raw);
+        };
+        const tailLines = (value: string) => value.replace(/\s+$/, "").split("\n").slice(-20).join("\n");
+        // Bound the scan so a pathological pattern can't chew through a huge log every second.
+        const SCAN_MAX = 200_000;
+        const timeout = timeoutSeconds ?? 60;
+        const deadline = Date.now() + timeout * 1_000;
+
+        let log = await readLog();
+        let offset = includeExisting ? 0 : log.length;
+        for (;;) {
+          const fresh = log.slice(offset);
+          const scan = fresh.length > SCAN_MAX ? fresh.slice(-SCAN_MAX) : fresh;
+          const match = regex.exec(scan);
+          if (match) {
+            const lineStart = scan.lastIndexOf("\n", match.index) + 1;
+            const lineEnd = scan.indexOf("\n", match.index);
+            const line = scan.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Matched /${pattern}/${flags ?? ""} in ${sessionId}:\n${line}\n\nRecent output:\n\`\`\`\n${tailLines(log)}\n\`\`\``,
+                },
+              ],
+            };
+          }
+          if (Date.now() >= deadline || extra.signal.aborted) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `No match for /${pattern}/${flags ?? ""} within ${timeout}s.\n\nRecent output:\n\`\`\`\n${tailLines(log)}\n\`\`\``,
+                },
+              ],
+            };
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1_000));
+          log = await readLog();
+          // The dock's log can be cleared or rotated under us.
+          if (log.length < offset) offset = 0;
+        }
+      }),
+  );
 }

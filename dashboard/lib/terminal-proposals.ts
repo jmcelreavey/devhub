@@ -4,6 +4,9 @@
  * MCP `terminal_propose_run` posts here; TerminalDock polls/resolves via
  * `/api/terminal/propose`. Desktop tickets alone never imply user intent —
  * the dock UI must confirm before inject.
+ *
+ * The one exception is `autoRun`, set only server-side by agent dispatch
+ * (`/api/agent/runs`). The public POST schema cannot set it.
  */
 
 import type { TerminalSessionKind } from "@/lib/terminal-meta";
@@ -28,6 +31,8 @@ export interface TerminalProposal {
   reason?: string;
   source: "mcp" | "api";
   destructive: boolean;
+  /** Dock injects without a confirm chip. Server-internal; see module comment. */
+  autoRun: boolean;
   status: TerminalProposalStatus;
   createdAt: number;
   resolvedAt?: number;
@@ -39,7 +44,15 @@ export interface TerminalProposal {
 const TTL_MS = 15 * 60 * 1_000;
 const MAX_PENDING = 20;
 
-const proposals = new Map<string, TerminalProposal>();
+/**
+ * Pinned to globalThis: the dock reads through /api/terminal/propose while
+ * agent dispatch writes from /api/agent/runs, and a module-level Map is only
+ * shared if both routes get the same module instance.
+ */
+const globalStore = globalThis as typeof globalThis & {
+  __devhubTerminalProposals?: Map<string, TerminalProposal>;
+};
+const proposals = (globalStore.__devhubTerminalProposals ??= new Map<string, TerminalProposal>());
 
 function prune(): void {
   const now = Date.now();
@@ -65,6 +78,7 @@ export function createTerminalProposal(input: {
   forceNewTab?: boolean;
   reason?: string;
   source?: "mcp" | "api";
+  autoRun?: boolean;
 }): TerminalProposal {
   prune();
   const pending = [...proposals.values()].filter((p) => p.status === "pending");
@@ -75,6 +89,7 @@ export function createTerminalProposal(input: {
   if (!command) throw new Error("command is required");
   if (command.length > 8_000) throw new Error("command too long");
 
+  const destructive = isDestructiveTerminalCommand(command);
   const proposal: TerminalProposal = {
     id: newTerminalProposeId(),
     command,
@@ -85,7 +100,9 @@ export function createTerminalProposal(input: {
     repoName: input.repoName,
     reason: input.reason,
     source: input.source ?? "api",
-    destructive: isDestructiveTerminalCommand(command),
+    destructive,
+    // A destructive-looking command always gets the chip, whoever asked.
+    autoRun: input.autoRun === true && !destructive,
     status: "pending",
     createdAt: Date.now(),
   };

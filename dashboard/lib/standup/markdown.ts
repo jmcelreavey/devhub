@@ -9,6 +9,15 @@ export interface StandupTaskLine {
   timeSpentMs?: number;
 }
 
+/** DevHub MCP calls in the standup window (see lib/standup/agent-activity.ts). */
+export interface StandupAgentActivity {
+  total: number;
+  failed: number;
+  /** Actions taken, pre-formatted: `agent_dispatch provider=claude title=…`. */
+  actions: string[];
+  actionsTruncated: boolean;
+}
+
 export interface StandupMarkdownInput {
   /** Local calendar YYYY-MM-DD for the standup header. */
   localToday: string;
@@ -21,6 +30,8 @@ export interface StandupMarkdownInput {
   mergedReviewedOthers: StandupMergedPr[];
   prsCreated: StandupMergedPr[];
   tasksCompleted: StandupTaskLine[];
+  /** Omitted or null when no MCP calls were recorded — the section is skipped. */
+  agentActivity?: StandupAgentActivity | null;
 }
 
 /** Normalise Windows line endings so embedded strings don't corrupt the output. */
@@ -140,6 +151,25 @@ export function buildStandupMarkdown(input: StandupMarkdownInput): string {
       }
       parts.push("");
     }
+  }
+
+  // Last, and only when something happened: agent work is context, not the headline.
+  const activity = input.agentActivity;
+  if (activity && activity.total > 0) {
+    parts.push("## Agent activity (DevHub MCP)");
+    parts.push("");
+    parts.push(
+      `${activity.total} tool call${activity.total === 1 ? "" : "s"}${activity.failed ? ` · ${activity.failed} failed` : ""}`,
+    );
+    if (activity.actions.length > 0) {
+      parts.push("");
+      for (const action of activity.actions) parts.push(`- ${normalizeLf(action)}`);
+      if (activity.actionsTruncated) {
+        parts.push("");
+        parts.push("_…truncated — full trace on the Agent activity page_");
+      }
+    }
+    parts.push("");
   }
 
   return parts.join("\n");

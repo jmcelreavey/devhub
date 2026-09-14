@@ -12,6 +12,8 @@ import { DashboardClient } from "./dashboard-client.ts";
 import { resolveDashboard, type ResolvedDashboard } from "./discover-dashboard.ts";
 
 export interface Context {
+  /** DevHub checkout the server runs from (REPO_ROOT) — where skills/ lives. */
+  repoRoot: string;
   notesDir: string;
   docsDir: string;
   tasksDir: string;
@@ -37,6 +39,7 @@ export function createContext(): Context {
 
   const storage = new NotesStorage(notesDir);
   return {
+    repoRoot,
     notesDir,
     docsDir,
     tasksDir,

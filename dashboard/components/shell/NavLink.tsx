@@ -32,6 +32,7 @@ import {
   BrainCircuit,
   ShieldCheck,
   Database,
+  History,
   type LucideIcon,
 } from "lucide-react";
 import type { NavItem } from "@/lib/nav";
@@ -62,6 +63,7 @@ const ICONS: Record<string, LucideIcon> = {
   chatgpt: MessageSquare,
   antigravity: Sparkles,
   status: Activity,
+  activity: History,
   skills: Zap,
   repos: FolderGit2,
   database: Database,

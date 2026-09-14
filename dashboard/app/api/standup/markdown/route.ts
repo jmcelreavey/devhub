@@ -3,6 +3,7 @@ import { readDashboardEnvLocalFile, resolveEnvValue } from "@/lib/dashboard-env-
 import { getMyAssignedTicketsTouchedInRange, type JiraStandupTicket } from "@/lib/jira/client";
 import { getTasks } from "@/lib/tasks/storage";
 import { buildStandupMarkdown } from "@/lib/standup/markdown";
+import { loadStandupAgentActivity } from "@/lib/standup/agent-activity";
 import {
   getGitUserEmail,
   gitFetch,
@@ -205,6 +206,7 @@ export const GET = withErrorHandler(async (request: Request) => {
     mergedReviewedOthers,
     prsCreated: authoredSlices.prsCreated,
     tasksCompleted,
+    agentActivity: rangeFinite ? loadStandupAgentActivity(sinceMs, untilExclusiveMs) : null,
   });
 
   // Partial-failure metadata so the UI can surface "N of M repos failed to fetch".

@@ -47,6 +47,22 @@ describe("buildStandupMarkdown", () => {
     expect(md).toContain("_Jira not configured._");
   });
 
+  it("adds agent activity last, and only when MCP calls were recorded", () => {
+    expect(buildStandupMarkdown(EMPTY)).not.toContain("## Agent activity");
+    expect(buildStandupMarkdown({ ...EMPTY, agentActivity: { total: 0, failed: 0, actions: [], actionsTruncated: false } })).not.toContain(
+      "## Agent activity",
+    );
+
+    const md = buildStandupMarkdown({
+      ...EMPTY,
+      agentActivity: { total: 12, failed: 1, actions: ["agent_dispatch provider=claude"], actionsTruncated: true },
+    });
+    expect(md.indexOf("## Agent activity (DevHub MCP)")).toBeGreaterThan(md.indexOf("## Git commits"));
+    expect(md).toContain("12 tool calls · 1 failed");
+    expect(md).toContain("- agent_dispatch provider=claude");
+    expect(md).toContain("_…truncated — full trace on the Agent activity page_");
+  });
+
   it("tasks section appears before PRs section", () => {
     const md = buildStandupMarkdown({
       ...EMPTY,

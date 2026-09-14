@@ -845,27 +845,42 @@ export function TerminalDock() {
         );
       };
 
+      /**
+       * A brand-new tab's socket is usually still connecting 200ms in, and
+       * `write` refuses (sends nothing) until it opens. Failing on that first
+       * refusal dropped the command, and the later "open" flush found nothing
+       * queued — so retry until the socket opens (~10s), then give up.
+       */
+      const INJECT_WRITE_RETRIES = 40;
+      const INJECT_WRITE_RETRY_MS = 250;
+      const writeWhenOpen = (data: string, onWritten: () => void, attempt = 0) => {
+        if (!pendingInjectRef.current.has(tabId)) return;
+        const current = readersRef.current.get(tabId) ?? reader;
+        if (current.write(data)) {
+          onWritten();
+          return;
+        }
+        if (attempt >= INJECT_WRITE_RETRIES) {
+          fail("Could not write to the terminal session.");
+          return;
+        }
+        window.setTimeout(() => writeWhenOpen(data, onWritten, attempt + 1), INJECT_WRITE_RETRY_MS);
+      };
+
       const inject = () => {
         // Still queued in the map until write or fail — visible chip stays up.
         if (!pendingInjectRef.current.has(tabId)) return;
         const writeQuiet = () => {
           // Hide argv flash: echo off → clear+command → echo on.
           beginCommandBlock(tabId, pending.command, "inject");
-          if (!reader.write("stty -echo\r")) {
-            fail("Could not write to the terminal session.");
-            return;
-          }
-          window.setTimeout(() => {
-            if (!pendingInjectRef.current.has(tabId)) return;
-            const payload = formatTerminalInjectPayload(
-              `printf '\\033[2J\\033[H'; ${pending.command}; stty echo 2>/dev/null || true`,
-            );
-            if (!reader.write(payload)) {
-              fail("Could not write to the terminal session.");
-              return;
-            }
-            succeed();
-          }, 60);
+          writeWhenOpen("stty -echo\r", () => {
+            window.setTimeout(() => {
+              const payload = formatTerminalInjectPayload(
+                `printf '\\033[2J\\033[H'; ${pending.command}; stty echo 2>/dev/null || true`,
+              );
+              writeWhenOpen(payload, succeed);
+            }, 60);
+          });
         };
 
         const tab = tabsRef.current.find((t) => t.id === tabId);
@@ -877,12 +892,7 @@ export function TerminalDock() {
           return;
         }
         if (!interactive) beginCommandBlock(tabId, pending.command, "inject");
-        const payload = formatTerminalInjectPayload(pending.command);
-        if (!reader.write(payload)) {
-          fail("Could not write to the terminal session.");
-          return;
-        }
-        succeed();
+        writeWhenOpen(formatTerminalInjectPayload(pending.command), succeed);
       };
       // Give a fresh session a beat to settle before typing.
       if (pending.proposalId) setInjectQueuedId(pending.proposalId);
@@ -1203,6 +1213,7 @@ export function TerminalDock() {
             repoName?: string;
             reason?: string;
             source?: string;
+            autoRun?: boolean;
           }>;
         };
         const pending = data.proposals ?? [];
@@ -1218,6 +1229,8 @@ export function TerminalDock() {
           repoName: next.repoName,
           reason: next.reason,
           source: next.source === "mcp" ? "mcp" : "ui",
+          // Server-set for agent dispatch runs only; never settable from the propose POST.
+          skipConfirm: next.autoRun === true,
         }));
 
         // An auto-run proposal never enters the queue, so the queue cannot be
@@ -1231,7 +1244,10 @@ export function TerminalDock() {
         expandDock();
         if (!openRef.current) setUnread(true);
         for (const detail of fresh) {
-          if (shouldAutoRunProposal({ autoRun: autoRunRef.current, command: detail.command })) {
+          if (
+            detail.skipConfirm ||
+            shouldAutoRunProposal({ autoRun: autoRunRef.current, command: detail.command })
+          ) {
             injectProposalNow(detail);
           } else {
             chips.push(detail);

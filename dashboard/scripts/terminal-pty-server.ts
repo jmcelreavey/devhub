@@ -513,6 +513,8 @@ function spawnShell(session: PtySession, mode: ShellMode, { watchdog }: { watchd
   // Shell integration: point ZDOTDIR at our chaining .zshrc and remember where
   // the user's real one lives. Profile files (~/.zprofile) still load from HOME.
   const spawnEnv = shellEnv();
+  // Lets a process in the tab (the agent runner) report which tab it lives in.
+  spawnEnv.DEVHUB_TERMINAL_SESSION_ID = session.sessionId;
   const integrated = wantsShellIntegration(mode);
   if (integrated) {
     spawnEnv.USER_ZDOTDIR = process.env.ZDOTDIR ?? os.homedir();

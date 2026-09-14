@@ -93,6 +93,28 @@ describe("syncMcpServers", () => {
     expect(opencode.mcp.notes.env).toEqual({ NOTES_DIR: `${repo}/notes` });
   });
 
+  it("writes AutoClaw's mcporter.json only when AutoClaw is installed, keeping its imports", async () => {
+    const { repo, home, lines } = makeTempRepo();
+    writeJson(path.join(repo, "mcp", "shared", "notes.json"), { command: "REPO_ROOT/bin/notes" });
+    const mcporter = path.join(home, ".openclaw-autoclaw", "workspace", "config", "mcporter.json");
+
+    await syncMcpServers({ emit: (l) => lines.push(l), repoRoot: repo, tool: "autoclaw" });
+    expect(fs.existsSync(mcporter)).toBe(false);
+
+    writeJson(mcporter, {
+      imports: ["cursor"],
+      mcpServers: { "autoclaw-productivity": { type: "http", url: "https://example.test/mcp" } },
+    });
+    // prune: AutoClaw's own bundled server must survive even though DevHub doesn't define it.
+    const code = await syncMcpServers({ emit: (l) => lines.push(l), repoRoot: repo, tool: "autoclaw", prune: true });
+
+    expect(code).toBe(0);
+    const written = JSON.parse(fs.readFileSync(mcporter, "utf-8"));
+    expect(written.imports).toEqual(["cursor"]);
+    expect(written.mcpServers["autoclaw-productivity"]).toEqual({ type: "http", url: "https://example.test/mcp" });
+    expect(written.mcpServers.notes).toEqual({ command: `${repo}/bin/notes` });
+  });
+
   it("preserves unrelated Codex TOML settings and comments byte-for-byte", async () => {
     const { repo, home, lines } = makeTempRepo();
     writeJson(path.join(repo, "mcp", "shared", "notes.json"), {

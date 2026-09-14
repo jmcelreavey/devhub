@@ -52,6 +52,7 @@ export default defineConfig({
       "../shared/meeting-note/**/*.test.ts",
       "../shared/pr-note/**/*.test.ts",
       "../shared/entity-note/**/*.test.ts",
+      "../shared/mcp-history/**/*.test.ts",
       "../mcp-servers/devhub-server/src/**/*.test.ts",
     ],
     /** Playwright owns e2e/; vitest must not pick those specs up. */

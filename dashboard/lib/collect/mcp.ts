@@ -67,6 +67,9 @@ export function scanLocalMcpImportCandidates(repoRoot: string): LocalMcpImportCa
   const byName = new Map<string, LocalMcpServerSource[]>();
 
   for (const tool of MCP_TOOL_TARGETS) {
+    // Its config mixes in servers the app ships itself; importing those would
+    // spread them into every other tool on the next sync.
+    if (tool.neverPrune) continue;
     const configPaths = [
       ...(tool.extraReadConfigPaths?.(home) ?? []),
       tool.configPath(home),

@@ -1,6 +1,7 @@
 "use client";
 
 import { getAgentCliConfig, type AgentCli, type AgentCliConfig } from "@/lib/agent/cli-config";
+import { shellQuote } from "@/lib/shell-quote";
 import type { TerminalSessionKind } from "@/lib/terminal-meta";
 
 export interface TerminalLaunchOptions {
@@ -27,9 +28,7 @@ export function openTerminal(options: TerminalLaunchOptions = {}): void {
   window.dispatchEvent(new CustomEvent("devhub:terminal-open", { detail: options }));
 }
 
-export function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\"'\"'")}'`;
-}
+export { shellQuote };
 
 /**
  * The agent CLI one-shot jobs are handed to, resolved from the env-backed

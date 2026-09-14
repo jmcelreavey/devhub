@@ -403,6 +403,19 @@ async function stageServices() {
   });
   log("bundled terminal-pty-server.cjs");
 
+  // Agent runner: a terminal tab runs this (with the app's node) for each
+  // dispatched agent run. See dashboard/lib/agent-runs/launch.ts.
+  await esbuild.build({
+    entryPoints: [path.join(dashboardDir, "scripts", "agent-run.ts")],
+    outfile: path.join(servicesDir, "agent-run.cjs"),
+    bundle: true,
+    platform: "node",
+    target: "node22",
+    format: "cjs",
+    logLevel: "warning",
+  });
+  log("bundled agent-run.cjs");
+
   /**
    * Peer boot — frees leftover OpenCode on 1338/4096. Chamber and OpenCode
    * lazy-start from the dashboard; this bundle is what Rebuild Dashboard
@@ -459,6 +472,7 @@ function assertStaged() {
     [path.join(servicesDir, "supervisor.mjs"), "sidecar supervisor"],
     [path.join(servicesDir, "start-peer-services.mjs"), "peer boot (free pinned OpenCode ports)"],
     [path.join(servicesDir, "terminal-pty-server.cjs"), "terminal server"],
+    [path.join(servicesDir, "agent-run.cjs"), "agent runner"],
     [
       path.join(servicesDir, "node_modules", "node-pty", "prebuilds", `${os.platform()}-${os.arch()}`),
       "node-pty native binding",
