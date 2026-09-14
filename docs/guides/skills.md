@@ -28,8 +28,9 @@ Each skill should have a clear name and a `SKILL.md` file that explains when and
 | Codex | `~/.codex/skills` |
 | OpenCode | `~/.opencode/skills`, `~/.config/opencode/skills` |
 | Cursor | `~/.cursor/skills` and `~/.agents/skills` |
+| Antigravity | `~/.gemini/config/skills` |
 
-Cursor Customize → Skills lists `~/.agents/skills` as **User**. `~/.cursor/skills-cursor` is Cursor's internal builtin store — never a sync target.
+Cursor Customize → Skills lists `~/.agents/skills` as **User**. `~/.cursor/skills-cursor` is Cursor's internal builtin store — never a sync target. Antigravity also gets a generated `~/.gemini/config/skills/index.json` listing synced skills.
 
 
 Configure `AI_TOOLS_ROOT` if your clone is not at `~/Developer/ai-tools`. Set `AI_TOOLS_SYNC=0` to sync DevHub skills only. Set `AI_TOOLS_REFRESH_ON_SYNC=0` if you want sync to skip upstream fetch (airplane mode). Set `AI_TOOLS_BRANCH` to override the default branch (normally resolved via `gh`). Requires `gh auth login` for upstream refresh.
@@ -119,7 +120,7 @@ Some dashboard actions launch a one-shot agent in the terminal dock with a prelo
 | `git-conflict-resolve` | Repo Git stash conflicts | Walk through resolving conflict markers after a failed stash apply/pop (`409 stash_conflict`). |
 | `taste-skill` | Briefing canvas generation (house aesthetic) | Anti-slop frontend rules distilled into briefing prompts via `lib/briefing-taste.ts`. Install under `skills/shared/` (or sync to tool paths) for stricter default palettes; **fresh look** / custom aesthetics bypass house rules until reset. |
 
-Configure the underlying provider (`cursor-cli`, `chatgpt-cli`, `opencode`, or `api`) from **/setup → AI Provider**. See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md#agent-cli-selection).
+Configure the underlying provider (`cursor-cli`, `chatgpt-cli`, `antigravity-cli`, `opencode`, or `api`) from **/setup → AI Provider**. See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md#agent-cli-selection).
 
 ## MCP tab
 

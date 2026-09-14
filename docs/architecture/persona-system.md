@@ -77,6 +77,7 @@ Sync writes:
 
 - Repo `AGENTS.md` — L0/L1 **pointers** (not full text)
 - `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.opencode/AGENTS.md` — full L0/L1
+- `~/.gemini/GEMINI.md` — full L0/L1 (Antigravity)
 - `~/.cursor/.cursorrules` — full L0/L1 (legacy; Cursor does not always-apply this)
 - `~/.cursor/rules/devhub-persona-identity.mdc` and `devhub-persona-shared.mdc` — full L0/L1, `alwaysApply: true`
 

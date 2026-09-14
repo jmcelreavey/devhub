@@ -32,6 +32,7 @@ graph LR
   merge --> codex["~/.codex/config.toml"]
   merge --> cursor["~/.cursor/mcp.json"]
   merge --> oc["OpenCode config"]
+  merge --> agy["~/.gemini/config/mcp_config.json"]
 ```
 
 > [!IMPORTANT]
@@ -45,7 +46,7 @@ graph LR
 | Skills          | `skills/shared/` plus optional `ai-tools` checkout | Local tool skill directories    |
 | Agents          | Shared agent files     | Local tool agent directories    |
 | Persona         | Persona files          | Tool-specific instruction files |
-| MCP configs     | Core `mcp/shared/*.json`, enabled plugin `mcp/*.json`, and machine-local `~/.config/devhub/mcp-personal/` | `~/.claude.json`, `~/.codex/config.toml`, `~/.cursor/mcp.json`, OpenCode `mcp` block |
+| MCP configs     | Core `mcp/shared/*.json`, enabled plugin `mcp/*.json`, and machine-local `~/.config/devhub/mcp-personal/` | `~/.claude.json`, `~/.codex/config.toml`, `~/.cursor/mcp.json`, OpenCode `mcp` block, `~/.gemini/config/mcp_config.json` |
 | OpenCode config | `opencode/shared/opencode.json` | `~/.config/opencode/opencode.json` (curated keys only) |
 
 Only `model`, `small_model`, `provider`, and `theme` are merged. MCP entries, schema, and agent metadata that OpenCode maintains locally are preserved. Provider credentials use `{env:VAR}` in the repo; sync resolves them from the environment (including 1Password-backed vars) into the local file.
@@ -78,6 +79,8 @@ On **Sync skills**, DevHub may fetch the ai-tools default branch into `~/.cache/
 **Cursor skill paths:** Sync writes user skills to `~/.cursor/skills` and `~/.agents/skills` (the Agent Skills spec root Cursor Customize → Skills actually lists). Do not write catalog skills to `~/.cursor/skills-cursor` — that directory is Cursor's internal builtin store.
 
 **Cursor MCP path:** DevHub syncs to `~/.cursor/mcp.json` (where Cursor stores user MCP servers such as agentmemory). A legacy `~/.config/cursor/mcp.json` is merged on read and cleared after sync.
+
+**Antigravity MCP path:** `~/.gemini/config/mcp_config.json`. Remote servers use `{ serverUrl, headers? }` (not Cursor's `{ url }`). Stdio entries match the shared shape. Sync merges the rest of that file so local Antigravity settings survive.
 
 **Personal MCP catalog:** Machine-local definitions under `~/.config/devhub/mcp-personal/` sync to every tool like `mcp/shared/` but are never committed — use for agentmemory, remote HTTP entries, or other per-machine setup.
 

@@ -11,7 +11,7 @@ related:
 
 # Shared Agents
 
-Shared agents are reusable subagent personas synced from `agents/shared/` into local tool directories (Cursor, Codex, OpenCode, and others). The dashboard **Agents → Agents** tab lists the catalog and runs **Sync agents**.
+Shared agents are reusable subagent personas synced from `agents/shared/` into local tool directories (Cursor, Codex, OpenCode, Antigravity, and others). The dashboard **Agents → Agents** tab lists the catalog and runs **Sync agents**.
 
 ## Walkthrough
 
@@ -55,6 +55,7 @@ Do **not** put `tools:`, `model:`, or `permission:` in the repo copy — sync de
 | ------------------------------------------------- | ----------------------------------------------------------------- |
 | **OpenCode** (`.config/opencode/agent`, `agents`) | `mode: subagent`, `permission:` (`edit` / `bash` from `readonly`) |
 | **Cursor** (`.cursor/agents`)                     | `readonly`, `is_background: false`                                |
+| **Antigravity** (`.gemini/config/agents`)         | Same as Cursor                                                    |
 | **Codex / Claude / config-ai**                    | Same as Cursor                                                    |
 
 Prune on sync removes tool-dir agents that are no longer in the catalog (e.g. retired agents).

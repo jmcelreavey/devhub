@@ -65,7 +65,7 @@ Set `AI_API_KEY` in `dashboard/.env.local` or a matching 1Password `devhub` item
 ## DX Audit (same page)
 
 **DX Audit** on a repo card launches the `dx-audit` skill through the resolved AI provider
-(Cursor CLI, ChatGPT/Codex, OpenCode, or HTTP API — see [Agent CLI selection](opencode-and-chamber.md#agent-cli-selection)).
+(Cursor CLI, ChatGPT/Codex, Antigravity, OpenCode, or HTTP API — see [Agent CLI selection](opencode-and-chamber.md#agent-cli-selection)).
 The agent inspects the checkout (dev loop, CI, dependencies, release path), optionally
 researches current ecosystem guidance, and writes a prioritised report to DevHub notes:
 

@@ -34,6 +34,7 @@ Run these from the repo root.
 | `npm run desktop:install`| Replace `/Applications/DevHub.app` safely            |
 | `npm run desktop:sign:identity`  | Create the stable local signing certificate (once per Mac) |
 | `npm run desktop:sign:installed` | Re-seal `/Applications/DevHub.app` after an in-place edit  |
+| `npm run demos:record`     | Record `docs/assets/demos/control-layer.gif` against a throwaway fixture (needs `vhs`) |
 
 The two signing scripts exist because macOS ties permission grants to the code
 signature: an unsealed or ad-hoc-signed bundle gets asked for Full Disk Access,

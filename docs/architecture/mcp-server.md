@@ -71,6 +71,7 @@ groups and does not hold business logic.
 | `src/storage.ts`, `src/task-diagram-storage.ts` | Filesystem-backed vault access                                                    |
 | `src/dashboard-client.ts`                       | HTTP proxy for dashboard-backed tools                                             |
 | `src/convert.ts`                                | BlockNote ↔ Markdown conversion for notes                                         |
+| `scripts/call-tool.mjs`                         | Call one tool from a shell without an AI client (stdio, same env as Claude/Codex) |
 
 Filesystem tools import from `shared/vault/` via relative paths. Dashboard tools call
 matching routes on `DEVHUB_BASE_URL` through `DashboardClient`.
@@ -79,11 +80,20 @@ To add a tool group: create `src/tools/<group>.ts` with a `register*Tools(server
 function, import it in `mcp.ts`, and add a dashboard API route when the tool is
 dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 
+Call a tool without an AI client (same stdio server, so `NOTES_DIR` / `REPO_ROOT` match):
+
+```bash
+node mcp-servers/devhub-server/scripts/call-tool.mjs --list
+node mcp-servers/devhub-server/scripts/call-tool.mjs notes_search '{"query":"lockfile"}'
+```
+
+Requires `tsx` in `mcp-servers/devhub-server/node_modules`. Used by `npm run demos:record`.
+
 ## Tool Inventory
 
 | Group      | Tools                                                                                                                                                                                                                                                                                                                                                         |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Notes      | `notes_list`, `notes_read`, `notes_write`, `notes_write_asset`, `notes_append`, `notes_search`, `notes_delete`, `notes_create_meeting`, `notes_create_task`, `notes_create_pr`, `entity_links_read`, `notes_cursor_open`, `notes_cursor_apply`, `notes_cursor_delete`                                                                                         |
+| Notes      | `notes_list`, `notes_read`, `notes_write`, `notes_write_asset`, `notes_append`, `notes_search`, `notes_delete`, `notes_create_meeting`, `notes_create_task`, `notes_create_pr`, `entity_links_read`, `entity_links_resolve`, `notes_cursor_open`, `notes_cursor_apply`, `notes_cursor_delete` |
 | Docs       | `docs_list`, `docs_read`, `docs_write`, `docs_append`, `docs_search`, `docs_delete`                                                                                                                                                                                                                                                                           |
 | Tasks      | `tasks_list`, `tasks_create`, `tasks_update`, `tasks_delete`, `tasks_history`                                                                                                                                                                                                                                                                                 |
 | Diagrams   | `diagrams_list`, `diagrams_read`, `diagrams_create`, `diagrams_update`, `diagrams_add_note`, `diagrams_delete`, `diagrams_rename`                                                                                                                                                                                                                             |
@@ -91,7 +101,7 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 | DX audit   | `dx_audit_list`, `dx_audit_read` — reads `reviews/dx-audit-<repo>-<date>` notes written by the `dx-audit` skill                                                                                                                                                                                                                                               |
 | Capability | `capability_radar`, `capability_scan`, `capability_digest`, `capability_get_lab`, `capability_complete_lab`                                                                                                                                                                                                                                                   |
 | Ship       | `repo_ship`, `repo_ship_status` — wraps `scripts/devhub-ship.sh` (detached; poll status while pre-push verify runs)                                                                                                                                                                                                                                           |
-| Status     | `status_services`, `status_git`, `status_mcp`, `services_restart`                                                                                                                                                                                                                                                                                             |
+| Status     | `status_services`, `status_git`, `status_mcp`, `status_exec`, `services_restart`                                                                                                                                                                                                                                                                               |
 | Briefing   | `briefing_get`                                                                                                                                                                                                                                                                                                                                                |
 | Calendar   | `calendar_week`, `calendar_list`                                                                                                                                                                                                                                                                                                                              |
 | Work       | `prs_list`, `prs_open_in_cursor`, `jira_tickets`, `jira_ticket_get`, `standup_markdown`, `tasks_weekly`, `jira_ticket_transition`                                                                                                                                                                                                                             |
@@ -106,7 +116,7 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 | Recall     | `recall`, `recall_graph`, `recall_remember`, `recall_index`                                                                                                                                                                                                                                                                                                   |
 | Tags       | `tags_list`, `tags_lookup`, `tags_rename` — discover the existing `#tag` vocabulary before inventing near-duplicates, get everything tied to one tag, and rename globally (confirm-gated). There is no `tags_create`: writing `#tag` in a task or note body _is_ the create path                                                                              |
 | Ownership  | `owned_repos`, `repo_owner_brief`, `repo_pr_radar`, `repo_who_owns`, `repo_knowledge_gaps` — dashboard-backed proxies for `/api/own/*`                                                                                                                                                                                                                        |
-| Terminal   | `terminal_list`, `terminal_tail`, `terminal_propose_run`, `terminal_proposal_status` — dock tabs and propose-then-confirm command runs. **Never** injects stdin; the UI must confirm.                                                                                                                                                                         |
+| Terminal   | `terminal_list`, `terminal_tail`, `terminal_propose_run`, `terminal_proposal_status` — dock tabs and propose-then-confirm command runs. The MCP process never injects stdin; the dock must confirm, unless the user has **Auto-run** on for a non-destructive command. |
 | Database   | `db_connections`, `db_preflight`, `db_connect`, `db_schema`, `db_table`, `db_query`, `db_explain`, `db_execute`, `db_cancel`, `db_diff`, `db_history` — proxy `/api/db/*`. Reads via `db_query`; writes via `db_execute` (`confirm: true`, plus `confirmLabel` on dangerous connections). The MCP process never opens a database. See [Database client](database-client.md). |
 
 `recall` is the one an agent should reach for first. `search` answers "which
@@ -227,7 +237,7 @@ On the packaged desktop app, checkout-gated script IDs (`sync_skills`, `sync_not
 
 ### Check local health from an agent
 
-Use `status_services`, `status_git`, and `status_mcp` when the dashboard is running. These are dashboard-backed because they inspect live process and repo state.
+Use `status_exec` first when the dashboard is hanging or a page never loads — an overdue `execExternal` (or DB query) is usually the cause. Use `status_services`, `status_git`, and `status_mcp` for peer/git/MCP health. These are dashboard-backed because they inspect live process and repo state. See [Dashboard — When the dashboard hangs](dashboard.md#when-the-dashboard-hangs).
 
 ### Recap an OpenCode session
 
@@ -246,7 +256,7 @@ Terminal tools proxy `/api/terminal/sessions` and `/api/terminal/propose`. Start
 
 1. `terminal_list` — visible dock tabs (label, cwd, kind, busy, session id). Empty until the dock has opened this process.
 2. `terminal_propose_run` with `command` (and optional `cwd`, `kind`, `label`). Returns a proposal id. **Does not execute.** Prefer it over running a command in the agent shell — the dock is where the user can see it, keep it, and kill it. Always use it for upstarts and other user-visible long-running commands. Every approved proposal opens its own tab, so a run never waits on another session.
-3. `terminal_proposal_status` with that id — poll until `approved` / `injected` / `denied` / `expired` / `failed`. Pending means the human has not confirmed yet; do not proceed as if it ran.
+3. `terminal_proposal_status` with that id — poll until `approved` / `injected` / `denied` / `expired` / `failed`. Pending means the human has not confirmed yet (or Auto-run has not injected); do not proceed as if it ran.
 4. `terminal_tail` with a `sessionId` from `terminal_list` to read the cleaned log tail after inject.
 
 Proposals live in the dashboard process (15 min TTL, max 20 pending). Desktop WS tickets alone are not user intent.
@@ -386,6 +396,7 @@ plugin MCP packages. See [Plugin System](plugins.md) and
 | `repos_git_*` can't find the repo       | Pass `path` for clones outside the DevHub scan directory, or use `repos_list` names only for siblings under `dirname(REPO_ROOT)`.           |
 | MCP client shows an old tool list       | Re-run MCP sync, then restart the AI tool so it reloads server metadata.                                                                    |
 | `tsx` is missing for `devhub`           | Run `cd mcp-servers/devhub-server && npm install`.                                                                                          |
+| `call-tool.mjs` exits 2                 | Pass `--list` or `<tool> '<json object>'`. Arguments must be JSON, not a bare string.                                                       |
 | Plugin MCP server fails to start        | Run `npm install` inside the plugin's `mcp-servers/<name>/` package and re-run MCP sync.                                                    |
 | A plugin MCP tool is missing            | Check plugin registration in `~/.config/devhub/plugins.json`, then run the sync action so plugin MCP configs are materialized.              |
 | `db_*` 404                              | Packaged dashboard older than the checkout — rebuild/sync rather than retrying. Tools need the dashboard process.               |

@@ -58,7 +58,7 @@ See [Sharing](../guides/sharing.md) for the full workflow, security model, and t
 
 | Section       | API                                     | Behavior                                                                                                                                               |
 | ------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Local repos   | `GET /api/repos`                        | Branch, remote, dirty/unpushed counts, and whether a compose file exists (`docker-compose.yml`, `compose.yaml`, etc.).                                 |
+| Local repos   | `GET /api/repos`                        | Branch, remote, dirty/unpushed counts, `worktreeOf` (owning clone when this folder is a git worktree), and whether a compose file exists (`docker-compose.yml`, `compose.yaml`, etc.). Filter chips: changed / unpushed / worktree. |
 | GitHub search | `GET /api/repos/github?q=`              | Requires `gh auth login`. Shows clone targets; already-cloned repos link to the local card.                                                            |
 | Clone         | `POST /api/repos/clone`                 | Body `{ fullName: "owner/repo" }`. Clones into the scan directory using the repo name as the folder.                                                   |
 | Remove        | `DELETE /api/repos/<name>`              | Deletes the local folder. Cannot remove the current DevHub checkout.                                                                                   |
@@ -67,6 +67,8 @@ See [Sharing](../guides/sharing.md) for the full workflow, security model, and t
 | Open Git      | `RepoGitWorkspace` on the card          | Full in-dashboard git UI (changes, branches, stash, history, conflicts, blame). Same component as the top-bar warning control for the DevHub checkout. |
 | GitKraken     | `POST /api/repos/<name>/open-gitkraken` | When `GET /api/repos/apps` reports `gitkraken: true`.                                                                                                  |
 | Compose       | `POST /api/repos/<name>/compose-up`     | `docker compose up -d` when the repo has a compose file and Docker is available.                                                                       |
+
+Click a local card to open `/repos/<name>` — the [work hub](../architecture/dashboard.md#repo-work-hub) for that clone.
 
 Repo Learning (`?learn=<name>` or the **Learn** action) only resolves repos from this scan directory. See [Repo Learning](../guides/repo-learning.md).
 
@@ -84,6 +86,14 @@ queues, and keeps a short in-memory cache so the dashboard does not hammer `gh`
 on every render. Each active bucket (authored, review-requested) keeps up to **100**
 rows — raised from 30 so review requests buried under Dependabot floods are not
 silently dropped.
+
+Authored and review-requested rows may include `approved: true` when a write-access
+reviewer has a standing approval on HEAD. GitHub's `reviewDecision` is **null** on
+repos that do not require reviews, so a `review:approved` search misses those PRs.
+DevHub uses one GraphQL lookup (`reviewDecision` **or** `latestOpinionatedReviews`
+with `writersOnly`) in parallel with the list searches. A later "changes requested"
+cancels an earlier approval. A failed lookup returns an empty set — the list still
+renders, just without ticks.
 
 ### Search and pin
 
@@ -144,7 +154,7 @@ the scaffold with MCP `notes_create_pr`. See [Notes System — Cross-entity link
 ### Review Note Constraints
 
 - A usable AI provider must be installed or configured (`DEVHUB_AI_PROVIDER`:
-  Cursor CLI, ChatGPT/Codex CLI, OpenCode, or `AI_API_KEY`). Otherwise the Agent
+  Cursor CLI, ChatGPT/Codex CLI, Antigravity CLI, OpenCode, or `AI_API_KEY`). Otherwise the Agent
   tab shows a setup hint instead of crashing the UI. See [Agent CLI selection](../guides/opencode-and-chamber.md#agent-cli-selection).
 - When `NEXT_PUBLIC_REPO_ROOT` is set, the launch command exports `REPO_ROOT`
   and `NOTES_DIR` for the agent run so the notes MCP writes into
@@ -170,7 +180,8 @@ GitHub activity can contribute to standup markdown, especially merged PRs and re
 | PRs do not load                       | `gh auth status` succeeds.                                                                                                                                               |
 | Repo is missing                       | It has a GitHub remote and is discoverable from DevHub's repo search scope.                                                                                              |
 | Archived repo PRs are missing         | Expected: authored and review-requested rows from archived repos are hidden.                                                                                             |
-| **Review with agent** shows a setup hint | A local CLI (`cursor-agent`, ChatGPT/Codex, or `opencode`) is on `PATH`, or `AI_API_KEY` is set. See [Agent CLI selection](../guides/opencode-and-chamber.md#agent-cli-selection). |
+| **Review with agent** shows a setup hint | A local CLI (`cursor-agent`, ChatGPT/Codex, `agy`, or `opencode`) is on `PATH`, or `AI_API_KEY` is set. See [Agent CLI selection](../guides/opencode-and-chamber.md#agent-cli-selection). |
+| Approved tick missing on a reviewed PR | Expected when the repo does not *require* reviews **and** the GraphQL approval lookup failed. The Search API `review:approved` qualifier is not used — it misses those PRs. |
 | **Open in Cursor** fails               | The PR's repo is cloned under the Repos scan directory and `cursor` is on `PATH`.                                                                                          |
 | **Finish your daily rep first**        | Expected when this PR is today's unfinished [daily review rep](../architecture/dashboard.md#daily-review-reps). Save findings on `/review/rep` first.                     |
 | **Notes** link never appears          | The agent job finished, the skill had notes MCP access, and it wrote to the exact `Notes MCP path` from the prompt.                                                       |

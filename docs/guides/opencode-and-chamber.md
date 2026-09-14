@@ -103,13 +103,13 @@ Finished commands render as **block cards** (Warp-style) while the xterm grid st
 | Repo Learning **OpenCode handoff** | Opens a terminal in the target repo with a copied handoff prompt                                                                  |
 | Repos **DX Audit**                 | Runs the `dx-audit` skill via the resolved AI provider                                                                            |
 | Capability **Build lab**           | Runs the `capability-lab` skill in the kitchen-sink workspace                                                                     |
-| MCP `terminal_propose_run`         | Queues a command; the dock shows confirm / edit / deny. **Never** injects stdin without that click                                |
+| MCP `terminal_propose_run`         | Queues a command; the dock shows confirm / edit / deny unless **Auto-run** is on (destructive commands still confirm) |
 
 The PTY server binds **localhost only** and has no authentication — acceptable because DevHub is a local-only tool. Do not expose port `1339` off-host.
 
 Visible dock tabs heartbeat to `GET`/`POST /api/terminal/sessions` so MCP `terminal_list` can see label, cwd, kind, and busy state. Empty until the dock has opened at least once this process.
 
-Agents that need a shell command use **propose-then-confirm**: `POST /api/terminal/propose` (MCP `terminal_propose_run`) stores an in-memory proposal (15 min TTL, max 20 pending). The dock must approve before inject. Poll `terminal_proposal_status` — do not assume the command ran. Destructive commands are flagged in the chip. Every approved proposal opens its own tab, so a run never waits on another session.
+Agents that need a shell command use **propose-then-confirm**: `POST /api/terminal/propose` (MCP `terminal_propose_run`) stores an in-memory proposal (15 min TTL, max 20 pending). The dock must approve before inject **unless** the dock **Auto-run** toggle is on (`localStorage` key `devhub:terminal-autorun`). Auto-run skips the chip for ordinary commands and injects into a new tab immediately. Destructive patterns (`rm -rf`, `git push --force`, `kubectl delete`, `DROP TABLE`, … — `isDestructiveTerminalCommand`) **always** keep the confirm modal. Poll `terminal_proposal_status` — do not assume the command ran. Every approved (or auto-run) proposal opens its own tab, so a run never waits on another session.
 
 Each session's output is **tee'd to disk** (`DEVHUB_TERMINAL_LOG_DIR`, default `<tmpdir>/devhub-terminal-logs/<session-uuid>.log`) so **Copy all output** in the terminal drawer can return the full log via `GET /api/terminal/log?session=<uuid>`. Browser xterm scrollback is RAM-capped; the on-disk log is the source of truth for long PR reviews or builds. Session logs older than three days are pruned on terminal peer startup.
 
@@ -121,20 +121,23 @@ For PR review notes to land under `notes/pr-reviews/...`, set `NEXT_PUBLIC_REPO_
 
 ## Agent CLI selection
 
-One **AI provider** (`DEVHUB_AI_PROVIDER`) covers in-app generation and agent launches. Values: `cursor-cli`, `chatgpt-cli`, `opencode`, `api`. Unset auto-picks the first installed/configured in that order. Configure from **/setup → AI Provider** or **Skills → Agent CLI**.
+One **AI provider** (`DEVHUB_AI_PROVIDER`) covers in-app generation and agent launches. Values: `cursor-cli`, `chatgpt-cli`, `antigravity-cli`, `opencode`, `api`. Unset auto-picks the first installed/configured in that order. Configure from **/setup → AI Provider** or **Skills → Agent CLI**.
 
 | Provider | Launch | Gate |
 | -------- | ------ | ---- |
 | `cursor-cli` | `cursor-agent -p … --force --model <model>` (default `cursor-grok-4.5-high`) | `cursor-agent` on `PATH` |
 | `chatgpt-cli` | ChatGPT.app Codex binary, or `codex` / `chatgpt` on `PATH` | ChatGPT/Codex CLI present |
+| `antigravity-cli` | `agy -p … --dangerously-skip-permissions` (optional `--model`) | `agy` on `PATH` or a known user bin (`~/.local/bin`, Homebrew, …) |
 | `opencode` | `opencode run` (optional `--model`) | `opencode` installed |
 | `api` | HTTP via `AI_API_KEY` | notes-AI configured |
 
-`PUT /api/agent-cli` with a provider whose binary/key is missing returns `400`. Legacy `DEVHUB_AGENT_CLI` (`opencode` \| `cursor` \| `chatgpt`) still maps in; saving a provider writes both keys. Blank `opencodeModel` keeps the shared `opencode.json` default.
+`PUT /api/agent-cli` with a provider whose binary/key is missing returns `400`. Legacy `DEVHUB_AGENT_CLI` (`opencode` \| `cursor` \| `chatgpt` \| `antigravity`) still maps in; aliases `agy` / `antigravity` resolve to `antigravity-cli`. Saving a provider writes both keys. Blank `opencodeModel` keeps the shared `opencode.json` default. Optional `DEVHUB_AGENT_ANTIGRAVITY_MODEL` is passed as `agy --model`.
 
-Agent/review jobs open the Agent dock tab or an OpenCode HTTP session (`dashboard/lib/agent-job.ts`). MCP `terminal_propose_run` still goes through the dock confirm chip onto a real PTY — never into the chat pane. Concurrent CLI runs are capped at `DEVHUB_AI_MAX_CONCURRENT` (default 3); queue wait is not counted against the job timeout.
+There is no Antigravity desktop IDE in DevHub — the sidebar **Antigravity** row and the repo-hub Terminal split both open `agy` in the dock. Interactive launches use `agy --dangerously-skip-permissions` (same idea as Claude skip-permissions).
 
-Settings are managed `.env.local` keys so the 1Password `devhub` item can populate them like other managed config. Server read/detection: `dashboard/lib/ai/preference.ts` + `dashboard/lib/agent/cli-env.ts` (`GET`/`PUT /api/agent-cli`). Local CLIs see the same skills and notes MCP because sync writes them to `~/.cursor/skills` and `~/.cursor/mcp.json` as well as the OpenCode paths — run **Sync skills** / **Sync MCP** before first use.
+Agent/review jobs open the Agent dock tab or an OpenCode HTTP session (`dashboard/lib/agent-job.ts`). MCP `terminal_propose_run` still goes through the dock confirm chip onto a real PTY — never into the chat pane — unless the user has Auto-run on for non-destructive commands. Concurrent CLI runs are capped at `DEVHUB_AI_MAX_CONCURRENT` (default 3); queue wait is not counted against the job timeout.
+
+Settings are managed `.env.local` keys so the 1Password `devhub` item can populate them like other managed config. Server read/detection: `dashboard/lib/ai/preference.ts` + `dashboard/lib/agent/cli-env.ts` (`GET`/`PUT /api/agent-cli`). Local CLIs see the same skills and notes MCP because sync writes them to `~/.cursor/skills`, `~/.cursor/mcp.json`, `~/.gemini/config/skills`, and `~/.gemini/config/mcp_config.json` as well as the OpenCode paths — run **Sync skills** / **Sync MCP** before first use.
 
 ## OpenCode Session Recap
 

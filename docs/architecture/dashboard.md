@@ -27,7 +27,7 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 | Actions      | Safe script runner for maintenance tasks                                                                    |
 | Status       | Health checks for repo, services, MCP, sync health, merge conflicts, and network access                     |
 | Setup        | Environment and integration configuration                                                                   |
-| Repos        | Sibling git checkout discovery, GitHub clone/search, Cursor/GitKraken launch, compose-up, Repo Learning, and owned-repo radar (`?view=owned`) |
+| Repos        | Sibling git checkout discovery, per-repo **work hub**, GitHub clone/search, Cursor/GitKraken/CLI launch, compose-up, Repo Learning, and owned-repo radar (`?view=owned`) |
 | Databases    | In-app client for PostgreSQL, MongoDB, and SQLite (`/db`) — see [Database client](database-client.md)       |
 | Integrations | Calendar, Jira, Datadog, GitHub, and internal ops views                                                     |
 
@@ -53,7 +53,7 @@ When allowlisted script runs failed since your last visit, Today shows a dismiss
 
 ## Navigation (2026-06 IA)
 
-The sidebar is driven by `dashboard/lib/nav.ts` — **18** core sidebar destinations in `NAV_ITEMS` (plugin items such as Ops merge in separately), grouped into **Workspace**, **Library**, **BI**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`.
+The sidebar is driven by `dashboard/lib/nav.ts` — **19** core sidebar destinations in `NAV_ITEMS` (plugin items such as Ops merge in separately), grouped into **Workspace**, **Library**, **BI**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`. Claude, Cursor, ChatGPT, and Antigravity rows are not pages — they open a terminal-dock tab (`NavItem.terminal`).
 
 | Sidebar    | Route       | Notes                                                                                         |
 | ---------- | ----------- | --------------------------------------------------------------------------------------------- |
@@ -66,7 +66,7 @@ The sidebar is driven by `dashboard/lib/nav.ts` — **18** core sidebar destinat
 | Notes      | `/notes`    | Library landing. Top-bar tabs: Notes, Search, Docs, Radar, Appraisal, Research, Diagrams, Live links (gated) |
 | Search     | `/search`   | Unified discovery (notes/docs + Recall). Library sidebar slot                                 |
 | Agents     | `/skills`   | Skills, persona, MCP catalog                                                                  |
-| Repos      | `/repos`    | Desktop nav only; sibling clones sorted by recent git activity. Owned radar at `?view=owned`  |
+| Repos      | `/repos`    | Desktop nav only; sibling clones sorted by recent git activity. Click a card for `/repos/<name>` (work hub). Owned radar at `?view=owned` |
 | Databases  | `/db`       | Desktop nav only, **ungated**. SQLite works with no setup; BI connections appear with the plugin. See [Database client](database-client.md) |
 | Ops        | `/ops`      | BI group; from BI plugin (`gate: bi`)                                                         |
 | Datadog    | `/datadog`  | BI group; gated on `datadog`                                                                  |
@@ -76,6 +76,7 @@ The sidebar is driven by `dashboard/lib/nav.ts` — **18** core sidebar destinat
 | Claude     | `/claude`   | Gated on `claude`; desktop nav only                                                           |
 | Cursor     | `/cursor`   | Gated on `cursor`; desktop nav only                                                           |
 | ChatGPT    | `/chatgpt`  | Gated on `chatgpt`; desktop nav only. ChatGPT.app is the Codex desktop.                       |
+| Antigravity | `/antigravity` | Gated on `antigravity`; desktop nav only. Opens the `agy` CLI in the terminal dock (no desktop IDE). |
 
 ### Merged destinations
 
@@ -180,6 +181,16 @@ Completed and abandoned tasks stay in the file for history and standup; they are
 
 When Jira is configured, each task exposes an **Add to Jira** action. The modal creates a Jira issue from the task text, optionally under the task's linked parent or another key, inherits Team/sprint context from `GET /api/jira/meta`, and rewrites the task with the new key on success. See [Jira integration](../integrations/jira.md#create-tickets-from-tasks).
 
+### Implement with agent
+
+Task overflow **Implement with Agent…** (Today, Work, and the repo hub) launches the `devhub-implement-task` skill in the Agent dock. It does not start until you pick a CLI.
+
+The agent curls `GET /api/tasks/implement/plan?taskId=&date=` first — tags, linked notes/repos, Jira ticket, and a depth-2 entity graph. Repo choice comes from the **task's own** `kind: "repo"` links (a back-link from another repo must not steal the checkout). Hub rows pass the hub's `cwd` so the agent stays in that tree.
+
+A guardrail (`lib/tasks/implement-guardrails.ts`) blocks a third launch when **two** agent-kind dock tabs are already busy. It reads `/api/terminal/sessions` (live heartbeats), not the proposal store — UI launches never create a server-side proposal. If the registry cannot be read, the guardrail fails open.
+
+The agent must ask before commit, PR, Jira transition, or completing the task. See [Notes System — Create tasks from plan](notes-system.md#create-tasks-from-plan) for the inverse flow (plan → tickets).
+
 ### Focus timer
 
 Each task can track focused work time via `timerStartedAt` (ISO start) and `timeSpentMs` (accumulated). Only **one** timer runs per calendar day — starting a timer on a new task stops any other running timer that day and folds elapsed time into `timeSpentMs`.
@@ -229,12 +240,12 @@ One shared **AI provider** covers in-app generation (briefings, learn-repo, Agen
 
 | Surface    | Route / env                           | Behavior                                                                                                           |
 | ---------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Setup      | `/setup → AI Provider`                | Pick `cursor-cli`, `chatgpt-cli`, `opencode`, or `api`; optional model overrides                                   |
+| Setup      | `/setup → AI Provider`                | Pick `cursor-cli`, `chatgpt-cli`, `antigravity-cli`, `opencode`, or `api`; optional model overrides                |
 | Skills     | **Skills → Agent CLI**                | Same settings                                                                                                      |
 | API        | `GET/PUT /api/agent-cli`              | Read/save `DEVHUB_AI_PROVIDER`, `DEVHUB_AGENT_CLI`, model overrides in `dashboard/.env.local`                      |
 | Setup poll | `GET /api/setup/status` → `agentVars` | Resolved provider plus install flags                                                                               |
 
-Unset `DEVHUB_AI_PROVIDER` auto-picks the first available of Cursor CLI → ChatGPT/Codex CLI → OpenCode → HTTP API. `PUT` with a provider whose binary/key is missing returns `400`. Legacy `DEVHUB_AGENT_CLI` (`opencode` \| `cursor` \| `chatgpt`) still maps in.
+Unset `DEVHUB_AI_PROVIDER` auto-picks the first available of Cursor CLI → ChatGPT/Codex CLI → Antigravity CLI (`agy`) → OpenCode → HTTP API. `PUT` with a provider whose binary/key is missing returns `400`. Legacy `DEVHUB_AGENT_CLI` (`opencode` \| `cursor` \| `chatgpt` \| `antigravity`) still maps in. Aliases `agy` / `antigravity` resolve to `antigravity-cli`.
 
 Agent/review jobs open the **Agent** dock tab (`POST /api/agent/chat`) or an OpenCode HTTP session (`POST /api/agent/run`). They do **not** inject into a live shell unless the job is an upstart that must share a PTY with bash. Concurrent CLI generations are capped at `DEVHUB_AI_MAX_CONCURRENT` (default 3); queued wait time is not counted against the job timeout.
 
@@ -383,6 +394,7 @@ The Status page (`/status`) aggregates Git, sync, services, and infra into one o
 | Services               | OpenChamber and OpenCode port probes                                                                                                 | Restart via `POST /api/status/services/restart`; cards hidden when setup disables a peer                                                                                                                                                                                                                                    |
 | MCP                    | Runtime scan of `mcp/shared/` only                                                                                                   | Idle = normal; missing binary = warning                                                                                                                                                                                                                                                                                     |
 | Infra                  | AWS profile/identity and kubectl context via `GET /api/bi` (plugin-backed)                                                           | Polls every 5 minutes; links to `/ops`                                                                                                                                                                                                                                                                                      |
+| External commands      | `GET /api/status/exec` — in-flight `execExternal` calls, slow recent ones, and in-flight DB queries                                  | Hidden when idle. An **overdue** row names the command (or query) holding things up. MCP: `status_exec`. See below.                                                                                                                                                                                                         |
 | LAN access             | Wi‑Fi IPv4 badge + QR                                                                                                                | Client builds `http://<ip>:<port>…` for phone access on the same network                                                                                                                                                                                                                                                    |
 | Dashboard rebuild      | `GET/POST /api/status/dashboard/rebuild`                                                                                             | **Rebuild & restart** runs `npm run restart` in the linked checkout (production build + relaunch). Unavailable when the desktop shell supervises the server (`DEVHUB_SHELL_SUPERVISED=1`) or in a packaged app — use **View → Rebuild Dashboard…** or **Check for Updates** instead. Reopening DevHub does **not** rebuild. |
 
@@ -395,6 +407,33 @@ On desktop, **System → Logs** (`/logs`, also in ⌘K) tails the rotating log f
 The page reloads on manual refresh and polls Git/services/MCP/LAN every 30 seconds in the background.
 
 Merge conflict recovery lives on Status through `ConflictResolverPanel`. It reads `GET /api/git/conflicts`, lets the user edit the conflicted file, and saves with `POST /api/git/conflicts`; the backend writes the resolved content and stages the file only after conflict markers are removed. The full content-sync runbook is in [Notes System -> Content sync workflow](notes-system.md#content-sync-workflow).
+
+### When the dashboard hangs
+
+One blocked subprocess blocks **every** route — "the app is dead" and "one `git`/`gh` call is stuck" look identical. Call `status_exec` (MCP) or `GET /api/status/exec` first; an entry with a large `runningMs` (especially `overdue: true`) names the command and cwd. Database queries report in the same payload (`dbQueries`, `dbSlowest`, `dbConnections`) because a stuck page looks the same from the outside. If that route itself does not answer, the event loop is already blocked — diagnose from `ps`/`lsof`, not by restarting blindly. Full ladder: skill `devhub-debug-hang`.
+
+Every dashboard subprocess must go through `execExternal` (`lib/exec-external.ts`) with a timeout (default `DEVHUB_EXEC_TIMEOUT_MS`, 30s). There is no unbounded option. The Status **External commands** panel is idle-hidden; token-shaped args are redacted.
+
+### Repo work hub
+
+Click a card on `/repos` (or open `/repos/<name>`) for that clone's **work hub** — tasks, Jira, notes, PRs, and calendar clustered around the repo, plus inline git.
+
+`GET /api/repos/<name>/work` fans out tasks, Jira, calendar (±14 days), and open PRs in parallel. A failed optional integration is listed in `degraded[]` (Jira / Calendar / GitHub) instead of rendering a bare empty state. Membership:
+
+| Source   | Belongs to this repo when…                                                                                          |
+| -------- | ------------------------------------------------------------------------------------------------------------------- |
+| Task     | `kind: "repo"` EntityRef, or a `#repo` tag in the text                                                              |
+| Note     | Path under `projects/<repo>`, a path segment matching the name, a `#repo` tag in the title, or a recall `repo:<name>` ref |
+| Calendar | Repo link or `#repo` tag, and the event overlaps the ±14-day window                                                 |
+| Jira     | In progress, or already tied to a repo-linked task                                                                  |
+
+Clusters seed from repo-linked open tasks plus in-progress Jira whose one-hop graph touches the repo. Leftovers (tasks, notes, PRs, events) and open-but-not-in-progress tickets sit in **Backlog**. Finished tasks (up to 200) sit in **Done**. The composer at the top of Active work `POST`s a task with a repo link already set.
+
+Open PRs are partitioned mine/others; **Commits** is a collapsible History panel plus the same `RepoGitWorkspace` as the list-page **Open Git** control. Hub task rows can launch [Implement with agent](#implement-with-agent) with `cwd` pinned to this checkout.
+
+The header **Terminal** split launches a dock tab in this checkout: a plain shell, or Claude / ChatGPT (Codex) / Antigravity (`agy --dangerously-skip-permissions`) / Cursor Agent / OpenCode. **IDE** still opens the desktop app. `⌘⇧T` is the shell; `⌘Enter` is upstart.
+
+On the `/repos` list, chips filter **changed**, **unpushed**, and **worktree**. A worktree is a second checkout whose `.git` is a file pointing at another clone in the scan folder — `GET /api/repos` sets `worktreeOf` to that parent path. Cards show a `worktree of <parent>` chip so they are not mistaken for a stray clone with a detached HEAD (the old `.git/HEAD` read threw on worktrees and scored them as high-risk).
 
 ### Repo Git workspace
 

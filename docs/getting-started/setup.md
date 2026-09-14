@@ -30,6 +30,7 @@ http://localhost:1337/setup
 | Jira Cloud      | Optional ticket views and standup support                                   |
 | Datadog         | Optional alert summaries and deep links                                     |
 | GitHub          | Pull request and repo-related features via the GitHub CLI — **Sign in with GitHub** on this page, or `gh auth login` in a terminal |
+| AI Provider     | Default CLI or HTTP API for in-app generation and agent launches (`cursor-cli`, `chatgpt-cli`, `antigravity-cli`, `opencode`, `api`) |
 | Infra           | Optional internal infrastructure helpers, when an infra plugin is installed |
 | Notes AI        | Optional OpenAI-compatible BlockNote AI — **env vars only** (see below)     |
 
@@ -93,6 +94,8 @@ The shared configuration files should use environment variable placeholders inst
 ### AI Features (not on this page)
 
 Notes AI, Repo Learning generated artifacts, and morning-briefing AI use `AI_API_KEY` in `dashboard/.env.local` (any OpenAI-compatible provider — z.ai by default, or OpenAI, OpenRouter, etc. via `AI_BASE_URL`/`AI_MODEL`). Copy the example lines from `dashboard/.env.example`, restart after changes, and see [Environment Variables](../reference/environment-variables.md#notes-repo-learning-and-briefing-ai-optional).
+
+Agent launches and in-app generation that prefer a local CLI use **/setup → AI Provider** (`DEVHUB_AI_PROVIDER`). Antigravity is the `agy` CLI — install it, then pick **Antigravity CLI**. There is no Antigravity desktop app in DevHub. See [Agent CLI selection](../guides/opencode-and-chamber.md#agent-cli-selection).
 
 ## After Changing Setup
 
