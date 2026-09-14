@@ -64,6 +64,12 @@ while IFS= read -r key; do
     esac
 done < <(env | awk -F= '/^DEVHUB_/ { print $1 }')
 unset NOTES_DIR TASKS_DIR COLLECTIONS_DIR UPSTARTS_DIR DOCS_DIR
+# Git hands hooks GIT_DIR (absolute when pushing from a linked worktree) and passes
+# through GIT_CONFIG_* overrides. Tests that build throwaway repos inherit them and
+# commit, branch, write config or run hooks against this repo, so verify sees none.
+while IFS= read -r key; do
+    unset "$key"
+done < <(env | awk -F= '/^GIT_/ { print $1 }')
 # Packaged Next standalone puts a JSON config (no functions) on process.env;
 # if that leaks into this hook, `next build` dies with generate is not a function.
 while IFS= read -r key; do
