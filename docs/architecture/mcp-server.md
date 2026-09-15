@@ -79,11 +79,36 @@ To add a tool group: create `src/tools/<group>.ts` with a `register*Tools(server
 function, import it in `mcp.ts`, and add a dashboard API route when the tool is
 dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 
+## Connect any MCP client over HTTP
+
+Besides the synced stdio launch, the same server listens on Streamable HTTP for
+clients that connect to a URL:
+
+```bash
+npm run mcp:http        # → http://127.0.0.1:1340/mcp
+```
+
+The dashboard starts this peer automatically, so if DevHub is running, the
+endpoint usually already exists. To onboard any MCP client:
+
+```bash
+npm run mcp:token       # prints ready-to-paste configs
+```
+
+That prints a generic client config, the Claude Code CLI command, and a Cursor
+`mcp.json` entry — same tools as stdio.
+
+Security model: every request needs a bearer token (auto-generated once, stored
+`0600` at `~/.config/devhub/mcp-http-token`, override with `DEVHUB_MCP_HTTP_TOKEN`);
+Host/Origin must be loopback unless `DEVHUB_MCP_HTTP_ALLOWED_HOSTS` extends it.
+The token grants every DevHub tool — narrow the exposed surface with
+`DEVHUB_MCP_TOOLSETS` before exposing it beyond this machine.
+
 ## Tool Inventory
 
 | Group      | Tools                                                                                                                                                                                                                                                                                                                                                         |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Notes      | `notes_list`, `notes_read`, `notes_write`, `notes_write_asset`, `notes_append`, `notes_search`, `notes_delete`, `notes_create_meeting`, `notes_create_task`, `notes_create_pr`, `entity_links_read`, `notes_cursor_open`, `notes_cursor_apply`, `notes_cursor_delete`                                                                                         |
+| Notes      | `notes_list`, `notes_read`, `notes_write`, `notes_write_asset`, `notes_append`, `notes_search`, `notes_delete`, `notes_create_meeting`, `notes_create_task`, `notes_create_pr`, `entity_links_read`, `notes_devhub_open`, `notes_cursor_open`, `notes_cursor_apply`, `notes_cursor_delete`                                                                         |
 | Docs       | `docs_list`, `docs_read`, `docs_write`, `docs_append`, `docs_search`, `docs_delete`                                                                                                                                                                                                                                                                           |
 | Tasks      | `tasks_list`, `tasks_create`, `tasks_update`, `tasks_delete`, `tasks_history`                                                                                                                                                                                                                                                                                 |
 | Diagrams   | `diagrams_list`, `diagrams_read`, `diagrams_create`, `diagrams_update`, `diagrams_add_note`, `diagrams_delete`, `diagrams_rename`                                                                                                                                                                                                                             |
@@ -93,6 +118,7 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 | Ship       | `repo_ship`, `repo_ship_status` — wraps `scripts/devhub-ship.sh` (detached; poll status while pre-push verify runs)                                                                                                                                                                                                                                           |
 | Status     | `status_services`, `status_git`, `status_mcp`, `services_restart`                                                                                                                                                                                                                                                                                             |
 | Briefing   | `briefing_get`                                                                                                                                                                                                                                                                                                                                                |
+| UI         | `ui_open` — open any internal DevHub page (`/notes/<path>`, `/repos/<name>`, `/work`, `/briefing`, …) as a workspace tab in the running DevHub app (desktop or browser); the generalized form of `notes_devhub_open` |
 | Calendar   | `calendar_week`, `calendar_list`                                                                                                                                                                                                                                                                                                                              |
 | Work       | `prs_list`, `prs_open_in_cursor`, `jira_tickets`, `jira_ticket_get`, `standup_markdown`, `tasks_weekly`, `jira_ticket_transition`                                                                                                                                                                                                                             |
 | Assets     | `assets_list`                                                                                                                                                                                                                                                                                                                                                 |

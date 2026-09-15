@@ -221,6 +221,7 @@ Packaged-app endpoints under `/api/desktop/*`. Auth uses bootstrap token → `Ht
 | `/api/desktop/terminal-ticket` | GET | Mints a short-lived WS ticket for the PTY peer (cookie cannot cross port). Browser: `{ ticket: null, desktop: false }`. |
 | `/api/desktop/first-run` | GET/POST | Persisted onboarding state in app data (`completed`, `goals`, `skipped`, `migrationAvailable`, `migrated`). `POST` saves incrementally. |
 | `/api/desktop/migration` | GET/POST | Electron→Tauri migration plan (`GET`) and execution (`POST` body `{ choices: [{ key, action: "keep" \| "copy" \| "skip" }] }`). Desktop + bootstrap-auth only. |
+| `/api/desktop/navigation` | GET/POST | Desktop workspace navigation channel. The desktop webview keeps an authenticated event stream open with `GET`; authenticated local tools publish an internal `{ href, newTab: true }` request with `POST`. Returns `409` when no desktop app is connected. |
 | `/api/desktop/upstart` | GET/POST | `GET ?repo=` returns upstart script + approval state. `POST`: `{ repo, action: "approve" \| "revoke" \| "run", sha256? }` — run command only when the current script bytes are approved. Works in browser checkouts too. |
 | `/api/desktop/selftest-roundtrip` | GET | Packaged `--self-test` storage round-trip. Desktop + bootstrap-auth only. |
 

@@ -3,6 +3,9 @@ import { z } from "zod";
 import type { Context } from "../context.ts";
 import { withDashboardErrors } from "../dashboard-client.ts";
 
+/** Kept in step with the version in mcp.ts so status_mcp can self-report it. */
+const SERVER_VERSION = "4.0.0";
+
 export function registerStatusTools(server: McpServer, ctx: Context): void {
   const { dashboard } = ctx;
 
@@ -103,15 +106,28 @@ export function registerStatusTools(server: McpServer, ctx: Context): void {
         const data = await dashboard.get<
           Array<{ name: string; runningCount: number; pids: number[]; binaryExists: boolean }>
         >("/api/status/mcp");
+        // This connection is a first-class fact: a fresh harness user asking "is
+        // the MCP link healthy?" gets the serving process itself in the answer,
+        // not a registry list that may not know about it.
+        const self = `- devhub (this server): serving this call — v${SERVER_VERSION}`;
         if (!Array.isArray(data) || data.length === 0) {
-          return { content: [{ type: "text", text: "No MCP servers reported." }] };
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  `MCP servers:\n${self}\n\n` +
+                  "The dashboard's registry lists MCP servers it launches itself; it does not track this connection.",
+              },
+            ],
+          };
         }
         const lines = data.map((m) => {
           const run = m.runningCount > 0 ? `running ×${m.runningCount} (pids ${m.pids.join(", ")})` : "not running";
           const bin = m.binaryExists ? "" : " · binary missing";
           return `- ${m.name}: ${run}${bin}`;
         });
-        return { content: [{ type: "text", text: `MCP servers:\n${lines.join("\n")}` }] };
+        return { content: [{ type: "text", text: `MCP servers:\n${self}\n${lines.join("\n")}` }] };
       }),
   );
 

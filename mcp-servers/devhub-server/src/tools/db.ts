@@ -264,7 +264,8 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
       if (!result.isError) return result;
       const hint = explainMissingFeature(ctx.dashboardInfo, "db");
       if (!hint) return result;
-      const text = result.content.map((c) => c.text).join("\n");
+      // Widget resources have no .text; only the text entries carry the message.
+      const text = result.content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
       if (!/\b404\b|Not Found/i.test(text)) return result;
       return {
         content: [{ type: "text" as const, text: `${hint}\n\n(${text})` }],

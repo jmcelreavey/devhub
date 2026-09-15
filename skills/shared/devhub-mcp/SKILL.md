@@ -33,6 +33,7 @@ errors. Tool **descriptions** are the source of truth for args; this skill carri
 `notes_create_pr` scaffolds `pr-reviews/<repo>-<n>` with PR + repo `## Links` EntityRefs; `notes_write` on `pr-reviews/` upserts the same links.
 `notes_write_asset` writes image bytes (jpg, png, gif, webp); reference them as
 `![caption](garden/project/assets/photo-1.jpg)`. Toggles: `::toggle <title>` … `::end-toggle`.
+`notes_devhub_open` opens an existing note in a new workspace tab when the DevHub desktop app is running; it fails cleanly instead of opening a browser when no desktop client is connected.
 
 **Docs** — `docs_*` over the full `docs/` Markdown tree (list/search cover everything,
 unlike the filtered notes slice).

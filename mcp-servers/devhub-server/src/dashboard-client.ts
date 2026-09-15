@@ -127,13 +127,29 @@ export class DashboardClient {
 }
 
 /**
+ * A tool result's content: plain text plus optional rendered blocks. Text-only
+ * tools never see the distinction; tools using the ui.ts seam return
+ * `ToolResult`, whose `UiResource` entries the SDK's plain-content type
+ * rejects — so the wrapper must type `fn` (and itself) as `ToolResult`-shaped.
+ * Narrowing `content` to text-only here is what made four UI-seam tools fail
+ * typecheck while the identical pattern in tasks.ts (no wrapper) passed.
+ */
+export type DashboardToolResult = {
+  content: Array<
+    | { type: "text"; text: string }
+    | { type: "resource"; resource: { uri: string; mimeType: string; text: string } }
+  >;
+  isError?: boolean;
+};
+
+/**
  * Wrap a dashboard-backed tool handler so any client error becomes a clean MCP
  * error result instead of an exception. Keeps every proxy tool's catch block
  * identical.
  */
 export async function withDashboardErrors(
-  fn: () => Promise<{ content: { type: "text"; text: string }[]; isError?: boolean }>,
-): Promise<{ content: { type: "text"; text: string }[]; isError?: boolean }> {
+  fn: () => Promise<DashboardToolResult>,
+): Promise<DashboardToolResult> {
   try {
     return await fn();
   } catch (err) {
