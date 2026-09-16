@@ -97,6 +97,10 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
         date: z.string().optional().describe("Date in YYYY-MM-DD format. Defaults to today."),
         due: z.string().optional().describe("Due date in YYYY-MM-DD format."),
         withNote: z.boolean().optional().describe("If true, also create the linked task-notes/ note"),
+        draft: z
+          .boolean()
+          .optional()
+          .describe("Create as a draft (an idea, not yet a plan). Prefer tasks_capture, which also saves related context."),
         links: z
           .array(
             z.object({
@@ -110,8 +114,8 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
           .describe("EntityRefs to store on the task for hop-around"),
       },
     },
-    async ({ text, date, due, withNote, links }) => {
-      let task = tasksStorage.add(text, date, due);
+    async ({ text, date, due, withNote, links, draft }) => {
+      let task = tasksStorage.add(text, date, due, draft ? "draft" : undefined);
       if (links?.length) {
         task = tasksStorage.update(task.id, { links }, date) ?? task;
       }
@@ -141,7 +145,8 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
   server.registerTool(
     "tasks_update",
     {
-      description: "Update a task: toggle done, edit text, set due date, abandon, or reactivate.",
+      description:
+        "Update a task: toggle done, edit text, set due date, abandon, reactivate, or set its stage. stage here is unchecked — to mark a plan ready use tasks_set_stage, which runs the readiness checklist.",
       inputSchema: {
         id: z.string().describe("Task ID (UUID)"),
         text: z.string().optional().describe("New task text"),
@@ -152,6 +157,7 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
           .optional()
           .describe("Status change: complete, abandon, or reactivate"),
         abandonReason: z.string().optional().describe("Reason for abandoning"),
+        stage: z.enum(["draft", "ready"]).optional().describe("draft = idea not yet planned; ready = an agent can run it"),
         date: z.string().optional().describe("Date the task belongs to (YYYY-MM-DD). Defaults to today."),
         links: z
           .array(
@@ -166,12 +172,12 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
           .describe("Replace hop-around EntityRefs on the task"),
       },
     },
-    async ({ id, text, done, due, status, abandonReason, date, links }) => {
-      const task = tasksStorage.update(id, { text, done, due, status, abandonReason, links }, date);
+    async ({ id, text, done, due, status, abandonReason, date, links, stage }) => {
+      const task = tasksStorage.update(id, { text, done, due, status, abandonReason, links, stage }, date);
       if (!task) {
         return { content: [{ type: "text", text: `Task not found: ${id}` }] };
       }
-      return { content: [{ type: "text", text: `Updated task: ${task.id} — ${task.text} (done=${task.done})` }] };
+      return { content: [{ type: "text", text: `Updated task: ${task.id} — ${task.text} (done=${task.done}, stage=${task.stage ?? "ready"})` }] };
     },
   );
 

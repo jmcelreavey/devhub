@@ -27,6 +27,8 @@ export interface Task {
   timeSpentMs?: number;
   timerStartedAt?: string;
   links?: EntityRef[];
+  /** "draft" = captured idea, not yet a plan an agent can run. Absent = ready. */
+  stage?: "draft";
 }
 
 export interface TaskDaySummary {
@@ -116,7 +118,7 @@ export class TasksStorage {
     return this.read(this.todayISO());
   }
 
-  add(text: string, date?: string, due?: string): Task {
+  add(text: string, date?: string, due?: string, stage?: "draft"): Task {
     const target = date || this.todayISO();
     const tasks = this.read(target);
     const jiraKey = text.match(/\b([A-Z][A-Z0-9]+-\d+)\b/)?.[1];
@@ -127,6 +129,7 @@ export class TasksStorage {
       jiraKey,
       due,
       createdAt: new Date().toISOString(),
+      ...(stage ? { stage } : {}),
     };
     tasks.push(task);
     this.write(target, tasks);
@@ -142,6 +145,7 @@ export class TasksStorage {
       status?: "complete" | "abandon" | "reactivate";
       abandonReason?: string;
       links?: EntityRef[];
+      stage?: "draft" | "ready";
     },
     date?: string,
   ): Task | null {
@@ -162,6 +166,8 @@ export class TasksStorage {
         task.abandonReason = undefined;
       }
     }
+    if (patch.stage === "draft") task.stage = "draft";
+    else if (patch.stage === "ready") delete task.stage;
     if (patch.due === null) {
       task.due = undefined;
     } else if (typeof patch.due === "string") {

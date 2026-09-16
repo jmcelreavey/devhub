@@ -6,7 +6,7 @@
  * hard-block setting flips Launch to refuse until items pass.
  */
 
-export type ImplementReadyItemId = "acceptance" | "repo" | "prerequisites";
+export type ImplementReadyItemId = "acceptance" | "questions" | "repo" | "prerequisites";
 
 export interface ImplementReadyItem {
   id: ImplementReadyItemId;
@@ -90,6 +90,28 @@ export function sectionBodyHasContent(body: string): boolean {
   return meaningful.some((line) => line.length >= 3);
 }
 
+const OPEN_QUESTIONS_HEADING_RE = /^##\s+Open\s+questions\b.*$/im;
+
+/**
+ * Unanswered lines under `## Open questions`. A checked box (`- [x]`) is an
+ * answered question; placeholder bullets don't count. A plan with open
+ * questions stays a draft — the agent would have to ask them.
+ */
+export function noteOpenQuestions(markdown: string | null | undefined): string[] {
+  if (!markdown) return [];
+  const text = markdown.replace(/\r\n/g, "\n");
+  const match = OPEN_QUESTIONS_HEADING_RE.exec(text);
+  if (!match) return [];
+  const rest = text.slice(match.index + match[0].length);
+  const nextHeading = rest.search(/\n##\s+/);
+  const body = nextHeading === -1 ? rest : rest.slice(0, nextHeading);
+  return body
+    .split("\n")
+    .filter((line) => !/^\s*[-*+]\s*\[[xX]\]/.test(line))
+    .map((line) => line.replace(/^\s*[-*+]\s*(\[ \])?\s*/, "").trim())
+    .filter((line) => line.length >= 3);
+}
+
 export function jiraDescriptionHasContent(text: string | null | undefined): boolean {
   if (!text) return false;
   return text.replace(/\s+/g, " ").trim().length >= 8;
@@ -144,6 +166,19 @@ export function evaluateImplementReady(input: ImplementReadyInput): ImplementRea
         fixLabel: input.notePath ? "Open task note" : undefined,
       };
 
+  const openQuestions = noteOpenQuestions(input.noteMarkdown);
+  const questions: ImplementReadyItem =
+    openQuestions.length === 0
+      ? { id: "questions", ok: true, label: "Open questions", detail: "None left unanswered" }
+      : {
+          id: "questions",
+          ok: false,
+          label: "Open questions",
+          detail: openQuestions.slice(0, 3).join("; ").slice(0, 200),
+          fixHref: input.notePath ? `/notes/${input.notePath}` : undefined,
+          fixLabel: input.notePath ? "Answer them in the task note" : undefined,
+        };
+
   let repo: ImplementReadyItem;
   if (selected) {
     repo = {
@@ -197,7 +232,7 @@ export function evaluateImplementReady(input: ImplementReadyInput): ImplementRea
               : `Open ${openBlockers.length} open prerequisites`,
         };
 
-  const items = [acceptance, repo, prerequisites];
+  const items = [acceptance, questions, repo, prerequisites];
   const ok = items.every((item) => item.ok);
   const hardBlock = Boolean(input.hardBlock);
   return {

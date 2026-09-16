@@ -75,6 +75,14 @@ export const TOOL_ANNOTATIONS: Readonly<Record<string, ToolHints>> = {
   tasks_agent_handoff_set: { ...wr, idempotentHint: true },
   tasks_agent_resume: wrx, // starts follow-up or new implement run; confirm in clients
   tasks_implement_ready: rox, // may fetch Jira description; warn-only checklist
+  // ── plans ──────────────────────────────────────────────────────────────
+  tasks_capture: wrx, // creates a draft task + note; reads alerts
+  tasks_set_stage: { ...wrx, idempotentHint: true }, // readiness check may read Jira
+  tasks_plan_status: ro,
+  tasks_plan_markdown: ro,
+  tasks_pr_watch: wrx, // queries GitHub, updates run sidecars
+  tasks_alert_drafts: { ...wr, idempotentHint: true },
+  tasks_retro_inputs: ro,
   // ── diagrams ───────────────────────────────────────────────────────────
   diagrams_list: ro,
   diagrams_read: ro,

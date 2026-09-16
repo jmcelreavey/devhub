@@ -11,6 +11,8 @@ import {
 } from "@/lib/tasks/task-agent-resume";
 import { taskImplementPlanUrl } from "@/lib/tasks/implement-prompt";
 import { useLive } from "@/lib/hooks/use-fetch";
+import { mutate } from "swr";
+import { TASK_AGENT_RUNS_KEY } from "@/lib/tasks/use-task-agent-runs";
 
 type AgentRunDetail = {
   run?: {
@@ -76,6 +78,7 @@ export function ResumeTaskDialog({
   const priorProvider = providersData?.providers?.find((p) => p.id === priorDispatchProvider);
   const priorSupportsResume = priorProvider?.supportsResume ?? false;
 
+  const attention = latestRun?.attention;
   const followUp = willResumeFollowUpSession({
     priorDispatchProvider,
     selectedUiProvider: effectiveProvider,
@@ -92,25 +95,41 @@ export function ResumeTaskDialog({
     cwd,
     repoName,
     jiraKey: task.jiraKey,
+    ...(attention ? { attention: { ...attention, prUrl: latestRun?.prUrl } } : {}),
   });
+
+  // Sent back for this finding — the watcher stays quiet until it changes.
+  const markAttentionHandled = () => {
+    if (!attention || !latestRun) return;
+    void fetch("/api/tasks/agent-runs/attention", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId: task.id, runId: latestRun.runId }),
+    }).finally(() => void mutate(TASK_AGENT_RUNS_KEY));
+  };
 
   return (
     <SkillAgentDialog
       key={open ? `resume-${latestRun?.runId ?? "none"}-${initialProvider}` : "resume-closed"}
       open={open}
       onClose={onClose}
-      title="Resume with agent"
-      description="Choose the CLI. Keep the same provider as the prior run when you want to continue its session."
+      title={attention ? "Fix PR with agent" : "Resume with agent"}
+      description={
+        attention
+          ? `${attention.summary}. The agent gets this plus the handoff and fixes it on the same branch.`
+          : "Choose the CLI. Keep the same provider as the prior run when you want to continue its session."
+      }
+      onLaunched={markAttentionHandled}
       initialProvider={initialProvider}
       onProviderChange={(value) => setPickedProvider({ forInitial: initialProvider, value })}
       getPrompt={() => buildTaskAgentResumePrompt(promptInput())}
       cwd={cwd}
       repoName={repoName}
-      summary={`Resume ${task.text}`}
+      summary={`${attention ? "Fix PR for" : "Resume"} ${task.text}`}
       reason={`Resume DevHub task ${task.id}`}
       taskId={task.id}
       resumeSessionId={followUp ? priorSessionId ?? undefined : undefined}
-      launchButtonLabel="Resume agent"
+      launchButtonLabel={attention ? "Send agent back" : "Resume agent"}
       banner={
         latestRun ? (
           <ResumeModeBanner

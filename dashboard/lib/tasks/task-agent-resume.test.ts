@@ -143,3 +143,33 @@ describe("mapAgentDispatchProviderToUi / willResumeFollowUpSession", () => {
     expect(id).toMatch(/^run-[a-z0-9]{6,12}-[0-9a-f]{8}$/);
   });
 });
+
+describe("PR-aware chips and prompts", () => {
+  const base = { runId: "run-a1b2c3-deadbeef", status: "done" as const, prUrl: "https://github.com/acme/app/pull/7" };
+
+  it("puts PR findings ahead of merge state, and running ahead of both", () => {
+    const attention = { kind: "ci-failing" as const, summary: "Failing checks: lint", detectedAt: "x", key: "k" };
+    expect(taskAgentChipForLatestRun({ ...base, prState: "open", attention })).toMatchObject({
+      kind: "attention",
+      label: "CI failing",
+      detail: "Failing checks: lint",
+      prUrl: base.prUrl,
+    });
+    expect(taskAgentChipForLatestRun({ ...base, prState: "merged" })).toMatchObject({ kind: "merged", label: "PR merged" });
+    expect(taskAgentChipForLatestRun({ ...base, prState: "closed" })).toMatchObject({ kind: "closed" });
+    expect(taskAgentChipForLatestRun({ ...base, prState: "open" })).toMatchObject({ kind: "waiting", label: "PR open" });
+    expect(taskAgentChipForLatestRun({ ...base, status: "running", attention })).toMatchObject({ kind: "running" });
+  });
+
+  it("leads the resume prompt with the PR finding", () => {
+    const prompt = buildTaskAgentResumePrompt({
+      origin: "http://localhost:1337",
+      taskId: "t1",
+      date: "2026-09-17",
+      handoff: "",
+      attention: { kind: "changes-requested", summary: "@sam requested changes", prUrl: base.prUrl },
+    });
+    expect(prompt).toContain(`FIX THE PULL REQUEST FIRST (${base.prUrl}):`);
+    expect(prompt).toContain("Changes requested — @sam requested changes");
+  });
+});

@@ -79,6 +79,33 @@ async function registerInteractiveAgentRun(opts: {
   return { runId: body.run.id, wrap: body.wrap };
 }
 
+/**
+ * Planning wants a reasoning model, implementation a fast coder: remember the
+ * last model per stage and CLI so each dialog opens with the right one.
+ */
+export type AgentStage = "plan" | "implement";
+
+function modelKey(stage: AgentStage, provider: string): string {
+  return `devhub.agentModel.${stage}.${provider}`;
+}
+
+function readStageModel(stage: AgentStage, provider: string): string {
+  try {
+    return window.localStorage.getItem(modelKey(stage, provider)) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function saveStageModel(stage: AgentStage, provider: string, model: string): void {
+  try {
+    if (model) window.localStorage.setItem(modelKey(stage, provider), model);
+    else window.localStorage.removeItem(modelKey(stage, provider));
+  } catch {
+    // Private windows can refuse storage; the override still applies to this launch.
+  }
+}
+
 function appendInteractiveActivityHint(prompt: string, runId: string): string {
   const block = [
     "",
@@ -115,6 +142,8 @@ export function SkillAgentDialog({
   onProviderChange,
   launchButtonLabel = "Launch agent",
   resumeSessionId,
+  stage = "implement",
+  onLaunched,
 }: {
   open: boolean;
   onClose: () => void;
@@ -137,16 +166,23 @@ export function SkillAgentDialog({
   launchButtonLabel?: string;
   /** Continue a prior CLI session when the selected provider supports it. */
   resumeSessionId?: string;
+  /** Which remembered model to prefill. */
+  stage?: AgentStage;
+  /** After the CLI was handed to the terminal dock. */
+  onLaunched?: () => void;
 }) {
   const toast = useToast();
   const router = useRouter();
   const launchChamber = useLaunchChamberDesktop();
   const [provider, setProvider] = useState<SkillAgentLaunchTarget>(initialProvider);
-  const [model, setModel] = useState("");
+  // null = not edited: show the model remembered for this stage + CLI.
+  const [editedModel, setModel] = useState<string | null>(null);
+  const model = editedModel ?? (open && typeof window !== "undefined" ? readStageModel(stage, provider) : "");
   const [launching, setLaunching] = useState(false);
 
   const selectProvider = (next: SkillAgentLaunchTarget) => {
     setProvider(next);
+    setModel(null);
     onProviderChange?.(next);
   };
 
@@ -164,6 +200,7 @@ export function SkillAgentDialog({
     const cli = await resolveTaskImplementationProvider(target);
     const sessionId = resumeSessionId?.trim() || undefined;
     const modelOverride = model.trim() || undefined;
+    saveStageModel(stage, target, modelOverride ?? "");
     const basePrompt = getPrompt();
 
     let registration: InteractiveRegistration | null = null;
@@ -236,6 +273,7 @@ export function SkillAgentDialog({
       } else {
         await launchInteractive(provider);
       }
+      onLaunched?.();
       onClose();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't launch the agent");
@@ -299,12 +337,12 @@ export function SkillAgentDialog({
       </fieldset>
 
       <label className="mt-4 block text-xs font-medium text-text-muted">
-        Model override
+        {stage === "plan" ? "Planning model" : "Model override"}
         <input
           className="input mt-1 w-full"
           value={model}
           onChange={(event) => setModel(event.target.value)}
-          placeholder="Default model"
+          placeholder={stage === "plan" ? "A strong reasoning model (remembered)" : "Default model (remembered)"}
           autoComplete="off"
           disabled={provider === "openchamber"}
         />

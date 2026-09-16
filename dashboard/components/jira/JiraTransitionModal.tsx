@@ -53,47 +53,54 @@ export function JiraTransitionModal({
           <button type="button" className="btn btn-ghost" onClick={onCancel}>
             Cancel
           </button>
-          <button type="button" className="btn btn-ghost" onClick={() => onConfirm(null)}>
-            {skipLabel}
-          </button>
+          {/* Callers that only change status pass "Cancel" here — don't show it twice. */}
+          {skipLabel !== "Cancel" ? (
+            <button type="button" className="btn btn-ghost" onClick={() => onConfirm(null)}>
+              {skipLabel}
+            </button>
+          ) : null}
         </div>
       }
     >
-      {loading && (
-        <div className="flex items-center gap-2 py-4 text-sm text-text-subtle">
-          <Loader2 size={14} className="animate-spin" /> Loading states…
-        </div>
-      )}
+      {/* Reserve the grid's height: the footer moving down as states load put a
+          click meant for Cancel onto a transition button. */}
+      <div className="min-h-44">
+        {loading && (
+          <div className="flex items-center gap-2 py-4 text-sm text-text-subtle">
+            <Loader2 size={14} className="animate-spin" /> Loading states…
+          </div>
+        )}
 
-      {!loading && (transitions?.length ?? 0) === 0 && (
-        <p className="py-3 text-sm text-text-subtle">
-          No transitions available for this ticket.
-        </p>
-      )}
+        {!loading && (transitions?.length ?? 0) === 0 && (
+          <p className="py-3 text-sm text-text-subtle">
+            No transitions available for this ticket.
+          </p>
+        )}
 
-      {!loading && transitions && transitions.length > 0 && (
-        <div className="grid grid-cols-2 gap-1.5">
-          {transitions.map((t) => {
-            const highlight = suggestLc && (t.to.toLowerCase() === suggestLc || t.name.toLowerCase() === suggestLc);
-            return (
-              <button
-                key={t.id}
-                type="button"
-                className="truncate rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors"
-                title={t.name !== t.to ? `${t.to} (${t.name})` : t.to}
-                onClick={() => onConfirm(t.id)}
-                style={{
-                  border: `1px solid ${highlight ? "var(--accent)" : "var(--border-muted)"}`,
-                  background: highlight ? "var(--accent-dim)" : "transparent",
-                  color: "var(--text)",
-                }}
-              >
-                {t.to}
-              </button>
-            );
-          })}
-        </div>
-      )}
+        {!loading && transitions && transitions.length > 0 && (
+          <div className="grid grid-cols-2 gap-1.5">
+            {transitions.map((t) => {
+              const highlight = suggestLc && (t.to.toLowerCase() === suggestLc || t.name.toLowerCase() === suggestLc);
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  className="truncate rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors"
+                  title={t.name !== t.to ? `${t.to} (${t.name})` : t.to}
+                  onClick={() => onConfirm(t.id)}
+                  style={{
+                    border: `1px solid ${highlight ? "var(--accent)" : "var(--border-muted)"}`,
+                    background: highlight ? "var(--accent-dim)" : "transparent",
+                    color: "var(--text)",
+                  }}
+                >
+                  {t.to}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </ModalShell>
   );
 }

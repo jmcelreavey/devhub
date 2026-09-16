@@ -9,6 +9,7 @@ import type { DatadogRecentAlertsResponse, RecentEvent } from "@/lib/datadog/rec
 import type { OncallStatus } from "@/lib/datadog/oncall";
 import { formatTime } from "@/lib/utils";
 import { DatadogInvestigateButton } from "@/components/DatadogInvestigateButton";
+import { AlertDraftsToggle } from "@/components/AlertDraftsToggle";
 
 /** At-a-glance "am I on the pager?" banner — always shown once Datadog is configured. */
 function OncallBanner() {
@@ -201,11 +202,14 @@ export default function DatadogClient() {
           <h2 className="text-sm font-semibold text-text">
             Recent alerts <span className="font-normal text-text-subtle">· last 24h</span>
           </h2>
-          {recentOk && (
-            <span className="text-[11px] font-mono text-text-subtle">
-              Updated {new Date(recent.fetchedAt).toLocaleTimeString()}
-            </span>
-          )}
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <AlertDraftsToggle />
+            {recentOk && (
+              <span className="text-[11px] font-mono text-text-subtle">
+                Updated {new Date(recent.fetchedAt).toLocaleTimeString()}
+              </span>
+            )}
+          </div>
         </div>
 
         {recentLoading && !recent && (

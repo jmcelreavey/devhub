@@ -28,3 +28,22 @@ export function buildTaskImplementPrompt(input: TaskImplementPromptInput): strin
   );
   return lines.join("\n");
 }
+
+/**
+ * Turn a draft into a plan an agent can run without design questions. Uses a
+ * reasoning-heavy pass; implementation happens later, from the ready task.
+ */
+export function buildTaskPlanPrompt(input: TaskImplementPromptInput): string {
+  const planUrl = taskImplementPlanUrl(input);
+  const lines = [
+    "Use the devhub-plan-write skill to turn this DevHub draft task into a plan. Do not implement it.",
+    `Plan URL (curl it first - task, note path, links, Jira, context): ${planUrl}`,
+  ];
+  if (input.cwd) lines.push(`Repo checkout for investigation: ${input.cwd}. Read only — no commits, no branches.`);
+  if (input.jiraKey) lines.push(`Jira ticket: ${input.jiraKey}.`);
+  lines.push(
+    "Write the result into the task note: ## Plan (the change, the files, the commands that prove it worked) and ## Acceptance. Put anything only I can answer under ## Open questions as unchecked boxes.",
+    `When nothing is left open, mark the task ready: POST ${input.origin.replace(/\/$/, "")}/api/tasks/stage with {"taskId":"${input.taskId}","date":"${input.date}","stage":"ready"} (409 lists what's still missing). Otherwise leave it as a draft and tell me the questions.`,
+  );
+  return lines.join("\n");
+}

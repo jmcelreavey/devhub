@@ -17,6 +17,7 @@ import { selectToolsets, type ToolsetSelection } from "./toolsets.ts";
 import { registerNotesTools } from "./tools/notes.ts";
 import { registerDocsTools } from "./tools/docs.ts";
 import { registerTasksTools } from "./tools/tasks.ts";
+import { registerPlanTools } from "./tools/plans.ts";
 import { registerDiagramsTools } from "./tools/diagrams.ts";
 import { registerAppraisalTools } from "./tools/appraisal.ts";
 import { registerDxAuditTools } from "./tools/dx-audit.ts";
@@ -83,6 +84,7 @@ const TOOLSETS: Record<string, (server: McpServer, ctx: Context) => void> = {
   briefing: registerBriefingTools,
   calendar: registerCalendarTools,
   work: registerWorkTools,
+  plans: registerPlanTools,
   assets: registerAssetsTools,
   search: registerSearchTools,
   scripts: registerScriptsTools,

@@ -31,6 +31,7 @@ import type { GithubPrRow, GithubPrsApiPayload } from "@/lib/github/prs";
 import type { CalendarEvent } from "@/lib/google-calendar";
 import { PersonChip } from "@/components/PersonChip";
 import { PrRow } from "@/components/PrRow";
+import { BriefingPlanStatus } from "@/components/briefing/BriefingPlanStatus";
 
 interface BriefingResponse {
   ok: boolean;
@@ -404,6 +405,8 @@ export function TodayFocusView() {
             )}
           </div>
         )}
+
+        <BriefingPlanStatus />
 
         {/* Next meeting + focus */}
         <div className="flex items-center gap-2 text-xs text-text-muted">

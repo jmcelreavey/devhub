@@ -94,6 +94,11 @@ the latest audit as markdown; run new audits from the Repos page **DX Audit** bu
   own dock tab the user can watch and stop, and edit `cwd` directly unless `worktree:true` (so
   changes show in the IDE). Write a self-contained prompt; `agent_wait` then `agent_diff`.
   A dispatched agent cannot dispatch further (`DEVHUB_AGENT_MAX_DEPTH`).
+- **Plans** — `tasks_capture` (draft task + context snapshot), `tasks_set_stage` (draft ↔ ready; ready runs the
+  checklist), `tasks_plan_status` (what needs a fix / is merged / is running / is ready), `tasks_plan_markdown`
+  (portable plan), `tasks_pr_watch` (check agent PRs now, or dismiss a PR alert), `tasks_alert_drafts`
+  (new on-call alerts → drafts, off by default), `tasks_retro_inputs` (for `devhub-retro`). Loop:
+  capture → `devhub-plan-write` → ready → implement → PR watched → complete → retro.
 - **Scheduled jobs** — `jobs_list`, `jobs_get`, `jobs_create`, `jobs_update`, `jobs_delete`, `jobs_run`, `jobs_log`.
   **Use these, not your harness's own cron (`CronCreate`, `/loop`, `/schedule`, scheduled tasks, crontab),
   for anything recurring or deferred that involves DevHub.** A job runs an allowlisted script or an agent

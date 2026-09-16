@@ -32,7 +32,9 @@ handed back to the human". Five rules govern everything:
 
 ## 0. Fetch the plan
 
-Optional: `tasks_implement_ready` (or `GET /api/tasks/implement/ready`) returns the light checklist (acceptance/plan, repo, open `#prerequisite`/`#blocker`). Treat misses as warnings unless the response says `blocked`.
+Optional: `tasks_implement_ready` (or `GET /api/tasks/implement/ready`) returns the light checklist (acceptance/plan, unanswered `## Open questions`, repo, open `#prerequisite`/`#blocker`). Treat misses as warnings unless the response says `blocked`.
+
+If the plan payload says `"stage": "draft"`, the task is a captured idea, not a plan. Stop and suggest **Write plan with Agent** (the `devhub-plan-write` skill) instead of implementing — unless the user explicitly says to go ahead.
 
 The launch prompt gives you a **plan URL**. Curl it first:
 
@@ -85,8 +87,7 @@ Sidecar files live at `notes/.config/task-agent-runs/<taskId>.json` (plus `_inde
 When the prompt includes a DevHub Agent Activity run id (injected by the UI):
 
 1. After your first meaningful progress update, call `agent_interactive_note` with that `runId` and a short status.
-2. When you finish (success or stop), call `agent_interactive_finish` with `runId`, `ok`, your `sessionId`, and a short `resultText` (or `error`). DevHub closes the run itself when the CLI exits, but only this call lets the task be continued later.
-3. Do not leave the run in `running` — Agent Activity has no runner pid to auto-close it.
+2. When you finish (success or stop), call `agent_interactive_finish` with `runId`, `ok`, your `sessionId`, and a short `resultText` (or `error`). DevHub closes the run itself when the CLI exits or the tab closes, but only this call records the session so the task can be continued later.
 
 **Before pause, end-of-day, or abandon**
 
@@ -95,6 +96,10 @@ When the prompt includes a DevHub Agent Activity run id (injected by the UI):
 3. Set the linked run to `paused` (EOD/pause) or `abandoned` (giving up) via `tasks_agent_runs`.
 
 Do not rely on chat scrollback alone — the handoff is what the next session reads first.
+
+When any linked run ends, DevHub appends a `### Run <runId>` snapshot to the handoff (branch, last commit, changes vs base, uncommitted files, session). Write your own notes above it; don't repeat what the snapshot already says.
+
+**After the PR exists** DevHub watches it (`tasks_pr_watch`, every 10 minutes): failing CI, requested changes or new comments show on the task as **Fix PR with Agent**, and a merge offers **Complete task**. When you are resumed for a PR finding, the prompt starts with `FIX THE PULL REQUEST FIRST` — read the full failure with `gh pr checks` / `gh pr view --comments`, fix it on the same branch, and ask before pushing.
 
 ## 1. Gather context (DevHub MCP)
 

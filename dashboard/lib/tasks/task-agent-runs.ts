@@ -22,6 +22,18 @@ export const TASK_AGENT_RUN_STATUSES = [
 
 export type TaskAgentRunStatus = (typeof TASK_AGENT_RUN_STATUSES)[number];
 
+export type TaskPrState = "open" | "merged" | "closed";
+
+/** Something on the run's PR that the agent should be sent back for. */
+export interface TaskPrAttention {
+  kind: "ci-failing" | "changes-requested" | "new-comments";
+  /** One or two lines: failing check names, or the latest comment excerpt. */
+  summary: string;
+  detectedAt: string;
+  /** kind + head commit + summary — a dismissal holds until this changes. */
+  key: string;
+}
+
 export interface TaskAgentRunRecord {
   runId: string;
   status: TaskAgentRunStatus;
@@ -30,8 +42,18 @@ export interface TaskAgentRunRecord {
   updatedAt: string;
   prUrl?: string;
   branch?: string;
+  /** Checkout the run worked in — lets the PR watcher find a PR by branch. */
+  cwd?: string;
   sessionId?: string;
   terminalSessionId?: string;
+  /** Last PR state the watcher saw (task-pr-watch.ts). */
+  prState?: TaskPrState;
+  prCheckedAt?: string;
+  /** PR activity up to here has been seen (or acted on) — newer comments raise attention. */
+  prSeenAt?: string;
+  attention?: TaskPrAttention;
+  /** Attention key the user dismissed or already sent the agent back for. */
+  attentionHandled?: string;
 }
 
 export interface TaskAgentRunsFile {
@@ -165,6 +187,75 @@ export function getTaskAgentHandoff(taskId: string, notesDir = getNotesDir()): {
     handoffUpdatedAt: file.handoffUpdatedAt,
     latestRun,
   };
+}
+
+/** Watcher-owned fields; set through patchTaskAgentRun, not upsert. */
+export type TaskAgentRunPatch = Partial<
+  Pick<
+    TaskAgentRunRecord,
+    "prUrl" | "branch" | "cwd" | "prState" | "prCheckedAt" | "prSeenAt" | "attention" | "attentionHandled"
+  >
+>;
+
+/**
+ * Patch fields on an existing run record. `undefined` values delete the field.
+ * Returns null when the run is not on the task. No write (and no updatedAt
+ * bump) when nothing changed — see the note in upsertTaskAgentRun.
+ */
+export async function patchTaskAgentRun(
+  taskId: string,
+  runId: string,
+  patch: TaskAgentRunPatch,
+  notesDir = getNotesDir(),
+): Promise<TaskAgentRunRecord | null> {
+  const file = taskAgentRunsPath(taskId, notesDir);
+  return withMutex(file, async () => {
+    const current = readFile(taskId, notesDir);
+    const idx = current.runs.findIndex((r) => r.runId === runId);
+    if (idx === -1) return null;
+    const next: TaskAgentRunRecord = { ...current.runs[idx]! };
+    for (const [key, value] of Object.entries(patch) as Array<[keyof TaskAgentRunPatch, unknown]>) {
+      if (value === undefined) delete next[key];
+      else (next as unknown as Record<string, unknown>)[key] = value;
+    }
+    if (JSON.stringify(next) === JSON.stringify(current.runs[idx])) return next;
+    current.runs[idx] = next;
+    await writeFileUnlocked(current, notesDir);
+    return next;
+  });
+}
+
+/**
+ * Rollover gives a task a new id each day; move its run history along so the
+ * Running / Resume state survives the night. Merges when both ids have files.
+ */
+export async function relinkTaskAgentRuns(fromId: string, toId: string, notesDir = getNotesDir()): Promise<boolean> {
+  if (fromId === toId || !isValidTaskAgentTaskId(fromId) || !isValidTaskAgentTaskId(toId)) return false;
+  const fromPath = taskAgentRunsPath(fromId, notesDir);
+  if (!fs.existsSync(fromPath)) return false;
+  const toPath = taskAgentRunsPath(toId, notesDir);
+  const moved = await withMutex(toPath, async () => {
+    const from = readFile(fromId, notesDir);
+    const to = readFile(toId, notesDir);
+    const known = new Set(to.runs.map((r) => r.runId));
+    const merged: TaskAgentRunsFile = {
+      version: 1,
+      taskId: toId,
+      handoff: mergeHandoff(from.handoff, to.handoff, "append").handoff,
+      handoffUpdatedAt: to.handoffUpdatedAt ?? from.handoffUpdatedAt,
+      runs: [...to.runs, ...from.runs.filter((r) => !known.has(r.runId))],
+    };
+    await writeFileUnlocked(merged, notesDir);
+    fs.rmSync(fromPath, { force: true });
+    return merged.runs.map((r) => r.runId);
+  });
+  const index = indexPath(notesDir);
+  await withMutex(index, async () => {
+    const current = readIndex(notesDir);
+    for (const runId of moved) current.byRunId[runId] = toId;
+    await writeAtomic(index, JSON.stringify(current, null, 2));
+  });
+  return true;
 }
 
 /** `GET /api/tasks/agent-runs/summary` body, keyed by task id. */

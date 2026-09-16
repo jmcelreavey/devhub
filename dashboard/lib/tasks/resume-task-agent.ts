@@ -11,7 +11,9 @@ import {
   getTaskAgentHandoff,
   isActiveTaskAgentRunStatus,
   upsertTaskAgentRun,
+  type TaskAgentRunRecord,
 } from "@/lib/tasks/task-agent-runs";
+import { handleTaskPrAttention } from "@/lib/tasks/task-pr-watch";
 import { reconcileTaskAgentRunSidecar } from "@/lib/tasks/reconcile-task-agent-sidecar";
 import {
   buildTaskAgentResumePrompt,
@@ -94,7 +96,9 @@ async function resolveImplementCwd(
   return { cwd: localRepo.repo.path, repoName: repoId };
 }
 
-async function linkRun(taskId: string, run: AgentRun): Promise<void> {
+async function linkRun(taskId: string, run: AgentRun, prior: TaskAgentRunRecord | null): Promise<void> {
+  // The agent was sent back for the PR finding — don't raise it again.
+  if (prior?.attention) await handleTaskPrAttention(taskId, prior.runId);
   await upsertTaskAgentRun({
     taskId,
     runId: run.spec.id,
@@ -156,6 +160,7 @@ export async function resumeTaskAgent(input: ResumeTaskAgentInput): Promise<Resu
     cwd: cwd.cwd,
     repoName: input.repoName ?? cwd.repoName,
     jiraKey: task.jiraKey,
+    ...(latest?.attention ? { attention: { ...latest.attention, prUrl: latest.prUrl } } : {}),
   });
   const common = {
     provider,
@@ -175,7 +180,7 @@ export async function resumeTaskAgent(input: ResumeTaskAgentInput): Promise<Resu
         resumeSessionId: priorSessionId ?? undefined,
         inherit: { baseSha: prior.spec.baseSha, worktree: prior.spec.worktree },
       });
-      await linkRun(input.taskId, next);
+      await linkRun(input.taskId, next, latest);
       return result("followup", next);
     } catch (err) {
       // A refused follow-up (e.g. expired session) falls back to a fresh run.
@@ -185,7 +190,7 @@ export async function resumeTaskAgent(input: ResumeTaskAgentInput): Promise<Resu
 
   try {
     const next = await dispatchAgentRun({ ...common, model: input.model });
-    await linkRun(input.taskId, next);
+    await linkRun(input.taskId, next, latest);
     return result("new", next);
   } catch (err) {
     if (err instanceof AgentDispatchError) throw new TaskAgentResumeError(err.message, err.status);

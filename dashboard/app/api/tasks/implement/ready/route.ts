@@ -1,17 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireDashboardAuth, withErrorHandler } from "@/lib/api-utils";
 import { getTasks } from "@/lib/tasks/storage";
-import {
-  evaluateImplementReady,
-  type ImplementReadyResult,
-} from "@/lib/tasks/implement-ready";
 import { readImplementReadyPrefs } from "@/lib/tasks/implement-ready-prefs";
-import {
-  collectOpenPrerequisiteBlockers,
-  fetchJiraDescriptionText,
-  readTaskNoteMarkdown,
-  resolveTaskNotePath,
-} from "@/lib/tasks/implement-ready-gather";
+import { checkTaskImplementReady } from "@/lib/tasks/implement-ready-gather";
 
 export const dynamic = "force-dynamic";
 
@@ -47,25 +38,10 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
         ? false
         : prefs.hardBlock;
 
-  const notePath = resolveTaskNotePath(task, date);
-  const noteMarkdown = readTaskNoteMarkdown(notePath);
-  const jiraDescriptionText = task.jiraKey
-    ? await fetchJiraDescriptionText(task.jiraKey)
-    : null;
-  const repoIds = (task.links ?? []).filter((l) => l.kind === "repo").map((l) => l.id);
-  const openPrerequisiteBlockers = collectOpenPrerequisiteBlockers(task.id, task.links);
-
-  const result: ImplementReadyResult = evaluateImplementReady({
-    noteMarkdown,
-    jiraDescriptionText,
-    hasJiraKey: Boolean(task.jiraKey),
-    repoIds,
+  const { notePath, repoIds, ...result } = await checkTaskImplementReady(task, date, {
     selectedRepoId,
     hubRepoId,
-    openPrerequisiteBlockers,
     hardBlock,
-    notePath,
-    taskDate: date,
   });
 
   return NextResponse.json({

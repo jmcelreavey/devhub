@@ -14,6 +14,7 @@ export const TaskCreateSchema = z.object({
   due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "due must be YYYY-MM-DD").optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD").optional(),
   links: z.array(EntityRefSchema).max(20).optional(),
+  stage: z.enum(["draft"]).optional(),
 });
 
 export const TaskPatchSchema = z
@@ -27,6 +28,7 @@ export const TaskPatchSchema = z
     abandonReason: z.string().max(200).optional(),
     timer: z.enum(["start", "stop"]).optional(),
     links: z.array(EntityRefSchema).max(20).optional(),
+    stage: z.enum(["draft", "ready"]).optional(),
   })
   .refine(
     (v) =>
@@ -35,8 +37,9 @@ export const TaskPatchSchema = z
       v.due !== undefined ||
       v.status !== undefined ||
       v.timer !== undefined ||
-      v.links !== undefined,
-    { message: "Provide text, done, due, status, timer, or links" },
+      v.links !== undefined ||
+      v.stage !== undefined,
+    { message: "Provide text, done, due, status, timer, links, or stage" },
   );
 
 export const TaskDeleteSchema = z.object({

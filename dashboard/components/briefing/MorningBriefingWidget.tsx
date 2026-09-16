@@ -8,6 +8,7 @@ import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
 import { onTodayCardHeaderClick, TodayViewAllLink } from "@/components/today/TodayViewAllLink";
 import { DashboardBriefingWeather } from "@/components/briefing/DashboardBriefingWeather";
 import { BriefingOwnedReposDigest, type BriefingRepoAttentionRow } from "@/components/briefing/BriefingOwnedReposDigest";
+import { BriefingPlanStatus } from "@/components/briefing/BriefingPlanStatus";
 
 interface BriefingResponse {
   ok: boolean;
@@ -88,6 +89,7 @@ export function MorningBriefingWidget({ collapsed = false, onToggle }: MorningBr
           ) : (
             <div key={data?.generatedAt ?? "briefing"} className="briefing-settle space-y-2.5">
               {b.weather && <DashboardBriefingWeather weather={b.weather} />}
+              <BriefingPlanStatus />
               {data?.ownedRepoAttention?.length ? (
                 <BriefingOwnedReposDigest rows={data.ownedRepoAttention} />
               ) : null}

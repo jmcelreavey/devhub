@@ -115,7 +115,8 @@ describe("buildBriefingContext", () => {
     fs.writeFileSync(path.join(cacheDir, "context-v1-2026-07-16.json"), JSON.stringify(complete));
 
     const ctx = await buildBriefingContext();
-    expect(ctx).toEqual(complete);
+    // Plan status is attached live on every read, never cached.
+    expect(ctx).toEqual({ ...complete, planStatus: [] });
     expect(fetchWeatherMock).not.toHaveBeenCalled();
     expect(assembleMock).not.toHaveBeenCalled();
   });

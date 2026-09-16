@@ -30,6 +30,7 @@ import { runLast30DaysForInterests } from "@/lib/last30days-runner";
 import { buildDayPlan, type DayPlan } from "@/lib/briefing/day-plan";
 import { todayISO } from "@/lib/utils";
 import { loadOwnershipSummary, type OwnershipSummaryRow } from "@/lib/ownership/service";
+import type { PlanStatusGroup } from "@/lib/tasks/plan-status";
 
 export interface BriefingContext {
   date: string;
@@ -53,6 +54,11 @@ export interface BriefingContext {
   dayPlan?: DayPlan;
   /** Ranked repository obligations that currently need the owner's attention. */
   ownedRepoAttention?: OwnershipSummaryRow[];
+  /**
+   * Where open tasks stand in the plan loop. Live, never day-cached: attached
+   * when the context is served (buildBriefingContext).
+   */
+  planStatus?: PlanStatusGroup[];
   /** Plain-text one-liner, kept for the home-screen widget + focus view. */
   summary: string;
 }

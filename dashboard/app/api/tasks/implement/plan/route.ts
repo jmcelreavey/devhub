@@ -6,6 +6,7 @@ import { getTicket } from "@/lib/jira/client";
 import { resolveEntityContext } from "@/lib/entity-links/resolve";
 import { resolveLocalGithubRepos } from "@/lib/repos/resolution";
 import { selectTaskImplementationRepo } from "@/lib/tasks/implement-repo";
+import { buildPlanMarkdown } from "@/lib/tasks/plan-markdown";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,13 @@ export async function GET(req: NextRequest) {
 
   const task = getTasks(date).find((t) => t.id === taskId);
   if (!task) return NextResponse.json({ error: `Task ${taskId} not found` }, { status: 404 });
+
+  // Portable copy for teammates or agents off this machine.
+  if (req.nextUrl.searchParams.get("format") === "markdown") {
+    return new NextResponse(buildPlanMarkdown(task, date), {
+      headers: { "Content-Type": "text/markdown; charset=utf-8" },
+    });
+  }
 
   const tags = extractTags(task.text);
   const links = task.links ?? [];
@@ -48,6 +56,7 @@ export async function GET(req: NextRequest) {
     date,
     text: task.text,
     done: task.done,
+    stage: task.stage ?? "ready",
     abandonedAt: task.abandonedAt ?? null,
     tags,
     jiraKey: task.jiraKey ?? null,

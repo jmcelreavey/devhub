@@ -5,6 +5,7 @@ import { getTasksDir } from "@/lib/notes/dir";
 import { writeAtomic, safeReadJSON, withMutex } from "@/lib/atomic-write";
 import { todayISO, JIRA_KEY_RE } from "@/lib/utils";
 import { normalizeTaskLinkState } from "@/lib/task-note";
+import { relinkTaskAgentRuns } from "@/lib/tasks/task-agent-runs";
 
 // Canonical shape lives in ./types so client components can import it too
 // (this module imports node:fs and cannot be reached from the browser).
@@ -127,6 +128,10 @@ export async function rolloverTasks(): Promise<Task[]> {
     // Write today before marking source days moved. If today's save fails, sources
     // must stay open — marking first made tasks vanish from both days on retry.
     await saveTasks(today, merged);
+    // Agent run history is keyed by task id; carry it to the new copy.
+    for (const copy of allCopies) {
+      if (copy.rolledFromId) await relinkTaskAgentRuns(copy.rolledFromId, copy.id).catch(() => false);
+    }
 
     for (const { date, taskIds } of datesToMark) {
       await withMutex(tasksFile(date), async () => {
@@ -163,6 +168,7 @@ export async function addTask(
   date?: string,
   due?: string,
   links?: Task["links"],
+  stage?: Task["stage"],
 ): Promise<Task> {
   const target = date ?? todayISO();
   return withMutex(tasksFile(target), async () => {
@@ -175,6 +181,7 @@ export async function addTask(
       due,
       createdAt: new Date().toISOString(),
       ...(links && links.length > 0 ? { links } : {}),
+      ...(stage ? { stage } : {}),
     };
     tasks.push(task);
     await saveTasks(target, tasks);
@@ -247,7 +254,7 @@ export async function deleteTask(taskId: string, date?: string): Promise<boolean
 
 export async function updateTask(
   taskId: string,
-  patch: { text?: string; due?: string | null; links?: Task["links"] },
+  patch: { text?: string; due?: string | null; links?: Task["links"]; stage?: "draft" | "ready" },
   date?: string,
 ): Promise<Task | null> {
   const target = date ?? todayISO();
@@ -264,6 +271,8 @@ export async function updateTask(
     } else if (typeof patch.due === "string") {
       task.due = patch.due;
     }
+    if (patch.stage === "draft") task.stage = "draft";
+    else if (patch.stage === "ready") delete task.stage;
     if (patch.links !== undefined) {
       const normalized = normalizeTaskLinkState(task.text, task.jiraKey, patch.links);
       task.text = normalized.text;

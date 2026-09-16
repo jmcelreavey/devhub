@@ -39,6 +39,18 @@ export interface Task {
    * Same EntityRef contract as note ## Links / MCP / plugins.
    */
   links?: EntityRef[];
+  /**
+   * "draft" = captured idea, not yet a plan an agent can run without design
+   * questions. Absent = ready (every task created before stages existed).
+   */
+  stage?: TaskStage;
+}
+
+export type TaskStage = "draft";
+
+/** A task an agent may be handed: open and past the draft stage. */
+export function isTaskReadyForAgent(task: Task): boolean {
+  return isTaskOpen(task) && task.stage !== "draft";
 }
 
 /**

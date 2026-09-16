@@ -2,7 +2,7 @@
  * Pure helpers for Resume with Agent + task-row agent-run chips.
  * Orchestration (follow-up vs new dispatch) lives in resume-task-agent.ts.
  */
-import type { TaskAgentRunStatus } from "@/lib/tasks/task-agent-runs";
+import type { TaskAgentRunRecord, TaskAgentRunStatus, TaskPrAttention } from "@/lib/tasks/task-agent-runs";
 import { buildTaskImplementPrompt, taskImplementPlanUrl } from "@/lib/tasks/implement-prompt";
 
 /** Sidecar statuses where the human can pick work back up. */
@@ -11,13 +11,22 @@ export const TASK_AGENT_RESUMABLE_STATUSES = ["paused", "abandoned", "failed"] a
 export type TaskAgentResumableStatus = (typeof TASK_AGENT_RESUMABLE_STATUSES)[number];
 
 /** Chip kinds shown on the task row (not every sidecar status gets a chip). */
-export type TaskAgentChipKind = "running" | "paused" | "ready";
+export type TaskAgentChipKind = "running" | "attention" | "merged" | "closed" | "waiting" | "paused" | "ready";
 
 export type TaskAgentChip = {
   kind: TaskAgentChipKind;
   label: string;
   runId: string;
   status: TaskAgentRunStatus;
+  /** Tooltip detail (attention summary, PR link). */
+  detail?: string;
+  prUrl?: string;
+};
+
+const ATTENTION_LABEL: Record<TaskPrAttention["kind"], string> = {
+  "ci-failing": "CI failing",
+  "changes-requested": "Changes requested",
+  "new-comments": "New PR comments",
 };
 
 export function isTaskAgentResumableStatus(status: string): status is TaskAgentResumableStatus {
@@ -37,13 +46,30 @@ export function canResumeTaskAgentRun(
 
 /** Map latest linked run → chip, or null when nothing useful to show. */
 export function taskAgentChipForLatestRun(
-  latest: { runId: string; status: TaskAgentRunStatus; sessionId?: string | null } | null | undefined,
+  latest:
+    | (Pick<TaskAgentRunRecord, "runId" | "status"> &
+        Partial<Pick<TaskAgentRunRecord, "prUrl" | "prState" | "attention">> & { sessionId?: string | null })
+    | null
+    | undefined,
 ): TaskAgentChip | null {
   if (!latest?.runId) return null;
-  const { runId, status, sessionId } = latest;
+  const { runId, status, sessionId, prUrl } = latest;
   if (status === "queued" || status === "running") {
     return { kind: "running", label: "Running", runId, status };
   }
+  if (latest.attention) {
+    return {
+      kind: "attention",
+      label: ATTENTION_LABEL[latest.attention.kind],
+      runId,
+      status,
+      detail: latest.attention.summary,
+      prUrl,
+    };
+  }
+  if (latest.prState === "merged") return { kind: "merged", label: "PR merged", runId, status, prUrl };
+  if (latest.prState === "closed") return { kind: "closed", label: "PR closed", runId, status, prUrl };
+  if (latest.prState === "open") return { kind: "waiting", label: "PR open", runId, status, prUrl };
   if (status === "paused") {
     return { kind: "paused", label: "Paused", runId, status };
   }
@@ -70,6 +96,8 @@ export interface BuildTaskAgentResumePromptInput {
   jiraKey?: string;
   /** When following up an existing session. */
   priorRunId?: string;
+  /** The run's PR needs fixing — the resume is about this, not the original plan. */
+  attention?: Pick<TaskPrAttention, "kind" | "summary"> & { prUrl?: string };
 }
 
 /**
@@ -85,6 +113,14 @@ export function buildTaskAgentResumePrompt(input: BuildTaskAgentResumePromptInpu
     `Plan URL (curl it): ${planUrl}`,
   ];
   if (input.priorRunId) lines.push(`Prior agent run: ${input.priorRunId}`);
+  if (input.attention) {
+    lines.push(
+      "",
+      `FIX THE PULL REQUEST FIRST${input.attention.prUrl ? ` (${input.attention.prUrl})` : ""}:`,
+      `${ATTENTION_LABEL[input.attention.kind]} — ${input.attention.summary}`,
+      "Read the full failure or review with gh (gh pr checks / gh pr view --comments), fix it on the same branch, and ask before pushing.",
+    );
+  }
   if (handoff) {
     lines.push("", "--- durable handoff (source of truth for prior progress) ---", handoff, "--- end handoff ---", "");
   } else {

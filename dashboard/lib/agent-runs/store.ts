@@ -24,6 +24,7 @@ import {
 import { agentConsentFile, hasConsented, recordConsent } from "@/lib/agent-runs/consent";
 import { getTerminalProposal, resolveTerminalProposal } from "@/lib/terminal-proposals";
 import { syncTaskAgentRunFromAgentState } from "@/lib/tasks/task-agent-runs";
+import { recordRunSnapshot } from "@/lib/tasks/run-snapshot";
 
 /** Finished runs older than this are pruned whenever a new run is created. */
 const RUN_TTL_MS = 3 * 24 * 60 * 60 * 1_000;
@@ -138,6 +139,17 @@ export function updateAgentRunStatus(run: AgentRun, patch: Partial<AgentRunStatu
   const current = readRunStatus(run.dir) ?? run.status;
   const status = writeRunStatus(run.dir, { ...current, ...patch });
   syncLinkedTaskAgentRun(run, status);
+  if (isActiveAgentRunState(current.state) && !isActiveAgentRunState(status.state)) {
+    // Finished here (MCP finish, cancel, closed tab): leave the next agent a handoff.
+    void recordRunSnapshot(run.spec.worktree?.path ?? run.spec.cwd, {
+      runId: run.spec.id,
+      state: status.state,
+      provider: run.spec.provider,
+      exitCode: status.exitCode,
+      sessionId: status.sessionId,
+      error: status.error,
+    }).catch(() => false);
+  }
   return { ...run, status };
 }
 

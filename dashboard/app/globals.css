@@ -5735,6 +5735,8 @@ body[data-motion="off"] .context-menu:not([hidden]) {
 
 .task-agent-chip {
   display: inline-flex;
+  flex-shrink: 0;
+  white-space: nowrap;
   align-items: center;
   gap: 4px;
   padding: 2px 7px;
@@ -5754,6 +5756,22 @@ body[data-motion="off"] .context-menu:not([hidden]) {
 }
 .task-agent-chip[data-kind="ready"] {
   color: var(--accent);
+}
+.task-agent-chip[data-kind="attention"] {
+  border-color: color-mix(in oklab, var(--danger) 45%, var(--border-muted));
+  background: var(--danger-dim);
+  color: var(--danger);
+}
+.task-agent-chip[data-kind="merged"] {
+  color: var(--success);
+}
+.task-agent-chip[data-kind="draft"] {
+  border-style: dashed;
+}
+button.task-agent-chip {
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
 }
 
 /* ── Generic launcher dropdowns ── */

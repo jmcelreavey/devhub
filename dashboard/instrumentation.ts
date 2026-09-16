@@ -11,6 +11,9 @@ export async function register() {
   if (process.env.DEVHUB_SCHEDULER !== "0") {
     const { startScheduler } = await import("./lib/scheduler");
     startScheduler();
+    // Same single-owner rule: it writes the shared task sidecars.
+    const { startTaskPrWatcher } = await import("./lib/tasks/task-pr-watch");
+    startTaskPrWatcher();
   } else {
     const { appendSchedulerLog } = await import("./lib/scheduler-log");
     appendSchedulerLog("info", "scheduler", "disabled by DEVHUB_SCHEDULER=0 — another DevHub process owns scheduled jobs");

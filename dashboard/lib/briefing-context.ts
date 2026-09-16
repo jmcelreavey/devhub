@@ -12,6 +12,7 @@ import { todayISO } from "@/lib/utils";
 import { fetchWeather } from "@/lib/morning-briefing-sources";
 import { buildBriefingSummary, type DailyBriefing } from "@/lib/morning-briefing";
 import { formatMinutes, formatClock } from "@/lib/briefing/day-plan";
+import { buildPlanStatus, planStatusGroups } from "@/lib/tasks/plan-status";
 
 export type { BriefingContext } from "@/lib/briefing/assemble";
 export { assembleBriefingContext } from "@/lib/briefing/assemble";
@@ -80,6 +81,10 @@ async function softFillMissingWeather(cached: BriefingContext): Promise<Briefing
 }
 
 export async function buildBriefingContext(opts: { refresh?: boolean } = {}): Promise<BriefingContext> {
+  return withPlanStatus(await loadBriefingContext(opts));
+}
+
+async function loadBriefingContext(opts: { refresh?: boolean }): Promise<BriefingContext> {
   const date = todayISO();
   if (!opts.refresh) {
     const cached = readCachedContext(date);
@@ -91,6 +96,15 @@ export async function buildBriefingContext(opts: { refresh?: boolean } = {}): Pr
   const context = await assembleBriefingContext(prefs, { refresh: opts.refresh, date });
   await writeContextCache(date, context);
   return context;
+}
+
+/** Task state changes all day; the rest of the context is a daily snapshot. */
+function withPlanStatus(context: BriefingContext): BriefingContext {
+  try {
+    return { ...context, planStatus: planStatusGroups(buildPlanStatus(context.date)) };
+  } catch {
+    return context;
+  }
 }
 
 /**
@@ -148,6 +162,7 @@ export function contextForPrompt(ctx: BriefingContext): Record<string, unknown> 
           })),
         }
       : null,
+    planStatus: (ctx.planStatus ?? []).map((group) => ({ ...group, items: group.items.slice(0, 5) })),
     ownedRepoAttention: (ctx.ownedRepoAttention ?? []).slice(0, 5).map((row) => ({
       repo: row.repo.fullName,
       score: row.attention.score,
@@ -190,6 +205,11 @@ export const BRIEFING_DATA_SHAPE = `window.__BRIEFING__ = {
     recentFailures: [{ script, exitCode?, when }]   // background runs that failed
   },
   ownedRepoAttention: [{ repo: string, score: number, reasons: string[] }],
+  planStatus: [{                 // open tasks by plan-loop stage, most urgent first; live
+    bucket: string,              // needsFix | mergedToClose | closedToDecide | running | waitingOnMerge | resumable | blocked | readyToDispatch | drafts
+    label: string,               // human label, e.g. "PR needs a fix"
+    items: [{ text, detail?, prUrl? }]
+  }],
   summary: string
 };
 // Same-origin: the canvas may also call fetch('/api/briefing/data?refresh=1')

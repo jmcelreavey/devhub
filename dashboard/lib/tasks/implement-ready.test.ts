@@ -3,6 +3,7 @@ import {
   evaluateImplementReady,
   jiraDescriptionHasContent,
   noteHasPlanOrAcceptanceSection,
+  noteOpenQuestions,
   sectionBodyHasContent,
   taskTextHasPrerequisiteTag,
 } from "./implement-ready";
@@ -69,7 +70,7 @@ describe("evaluateImplementReady", () => {
     expect(result.ok).toBe(false);
     expect(result.warn).toBe(true);
     expect(result.blocked).toBe(false);
-    expect(result.items.map((i) => i.id)).toEqual(["acceptance", "repo", "prerequisites"]);
+    expect(result.items.map((i) => i.id)).toEqual(["acceptance", "questions", "repo", "prerequisites"]);
     expect(result.items.find((i) => i.id === "acceptance")?.ok).toBe(false);
     expect(result.items.find((i) => i.id === "repo")?.ok).toBe(false);
     expect(result.items.find((i) => i.id === "prerequisites")?.ok).toBe(true);
@@ -140,5 +141,27 @@ describe("evaluateImplementReady", () => {
     expect(result.ok).toBe(false);
     expect(result.items.find((i) => i.id === "prerequisites")?.ok).toBe(false);
     expect(result.items.find((i) => i.id === "prerequisites")?.fixHref).toContain("2026-09-15");
+  });
+});
+
+describe("noteOpenQuestions", () => {
+  it("returns unanswered questions only", () => {
+    const md = "## Plan\n- Do it\n\n## Open questions\n- [ ] Which env?\n- [x] Who owns it?\n- \n- Is there a flag?\n\n## Notes\n- other";
+    expect(noteOpenQuestions(md)).toEqual(["Which env?", "Is there a flag?"]);
+    expect(noteOpenQuestions("## Open questions\n\n- [ ] ")).toEqual([]);
+    expect(noteOpenQuestions(null)).toEqual([]);
+  });
+
+  it("keeps a task with open questions out of ready", () => {
+    const result = evaluateImplementReady({
+      noteMarkdown: "## Plan\nTighten the timeout.\n\n## Open questions\n- [ ] Which env?",
+      jiraDescriptionText: null,
+      hasJiraKey: false,
+      repoIds: ["acme/app"],
+      openPrerequisiteBlockers: [],
+      hardBlock: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.items.find((i) => i.id === "questions")).toMatchObject({ ok: false, detail: "Which env?" });
   });
 });

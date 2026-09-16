@@ -38,6 +38,7 @@ import {
 } from "../lib/agent-runs/run-files";
 import { agentBudgets } from "../lib/agent-runs/budget";
 import { attachInteractiveShell, finishInteractiveFromExit } from "../lib/agent-runs/interactive-shell";
+import { recordRunSnapshot } from "../lib/tasks/run-snapshot";
 import { syncTaskAgentRunFromAgentState } from "../lib/tasks/task-agent-runs";
 
 const STATUS_FLUSH_MS = 1_000;
@@ -90,7 +91,18 @@ async function interactive(mode: string, dir: string | undefined, value: string 
   await syncTaskAgentRunFromAgentState(done.id, done.status.state, {
     sessionId: done.status.sessionId ?? null,
   }).catch(() => undefined);
-  process.stdout.write(`${dim(`── DevHub: run ${done.status.state} ──`)}\n`);
+  const spec = readRunSpec(dir);
+  if (spec) {
+    await recordRunSnapshot(spec.worktree?.path ?? spec.cwd, {
+      runId: done.id,
+      state: done.status.state,
+      provider: spec.provider,
+      exitCode: done.status.exitCode,
+      sessionId: done.status.sessionId,
+      error: done.status.error,
+    }).catch(() => false);
+  }
+  process.stdout.write(`${dim(`── DevHub: run ${done.status.state}, handoff saved ──`)}\n`);
 }
 
 function main(): void {
@@ -239,6 +251,14 @@ function main(): void {
     flush();
     process.stdout.write(`\n${(state === "succeeded" ? green : red)(`── ${state} ──`)}\n`);
     process.exitCode = state === "succeeded" ? 0 : 1;
+    void recordRunSnapshot(spec.worktree?.path ?? spec.cwd, {
+      runId: spec.id,
+      state,
+      provider: spec.provider,
+      exitCode,
+      sessionId: status.sessionId,
+      error: status.error,
+    }).catch(() => false);
   };
 
   child.on("error", (err) => {

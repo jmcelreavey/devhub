@@ -20,7 +20,7 @@ export const POST = withErrorHandler(async (req: Request) => {
   if (!parsed.success) {
     return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
   }
-  const task = await addTask(parsed.data.text.trim(), parsed.data.date, parsed.data.due, parsed.data.links);
+  const task = await addTask(parsed.data.text.trim(), parsed.data.date, parsed.data.due, parsed.data.links, parsed.data.stage);
   return NextResponse.json(task, { status: 201 });
 }, "tasks.post");
 
@@ -45,7 +45,7 @@ export const PATCH = withErrorHandler(async (req: Request) => {
   if (!parsed.success) {
     return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
   }
-  const { id, text, done, due, date, status, abandonReason, timer, links } = parsed.data;
+  const { id, text, done, due, date, status, abandonReason, timer, links, stage } = parsed.data;
 
   if (timer) {
     const task = timer === "start" ? await startTaskTimer(id, date) : await stopTaskTimer(id, date);
@@ -65,8 +65,9 @@ export const PATCH = withErrorHandler(async (req: Request) => {
     return NextResponse.json(task);
   }
 
-  if (text !== undefined || due !== undefined || links !== undefined) {
-    const patch: { text?: string; due?: string | null; links?: typeof links } = {};
+  if (text !== undefined || due !== undefined || links !== undefined || stage !== undefined) {
+    const patch: Parameters<typeof updateTask>[1] = {};
+    if (stage !== undefined) patch.stage = stage;
     if (text !== undefined) patch.text = text;
     if (due !== undefined) patch.due = due;
     if (links !== undefined) patch.links = links;

@@ -9,7 +9,7 @@ import {
   matchesTaskSearch,
 } from "@/lib/tasks/task-text";
 import { TaskItem } from "@/components/tasks/TaskItem";
-import { Plus, CheckCircle2, Link as LinkIcon, ChevronRight, ChevronDown, FolderGit2, X } from "lucide-react";
+import { Plus, CheckCircle2, Link as LinkIcon, ChevronRight, ChevronDown, FilePen, FolderGit2, X } from "lucide-react";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { AddToJiraModal } from "@/components/tasks/AddToJiraModal";
@@ -201,11 +201,12 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
     inputRef.current?.focus();
   }, []);
 
-  const addTask = useCallback(async () => {
+  /** `asDraft` captures an idea: a draft task plus a context snapshot in its note. */
+  const addTask = useCallback(async (asDraft = false) => {
     const text = newText.trim();
     if (!text) return;
     try {
-      const res = await fetch("/api/tasks", {
+      const res = await fetch(asDraft ? "/api/tasks/capture" : "/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -214,7 +215,9 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
         }),
       });
       if (!res.ok) throw new Error(await res.text());
-      const task = (await res.json()) as Task;
+      const body = (await res.json()) as Task | { task: Task };
+      const task = "task" in body ? body.task : body;
+      if (asDraft) toast.success("Captured as a draft — related context is in its note");
       setNewText("");
       setPendingLinks([]);
       setDetectedUrl(null);
@@ -791,7 +794,8 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
               setDetectedUrl(freshUrl);
               setNewText(currentText);
             } else {
-              addTask();
+              // Shift+Enter captures a draft instead of a ready task.
+              void addTask(e.shiftKey);
             }
           }}
         />
@@ -864,11 +868,22 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
             <FolderGit2 size={14} aria-hidden />
           </button>
         </HoverTip>
+        <HoverTip label="Capture as draft (⇧↵) — saves related notes, PRs and alerts" pos="top-end">
+          <button
+            type="button"
+            className="task-icon-action"
+            onClick={() => void addTask(true)}
+            disabled={!newText.trim()}
+            aria-label="Capture as draft"
+          >
+            <FilePen size={14} aria-hidden />
+          </button>
+        </HoverTip>
         <HoverTip label="Add task" pos="top-end">
           <button
             type="button"
             className="btn btn-ghost task-add-btn"
-            onClick={addTask}
+            onClick={() => void addTask()}
             disabled={!newText.trim()}
             aria-label="Add task"
           >

@@ -9,6 +9,8 @@ import {
   lookupTaskIdForRun,
   mapAgentRunStateToTaskStatus,
   mergeHandoff,
+  patchTaskAgentRun,
+  relinkTaskAgentRuns,
   setTaskAgentHandoff,
   syncTaskAgentRunFromAgentState,
   upsertTaskAgentRun,
@@ -162,6 +164,30 @@ describe("task-agent-runs persistence", () => {
     });
     expect(cleared.runs[0]?.prUrl).toBeUndefined();
     expect(cleared.runs[0]?.branch).toBeUndefined();
+  });
+
+  it("patches watcher fields without bumping updatedAt, and deletes undefined keys", async () => {
+    await upsertTaskAgentRun({ taskId: TASK_ID, runId: RUN_A, status: "done", notesDir });
+    const before = listTaskAgentRuns(TASK_ID, notesDir)[0]!.updatedAt;
+    const attention = { kind: "ci-failing" as const, summary: "Failing checks: lint", detectedAt: "t", key: "k" };
+    const patched = await patchTaskAgentRun(TASK_ID, RUN_A, { prState: "open", attention }, notesDir);
+    expect(patched?.attention?.summary).toBe("Failing checks: lint");
+    expect(patched?.updatedAt).toBe(before);
+    const cleared = await patchTaskAgentRun(TASK_ID, RUN_A, { attention: undefined }, notesDir);
+    expect(cleared?.attention).toBeUndefined();
+    expect(await patchTaskAgentRun(TASK_ID, RUN_B, { prState: "open" }, notesDir)).toBeNull();
+  });
+
+  it("relinks run history to the rolled-over task id", async () => {
+    const NEW_ID = "0b5c1f7e-1111-4222-8333-444455556666";
+    await upsertTaskAgentRun({ taskId: TASK_ID, runId: RUN_A, status: "paused", handoff: "## Done\nA", notesDir });
+    expect(await relinkTaskAgentRuns(TASK_ID, NEW_ID, notesDir)).toBe(true);
+    expect(listTaskAgentRuns(TASK_ID, notesDir)).toEqual([]);
+    expect(listTaskAgentRuns(NEW_ID, notesDir).map((r) => r.runId)).toEqual([RUN_A]);
+    expect(getTaskAgentRuns(NEW_ID, notesDir).handoff).toBe("## Done\nA");
+    expect(lookupTaskIdForRun(RUN_A, notesDir)).toBe(NEW_ID);
+    // Nothing to move the second time.
+    expect(await relinkTaskAgentRuns(TASK_ID, NEW_ID, notesDir)).toBe(false);
   });
 
   it("rejects path-traversal task ids", async () => {

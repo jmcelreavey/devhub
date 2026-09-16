@@ -10,7 +10,9 @@ import { getResolvedJiraEnv, authHeader, apiBase } from "@/lib/jira/env";
 import { taskNotePath } from "@/lib/task-note";
 import { isTaskOpen, type Task } from "@/lib/tasks/types";
 import {
+  evaluateImplementReady,
   taskTextHasPrerequisiteTag,
+  type ImplementReadyResult,
   type OpenPrerequisiteBlocker,
 } from "@/lib/tasks/implement-ready";
 
@@ -149,4 +151,27 @@ export function resolveTaskNotePath(task: Task, date: string): string {
     date,
     jiraKey: task.jiraKey,
   });
+}
+
+/** Gather everything the checklist reads for one task and evaluate it. */
+export async function checkTaskImplementReady(
+  task: Task,
+  date: string,
+  opts: { selectedRepoId?: string | null; hubRepoId?: string | null; hardBlock: boolean },
+): Promise<ImplementReadyResult & { notePath: string; repoIds: string[] }> {
+  const notePath = resolveTaskNotePath(task, date);
+  const repoIds = (task.links ?? []).filter((l) => l.kind === "repo").map((l) => l.id);
+  const result = evaluateImplementReady({
+    noteMarkdown: readTaskNoteMarkdown(notePath),
+    jiraDescriptionText: task.jiraKey ? await fetchJiraDescriptionText(task.jiraKey) : null,
+    hasJiraKey: Boolean(task.jiraKey),
+    repoIds,
+    selectedRepoId: opts.selectedRepoId ?? null,
+    hubRepoId: opts.hubRepoId ?? null,
+    openPrerequisiteBlockers: collectOpenPrerequisiteBlockers(task.id, task.links),
+    hardBlock: opts.hardBlock,
+    notePath,
+    taskDate: date,
+  });
+  return { ...result, notePath, repoIds };
 }
