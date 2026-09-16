@@ -6,6 +6,7 @@ import type { TaskAgentRunRecord } from "@/lib/tasks/task-agent-runs";
 import { SkillAgentDialog, type SkillAgentLaunchTarget } from "@/components/tasks/SkillAgentDialog";
 import {
   buildTaskAgentResumePrompt,
+  formatAgentActivityTrailForResume,
   mapAgentDispatchProviderToUi,
   willResumeFollowUpSession,
 } from "@/lib/tasks/task-agent-resume";
@@ -21,6 +22,7 @@ type AgentRunDetail = {
     sessionId: string | null;
     state: string;
   };
+  events?: Array<{ type: string; text?: string; ok?: boolean }>;
 };
 
 type AgentProvidersResponse = {
@@ -46,7 +48,9 @@ export function ResumeTaskDialog({
   cwd?: string;
   repoName?: string;
 }) {
-  const priorRunKey = open && latestRun?.runId ? `/api/agent/runs/${encodeURIComponent(latestRun.runId)}` : null;
+  const priorRunKey = open && latestRun?.runId
+    ? `/api/agent/runs/${encodeURIComponent(latestRun.runId)}?since=0&limit=500`
+    : null;
   const { data: priorDetail } = useLive<AgentRunDetail>(priorRunKey, {
     refreshInterval: 0,
     revalidateOnFocus: false,
@@ -86,6 +90,8 @@ export function ResumeTaskDialog({
     priorSupportsResume,
   });
 
+  const activityTrail = formatAgentActivityTrailForResume(priorDetail?.events ?? []);
+
   const promptInput = () => ({
     origin: typeof window === "undefined" ? "" : window.location.origin,
     taskId: task.id,
@@ -95,6 +101,7 @@ export function ResumeTaskDialog({
     cwd,
     repoName,
     jiraKey: task.jiraKey,
+    activityTrail: activityTrail || undefined,
     ...(attention ? { attention: { ...attention, prUrl: latestRun?.prUrl } } : {}),
   });
 

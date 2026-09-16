@@ -109,10 +109,15 @@ function saveStageModel(stage: AgentStage, provider: string, model: string): voi
 function appendInteractiveActivityHint(prompt: string, runId: string): string {
   const block = [
     "",
-    "## DevHub Agent Activity",
+    "## DevHub Agent Activity (required)",
     `Your Agent Activity run id is \`${runId}\`.`,
-    "After your first meaningful progress update, call MCP `agent_interactive_note` with that runId and a short status (1–3 sentences).",
-    "When you finish, call MCP `agent_interactive_finish` with runId, `ok`, and your `sessionId` and a short `resultText` so the task can be continued later.",
+    "Agent Activity is the audit trail for this session. Call MCP `agent_interactive_note` with that runId at EVERY milestone below — do not batch them into one note at the end:",
+    '1. Check-in — before any code: goal, assumptions, questions (or "no questions").',
+    "2. After I answer (or you proceed) — what we decided.",
+    "3. When you finish a review note, open Cursor/another tool, start/stop a verify (tests/CI), or change plan.",
+    "4. When I ask you to commit, push, open a PR, pause, or stop — note that instruction before you act.",
+    "5. After commit/push/PR — branch, SHA or PR URL, verify status.",
+    "When the implement goal is done (or I tell you to stop), call MCP `agent_interactive_finish` with runId, `ok`, your CLI `sessionId`, and a short `resultText` — even if the terminal stays open. Closing the tab is only a backup.",
     "",
   ].join("\n");
   return `${prompt.trimEnd()}\n${block}`;
@@ -175,6 +180,7 @@ export function SkillAgentDialog({
   const router = useRouter();
   const launchChamber = useLaunchChamberDesktop();
   const [provider, setProvider] = useState<SkillAgentLaunchTarget>(initialProvider);
+  const [extraContext, setExtraContext] = useState("");
   // null = not edited: show the model remembered for this stage + CLI.
   const [editedModel, setModel] = useState<string | null>(null);
   const model = editedModel ?? (open && typeof window !== "undefined" ? readStageModel(stage, provider) : "");
@@ -186,9 +192,15 @@ export function SkillAgentDialog({
     onProviderChange?.(next);
   };
 
+  /** What the user types here reaches the agent verbatim, under its own heading. */
+  const promptWithContext = () => {
+    const extra = extraContext.trim();
+    return extra ? `${getPrompt().trimEnd()}\n\n## Extra context from me\n${extra}` : getPrompt();
+  };
+
   const copyPrompt = async () => {
     try {
-      await copyTextToClipboard(getPrompt());
+      await copyTextToClipboard(promptWithContext());
       toast.success("Prompt copied");
     } catch {
       toast.error("Couldn't copy the prompt");
@@ -201,7 +213,7 @@ export function SkillAgentDialog({
     const sessionId = resumeSessionId?.trim() || undefined;
     const modelOverride = model.trim() || undefined;
     saveStageModel(stage, target, modelOverride ?? "");
-    const basePrompt = getPrompt();
+    const basePrompt = promptWithContext();
 
     let registration: InteractiveRegistration | null = null;
     if (repoPath) {
@@ -267,7 +279,7 @@ export function SkillAgentDialog({
         return;
       }
       if (provider === "openchamber") {
-        await copyTextToClipboard(getPrompt());
+        await copyTextToClipboard(promptWithContext());
         await launchChamber();
         toast.success("Prompt copied for OpenChamber");
       } else {
@@ -335,6 +347,17 @@ export function SkillAgentDialog({
           </label>
         ))}
       </fieldset>
+
+      <label className="mt-4 block text-xs font-medium text-text-muted">
+        Anything else the agent should know?
+        <textarea
+          className="input mt-1 w-full"
+          rows={2}
+          value={extraContext}
+          onChange={(event) => setExtraContext(event.target.value)}
+          placeholder="Optional — constraints, a link, where to start. It asks before coding either way."
+        />
+      </label>
 
       <label className="mt-4 block text-xs font-medium text-text-muted">
         {stage === "plan" ? "Planning model" : "Model override"}

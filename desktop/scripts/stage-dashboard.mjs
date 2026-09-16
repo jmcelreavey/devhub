@@ -86,6 +86,11 @@ function emptyContentTree() {
 
 async function buildNext() {
   log("building Next (standalone)");
+  // `next dev` and `next build` share dashboard/.next, and a build after a dev
+  // session can reuse cached CSS from before the last edit — the installed app
+  // then ships a stylesheet missing rules its JS references. Start clean: the
+  // desktop build is a full build anyway.
+  fs.rmSync(path.join(dashboardDir, ".next"), { recursive: true, force: true });
   const content = emptyContentTree();
   try {
     await new Promise((resolve, reject) => {

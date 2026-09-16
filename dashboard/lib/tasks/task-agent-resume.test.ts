@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   agentActivityHrefForRun,
   buildTaskAgentResumePrompt,
+  formatAgentActivityTrailForResume,
   canResumeTaskAgentRun,
   isTaskAgentResumableStatus,
   mapAgentDispatchProviderToUi,
@@ -173,3 +174,32 @@ describe("PR-aware chips and prompts", () => {
     expect(prompt).toContain("Changes requested — @sam requested changes");
   });
 });
+
+describe("formatAgentActivityTrailForResume / resume prompt trail", () => {
+  it("keeps text and result notes, drops other event types", () => {
+    const trail = formatAgentActivityTrailForResume([
+      { type: "session", text: "ignored" },
+      { type: "text", text: "Check-in: fix forgot-password" },
+      { type: "tool_call", text: "ignored" },
+      { type: "result", ok: true, text: "Shipped on branch x" },
+    ]);
+    expect(trail).toContain("Check-in: fix forgot-password");
+    expect(trail).toContain("[done] Shipped on branch x");
+    expect(trail).not.toContain("ignored");
+  });
+
+  it("injects the trail into the resume prompt for steering", () => {
+    const prompt = buildTaskAgentResumePrompt({
+      origin: "http://127.0.0.1:1400",
+      taskId: "task-1",
+      date: "2026-09-16",
+      handoff: "## Next\nFinish PR",
+      priorRunId: "run-m1abc2-deadbeef",
+      activityTrail: "- Check-in: no questions\n- User said commit and push",
+    });
+    expect(prompt).toContain("prior Agent Activity notes");
+    expect(prompt).toContain("User said commit and push");
+    expect(prompt).toContain("steer from these");
+  });
+});
+

@@ -65,7 +65,7 @@ Gaps come back as an error toast with **Mark anyway**. **Move back to draft** is
 
 ## 4. Implement
 
-**Implement with Agent…** opens the CLI in the terminal dock and links the run to the task. The chip shows **Running** until the CLI exits or the tab closes (see [Task agent handoff](task-agent-handoff.md#interactive-run-lifecycle)). When it ends, a snapshot (branch, commit, changes, session) is appended to the handoff.
+**Implement with Agent…** opens the CLI in the terminal dock and links the run to the task. The dialog has an optional **Anything else the agent should know?** box, which reaches the agent under `## Extra context from me`, and the prompt makes the agent restate the goal, list its assumptions and ask anything open **before** it writes code. That check-in is posted to Agent Activity (`agent_interactive_note`) so the scoping decisions are auditable next to the run. The chip shows **Running** until the CLI exits or the tab closes (see [Task agent handoff](task-agent-handoff.md#interactive-run-lifecycle)). When it ends, a snapshot (branch, commit, changes, session) is appended to the handoff.
 
 ## 5. Follow the PR
 

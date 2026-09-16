@@ -24,6 +24,7 @@ export function buildTaskImplementPrompt(input: TaskImplementPromptInput): strin
   lines.push(
     "Use the existing local repo checkout DevHub starts you in. Do not create a clone or worktree by default; switch/create the task branch in a clean checkout. If unrelated dirty work makes that unsafe, ask before using a worktree.",
     "The DevHub notes MCP is available for the task note, tag lookups (tags_lookup), Jira (jira_ticket_get / jira_ticket_transition), and updating the task.",
+    "Before writing any code: restate the goal in two or three lines, list the assumptions you are making, and ask anything that would change the approach — then wait for my answer. If the plan already covers it, say \"no questions\" and start.",
     "Work interactively: ask me before each post-implementation step (commit/push, PR, PR review note, Jira transition, completing the task). Never commit without asking.",
   );
   return lines.join("\n");
