@@ -17,7 +17,9 @@ test("packaged checkout stale banner", async ({ page }, testInfo) => {
     });
   });
 
-  await page.goto("/status", { waitUntil: "networkidle" });
+  // Not "networkidle": the shell keeps the /api/desktop/navigation event stream
+  // open, so the network never goes idle. The banner assertion below waits.
+  await page.goto("/status", { waitUntil: "domcontentloaded" });
   const banner = page.locator(".packaged-checkout-banner");
   await expect(banner).toBeVisible({ timeout: 60_000 });
   await expect(banner).toContainText("Dashboard bundle is behind your checkout");
