@@ -12,8 +12,9 @@ import type { AgentRunSpec } from "@/lib/agent-runs/run-files";
 import { getTaskAgentRuns, upsertTaskAgentRun } from "@/lib/tasks/task-agent-runs";
 import { reconcileTaskAgentRunSidecar } from "@/lib/tasks/reconcile-task-agent-sidecar";
 
-const TASK_ID = "5572f7b8-e336-4de5-92bb-4a8c0d0f2005";
-const RUN_ID = "run-mu422722-289ff18c";
+// Fake ids: real ones from the vault would let a late background write find the real task.
+const TASK_ID = "00000000-0000-4000-8000-00000000c0de";
+const RUN_ID = "run-test0001-0000c0de";
 
 function minimalSpec(id: string): AgentRunSpec {
   return {

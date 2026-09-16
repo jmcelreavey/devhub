@@ -68,6 +68,21 @@ describe("recordRunSnapshot", () => {
     expect(listTaskAgentRuns(TASK_ID)[0]).toMatchObject({ branch: "feat/snap", cwd: repo });
   });
 
+  it("writes to the vault it started in, even if NOTES_DIR changes mid-flight", async () => {
+    await upsertTaskAgentRun({ taskId: TASK_ID, runId: RUN_ID, status: "running" });
+    const pending = recordRunSnapshot(repo, { runId: RUN_ID, state: "failed" });
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-snap-other-"));
+    process.env.NOTES_DIR = other;
+    try {
+      expect(await pending).toBe(true);
+      expect(fs.readdirSync(other)).toEqual([]);
+      process.env.NOTES_DIR = notesDir;
+      expect(getTaskAgentRuns(TASK_ID).handoff).toContain(`### Run ${RUN_ID} — failed`);
+    } finally {
+      fs.rmSync(other, { recursive: true, force: true });
+    }
+  });
+
   it("ignores runs that aren't linked to a task", async () => {
     expect(await recordRunSnapshot(repo, { runId: "run-m1abc3-cafebabe", state: "failed" })).toBe(false);
   });

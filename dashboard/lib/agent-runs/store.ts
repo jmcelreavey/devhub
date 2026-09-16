@@ -24,6 +24,7 @@ import {
 import { agentConsentFile, hasConsented, recordConsent } from "@/lib/agent-runs/consent";
 import { getTerminalProposal, resolveTerminalProposal } from "@/lib/terminal-proposals";
 import { syncTaskAgentRunFromAgentState } from "@/lib/tasks/task-agent-runs";
+import { getNotesDir } from "@/lib/notes/dir";
 import { recordRunSnapshot } from "@/lib/tasks/run-snapshot";
 
 /** Finished runs older than this are pruned whenever a new run is created. */
@@ -127,10 +128,12 @@ export function createInteractiveAgentRun(input: {
 
 function syncLinkedTaskAgentRun(run: AgentRun, status: AgentRunStatus): void {
   // Runner process writes status.json directly; dashboard paths sync here.
+  // notesDir is resolved now, not when the promise runs — see recordRunSnapshot.
   void syncTaskAgentRunFromAgentState(run.spec.id, status.state, {
     sessionId: status.sessionId ?? null,
     terminalSessionId: status.terminalSessionId ?? null,
     provider: run.spec.provider,
+    notesDir: getNotesDir(),
   }).catch(() => undefined);
 }
 
@@ -141,14 +144,18 @@ export function updateAgentRunStatus(run: AgentRun, patch: Partial<AgentRunStatu
   syncLinkedTaskAgentRun(run, status);
   if (isActiveAgentRunState(current.state) && !isActiveAgentRunState(status.state)) {
     // Finished here (MCP finish, cancel, closed tab): leave the next agent a handoff.
-    void recordRunSnapshot(run.spec.worktree?.path ?? run.spec.cwd, {
-      runId: run.spec.id,
-      state: status.state,
-      provider: run.spec.provider,
-      exitCode: status.exitCode,
-      sessionId: status.sessionId,
-      error: status.error,
-    }).catch(() => false);
+    void recordRunSnapshot(
+      run.spec.worktree?.path ?? run.spec.cwd,
+      {
+        runId: run.spec.id,
+        state: status.state,
+        provider: run.spec.provider,
+        exitCode: status.exitCode,
+        sessionId: status.sessionId,
+        error: status.error,
+      },
+      getNotesDir(),
+    ).catch(() => false);
   }
   return { ...run, status };
 }

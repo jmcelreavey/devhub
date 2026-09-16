@@ -10,6 +10,7 @@
  * Also called from the runner process (scripts/agent-run.ts), so keep imports lean.
  */
 import { execFile } from "node:child_process";
+import { getNotesDir } from "@/lib/notes/dir";
 import {
   getTaskAgentRuns,
   lookupTaskIdForRun,
@@ -96,15 +97,27 @@ export function buildRunSnapshotMarkdown(snapshot: RunSnapshot, ctx: RunSnapshot
  * Append the snapshot for a task-linked run (once per run) and remember the
  * branch + checkout so the PR watcher can find its pull request.
  */
-export async function recordRunSnapshot(cwd: string, ctx: RunSnapshotContext): Promise<boolean> {
-  const taskId = lookupTaskIdForRun(ctx.runId);
+export async function recordRunSnapshot(
+  cwd: string,
+  ctx: RunSnapshotContext,
+  // Resolved once, before any await: callers fire this and move on, and the
+  // environment can change underneath (tests reset NOTES_DIR) — the check and
+  // the write must hit the same vault.
+  notesDir = getNotesDir(),
+): Promise<boolean> {
+  const taskId = lookupTaskIdForRun(ctx.runId, notesDir);
   if (!taskId || !cwd) return false;
-  if (getTaskAgentRuns(taskId).handoff.includes(`${snapshotHeading(ctx.runId)} `)) return false;
+  const heading = `${snapshotHeading(ctx.runId)} `;
+  if (getTaskAgentRuns(taskId, notesDir).handoff.includes(heading)) return false;
   const snapshot = await collectRunSnapshot(cwd);
-  await setTaskAgentHandoff(taskId, buildRunSnapshotMarkdown(snapshot, ctx), { mode: "append" });
-  await patchTaskAgentRun(taskId, ctx.runId, {
-    cwd,
-    ...(snapshot.branch ? { branch: snapshot.branch } : {}),
-  });
+  // Re-check after the git calls: another finish path may have written it meanwhile.
+  if (getTaskAgentRuns(taskId, notesDir).handoff.includes(heading)) return false;
+  await setTaskAgentHandoff(taskId, buildRunSnapshotMarkdown(snapshot, ctx), { mode: "append", notesDir });
+  await patchTaskAgentRun(
+    taskId,
+    ctx.runId,
+    { cwd, ...(snapshot.branch ? { branch: snapshot.branch } : {}) },
+    notesDir,
+  );
   return true;
 }
