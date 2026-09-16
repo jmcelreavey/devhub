@@ -4,6 +4,7 @@
  */
 import { AgentDispatchError, dispatchAgentRun } from "@/lib/agent-runs/dispatch";
 import { getAgentProvider, listAgentProviders } from "@/lib/agent-runs/providers";
+import { readRunEvents } from "@/lib/agent-runs/run-files";
 import { readAgentRun, toAgentRunSummary, type AgentRun, type AgentRunSummary } from "@/lib/agent-runs/store";
 import { getTasks } from "@/lib/tasks/storage";
 import type { Task } from "@/lib/tasks/types";
@@ -17,6 +18,7 @@ import { handleTaskPrAttention } from "@/lib/tasks/task-pr-watch";
 import { reconcileTaskAgentRunSidecar } from "@/lib/tasks/reconcile-task-agent-sidecar";
 import {
   buildTaskAgentResumePrompt,
+  formatAgentActivityTrailForResume,
   canResumeTaskAgentRun,
   mapUiProviderToAgentDispatch,
   willResumeFollowUpSession,
@@ -151,6 +153,9 @@ export async function resumeTaskAgent(input: ResumeTaskAgentInput): Promise<Resu
     });
 
   const cwd = followUp ? { cwd: prior.spec.cwd } : await resolveImplementCwd(input.cwd, prior?.spec.cwd, task);
+  const activityTrail = prior
+    ? formatAgentActivityTrailForResume(readRunEvents(prior.dir, 0, 500).events)
+    : "";
   const prompt = buildTaskAgentResumePrompt({
     origin: input.origin,
     taskId: input.taskId,
@@ -160,6 +165,7 @@ export async function resumeTaskAgent(input: ResumeTaskAgentInput): Promise<Resu
     cwd: cwd.cwd,
     repoName: input.repoName ?? cwd.repoName,
     jiraKey: task.jiraKey,
+    activityTrail: activityTrail || undefined,
     ...(latest?.attention ? { attention: { ...latest.attention, prUrl: latest.prUrl } } : {}),
   });
   const common = {
