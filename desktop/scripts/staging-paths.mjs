@@ -22,6 +22,8 @@ export const serverDir = path.join(stagingDir, "server");
 export const servicesDir = path.join(stagingDir, "services");
 /** Generic read-only assets: skills, agents, mcp, persona, docs. */
 export const resourcesDir = path.join(stagingDir, "resources");
+/** Root wake helper payload (macOS): binary + LaunchDaemon plist. */
+export const wakeHelperStagingDir = path.join(stagingDir, "wake-helper");
 /** Tauri external binaries — must use the target-triple suffix. */
 export const binariesDir = path.join(tauriDir, "binaries");
 

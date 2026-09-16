@@ -137,3 +137,28 @@ async function shutdown(): Promise<void> {
 
 process.on("SIGINT", () => void shutdown());
 process.on("SIGTERM", () => void shutdown());
+
+/**
+ * Started by a dashboard (mcp-http-peer.ts passes its pid): exit once that
+ * dashboard is gone. Otherwise a force-quit or crashed DevHub leaves this
+ * server holding the port, and every later dashboard skips starting a fresh
+ * one — so clients keep talking to stale code.
+ */
+const parentPid = Number.parseInt(process.env.DEVHUB_MCP_HTTP_PARENT_PID ?? "", 10);
+if (Number.isInteger(parentPid) && parentPid > 1) {
+  setInterval(() => {
+    if (processAlive(parentPid)) return;
+    console.error(`DevHub dashboard (pid ${parentPid}) is gone — shutting down HTTP MCP`);
+    void shutdown();
+  }, 5_000).unref();
+}
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    // EPERM: it exists but belongs to someone else — still alive.
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+}

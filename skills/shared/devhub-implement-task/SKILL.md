@@ -1,15 +1,6 @@
 ---
 name: devhub-implement-task
-description: >-
-  Implement a DevHub task end-to-end: gather context (task, tags, linked
-  notes/resources, Jira ticket), move a New/To Do/Open Jira ticket to In
-  Progress when work starts, write the code with minimal diffs and no
-  unnecessary comments,
-  verify, then walk a post-implementation checklist - asking before each step
-  (commit/push, PR, PR review note, Jira Code Review transition, completing
-  the DevHub task). Use when a DevHub task's "Implement with Agent" action
-  launched you with a plan URL, or when the user asks to implement a task
-  from DevHub.
+description: Implement a DevHub task from its context through verification and requested handoff steps.
 metadata:
   short-description: Implement a DevHub task end-to-end
 ---
@@ -41,6 +32,8 @@ handed back to the human". Five rules govern everything:
 
 ## 0. Fetch the plan
 
+Optional: `tasks_implement_ready` (or `GET /api/tasks/implement/ready`) returns the light checklist (acceptance/plan, repo, open `#prerequisite`/`#blocker`). Treat misses as warnings unless the response says `blocked`.
+
 The launch prompt gives you a **plan URL**. Curl it first:
 
 ```bash
@@ -65,6 +58,43 @@ checkout from something in `related`.
 
 If more than one repo is listed and the notes don't disambiguate, ask the
 user which repo to work in **before** writing any code.
+
+
+## 0.5 Task↔run link and durable handoff
+
+Every implement session must leave a resume-ready trail on the task:
+
+**Storage / MCP contract**
+
+| Concern | MCP | HTTP |
+| --- | --- | --- |
+| List / upsert linked runs | `tasks_agent_runs` | `GET/POST /api/tasks/agent-runs` |
+| Read handoff | `tasks_agent_handoff_get` | `GET /api/tasks/agent-runs/handoff?taskId=` |
+| Write handoff | `tasks_agent_handoff_set` | `PUT /api/tasks/agent-runs/handoff` |
+| Resume (follow-up or new) | `tasks_agent_resume` | `POST /api/tasks/agent-runs/resume` |
+
+Sidecar files live at `notes/.config/task-agent-runs/<taskId>.json` (plus `_index.json` for runId→taskId). Run `status` values: `queued` \| `running` \| `paused` \| `done` \| `failed` \| `abandoned`.
+
+**On start (and after any `agent_dispatch` / dock run id is known)**
+
+1. `tasks_agent_runs` with `taskId` + `runId` (+ `provider`, `status: "running"`).
+2. If resuming, prefer `tasks_agent_resume` (or UI **Resume with Agent…**), which injects handoff + plan URL. Otherwise call `tasks_agent_handoff_get` **before** coding and treat the markdown as the source of truth for prior progress, branch/PR, blockers, and next steps.
+
+**Interactive CLI (Implement / Resume / Continue in the terminal dock)**
+
+When the prompt includes a DevHub Agent Activity run id (injected by the UI):
+
+1. After your first meaningful progress update, call `agent_interactive_note` with that `runId` and a short status.
+2. When you finish (success or stop), call `agent_interactive_finish` with `runId`, `ok`, your `sessionId`, and a short `resultText` (or `error`). DevHub closes the run itself when the CLI exits, but only this call lets the task be continued later.
+3. Do not leave the run in `running` — Agent Activity has no runner pid to auto-close it.
+
+**Before pause, end-of-day, or abandon**
+
+1. Write/update handoff via `tasks_agent_handoff_set` (use `mode: "append"` only for additive checkpoints; prefer a full replace that stays current).
+2. Include at least: what changed, branch/PR/session if any, verify status, open questions, and the exact next action.
+3. Set the linked run to `paused` (EOD/pause) or `abandoned` (giving up) via `tasks_agent_runs`.
+
+Do not rely on chat scrollback alone — the handoff is what the next session reads first.
 
 ## 1. Gather context (DevHub MCP)
 

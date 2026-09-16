@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeChecks, summarizeWorkflowRuns } from "./branch-pr";
+import { summarizeCheckCountBuckets, summarizeChecks, summarizeWorkflowRuns } from "./branch-pr";
 
 describe("summarizeChecks", () => {
   it("reports none when there are no checks", () => {
@@ -45,6 +45,50 @@ describe("summarizeChecks", () => {
 
   it("ignores rows it cannot classify rather than guessing", () => {
     expect(summarizeChecks([{ conclusion: "SOMETHING_NEW" }]).checks).toBe("none");
+  });
+});
+
+
+describe("summarizeCheckCountBuckets", () => {
+  it("reports none when buckets and rollup are empty", () => {
+    expect(summarizeCheckCountBuckets({}).checks).toBe("none");
+  });
+
+  it("passes when every counted check succeeded", () => {
+    const result = summarizeCheckCountBuckets({
+      checkRunCountsByState: [
+        { state: "SUCCESS", count: 2 },
+        { state: "SKIPPED", count: 1 },
+      ],
+    });
+    expect(result.checks).toBe("passing");
+    expect(result.checkCounts).toEqual({ passed: 3, failed: 0, pending: 0 });
+  });
+
+  it("lets failures outrank pending buckets", () => {
+    const result = summarizeCheckCountBuckets({
+      checkRunCountsByState: [
+        { state: "SUCCESS", count: 1 },
+        { state: "FAILURE", count: 1 },
+        { state: "IN_PROGRESS", count: 2 },
+      ],
+      statusContextCountsByState: [{ state: "PENDING", count: 1 }],
+    });
+    expect(result.checks).toBe("failing");
+    expect(result.checkCounts).toEqual({ passed: 1, failed: 1, pending: 3 });
+  });
+
+  it("uses authoritative rollupState when buckets are empty", () => {
+    expect(summarizeCheckCountBuckets({ rollupState: "FAILURE" }).checks).toBe("failing");
+    expect(summarizeCheckCountBuckets({ rollupState: "PENDING" }).checks).toBe("pending");
+    expect(summarizeCheckCountBuckets({ rollupState: "SUCCESS" }).checks).toBe("passing");
+  });
+
+  it("ignores unknown state labels rather than guessing", () => {
+    expect(
+      summarizeCheckCountBuckets({ checkRunCountsByState: [{ state: "SOMETHING_NEW", count: 4 }] })
+        .checks,
+    ).toBe("none");
   });
 });
 

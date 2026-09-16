@@ -1,6 +1,6 @@
 ---
 name: devhub-sync
-description: Use when cleaning and syncing DevHub, DevHub-Private, and DevHub-BI repos: fetch/prune branches, commit and push private/plugin work, pull public core updates into the private mirror, and backport generic private changes to public DevHub either by PR or direct main push when explicitly permitted.
+description: Sync DevHub public, private, and plugin repositories safely.
 metadata:
   short-description: Sync DevHub public/private/plugin repos
 ---

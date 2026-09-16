@@ -11,6 +11,10 @@ import {
   type SearchIssuesResponse,
 } from "@/lib/github/search-types";
 import { applySkippedPrs } from "@/lib/github/skipped-prs";
+import {
+  summarizeCheckCountBuckets,
+  type PrChecksState,
+} from "@/lib/github/branch-pr";
 
 export interface GithubPrAuthor {
   login: string;
@@ -33,8 +37,19 @@ export interface GithubPrRow {
    * Filled for open authored / review-requested rows via a parallel search.
    */
   approved?: boolean;
+  /**
+   * Head-commit CI rollup for open authored / review-requested rows.
+   * Filled from the same GraphQL search as approvals (count buckets — cheap).
+   */
+  checks?: PrChecksState;
+  /** Counts behind {@link checks}, for tooltips. */
+  checkCounts?: { passed: number; failed: number; pending: number };
   /** Normalized state when known (recently reviewed / closed search hits). */
   prState?: "open" | "closed" | "merged";
+  /** Open-queue rows only (same GraphQL search as {@link checks}). */
+  draft?: boolean;
+  /** Head commit SHA — what auto-review dedupes on (comments bump updatedAt, not this). */
+  headSha?: string;
 }
 
 export interface RecentlyReviewedPr extends GithubPrRow {
@@ -95,6 +110,27 @@ export async function isRepoArchived(fullName: string): Promise<boolean> {
   }
 }
 
+const canonicalFullNames = new Map<string, string>();
+
+/**
+ * A renamed repo keeps its old name in local remotes. REST follows the rename
+ * redirect but the Search API does not — `repo:old/name` is a 422 — so resolve
+ * the current name before building search qualifiers. Failures fall back to the
+ * input uncached, so a transient GitHub error doesn't pin the stale name.
+ */
+export async function resolveCanonicalRepoFullName(fullName: string): Promise<string> {
+  const cached = canonicalFullNames.get(fullName);
+  if (cached) return cached;
+  try {
+    const { stdout } = await execGh(["api", `repos/${fullName}`, "--jq", ".full_name"]);
+    const canonical = stdout.trim() || fullName;
+    canonicalFullNames.set(fullName, canonical);
+    return canonical;
+  } catch {
+    return fullName;
+  }
+}
+
 async function filterOutArchivedRepos(fullNames: string[]): Promise<string[]> {
   const results = await pMap(fullNames, SUBPROCESS_CONCURRENCY, async (name) => ({
     name,
@@ -144,28 +180,66 @@ async function searchOpenPrs(query: string): Promise<SearchIssueItem[]> {
   return searchIssues(query, MAX_LIST);
 }
 
-interface ApprovalSearchNode {
+interface PrListMetaNode {
   url?: string;
+  isDraft?: boolean | null;
+  headRefOid?: string | null;
   reviewDecision?: string | null;
   latestOpinionatedReviews?: { nodes?: Array<{ state?: string } | null> | null } | null;
-}
-
-interface ApprovalSearchResponse {
-  data?: {
-    authored?: { nodes?: Array<ApprovalSearchNode | null> | null } | null;
-    reviewing?: { nodes?: Array<ApprovalSearchNode | null> | null } | null;
+  commits?: {
+    nodes?: Array<{
+      commit?: {
+        statusCheckRollup?: {
+          state?: string | null;
+          contexts?: {
+            checkRunCountsByState?: Array<{ state?: string; count?: number } | null> | null;
+            statusContextCountsByState?: Array<{ state?: string; count?: number } | null> | null;
+          } | null;
+        } | null;
+      } | null;
+    } | null> | null;
   } | null;
 }
 
-const APPROVAL_SEARCH_QUERY = `
-query($authored: String!, $reviewing: String!) {
-  authored: search(query: $authored, type: ISSUE, first: 100) { nodes { ...approval } }
-  reviewing: search(query: $reviewing, type: ISSUE, first: 100) { nodes { ...approval } }
+interface PrListMetaResponse {
+  data?: {
+    authored?: { nodes?: Array<PrListMetaNode | null> | null } | null;
+    reviewing?: { nodes?: Array<PrListMetaNode | null> | null } | null;
+  } | null;
 }
-fragment approval on PullRequest {
+
+export interface PrListMeta {
+  draft: boolean;
+  headSha?: string;
+  approved: boolean;
+  checks: PrChecksState;
+  checkCounts: { passed: number; failed: number; pending: number };
+}
+
+const PR_LIST_META_QUERY = `
+query($authored: String!, $reviewing: String!) {
+  authored: search(query: $authored, type: ISSUE, first: 100) { nodes { ...prListMeta } }
+  reviewing: search(query: $reviewing, type: ISSUE, first: 100) { nodes { ...prListMeta } }
+}
+fragment prListMeta on PullRequest {
   url
+  isDraft
+  headRefOid
   reviewDecision
   latestOpinionatedReviews(first: 50, writersOnly: true) { nodes { state } }
+  commits(last: 1) {
+    nodes {
+      commit {
+        statusCheckRollup {
+          state
+          contexts {
+            checkRunCountsByState { state count }
+            statusContextCountsByState { state count }
+          }
+        }
+      }
+    }
+  }
 }
 `;
 
@@ -176,7 +250,10 @@ fragment approval on PullRequest {
  * `latestOpinionatedReviews` is the per-reviewer latest verdict, so a later
  * "changes requested" still cancels an earlier approval.
  */
-function isApprovedNode(node: ApprovalSearchNode): boolean {
+export function isApprovedMetaNode(node: {
+  reviewDecision?: string | null;
+  latestOpinionatedReviews?: { nodes?: Array<{ state?: string } | null> | null } | null;
+}): boolean {
   if (node.reviewDecision === "APPROVED") return true;
   const states = (node.latestOpinionatedReviews?.nodes ?? [])
     .map((r) => r?.state)
@@ -184,34 +261,62 @@ function isApprovedNode(node: ApprovalSearchNode): boolean {
   return states.includes("APPROVED") && !states.includes("CHANGES_REQUESTED");
 }
 
-/** Best-effort: a failed approval lookup must not take down the PR list. */
-async function fetchApprovedPrUrls(): Promise<Set<string>> {
+/** Map GraphQL head-commit rollup counts onto the shared checks glance shape. */
+export function checksFromMetaNode(node: PrListMetaNode): {
+  checks: PrChecksState;
+  checkCounts: { passed: number; failed: number; pending: number };
+} {
+  const rollup = node.commits?.nodes?.[0]?.commit?.statusCheckRollup;
+  const contexts = rollup?.contexts;
+  return summarizeCheckCountBuckets({
+    rollupState: rollup?.state,
+    checkRunCountsByState: (contexts?.checkRunCountsByState ?? []).filter(
+      (row): row is { state?: string; count?: number } => row != null,
+    ),
+    statusContextCountsByState: (contexts?.statusContextCountsByState ?? []).filter(
+      (row): row is { state?: string; count?: number } => row != null,
+    ),
+  });
+}
+
+/**
+ * Best-effort approval + CI glance for both open queues in one GraphQL search.
+ * A failed lookup must not take down the PR list.
+ */
+export async function fetchPrListMetaByUrl(): Promise<Map<string, PrListMeta>> {
+  const out = new Map<string, PrListMeta>();
   try {
     const { stdout } = await execGh([
       "api",
       "graphql",
       "-f",
-      `query=${APPROVAL_SEARCH_QUERY}`,
+      `query=${PR_LIST_META_QUERY}`,
       "-f",
       "authored=author:@me is:pr state:open",
       "-f",
       "reviewing=review-requested:@me is:pr state:open",
     ]);
-    const parsed = JSON.parse(stdout) as ApprovalSearchResponse;
+    const parsed = JSON.parse(stdout) as PrListMetaResponse;
     const nodes = [
       ...(parsed.data?.authored?.nodes ?? []),
       ...(parsed.data?.reviewing?.nodes ?? []),
     ];
-    return new Set(
-      nodes
-        .filter((node): node is ApprovalSearchNode => node !== null && node !== undefined)
-        .filter(isApprovedNode)
-        .map((node) => node.url?.trim())
-        .filter((url): url is string => Boolean(url)),
-    );
+    for (const node of nodes) {
+      if (!node?.url?.trim()) continue;
+      const url = node.url.trim();
+      const { checks, checkCounts } = checksFromMetaNode(node);
+      out.set(url, {
+        draft: node.isDraft === true,
+        ...(node.headRefOid ? { headSha: node.headRefOid } : {}),
+        approved: isApprovedMetaNode(node),
+        checks,
+        checkCounts,
+      });
+    }
   } catch {
-    return new Set();
+    // leave empty — callers keep list rows without meta
   }
+  return out;
 }
 
 /**
@@ -219,21 +324,30 @@ async function fetchApprovedPrUrls(): Promise<Set<string>> {
  * across all repositories (not limited to locally cloned repos).
  */
 export async function fetchMyGithubPrs(): Promise<{ authored: GithubPrRow[]; reviews: GithubPrRow[] }> {
-  // One parallel GraphQL lookup for approval state is cheaper than N× `gh pr view`.
-  const [authoredItems, reviewItems, approvedUrls] = await Promise.all([
+  // One parallel GraphQL lookup for approval + CI counts is cheaper than N× `gh pr view`.
+  const [authoredItems, reviewItems, metaByUrl] = await Promise.all([
     searchOpenPrs("author:@me is:pr state:open sort:updated-desc"),
     searchOpenPrs("review-requested:@me is:pr state:open sort:updated-desc"),
-    fetchApprovedPrUrls(),
+    fetchPrListMetaByUrl(),
   ]);
 
-  const withApproval = (item: SearchIssueItem): GithubPrRow => {
+  const withMeta = (item: SearchIssueItem): GithubPrRow => {
     const row = rowFromSearchItem(item);
-    return approvedUrls.has(row.url) ? { ...row, approved: true } : row;
+    const meta = metaByUrl.get(row.url);
+    if (!meta) return row;
+    return {
+      ...row,
+      ...(meta.approved ? { approved: true } : {}),
+      draft: meta.draft,
+      ...(meta.headSha ? { headSha: meta.headSha } : {}),
+      checks: meta.checks,
+      checkCounts: meta.checkCounts,
+    };
   };
 
-  const authoredRaw = dedupeBy(authoredItems.map(withApproval), "url").slice(0, MAX_LIST);
+  const authoredRaw = dedupeBy(authoredItems.map(withMeta), "url").slice(0, MAX_LIST);
   const reviewsRaw = await applySkippedPrs(
-    dedupeBy(reviewItems.map(withApproval), "url").slice(0, MAX_LIST),
+    dedupeBy(reviewItems.map(withMeta), "url").slice(0, MAX_LIST),
   );
 
   return { authored: authoredRaw, reviews: reviewsRaw };

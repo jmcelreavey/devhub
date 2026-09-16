@@ -198,6 +198,10 @@ pub fn run(resource_dir: PathBuf, node_bin: PathBuf) -> SelfTestReport {
     let sidecar = Sidecar::new(port, terminal_port, token.clone(), log.clone());
 
     // 3. Start and serve.
+    // The scheduler reads the user's real ~/.local/state/devhub/jobs.json, so a
+    // self-test server would otherwise run (and then kill) any due job. This
+    // process exists only for the self-test, so setting it here is contained.
+    std::env::set_var("DEVHUB_SCHEDULER", "0");
     if let Err(err) = sidecar.start(&paths, |_| {}) {
         report.add("sidecar start", false, err.to_string());
         return report;

@@ -1,6 +1,6 @@
 ---
 name: devhub-create-shared-x
-description: Use when creating or updating shared DevHub assets such as skills, persona guidance, shared agents, MCP server configs, or OpenCode model config in the devhub repo. Helps choose the right artifact, follow repo conventions, avoid secrets and machine-local paths, and verify sync readiness.
+description: Create or update shared DevHub skills, personas, agents, MCP configuration, or model configuration.
 metadata:
   short-description: Create shared DevHub assets
 ---

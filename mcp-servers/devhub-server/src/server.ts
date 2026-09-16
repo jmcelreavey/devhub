@@ -12,6 +12,7 @@ import {
   mcpHistoryDir,
   pruneMcpHistory,
 } from "./history.ts";
+import { instrumentToolAnnotations } from "./annotations.ts";
 import { selectToolsets, type ToolsetSelection } from "./toolsets.ts";
 import { registerNotesTools } from "./tools/notes.ts";
 import { registerDocsTools } from "./tools/docs.ts";
@@ -39,9 +40,24 @@ import { registerOwnershipTools } from "./tools/ownership.ts";
 import { registerTerminalTools } from "./tools/terminal.ts";
 import { registerDbTools } from "./tools/db.ts";
 import { registerAgentTools } from "./tools/agents.ts";
+import { registerJobsTools } from "./tools/jobs.ts";
+import { registerResourceTools } from "./tools/resources.ts";
 import { registerHistoryTools } from "./tools/history.ts";
-import { registerSkillPrompts } from "./tools/prompts.ts";
+import { registerRaceVerdictPrompt, registerSkillPrompts } from "./tools/prompts.ts";
 import { registerEventTools } from "./tools/events.ts";
+import { registerUiTools } from "./tools/ui.ts";
+
+/**
+ * Sent to clients at initialize; harnesses such as Claude Code put this in the
+ * model's context. Only rules that should override a harness's own habits
+ * belong here — tool descriptions carry the rest.
+ */
+export const SERVER_INSTRUCTIONS = [
+  "DevHub is the user's local developer hub: notes, tasks, repos, PRs, agent runs, a terminal dock and scheduled jobs.",
+  "- Scheduling: when the user wants something to happen later or on a recurring schedule and it involves DevHub (a DevHub script, or an agent prompt in one of their repos), create a DevHub scheduled job with jobs_create instead of your own cron, loop or scheduled-task tools. DevHub jobs persist across restarts, catch up after sleep, can wake the Mac, and are visible on DevHub's Actions page.",
+  "- Long-running or user-visible commands belong in the DevHub terminal dock (terminal_propose_run), not your own shell.",
+  "- Dashboard-backed tools need the DevHub dashboard running; an 'unreachable' error means start it, not that the tool is broken.",
+].join("\n");
 
 /** Toolset name → registrar. Selectable with DEVHUB_MCP_TOOLSETS (see toolsets.ts). */
 const TOOLSETS: Record<string, (server: McpServer, ctx: Context) => void> = {
@@ -54,10 +70,16 @@ const TOOLSETS: Record<string, (server: McpServer, ctx: Context) => void> = {
   "dx-audit": registerDxAuditTools,
   ship: registerShipTools,
   history: registerHistoryTools,
-  prompts: registerSkillPrompts,
+  prompts: (server, ctx) => {
+    registerSkillPrompts(server, ctx);
+    // A workflow prompt, not a skill — lives in the same slash-command surface.
+    registerRaceVerdictPrompt(server);
+  },
 
   // Dashboard-backed (proxy localhost:1337; need the dashboard running).
+  resources: registerResourceTools,
   status: registerStatusTools,
+  jobs: registerJobsTools,
   briefing: registerBriefingTools,
   calendar: registerCalendarTools,
   work: registerWorkTools,
@@ -77,9 +99,13 @@ const TOOLSETS: Record<string, (server: McpServer, ctx: Context) => void> = {
   db: registerDbTools,
   agents: registerAgentTools,
   events: registerEventTools,
+  ui: registerUiTools,
 };
 
 export const TOOLSET_NAMES: readonly string[] = Object.keys(TOOLSETS);
+
+/** Sent to clients at initialize; keep in one place so status_mcp can self-report it. */
+export const SERVER_VERSION = "4.0.0";
 
 /** Once per process (not per HTTP session): report bad toolset names, prune old history. */
 export function startupHousekeeping(env: NodeJS.ProcessEnv = process.env): void {
@@ -99,7 +125,11 @@ export function createDevhubMcpServer(
   ctx: Context,
   env: NodeJS.ProcessEnv = process.env,
 ): { server: McpServer; toolsets: ToolsetSelection } {
-  const server = new McpServer({ name: "devhub", version: "4.0.0" });
+  const server = new McpServer({ name: "devhub", version: SERVER_VERSION }, { instructions: SERVER_INSTRUCTIONS });
+
+  // Annotate before registering: every tool gets readOnly/destructive/idempotent/
+  // openWorld hints (src/annotations.ts) unless a registrar set its own.
+  instrumentToolAnnotations(server);
 
   // Instrument before registering, so every tool lands in the day's history file.
   let registeringToolset: string | null = null;

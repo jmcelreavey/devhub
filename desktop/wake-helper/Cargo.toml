@@ -1,0 +1,23 @@
+[package]
+name = "devhub-wake-helper"
+version = "1.1.0"
+description = "Root LaunchDaemon that schedules Mac wakes for DevHub scheduled jobs"
+authors = ["DevHub"]
+edition = "2021"
+publish = false
+
+# No dependencies on purpose: this runs as root, so every crate would be code
+# running as root. The CoreFoundation/IOKit surface it needs is five calls.
+[dependencies]
+
+# Installed as /Library/PrivilegedHelperTools/com.devhub.wake-helper; the bundle
+# keeps an extensionless name so codesign-bundle.mjs recognises it as code.
+[[bin]]
+name = "devhub-wake-helper"
+path = "src/main.rs"
+
+[profile.release]
+panic = "abort"
+lto = true
+opt-level = "s"
+strip = true

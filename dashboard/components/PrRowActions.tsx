@@ -10,12 +10,18 @@ import {
   Link2,
   MessageSquare,
   ScanSearch,
+  Wrench,
 } from "lucide-react";
 import { mutate as globalMutate } from "swr";
 import type { GithubPrRow, GithubPrsApiPayload } from "@/lib/github/prs";
 import { buildSlackMessage, copyTextAndToast } from "@/lib/pr-slack";
 import { launchAgentJob } from "@/lib/agent-job";
-import { agentReviewCommand, agentReviewPrompt } from "@/lib/terminal-launch";
+import {
+  agentPipelineInvestigateCommand,
+  agentPipelineInvestigatePrompt,
+  agentReviewCommand,
+  agentReviewPrompt,
+} from "@/lib/terminal-launch";
 import { notifyPrReviewNoteWatch, prReviewNotePath } from "@/lib/pr-review-notes";
 import { buildPrNoteMarkdown, prNotePath } from "@/lib/pr-note";
 import { createOrOpenVaultNote } from "@/lib/create-vault-note";
@@ -167,6 +173,38 @@ export function buildPrRowMenuGroups({
     },
   };
 
+
+  const failing = row.checks === "failing";
+  const investigatePipeline = {
+    id: "investigate-pipeline",
+    label: "Investigate pipeline",
+    description: failing
+      ? "CI failing — dig into checks, classify flake vs real, fix on confirm"
+      : "Pull checks/logs, classify flake vs real, fix on confirm",
+    icon: <Wrench size={12} />,
+    danger: failing,
+    onSelect: async () => {
+      const note = watchPath || notePath;
+      const result = await launchAgentJob({
+        title: `Pipeline PR #${row.number}`,
+        kind: "agent",
+        repoName: row.repo,
+        notePath: note,
+        promptText: agentPipelineInvestigatePrompt(row.url, note),
+        promptCommand: await agentPipelineInvestigateCommand(row.url, note),
+        mode: "oneshot",
+        reason: `Pipeline investigate ${row.repo}#${row.number}`,
+        alreadyConfirmed: true,
+      });
+      notifyPrReviewNoteWatch(row);
+      toast.info(
+        result.channel === "opencode"
+          ? "Pipeline investigate running in OpenCode — findings land in the review note."
+          : "Pipeline investigate queued in the Agent tab — findings land in the review note.",
+      );
+    },
+  };
+
   if (kind === "authored") {
     return withTagsGroup(
       [
@@ -177,6 +215,7 @@ export function buildPrRowMenuGroups({
             ...copyUrlItems(row, toast),
             openCursor,
             agentReview,
+            investigatePipeline,
             {
               id: "slack-request",
               label: "Copy Slack request",
@@ -198,6 +237,7 @@ export function buildPrRowMenuGroups({
           id: "reviews",
           items: [
             repLocked ? repFirst : agentReview,
+            investigatePipeline,
             openCursor,
             openGithub,
             ...copyUrlItems(row, toast),

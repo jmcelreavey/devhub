@@ -89,6 +89,8 @@ export interface TerminalReader {
   dispose: () => void;
   /** Inject stdin (confirmed commands only). */
   write: (data: string) => boolean;
+  /** True once shell startup has reached an input-safe prompt. */
+  isReadyForInput: () => boolean;
   isBusy: () => boolean;
   /** Tail of the scrollback — cheap streaming reads for the blocks tick. */
   getBufferTail?: (maxLines: number) => string;
@@ -172,6 +174,13 @@ interface SessionProps {
   /** Cheap typed-in-xterm command detect (Enter on a prompt — not every key). */
   onCommandSubmit?: (command: string) => void;
   /**
+   * The shell has reached its first prompt and can safely accept injected
+   * input. For integrated zsh sessions this is the first OSC 133 A marker,
+   * emitted only after the user's .zshrc has finished (including any
+   * interactive updater prompt).
+   */
+  onReadyForInput?: () => void;
+  /**
    * Authoritative command-start from shell integration (OSC 133 C). When this
    * fires, heuristic detection stands down — the integration owns blocks.
    */
@@ -206,6 +215,7 @@ export function TerminalSession({
   onAltBuffer,
   onReader,
   onCommandSubmit,
+  onReadyForInput,
   onOscCommand,
   onTypedLine,
 }: SessionProps) {
@@ -238,6 +248,7 @@ export function TerminalSession({
   const onAltBufferRef = useLatestRef(onAltBuffer);
   const onReaderRef = useLatestRef(onReader);
   const onCommandSubmitRef = useLatestRef(onCommandSubmit);
+  const onReadyForInputRef = useLatestRef(onReadyForInput);
   const onOscCommandRef = useLatestRef(onOscCommand);
   const onTypedLineRef = useLatestRef(onTypedLine);
   const killOnUnmountRef = useLatestRef(killOnUnmount);
@@ -684,6 +695,9 @@ export function TerminalSession({
       let sawOsc133 = false;
       /** Server-asserted: this session was spawned with OSC 133 hooks. */
       let serverIntegrated = false;
+      /** Held until the first prompt marker proves ZLE owns the tty. */
+      let shellReady = false;
+      let shellIntegrationExpected: boolean | null = null;
 
       onReaderRef.current?.({
         getBuffer: getText,
@@ -695,6 +709,7 @@ export function TerminalSession({
         sessionId: () => sessionIdRef.current,
         dispose: disposeSession,
         write: writeStdin,
+        isReadyForInput: () => shellReady,
         paste: pasteText,
         clearSelection: () => term.clearSelection(),
         deleteSelection: deleteSelectionInPlace,
@@ -771,6 +786,23 @@ export function TerminalSession({
       let suppressSetupBlocksUntil = 0;
       let opened = false;
       let reportedClose = false;
+      const startLaunchCommand = () => {
+        // Launching before zsh's first prompt can paste raw bracketed-paste
+        // control bytes into an rc-file prompt (notably oh-my-zsh's updater).
+        // OSC 133 A arrives only once ZLE owns the tty.
+        if (!opened || reattached || attachSessionId || !command?.trim() || ranCommand) return;
+        ranCommand = true;
+        launchCommand = command.trim();
+        suppressSetupBlocksUntil = Date.now() + 10_000;
+        socket.send(`clear 2>/dev/null; ${launchCommand}\r`);
+      };
+
+      const markShellReady = () => {
+        if (shellReady) return;
+        shellReady = true;
+        onReadyForInputRef.current?.();
+        startLaunchCommand();
+      };
 
       socket.onopen = () => {
         if (disposed) return;
@@ -778,21 +810,10 @@ export function TerminalSession({
         onStatusRef.current?.("open");
         fit.fit();
         sendResize();
-        // Launch commands only on fresh sessions — reattach already has the
-        // process running (and re-sending would restart a long-running command).
-        if (!reattached && !attachSessionId && command?.trim() && !ranCommand) {
-          ranCommand = true;
-          // One line, not three: separate `clear` lines used to show up as
-          // their own (failing) blocks and race the launched command's block
-          // detection. No `stty -echo` here — it stays off for the whole
-          // command, which makes typing invisible in interactive launch
-          // scripts (upstarts that `read` choices). The raw echo of the
-          // inject happens before the shell executes the line anyway, so
-          // stty never hid it reliably.
-          launchCommand = command.trim();
-          suppressSetupBlocksUntil = Date.now() + 10_000;
-          socket.send(`clear 2>/dev/null; ${command.trim()}\r`);
-        }
+        // The server's session frame tells us whether an OSC prompt marker is
+        // coming. Do not guess that 200ms after a WebSocket opens is enough for
+        // a login shell to finish initialising.
+        if (shellIntegrationExpected === false) markShellReady();
         if (autoFocusRef.current) term.focus();
       };
       socket.onmessage = (event) => {
@@ -811,7 +832,9 @@ export function TerminalSession({
             if (ctl.type === "session" && typeof ctl.sessionId === "string") {
               sessionIdRef.current = ctl.sessionId;
               onSessionIdRef.current?.(ctl.sessionId);
+              shellIntegrationExpected = ctl.integrated === true;
               if (ctl.integrated) serverIntegrated = true;
+              else markShellReady();
               if (ctl.reattached) {
                 reattached = true;
                 suppressBlocksUntil = Date.now() + 2_500;
@@ -884,6 +907,7 @@ export function TerminalSession({
         if (Date.now() < suppressBlocksUntil) return true;
         const parsed = parseOsc133(payload);
         if (!parsed) return true;
+        if (parsed.kind === "A") markShellReady();
         // Live lifecycle marks are the authoritative busy signal: a command
         // runs between C and D; A/B mean the shell is back at a prompt.
         oscCommandRunning = parsed.kind === "C";

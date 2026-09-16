@@ -65,6 +65,72 @@ export function summarizeChecks(rows: GhCheckRow[] | undefined): {
   return { checks, checkCounts: counts };
 }
 
+
+export interface CheckStateCount {
+  state?: string | null;
+  count?: number | null;
+}
+
+/**
+ * Cheap rollup from GraphQL `checkRunCountsByState` / `statusContextCountsByState`
+ * (one search query for the whole queue — no per-check nodes).
+ *
+ * Bucket rules match {@link summarizeChecks}. Authoritative `rollupState` only
+ * breaks ties when every bucket is empty (GitHub can report FAILURE with no
+ * countable contexts on weird commits).
+ */
+export function summarizeCheckCountBuckets(input: {
+  rollupState?: string | null;
+  checkRunCountsByState?: readonly CheckStateCount[] | null;
+  statusContextCountsByState?: readonly CheckStateCount[] | null;
+}): {
+  checks: PrChecksState;
+  checkCounts: { passed: number; failed: number; pending: number };
+} {
+  const counts = { passed: 0, failed: 0, pending: 0 };
+  const bump = (stateRaw: string | null | undefined, n: number) => {
+    if (!n || n < 0) return;
+    const state = (stateRaw ?? "").toUpperCase();
+    if (["SUCCESS", "NEUTRAL", "SKIPPED"].includes(state)) counts.passed += n;
+    else if (
+      ["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"].includes(
+        state,
+      )
+    ) {
+      counts.failed += n;
+    } else if (
+      ["PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED", "STALE"].includes(
+        state,
+      )
+    ) {
+      counts.pending += n;
+    }
+  };
+  for (const row of input.checkRunCountsByState ?? []) bump(row.state, row.count ?? 0);
+  for (const row of input.statusContextCountsByState ?? []) bump(row.state, row.count ?? 0);
+
+  if (counts.failed === 0 && counts.pending === 0 && counts.passed === 0) {
+    const rollup = (input.rollupState ?? "").toUpperCase();
+    if (rollup === "FAILURE" || rollup === "ERROR") {
+      return { checks: "failing", checkCounts: counts };
+    }
+    if (rollup === "PENDING" || rollup === "EXPECTED") {
+      return { checks: "pending", checkCounts: counts };
+    }
+    if (rollup === "SUCCESS") {
+      return { checks: "passing", checkCounts: counts };
+    }
+    return { checks: "none", checkCounts: counts };
+  }
+
+  const checks: PrChecksState =
+    counts.failed > 0 ? "failing"
+    : counts.pending > 0 ? "pending"
+    : counts.passed > 0 ? "passing"
+    : "none";
+  return { checks, checkCounts: counts };
+}
+
 export function summarizeWorkflowRuns(
   runs: WorkflowRun[],
   currentHeadSha?: string | null,

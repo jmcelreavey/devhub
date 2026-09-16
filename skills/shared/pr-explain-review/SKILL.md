@@ -1,17 +1,6 @@
 ---
 name: pr-explain-review
-description: >-
-  Explain and review a GitHub pull request in plain language, with full
-  context: the PR conversation (comments, reviews, unresolved inline threads)
-  and the linked Jira ticket. Explains what the PR is for, how it's
-  implemented, walks the code path from entry point to exit, and reviews it
-  for KISS, DRY, developer experience, and over-engineering (ponytail
-  laziness ladder). Use when the user gives a PR URL or number and asks to
-  "review this PR", "explain this PR", "walk me through this PR", "what does
-  this PR do", or invokes the dashboard "Review" button on the
-  Review-requested list. Streams to the terminal and, when a notes path is
-  given, saves the write-up as a DevHub note. Never posts to GitHub unless
-  explicitly asked.
+description: Explain and review a GitHub pull request with its discussion and linked Jira context.
 metadata:
   short-description: Explain + review a GitHub PR
 ---

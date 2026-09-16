@@ -1,6 +1,6 @@
 ---
 name: devhub-learnings
-description: Use when creating or updating DevHub learning notes under the notes MCP learnings/ tree. Helps write KISS, junior-dev-friendly notes with simple explanations, examples, and clear takeaways.
+description: Create or update concise, beginner-friendly DevHub learning notes.
 metadata:
   short-description: Create DevHub learning notes
 ---

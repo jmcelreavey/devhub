@@ -4,6 +4,7 @@
 
 # Rust build output (~7 GB with incremental artefacts).
 src-tauri/target/
+wake-helper/target/
 
 # Staged Next output, compiled services, and copied resources (~130 MB).
 staging/
@@ -29,3 +30,4 @@ src-tauri/gen/
 # without the lockfile, CI resolves dependency versions afresh on every release
 # and "reproducible build" becomes a phrase rather than a property.
 !src-tauri/Cargo.lock
+!wake-helper/Cargo.lock

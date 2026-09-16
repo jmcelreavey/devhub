@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { GitPullRequest, RefreshCw, RotateCcw, X } from "lucide-react";
+import { AutoReviewBar } from "./AutoReviewBar";
 import { useLive } from "@/lib/hooks/use-fetch";
 import type { GithubPrsApiPayload, GithubPrRow, RecentlyReviewedPr } from "@/lib/github/prs";
 import type { SkippedPrRecord } from "@/lib/github/skipped-prs";
@@ -239,7 +240,7 @@ export default function PrsPage() {
         )}
       </div>
 
-        <div className="flex gap-1 mb-4" style={{ borderBottom: "1px solid var(--border-muted)" }}>
+      <div className="mb-4 flex gap-1" style={{ borderBottom: "1px solid var(--border-muted)" }}>
         {(["authored", "reviews", "recent", "skipped"] as const).map((t) => (
           <button
             key={t}
@@ -268,6 +269,8 @@ export default function PrsPage() {
           </button>
         ))}
       </div>
+
+      {prTab === "reviews" && <AutoReviewBar disabled={reviews.length === 0} />}
 
       {isLoading && !data && <SkeletonRows count={5} height={40} variant="list" />}
 

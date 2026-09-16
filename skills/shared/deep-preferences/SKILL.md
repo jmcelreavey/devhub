@@ -1,18 +1,6 @@
 ---
 name: deep-preferences
-description: >-
-  Use when teaching, reviewing a PR, debugging, scaffolding, DevOps, choosing
-  tools, or working a legacy codebase needs more than L0/L1. Do not read this
-  skill body first — open only the matching file:
-  teaching → persona/modes/teaching.md;
-  writing-code → persona/modes/writing-code.md;
-  code-review → persona/modes/code-review.md;
-  debugging → persona/modes/debugging.md;
-  project-setup → persona/modes/project-setup.md;
-  deployment-devops → persona/modes/deployment-devops.md;
-  tool-preferences → persona/modes/tool-preferences.md;
-  existing-codebases → persona/modes/existing-codebases.md.
-  Skip L2 if identity + shared-persona already cover it.
+description: Load the relevant DevHub L2 persona mode for teaching, coding, review, debugging, setup, or DevOps.
 metadata:
   short-description: Load one L2 persona mode file
 ---

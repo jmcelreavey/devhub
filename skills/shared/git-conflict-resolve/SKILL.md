@@ -1,11 +1,6 @@
 ---
 name: git-conflict-resolve
-description: >-
-  Resolve git merge/stash conflicts in the working tree. Inspect conflicted
-  files, pick the right resolution (ours/theirs/manual merge), remove conflict
-  markers, and stage the resolved files. Use when the user (or DevHub) asks to
-  resolve stash/checkout/merge conflicts, or when conflict markers are present
-  after a stash pop or branch switch. Do not commit unless explicitly asked.
+description: Resolve Git merge or stash conflicts in the working tree.
 metadata:
   short-description: Resolve git stash/merge conflicts
 ---

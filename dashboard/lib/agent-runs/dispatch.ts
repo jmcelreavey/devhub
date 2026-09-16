@@ -11,12 +11,15 @@ import path from "node:path";
 import { clip } from "@/lib/agent-runs/events";
 import { agentRunnerCommand } from "@/lib/agent-runs/launch";
 import { createRunWorktree, gitHead } from "@/lib/agent-runs/git";
+import { agentBudgets, costRefusalMessage, effectiveMaxTurns, spentToday } from "@/lib/agent-runs/budget";
+import { agentConsentFile, hasConsented } from "@/lib/agent-runs/consent";
 import { getAgentProvider } from "@/lib/agent-runs/providers";
 import type { AgentRunWorktree } from "@/lib/agent-runs/run-files";
 import {
   agentRunDir,
   countActiveAgentRuns,
   createAgentRun,
+  listAgentRuns,
   newAgentRunId,
   updateAgentRunStatus,
   type AgentRun,
@@ -52,6 +55,12 @@ export interface AgentDispatchInput {
   resumeSessionId?: string;
   /** Follow-ups keep the parent's worktree and diff baseline. */
   inherit?: { baseSha?: string; worktree?: AgentRunWorktree };
+  /**
+   * Set only by the scheduler for a job a human already approved. That approval
+   * is the checkpoint the first-run chip exists for, and nobody is at the dock
+   * to click it at 3am. Server-internal: the dispatch API schema cannot set it.
+   */
+  scheduledJobId?: string;
 }
 
 function envInt(key: string, fallback: number): number {
@@ -59,12 +68,31 @@ function envInt(key: string, fallback: number): number {
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
+/**
+ * DEVHUB_AGENT_ALLOWED_ROOTS narrows where dispatches may land (colon-separated
+ * directories, `~` allowed). Unset keeps the historical $HOME-wide rule.
+ */
+export function cwdAllowedRoots(env: NodeJS.ProcessEnv = process.env): string[] {
+  return (env.DEVHUB_AGENT_ALLOWED_ROOTS ?? "")
+    .split(":")
+    .map((root) => root.trim())
+   .filter(Boolean)
+    .map((root) => path.resolve(root.replace(/^~(?=$|\/)/, os.homedir())));
+}
+
 /** Same rule as the PTY peer: an existing directory under $HOME. */
-function validateCwd(raw: string): string {
+function validateCwd(raw: string, env: NodeJS.ProcessEnv = process.env): string {
   const home = os.homedir();
   const resolved = path.resolve(raw.replace(/^~(?=$|\/)/, home));
   if (resolved !== home && !resolved.startsWith(home + path.sep)) {
     throw new AgentDispatchError(`cwd must be inside ${home}`, 400);
+  }
+  const roots = cwdAllowedRoots(env);
+  if (roots.length > 0 && !roots.some((root) => resolved === root || resolved.startsWith(root + path.sep))) {
+    throw new AgentDispatchError(
+      `cwd is outside DEVHUB_AGENT_ALLOWED_ROOTS (${roots.join(", ")}) — dispatch there or extend the list.`,
+      400,
+    );
   }
   let isDir = false;
   try {
@@ -100,6 +128,14 @@ export async function dispatchAgentRun(input: AgentDispatchInput): Promise<Agent
     throw new AgentDispatchError(`${provider.label} runs cannot be resumed.`, 400);
   }
 
+  const budgets = agentBudgets();
+  if (budgets.maxCostUsd > 0) {
+    const spent = spentToday(listAgentRuns(Number.MAX_SAFE_INTEGER));
+    if (spent >= budgets.maxCostUsd) {
+      throw new AgentDispatchError(costRefusalMessage(spent, budgets.maxCostUsd), 429);
+    }
+  }
+
   const maxActive = envInt("DEVHUB_AGENT_MAX_RUNS", 6);
   if (countActiveAgentRuns() >= maxActive) {
     throw new AgentDispatchError(
@@ -117,8 +153,13 @@ export async function dispatchAgentRun(input: AgentDispatchInput): Promise<Agent
 
   let worktree = input.inherit?.worktree;
   let baseSha = input.inherit?.baseSha;
+  // Isolation is the default: a caller that means to edit the live checkout
+  // says worktree: false. DEVHUB_AGENT_DEFAULT_WORKTREE=0 restores the old
+  // shared-checkout-by-default behaviour.
+  const wantWorktree =
+    input.worktree ?? envInt("DEVHUB_AGENT_DEFAULT_WORKTREE", 1) !== 0;
   if (!input.inherit) {
-    if (input.worktree) {
+    if (wantWorktree) {
       try {
         const created = await createRunWorktree(cwd, id);
         worktree = created.worktree;
@@ -133,6 +174,13 @@ export async function dispatchAgentRun(input: AgentDispatchInput): Promise<Agent
   }
 
   const title = input.title?.trim() || defaultTitle(input.prompt);
+  const consentFile = agentConsentFile();
+  const trustAll = process.env.DEVHUB_AGENT_TRUST_ALL === "1";
+  // The repo key is stable across worktree re-creation: the repo we aimed at,
+  // not the throwaway checkout path.
+  const repoKey = worktree?.repoRoot ?? cwd;
+  const firstRunForRepo =
+    !trustAll && !input.scheduledJobId && !hasConsented(consentFile, provider.id, repoKey);
   const run = createAgentRun({
     id,
     provider: provider.id,
@@ -142,7 +190,7 @@ export async function dispatchAgentRun(input: AgentDispatchInput): Promise<Agent
       prompt: input.prompt,
       model: input.model,
       resumeSessionId: input.resumeSessionId,
-      maxTurns: provider.supportsMaxTurns ? input.maxTurns : undefined,
+      maxTurns: provider.supportsMaxTurns ? effectiveMaxTurns(input.maxTurns, budgets) : undefined,
     }),
     format: provider.format,
     cwd,
@@ -163,11 +211,12 @@ export async function dispatchAgentRun(input: AgentDispatchInput): Promise<Agent
       label: `${provider.label} · ${title}`,
       summary: `${provider.label}: ${title}`,
       kind: "shell",
-      repoName: path.basename(worktree?.repoRoot ?? cwd),
-      reason: `Agent run ${id}`,
+      repoName: path.basename(repoKey),
+      reason: `Agent run ${id}${input.scheduledJobId ? ` — scheduled job ${input.scheduledJobId}` : ""}${firstRunForRepo ? " — first run of this agent in this repo, approve once to remember" : ""}`,
       source: "api",
-      autoRun: true,
+      autoRun: !firstRunForRepo,
     });
+    // First-run consent is recorded by the dock approval (store.ts reconcile).
     return updateAgentRunStatus(run, { proposalId: proposal.id });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

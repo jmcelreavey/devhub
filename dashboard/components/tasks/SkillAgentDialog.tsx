@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { mutate } from "swr";
 import { Bot, Copy, Loader2, Play } from "lucide-react";
 import { ModalShell } from "@/components/shell/ModalShell";
 import {
+  resolveTaskImplementationProvider,
   taskImplementationCommand,
   type TaskImplementationProvider,
 } from "@/lib/terminal-launch";
@@ -12,11 +15,17 @@ import { useToast } from "@/lib/hooks/use-toast";
 import { useLaunchChamberDesktop } from "@/lib/launch/chamber";
 import { checkImplementGuardrails } from "@/lib/tasks/implement-guardrails";
 import { copyTextToClipboard } from "@/lib/clipboard";
+import {
+  agentActivityHrefForRun,
+  mapUiProviderToAgentDispatch,
+  newInteractiveTaskAgentRunId,
+} from "@/lib/tasks/task-agent-resume";
+import { TASK_AGENT_RUNS_KEY } from "@/lib/tasks/use-task-agent-runs";
 
-type LaunchTarget = TaskImplementationProvider | "openchamber";
+export type SkillAgentLaunchTarget = TaskImplementationProvider | "openchamber";
 
 const PROVIDERS: Array<{
-  id: LaunchTarget;
+  id: SkillAgentLaunchTarget;
   label: string;
   description: string;
 }> = [
@@ -29,6 +38,64 @@ const PROVIDERS: Array<{
   { id: "openchamber", label: "OpenChamber", description: "Copy prompt and open the desktop app" },
 ];
 
+interface InteractiveRegistration {
+  runId: string;
+  /** Shell fragments that report the tab's start and the CLI's exit. */
+  wrap: { before: string; after: string };
+}
+
+/** Agent Activity + optional task link for an interactive CLI session. */
+async function registerInteractiveAgentRun(opts: {
+  taskId?: string;
+  provider: string;
+  sessionId?: string;
+  prompt: string;
+  cwd: string;
+  title: string;
+  model?: string;
+}): Promise<InteractiveRegistration> {
+  const res = await fetch("/api/agent/runs/interactive", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      runId: newInteractiveTaskAgentRunId(),
+      provider: mapUiProviderToAgentDispatch(opts.provider) ?? opts.provider,
+      prompt: opts.prompt,
+      cwd: opts.cwd,
+      title: opts.title.slice(0, 80),
+      model: opts.model,
+      sessionId: opts.sessionId,
+      taskId: opts.taskId,
+    }),
+  });
+  const body = (await res.json().catch(() => ({}))) as {
+    run?: { id: string };
+    wrap?: InteractiveRegistration["wrap"];
+    error?: string;
+  };
+  if (!res.ok || !body.run?.id || !body.wrap) {
+    throw new Error(body.error || `Couldn't register interactive run (HTTP ${res.status})`);
+  }
+  return { runId: body.run.id, wrap: body.wrap };
+}
+
+function appendInteractiveActivityHint(prompt: string, runId: string): string {
+  const block = [
+    "",
+    "## DevHub Agent Activity",
+    `Your Agent Activity run id is \`${runId}\`.`,
+    "After your first meaningful progress update, call MCP `agent_interactive_note` with that runId and a short status (1–3 sentences).",
+    "When you finish, call MCP `agent_interactive_finish` with runId, `ok`, and your `sessionId` and a short `resultText` so the task can be continued later.",
+    "",
+  ].join("\n");
+  return `${prompt.trimEnd()}\n${block}`;
+}
+
+/**
+ * Pick a CLI and open it interactively in the terminal dock. Every launch is
+ * tracked in Agent Activity (and linked to `taskId` when given) when a repo
+ * path is known.
+ */
 export function SkillAgentDialog({
   open,
   onClose,
@@ -40,6 +107,14 @@ export function SkillAgentDialog({
   summary,
   reason,
   resolveCwd,
+  taskId,
+  banner,
+  launchDisabled,
+  launchDisabledReason,
+  initialProvider = "default",
+  onProviderChange,
+  launchButtonLabel = "Launch agent",
+  resumeSessionId,
 }: {
   open: boolean;
   onClose: () => void;
@@ -51,12 +126,29 @@ export function SkillAgentDialog({
   summary: string;
   reason: string;
   resolveCwd?: () => Promise<string | undefined>;
+  /** Links the launched run to this DevHub task. */
+  taskId?: string;
+  /** Optional panel above the agent picker (e.g. implement-ready checklist). */
+  banner?: ReactNode;
+  launchDisabled?: boolean;
+  launchDisabledReason?: string;
+  initialProvider?: SkillAgentLaunchTarget;
+  onProviderChange?: (provider: SkillAgentLaunchTarget) => void;
+  launchButtonLabel?: string;
+  /** Continue a prior CLI session when the selected provider supports it. */
+  resumeSessionId?: string;
 }) {
   const toast = useToast();
+  const router = useRouter();
   const launchChamber = useLaunchChamberDesktop();
-  const [provider, setProvider] = useState<LaunchTarget>("default");
+  const [provider, setProvider] = useState<SkillAgentLaunchTarget>(initialProvider);
   const [model, setModel] = useState("");
   const [launching, setLaunching] = useState(false);
+
+  const selectProvider = (next: SkillAgentLaunchTarget) => {
+    setProvider(next);
+    onProviderChange?.(next);
+  };
 
   const copyPrompt = async () => {
     try {
@@ -67,8 +159,69 @@ export function SkillAgentDialog({
     }
   };
 
+  const launchInteractive = async (target: TaskImplementationProvider) => {
+    const repoPath = (cwd ?? (await resolveCwd?.()))?.trim() || undefined;
+    const cli = await resolveTaskImplementationProvider(target);
+    const sessionId = resumeSessionId?.trim() || undefined;
+    const modelOverride = model.trim() || undefined;
+    const basePrompt = getPrompt();
+
+    let registration: InteractiveRegistration | null = null;
+    if (repoPath) {
+      try {
+        registration = await registerInteractiveAgentRun({
+          taskId,
+          provider: cli,
+          sessionId,
+          prompt: basePrompt,
+          cwd: repoPath,
+          title,
+          model: modelOverride,
+        });
+      } catch (err) {
+        toast.error(`${err instanceof Error ? err.message : "Couldn't register the run"} — Agent Activity won't track it.`);
+      }
+    }
+
+    const prompt = registration ? appendInteractiveActivityHint(basePrompt, registration.runId) : basePrompt;
+    const agent = await taskImplementationCommand(cli, prompt, { model: modelOverride, resumeSessionId: sessionId });
+    proposeTerminalRun({
+      command: registration
+        ? `${registration.wrap.before}; ${agent.command}; ${registration.wrap.after}`
+        : agent.command,
+      label: `${title} - ${agent.label}`,
+      summary,
+      providerLabel: agent.label,
+      kind: "agent",
+      cwd: repoPath,
+      repoName,
+      reason,
+      source: "ui",
+      mode: "interactive",
+      skipConfirm: true,
+    });
+
+    if (registration) {
+      const runId = registration.runId;
+      void mutate(TASK_AGENT_RUNS_KEY);
+      toast.success(`${agent.label} opened in the terminal dock`, {
+        action: { label: "View activity", onClick: () => router.push(agentActivityHrefForRun(runId)) },
+      });
+    } else {
+      toast.success(
+        repoPath
+          ? `${agent.label} opened in the terminal dock`
+          : `${agent.label} opened — no repo path, so Agent Activity won't track it`,
+      );
+    }
+  };
+
   const launch = async () => {
     if (launching) return;
+    if (launchDisabled) {
+      toast.error(launchDisabledReason ?? "Implement readiness checks failed.");
+      return;
+    }
     setLaunching(true);
     try {
       const guard = await checkImplementGuardrails();
@@ -80,24 +233,9 @@ export function SkillAgentDialog({
         await copyTextToClipboard(getPrompt());
         await launchChamber();
         toast.success("Prompt copied for OpenChamber");
-        onClose();
-        return;
+      } else {
+        await launchInteractive(provider);
       }
-      const agent = await taskImplementationCommand(provider, getPrompt(), model);
-      const repoPath = cwd ?? (await resolveCwd?.());
-      proposeTerminalRun({
-        command: agent.command,
-        label: `${title} - ${agent.label}`,
-        summary,
-        providerLabel: agent.label,
-        kind: "agent",
-        cwd: repoPath,
-        repoName,
-        reason,
-        source: "ui",
-        mode: "interactive",
-        skipConfirm: true,
-      });
       onClose();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't launch the agent");
@@ -118,13 +256,21 @@ export function SkillAgentDialog({
           <button type="button" className="btn btn-ghost" onClick={() => void copyPrompt()}>
             <Copy size={13} aria-hidden /> Copy prompt
           </button>
-          <button type="button" className="btn btn-primary" disabled={launching} onClick={() => void launch()}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={launching || launchDisabled}
+            title={launchDisabled ? launchDisabledReason : undefined}
+            onClick={() => void launch()}
+          >
             {launching ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <Play size={13} aria-hidden />}
-            Launch agent
+            {launchButtonLabel}
           </button>
         </div>
       }
     >
+      {banner}
+
       <fieldset className="grid gap-2">
         <legend className="mb-2 text-xs font-medium text-text-muted">Agent</legend>
         {PROVIDERS.map((option) => (
@@ -133,7 +279,7 @@ export function SkillAgentDialog({
             className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2"
             style={{
               border: `1px solid ${provider === option.id ? "var(--accent)" : "var(--border-muted)"}`,
-              background: provider === option.id ? "var(--bg-hover)" : "transparent",
+              background: provider === option.id ? "var(--accent-dim)" : "transparent",
             }}
           >
             <input
@@ -141,7 +287,7 @@ export function SkillAgentDialog({
               name="skill-agent-provider"
               value={option.id}
               checked={provider === option.id}
-              onChange={() => setProvider(option.id)}
+              onChange={() => selectProvider(option.id)}
             />
             <Bot size={14} className="shrink-0 text-text-muted" aria-hidden />
             <span className="min-w-0">

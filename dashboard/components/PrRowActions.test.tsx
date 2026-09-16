@@ -60,6 +60,23 @@ describe("buildPrRowMenuGroups", () => {
     expect(itemIds("reviewed")).not.toContain("agent-review");
   });
 
+  it("offers Investigate pipeline on authored and review-requested rows", () => {
+    expect(itemIds("authored")).toContain("investigate-pipeline");
+    expect(itemIds("reviews")).toContain("investigate-pipeline");
+    expect(itemIds("reviewed")).not.toContain("investigate-pipeline");
+  });
+
+  it("marks Investigate pipeline as danger when checks are failing", () => {
+    const groups = buildPrRowMenuGroups({
+      row: row({ checks: "failing" }),
+      kind: "authored",
+      toast,
+      openNote: vi.fn(),
+    });
+    const item = groups.flatMap((g) => g.items).find((i) => i.id === "investigate-pipeline");
+    expect(item?.danger).toBe(true);
+  });
+
   it("does not offer GitHub reviewer request from the PR menu", () => {
     expect(itemIds("authored")).not.toContain("request-review");
     expect(itemIds("reviews")).not.toContain("request-review");

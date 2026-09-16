@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Context } from "../context.ts";
+import { withDashboardErrors } from "../dashboard-client.ts";
 import { escapeHtml, uiResult, widgetDocument } from "../ui.ts";
 import { blocksToText, textToBlocks } from "../convert.ts";
 import {
@@ -409,4 +410,269 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
       };
     },
   );
+
+  const { dashboard } = ctx;
+
+  server.registerTool(
+    "tasks_agent_runs",
+    {
+      description:
+        "List or upsert agent runs linked to a DevHub task (durable task↔run sidecar + optional handoff). GET-style when only taskId is set; pass runId to link/update a run (status queued|running|paused|done|failed|abandoned). Requires the dashboard. Use before pause/EOD and when starting/resuming implement-task runs.",
+      inputSchema: {
+        taskId: z.string().trim().min(1).max(128).describe("DevHub task UUID"),
+        runId: z
+          .string()
+          .trim()
+          .regex(/^run-[a-z0-9]+-[0-9a-f]+$/, "run id from agent_dispatch / agent_runs")
+          .optional()
+          .describe("When set, upsert this run onto the task"),
+        status: z
+          .enum(["queued", "running", "paused", "done", "failed", "abandoned"])
+          .optional()
+          .describe("Sidecar status (paused for EOD; abandoned when giving up)"),
+        provider: z.string().trim().min(1).max(64).optional().describe("Agent provider id, e.g. claude"),
+        prUrl: z.string().url().max(2_000).nullable().optional(),
+        branch: z.string().trim().min(1).max(300).nullable().optional(),
+        sessionId: z.string().trim().min(1).max(200).nullable().optional(),
+        terminalSessionId: z.string().trim().min(1).max(200).nullable().optional(),
+        handoff: z.string().max(100_000).optional().describe("Optional handoff markdown to set in the same write"),
+        handoffMode: z.enum(["replace", "append"]).optional().describe("How to apply handoff (default replace)"),
+      },
+    },
+    async (input) =>
+      withDashboardErrors(async () => {
+        if (!input.runId) {
+          const data = await dashboard.get<{
+            taskId: string;
+            handoff: string;
+            handoffUpdatedAt: string | null;
+            runs: Array<Record<string, unknown>>;
+          }>("/api/tasks/agent-runs", { taskId: input.taskId });
+          const lines = [
+            `Task ${data.taskId}: ${data.runs.length} linked run(s)`,
+            data.handoffUpdatedAt ? `Handoff updated: ${data.handoffUpdatedAt}` : "Handoff: (none yet)",
+            data.handoff ? `\n--- handoff ---\n${data.handoff}\n--- end ---` : null,
+            "",
+            ...data.runs.map((r) => {
+              const bits = [
+                r.runId,
+                r.status,
+                r.provider,
+                r.branch ? `branch ${r.branch}` : null,
+                r.prUrl ? String(r.prUrl) : null,
+              ].filter(Boolean);
+              return `- ${bits.join(" · ")}`;
+            }),
+          ].filter((line) => line !== null);
+          return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+        }
+        const data = await dashboard.post<{
+          taskId: string;
+          handoff: string;
+          handoffUpdatedAt: string | null;
+          runs: Array<Record<string, unknown>>;
+        }>("/api/tasks/agent-runs", {
+          taskId: input.taskId,
+          runId: input.runId,
+          status: input.status,
+          provider: input.provider,
+          prUrl: input.prUrl,
+          branch: input.branch,
+          sessionId: input.sessionId,
+          terminalSessionId: input.terminalSessionId,
+          handoff: input.handoff,
+          handoffMode: input.handoffMode,
+        });
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Upserted run ${input.runId} on task ${data.taskId} (${data.runs.length} run(s) linked).`,
+            },
+          ],
+        };
+      }),
+  );
+
+  server.registerTool(
+    "tasks_agent_handoff_get",
+    {
+      description:
+        "Read the durable markdown handoff for a DevHub task (resume: call this before continuing implement-task work). Includes the latest linked agent run when present. Requires the dashboard.",
+      inputSchema: {
+        taskId: z.string().trim().min(1).max(128).describe("DevHub task UUID"),
+      },
+    },
+    async ({ taskId }) =>
+      withDashboardErrors(async () => {
+        const data = await dashboard.get<{
+          taskId: string;
+          handoff: string;
+          handoffUpdatedAt?: string;
+          latestRun: Record<string, unknown> | null;
+        }>("/api/tasks/agent-runs/handoff", { taskId });
+        const lines = [
+          `Task ${data.taskId}`,
+          data.handoffUpdatedAt ? `Updated: ${data.handoffUpdatedAt}` : null,
+          data.latestRun
+            ? `Latest run: ${data.latestRun.runId} · ${data.latestRun.status}${data.latestRun.provider ? ` · ${data.latestRun.provider}` : ""}`
+            : "Latest run: (none)",
+          "",
+          data.handoff.trim() ? data.handoff : "(empty handoff)",
+        ].filter((line) => line !== null);
+        return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+      }),
+  );
+
+  server.registerTool(
+    "tasks_agent_handoff_set",
+    {
+      description:
+        "Write durable handoff markdown for a DevHub task. Call before pause, end-of-day, or abandon so a later resume can pick up. mode=replace (default) or append. Requires the dashboard.",
+      inputSchema: {
+        taskId: z.string().trim().min(1).max(128).describe("DevHub task UUID"),
+        handoff: z.string().max(100_000).describe("Markdown handoff body"),
+        mode: z.enum(["replace", "append"]).optional().describe("replace (default) or append"),
+      },
+    },
+    async ({ taskId, handoff, mode }) =>
+      withDashboardErrors(async () => {
+        const data = await dashboard.put<{
+          taskId: string;
+          handoff: string;
+          handoffUpdatedAt?: string;
+        }>("/api/tasks/agent-runs/handoff", { taskId, handoff, mode });
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Handoff saved for task ${data.taskId}${data.handoffUpdatedAt ? ` at ${data.handoffUpdatedAt}` : ""} (${data.handoff.length} chars).`,
+            },
+          ],
+        };
+      }),
+  );
+
+  server.registerTool(
+    "tasks_agent_resume",
+    {
+      description:
+        "Resume a DevHub task's agent work. Prefers follow-up on the latest linked run (same CLI session) injecting durable handoff + implement plan URL; otherwise dispatches a new run quoting the handoff and upserts the task↔run sidecar. Requires the dashboard. Compose manually with tasks_agent_handoff_get + agent_followup / agent_dispatch + tasks_agent_runs when you need finer control.",
+      inputSchema: {
+        taskId: z.string().trim().min(1).max(128).describe("DevHub task UUID"),
+        date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD")
+          .describe("Day file the task lives in"),
+        provider: z.string().trim().min(1).max(64).optional().describe("Optional agent_dispatch provider id"),
+        model: z.string().trim().max(120).optional(),
+        cwd: z.string().trim().min(1).max(1_000).optional().describe("Checkout path when starting a new run"),
+        origin: z
+          .string()
+          .url()
+          .optional()
+          .describe("Dashboard origin for plan URL (defaults to the MCP dashboard base URL)"),
+      },
+    },
+    async (input) =>
+      withDashboardErrors(async () => {
+        const data = await dashboard.post<{
+          mode: "followup" | "new";
+          run: { id: string; state: string; providerLabel?: string; title?: string };
+          priorRunId: string | null;
+          handoffChars: number;
+        }>("/api/tasks/agent-runs/resume", {
+          taskId: input.taskId,
+          date: input.date,
+          provider: input.provider,
+          model: input.model,
+          cwd: input.cwd,
+          origin: input.origin,
+        });
+        const bits = [
+          `Resumed task ${input.taskId} via ${data.mode} → ${data.run.id}`,
+          data.run.state,
+          data.run.providerLabel,
+          data.priorRunId ? `prior ${data.priorRunId}` : null,
+          `handoff ${data.handoffChars} chars`,
+        ].filter(Boolean);
+        return { content: [{ type: "text" as const, text: bits.join(" · ") }] };
+      }),
+  );
+
+  server.registerTool(
+    "tasks_implement_ready",
+    {
+      description:
+        "Light ready-to-implement checklist for a DevHub task (acceptance/plan, single repo link or pick, no open #prerequisite/#blocker). Warn by default; hardBlock (prefs or arg) flips to blocked. Proxies GET /api/tasks/implement/ready. Call before agent_dispatch / Implement.",
+      inputSchema: {
+        taskId: z.string().trim().min(1).max(128).describe("DevHub task UUID"),
+        date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD")
+          .optional()
+          .describe("Day file the task lives in (defaults to today on the dashboard)"),
+        selectedRepoId: z
+          .string()
+          .trim()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe("When multiple kind:repo links exist, the repo to use"),
+        hubRepoId: z
+          .string()
+          .trim()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe("Hub checkout owner/repo — satisfies repo when the task has no repo links"),
+        hardBlock: z
+          .boolean()
+          .optional()
+          .describe("Override vault prefs; true refuses ready when items fail"),
+      },
+    },
+    async (input) =>
+      withDashboardErrors(async () => {
+        const data = await dashboard.get<{
+          taskId: string;
+          date: string;
+          ok: boolean;
+          warn: boolean;
+          blocked: boolean;
+          hardBlock: boolean;
+          selectedRepoId: string | null;
+          items: Array<{
+            id: string;
+            ok: boolean;
+            label: string;
+            detail?: string;
+            fixHref?: string;
+            fixLabel?: string;
+          }>;
+        }>("/api/tasks/implement/ready", {
+          taskId: input.taskId,
+          date: input.date,
+          selectedRepoId: input.selectedRepoId,
+          hubRepoId: input.hubRepoId,
+          hardBlock:
+            input.hardBlock === undefined ? undefined : input.hardBlock ? "1" : "0",
+        });
+        const status = data.blocked ? "BLOCKED" : data.ok ? "READY" : "WARN";
+        const lines = [
+          `Implement ready for task ${data.taskId} (${data.date}): ${status}`,
+          data.selectedRepoId ? `Repo: ${data.selectedRepoId}` : "Repo: (unresolved)",
+          `hardBlock=${data.hardBlock}`,
+          "",
+          ...data.items.map((item) => {
+            const mark = item.ok ? "ok" : "miss";
+            const fix = !item.ok && item.fixHref ? ` → ${item.fixLabel ?? "fix"}: ${item.fixHref}` : "";
+            return `- [${mark}] ${item.label}${item.detail ? `: ${item.detail}` : ""}${fix}`;
+          }),
+        ];
+        return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+      }),
+  );
+
+
 }

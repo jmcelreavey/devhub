@@ -10,27 +10,36 @@ export {};
 
 const hasDom = typeof window !== "undefined";
 
-if (!hasDom) {
+if (!hasDom || typeof window.localStorage === "undefined") {
+  // Two cases need this polyfill:
+  // - node env: nothing provides localStorage at all.
+  // - jsdom on Node >= 26: Node's experimental global `localStorage` (which is
+  //   inert without --localstorage-file) shadows jsdom's own implementation,
+  //   so `window.localStorage` comes through undefined and every component
+  //   test touching storage dies on the first access. Provide a working
+  //   in-memory storage either way; jsdom persists nothing between files by
+  //   design, so nothing loses behaviour it had.
   const storage = new Map<string, string>();
-
-  Object.defineProperty(globalThis, "localStorage", {
-    value: {
-      getItem: (key: string) => storage.get(key) ?? null,
-      setItem: (key: string, value: string) => {
-        storage.set(key, value);
-      },
-      removeItem: (key: string) => {
-        storage.delete(key);
-      },
-      clear: () => storage.clear(),
-      get length() {
-        return storage.size;
-      },
-      key: (index: number) => [...storage.keys()][index] ?? null,
+  const shim = {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      storage.set(key, value);
     },
-    configurable: true,
-  });
-} else {
+    removeItem: (key: string) => {
+      storage.delete(key);
+    },
+    clear: () => storage.clear(),
+    get length() {
+      return storage.size;
+    },
+    key: (index: number) => [...storage.keys()][index] ?? null,
+  };
+  Object.defineProperty(globalThis, "localStorage", { value: shim, configurable: true });
+  if (hasDom && typeof window !== "undefined") {
+    Object.defineProperty(window, "localStorage", { value: shim, configurable: true });
+  }
+}
+if (hasDom) {
   const { cleanup } = await import("@testing-library/react");
   const { afterEach } = await import("vitest");
   await import("@testing-library/jest-dom/vitest");

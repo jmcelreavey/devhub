@@ -1,6 +1,6 @@
 ---
 name: devhub-recap
-description: Use when the user asks for a recap of the current, latest, or named OpenCode session, including commands, MCP calls, file changes, failures, and mutations without prompts or reasoning.
+description: Recap the commands, changes, failures, and mutations in an OpenCode session.
 metadata:
   short-description: Recap OpenCode session activity
 ---

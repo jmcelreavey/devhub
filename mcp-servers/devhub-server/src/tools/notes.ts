@@ -16,7 +16,7 @@ import {
   type TaskNoteSource,
 } from "../../../../shared/task-note/index.ts";
 import { buildPrNoteMarkdown, prNotePath, withPrReviewEntityLinks } from "../../../../shared/pr-note/index.ts";
-import { parseEntityLinksFromMarkdown } from "../../../../shared/entity-note/index.ts";
+import { defaultHrefForRef, parseEntityLinksFromMarkdown } from "../../../../shared/entity-note/index.ts";
 import type { EntityRef } from "../../../../shared/entity-note/index.ts";
 
 /** Workspace slice surfaced by notes_list / notes_search: daily/ + root .json. */
@@ -91,6 +91,29 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
       storage.write(filePath, blocks);
       const action = existing ? "Updated" : "Created";
       return { content: [{ type: "text", text: `${action}: ${filePath}` }] };
+    },
+  );
+
+  server.registerTool(
+    "notes_devhub_open",
+    {
+      description:
+        "Open an existing note in a new workspace tab in the running DevHub app (desktop webview or browser dashboard). Fails cleanly when no DevHub client is connected. For non-note pages use ui_open.",
+      inputSchema: {
+        path: z.string().describe("Notes-relative path, with or without .json"),
+      },
+    },
+    async ({ path: notePath }) => {
+      const note = storage.read(notePath);
+      if (!note) return { content: [{ type: "text", text: `Note not found: ${notePath}` }], isError: true };
+      const id = note.path.replace(/\.json$/i, "");
+      const href = defaultHrefForRef({ kind: "note", id, label: id });
+      if (!href) return { content: [{ type: "text", text: `Could not resolve note path: ${notePath}` }], isError: true };
+
+      return withDashboardErrors(async () => {
+        await dashboard.post("/api/desktop/navigation", { href, newTab: true });
+        return { content: [{ type: "text", text: `Opened ${id} in a new DevHub workspace tab.` }] };
+      });
     },
   );
 
@@ -419,7 +442,8 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
       if (!note) {
         return { content: [{ type: "text", text: `Not found: ${filePath}` }] };
       }
-      const md = blocksToText(note.content);
+      // NoteResult.content is `unknown`; normalize to an array like notes_read does.
+      const md = blocksToText(Array.isArray(note.content) ? note.content : [note.content]);
       const refs = parseEntityLinksFromMarkdown(md);
       return {
         content: [

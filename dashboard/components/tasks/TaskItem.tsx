@@ -33,6 +33,13 @@ import {
   Bot,
   Hash,
 } from "lucide-react";
+import Link from "next/link";
+import {
+  agentActivityHrefForRun,
+  canResumeTaskAgentRun,
+  taskAgentChipForLatestRun,
+} from "@/lib/tasks/task-agent-resume";
+import { useTaskAgentRuns } from "@/lib/tasks/use-task-agent-runs";
 import { JiraKeyChip } from "@/components/jira/JiraKeyChip";
 import { JiraStatusPill } from "@/components/jira/JiraStatusPill";
 import { HoverTip } from "@/components/ui/HoverTip";
@@ -55,6 +62,7 @@ import { mutate } from "swr";
 import type { EntityRef } from "@/lib/entity-note";
 import { useToast } from "@/lib/hooks/use-toast";
 import { ImplementTaskDialog } from "@/components/tasks/ImplementTaskDialog";
+import { ResumeTaskDialog } from "@/components/tasks/ResumeTaskDialog";
 
 interface JiraStatus {
   name: string;
@@ -109,11 +117,16 @@ export function TaskItem({
   const router = useRouter();
   const menu = useContextMenu<Task>();
   const taskDate = date ?? todayISO();
+  const { latestRun: latestAgentRun, handoff: agentHandoff } = useTaskAgentRuns(task.id, !readOnly);
+  const agentChip = taskAgentChipForLatestRun(latestAgentRun);
+  const canResumeAgent = canResumeTaskAgentRun(latestAgentRun?.status, latestAgentRun?.sessionId);
+
   const [editing, setEditing] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [editText, setEditText] = useState(task.text);
   const [showAbandon, setShowAbandon] = useState(false);
   const [implementOpen, setImplementOpen] = useState(false);
+  const [resumeOpen, setResumeOpen] = useState(false);
   const [abandonReason, setAbandonReason] = useState("");
   // True only in the moment the user just checked the box, so the confetti
   // burst fires on completion — not when an already-done list renders.
@@ -247,6 +260,19 @@ export function TaskItem({
                 icon: <Bot size={12} aria-hidden />,
                 onSelect: () => setImplementOpen(true),
               },
+              ...(canResumeAgent
+                ? [
+                    {
+                      id: "resume-agent",
+                      label:
+                        latestAgentRun?.status === "done"
+                          ? "Continue with Agent…"
+                          : "Resume with Agent…",
+                      icon: <RotateCcw size={12} aria-hidden />,
+                      onSelect: () => setResumeOpen(true),
+                    },
+                  ]
+                : []),
             ]
           : []),
         ...(onTimer && !isInactive
@@ -478,8 +504,22 @@ export function TaskItem({
           <div className="task-row-actions">
             {/* Trailing meta (Jira status, due date, timer) leads the rail so the
                 note/tags icons keep the same column across rows. */}
-            {(showJiraStatus || showDueDate || showTimerReadout) && (
+            {(showJiraStatus || showDueDate || showTimerReadout || agentChip) && (
               <div className="task-row-meta">
+                {agentChip && (
+                  <HoverTip label={`Agent run ${agentChip.runId}`}>
+                    <Link
+                      href={agentActivityHrefForRun(agentChip.runId)}
+                      className="task-agent-chip"
+                      data-kind={agentChip.kind}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={`${agentChip.label} — open agent activity`}
+                    >
+                      <Bot size={11} aria-hidden />
+                      {agentChip.label}
+                    </Link>
+                  </HoverTip>
+                )}
                 {showJiraStatus && (
                   onStatusClick ? (
                     <span className="task-jira-status" onClick={(e) => e.stopPropagation()}>
@@ -584,6 +624,16 @@ export function TaskItem({
         cwd={cwd}
         repoName={repoName}
         onClose={() => setImplementOpen(false)}
+      />
+      <ResumeTaskDialog
+        open={resumeOpen}
+        task={task}
+        date={taskDate}
+        latestRun={latestAgentRun}
+        handoff={agentHandoff}
+        cwd={cwd}
+        repoName={repoName}
+        onClose={() => setResumeOpen(false)}
       />
       <ContextMenu
         open={menu.target !== null}

@@ -64,4 +64,20 @@ describe("ExternalLinks interception", () => {
     fireEvent.click(document.getElementById("int")!);
     expect(open).not.toHaveBeenCalled();
   });
+
+  it("does not intercept contextmenu inside a row menu host", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: { invoke },
+    });
+    document.body.innerHTML =
+      '<div data-context-menu-host="true"><a id="ext" href="https://example.test/x">x</a></div>';
+    const { queryByRole } = render(<ExternalLinks />);
+
+    fireEvent.contextMenu(document.getElementById("ext")!, { clientX: 12, clientY: 24 });
+    // External link menu would expose "Open in browser" — row hosts keep ownership.
+    expect(queryByRole("menu", { name: "External link" })).toBeNull();
+    expect(invoke).not.toHaveBeenCalled();
+  });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
 import { AlertTriangle, Ban, Check, ChevronDown, ChevronRight, CircleDashed, Loader2 } from "lucide-react";
 import { FetchError, LoadingLine } from "@/components";
 import { useLive } from "@/lib/hooks/use-fetch";
@@ -36,6 +37,13 @@ const PRE: CSSProperties = {
 };
 
 export default function AgentActivityPage() {
+  const search = useSearchParams();
+  const runParam = search.get("run")?.trim() || null;
+  // Remount when ?run= changes so tab/openId init from the URL without an effect.
+  return <AgentActivityInner key={runParam ?? "no-run"} runParam={runParam} />;
+}
+
+function AgentActivityInner({ runParam }: { runParam: string | null }) {
   const [tab, setTab] = useState<Tab>("runs");
   return (
     <div className="page-wrapper">
@@ -67,7 +75,7 @@ export default function AgentActivityPage() {
           ))}
         </div>
       </div>
-      <div className="card">{tab === "runs" ? <AgentRunsPanel /> : <McpCallsPanel />}</div>
+      <div className="card card-body">{tab === "runs" ? <AgentRunsPanel initialRunId={runParam} /> : <McpCallsPanel />}</div>
     </div>
   );
 }
@@ -115,9 +123,9 @@ function RunStateIcon({ state }: { state: AgentRunSummary["state"] }) {
   return <CircleDashed size={13} className="shrink-0 text-text-subtle" aria-label="Queued" />;
 }
 
-function AgentRunsPanel() {
+function AgentRunsPanel({ initialRunId }: { initialRunId?: string | null }) {
   const now = useMinuteTick();
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(initialRunId ?? null);
   const { data, error, isLoading, mutate } = useLive<RunsResponse>("/api/agent/runs?limit=50");
 
   if (isLoading) return <LoadingLine />;
@@ -136,7 +144,7 @@ function AgentRunsPanel() {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-xs text-text-subtle">
+      <div className="text-xs text-text-subtle" style={{ paddingTop: 2, paddingBottom: 6 }}>
         {runs.length} recent run{runs.length === 1 ? "" : "s"} · providers: {installed.join(", ") || "none installed"}
         {data?.providersConfigError ? <span className="text-danger"> · {data.providersConfigError}</span> : null}
       </div>
@@ -155,7 +163,7 @@ function AgentRunsPanel() {
                   type="button"
                   aria-expanded={open}
                   onClick={() => setOpenId(open ? null : run.id)}
-                  className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-[var(--bg-elevated)]"
+                  className="row-select agent-activity-row w-full flex items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-[var(--bg-elevated)]"
                   style={{ color: "var(--text)" }}
                 >
                   {open ? <ChevronDown size={13} className="shrink-0" /> : <ChevronRight size={13} className="shrink-0" />}
@@ -169,7 +177,7 @@ function AgentRunsPanel() {
                     {formatRelativePastAge(Math.max(0, now - run.createdAt))}
                   </span>
                 </button>
-                {open && <RunDetail runId={run.id} onChanged={() => void mutate()} />}
+                {open ? <RunDetail runId={run.id} onChanged={() => void mutate()} /> : null}
               </li>
             );
           })}
@@ -242,7 +250,7 @@ function RunDetail({ runId, onChanged }: { runId: string; onChanged: () => void 
   ].filter(Boolean);
 
   return (
-    <div className="flex flex-col gap-2 px-8 pb-3 pt-1 text-xs">
+    <div className="agent-activity-detail flex flex-col gap-2 px-8 pb-3 pt-1 text-xs">
       <div className="text-text-subtle break-all">{meta.join(" · ")}</div>
       {run.error && <div className="text-danger">{run.error}</div>}
       {!active && run.resultText && (
@@ -402,7 +410,7 @@ function McpCallsPanel() {
                     type="button"
                     aria-expanded={open}
                     onClick={() => setOpenKey(open ? null : key)}
-                    className="w-full flex items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-[var(--bg-elevated)]"
+                    className="row-select agent-activity-row w-full flex items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-[var(--bg-elevated)]"
                     style={{ color: "var(--text)" }}
                   >
                     <span className="shrink-0 w-16 text-xs tabular-nums text-text-subtle">{clock(entry.ts)}</span>

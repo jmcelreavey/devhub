@@ -74,6 +74,7 @@ export function ToggleGroup<T extends string>({
               }}
               onClick={() => !opt.disabled && onChange(opt.value)}
               disabled={opt.disabled}
+              aria-pressed={active}
             >
               {opt.dotColor && (
                 <span

@@ -113,24 +113,79 @@ export interface RunEventPage {
   total: number;
 }
 
-/** Events with `seq >= since`, oldest first. */
+/**
+ * Read position per run dir: byte offset of the first unread line, and how
+ * many complete lines precede it. `agent_wait` polls with a monotonic cursor,
+ * so steady-state reads touch only the tail instead of the whole file — a
+ * multi-hour run otherwise re-reads megabytes on every 1.5s poll.
+ */
+const readOffsets = new Map<string, { offset: number; lines: number; size: number }>();
+
+/** Test seam: drop the per-process read offsets. */
+export function resetRunEventOffsets(): void {
+  readOffsets.clear();
+}
+
+/** Events with `seq >= since`, oldest first, tail-reading when the cursor allows. */
 export function readRunEvents(dir: string, since = 0, limit = 200): RunEventPage {
-  let raw: string;
+  const file = path.join(dir, EVENTS_FILE);
+  let fd: number;
+  let size: number;
   try {
-    raw = fs.readFileSync(path.join(dir, EVENTS_FILE), "utf8");
+    fd = fs.openSync(file, "r");
+    size = fs.fstatSync(fd).size;
   } catch {
+    readOffsets.delete(dir);
     return { events: [], next: since, total: 0 };
   }
-  // Only newline-terminated lines are complete; the runner may be mid-append.
-  const complete = raw.slice(0, raw.lastIndexOf("\n") + 1);
-  const lines = complete.split("\n").filter(Boolean);
-  const events: RecordedAgentRunEvent[] = [];
-  for (const line of lines.slice(since, since + limit)) {
-    try {
-      events.push(JSON.parse(line) as RecordedAgentRunEvent);
-    } catch {
-      break;
+
+  try {
+    const cached = readOffsets.get(dir);
+    // The cache is only valid while the file only grew: same fd world, append-only.
+    let startOffset = 0;
+    let startLine = 0;
+    if (cached && size >= cached.size && since >= cached.lines) {
+      startOffset = cached.offset;
+      startLine = cached.lines;
     }
+
+    const chunks: Buffer[] = [];
+    const buffer = Buffer.alloc(64 * 1024);
+    let position = startOffset;
+    while (position < size) {
+      const read = fs.readSync(fd, buffer, 0, buffer.length, position);
+      if (read <= 0) break;
+      chunks.push(Buffer.from(buffer.subarray(0, read)));
+      position += read;
+    }
+    const raw = Buffer.concat(chunks).toString("utf8");
+
+    // Only newline-terminated lines are complete; the runner may be mid-append.
+    const lastNewline = raw.lastIndexOf("\n");
+    const complete = lastNewline === -1 ? "" : raw.slice(0, lastNewline + 1);
+    const lines = complete.split("\n").filter(Boolean);
+    const total = startLine + lines.length;
+
+    // Remember where line `total` starts so the next tail read resumes there.
+    if (lines.length > 0) {
+      const consumedBytes = Buffer.byteLength(complete, "utf8");
+      readOffsets.set(dir, { offset: startOffset + consumedBytes, lines: total, size });
+    } else if (cached) {
+      // No complete new lines; keep the old position but refresh the size.
+      readOffsets.set(dir, { ...cached, size });
+    }
+
+    const skip = Math.max(0, since - startLine);
+    const events: RecordedAgentRunEvent[] = [];
+    for (const line of lines.slice(skip, skip + limit)) {
+      try {
+        events.push(JSON.parse(line) as RecordedAgentRunEvent);
+      } catch {
+        break;
+      }
+    }
+    return { events, next: since + events.length, total };
+  } finally {
+    fs.closeSync(fd);
   }
-  return { events, next: since + events.length, total: lines.length };
 }

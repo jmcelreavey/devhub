@@ -174,7 +174,7 @@ export function registerAgentTools(server: McpServer, ctx: Context): void {
     "agent_dispatch",
     {
       description:
-        "Hand a task to another coding agent CLI. The run executes with approvals DISABLED in a new DevHub terminal tab the user can watch and stop. Without worktree it edits files in cwd directly, so changes appear in the user's IDE; with worktree=true it works on an isolated branch. Returns a run id immediately — follow with agent_wait (block until done) or agent_output (page events). Requires the dashboard running with the terminal dock loaded.",
+        "Hand a task to another coding agent CLI. The run executes with approvals DISABLED in a new DevHub terminal tab the user can watch and stop. Runs are ISOLATED by default in a git worktree on a devhub/agent/<run> branch (worktree:false edits cwd directly, so changes appear in the user's IDE). The first dispatch to a given repo with a given agent waits on a one-time dock confirmation; later ones start on their own. Caps: DEVHUB_AGENT_MAX_TURNS (default 200 where supported), MAX_SECONDS (default 1800), MAX_COST_USD per local day (default 25), MAX_RUNS concurrent (default 6). Returns a run id immediately — follow with agent_wait (block until done) or agent_output (page events). Requires the dashboard running with the terminal dock loaded.",
       inputSchema: {
         provider: z.string().min(1).describe("Provider id from agent_providers, e.g. claude, cursor, codex"),
         prompt: z.string().min(1).max(32_000).describe("The full task. The agent has no other context from you."),
@@ -383,6 +383,49 @@ export function registerAgentTools(server: McpServer, ctx: Context): void {
               ? "Cancelled before it started."
               : "Already finished; nothing to stop.";
         return text(`${said}\n${formatRunSummary(run)}`);
+      }),
+  );
+
+  server.registerTool(
+    "agent_interactive_note",
+    {
+      description:
+        "Append a short progress note to an interactive Agent Activity run (bin=interactive — Claude/etc opened in the dock, not agent_dispatch). Call after your first meaningful update so the Activity panel shows live progress. Requires the dashboard running.",
+      inputSchema: {
+        runId: runIdSchema,
+        text: z.string().trim().min(1).max(8_000).describe("Short status for Agent Activity"),
+      },
+    },
+    async ({ runId, text: note }) =>
+      withDashboardErrors(async () => {
+        const { run } = await dashboard.post<{ run: AgentRunSummary }>(
+          `/api/agent/runs/${encodeURIComponent(runId)}/note`,
+          { text: note },
+        );
+        return text(`Noted on ${run.id}.\n${formatRunSummary(run)}`);
+      }),
+  );
+
+  server.registerTool(
+    "agent_interactive_finish",
+    {
+      description:
+        "Mark an interactive Agent Activity run finished (success or failure) with a result summary. DevHub also closes the run when the CLI exits or its tab closes, but only this call records resultText and sessionId — pass sessionId so Resume/Continue can pick up the CLI session. Requires the dashboard running.",
+      inputSchema: {
+        runId: runIdSchema,
+        ok: z.boolean().describe("true when the task succeeded"),
+        resultText: z.string().trim().max(8_000).optional().describe("Short final summary"),
+        sessionId: z.string().trim().max(200).optional().describe("CLI session id for later resume"),
+        error: z.string().trim().max(2_000).optional().describe("Failure reason when ok is false"),
+      },
+    },
+    async ({ runId, ok, resultText, sessionId, error }) =>
+      withDashboardErrors(async () => {
+        const { run } = await dashboard.post<{ run: AgentRunSummary }>(
+          `/api/agent/runs/${encodeURIComponent(runId)}/finish`,
+          { ok, resultText, sessionId, error },
+        );
+        return text(`Interactive run ${run.state}.\n${formatRunSummary(run)}`);
       }),
   );
 

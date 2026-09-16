@@ -1,9 +1,10 @@
 "use client";
 
-import { Check, GitMerge } from "lucide-react";
+import { Check, CheckCircle2, CircleDot, GitMerge, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { prRowStatus } from "@/lib/github/pr-row-status";
 import type { GithubPrRow } from "@/lib/github/prs";
+import type { PrChecksState } from "@/lib/github/branch-pr";
 import { extractTags } from "@/lib/entity-note";
 import { PersonChip } from "@/components/PersonChip";
 import { PrReviewNoteLink } from "@/components/PrReviewNoteLink";
@@ -21,6 +22,35 @@ import { useTagMenuGroup } from "@/lib/hooks/use-tag-menu";
 import { useToast } from "@/lib/hooks/use-toast";
 
 export type { PrRowKind };
+
+
+const CHECK_ICON: Record<Exclude<PrChecksState, "none">, typeof CheckCircle2> = {
+  passing: CheckCircle2,
+  failing: XCircle,
+  pending: CircleDot,
+};
+
+/** Rolled-up CI state — same visual language as RepoOpenPrLink. */
+function PrChecksGlance({ row }: { row: GithubPrRow }) {
+  const state = row.checks ?? "none";
+  if (state === "none") return null;
+  const Icon = CHECK_ICON[state];
+  const counts = row.checkCounts;
+  const title = counts
+    ? `checks: ${counts.passed} passed, ${counts.failed} failed, ${counts.pending} pending`
+    : `checks ${state}`;
+  return (
+    <span
+      className="pr-row-checks"
+      data-checks={state}
+      title={title}
+      aria-label={`checks ${state}`}
+      role="img"
+    >
+      <Icon size={14} aria-hidden />
+    </span>
+  );
+}
 
 function PrStatusIcon({ row }: { row: GithubPrRow }) {
   const status = prRowStatus(row);
@@ -85,7 +115,14 @@ export function PrRow({
             target="_blank"
             rel="noopener noreferrer"
             className={`pr-row-title ${compact ? "text-sm" : "text-[15px]"}`}
-            onContextMenu={(event) => event.preventDefault()}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const host = (event.currentTarget as HTMLElement).closest(
+                "[data-context-menu-host]",
+              ) as HTMLElement | null;
+              menu.openAtPoint(event.clientX, event.clientY, row, host);
+            }}
           >
             {row.title}
           </a>
@@ -109,6 +146,7 @@ export function PrRow({
           </div>
         </div>
         <div className="pr-row-actions" data-pr-actions>
+          <PrChecksGlance row={row} />
           <PrStatusIcon row={row} />
           <PrReviewNoteLink row={row} />
           <RowMenuKebab

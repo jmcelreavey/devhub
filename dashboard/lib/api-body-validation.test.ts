@@ -36,8 +36,6 @@ const UNVALIDATED_ALLOWLIST = new Set<string>([
   "capability/journey/session/route.ts",
   "capability/journey/tutor/route.ts",
   "datadog/investigate/route.ts",
-  "jobs/[id]/route.ts",
-  "jobs/route.ts",
   "mcp/route.ts",
   "notes/ai/chat/route.ts",
   "persona/route.ts",

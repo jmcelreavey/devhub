@@ -1,4 +1,4 @@
-//! Runtime OS icon — window, Dock, and (if we ever grow one) tray.
+//! Runtime OS icon — window, Dock, and menu-bar tray (macOS).
 //!
 //! The bundled `.icns` is the DevHub bottle. Plugin branding overlays the Dock
 //! at runtime. macOS's persistent Dock tile reads `CFBundleIconFile`, so a

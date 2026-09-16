@@ -3,6 +3,8 @@
 import { getAgentCliConfig, type AgentCli, type AgentCliConfig } from "@/lib/agent/cli-config";
 import { shellQuote } from "@/lib/shell-quote";
 import type { TerminalSessionKind } from "@/lib/terminal-meta";
+import { agentReviewPrompt } from "@/lib/pr-review-prompt";
+import { agentPipelineInvestigatePrompt } from "@/lib/pr-pipeline-prompt";
 
 export interface TerminalLaunchOptions {
   cwd?: string;
@@ -272,30 +274,31 @@ export async function agentLocalCommitReviewCommand(
   );
 }
 
-export function agentReviewPrompt(prUrl: string, notePath?: string): string {
-  const parts = [`Use the pr-explain-review skill to explain and review this GitHub PR: ${prUrl}`];
-  if (notePath) {
-    parts.push(
-      `Save the finished write-up as a well-formatted note with the notes MCP (notes_write). Notes MCP path: ${notePath}`,
-    );
-  }
-  return parts.join(" ");
-}
+export { agentReviewPrompt };
 
 export async function agentReviewCommand(prUrl: string, notePath?: string): Promise<string> {
   const cli = await activeAgentCliSpec();
-  const parts = [`Use the pr-explain-review skill to explain and review this GitHub PR: ${prUrl}`];
-  if (notePath) {
-    parts.push(
-      `Save the finished write-up as a well-formatted note with the notes MCP (notes_write). Notes MCP path: ${notePath}`,
-    );
-  }
   return guardedCliCommand(
     cli.binary,
-    withDevhubNotesEnv(cli.run(parts.join(" "))),
+    withDevhubNotesEnv(cli.run(agentReviewPrompt(prUrl, notePath))),
     cli.missing("run PR reviews from the terminal"),
   );
 }
+
+export { agentPipelineInvestigatePrompt };
+
+export async function agentPipelineInvestigateCommand(
+  prUrl: string,
+  notePath?: string,
+): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  return guardedCliCommand(
+    cli.binary,
+    withDevhubNotesEnv(cli.run(agentPipelineInvestigatePrompt(prUrl, notePath))),
+    cli.missing("investigate PR pipelines from the terminal"),
+  );
+}
+
 
 export interface StashConflictLaunchOptions {
   repoName: string;
@@ -610,21 +613,40 @@ export async function agentInteractiveSessionCommand(): Promise<{
 
 export type TaskImplementationProvider = "default" | AgentCli | "claude";
 
+/** The concrete CLI "default" launches — what Agent Activity should record. */
+export async function resolveTaskImplementationProvider(
+  provider: TaskImplementationProvider,
+): Promise<Exclude<TaskImplementationProvider, "default">> {
+  return provider === "default" ? (await getAgentCliConfig()).cli : provider;
+}
+
+export type TaskImplementationCommandOptions = {
+  model?: string;
+  /** When set and the CLI supports it, continue that interactive session. */
+  resumeSessionId?: string;
+};
+
 export async function taskImplementationCommand(
   provider: TaskImplementationProvider,
   prompt: string,
-  model?: string,
+  modelOrOptions?: string | TaskImplementationCommandOptions,
 ): Promise<{ command: string; label: string; provider: Exclude<TaskImplementationProvider, "default"> }> {
+  const options: TaskImplementationCommandOptions =
+    typeof modelOrOptions === "string" || modelOrOptions === undefined
+      ? { model: modelOrOptions }
+      : modelOrOptions;
   const config = await getAgentCliConfig();
   const selected = provider === "default" ? config.cli : provider;
-  const requestedModel = model?.trim();
+  const requestedModel = options.model?.trim();
+  const resumeId = options.resumeSessionId?.trim();
+  const resumeFlag = resumeId ? ` --resume ${shellQuote(resumeId)}` : "";
 
   if (selected === "claude") {
     const modelFlag = requestedModel ? ` --model ${shellQuote(requestedModel)}` : "";
     return {
       command: guardedCliCommand(
         "claude",
-        `claude --dangerously-skip-permissions${modelFlag} ${shellQuote(prompt)}`,
+        `claude --dangerously-skip-permissions${modelFlag}${resumeFlag} ${shellQuote(prompt)}`,
         "Claude CLI not found. Install Claude Code to implement this task.",
       ),
       label: "Claude",
@@ -637,7 +659,7 @@ export async function taskImplementationCommand(
     return {
       command: guardedCliCommand(
         "cursor-agent",
-        `cursor-agent --force --approve-mcps --trust --model ${shellQuote(selectedModel)} ${shellQuote(prompt)}`,
+        `cursor-agent --force --approve-mcps --trust --model ${shellQuote(selectedModel)}${resumeFlag} ${shellQuote(prompt)}`,
         "Cursor CLI not found. Install cursor-agent to implement this task.",
       ),
       label: "Cursor",

@@ -1,6 +1,6 @@
 ---
 name: devhub-fork-workflow
-description: Use when contributing a DevHub feature from a private mirror back to the public core (backport / push upstream) or pulling core updates down from upstream into the mirror. Covers generic-vs-personal judgement, base selection, leak scanning, and the --mark-synced step after a backport. Trigger phrases — "backport this", "push this upstream", "contribute to public devhub", "pull core updates", "sync from upstream".
+description: Move DevHub changes safely between the private mirror and public core.
 metadata:
   short-description: Push/pull features with the public DevHub core
 ---

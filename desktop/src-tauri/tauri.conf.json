@@ -38,7 +38,11 @@
       "../staging/icons/plugin.png": "icons/plugin.png"
     },
     "macOS": {
-      "minimumSystemVersion": "11.0"
+      "minimumSystemVersion": "11.0",
+      "files": {
+        "Resources/wake-helper/devhub-wake-helper": "../staging/wake-helper/devhub-wake-helper",
+        "Resources/wake-helper/com.devhub.wake-helper.plist": "../staging/wake-helper/com.devhub.wake-helper.plist"
+      }
     },
     "createUpdaterArtifacts": true
   },

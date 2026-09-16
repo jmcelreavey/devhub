@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wake-helper-uninstall"
+description = "Enables the wake_helper_uninstall command without any pre-configured scope."
+commands.allow = ["wake_helper_uninstall"]
+
+[[permission]]
+identifier = "deny-wake-helper-uninstall"
+description = "Denies the wake_helper_uninstall command without any pre-configured scope."
+commands.deny = ["wake_helper_uninstall"]

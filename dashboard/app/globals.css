@@ -5718,6 +5718,44 @@ body[data-motion="off"] .context-menu:not([hidden]) {
   margin-left: auto;
 }
 
+.pr-row-checks {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+.pr-row-checks[data-checks="passing"] {
+  color: var(--success);
+}
+.pr-row-checks[data-checks="failing"] {
+  color: var(--danger);
+}
+.pr-row-checks[data-checks="pending"] {
+  color: var(--warning);
+}
+
+.task-agent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border: 1px solid var(--border-muted);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.2;
+  text-decoration: none;
+}
+.task-agent-chip:hover {
+  background: var(--bg-overlay);
+}
+.task-agent-chip[data-kind="paused"] {
+  color: var(--warning);
+}
+.task-agent-chip[data-kind="ready"] {
+  color: var(--accent);
+}
+
 /* ── Generic launcher dropdowns ── */
 .launch-menu-wrap {
   position: relative;
@@ -5858,6 +5896,18 @@ button.row-select:not(:disabled):active,
 .row-select:active {
   scale: 1;
   opacity: 0.85;
+}
+
+/* Agent Activity run/MCP rows: expand must stay linear/instant — never spring. */
+.agent-activity-row,
+.agent-activity-row:active,
+button.agent-activity-row:not(:disabled):active {
+  scale: 1;
+  transition: background var(--dur-instant) linear, opacity var(--dur-instant) linear;
+}
+.agent-activity-detail {
+  animation: none !important;
+  transition: none !important;
 }
 
 /* ───────────────────────────────────────────────────────────
@@ -6080,7 +6130,7 @@ main,
 }
 .repos-learn-actions {
   display: flex;
-  shrink: 0;
+  flex-shrink: 0;
   gap: 2px;
 }
 @media (prefers-reduced-motion: reduce) {

@@ -195,6 +195,9 @@ impl Sidecar {
             "SHELL",
             "TMPDIR",
             "XDG_DATA_HOME",
+            // The self-test sets this so its throwaway server never runs the
+            // user's scheduled jobs; also lets a user turn the scheduler off.
+            "DEVHUB_SCHEDULER",
         ] {
             if let Some(value) = std::env::var_os(key) {
                 cmd.env(key, value);

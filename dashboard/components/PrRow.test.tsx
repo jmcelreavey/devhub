@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { PrRow } from "@/components/PrRow";
 import type { GithubPrRow } from "@/lib/github/prs";
@@ -59,6 +59,34 @@ describe("PrRow", () => {
     render(<PrRow row={{ ...row, prState: "merged", approved: true }} kind="reviewed" density="compact" />);
     expect(screen.getByLabelText("Merged")).toBeTruthy();
     expect(screen.queryByLabelText("Approved")).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it("shows a CI glance glyph when checks are known", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+    render(
+      <PrRow
+        row={{ ...row, checks: "failing", checkCounts: { passed: 1, failed: 2, pending: 0 } }}
+        kind="authored"
+        density="compact"
+      />,
+    );
+    expect(screen.getByLabelText("checks failing")).toBeTruthy();
+    vi.unstubAllGlobals();
+  });
+
+  it("opens the row menu from a right-click on the PR title", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+    render(<PrRow row={row} kind="reviews" density="compact" />);
+    const title = screen.getByRole("link", { name: row.title });
+    fireEvent.contextMenu(title, { clientX: 40, clientY: 80 });
+    // popover=manual keeps the menu out of the a11y tree in jsdom; assert DOM.
+    const menu = document.querySelector('[role="menu"][aria-label$="actions"]');
+    expect(menu).toBeTruthy();
+    expect(menu?.textContent).toMatch(/Review with agent/i);
+    expect(menu?.textContent).toMatch(/Investigate pipeline/i);
+    const host = document.querySelector("[data-context-menu-host][data-context-menu='open']");
+    expect(host?.classList.contains("pr-row")).toBe(true);
     vi.unstubAllGlobals();
   });
 });

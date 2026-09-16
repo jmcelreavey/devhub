@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Minimal surface for the local boot page. The dashboard's remote loopback origins receive their own explicitly scoped capability below.",
+  "description": "What both the local boot page and the dashboard's loopback origins may call — every app command here is one lib/desktop/bridge.ts or UpdateBanner uses. Boot-page-only commands live in boot.json, which has no remote block.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -11,7 +11,20 @@
     "dialog:allow-open",
     "notification:default",
     "opener:default",
-    "updater:default"
+    "updater:default",
+    "allow-desktop-info",
+    "allow-pick-folder",
+    "allow-open-logs",
+    "allow-renderer-log",
+    "allow-set-desktop-icon",
+    "allow-current-version",
+    "allow-check-update",
+    "allow-install-update",
+    "allow-relaunch",
+    "allow-wake-helper-install",
+    "allow-wake-helper-uninstall",
+    "allow-login-item-status",
+    "allow-login-item-set"
   ],
   "remote": {
     "urls": [

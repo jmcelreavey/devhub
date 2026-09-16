@@ -4,6 +4,7 @@ import { stageDashboard } from "./stage-dashboard.mjs";
 import { stageIcons } from "./stage-icons.mjs";
 import { stageResources } from "./stage-resources.mjs";
 import { stageNodeRuntime } from "./stage-node-runtime.mjs";
+import { stageWakeHelper } from "./stage-wake-helper.mjs";
 
 const noBuild = process.argv.includes("--no-build");
 
@@ -11,6 +12,7 @@ try {
   await stageNodeRuntime();
   stageResources();
   stageIcons();
+  stageWakeHelper();
   await stageDashboard({ build: !noBuild });
   process.stdout.write("[stage] complete\n");
 } catch (err) {

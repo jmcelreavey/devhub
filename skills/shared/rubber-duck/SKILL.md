@@ -1,6 +1,6 @@
 ---
 name: rubber-duck
-description: Review the conversation so far as an independent second-opinion model. Use when the assistant needs to critique an existing plan, pressure-test assumptions, catch missing risks, propose a simpler alternative, or sanity-check the current direction before implementation or after a draft answer.
+description: Pressure-test a plan or draft with an independent second opinion.
 ---
 
 # Rubber Duck

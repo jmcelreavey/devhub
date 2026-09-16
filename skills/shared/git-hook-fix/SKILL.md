@@ -1,11 +1,6 @@
 ---
 name: git-hook-fix
-description: >-
-  Fix a failing git hook (pre-commit, commit-msg, pre-push, husky, verify/lint).
-  Inspect the failure log, fix the underlying errors, and re-run the hook or
-  the original git command until it passes. Use when DevHub hands off a hook
-  failure, or when the user asks to fix a blocked commit/push. Never skip
-  hooks with --no-verify or DEVHUB_SKIP_VERIFY unless the user explicitly asks.
+description: Diagnose and fix a failing Git hook without bypassing it.
 metadata:
   short-description: Fix failing git hooks (commit/push)
 ---

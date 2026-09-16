@@ -89,13 +89,40 @@ node mcp-servers/devhub-server/scripts/call-tool.mjs notes_search '{"query":"loc
 
 Requires `tsx` in `mcp-servers/devhub-server/node_modules`. Used by `npm run demos:record`.
 
+## Connect any MCP client over HTTP
+
+Besides the synced stdio launch, the same server listens on Streamable HTTP for
+clients that connect to a URL:
+
+```bash
+npm run mcp:http        # → http://127.0.0.1:1340/mcp
+```
+
+The dashboard starts this peer automatically, so if DevHub is running, the
+endpoint usually already exists. To onboard any MCP client:
+
+```bash
+npm run mcp:token       # prints ready-to-paste configs
+```
+
+That prints a generic client config (`{ "type": "http", "url": ..., "headers": { "Authorization": "Bearer ..." } }`),
+the Claude Code CLI command, and a Cursor `mcp.json` entry — same tools, same
+toolsets, same history as stdio.
+
+Security model: every request needs a bearer token (auto-generated once, stored
+`0600` at `~/.config/devhub/mcp-http-token`, override with `DEVHUB_MCP_HTTP_TOKEN`);
+Host/Origin must be loopback unless `DEVHUB_MCP_HTTP_ALLOWED_HOSTS` extends it
+(a tunnelled remote client needs both the tunnel and that variable). The token
+grants every DevHub tool, including agent dispatch — narrow the exposed surface
+with `DEVHUB_MCP_TOOLSETS` before exposing it beyond this machine.
+
 ## Tool Inventory
 
 | Group      | Tools                                                                                                                                                                                                                                                                                                                                                         |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Notes      | `notes_list`, `notes_read`, `notes_write`, `notes_write_asset`, `notes_append`, `notes_search`, `notes_delete`, `notes_create_meeting`, `notes_create_task`, `notes_create_pr`, `entity_links_read`, `entity_links_resolve`, `notes_cursor_open`, `notes_cursor_apply`, `notes_cursor_delete` |
+| Notes      | `notes_list`, `notes_read`, `notes_write`, `notes_write_asset`, `notes_append`, `notes_search`, `notes_delete`, `notes_create_meeting`, `notes_create_task`, `notes_create_pr`, `notes_devhub_open`, `entity_links_read`, `entity_links_resolve`, `notes_cursor_open`, `notes_cursor_apply`, `notes_cursor_delete` |
 | Docs       | `docs_list`, `docs_read`, `docs_write`, `docs_append`, `docs_search`, `docs_delete`                                                                                                                                                                                                                                                                           |
-| Tasks      | `tasks_list`, `tasks_create`, `tasks_update`, `tasks_delete`, `tasks_history`                                                                                                                                                                                                                                                                                 |
+| Tasks      | `tasks_list`, `tasks_create`, `tasks_update`, `tasks_delete`, `tasks_history`, `tasks_agent_runs`, `tasks_agent_handoff_get`, `tasks_agent_handoff_set`, `tasks_agent_resume`, `tasks_implement_ready`                                                                                                                                                                                                                                                                                 |
 | Diagrams   | `diagrams_list`, `diagrams_read`, `diagrams_create`, `diagrams_update`, `diagrams_add_note`, `diagrams_delete`, `diagrams_rename`                                                                                                                                                                                                                             |
 | Appraisal  | `appraisal_record`, `appraisal_set_goal`, `appraisal_list_goals`, `appraisal_read`, `appraisal_list`, `appraisal_people`, `appraisal_summarize`, `appraisal_delete`                                                                                                                                                                                           |
 | DX audit   | `dx_audit_list`, `dx_audit_read` — reads `reviews/dx-audit-<repo>-<date>` notes written by the `dx-audit` skill                                                                                                                                                                                                                                               |
@@ -104,23 +131,26 @@ Requires `tsx` in `mcp-servers/devhub-server/node_modules`. Used by `npm run dem
 | Status     | `status_services`, `status_git`, `status_mcp`, `status_exec`, `services_restart`                                                                                                                                                                                                                                                                               |
 | Briefing   | `briefing_get`                                                                                                                                                                                                                                                                                                                                                |
 | Calendar   | `calendar_week`, `calendar_list`                                                                                                                                                                                                                                                                                                                              |
-| Work       | `prs_list`, `prs_open_in_cursor`, `jira_tickets`, `jira_ticket_get`, `standup_markdown`, `tasks_weekly`, `jira_ticket_transition`                                                                                                                                                                                                                             |
+| Work       | `prs_list`, `prs_open_in_cursor`, `prs_auto_review`, `prs_auto_review_settings_get`, `prs_auto_review_settings_set`, `prs_pipeline_investigate`, `jira_tickets`, `jira_ticket_get`, `standup_markdown`, `tasks_weekly`, `jira_ticket_transition`                                                                                                                                                                                                                             |
 | Assets     | `assets_list`                                                                                                                                                                                                                                                                                                                                                 |
 | Search     | `search`                                                                                                                                                                                                                                                                                                                                                      |
 | Scripts    | `scripts_list`, `scripts_run`, `scripts_run_status`, `scripts_history`                                                                                                                                                                                                                                                                                        |
 | Repos      | `repos_list`, `repos_open`, `repos_reveal`, `repos_clone`, `repo_learn`, `repos_git_status`, `repos_git_stage`, `repos_git_discard`, `repos_git_stage_hunk`, `repos_git_diff`, `repos_git_stash`, `repos_git_branches`, `repos_git_branch`, `repos_git_commit`, `repos_git_push`, `repos_git_log`, `repos_git_show`, `repos_git_blame`, `repos_git_conflicts` |
+| Jobs       | `jobs_list`, `jobs_get`, `jobs_create`, `jobs_update`, `jobs_delete`, `jobs_run`, `jobs_log` — DevHub scheduled jobs (cron scripts or agent prompts) that persist, catch up after sleep and can wake the Mac; preferred over a harness's own cron. See [Scheduled jobs](../guides/scheduled-jobs.md) |
 | Sessions   | `sessions_recap`                                                                                                                                                                                                                                                                                                                                              |
 | Share      | `share_list`, `share_publish`, `share_one_time`, `share_revoke` — parity with the editor **Share** / **One-time** buttons; registry stays in the dashboard process                                                                                                                                                                                            |
-| Workspace  | `skills_list`, `skills_read`, `context_pack`, `collections_list`, `jobs_list`, `jobs_get`, `research_list`, `radar_personal`, `persona_list`, `learnings_list`, `agents_list`, `briefing_tasks` — read-only GET proxies for dashboard areas that had no MCP coverage                                                                                          |
+| Workspace  | `skills_list`, `skills_read`, `context_pack`, `collections_list`, `research_list`, `radar_personal`, `persona_list`, `learnings_list`, `agents_list`, `briefing_tasks` — read-only GET proxies for dashboard areas that had no MCP coverage                                                                                          |
 | Datadog    | `datadog_oncall`, `datadog_recent_alerts`, `datadog_investigate`                                                                                                                                                                                                                                                                                              |
 | Recall     | `recall`, `recall_graph`, `recall_remember`, `recall_index`                                                                                                                                                                                                                                                                                                   |
 | Tags       | `tags_list`, `tags_lookup`, `tags_rename` — discover the existing `#tag` vocabulary before inventing near-duplicates, get everything tied to one tag, and rename globally (confirm-gated). There is no `tags_create`: writing `#tag` in a task or note body _is_ the create path                                                                              |
 | Ownership  | `owned_repos`, `repo_owner_brief`, `repo_pr_radar`, `repo_who_owns`, `repo_knowledge_gaps` — dashboard-backed proxies for `/api/own/*`                                                                                                                                                                                                                        |
 | Terminal   | `terminal_list`, `terminal_tail`, `terminal_propose_run`, `terminal_proposal_status`, `terminal_wait_for` — dock tabs, propose-then-confirm command runs, and blocking until output matches a pattern. The MCP process never injects stdin; the dock must confirm, unless the user has **Auto-run** on for a non-destructive command (agent dispatch's auto-run tabs are the one server-side exception). |
 | Database   | `db_connections`, `db_preflight`, `db_connect`, `db_schema`, `db_table`, `db_query`, `db_explain`, `db_execute`, `db_cancel`, `db_diff`, `db_history` — proxy `/api/db/*`. Reads via `db_query`; writes via `db_execute` (`confirm: true`, plus `confirmLabel` on dangerous connections). The MCP process never opens a database. See [Database client](database-client.md). |
-| Agents     | `agent_providers`, `agent_dispatch`, `agent_race`, `agent_runs`, `agent_output`, `agent_wait`, `agent_followup`, `agent_cancel`, `agent_diff` — hand a task to another agent CLI (Claude Code, Cursor, Codex, Gemini, OpenCode, Antigravity, or a custom CLI). Each run executes with approvals off in its own visible dock tab; proxies `/api/agent/runs`. See [Dispatch work to another agent](#dispatch-work-to-another-agent). |
+| Agents     | `agent_providers`, `agent_dispatch`, `agent_race`, `agent_runs`, `agent_output`, `agent_wait`, `agent_followup`, `agent_cancel`, `agent_diff`, `agent_interactive_note`, `agent_interactive_finish` — hand a task to another agent CLI (Claude Code, Cursor, Codex, Gemini, OpenCode, Antigravity, or a custom CLI). Each run executes with approvals off in its own visible dock tab; the first dispatch to a repo with a given agent waits on a one-time dock confirmation, and turn/wall-clock/cost caps apply; proxies `/api/agent/runs`. See [Dispatch work to another agent](#dispatch-work-to-another-agent). |
+| Resources  | `devhub://notes/{path}`, `devhub://docs/{path}`, `devhub://agent-runs/{runId}/events`, `devhub://jobs`, `devhub://jobs/log` — cacheable reads of vault content, run event streams and scheduled jobs, with best-effort update notifications. Selected with the `resources` toolset. |
 | History    | `mcp_history`, `mcp_history_summary` — filesystem-backed trace of every DevHub MCP tool call (redacted args, duration, outcome, client, dispatching run) and a per-day rollup. See [Trace what agents did](#trace-what-agents-did). |
 | Events     | `events_wait` — block until a PR's checks finish / it is reviewed / merged (`/api/github/pr-state`), a script or agent run ends, a new Datadog alert fires, or a new recall-spine event lands. Polls dashboard routes; max 300s per call. |
+| UI         | `ui_open` — open any internal DevHub page (`/notes/<path>`, `/repos/<name>`, `/work`, `/briefing`, …) as a workspace tab in the running DevHub app (desktop or browser); the generalized form of `notes_devhub_open` |
 | Prompts    | Not tools: every skill under the checkout's `skills/` (shared, vendor, root installs) is registered as an MCP **prompt** named after the skill, with an optional `task` argument. Clients show them as slash commands. Toolset name `prompts`; plugin skills are not included. |
 
 `recall` is the one an agent should reach for first. `search` answers "which
@@ -132,7 +162,7 @@ BI-specific MCP tools are contributed by the private BI plugin as a separate ser
 
 **Scope notes:** `notes_list` and `notes_search` cover the workspace slice only — `daily/` journals plus root-level `.json` scratch notes. Structured areas like `learnings/` need explicit paths via `notes_read`. `calendar_list` returns Google Calendar **accounts and selection state**, not events (use `calendar_week` for the week grid).
 
-Dashboard-backed tools that mutate runtime or external state require `confirm: true` (for example `services_restart`, mutating `scripts_run` entries, `repos_git_stage`, `repos_git_commit`, `repos_git_push`, `repos_git_branch`, `prs_open_in_cursor`, `jira_ticket_transition`, and `db_execute`). Long-running actions return a `runId`; poll the matching status tool, such as `scripts_run_status`, until the run exits. MCP cannot stream the dashboard's live run log.
+Dashboard-backed tools that mutate runtime or external state require `confirm: true` (for example `services_restart`, mutating `scripts_run` entries, `repos_git_stage`, `repos_git_commit`, `repos_git_push`, `repos_git_branch`, `prs_open_in_cursor`, `prs_auto_review`, `jira_ticket_transition`, and `db_execute`). Long-running actions return a `runId`; poll the matching status tool, such as `scripts_run_status`, until the run exits. MCP cannot stream the dashboard's live run log.
 
 All `repos_git_*` tools proxy the Repo Git workspace HTTP routes (`/api/repos/<name>/git/*` and `/branches`) — they do not shell out to `git` directly from the MCP process. Start the dashboard before using them.
 
@@ -203,9 +233,10 @@ Clients that take a URL rather than launching a process can use the Streamable H
 
 - Endpoint: `http://127.0.0.1:1340/mcp` (`DEVHUB_MCP_HTTP_PORT`, `DEVHUB_MCP_HTTP_HOST`).
 - Every request needs `Authorization: Bearer <token>`. The token comes from `DEVHUB_MCP_HTTP_TOKEN`, or is generated once into `~/.config/devhub/mcp-http-token` (0600) and reused.
+- Onboarding: `npm run mcp:token` in `mcp-servers/devhub-server` prints the token plus paste-ready configs for generic MCP clients (AutoClaw, Grok Bot), the Claude Code CLI, and Cursor.
 - `Host` and any `Origin` must be loopback, which blocks DNS-rebinding pages. Add names such as a Tailscale hostname with `DEVHUB_MCP_HTTP_ALLOWED_HOSTS` (and bind a reachable `DEVHUB_MCP_HTTP_HOST`) only when a remote client needs it.
 
-The dashboard starts it at boot from the linked checkout (`dashboard/lib/mcp-http-peer.ts`, called from `instrumentation.ts`), pointed at that dashboard's URL and content dirs, with output in `~/.local/state/devhub/mcp-http.log`. It is skipped when `DEVHUB_MCP_HTTP=0`, there is no checkout, the MCP package has no `node_modules`, or the port already has a listener. Cloud-hosted agents (for example a Grok Bot box) cannot reach `127.0.0.1` on your machine; they need a tunnelled URL, which also exposes every tool the server has — narrow it with `DEVHUB_MCP_TOOLSETS` first.
+The dashboard starts it at boot from the linked checkout (`dashboard/lib/mcp-http-peer.ts`, called from `instrumentation.ts`), pointed at that dashboard's URL and content dirs, with output in `~/.local/state/devhub/mcp-http.log`. It is skipped when `DEVHUB_MCP_HTTP=0`, there is no checkout, the MCP package has no `node_modules`, or the port is held by something else (a second live DevHub, or a manual `npm run mcp:http`). The server is given the dashboard's pid (`DEVHUB_MCP_HTTP_PARENT_PID`) and exits within a few seconds of that dashboard going away; a peer that still outlives its dashboard is replaced at the next dashboard start, so a rebuild, reinstall or relaunch always serves the checkout's current MCP code. MCP servers that clients launch over stdio (Claude Code, Cursor, …) belong to those clients — reconnect the client to pick up new tools. Cloud-hosted agents (for example a Grok Bot box) cannot reach `127.0.0.1` on your machine; they need a tunnelled URL, which also exposes every tool the server has — narrow it with `DEVHUB_MCP_TOOLSETS` first.
 
 Clients that launch stdio servers (Claude Code, Cursor, Codex, OpenCode, AutoClaw via `mcporter.json`) should keep using the synced stdio config.
 
@@ -231,6 +262,8 @@ Cross-entity edges use the shared `EntityRef` contract in `shared/entity-note/`.
 4. `entity_links_read` — parse `## Links` from an existing note path.
 5. `tasks_create` — optional `withNote: true` and/or `links: EntityRef[]` on the new task.
 6. `tasks_update` — pass `links` to replace hop-around refs on an existing task.
+7. `tasks_agent_runs` / `tasks_agent_handoff_get` / `tasks_agent_handoff_set` / `tasks_agent_resume` — durable task↔agent-run links, handoff, and Resume with Agent (`/api/tasks/agent-runs`, `/resume`). See [Task agent handoff](../guides/task-agent-handoff.md).
+8. `tasks_implement_ready` — light ready-to-implement checklist (`GET /api/tasks/implement/ready`). See [Task agent handoff](../guides/task-agent-handoff.md#implement-ready).
 
 Path helpers and markdown scaffolds live in `shared/task-note/`, `shared/meeting-note/`, and `shared/pr-note/`. When the dashboard is running, `GET /api/entity-links` resolves the combined read model (notes + related entities). See [Notes System — Cross-entity linking](notes-system.md#cross-entity-linking).
 
@@ -272,6 +305,8 @@ The dashboard route redacts secrets (tokens, env values, URL credentials) before
 
 ### Propose a terminal command from an agent
 
+Clients that support MCP elicitation get the confirmation in their own chat first (`terminal_propose_run` asks "Run this in the DevHub terminal dock?"); on accept the proposal starts without the dock's second chip. Destructive commands always keep the dock modal. Clients without elicitation keep the chip-only flow.
+
 Terminal tools proxy `/api/terminal/sessions` and `/api/terminal/propose`. Start the dashboard and open the dock at least once so tabs register.
 
 1. `terminal_list` — visible dock tabs (label, cwd, kind, busy, session id). Empty until the dock has opened this process.
@@ -286,7 +321,7 @@ Proposals live in the dashboard process (15 min TTL, max 20 pending). Desktop WS
 Agent tools proxy `/api/agent/runs`. Start the dashboard and keep it open — a run starts when the terminal dock opens its tab.
 
 1. `agent_providers` — which CLIs are installed (built-ins plus `~/.config/devhub/agent-providers.json`).
-2. `agent_dispatch` with `provider`, a self-contained `prompt`, and `cwd`. Approvals are **off** for the dispatched CLI. Without `worktree` it edits `cwd` directly, so changes appear in the user's IDE; `worktree: true` isolates it on a `devhub/agent/<run>` branch under the repo's `.git/devhub-worktrees/`.
+2. `agent_dispatch` with `provider`, a self-contained `prompt`, and `cwd`. Approvals are **off** for the dispatched CLI. Runs are **isolated by default** on a `devhub/agent/<run>` worktree branch under the repo's `.git/devhub-worktrees/`; `worktree: false` edits `cwd` directly, so changes appear in the user's IDE. The first dispatch of a provider into a repo queues behind the dock chip (approval is remembered in the app-data `agent-consent.json`); `DEVHUB_AGENT_TRUST_ALL=1` skips that. Caps via env: `DEVHUB_AGENT_MAX_TURNS` (200), `DEVHUB_AGENT_MAX_SECONDS` (1800), `DEVHUB_AGENT_MAX_COST_USD` per local day (25), `DEVHUB_AGENT_MAX_RUNS` (6), and optional `DEVHUB_AGENT_ALLOWED_ROOTS` (colon-separated cwd allowlist).
 3. `agent_wait` (blocks up to 300s and sends progress notifications) or `agent_output` with the returned `since` cursor.
 4. `agent_diff` shows what changed against HEAD at dispatch. `agent_followup` resumes the same CLI session (Claude Code, Cursor, or a custom CLI with `resumeArgs`); `agent_cancel` stops a run.
 5. `agent_race` sends one prompt to 2–4 providers, each in its own worktree, for side-by-side diffs.
@@ -329,8 +364,12 @@ Default MCP row cap is 100. Do not interpolate untrusted values into SQL.
 
 These proxy the same GitHub PR routes as the `/prs` row actions. Start the dashboard first.
 
-1. `prs_list` — authored + review-requested queues.
+1. `prs_list` — authored + review-requested queues (includes CI `checks` glance when available).
 2. `prs_open_in_cursor` with `repo` + `number` and `confirm: true` — stashes dirty work in the local clone, `gh pr checkout`, then launches Cursor. Optional `notePath` opens a notes working copy alongside. `repos_open` only opens the current branch.
+3. `prs_auto_review` — dry-run lists candidates from the review-requested queue; `confirm: true` starts OpenCode agent reviews (same prompt/note path as the UI **Review with agent**). Skips drafts, skip-until-updated, and PRs already reviewed for the current `updatedAt`. **Does not** post GitHub review comments. Cap with optional `limit` (1–2).
+3b. `prs_auto_review_settings_get` / `prs_auto_review_settings_set` — read or write the in-process poller prefs (`enabled` / `always`) without editing `.env.local`. Persists to `notes/.config/auto-pr-review.json`.
+4. `prs_pipeline_investigate` — dig into CI for one PR (`confirm: true` to start; optional `rerunFailed`). Same prompt/note path as UI **Investigate pipeline**. See [Pipeline investigate](../guides/pipeline-investigate.md).
+5. Live waits: `events_wait` (`kind: "pr"`, `until: "checks_done"`) against `/api/github/pr-state`.
 
 **Not exposed as MCP tools** (dashboard UI / direct HTTP only): `GET /api/repos/<name>/git/commit-context`, `.../git/coupling`, `.../git/range`, `.../git/reflog`, `.../git/remotes`, `.../git/worktrees`, `.../git/ci`, `POST .../git/commit-action`, `POST .../git/rebase-interactive`. Agents can call these via `DEVHUB_BASE_URL` when needed; there is no matching `repos_git_*` registrar yet.
 
@@ -397,9 +436,17 @@ Workspace tools are read-only GET proxies — useful as a first call when pickin
 - `context_pack` — consolidated working-state snapshot (optional `format`, e.g. `markdown`).
 - `skills_list` / `skills_read` — browse the merged skill catalog before improvising.
 - `collections_list` — optional `notePath` filter for membership.
-- `jobs_list` / `jobs_get`, `research_list`, `radar_personal`, `learnings_list` (optional `category`), `agents_list`, `briefing_tasks`, `persona_list`.
+- `research_list`, `radar_personal`, `learnings_list` (optional `category`), `agents_list`, `briefing_tasks`, `persona_list`.
 
 Writes in these areas (`/api/persona` POST, `/api/collections` POST, `/api/briefing/tasks` POST, `/api/actions/*` launches) are deliberately not exposed yet.
+
+### Schedule work
+
+The `jobs` toolset (`jobs_list`, `jobs_get`, `jobs_create`, `jobs_update`, `jobs_delete`, `jobs_run`, `jobs_log`) manages DevHub scheduled jobs: cron-triggered DevHub scripts or agent prompts that persist in the dashboard, catch up once after sleep, and can wake the Mac through the root wake helper. The server's `instructions` tell harnesses to prefer these over their own cron tools for DevHub work.
+
+`jobs_log` reads the scheduler activity log (`~/.local/state/devhub/scheduler.log`) and the wake helper's log — why each run fired, how it ended, and every wake scheduled — so "did my job run?" and "why didn't the Mac wake?" are one call. The same data is available as the `devhub://jobs` and `devhub://jobs/log` resources.
+
+Mutating tools take `confirm: true`. Agent jobs run with approvals off, so `jobs_create` (and `jobs_update` when it changes the agent action) asks the user in-band when the client supports elicitation; otherwise the job waits for **Approve** on the Actions page. See [Scheduled jobs](../guides/scheduled-jobs.md).
 
 ### Ship everything to main
 

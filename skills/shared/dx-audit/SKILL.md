@@ -1,6 +1,6 @@
 ---
 name: dx-audit
-description: Run a developer-experience audit on any repo — dev loop, build/CI/CD, release process, testing, dependency health, architecture drift. Detects the stack and applies stack-specific checks (React Native/Expo, Node/web, etc.). Writes the report to DevHub notes via the notes MCP. Use when DevHub launches a "DX Audit" from the Repos page, or when the user asks to audit developer experience, find dev-time wins, or review why shipping is slow.
+description: Audit a repository's developer experience and save findings to DevHub notes.
 metadata:
   short-description: Audit a repo's developer experience
 ---

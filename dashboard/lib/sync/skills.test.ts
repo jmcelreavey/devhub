@@ -3,13 +3,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { SKILL_MD } from "@/lib/skills/shared";
-import { syncSkills, TOOL_DIRS } from "@/lib/sync/skills";
+import { SKILL_SYNC_EXCLUDE_TOOLS_ENV, syncSkills, TOOL_DIRS, verifySync } from "@/lib/sync/skills";
 
 describe("syncSkills merged catalog", () => {
   const prev = {
     HOME: process.env.HOME,
     AI_TOOLS_ROOT: process.env.AI_TOOLS_ROOT,
     AI_TOOLS_REFRESH_ON_SYNC: process.env.AI_TOOLS_REFRESH_ON_SYNC,
+    [SKILL_SYNC_EXCLUDE_TOOLS_ENV]: process.env[SKILL_SYNC_EXCLUDE_TOOLS_ENV],
   };
 
   let repo: string;
@@ -142,6 +143,27 @@ describe("syncSkills merged catalog", () => {
 
     expect(fs.readFileSync(path.join(codex, "orphan-local", SKILL_MD), "utf-8")).toBe("keep me\n");
     expect(fs.existsSync(path.join(codex, "stale-skill"))).toBe(false);
+  });
+
+  it("skips configured all-target destinations but honors an explicit target", async () => {
+    setup();
+    process.env[SKILL_SYNC_EXCLUDE_TOOLS_ENV] = "agents";
+
+    await syncSkills({ repoRoot: repo, emit: () => {}, refreshAiTools: false });
+    expect(fs.existsSync(path.join(home, ".agents/skills/local-skill"))).toBe(false);
+
+    await syncSkills({ repoRoot: repo, emit: () => {}, refreshAiTools: false, tool: "agents" });
+    expect(fs.existsSync(path.join(home, ".agents/skills/local-skill"))).toBe(true);
+  });
+
+  it("does not report configured excluded destinations as unhealthy", async () => {
+    setup();
+    process.env[SKILL_SYNC_EXCLUDE_TOOLS_ENV] = "agents";
+
+    await syncSkills({ repoRoot: repo, emit: () => {}, refreshAiTools: false });
+    const result = await verifySync({ repoRoot: repo, emit: () => {} });
+
+    expect(result.missing.some((entry) => entry.tool === "agents")).toBe(false);
   });
 });
 

@@ -1,6 +1,13 @@
 import net from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { canBindPort, canConnect, parsePsEtime, waitForPortListening } from "./port-probe";
+import {
+  canBindPort,
+  canConnect,
+  lsofListenerArgs,
+  parsePsEtime,
+  pidsListeningOnPort,
+  waitForPortListening,
+} from "./port-probe";
 
 describe("port-probe", () => {
   let server: net.Server | undefined;
@@ -35,6 +42,19 @@ describe("port-probe", () => {
     await new Promise<void>((resolve) => server!.listen(port, "127.0.0.1", resolve));
 
     expect(await waitPromise).toBe(true);
+  });
+
+  it("passes the port on -i, so lsof filters instead of treating it as a file", () => {
+    expect(lsofListenerArgs(1340)).toEqual(["-t", "-iTCP:1340", "-sTCP:LISTEN"]);
+  });
+
+  it.skipIf(process.platform === "win32")("pidsListeningOnPort finds this process's listener", async () => {
+    server = net.createServer();
+    await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
+    const addr = server.address();
+    if (!addr || typeof addr === "string") throw new Error("expected address");
+
+    expect(pidsListeningOnPort(addr.port)).toContain(process.pid);
   });
 });
 

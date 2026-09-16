@@ -58,6 +58,9 @@ export function ExternalLinks() {
     };
     const onContextMenu = (event: MouseEvent) => {
       if (event.defaultPrevented) return;
+      // Row hosts (PrRow, tasks, …) own right-click — don't steal their menu.
+      const hit = event.target;
+      if (hit instanceof Element && hit.closest("[data-context-menu-host]")) return;
       const url = externalHref(event.target);
       if (!url) return;
       event.preventDefault();

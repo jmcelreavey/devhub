@@ -1,6 +1,6 @@
 ---
 name: devhub-debug-hang
-description: "Diagnose a DevHub dashboard that is hanging, slow, or unresponsive — pages that never load, requests that never return, a wedged server, or a route that got slow. Start with status_exec to find the blocking external command, then the ladder below. Keywords: dashboard hangs, page never loads, server wedged, unresponsive, HTTP 000, slow route, stuck request, git hangs, gh hangs, spinner forever."
+description: Diagnose a slow, hanging, or unresponsive DevHub dashboard or route.
 ---
 
 # Debugging a hanging or slow DevHub

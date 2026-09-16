@@ -1,6 +1,6 @@
 ---
 name: datadog-investigation
-description: Triage and investigate a Datadog alert (BI DAD team) — correlate it with recent deploys/commits, identify the owning service, and recommend the next dashboards, logs, and mitigations. Use when investigating an @oncall-dad page or @slack-dad-team-alerts warning, or when DevHub's "Investigate" button hands off an alert to OpenCode.
+description: Investigate a BI Datadog alert, its owner, recent changes, and next mitigations.
 ---
 
 # Datadog Investigation

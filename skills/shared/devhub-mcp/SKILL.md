@@ -1,6 +1,6 @@
 ---
 name: devhub-mcp
-description: "Use the DevHub MCP (stdio server `mcp-servers/devhub-server`). Covers filesystem tools — BlockNote JSON notes under notes/, Markdown docs under docs/, daily tasks, tldraw diagrams, self-appraisal, DX audit reports — AND dashboard-backed tools that proxy the local DevHub dashboard (status, scripts/sync, briefing, calendar, work/PRs, repos, search). Keywords: devhub MCP, notes_list, notes_search, docs_read, tasks_create, scripts_run, status_services, briefing_get, prs_list, jira_tickets, repos_list, dx_audit_list, dx_audit_read."
+description: Use DevHub MCP for notes, tasks, diagrams, dashboard operations, and scheduled jobs.
 ---
 
 DevHub ships a **stdio MCP server** at `mcp-servers/devhub-server`, wired from
@@ -33,6 +33,7 @@ errors. Tool **descriptions** are the source of truth for args; this skill carri
 `notes_create_pr` scaffolds `pr-reviews/<repo>-<n>` with PR + repo `## Links` EntityRefs; `notes_write` on `pr-reviews/` upserts the same links.
 `notes_write_asset` writes image bytes (jpg, png, gif, webp); reference them as
 `![caption](garden/project/assets/photo-1.jpg)`. Toggles: `::toggle <title>` … `::end-toggle`.
+`notes_devhub_open` opens an existing note in a new workspace tab when DevHub is running (desktop app or browser dashboard); it fails cleanly instead of pretending when no client is connected. `ui_open` does the same for any internal page (/work, /briefing, /repos/<name>, …).
 
 **Docs** — `docs_*` over the full `docs/` Markdown tree (list/search cover everything,
 unlike the filtered notes slice).
@@ -86,12 +87,23 @@ the latest audit as markdown; run new audits from the Repos page **DX Audit** bu
   `repos_git_conflicts`. Mutating tools need `confirm:true`.
 - **Inventory/search** — `assets_list` (agents|skills|mcp|persona), `search` (notes|docs).
 - **Agents** — `agent_providers`, `agent_dispatch`, `agent_race`, `agent_runs`, `agent_output`,
-  `agent_wait`, `agent_followup`, `agent_cancel`, `agent_diff`. Hands a task to another agent CLI
+  `agent_wait`, `agent_followup`, `agent_cancel`, `agent_diff`, `agent_interactive_note`,
+  `agent_interactive_finish`. Hands a task to another agent CLI
   (Claude Code, Cursor, Codex, Gemini, OpenCode, or a custom one from
   `~/.config/devhub/agent-providers.json`). Runs start immediately with approvals disabled in their
   own dock tab the user can watch and stop, and edit `cwd` directly unless `worktree:true` (so
   changes show in the IDE). Write a self-contained prompt; `agent_wait` then `agent_diff`.
   A dispatched agent cannot dispatch further (`DEVHUB_AGENT_MAX_DEPTH`).
+- **Scheduled jobs** — `jobs_list`, `jobs_get`, `jobs_create`, `jobs_update`, `jobs_delete`, `jobs_run`, `jobs_log`.
+  **Use these, not your harness's own cron (`CronCreate`, `/loop`, `/schedule`, scheduled tasks, crontab),
+  for anything recurring or deferred that involves DevHub.** A job runs an allowlisted script or an agent
+  prompt in a repo; it persists in the dashboard, catches up once after sleep, wakes the Mac by default
+  (`wake:false` for frequent jobs) and shows on the Actions page. Agent jobs need the user — they confirm in
+  chat, or the job waits for **Approve** in DevHub; say so rather than assuming it will run. `jobs_list`
+  reports whether the wake helper is installed. For "did it run?" or "why didn't the Mac wake?", read
+  `jobs_log` (optionally `job: <id>`) before guessing — it records why each run fired, how it ended, and
+  every wake scheduled. MCP cannot approve agent jobs or install the wake helper; point the user to
+  Actions → Scheduled Jobs.
 - **Terminal** — `terminal_list`, `terminal_propose_run`, `terminal_proposal_status`, `terminal_tail`,
   `terminal_wait_for` (block until output matches a regex instead of polling the tail).
   Prefer a dock tab over the agent/Cursor shell for anything the user should see: the dock is where

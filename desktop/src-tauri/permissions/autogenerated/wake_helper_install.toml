@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wake-helper-install"
+description = "Enables the wake_helper_install command without any pre-configured scope."
+commands.allow = ["wake_helper_install"]
+
+[[permission]]
+identifier = "deny-wake-helper-install"
+description = "Denies the wake_helper_install command without any pre-configured scope."
+commands.deny = ["wake_helper_install"]

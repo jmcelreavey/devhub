@@ -6,7 +6,7 @@ import { getEventsInRange } from "@/lib/google-calendar";
 import { getMyTicketsCached } from "@/lib/jira/client";
 import { getNoteIndex } from "@/lib/notes/note-index";
 import { loadIndex } from "@/lib/recall/store";
-import { rowFromSearchItem, searchIssues } from "@/lib/github/prs";
+import { resolveCanonicalRepoFullName, rowFromSearchItem, searchIssues } from "@/lib/github/prs";
 import { getGithubFullNameForLocalRepo } from "@/lib/repos";
 import {
   clusterRepoWork,
@@ -149,7 +149,8 @@ export const GET = withErrorHandler(
       return NextResponse.json({ error: "Repo not found" }, { status: 404 });
     }
 
-    const fullName = getGithubFullNameForLocalRepo(repoPath);
+    const remoteFullName = getGithubFullNameForLocalRepo(repoPath);
+    const fullName = remoteFullName ? await resolveCanonicalRepoFullName(remoteFullName) : null;
     const date = todayISO();
     // Tasks are local; Jira, Calendar and GitHub are independent network calls.
     // Awaiting them in sequence made this route cost the sum of all four on the

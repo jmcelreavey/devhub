@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEffect } from "react";
 import {
@@ -8,15 +8,51 @@ import {
   WorkspaceTabsProvider,
   useWorkspaceTabs,
 } from "@/components/shell/WorkspaceTabs";
-import { WORKSPACE_TABS_STORAGE_KEY } from "@/lib/workspace-tabs";
+import { UI_OPEN_BROWSER_FLAG, WORKSPACE_TABS_STORAGE_KEY } from "@/lib/workspace-tabs";
 
 const pathname = vi.hoisted(() => ({ current: "/" }));
 const routerPush = vi.hoisted(() => vi.fn());
+const desktop = vi.hoisted(() => ({ current: false }));
+
+type MessageListener = (event: MessageEvent<string>) => void;
+
+class FakeEventSource {
+  static instances: FakeEventSource[] = [];
+
+  readonly url: string;
+  closed = false;
+  private messageListener: MessageListener | undefined;
+
+  constructor(url: string) {
+    this.url = url;
+    FakeEventSource.instances.push(this);
+  }
+
+  addEventListener(type: string, listener: EventListener): void {
+    if (type === "message") this.messageListener = listener as MessageListener;
+  }
+
+  removeEventListener(type: string, listener: EventListener): void {
+    if (type === "message" && this.messageListener === listener) this.messageListener = undefined;
+  }
+
+  emit(data: string): void {
+    this.messageListener?.(new MessageEvent("message", { data }));
+  }
+
+  close(): void {
+    this.closed = true;
+  }
+}
 
 vi.mock("next/navigation", () => ({
   usePathname: () => pathname.current,
   useSearchParams: () => new URLSearchParams(),
   useRouter: () => ({ push: routerPush, refresh: vi.fn() }),
+}));
+
+vi.mock("@/lib/desktop/bridge", () => ({
+  isDesktop: () => desktop.current,
 }));
 
 /** Opens tabs from inside the provider so the strip has something to render. */
@@ -42,11 +78,15 @@ function renderStrip(hrefs: string[] = []) {
 
 beforeEach(() => {
   pathname.current = "/";
+  desktop.current = false;
+  FakeEventSource.instances.length = 0;
+  vi.stubGlobal("EventSource", FakeEventSource);
   window.localStorage.removeItem(WORKSPACE_TABS_STORAGE_KEY);
 });
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("WorkspaceTabStrip structure", () => {
@@ -76,6 +116,80 @@ describe("WorkspaceTabStrip structure", () => {
     pathname.current = "/repos";
     renderStrip();
     expect(screen.getByText(hint)).toBeInTheDocument();
+  });
+});
+
+describe("desktop navigation", () => {
+  it("opens a streamed note in a new workspace tab", () => {
+    desktop.current = true;
+    renderStrip();
+
+    const source = FakeEventSource.instances.at(-1);
+    expect(source?.url).toBe("/api/desktop/navigation");
+    act(() => {
+      source?.emit(JSON.stringify({ href: "/notes/discovery/example", newTab: true }));
+    });
+
+    expect(screen.getByRole("tab", { name: /example/ })).toBeInTheDocument();
+    expect(routerPush).toHaveBeenCalledWith("/notes/discovery/example");
+  });
+
+  it("closes the desktop navigation stream when the shell unmounts", () => {
+    desktop.current = true;
+    const view = renderStrip();
+    const source = FakeEventSource.instances.at(-1);
+
+    view.unmount();
+
+    expect(source?.closed).toBe(true);
+  });
+});
+
+describe("browser navigation (ui_open generalization)", () => {
+  it("listens by default in a plain browser dashboard", () => {
+    desktop.current = false;
+    renderStrip();
+
+    const source = FakeEventSource.instances.at(-1);
+    expect(source?.url).toBe("/api/desktop/navigation");
+    act(() => {
+      source?.emit(JSON.stringify({ href: "/work", newTab: true }));
+    });
+
+    expect(screen.getByRole("tab", { name: /work/i })).toBeInTheDocument();
+  });
+
+  it("does not listen when the browser opt-out flag is set", () => {
+    desktop.current = false;
+    window.localStorage.setItem(UI_OPEN_BROWSER_FLAG, "off");
+    renderStrip();
+
+    expect(FakeEventSource.instances).toHaveLength(0);
+  });
+
+  it("focuses an existing tab for the same href instead of duplicating it", () => {
+    desktop.current = false;
+    // The opt-out test above sets the flag; this file's beforeEach only clears
+    // the tab store, so undo it explicitly.
+    window.localStorage.removeItem(UI_OPEN_BROWSER_FLAG);
+    renderStrip(["/work"]);
+
+    const tab = screen.getByRole("tab", { name: /work/i });
+    // Activate the initial (Today) tab so /work is not active, then re-publish.
+    const initialTab = screen.getAllByRole("tab").find((el) => el !== tab);
+    expect(initialTab).toBeDefined();
+    fireEvent.click(initialTab as HTMLElement);
+    expect(tab).toHaveAttribute("aria-selected", "false");
+
+    // Capture after the click: re-renders re-run the subscription effect, and
+    // the previous fake's listener is detached by its cleanup.
+    const source = FakeEventSource.instances.at(-1);
+    act(() => {
+      source?.emit(JSON.stringify({ href: "/work", newTab: true }));
+    });
+
+    expect(screen.getAllByRole("tab", { name: /work/i })).toHaveLength(1);
+    expect(screen.getByRole("tab", { name: /work/i })).toHaveAttribute("aria-selected", "true");
   });
 });
 

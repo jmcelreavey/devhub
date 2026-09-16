@@ -10,6 +10,46 @@ import { withDashboardErrors } from "../dashboard-client.ts";
  * dashboard; TerminalDock shows confirm/edit/deny. Desktop tickets alone are
  * not user intent.
  */
+/**
+ * In-band consent for terminal_propose_run. Clients that advertise MCP
+ * elicitation get a confirm dialog in their own chat surface; the proposal is
+ * then created with autoRunConfirmed so the dock skips the second chip
+ * (destructive commands always keep their modal — see terminal-proposals.ts).
+ * Clients without elicitation keep today's chip-only flow.
+ */
+export interface ConsentDecisionInput {
+  clientSupportsElicitation: boolean;
+  userAccepted: boolean | null; // null = never asked
+}
+
+export function shouldSkipDockChip(input: ConsentDecisionInput): boolean {
+  return input.clientSupportsElicitation && input.userAccepted === true;
+}
+
+export function buildRunConsentRequest(command: string): {
+  message: string;
+  requestedSchema: {
+    type: "object";
+    properties: Record<string, { type: "boolean"; title: string; description: string }>;
+    required: string[];
+  };
+} {
+  return {
+    message: `Run this in the DevHub terminal dock?\n\n${command.slice(0, 400)}${command.length > 400 ? "…" : ""}`,
+    requestedSchema: {
+      type: "object",
+      properties: {
+        confirm: {
+          type: "boolean",
+          title: "Run it",
+          description: "true = start the command in a visible DevHub terminal tab now",
+        },
+      },
+      required: ["confirm"],
+    },
+  };
+}
+
 export function registerTerminalTools(server: McpServer, ctx: Context): void {
   const { dashboard } = ctx;
 
@@ -157,6 +197,29 @@ export function registerTerminalTools(server: McpServer, ctx: Context): void {
     },
     async ({ command, cwd, label, summary, kind, repoName, reason }) =>
       withDashboardErrors(async () => {
+        // Consent first: if the client can elicit, ask in-band and remember the
+        // answer; otherwise the dock chip is the only confirmation (unchanged).
+        let userAccepted: boolean | null = null;
+        const caps = server.server.getClientCapabilities();
+        const canElicit = Boolean((caps as { elicitation?: unknown } | undefined)?.elicitation);
+        if (canElicit) {
+          const request = buildRunConsentRequest(command);
+          const result = await server.server.elicitInput({
+            message: request.message,
+            requestedSchema: request.requestedSchema,
+          });
+          userAccepted = result.action === "accept" && result.content?.confirm === true;
+        }
+        if (userAccepted === false) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "The user declined — nothing was proposed.",
+              },
+            ],
+          };
+        }
         const created = await dashboard.post<{
           proposal: { id: string; destructive: boolean; status: string };
         }>("/api/terminal/propose", {
@@ -168,21 +231,20 @@ export function registerTerminalTools(server: McpServer, ctx: Context): void {
           repoName,
           reason,
           source: "mcp",
+          // Only meaningful when the user just accepted in-band; the API still
+          // refuses it for destructive commands.
+          autoRunConfirmed: shouldSkipDockChip({ clientSupportsElicitation: canElicit, userAccepted }),
         });
         const p = created.proposal;
-        return {
-          content: [
-            {
-              type: "text",
-              text: [
-                `Proposed run ${p.id} (status: ${p.status}${p.destructive ? ", destructive" : ""}).`,
-                "Waiting for the user to confirm in the DevHub terminal dock.",
-                "Poll terminal_proposal_status(id) if you need the outcome — do not assume approval.",
-                "There is no unrestricted stdin tool; that is intentional.",
-              ].join("\n"),
-            },
-          ],
-        };
+        const lines = [
+          `Proposed run ${p.id} (status: ${p.status}${p.destructive ? ", destructive" : ""}).`,
+          userAccepted === true
+            ? "User confirmed in chat — the dock will start it without a second chip."
+            : "Waiting for the user to confirm in the DevHub terminal dock.",
+          "Poll terminal_proposal_status(id) if you need the outcome — do not assume approval.",
+          "There is no unrestricted stdin tool; that is intentional.",
+        ];
+        return { content: [{ type: "text", text: lines.join("\n") }] };
       }),
   );
 

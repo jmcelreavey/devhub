@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "boot",
+  "description": "Commands only the bundled boot page needs. No `remote` block, so the dashboard origin never gets them.",
+  "windows": ["main"],
+  "permissions": [
+    "allow-boot-state",
+    "allow-recent-logs",
+    "allow-retry-start",
+    "allow-stop-conflicting-dev-server",
+    "allow-quit-app"
+  ]
+}

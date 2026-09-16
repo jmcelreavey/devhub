@@ -30,6 +30,7 @@ import { todayISO, yesterdayISO, dailyNotePath, formatDayLabel, formatTime } fro
 import type { GithubPrRow, GithubPrsApiPayload } from "@/lib/github/prs";
 import type { CalendarEvent } from "@/lib/google-calendar";
 import { PersonChip } from "@/components/PersonChip";
+import { PrRow } from "@/components/PrRow";
 
 interface BriefingResponse {
   ok: boolean;
@@ -441,50 +442,23 @@ export function TodayFocusView() {
                 return (
                   <div
                     key={id}
-                    className="group flex items-center gap-2.5 rounded px-2 py-1.5"
+                    className="group flex items-start gap-1 rounded"
                     style={{ border: "1px solid var(--border-muted)", background: "var(--bg-surface)" }}
                   >
-                    <GitPullRequest size={13} style={{ color: "var(--warning)", flex: "none" }} aria-hidden />
-                    <a
-                      href={r.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="min-w-0 flex-1 truncate text-sm hover:underline text-text"
-                    >
-                      {r.title}
-                    </a>
-                    {r.author ? (
-                      <PersonChip
-                        name={r.author.login}
-                        email={`${r.author.login}@users.noreply.github.com`}
-                        avatarUrl={r.author.avatarUrl}
-                        size={16}
-                        className="hidden sm:inline-flex max-w-[7rem] shrink-0"
-                      />
-                    ) : null}
                     {/*
-                      Hidden below `sm`. The title is `flex-1` (basis 0) while
-                      this is `shrink` (basis auto), so on a 390px row this took
-                      153px of the 289px available and the title was left with
-                      **8px** — one character. The row showed
-                      "acme/widgets#569" and nothing else, which is the
-                      half that doesn't identify the PR.
-                      Measured, not guessed: 13px icon + 8px title + 153px slug
-                      + 66px Open + 60px Skip + gaps = the full 358px row.
-                      Capping the width wasn't enough with five children in the
-                      row; the slug is context, the title is identity, so on
-                      small screens the context goes and tapping through gives
-                      it back.
+                      PrRow gives the same kebab/right-click as /prs (Review with
+                      agent, Investigate pipeline, CI glance). Keep Today's
+                      "Skip until tomorrow" beside it — that's localStorage for
+                      the day, distinct from GitHub "Skip until updated" in the
+                      row menu.
                     */}
-                    <span
-                      className="hidden min-w-0 shrink truncate font-mono text-[11px] sm:inline text-text-subtle"
-                    >
-                      {id}
-                    </span>
+                    <div className="min-w-0 flex-1">
+                      <PrRow row={r} kind="reviews" density="compact" />
+                    </div>
                     <button
                       type="button"
                       onClick={() => skipPr(id)}
-                      className="btn btn-ghost shrink-0 reveal-on-hover transition-opacity"
+                      className="btn btn-ghost shrink-0 reveal-on-hover transition-opacity mt-1.5 mr-1"
                       style={{ fontSize: 11, padding: "1px 8px", color: "var(--text-subtle)" }}
                       title="Skip until tomorrow"
                     >

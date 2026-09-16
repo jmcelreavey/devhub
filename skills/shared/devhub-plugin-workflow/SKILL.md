@@ -1,6 +1,6 @@
 ---
 name: devhub-plugin-workflow
-description: Use when developing, editing, or reviewing a DevHub Tier-2 dashboard plugin (a separate repo like devhub-bi that contributes pages/API routes/libs/components into core). Covers the edit -> materialize -> verify loop, dashboard.paths in devhub-plugin.json, the overwrite-on-restart gotcha, and client-safe lib rules. Trigger phrases — "edit the bi plugin", "add a card to ops", "why did my plugin change disappear", "verify a plugin change", "sync_plugins".
+description: Develop, edit, or review a DevHub Tier-2 dashboard plugin.
 metadata:
   short-description: Develop a DevHub dashboard plugin
 ---

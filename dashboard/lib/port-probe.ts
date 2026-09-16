@@ -61,9 +61,18 @@ export async function waitForPortListening(
   return false;
 }
 
+/**
+ * `lsof` arguments for "pids listening on this TCP port". The port has to ride
+ * on `-i`: a bare `tcp:<port>` is read as a file name, lsof exits 1 with no
+ * output, and every caller silently sees no listeners.
+ */
+export function lsofListenerArgs(port: number): string[] {
+  return ["-t", `-iTCP:${port}`, "-sTCP:LISTEN"];
+}
+
 export function pidsListeningOnPort(port: number): number[] {
   if (process.platform === "win32") return [];
-  const res = spawnSync("lsof", ["-ti", "-sTCP:LISTEN", `tcp:${port}`], {
+  const res = spawnSync("lsof", lsofListenerArgs(port), {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
   });

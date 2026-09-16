@@ -5,8 +5,12 @@
  * `/api/terminal/propose`. Desktop tickets alone never imply user intent —
  * the dock UI must confirm before inject.
  *
- * The one exception is `autoRun`, set only server-side by agent dispatch
- * (`/api/agent/runs`). The public POST schema cannot set it.
+ * Two exceptions set `autoRun` server-side, never by hand in the dock:
+ * - agent dispatch (`/api/agent/runs`), whose POST schema cannot set it;
+ * - `autoRunConfirmed` on the public POST (`/api/terminal/propose`), which an
+ *   MCP client may only set after the user accepted an elicitation prompt in
+ *   its own chat surface (see mcp tools/terminal.ts). Destructive commands
+ *   still always get the chip below, whoever asked.
  */
 
 import type { TerminalSessionKind } from "@/lib/terminal-meta";
@@ -79,6 +83,8 @@ export function createTerminalProposal(input: {
   reason?: string;
   source?: "mcp" | "api";
   autoRun?: boolean;
+  /** Caller already obtained user consent out-of-band (MCP elicitation). */
+  autoRunConfirmed?: boolean;
 }): TerminalProposal {
   prune();
   const pending = [...proposals.values()].filter((p) => p.status === "pending");
@@ -102,7 +108,7 @@ export function createTerminalProposal(input: {
     source: input.source ?? "api",
     destructive,
     // A destructive-looking command always gets the chip, whoever asked.
-    autoRun: input.autoRun === true && !destructive,
+    autoRun: (input.autoRun === true || input.autoRunConfirmed === true) && !destructive,
     status: "pending",
     createdAt: Date.now(),
   };

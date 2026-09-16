@@ -21,6 +21,14 @@ export interface WorkspaceTabsState {
 }
 
 export const WORKSPACE_TABS_STORAGE_KEY = "devhub.workspace-tabs";
+
+/**
+ * Browser opt-out for agent-driven navigation (`ui_open` / `notes_devhub_open`).
+ * The desktop webview always listens; a plain browser dashboard listens too
+ * unless this is "off" — an agent opening a tab is the feature, not an attack,
+ * and the publish route is same-origin/authenticated like every mutator.
+ */
+export const UI_OPEN_BROWSER_FLAG = "devhub.ui-open-browser";
 const STORAGE_VERSION = 1;
 
 /**

@@ -1,13 +1,6 @@
 ---
 name: capability-lab
-description: >-
-  Build a hands-on, repo-grounded learning lab for a Capability Radar signal
-  (a technology, pattern, or concept detected in a repo). Explores the real
-  repo, writes a runnable starter project into the lab workspace, saves the
-  lab note via the notes MCP, and registers the lab with the DevHub dashboard
-  by POSTing the given adopt URL. Use when the dashboard "Build lab" button
-  fired `opencode run` with a signal id, repo path, workspace directory, and
-  notes MCP path — or when the user asks to build/rebuild a capability lab.
+description: Build a runnable, repo-grounded learning lab for a Capability Radar signal.
 metadata:
   short-description: Build a repo-grounded learning lab
 ---

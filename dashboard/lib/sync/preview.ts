@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { formatAgentForTool } from "@/lib/agent/sync-format";
 import { buildMergedSkillCatalog } from "@/lib/skill-catalog";
-import { agentDirEntries, skillTreesEqualForSync, TOOL_DIRS } from "@/lib/sync/skills";
+import { agentDirEntries, skillSyncToolEntries, skillTreesEqualForSync } from "@/lib/sync/skills";
 import type { SyncPreviewKind, SyncPreviewResult, SyncPreviewTarget, SyncPreviewWrite } from "@/lib/sync/preview-types";
 
 export interface BuildSyncPreviewOptions {
@@ -118,10 +118,7 @@ export function buildSyncPreview(opts: BuildSyncPreviewOptions): SyncPreviewResu
     const fullCatalog = buildMergedSkillCatalog(opts.repoRoot);
     const catalog = fullCatalog.filter((e) => !excluded.has(e.name));
     const keepNames = fullCatalog.filter((e) => !excluded.has(e.name)).map((e) => e.name);
-    const targets = Object.entries(TOOL_DIRS).map(([tool, subdir]) => ({
-      tool,
-      path: path.join(home, subdir),
-    }));
+    const targets = skillSyncToolEntries(home).map(([tool, targetPath]) => ({ tool, path: targetPath }));
 
     return {
       kind: opts.kind,

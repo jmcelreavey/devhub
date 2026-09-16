@@ -3,13 +3,17 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { buildSyncPreview } from "@/lib/sync/preview";
+import { SKILL_SYNC_EXCLUDE_TOOLS_ENV } from "@/lib/sync/skills";
 
 describe("buildSyncPreview", () => {
   const prevHome = process.env.HOME;
+  const prevExcludedTools = process.env[SKILL_SYNC_EXCLUDE_TOOLS_ENV];
 
   afterEach(() => {
     if (prevHome === undefined) delete process.env.HOME;
     else process.env.HOME = prevHome;
+    if (prevExcludedTools === undefined) delete process.env[SKILL_SYNC_EXCLUDE_TOOLS_ENV];
+    else process.env[SKILL_SYNC_EXCLUDE_TOOLS_ENV] = prevExcludedTools;
   });
 
   it("shows skill writes without pruning by default", () => {
@@ -54,6 +58,19 @@ describe("buildSyncPreview", () => {
     const codex = preview.targets.find((targetPreview) => targetPreview.tool === "codex");
 
     expect(codex?.prunes).toEqual(["old"]);
+  });
+
+  it("omits configured skill-sync targets", () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-preview-home-"));
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-preview-repo-"));
+    process.env.HOME = home;
+    process.env[SKILL_SYNC_EXCLUDE_TOOLS_ENV] = "agents";
+
+    fs.mkdirSync(path.join(repo, "skills/shared/alpha"), { recursive: true });
+    fs.writeFileSync(path.join(repo, "skills/shared/alpha/SKILL.md"), "repo alpha\n");
+
+    const preview = buildSyncPreview({ kind: "skill", repoRoot: repo });
+    expect(preview.targets.some((target) => target.tool === "agents")).toBe(false);
   });
 
   it("shows agent writes and respects prune=false", () => {

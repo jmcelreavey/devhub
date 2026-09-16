@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-renderer-log"
+description = "Enables the renderer_log command without any pre-configured scope."
+commands.allow = ["renderer_log"]
+
+[[permission]]
+identifier = "deny-renderer-log"
+description = "Denies the renderer_log command without any pre-configured scope."
+commands.deny = ["renderer_log"]

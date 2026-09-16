@@ -13,11 +13,13 @@
 //! shell command, and the bridge routes require a cookie the shell sets once
 //! from a token only it knows.
 
+mod background;
 mod icon;
 mod logging;
 mod paths;
 mod selftest;
 mod sidecar;
+mod tray;
 mod updater;
 
 use std::io::{Read, Write};
@@ -196,7 +198,10 @@ fn open_logs(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result
 /// keeps an orphaned Next server from holding port 1337 into the next launch.
 #[tauri::command]
 fn quit_app(window: tauri::Window) -> Result<(), String> {
-    window.close().map_err(|e| e.to_string())
+    // Not window.close(): on macOS closing only hides the window (see
+    // on_window_event). Exiting runs the ExitRequested cleanup.
+    window.app_handle().exit(0);
+    Ok(())
 }
 
 /// Native folder picker for the setup wizard's "code folder" step.
@@ -1460,6 +1465,8 @@ fn show_main_window(app: &tauri::AppHandle) {
         let _ = window.show();
         let _ = window.set_focus();
     }
+    #[cfg(target_os = "macos")]
+    tray::set_visible(app, false);
 }
 
 fn menu_log(app: &tauri::AppHandle, message: &str) {
@@ -1861,6 +1868,10 @@ pub fn run() {
             stop_conflicting_dev_server,
             quit_app,
             icon::set_desktop_icon,
+            background::wake_helper_install,
+            background::wake_helper_uninstall,
+            background::login_item_status,
+            background::login_item_set,
             updater::current_version,
             updater::check_update,
             updater::install_update,
@@ -1995,9 +2006,22 @@ pub fn run() {
             });
 
             let _ = start_sidecar(&handle);
+            tray::install(&handle)?;
             Ok(())
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
+            "tray-show-devhub" => {
+                menu_log(app, "[tray] Show DevHub");
+                show_main_window(app);
+            }
+            "tray-quit-devhub" => {
+                menu_log(app, "[tray] Quit DevHub");
+                if let Some(state) = app.try_state::<AppState>() {
+                    state.sidecar.stop();
+                }
+                stop_dev_server(app);
+                app.exit(0);
+            }
             "show-logs" => {
                 // Prefer the live dashboard so the in-app terminal view is
                 // what opens. Fall back to the folder only when nothing is
@@ -2100,6 +2124,26 @@ pub fn run() {
             _ => {}
         })
         .on_window_event(|window, event| {
+            // The Mac convention, and what keeps scheduled jobs running: closing
+            // the window hides it and the server stays up until ⌘Q. Clicking the
+            // Dock icon brings it back (RunEvent::Reopen below).
+            #[cfg(target_os = "macos")]
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                if window.is_fullscreen().unwrap_or(false) {
+                    let _ = window.set_fullscreen(false);
+                }
+                let _ = window.hide();
+                #[cfg(target_os = "macos")]
+                tray::set_visible(window.app_handle(), true);
+                if let Some(state) = window.app_handle().try_state::<AppState>() {
+                    state.log.write_line(
+                        "shell:window",
+                        "[window] closed — hidden; DevHub and scheduled jobs keep running until ⌘Q (menu bar tray when hidden)",
+                    );
+                }
+                return;
+            }
             if let tauri::WindowEvent::Destroyed = event {
                 // Stop the process group here rather than letting the process
                 // exit take it: an orphaned Next server holding port 1337 is
@@ -2114,6 +2158,13 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("failed to build the DevHub shell")
         .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                if let Some(state) = app.try_state::<AppState>() {
+                    state.log.write_line("shell:window", "[window] reopened from the Dock");
+                }
+                show_main_window(app);
+            }
             if let tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit = event {
                 if let Some(state) = app.try_state::<AppState>() {
                     state.sidecar.stop();

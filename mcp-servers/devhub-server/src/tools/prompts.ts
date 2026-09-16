@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { Context } from "../context.ts";
 
 /**
- * DevHub skills as MCP prompts.
+ * DevHub skills as MCP prompts, plus one workflow prompt.
  *
  * Harnesses surface prompts as slash commands (Claude Code shows
  * `/mcp__devhub__<skill>`), so a skill becomes something you invoke rather than
@@ -131,4 +131,61 @@ export function registerSkillPrompts(server: McpServer, ctx: Context): void {
       },
     );
   }
+}
+
+// ── agent race verdict ──────────────────────────────────────────────────────
+
+const RUN_ID_RE = /^run-[a-z0-9-]+$/;
+
+/** Comma-separated run ids → validated list. The MCP-side regex matches agents.ts. */
+export function parseRaceRunIds(raw: string): { runIds: string[]; error?: string } {
+  const runIds = raw
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  if (runIds.length < 2) return { runIds, error: "Give at least two run ids, comma-separated (from agent_race or agent_runs)." };
+  const invalid = runIds.filter((id) => !RUN_ID_RE.test(id));
+  if (invalid.length > 0) return { runIds, error: `Not valid run ids: ${invalid.join(", ")}` };
+  return { runIds };
+}
+
+export function buildRaceVerdictPrompt(runIds: string[], taskRef?: string): string {
+  const linkLine = taskRef?.trim()
+    ? `4. Link the verdict note to ${taskRef.trim()} via entity links (they live in a "## Links" section; notes_create_task / tasks_update maintain them).`
+    : "4. If a related task or note exists, mention that it should be linked via entity links.";
+  const steps = [
+    "Compare the finished agent race runs and record a verdict.",
+    "",
+    "Steps:",
+    `1. Diff every run before judging: ${runIds.map((id) => `agent_diff("${id}")`).join(", ")}.`,
+    "2. For each run compare: what changed (diff stat + patch), the run's result state, cost/turns, and how well the changes match the original task.",
+    '3. Decide a winner (or "none — all unsuitable") and say why in two or three sentences.',
+    "5. Write the verdict with notes_write to a path like race-verdicts/<yyyy-mm-dd>-<slug>: per-run sections (provider, diff stat, result, cost, assessment) plus a final recommendation.",
+    `6. Run ids compared: ${runIds.join(", ")}.`,
+    linkLine,
+  ];
+  return steps.join("\n");
+}
+
+/** Race verdict: agent_diff every run, pick a winner, write the note. */
+export function registerRaceVerdictPrompt(server: McpServer): void {
+  server.registerPrompt(
+    "agent_race_verdict",
+    {
+      title: "Agent race verdict",
+      description:
+        "Compare finished agent_race runs (agent_diff each), decide a winner, and write a structured verdict note. Args: runIds (comma-separated), taskRef (optional task/note to link).",
+      argsSchema: {
+        runIds: z.string().describe("Comma-separated run ids, e.g. run-x1,run-x2,run-x3"),
+        taskRef: z.string().optional().describe("Task or note ref to link the verdict to (e.g. task-2026-09-14)"),
+      },
+    },
+    ({ runIds, taskRef }) => {
+      const parsed = parseRaceRunIds(runIds);
+      const text = parsed.error
+        ? `Cannot build the race verdict: ${parsed.error}`
+        : buildRaceVerdictPrompt(parsed.runIds, taskRef);
+      return { messages: [{ role: "user", content: { type: "text", text } }] };
+    },
+  );
 }

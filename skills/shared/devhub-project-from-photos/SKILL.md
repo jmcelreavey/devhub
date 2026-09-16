@@ -1,6 +1,6 @@
 ---
 name: devhub-project-from-photos
-description: Turns user project photos and a stated goal into a beginner-friendly DevHub note with embedded images and a folder-scoped linked master checklist. Use when the user sends site photos and asks for garden, home, yard, or DIY project plans, supplies lists, or step-by-step how-to notes with shared checklists.
+description: Turn project photos and a goal into a beginner-friendly DevHub plan and checklist.
 metadata:
   short-description: Project note from photos
 ---

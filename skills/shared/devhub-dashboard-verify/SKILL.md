@@ -1,10 +1,6 @@
 ---
 name: devhub-dashboard-verify
-description: >-
-  Use when verifying DevHub dashboard UI, opening localhost:1337, running
-  Playwright or a browser against the dashboard, or checking whether a code
-  change is live. Port 1337 is almost always the packaged production
-  DevHub.app bundle — do not use it to test checkout changes.
+description: Verify DevHub dashboard UI changes with the correct local server and browser tooling.
 metadata:
   short-description: Don't test dashboard UI on :1337
 ---

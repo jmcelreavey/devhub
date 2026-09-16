@@ -6,7 +6,7 @@ import { listWidgetHtml, uiResult } from "../ui.ts";
 
 /**
  * Read-side coverage for dashboard areas that had no MCP tools: skills,
- * context packs, collections, jobs, research, personal radar, persona,
+ * context packs, collections, research, personal radar, persona,
  * learnings, agents and briefing tasks.
  *
  * These are all GET proxies. Action routes in the same areas (`/api/actions/*`
@@ -142,21 +142,6 @@ export function registerWorkspaceTools(server: McpServer, ctx: Context): void {
       withDashboardErrors(async () => {
         const data = await dashboard.get("/api/collections", notePath ? { notePath } : undefined);
         return { content: [{ type: "text", text: render("Collections", data) }] };
-      }),
-  );
-
-  readTool("jobs_list", "List background jobs and their current status.", "/api/jobs", "Jobs");
-
-  server.registerTool(
-    "jobs_get",
-    {
-      description: "Get one background job by id, including its status and any result.",
-      inputSchema: { id: z.string().min(1).describe("Job id from jobs_list") },
-    },
-    async ({ id }) =>
-      withDashboardErrors(async () => {
-        const data = await dashboard.get(`/api/jobs/${encodeURIComponent(id)}`);
-        return { content: [{ type: "text", text: render(`Job ${id}`, data) }] };
       }),
   );
 

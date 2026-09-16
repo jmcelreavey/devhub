@@ -1,6 +1,6 @@
 ---
 name: "playwright-interactive"
-description: "Persistent browser QA: use Playwriter MCP for the user's existing Chrome session when available; in Cursor/Codex otherwise use `js_repl` + Playwright; in OpenCode otherwise use `agent-browser` with `--headed` and `--json`. Use for iterative UI debugging, screenshots, DOM inspection, and functional/visual signoff."
+description: Use persistent browser tooling for interactive UI debugging and visual QA.
 ---
 
 # Playwright Interactive Skill

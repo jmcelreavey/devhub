@@ -773,6 +773,12 @@ export function TerminalDock() {
         flushingInjectRef.current.delete(tabId);
         return;
       }
+      // A WebSocket being open only means the PTY exists. Login zsh still has
+      // to finish its rc files before ZLE can interpret bracketed paste.
+      if (!reader.isReadyForInput()) {
+        flushingInjectRef.current.delete(tabId);
+        return;
+      }
 
       const fail = (message: string) => {
         flushingInjectRef.current.delete(tabId);
@@ -2241,6 +2247,7 @@ export function TerminalDock() {
                   fontSize={fontSize ?? TERMINAL_FONT_SIZE_DEFAULT}
                   onStatus={(s) => setStatus(tab.id, s)}
                   onSessionId={(sid) => setSessionId(tab.id, sid)}
+                  onReadyForInput={() => flushPendingInject(tab.id)}
                   onBusy={(busy) => {
                     setTabs((prev) => {
                       const cur = prev.find((t) => t.id === tab.id);

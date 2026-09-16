@@ -58,6 +58,9 @@ export const TOOL_DIRS: Record<string, string> = {
   "config-ai": ".config/ai/skills",
 };
 
+/** Comma-separated sync target names to skip during an all-target skill sync. */
+export const SKILL_SYNC_EXCLUDE_TOOLS_ENV = "DEVHUB_SKILL_SYNC_EXCLUDE_TOOLS";
+
 export const AGENT_TOOL_DIRS: Array<{ tool: string; subdir: string }> = [
   { tool: "claude", subdir: ".claude/agents" },
   { tool: "codex", subdir: ".codex/agents" },
@@ -71,6 +74,29 @@ export const AGENT_TOOL_DIRS: Array<{ tool: string; subdir: string }> = [
 
 export function toolDirPaths(home: string): string[] {
   return Object.values(TOOL_DIRS).map((d) => path.join(home, d));
+}
+
+function excludedSkillSyncTools(raw = process.env[SKILL_SYNC_EXCLUDE_TOOLS_ENV]): Set<string> {
+  return new Set(
+    (raw ?? "")
+      .split(",")
+      .map((tool) => tool.trim())
+      .filter((tool) => tool in TOOL_DIRS),
+  );
+}
+
+/**
+ * All enabled skill-sync destinations. An explicit `tool` is always honored so
+ * a temporarily excluded destination can still be synced on demand.
+ */
+export function skillSyncToolEntries(home: string, tool?: string): Array<[string, string]> {
+  const entries = Object.entries(TOOL_DIRS).map(
+    ([name, subdir]) => [name, path.join(home, subdir)] as [string, string],
+  );
+  if (tool) return entries.filter(([name]) => name === tool);
+
+  const excluded = excludedSkillSyncTools();
+  return entries.filter(([name]) => !excluded.has(name));
 }
 
 export function agentDirEntries(home: string): Array<{ tool: string; path: string }> {
@@ -203,16 +229,13 @@ export async function syncSkills(opts: SyncSkillsOptions): Promise<number> {
     .map((e) => e.name);
 
   const home = os.homedir();
-  let toolEntries = Object.entries(TOOL_DIRS).map(
-    ([tool, sub]) => [tool, path.join(/*turbopackIgnore: true*/ home, sub)] as const,
-  );
   if (opts.tool) {
     if (!TOOL_DIRS[opts.tool]) {
       emit(`ERROR: Unknown tool '${opts.tool}'. Options: ${Object.keys(TOOL_DIRS).join(", ")}`);
       return 1;
     }
-    toolEntries = toolEntries.filter(([t]) => t === opts.tool);
   }
+  const toolEntries = skillSyncToolEntries(home, opts.tool);
 
   const { devhub: devhubCount, vendor: vendorCount, aiTools: upstreamCount, plugins: pluginCount } =
     catalogOriginCounts(catalog);
@@ -311,9 +334,7 @@ export async function verifySync(opts: VerifySyncOptions): Promise<VerifyResult>
   if (expected.length === 0) return { healthy: 0, missing: [], unreadable: [] };
 
   const home = os.homedir();
-  const toolEntries = Object.entries(TOOL_DIRS).map(
-    ([tool, sub]) => [tool, path.join(home, sub)] as const,
-  );
+  const toolEntries = skillSyncToolEntries(home);
 
   const result: VerifyResult = { healthy: 0, missing: [], unreadable: [] };
 

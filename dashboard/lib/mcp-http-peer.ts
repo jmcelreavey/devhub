@@ -6,20 +6,22 @@
  * It runs from the linked checkout — the MCP server is not bundled into the
  * desktop app — and is pointed at *this* dashboard and its content dirs rather
  * than whatever a synced client config says. Skipped when DEVHUB_MCP_HTTP=0,
- * there is no checkout, the MCP package isn't installed, or something already
+ * there is no checkout, the MCP package isn't installed, or something else
  * listens on the port (a second DevHub, or a manual `npm run mcp:http`).
  *
- * Not detached: the child lives in the dashboard's process group and goes away
- * with it.
+ * The child gets this dashboard's pid and exits when the dashboard is gone.
+ * A peer that outlived its dashboard anyway (force-quit, or one started before
+ * that watch existed) is replaced at boot rather than skipped, so a rebuild,
+ * reinstall or relaunch always serves the checkout's current MCP code.
  */
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { getDocsDir, getNotesDir, getTasksDir } from "@/lib/content/dirs";
 import { buildRuntimeInfo } from "@/lib/dashboard-runtime";
 import { getCheckoutRoot } from "@/lib/desktop/runtime-paths";
-import { canConnect } from "@/lib/port-probe";
+import { canConnect, commandAndEnvForPid, commandForPid, pidsListeningOnPort } from "@/lib/port-probe";
 import { augmentedPathEnv, scrubDesktopRuntimeEnv } from "@/lib/process-env";
 
 export const DEFAULT_MCP_HTTP_PORT = 1340;
@@ -47,6 +49,93 @@ export function mcpHttpLogPath(home = os.homedir()): string {
   return path.join(home, ".local", "state", "devhub", "mcp-http.log");
 }
 
+/** Set on the child; http.ts exits when this pid is gone. */
+export const PARENT_PID_ENV = "DEVHUB_MCP_HTTP_PARENT_PID";
+
+export interface PortListener {
+  pid: number;
+  /** `ps eww` output for the listener: command line plus environment. */
+  commandAndEnv: string;
+  /** The process that launched it (normally the tsx wrapper). */
+  launcherPid: number | null;
+  launcherCommand: string | null;
+  launcherParentPid: number | null;
+}
+
+/**
+ * The pids to stop when every listener on the port is this checkout's HTTP MCP
+ * left behind by a dashboard that is no longer running. Anything else on the
+ * port — a foreign server, or a peer a live DevHub owns — returns [] so the
+ * port is left alone.
+ */
+export function stalePeerPids(listeners: PortListener[], entry: string, isAlive: (pid: number) => boolean): number[] {
+  const pids: number[] = [];
+  for (const listener of listeners) {
+    if (!listener.commandAndEnv.includes(entry)) return [];
+    const owner = new RegExp(`${PARENT_PID_ENV}=(\\d+)`).exec(listener.commandAndEnv);
+    // Peers started before the parent pid was recorded count as stale once
+    // their launcher has been re-parented to launchd (pid 1).
+    const stale = owner
+      ? !isAlive(Number(owner[1]))
+      : listener.launcherPid === 1 || listener.launcherParentPid === 1;
+    if (!stale) return [];
+    pids.push(listener.pid);
+    if (listener.launcherPid && listener.launcherPid > 1 && listener.launcherCommand?.includes(entry)) {
+      pids.push(listener.launcherPid);
+    }
+  }
+  return pids;
+}
+
+function parentPidOf(pid: number): number | null {
+  const res = spawnSync("ps", ["-o", "ppid=", "-p", String(pid)], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  const n = Number.parseInt(res.stdout?.trim() ?? "", 10);
+  return Number.isInteger(n) ? n : null;
+}
+
+function describeListener(pid: number): PortListener {
+  const launcherPid = parentPidOf(pid);
+  const hasLauncher = launcherPid !== null && launcherPid > 1;
+  return {
+    pid,
+    commandAndEnv: commandAndEnvForPid(pid),
+    launcherPid,
+    launcherCommand: hasLauncher ? commandForPid(launcherPid) : null,
+    launcherParentPid: hasLauncher ? parentPidOf(launcherPid) : null,
+  };
+}
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+function signalAll(pids: number[], signal: NodeJS.Signals): void {
+  for (const pid of pids) {
+    try {
+      process.kill(pid, signal);
+    } catch {
+      // Already gone.
+    }
+  }
+}
+
+async function waitForPortFree(port: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!(await canConnect(port))) return true;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return !(await canConnect(port));
+}
+
 export async function startMcpHttpPeer(log: (msg: string) => void = (msg) => console.log(`[mcp-http] ${msg}`)): Promise<void> {
   if (!mcpHttpAutostartEnabled() || child) return;
 
@@ -62,8 +151,20 @@ export async function startMcpHttpPeer(log: (msg: string) => void = (msg) => con
   }
   const port = mcpHttpPort();
   if (await canConnect(port)) {
-    log(`port ${port} already has a listener — leaving it alone`);
-    return;
+    const stale = stalePeerPids(pidsListeningOnPort(port).map(describeListener), target.entry, processAlive);
+    if (stale.length === 0) {
+      log(`port ${port} already has a listener — leaving it alone`);
+      return;
+    }
+    log(`replacing stale HTTP MCP on port ${port} (pid ${stale.join(", ")}) left by a DevHub that is no longer running`);
+    signalAll(stale, "SIGTERM");
+    if (!(await waitForPortFree(port, 5_000))) {
+      signalAll(stale, "SIGKILL");
+      if (!(await waitForPortFree(port, 2_000))) {
+        log(`port ${port} is still in use after stopping the stale HTTP MCP — not starting another`);
+        return;
+      }
+    }
   }
 
   const logFile = mcpHttpLogPath();
@@ -81,6 +182,7 @@ export async function startMcpHttpPeer(log: (msg: string) => void = (msg) => con
         DOCS_DIR: getDocsDir(),
         DEVHUB_BASE_URL: buildRuntimeInfo().baseUrl,
         DEVHUB_MCP_HTTP_PORT: String(port),
+        [PARENT_PID_ENV]: String(process.pid),
       },
     });
   } finally {

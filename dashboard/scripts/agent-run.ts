@@ -32,9 +32,13 @@ import {
   readRunSpec,
   readRunStatus,
   writeRunStatus,
+  isActiveAgentRunState,
   type AgentRunState,
   type AgentRunStatus,
 } from "../lib/agent-runs/run-files";
+import { agentBudgets } from "../lib/agent-runs/budget";
+import { attachInteractiveShell, finishInteractiveFromExit } from "../lib/agent-runs/interactive-shell";
+import { syncTaskAgentRunFromAgentState } from "../lib/tasks/task-agent-runs";
 
 const STATUS_FLUSH_MS = 1_000;
 const KILL_GRACE_MS = 5_000;
@@ -73,8 +77,29 @@ function lineReader(onLine: (line: string) => void): { push: (chunk: Buffer) => 
   };
 }
 
+/** `--interactive-start <dir> <shell-pid>` / `--interactive-finish <dir> <exit-code>`. */
+async function interactive(mode: string, dir: string | undefined, value: string | undefined): Promise<void> {
+  const n = Number(value);
+  if (!dir || !Number.isInteger(n)) exitWith(`usage: agent-run ${mode} <run-dir> <number>`);
+  if (mode === "--interactive-start") {
+    attachInteractiveShell(dir, n);
+    return;
+  }
+  const done = finishInteractiveFromExit(dir, n);
+  if (!done) return;
+  await syncTaskAgentRunFromAgentState(done.id, done.status.state, {
+    sessionId: done.status.sessionId ?? null,
+  }).catch(() => undefined);
+  process.stdout.write(`${dim(`── DevHub: run ${done.status.state} ──`)}\n`);
+}
+
 function main(): void {
-  const dir = process.argv[2];
+  const mode = process.argv[2];
+  if (mode === "--interactive-start" || mode === "--interactive-finish") {
+    void interactive(mode, process.argv[3], process.argv[4]);
+    return;
+  }
+  const dir = mode;
   if (!dir) exitWith("usage: agent-run <run-dir>");
   const spec = readRunSpec(dir);
   const initial = readRunStatus(dir);
@@ -101,6 +126,13 @@ function main(): void {
     if (!dirty) return;
     dirty = false;
     status = writeRunStatus(dir, status);
+    if (!isActiveAgentRunState(status.state)) {
+      void syncTaskAgentRunFromAgentState(spec.id, status.state, {
+        sessionId: status.sessionId ?? null,
+        terminalSessionId: status.terminalSessionId ?? null,
+        provider: spec.provider,
+      }).catch(() => undefined);
+    }
   };
 
   const emit = (event: AgentRunEvent, display = renderAgentEvent(event)) => {
@@ -149,6 +181,22 @@ function main(): void {
   flush();
   const flushTimer = setInterval(flush, STATUS_FLUSH_MS);
 
+  // Wall-clock budget: a run past DEVHUB_AGENT_MAX_SECONDS (default 30 min)
+  // gets the same SIGTERM→SIGKILL as a user stop, with its own status note.
+  const budgets = agentBudgets();
+  let budgetTimer: NodeJS.Timeout | undefined;
+  if (budgets.maxSeconds > 0) {
+    budgetTimer = setTimeout(() => {
+      if (cancelled || finished) return;
+      cancelled = true;
+      update({ error: `Wall-clock budget exceeded (${budgets.maxSeconds}s) — run stopped.` });
+      process.stdout.write(`\n${dim(`── wall-clock budget exceeded (${budgets.maxSeconds}s): stopping ${spec.providerLabel} ──`)}\n`);
+      child.kill("SIGTERM");
+      setTimeout(() => child.kill("SIGKILL"), KILL_GRACE_MS).unref();
+    }, budgets.maxSeconds * 1_000);
+    budgetTimer.unref();
+  }
+
   const stdout = lineReader((line) => {
     const events = parseStreamLine(spec.format, line);
     if (spec.format === "text") {
@@ -170,6 +218,7 @@ function main(): void {
     if (finished) return;
     finished = true;
     clearInterval(flushTimer);
+    if (budgetTimer) clearTimeout(budgetTimer);
     stdout.end();
     stderr.end();
     const state: AgentRunState = cancelled

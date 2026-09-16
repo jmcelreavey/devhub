@@ -14,11 +14,13 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FileText, FolderGit2, LayoutGrid, Plus, X } from "lucide-react";
 import { workspaceTabChordFromEvent } from "@/lib/app-shortcuts";
+import { isDesktop } from "@/lib/desktop/bridge";
 import { PanelVisibilityContext } from "@/lib/hooks/panel-visibility";
 import { workspaceTabHrefFromClick } from "@/lib/workspace-tab-links";
 import type { SessionHistoryEntry } from "@/lib/session-history";
 import {
   MAX_WORKSPACE_TABS,
+  UI_OPEN_BROWSER_FLAG,
   activateTab,
   canOpenTab,
   closeTab,
@@ -193,6 +195,47 @@ export function WorkspaceTabsProvider({ children }: { children: ReactNode }) {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [apply]);
+
+  useEffect(() => {
+    if (typeof EventSource === "undefined") return;
+    // The desktop webview always listens; a browser dashboard listens unless
+    // explicitly opted out (UI_OPEN_BROWSER_FLAG === "off"). Agents surface
+    // pages wherever the user actually has DevHub open, not only in the app.
+    try {
+      if (!isDesktop() && window.localStorage.getItem(UI_OPEN_BROWSER_FLAG) === "off") return;
+    } catch {
+      /* storage unavailable — default to listening */
+    }
+    const source = new EventSource("/api/desktop/navigation");
+    const onMessage = (event: MessageEvent<string>) => {
+      try {
+        const navigation = JSON.parse(event.data) as { href?: unknown; newTab?: unknown };
+        if (
+          typeof navigation.href === "string" &&
+          navigation.href.startsWith("/") &&
+          !navigation.href.startsWith("//") &&
+          navigation.newTab === true
+        ) {
+          // Focus a tab already showing this href instead of duplicating it —
+          // link semantics, not a "+ new tab" click. Paths compare without
+          // query/search: openHref would route the focused tab there anyway.
+          // Hoisted: the typeof guard above does not narrow inside a closure.
+          const target = navigation.href;
+          const norm = (h: string) => h.split("?")[0].replace(/\/+$/, "") || "/";
+          const existing = stateRef.current.tabs.find((t) => norm(t.href) === norm(target));
+          if (existing) activate(existing.id);
+          else openHref(target, { newTab: true });
+        }
+      } catch {
+        // Ignore malformed local events and keep the stream alive for the next one.
+      }
+    };
+    source.addEventListener("message", onMessage);
+    return () => {
+      source.removeEventListener("message", onMessage);
+      source.close();
+    };
+  }, [activate, openHref]);
 
   /**
    * Shift / ⌘ / middle-click on an in-app link opens a workspace tab.

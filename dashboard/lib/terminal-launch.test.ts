@@ -349,6 +349,18 @@ describe("taskImplementationCommand", () => {
     expect(result.command).toContain("claude --dangerously-skip-permissions --model 'sonnet' 'Implement task 1'");
   });
 
+  it("adds --resume when continuing a prior Claude session", async () => {
+    useConfig();
+
+    const result = await taskImplementationCommand("claude", "Resume task", {
+      model: "sonnet",
+      resumeSessionId: "sess-abc",
+    });
+
+    expect(result.command).toContain("--resume 'sess-abc'");
+    expect(result.command).toContain("--model 'sonnet'");
+  });
+
   it("uses Cursor's configured model when no override is supplied", async () => {
     useConfig({ cursorModel: "cursor-model" });
 

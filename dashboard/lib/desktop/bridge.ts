@@ -265,6 +265,57 @@ export async function setDesktopIcon(
   }
 }
 
+function invokeError(error: unknown): Error {
+  return new Error(typeof error === "string" ? error : errorMessage(error));
+}
+
+/**
+ * Install the root helper that wakes this Mac for scheduled jobs. Shows the
+ * macOS admin prompt; rejects with "Cancelled" if the user dismisses it.
+ */
+export async function installWakeHelper(): Promise<void> {
+  const api = tauri();
+  if (!api) throw new Error("Open DevHub in the desktop app to enable waking this Mac.");
+  try {
+    await api.core.invoke("wake_helper_install");
+  } catch (error) {
+    throw invokeError(error);
+  }
+}
+
+export async function uninstallWakeHelper(): Promise<void> {
+  const api = tauri();
+  if (!api) throw new Error("Open DevHub in the desktop app to remove the wake helper.");
+  try {
+    await api.core.invoke("wake_helper_uninstall");
+  } catch (error) {
+    throw invokeError(error);
+  }
+}
+
+export type LoginItemStatus = "enabled" | "disabled" | "requires-approval" | "unsupported";
+
+/** `null` outside the desktop app. */
+export async function loginItemStatus(): Promise<LoginItemStatus | null> {
+  const api = tauri();
+  if (!api) return null;
+  try {
+    return await api.core.invoke<LoginItemStatus>("login_item_status");
+  } catch {
+    return "unsupported";
+  }
+}
+
+export async function setLoginItem(enabled: boolean): Promise<LoginItemStatus> {
+  const api = tauri();
+  if (!api) throw new Error("Launch at login is only available in the desktop app.");
+  try {
+    return await api.core.invoke<LoginItemStatus>("login_item_set", { enabled });
+  } catch (error) {
+    throw invokeError(error);
+  }
+}
+
 /**
  * Subscribe to a shell event. Returns an unsubscribe function that is safe to
  * call in a browser, so effects can clean up without branching.

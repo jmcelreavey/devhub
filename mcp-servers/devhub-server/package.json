@@ -5,7 +5,9 @@
   "description": "Notes MCP server with markdown storage",
   "scripts": {
     "mcp": "tsx src/mcp.ts",
-    "mcp:http": "tsx src/http.ts"
+    "typecheck": "tsc --noEmit",
+    "mcp:http": "tsx src/http.ts",
+    "mcp:token": "tsx src/token.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

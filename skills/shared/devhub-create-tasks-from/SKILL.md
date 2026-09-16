@@ -1,11 +1,6 @@
 ---
 name: devhub-create-tasks-from
-description: >-
-  Turn a DevHub planning note into linked Jira sub-tasks, DevHub tasks, and
-  entity cross-links — publish the plan gist, create tickets under a parent epic,
-  scaffold task notes, and update the parent Jira description. Use when the user
-  launches "Create tasks from" on a note or asks to materialize a plan into
-  tickets and tasks.
+description: Turn a DevHub planning note into linked Jira sub-tasks and DevHub tasks.
 metadata:
   short-description: Plan note → Jira + DevHub tasks
 ---

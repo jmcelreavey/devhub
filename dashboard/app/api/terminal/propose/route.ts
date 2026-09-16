@@ -42,6 +42,11 @@ const ProposalCreateSchema = z.object({
   repoName: z.string().optional(),
   reason: z.string().optional(),
   source: z.enum(["mcp", "api"]).default("api"),
+  /**
+   * True only when the caller already asked the user in-band (MCP elicitation)
+   * and they accepted. Still refused for destructive commands server-side.
+   */
+  autoRunConfirmed: z.boolean().optional(),
 });
 
 /** MCP / API creates a proposal — dock must confirm before inject. */

@@ -17,10 +17,13 @@ import {
   readRunStatus,
   writeRunSpec,
   writeRunStatus,
+  appendRunEvent,
   type AgentRunSpec,
   type AgentRunStatus,
 } from "@/lib/agent-runs/run-files";
+import { agentConsentFile, hasConsented, recordConsent } from "@/lib/agent-runs/consent";
 import { getTerminalProposal, resolveTerminalProposal } from "@/lib/terminal-proposals";
+import { syncTaskAgentRunFromAgentState } from "@/lib/tasks/task-agent-runs";
 
 /** Finished runs older than this are pruned whenever a new run is created. */
 const RUN_TTL_MS = 3 * 24 * 60 * 60 * 1_000;
@@ -85,10 +88,57 @@ export function createAgentRun(spec: AgentRunSpec): AgentRun {
   return { spec, status, dir };
 }
 
+/**
+ * Register an interactive CLI session (Claude/etc in the dock) so Agent Activity
+ * lists it without spawning agent-run.cjs. Stays queued until the tab's
+ * `--interactive-start` records the shell pid (see interactive-shell.ts); from
+ * then on the normal dead-pid and never-started reconcile applies.
+ */
+export function createInteractiveAgentRun(input: {
+  id: string;
+  provider: string;
+  providerLabel: string;
+  cwd: string;
+  title: string;
+  prompt: string;
+  model?: string;
+  sessionId?: string;
+  parentRunId?: string;
+}): AgentRun {
+  const now = Date.now();
+  const run = createAgentRun({
+    id: input.id,
+    provider: input.provider,
+    providerLabel: input.providerLabel,
+    bin: "interactive",
+    args: [],
+    format: "text",
+    cwd: input.cwd,
+    title: input.title.slice(0, 80),
+    prompt: input.prompt,
+    model: input.model,
+    depth: 0,
+    createdAt: now,
+    parentRunId: input.parentRunId,
+  });
+  return input.sessionId ? updateAgentRunStatus(run, { sessionId: input.sessionId }) : run;
+}
+
+function syncLinkedTaskAgentRun(run: AgentRun, status: AgentRunStatus): void {
+  // Runner process writes status.json directly; dashboard paths sync here.
+  void syncTaskAgentRunFromAgentState(run.spec.id, status.state, {
+    sessionId: status.sessionId ?? null,
+    terminalSessionId: status.terminalSessionId ?? null,
+    provider: run.spec.provider,
+  }).catch(() => undefined);
+}
+
 export function updateAgentRunStatus(run: AgentRun, patch: Partial<AgentRunStatus>): AgentRun {
   // Re-read first: the runner writes status.json from its own process.
   const current = readRunStatus(run.dir) ?? run.status;
-  return { ...run, status: writeRunStatus(run.dir, { ...current, ...patch }) };
+  const status = writeRunStatus(run.dir, { ...current, ...patch });
+  syncLinkedTaskAgentRun(run, status);
+  return { ...run, status };
 }
 
 function pidAlive(pid: number): boolean {
@@ -103,12 +153,31 @@ function pidAlive(pid: number): boolean {
 export function reconcileAgentRun(run: AgentRun): AgentRun {
   const { status } = run;
   const now = Date.now();
+  // The dock chip approved (or already injected) this run's proposal: that is
+  // the user saying "this agent may work in this repo" — remember it so later
+  // dispatches to the same provider+repo auto-run (see consent.ts).
+  if (status.proposalId && (status.state === "running" || status.state === "succeeded")) {
+    try {
+      // Reconcile runs on every list/poll — only write the first time.
+      const file = agentConsentFile();
+      const repoKey = run.spec.worktree?.repoRoot ?? run.spec.cwd;
+      if (!hasConsented(file, run.spec.provider, repoKey)) recordConsent(file, run.spec.provider, repoKey, now);
+    } catch {
+      // Consent recording must never break reconciliation.
+    }
+  }
   if (status.state === "running" && status.pid && !pidAlive(status.pid)) {
-    return updateAgentRunStatus(run, {
-      state: "failed",
-      finishedAt: now,
-      error: status.error ?? "The runner exited without reporting a result — was the terminal tab closed?",
-    });
+    // Interactive runs track the tab's shell: it dying means the tab was closed.
+    return updateAgentRunStatus(
+      run,
+      run.spec.bin === "interactive"
+        ? { state: "cancelled", finishedAt: now, error: status.error ?? "Terminal tab closed before the CLI exited." }
+        : {
+            state: "failed",
+            finishedAt: now,
+            error: status.error ?? "The runner exited without reporting a result — was the terminal tab closed?",
+          },
+    );
   }
   if (status.state !== "queued") return run;
 
@@ -143,7 +212,13 @@ export function readAgentRun(id: string): AgentRun | null {
   const dir = agentRunDir(id);
   if (!dir) return null;
   const run = readRunFromDir(dir);
-  return run ? reconcileAgentRun(run) : null;
+  if (!run) return null;
+  const reconciled = reconcileAgentRun(run);
+  // Heal task sidecar when status.json already shows a terminal state.
+  if (!isActiveAgentRunState(reconciled.status.state)) {
+    syncLinkedTaskAgentRun(reconciled, reconciled.status);
+  }
+  return reconciled;
 }
 
 /** Newest first. */
@@ -171,6 +246,17 @@ export type AgentRunCancelOutcome = "signalled" | "cancelled" | "already-finishe
  */
 export function cancelAgentRun(run: AgentRun): { run: AgentRun; outcome: AgentRunCancelOutcome } {
   const { status } = run;
+  // Interactive runs' pid is the user's shell — never signal it; just close the record.
+  if (status.state === "running" && run.spec.bin === "interactive") {
+    return {
+      run: updateAgentRunStatus(run, {
+        state: "cancelled",
+        finishedAt: Date.now(),
+        error: "Cancelled while the interactive CLI was still open.",
+      }),
+      outcome: "cancelled",
+    };
+  }
   if (status.state === "running" && status.pid) {
     try {
       process.kill(status.pid, "SIGTERM");
@@ -187,6 +273,46 @@ export function cancelAgentRun(run: AgentRun): { run: AgentRun; outcome: AgentRu
     };
   }
   return { run, outcome: "already-finished" };
+}
+
+export function appendInteractiveAgentNote(run: AgentRun, text: string): AgentRun {
+  const trimmed = clip(text, 8_000).trim();
+  if (!trimmed) return run;
+  const page = { type: "text" as const, text: trimmed, seq: run.status.eventCount, ts: Date.now() };
+  appendRunEvent(run.dir, page);
+  return updateAgentRunStatus(run, { eventCount: run.status.eventCount + 1, updatedAt: Date.now() });
+}
+
+export function finishInteractiveAgentRun(
+  run: AgentRun,
+  input: {
+    ok: boolean;
+    resultText?: string;
+    sessionId?: string;
+    error?: string;
+  },
+): AgentRun {
+  const now = Date.now();
+  if (input.resultText?.trim()) {
+    appendRunEvent(run.dir, {
+      type: "result",
+      ok: input.ok,
+      text: clip(input.resultText.trim(), 8_000),
+      seq: run.status.eventCount,
+      ts: now,
+    });
+  }
+  const eventBump = input.resultText?.trim() ? 1 : 0;
+  return updateAgentRunStatus(run, {
+    state: input.ok ? "succeeded" : "failed",
+    finishedAt: now,
+    updatedAt: now,
+    eventCount: run.status.eventCount + eventBump,
+    resultText: input.resultText?.trim() || run.status.resultText,
+    sessionId: input.sessionId?.trim() || run.status.sessionId,
+    error: input.ok ? undefined : input.error?.trim() || run.status.error || "Interactive run marked failed",
+    exitCode: input.ok ? 0 : 1,
+  });
 }
 
 export function toAgentRunSummary(run: AgentRun) {

@@ -1,6 +1,6 @@
 ---
 name: devhub-repo-upstart
-description: Use when DevHub asks an agent to create, run, debug, or update a DevHub-private upstart script (`upstarts/<repo>/upstart.sh`) from the Repos page Upstart button.
+description: Create, run, debug, or update a DevHub-private repository upstart script.
 metadata:
   short-description: Create or debug repo startup scripts
 ---

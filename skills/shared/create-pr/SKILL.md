@@ -1,7 +1,6 @@
 ---
 name: create-pr
-description: >-
-  Create a GitHub pull request with repo-aligned title/body (often Jira-first), with draft vs execution modes and safe defaults for git push and Jira mutations. Use when the user asks to create/open a PR, draft a PR, or run `gh pr create`.
+description: Create or draft a GitHub pull request with repository conventions and safe git defaults.
 ---
 
 # Create Pull Request
