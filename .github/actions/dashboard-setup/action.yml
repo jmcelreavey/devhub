@@ -15,7 +15,9 @@ runs:
       with:
         node-version-file: ${{ inputs.node-version-file }}
         cache: npm
-        cache-dependency-path: dashboard/package-lock.json
+        cache-dependency-path: |
+          dashboard/package-lock.json
+          mcp-servers/devhub-server/package-lock.json
 
     - name: Cache dashboard node_modules
       id: node-cache
@@ -23,6 +25,15 @@ runs:
       with:
         path: dashboard/node_modules
         key: dashboard-node-modules-${{ runner.os }}-${{ hashFiles('dashboard/package-lock.json') }}
+
+    # The dashboard's vitest run also collects mcp-servers/devhub-server tests,
+    # which import the MCP SDK from that package's own node_modules.
+    - name: Cache MCP server node_modules
+      id: mcp-cache
+      uses: actions/cache@v4
+      with:
+        path: mcp-servers/devhub-server/node_modules
+        key: mcp-server-node-modules-${{ runner.os }}-${{ hashFiles('mcp-servers/devhub-server/package-lock.json') }}
 
     - name: Setup safe-chain
       shell: bash
@@ -34,6 +45,11 @@ runs:
       shell: bash
       if: steps.node-cache.outputs.cache-hit != 'true'
       run: npm ci --prefix dashboard
+
+    - name: Install MCP server dependencies
+      shell: bash
+      if: steps.mcp-cache.outputs.cache-hit != 'true'
+      run: npm ci --prefix mcp-servers/devhub-server
 
     - name: Configure DevHub content paths
       shell: bash
