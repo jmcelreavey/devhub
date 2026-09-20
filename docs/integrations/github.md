@@ -40,7 +40,7 @@ gh auth login
 
 Then press **Check connection** on `/setup`. `GET /api/setup/status` reports `github` / `githubVars.authenticated` from that `gh` session.
 
-Scopes requested by the in-app flow match `gh auth login --web`: `repo`, `read:org`, `gist`, `workflow`. To use your own OAuth app, set `DEVHUB_GITHUB_OAUTH_CLIENT_ID` (the default is GitHub CLI's public client id, which is what makes the token acceptable to `gh`).
+Scopes requested by the in-app flow: `repo`, `read:org`, `gist`, `workflow`, `read:packages`. Packages is extra vs `gh auth login --web` so Setup re-auth does not break GitHub Packages installs. To use your own OAuth app, set `DEVHUB_GITHUB_OAUTH_CLIENT_ID` (the default is GitHub CLI's public client id, which is what makes the token acceptable to `gh`).
 
 ## Temporary Note And Doc Sharing
 

@@ -22,8 +22,11 @@ import { ghEnv } from "@/lib/gh-exec";
  */
 const CLIENT_ID = process.env.DEVHUB_GITHUB_OAUTH_CLIENT_ID ?? "178c6fc778ccc68e1d6a";
 
-/** Matches what `gh auth login --web` requests, so no feature loses access later. */
-const SCOPES = "repo,read:org,gist,workflow";
+/**
+ * `gh auth login --web` defaults plus `read:packages`. Without packages, Setup
+ * re-auth overwrites a working gh token and BI `npm install` 403s on GitHub Packages.
+ */
+const SCOPES = "repo,read:org,gist,workflow,read:packages";
 
 const DEVICE_CODE_URL = "https://github.com/login/device/code";
 const ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
