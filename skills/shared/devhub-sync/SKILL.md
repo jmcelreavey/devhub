@@ -45,7 +45,7 @@ git -C <repo> remote -v
 git -C <repo> branch -vv
 ```
 
-3. In `devhub-private`, resolve staged/unstaged weirdness before committing. If a tracked file is both deleted and untracked, decide which copy is real from the working tree, then unstage accidental rollbacks with `git restore --staged .` rather than rewriting file contents.
+3. In `devhub-private`, resolve staged/unstaged weirdness before committing. If a tracked file is both deleted and untracked, decide which copy is real from the working tree, then unstage accidental rollbacks with `git restore --staged .` rather than rewriting file contents. Stash or commit tracked `notes/` dirt before `devhub-backport.sh` (it refuses any tracked dirty tree).
 
 4. Commit and push private-only state to `origin/main`. Personal data is expected in `devhub-private`; do not push it to public/core.
 
@@ -55,7 +55,7 @@ git -C ~/Developer/devhub-private commit -m "chore: devhub private sync YYYY-MM-
 git -C ~/Developer/devhub-private push origin main
 ```
 
-5. Commit and push BI plugin work in `devhub-bi` to its default branch (`master` today unless the repo has moved to `main`). Then materialize into private/core only if verifying dashboard integration.
+5. Commit and push BI plugin work in `devhub-bi` to its default branch (`master` today unless the repo has moved to `main`). Then materialize into private/core only if verifying dashboard integration. Skip this step when the backlog has no BI plugin changes and `devhub-bi` is clean/even with origin.
 
 ```bash
 git -C ~/Developer/devhub-bi add -A -- . ':(exclude).devhub'
@@ -86,34 +86,68 @@ TEMPLATE_AND_PLUGIN_PLAN.md
 scripts/make-public-seed.sh
 ```
 
-Preferred PR path:
+### Prefer `devhub-backport.sh` for a named feature range
 
 ```bash
-bash ~/Developer/devhub-private/scripts/devhub-backport.sh <source-ref> --base <base-ref> --title "<title>"
-bash ~/Developer/devhub-private/scripts/devhub-backport.sh <source-ref> --base <base-ref> --title "<title>" --execute
+bash scripts/devhub-backport-status.sh
+bash scripts/devhub-backport.sh <source-ref> --base <base-ref> --title "<title>"
+# PR path:
+bash scripts/devhub-backport.sh <source-ref> --base <base-ref> --title "<title>" --execute
 ```
 
-Direct-main path, only after the user chose it:
+### When watermark ranges conflict (partial earlier backports)
 
-- Build/inspect the same clean patch preview first.
-- Apply the previewed public-safe diff onto `~/Developer/devhub` `main`.
-- Run the leak scan and targeted tests.
-- Commit and push `origin main`.
+`devhub-backport.sh` diffs `BASE..SOURCE` and applies onto `upstream/main`. If public already has overlapping hunks from earlier backports, that apply fails with conflicts even though content still differs.
+
+Then use a **tree catch-up** from private (do not use a dirty `~/Developer/devhub` checkout):
+
+```bash
+cd ~/Developer/devhub-private
+source scripts/lib/public-paths.sh
+git fetch upstream
+git branch -f backport/catchup upstream/main
+git checkout backport/catchup
+# reset skip-worktree baselines the same way backport.sh does, then:
+git diff --binary upstream/main main -- "${PUBLIC_PATHS[@]}" | git apply --index --3way
+git diff --cached -U0 | grep -E '^\+' | grep -vE '^\+\+\+' | bash scripts/scan-leaks.sh stdin
+git commit -m "chore: sync public catalog from private"
+# Prefer pushing via private's upstream remote (avoids dirty public local checkout):
+rm -rf dashboard/.next dashboard/.next-verify   # stale Next types break pre-push typecheck
+DEVHUB_SKIP_VERIFY=1 git push upstream HEAD:main   # leak scan already passed; public GHA verifies
+git checkout main
+bash scripts/devhub-backport-status.sh --set-watermark
+bash scripts/devhub-update.sh --mark-synced
+```
+
+Path-subset batches (e.g. skills-only then dashboard) are fine for review, but each batch must leave public typecheck-consistent — skills-only while private `.next` caches still reference Agents routes will fail the private pre-push verify. Prefer one coherent catch-up commit, or clean `.next` / use `DEVHUB_SKIP_VERIFY=1` after a green leak scan when pushing to `upstream`.
+
+### Direct-main path (user chose direct)
+
+- Prefer `git push upstream <backport-branch>:main` from private after a successful preview/catch-up commit.
+- Do not require a clean `~/Developer/devhub` working tree.
+- Always leak-scan added lines before push.
+- Close obsolete open backport PRs that the catch-up supersedes.
+
+### PR path (default)
+
+Use `--execute` on `devhub-backport.sh` so it pushes the backport branch and opens the PR.
 
 8. After public/core contains the backported changes, mark the private mirror synced instead of re-applying its own changes.
 
 ```bash
 bash ~/Developer/devhub-private/scripts/devhub-update.sh --mark-synced
-git -C ~/Developer/devhub-private push origin main
+bash ~/Developer/devhub-private/scripts/devhub-backport-status.sh --set-watermark
 ```
+
+(`--mark-synced` advances `refs/devhub/upstream-sync`; `--set-watermark` advances `.git/devhub-backport-watermark`. Both are local git state — neither needs a private commit unless you also push other changes.)
 
 9. Clean local branches only after their work is merged/pushed. Delete local stale branches with `git branch -d <branch>`; use `-D` only when the user explicitly says to throw away the branch.
 
 ## Verification
 
-- Run the smallest relevant checks for changed code: targeted `vitest`, `typecheck`, or `validate` before pushing public/core.
+- Leak-scan public-safe added lines before any public push (`scripts/scan-leaks.sh`).
+- Private pre-push runs full dashboard verify on every `git push`, including pushes to `upstream`. Stale `dashboard/.next*` from private main will fail typecheck on a catch-up branch; clear those caches or set `DEVHUB_SKIP_VERIFY=1` only after leak scan passed, and rely on public GitHub Actions Verify.
 - For plugin changes, verify from a DevHub checkout after `sync_plugins`; the plugin repo does not build standalone.
-- Run `scripts/scan-leaks.sh` on public/core staged changes before any direct main push.
 
 ## Rules
 
@@ -122,3 +156,4 @@ git -C ~/Developer/devhub-private push origin main
 - Never push personal paths to public/core.
 - Do not create a PR if the user chose direct main and direct push succeeds.
 - If direct push fails, stop and report the branch/commit to open as a PR.
+- Run this work on the Mac checkout with Shell `machineId` — box executors cannot see `/Users/jmcelreavey/...` or push with Mac `gh`/SSH.
