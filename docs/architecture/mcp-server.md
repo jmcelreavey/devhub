@@ -224,6 +224,31 @@ npm run dev
 Run `npm run dev` for dashboard-backed tools. Run the sync action after changing MCP
 catalog entries so client configs pick up the new command, args, and environment.
 
+### Cursor ACP tool budget
+
+Cursor silently drops MCP **tools** past ~190. Resources on the same server still
+list, which is how Playwriter/`lean-ctx` looked "connected" while `execute` and
+`ctx_search` were missing.
+
+`syncMcpServers` therefore:
+
+1. Sets `DEVHUB_MCP_TOOLSETS` on Cursor's `devhub` entry (and AionUi's attached
+   `devhub` process) to the Implement/Plan surface — notes, tasks, plans, work,
+   agents, terminal, and a few others. Claude Code / Codex keep the full catalog.
+2. Rewrites Cursor `mcp.json` key order so `playwriter`, `lean-ctx`, `agentmemory`,
+   `figma`, and `devhub-bi` come before `devhub`. An overflow then drops DevHub
+   tail tools, not the small servers.
+3. Launches Playwriter through `dashboard/lib/mcp/playwriter-compact.ts`, which
+   truncates `execute`'s ~53KB `prompt.md` description. The full API stays on
+   Playwriter's MCP resources.
+4. Pins `LEAN_CTX_TOOL_PROFILE=standard` on Cursor/`lean-ctx` so a wrap that
+   flipped the profile to `power` (78 tools) cannot blow the budget again.
+5. Deep-merges `env` when syncing so wrap extras (`autoApprove`,
+   `DEVHUB_MCP_TOOLSETS`) survive a catalog overwrite.
+
+Reload Cursor MCP after **Sync MCP**. Do not put `DEVHUB_MCP_TOOLSETS` in
+`mcp/shared/devhub.json` — that would slim every client.
+
 ### Connect over HTTP
 
 Clients that take a URL rather than launching a process can use the Streamable HTTP entry. It builds the same server (`src/server.ts`) — same tools, toolsets and history — with one MCP session per client.
@@ -322,7 +347,7 @@ Proposals live in the dashboard process (15 min TTL, max 20 pending). Desktop WS
 Agent tools proxy `/api/agent/runs`. Start the dashboard and keep it open — a run starts when the terminal dock opens its tab.
 
 1. `agent_providers` — which CLIs are installed (built-ins plus `~/.config/devhub/agent-providers.json`).
-2. `agent_dispatch` with `provider`, a self-contained `prompt`, and `cwd`. Approvals are **off** for the dispatched CLI. Runs are **isolated by default** on a `devhub/agent/<run>` worktree branch under the repo's `.git/devhub-worktrees/`; `worktree: false` edits `cwd` directly, so changes appear in the user's IDE. The first dispatch of a provider into a repo queues behind the dock chip (approval is remembered in the app-data `agent-consent.json`); `DEVHUB_AGENT_TRUST_ALL=1` skips that. Caps via env: `DEVHUB_AGENT_MAX_TURNS` (200), `DEVHUB_AGENT_MAX_SECONDS` (1800), `DEVHUB_AGENT_MAX_COST_USD` per local day (25), `DEVHUB_AGENT_MAX_RUNS` (6), and optional `DEVHUB_AGENT_ALLOWED_ROOTS` (colon-separated cwd allowlist).
+2. `agent_dispatch` with `provider`, a self-contained `prompt`, and `cwd`. Approvals are **off** for the dispatched CLI. Runs are **isolated by default** on a `devhub/agent/<repo>-<ticket-or-task>-<runId>` worktree (run id kept as the suffix so resume can still find the run) under the repo's `.git/devhub-worktrees/`; `worktree: false` edits `cwd` directly, so changes appear in the user's IDE. The first dispatch of a provider into a repo queues behind the dock chip (approval is remembered in the app-data `agent-consent.json`); `DEVHUB_AGENT_TRUST_ALL=1` skips that. Caps via env: `DEVHUB_AGENT_MAX_TURNS` (200), `DEVHUB_AGENT_MAX_SECONDS` (1800), `DEVHUB_AGENT_MAX_COST_USD` per local day (25), `DEVHUB_AGENT_MAX_RUNS` (6), and optional `DEVHUB_AGENT_ALLOWED_ROOTS` (colon-separated cwd allowlist).
 3. `agent_wait` (blocks up to 300s and sends progress notifications) or `agent_output` with the returned `since` cursor.
 4. `agent_diff` shows what changed against HEAD at dispatch. `agent_followup` resumes the same CLI session (Claude Code, Cursor, or a custom CLI with `resumeArgs`); `agent_cancel` stops a run.
 5. `agent_race` sends one prompt to 2–4 providers, each in its own worktree, for side-by-side diffs.
@@ -529,3 +554,8 @@ network, and everything interpolated goes through `escapeHtml`. The client
 renders this in _its_ trust context, so a widget steerable by note content would
 be a content-injection vector into the client. Styling adapts via
 `prefers-color-scheme` because the host theme is not queryable.
+
+## AionUi (Agents)
+
+When the managed AionUi workspace is connected, `syncMcpServers` also calls `syncAionMcpServers`, which upserts catalog entries tagged `[DevHub managed]` into AionUi and **enables** them. Connect / managed setup runs `ensureAionMcpBootstrap` so Agents can call DevHub tools without a manual toggle. See [Agents (AionUi)](../guides/aionui-agents.md).
+

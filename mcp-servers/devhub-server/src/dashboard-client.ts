@@ -60,7 +60,7 @@ export class DashboardClient {
   }
 
   private authHeaders(): Record<string, string> {
-    const headers: Record<string, string> = { Origin: this.baseUrl };
+    const headers: Record<string, string> = { Origin: this.baseUrl, "X-DevHub-Client": "mcp" };
     const secret = process.env.DEVHUB_API_SECRET?.trim();
     if (secret) headers["X-DevHub-Secret"] = secret;
     return headers;

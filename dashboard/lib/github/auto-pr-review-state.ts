@@ -1,6 +1,6 @@
 /**
  * Tracks auto agent-review starts so the poller / endpoint does not re-enqueue
- * the same PR head until it gets a new commit.
+ * the same PR after the first successful start — including after later pushes.
  *
  * Shape mirrors skipped-prs.json (notes/.config/). Does not auto-post GitHub
  * review comments — only records that DevHub started an agent review job.
@@ -13,28 +13,43 @@ export interface AutoPrReviewRecord {
   url: string;
   /** PR updatedAt captured when the review job was started. */
   updatedAt: string;
-  /** Head commit reviewed — the dedupe key when known. */
+  /** Head commit at start time (informational; not a re-review trigger). */
   headSha?: string;
   repo: string;
   number: number;
   title: string;
   startedAt: string;
+  /** Agent run id when started on a CLI provider. */
+  runId?: string;
+  /** OpenCode session id when started on OpenCode. */
   sessionId?: string;
   notePath?: string;
+  /** Starts for this PR URL, counting retries after failed runs. */
+  attempts?: number;
 }
 
 /**
- * Has this PR head already had an auto-review? Keyed on the head SHA — comments,
- * labels and CI bump `updatedAt` without changing the code. Records from before
- * SHAs were stored fall back to `updatedAt`.
+ * True when DevHub has already started an auto-review for this PR URL.
+ * Pushes / updatedAt changes do not clear this — review once per PR.
+ * (Failed runs are retried separately via shouldRetryAutoReview.)
+ */
+export function wasAlreadyAutoReviewed(
+  prior: Pick<AutoPrReviewRecord, "updatedAt" | "headSha"> | undefined | null,
+): boolean {
+  return Boolean(prior);
+}
+
+/**
+ * @deprecated Prefer wasAlreadyAutoReviewed — kept for older call sites/tests.
+ * Formerly keyed on head SHA so a new push re-queued; policy is now once per PR.
  */
 export function isSameReviewedHead(
   prior: Pick<AutoPrReviewRecord, "updatedAt" | "headSha">,
-  live: { updatedAt?: string; headSha?: string },
+  // live head ignored — once-per-PR policy
+  ..._ignored: unknown[]
 ): boolean {
-  if (prior.headSha && live.headSha) return prior.headSha === live.headSha;
-  const updatedAt = live.updatedAt ?? "";
-  return updatedAt !== "" && prior.updatedAt === updatedAt;
+  void _ignored;
+  return wasAlreadyAutoReviewed(prior);
 }
 
 interface AutoPrReviewFile {
@@ -75,9 +90,14 @@ export function listAutoPrReviewRecords(): AutoPrReviewRecord[] {
 }
 
 export async function recordAutoPrReviewStart(
-  row: Pick<AutoPrReviewRecord, "url" | "updatedAt" | "headSha" | "repo" | "number" | "title" | "sessionId" | "notePath">,
+  row: Pick<
+    AutoPrReviewRecord,
+    "url" | "updatedAt" | "headSha" | "repo" | "number" | "title" | "runId" | "sessionId" | "notePath"
+  >,
 ): Promise<void> {
   await updateAll((reviews) => {
+    const prev = reviews[row.url];
+    const attempts = prev ? (prev.attempts ?? 1) + 1 : 1;
     reviews[row.url] = {
       url: row.url,
       updatedAt: row.updatedAt ?? "",
@@ -86,24 +106,27 @@ export async function recordAutoPrReviewStart(
       title: row.title,
       startedAt: new Date().toISOString(),
       ...(row.headSha ? { headSha: row.headSha } : {}),
+      ...(row.runId ? { runId: row.runId } : {}),
       ...(row.sessionId ? { sessionId: row.sessionId } : {}),
       ...(row.notePath ? { notePath: row.notePath } : {}),
+      attempts,
     };
     return true;
   });
 }
 
-/** Drop entries whose PR head has moved on, so the new head gets reviewed. */
+/**
+ * Drop entries whose PR left the review-requested queue (merged/closed/unsubscribed).
+ * Does NOT clear on a new head SHA — once reviewed, stay reviewed.
+ */
 export async function pruneStaleAutoPrReviews(
   live: ReadonlyArray<{ url: string; updatedAt?: string; headSha?: string }>,
 ): Promise<void> {
-  const byUrl = new Map(live.map((r) => [r.url, r]));
+  const liveUrls = new Set(live.map((r) => r.url));
   await updateAll((reviews) => {
     let dirty = false;
-    for (const [url, entry] of Object.entries(reviews)) {
-      const liveRow = byUrl.get(url);
-      if (!liveRow) continue;
-      if (!isSameReviewedHead(entry, liveRow)) {
+    for (const url of Object.keys(reviews)) {
+      if (!liveUrls.has(url)) {
         delete reviews[url];
         dirty = true;
       }

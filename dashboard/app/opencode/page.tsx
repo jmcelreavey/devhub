@@ -1,10 +1,3 @@
-/**
- * The /opencode route exists so the URL and sidebar link work, but the actual
- * iframe is rendered by <PersistentOpenCode> in the root layout so it survives
- * client-side navigation to other pages.
- */
-export const metadata = { title: "OpenCode" };
+import { redirect } from "next/navigation";
 
-export default function OpenCodePage() {
-  return null;
-}
+export default function LegacyAgentPage() { redirect("/agents"); }

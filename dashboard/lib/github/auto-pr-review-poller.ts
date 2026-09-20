@@ -19,6 +19,7 @@ import { isGithubCliAuthenticated } from "@/lib/gh-exec";
 import { reviewNoteActivityByPath } from "@/lib/notes/review-index-server";
 import { autoReviewConcurrency, loadAutoReviewQueue, runAutoPrReview } from "@/lib/github/auto-pr-review";
 import { readAutoPrReviewPrefs } from "@/lib/github/auto-pr-review-prefs";
+import { isAdvertisedDashboard } from "@/lib/dashboard-runtime";
 
 const DEFAULT_INTERVAL_MS = 15 * 60 * 1000;
 
@@ -74,6 +75,9 @@ async function tick(): Promise<void> {
   }
   if (!prefs.enabled) return;
   if (!prefs.always && !isWeekdayDaytime()) return;
+  // A second dashboard (dev server beside the app) would queue reviews into a
+  // dock nobody has open; leave them to the one in dashboard.json.
+  if (!isAdvertisedDashboard()) return;
   if (!(await isGithubCliAuthenticated())) return;
 
   inFlight = true;

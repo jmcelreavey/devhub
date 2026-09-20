@@ -13,7 +13,7 @@ import { withDashboardErrors, type DashboardClient } from "../dashboard-client.t
  * (/api/agent/runs); these tools are a thin client over it.
  */
 
-type AgentRunState = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+type AgentRunState = "queued" | "starting" | "running" | "needs-attention" | "completed" | "succeeded" | "failed" | "cancelled";
 
 export interface AgentRunSummary {
   id: string;
@@ -22,6 +22,8 @@ export interface AgentRunSummary {
   title: string;
   model: string | null;
   state: AgentRunState;
+  runtime?: "legacy-cli" | "aionui" | "generation";
+  conversationId?: string | null;
   cwd: string;
   worktree: { path: string; branch: string; repoRoot: string } | null;
   parentRunId: string | null;
@@ -68,13 +70,13 @@ const POLL_MS = 1_500;
 const WAIT_EVENTS_SHOWN = 200;
 
 function isActive(state: AgentRunState): boolean {
-  return state === "queued" || state === "running";
+  return state === "queued" || state === "starting" || state === "running" || state === "needs-attention";
 }
 
 /** Nesting level of this server's caller — the agent runner sets it for dispatched runs. */
 export function callerDepth(env: NodeJS.ProcessEnv = process.env): number {
   const n = Number.parseInt(env.DEVHUB_AGENT_DEPTH ?? "", 10);
-  return Number.isFinite(n) && n > 0 ? n : 0;
+  return Math.max(Number.isFinite(n) && n > 0 ? n : 0, env.AIONUI_CONVERSATION_ID ? 1 : 0);
 }
 
 export function formatAgentEvent(event: AgentRunEvent): string {
@@ -111,7 +113,10 @@ export function formatRunSummary(run: AgentRunSummary): string {
     run.parentRunId ? `Follow-up of: ${run.parentRunId}` : null,
     stats.length ? `Stats: ${stats.join(" · ")}` : null,
     run.terminalSessionId ? `Terminal session: ${run.terminalSessionId}` : null,
-    run.state === "queued"
+    run.conversationId ? `Conversation: ${run.conversationId}` : null,
+    run.state === "needs-attention" ? "Waiting for your attention in the agent conversation." : null,
+    run.state === "completed" ? "The reply is available; this runtime does not report a verified success reason." : null,
+    run.state === "queued" && (!run.runtime || run.runtime === "legacy-cli")
       ? "Waiting for the DevHub terminal dock to open its tab — the dashboard must be open in a browser or the desktop app."
       : null,
     run.error ? `Error: ${run.error}` : null,
@@ -143,7 +148,7 @@ export function registerAgentTools(server: McpServer, ctx: Context): void {
     "agent_providers",
     {
       description:
-        "List the agent CLIs agent_dispatch can hand work to (Claude Code, Cursor, Codex, Gemini, OpenCode, Antigravity, plus any custom CLI from ~/.config/devhub/agent-providers.json) and whether each is installed. Requires the dashboard running.",
+        "List enabled AionUi assistants, their readiness and supported controls. Configure native harnesses and custom assistants in Agents. Requires DevHub and its connected AionUi workspace (MCP servers must be enabled — reconnect Agents after Sync MCP).",
     },
     async () =>
       withDashboardErrors(async () => {
@@ -162,7 +167,7 @@ export function registerAgentTools(server: McpServer, ctx: Context): void {
             "Agent providers:",
             ...lines,
             data.providersConfigError ? `\nCustom provider config error: ${data.providersConfigError}` : null,
-            "\nAdd a CLI with a headless mode in ~/.config/devhub/agent-providers.json.",
+            "\nConfigure agents in AionUi's Assistants view. Use only advertised models and controls.",
           ]
             .filter(Boolean)
             .join("\n"),
@@ -174,8 +179,9 @@ export function registerAgentTools(server: McpServer, ctx: Context): void {
     "agent_dispatch",
     {
       description:
-        "Hand a task to another coding agent CLI. The run executes with approvals DISABLED in a new DevHub terminal tab the user can watch and stop. Runs are ISOLATED by default in a git worktree on a devhub/agent/<run> branch (worktree:false edits cwd directly, so changes appear in the user's IDE). The first dispatch to a given repo with a given agent waits on a one-time dock confirmation; later ones start on their own. Caps: DEVHUB_AGENT_MAX_TURNS (default 200 where supported), MAX_SECONDS (default 1800), MAX_COST_USD per local day (default 25), MAX_RUNS concurrent (default 6). Returns a run id immediately — follow with agent_wait (block until done) or agent_output (page events). Requires the dashboard running with the terminal dock loaded.",
+        "Start a task in a new AionUi conversation. Defaults to Cursor + Grok with YOLO (auto-approve) unless you pass provider/model. No terminal or window opens. An isolated git worktree is the default; worktree:false uses cwd directly. Returns a durable run and conversation ID. Follow with agent_wait or agent_output; approvals remain in Agents. Reuse requestId when retrying the same submission to avoid duplicate work. Native turn/time/usage limits are available only when the runtime advertises them.",
       inputSchema: {
+        requestId: z.string().min(1).max(200).optional().describe("Stable key for retries of this same submission"),
         provider: z.string().min(1).describe("Provider id from agent_providers, e.g. claude, cursor, codex"),
         prompt: z.string().min(1).max(32_000).describe("The full task. The agent has no other context from you."),
         cwd: z.string().min(1).describe("Absolute directory under the user's home — usually a repo root"),
@@ -206,7 +212,7 @@ export function registerAgentTools(server: McpServer, ctx: Context): void {
     "agent_race",
     {
       description:
-        "Send the same task to 2–4 agent providers at once, each in its own git worktree on its own branch, so their changes can be compared with agent_diff. Same YOLO + visible-terminal rules as agent_dispatch. Requires the dashboard running.",
+        "Send the same task to 2–4 AionUi assistants, each in its own worktree and conversation. Each conversation uses YOLO permissions. Compare results with agent_diff; no terminal or window opens.",
       inputSchema: {
         providers: z.array(z.string().min(1)).min(2).max(4).describe("Distinct provider ids"),
         prompt: z.string().min(1).max(32_000),

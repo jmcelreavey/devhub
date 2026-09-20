@@ -29,7 +29,7 @@ export async function POST(req: NextRequest, { params }: RepoParams) {
     );
   }
 
-  const model = getNotesAiModel();
+  const model = getNotesAiModel({ action: "Suggest a commit message" });
   if (!model) {
     return NextResponse.json(
       {

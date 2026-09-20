@@ -30,10 +30,11 @@ export interface AgentCliSettings {
 
 export function normalizeAgentCli(raw: string | undefined): AgentCli {
   const v = raw?.trim().toLowerCase();
-  if (v === "cursor") return "cursor";
+  if (v === "opencode") return "opencode";
   if (v === "chatgpt" || v === "codex") return "chatgpt";
   if (v === "antigravity" || v === "agy") return "antigravity";
-  return "opencode";
+  // Cursor is the default, matching resolveAiProvider's fallback order.
+  return "cursor";
 }
 
 /**

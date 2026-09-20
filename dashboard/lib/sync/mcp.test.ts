@@ -362,6 +362,91 @@ describe("syncMcpServers", () => {
     expect(cursor.mcpServers.skip.command).toBe("/preexisting");
   });
 
+  it("preserves Cursor wrap extras (autoApprove, instructions) when syncing a catalog server", async () => {
+    const { repo, home } = makeTempRepo();
+    writeJson(path.join(home, ".config/devhub/mcp-personal/lean-ctx.json"), {
+      command: "/opt/lean-ctx",
+    });
+    writeJson(path.join(home, ".cursor/mcp.json"), {
+      mcpServers: {
+        "lean-ctx": {
+          command: "/opt/lean-ctx",
+          autoApprove: ["ctx_search"],
+          instructions: "use ctx_search",
+        },
+      },
+    });
+
+    await syncMcpServers({ emit: () => undefined, repoRoot: repo, servers: ["lean-ctx"] });
+
+    const cursor = JSON.parse(fs.readFileSync(path.join(home, ".cursor/mcp.json"), "utf-8"));
+    expect(cursor.mcpServers["lean-ctx"]).toMatchObject({
+      command: "/opt/lean-ctx",
+      autoApprove: ["ctx_search"],
+      instructions: "use ctx_search",
+    });
+  });
+
+  it("preserves wrap-only env keys when the catalog also has env", async () => {
+    const { repo, home } = makeTempRepo();
+    writeJson(path.join(repo, "mcp", "shared", "notes.json"), {
+      command: "REPO_ROOT/notes",
+      env: { NOTES_DIR: "REPO_ROOT/notes" },
+    });
+    writeJson(path.join(home, ".cursor/mcp.json"), {
+      mcpServers: {
+        notes: {
+          command: "/old/notes",
+          env: { NOTES_DIR: "/stale", EXTRA: "keep-me" },
+        },
+      },
+    });
+
+    await syncMcpServers({ emit: () => undefined, repoRoot: repo, servers: ["notes"], tool: "cursor" });
+
+    const cursor = JSON.parse(fs.readFileSync(path.join(home, ".cursor/mcp.json"), "utf-8"));
+    expect(cursor.mcpServers.notes.env).toMatchObject({
+      NOTES_DIR: `${repo}/notes`,
+      EXTRA: "keep-me",
+    });
+  });
+
+  it("slims Cursor DevHub toolsets, pins lean-ctx, and puts Playwriter first", async () => {
+    const { repo, home } = makeTempRepo();
+    writeJson(path.join(repo, "mcp", "shared", "devhub.json"), { command: "REPO_ROOT/devhub" });
+    writeJson(path.join(repo, "mcp", "shared", "playwriter.json"), { command: "REPO_ROOT/playwriter" });
+    writeJson(path.join(home, ".config/devhub/mcp-personal/lean-ctx.json"), { command: "/opt/lean-ctx" });
+    writeJson(path.join(home, ".cursor/mcp.json"), {
+      mcpServers: {
+        agentmemory: { command: "npx" },
+        devhub: { command: "/old/devhub" },
+      },
+    });
+
+    await syncMcpServers({ emit: () => undefined, repoRoot: repo, tool: "cursor" });
+
+    const cursor = JSON.parse(fs.readFileSync(path.join(home, ".cursor/mcp.json"), "utf-8"));
+    expect(Object.keys(cursor.mcpServers)[0]).toBe("playwriter");
+    expect(Object.keys(cursor.mcpServers).indexOf("lean-ctx")).toBeLessThan(
+      Object.keys(cursor.mcpServers).indexOf("devhub"),
+    );
+    expect(cursor.mcpServers.devhub.env.DEVHUB_MCP_TOOLSETS).toContain("notes");
+    expect(cursor.mcpServers["lean-ctx"].env.LEAN_CTX_TOOL_PROFILE).toBe("standard");
+  });
+
+  it("does not slim DevHub toolsets for Claude Code", async () => {
+    const { repo, home } = makeTempRepo();
+    writeJson(path.join(repo, "mcp", "shared", "devhub.json"), {
+      command: "REPO_ROOT/devhub",
+      env: { NOTES_DIR: "REPO_ROOT/notes" },
+    });
+
+    await syncMcpServers({ emit: () => undefined, repoRoot: repo, servers: ["devhub"], tool: "claude" });
+
+    const claude = JSON.parse(fs.readFileSync(path.join(home, ".claude.json"), "utf-8"));
+    expect(claude.mcpServers.devhub.env).toEqual({ NOTES_DIR: `${repo}/notes` });
+  });
+
   it("merges ~/.cursor and legacy ~/.config/cursor MCP entries on sync", async () => {
     const { repo, home, lines } = makeTempRepo();
     writeJson(path.join(repo, "mcp", "shared", "notes.json"), { command: "REPO_ROOT/notes" });

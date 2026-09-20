@@ -29,7 +29,7 @@ export interface AgentCliConfig {
 }
 
 export const AGENT_CLI_DEFAULTS: AgentCliConfig = {
-  cli: "opencode",
+  cli: "cursor",
   provider: null,
   opencodeModel: "",
   cursorModel: DEFAULT_CURSOR_AGENT_MODEL,

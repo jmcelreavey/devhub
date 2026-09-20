@@ -1,42 +1,38 @@
 import { describe, expect, it } from "vitest";
-import { appendSessionHistory, type SessionHistoryEntry } from "./session-history";
+import { appendSessionHistory, uniqueSessionHistory } from "./session-history";
 
-const entry = (href: string, ts: number): SessionHistoryEntry => ({ href, label: href, ts });
+const e = (href: string, label: string, ts: number) => ({ href, label, ts });
 
 describe("appendSessionHistory", () => {
-  it("collapses consecutive visits to the same destination", () => {
-    expect(appendSessionHistory([entry("/notes", 1)], entry("/notes", 2))).toEqual([
-      entry("/notes", 2),
-    ]);
+  it("keeps paths unique and moves revisits to the end", () => {
+    let h = appendSessionHistory([], e("/agents", "Agents", 1));
+    h = appendSessionHistory(h, e("/prs", "PRs", 2));
+    h = appendSessionHistory(h, e("/today", "Today", 3));
+    h = appendSessionHistory(h, e("/agents", "Agents", 4));
+    expect(h.map((x) => x.href)).toEqual(["/prs", "/today", "/agents"]);
   });
 
-  it("pops when navigating back to the previous entry", () => {
-    expect(
-      appendSessionHistory([entry("/notes", 1), entry("/repos", 2)], entry("/notes", 3)),
-    ).toEqual([entry("/notes", 1)]);
+  it("collapses Agents view query variants into one crumb", () => {
+    let h = appendSessionHistory([], e("/agents", "Agents", 1));
+    h = appendSessionHistory(h, e("/prs", "PRs", 2));
+    h = appendSessionHistory(h, e("/agents?view=activity", "Agents", 3));
+    h = appendSessionHistory(h, e("/today", "Today", 4));
+    h = appendSessionHistory(h, e("/agents?view=archive", "Agents", 5));
+    expect(h.map((x) => x.href)).toEqual(["/prs", "/today", "/agents?view=archive"]);
+    expect(h.map((x) => x.label)).toEqual(["PRs", "Today", "Agents"]);
   });
+});
 
-  it("does not treat a longer trail as a back-pop", () => {
-    expect(
-      appendSessionHistory(
-        [entry("/notes", 1), entry("/repos", 2), entry("/work", 3)],
-        entry("/notes", 4),
-      ).map((item) => item.href),
-    ).toEqual(["/notes", "/repos", "/work", "/notes"]);
-  });
-
-  it("treats trailing slashes as the same href", () => {
-    expect(appendSessionHistory([entry("/work", 1)], entry("/work/", 2))).toEqual([
-      entry("/work", 2),
-    ]);
-  });
-
-  it("keeps only the newest entries", () => {
-    const history = [entry("/1", 1), entry("/2", 2), entry("/3", 3)];
-    expect(appendSessionHistory(history, entry("/4", 4), 3).map((item) => item.href)).toEqual([
-      "/2",
-      "/3",
-      "/4",
-    ]);
+describe("uniqueSessionHistory", () => {
+  it("dedupes Agents query variants for breadcrumb display", () => {
+    const trail = uniqueSessionHistory([
+      e("/agents", "Agents", 1),
+      e("/agents?view=activity", "Agents", 2),
+      e("/prs", "PRs", 3),
+      e("/today", "Today", 4),
+      e("/agents?view=connection", "Agents", 5),
+    ], 5);
+    expect(trail.map((x) => x.label)).toEqual(["PRs", "Today", "Agents"]);
+    expect(trail.at(-1)?.href).toBe("/agents?view=connection");
   });
 });

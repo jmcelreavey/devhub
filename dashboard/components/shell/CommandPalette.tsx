@@ -1,43 +1,43 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
-  ChevronRight,
-  FileText,
-  ListTodo,
-  Ticket as TicketIcon,
-  Compass,
-  CheckCircle2,
-  Circle,
-  Search,
-  PenTool,
-  BookOpen,
-  FolderGit2,
-} from "lucide-react";
-import { ALL_NAV_DESTINATIONS, filterNavBySetup, type SetupGateStatus } from "@/lib/nav";
 import { useWorkspaceTabs } from "@/components/shell/WorkspaceTabs";
-import { toggleDensity, toggleMotion } from "@/lib/ui-prefs";
-import { useLive } from "@/lib/hooks/use-fetch";
-import { filterVisiblePaletteCommands, uniqueById } from "@/lib/command-palette-score";
-import { useToast } from "@/lib/hooks/use-toast";
+import { SEARCH_QUERY_INPUT_ATTRS } from "@/components/ui/SearchInput";
+import { navigateToAgents,openAgentHandoff } from "@/lib/agent-handoff";
+import { openInteractiveAgentSession } from "@/lib/agent-job";
+import { copyTextToClipboard } from "@/lib/clipboard";
+import { filterVisiblePaletteCommands,uniqueById } from "@/lib/command-palette-score";
 import { copyContextPackToClipboard } from "@/lib/context-pack-client";
-import { buildSearchUrl } from "@/lib/search-ui";
+import { openInBrowser } from "@/lib/desktop/bridge";
+import { isDiagramStoragePath,toDiagramRoutePath } from "@/lib/diagram-utils";
 import type { DocSearchHit } from "@/lib/docs/doc-search-types";
+import { clearFocusSession,readFocusSession,writeFocusSession } from "@/lib/focus-session-storage";
+import { useLive } from "@/lib/hooks/use-fetch";
+import { useIsMobile } from "@/lib/hooks/use-is-mobile";
+import { useToast } from "@/lib/hooks/use-toast";
+import { ALL_NAV_DESTINATIONS,filterNavBySetup,type SetupGateStatus } from "@/lib/nav";
+import { usePaletteRowPress } from "@/lib/palette-row-press";
+import { clearRouteUsage,summariseRouteUsage } from "@/lib/route-usage";
+import { buildSearchUrl } from "@/lib/search-ui";
 import { copyStandupMarkdownToClipboard } from "@/lib/standup/clipboard";
 import { saveStandupAsDailyNote } from "@/lib/standup/daily-note";
-import { isDiagramStoragePath, toDiagramRoutePath } from "@/lib/diagram-utils";
+import { openTerminal,openTerminalTranscript } from "@/lib/terminal-launch";
 import { flattenTreeFiles } from "@/lib/tree-utils";
-import { clearFocusSession, readFocusSession, writeFocusSession } from "@/lib/focus-session-storage";
-import { clearRouteUsage, summariseRouteUsage } from "@/lib/route-usage";
-import { copyTextToClipboard } from "@/lib/clipboard";
-import { openTerminal, openTerminalTranscript } from "@/lib/terminal-launch";
-import { focusAgentComposer, openAgentChat } from "@/lib/agent-chat";
-import { openInteractiveAgentSession } from "@/lib/agent-job";
-import { openInBrowser } from "@/lib/desktop/bridge";
-import { useIsMobile } from "@/lib/hooks/use-is-mobile";
-import { usePaletteRowPress } from "@/lib/palette-row-press";
-import { SEARCH_QUERY_INPUT_ATTRS } from "@/components/ui/SearchInput";
+import { toggleDensity,toggleMotion } from "@/lib/ui-prefs";
+import {
+BookOpen,
+CheckCircle2,
+ChevronRight,
+Circle,
+Compass,
+FileText,
+FolderGit2,
+ListTodo,
+PenTool,
+Search,
+Ticket as TicketIcon,
+} from "lucide-react";
+import { usePathname,useRouter,useSearchParams } from "next/navigation";
+import { useCallback,useEffect,useMemo,useRef,useState,type MouseEvent } from "react";
 
 type CommandKind =
   | "nav"
@@ -550,9 +550,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         hint: "Chat",
         perform: () => {
           onClose();
-          void openInteractiveAgentSession().then(() => {
-            window.setTimeout(() => focusAgentComposer(), 80);
-          });
+          void openInteractiveAgentSession();
         },
       },
       {
@@ -562,8 +560,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         hint: "Chat",
         perform: () => {
           onClose();
-          openAgentChat({ title: "Agent", kind: "agent", autoSend: false });
-          window.setTimeout(() => focusAgentComposer(), 80);
+          navigateToAgents();
         },
       },
       ...repos.map((r) => ({
@@ -574,14 +571,12 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         hint: "Chat",
         perform: () => {
           onClose();
-          openAgentChat({
+          openAgentHandoff({
             title: `Agent · ${r.name}`,
             kind: "agent",
             cwd: r.path,
             repoName: r.name,
-            autoSend: false,
           });
-          window.setTimeout(() => focusAgentComposer(), 80);
         },
       })),
     ];

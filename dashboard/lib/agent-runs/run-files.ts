@@ -11,12 +11,26 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import type { AgentStreamFormat, RecordedAgentRunEvent } from "./events";
+import type { AgentStreamFormat,RecordedAgentRunEvent } from "./events";
 
-export type AgentRunState = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+export type AgentRunState = "queued" | "starting" | "running" | "needs-attention" | "completed" | "succeeded" | "failed" | "cancelled";
 
 export function isActiveAgentRunState(state: AgentRunState): boolean {
-  return state === "queued" || state === "running";
+  return state === "queued" || state === "starting" || state === "running" || state === "needs-attention";
+}
+
+export interface AgentActivityContext {
+  source: "interactive" | "schedule" | "auto-review" | "investigation" | "briefing" | "generation" | "aionui";
+  action: string;
+  groupId?: string;
+  taskId?: string;
+  taskDate?: string;
+  repoName?: string;
+  prUrl?: string;
+  headSha?: string;
+  jobId?: string;
+  occurrence?: number;
+  notePath?: string;
 }
 
 export interface AgentRunWorktree {
@@ -27,6 +41,11 @@ export interface AgentRunWorktree {
 
 export interface AgentRunSpec {
   id: string;
+  schemaVersion?: 2;
+  /** Records without this field were launched by the legacy terminal runner. */
+  runtime?: "legacy-cli" | "aionui" | "generation";
+  activity?: AgentActivityContext;
+  requestId?: string;
   provider: string;
   providerLabel: string;
   /** Absolute binary path, resolved at dispatch so the runner does not depend on the tab's PATH. */
@@ -53,12 +72,25 @@ export interface AgentRunStatus {
   proposalId?: string;
   /** Runner (wrapper) pid — signalling it tears down the CLI it spawned. */
   pid?: number;
+  /** Observed for recovery only. Never signal the dashboard process to cancel a generation. */
+  ownerPid?: number;
   terminalSessionId?: string;
   startedAt?: number;
   finishedAt?: number;
   exitCode?: number | null;
   /** The CLI's own session id, used to resume for follow-ups. */
   sessionId?: string;
+  connectionId?: string;
+  conversationId?: string;
+  messageId?: string;
+  turnId?: string;
+  connectivity?: "connected" | "reconnecting";
+  submissionAttemptedAt?: number;
+  cancelRequestedAt?: number;
+  /** Set after a PR-review chat is archived in the AionUi sidebar. */
+  sidebarArchivedAt?: number;
+  inputTokens?: number;
+  outputTokens?: number;
   resultText?: string;
   costUsd?: number;
   turns?: number;

@@ -38,6 +38,7 @@ export async function generateAiDevTip(techStack: string[], date: Date): Promise
 
   try {
     const result = await tryGenerateAiText({
+      activity: { source: "briefing", action: "Briefing development tip" },
       prompt: [
         `Generate one practical, specific development tip for a developer who works with: ${techStack.join(", ")}.`,
         "The tip must be:",
@@ -100,6 +101,7 @@ export async function generateAiSummary(
     const stackLine = profile.techStack.length > 0 ? profile.techStack.join(", ") : "general";
 
     const result = await tryGenerateAiText({
+      activity: { source: "briefing", action: "Briefing summary" },
       prompt: [
         "You are writing a one-sentence morning briefing summary for a personal dashboard.",
         `The developer works with: ${stackLine}.`,
@@ -134,6 +136,7 @@ export async function generateInterestSnippets(interests: string[]): Promise<Int
 
   try {
     const result = await tryGenerateAiText({
+      activity: { source: "briefing", action: "Briefing interest insights" },
       prompt: [
         "For each of the user's interests below, generate one short, useful insight or tip.",
         "These are evergreen insights (not news) — practical knowledge, techniques, or interesting facts.",

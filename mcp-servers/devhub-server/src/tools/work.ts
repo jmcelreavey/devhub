@@ -172,7 +172,14 @@ export function registerWorkTools(server: McpServer, ctx: Context): void {
         const data = await dashboard.post<{
           dryRun?: boolean;
           configured?: boolean;
-          started?: Array<{ repo: string; number: number; url: string; sessionId?: string; notePath?: string }>;
+          started?: Array<{
+            repo: string;
+            number: number;
+            url: string;
+            runId?: string;
+            sessionId?: string;
+            notePath?: string;
+          }>;
           skipped?: Array<{ repo: string; number: number; url: string; reason: string }>;
           errors?: Array<{ repo: string; number: number; url: string; error: string }>;
           candidates?: Array<{ row: { repo: string; number: number; url: string; title?: string }; notePath: string }>;
@@ -200,7 +207,8 @@ export function registerWorkTools(server: McpServer, ctx: Context): void {
         if (data.started?.length) {
           lines.push(`Started (${data.started.length}):`);
           for (const s of data.started) {
-            lines.push(`  - ${s.repo}#${s.number} session ${s.sessionId ?? "?"} note ${s.notePath ?? "?"}`);
+            const id = s.runId ? `run ${s.runId}` : `session ${s.sessionId ?? "?"}`;
+            lines.push(`  - ${s.repo}#${s.number} ${id} note ${s.notePath ?? "?"}`);
           }
         }
         if (data.skipped?.length) {
@@ -327,7 +335,15 @@ export function registerWorkTools(server: McpServer, ctx: Context): void {
           prompt?: string;
           message?: string;
           error?: string;
-          started?: { repo: string; number: number; url: string; sessionId?: string; notePath?: string };
+          started?: {
+            repo: string;
+            number: number;
+            url: string;
+            runId?: string;
+            sessionId?: string;
+            providerLabel?: string;
+            notePath?: string;
+          };
           rerun?: { attempted: number; reran: number; runIds: number[]; errors: string[] } | null;
         }>(
           "/api/github/prs/pipeline-investigate",
@@ -363,7 +379,9 @@ export function registerWorkTools(server: McpServer, ctx: Context): void {
         }
         const lines = [
           `Started pipeline investigate for ${data.started.repo}#${data.started.number}.`,
-          `session ${data.started.sessionId ?? "?"} · note ${data.started.notePath ?? "?"}`,
+          `${data.started.providerLabel ?? "agent"} ${
+            data.started.runId ? `run ${data.started.runId}` : `session ${data.started.sessionId ?? "?"}`
+          } · note ${data.started.notePath ?? "?"}`,
         ];
         if (data.rerun) {
           lines.push(

@@ -29,7 +29,7 @@ export const POST = withErrorHandler(async (req: Request, { params }: Params) =>
   const body = (await req.json()) as { messages?: UIMessage[] };
   const messages = body.messages ?? [];
 
-  const model = getNotesAiModel();
+  const model = getNotesAiModel({ action: "Repository learning tutor" });
   if (!model) {
     return NextResponse.json({ error: NOTES_AI_NOT_CONFIGURED }, { status: 503 });
   }

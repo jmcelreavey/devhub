@@ -1,40 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { createPortal } from "react-dom";
-import {
-  AlertTriangle,
-  Download,
-  FileWarning,
-  FolderTree,
-  GitBranch,
-  GitCommit,
-  History,
-  Keyboard,
-  Layers,
-  Maximize2,
-  Minimize2,
-  PanelLeftClose,
-  PanelLeftOpen,
-  RefreshCw,
-  Undo2,
-  Upload,
-  X,
-  type LucideIcon,
-} from "lucide-react";
-import { useConfirm } from "@/components/shell/ConfirmDialog";
-import { useToast } from "@/lib/hooks/use-toast";
-import { launchAgentJob } from "@/lib/agent-job";
-import {
-  agentGitSyncConflictCommand,
-  agentGitSyncConflictPrompt,
-  agentStashConflictCommand,
-  agentStashConflictPrompt,
-} from "@/lib/terminal-launch";
-import type { GitHookFailurePayload } from "@/lib/git/hook-failure";
-import { peekUndo, popUndo, type UndoEntry } from "@/lib/git/undo-stack";
 import type { StashConflictPayload } from "@/app/repos/types";
-import { useStoredChoice, useStoredState } from "@/lib/hooks/use-stored-state";
+import { useConfirm } from "@/components/shell/ConfirmDialog";
+import { launchAgentJob } from "@/lib/agent-job";
+import type { GitHookFailurePayload } from "@/lib/git/hook-failure";
+import { peekUndo,popUndo,type UndoEntry } from "@/lib/git/undo-stack";
+import { useStoredChoice,useStoredState } from "@/lib/hooks/use-stored-state";
+import { useToast } from "@/lib/hooks/use-toast";
+import {
+agentGitSyncConflictPrompt,
+agentStashConflictPrompt
+} from "@/lib/terminal-launch";
+import {
+AlertTriangle,
+Download,
+FileWarning,
+FolderTree,
+GitBranch,
+GitCommit,
+History,
+Keyboard,
+Layers,
+Maximize2,
+Minimize2,
+PanelLeftClose,
+PanelLeftOpen,
+RefreshCw,
+Undo2,
+Upload,
+X,
+type LucideIcon,
+} from "lucide-react";
+import { useCallback,useEffect,useId,useRef,useState,type PointerEvent as ReactPointerEvent } from "react";
+import { createPortal } from "react-dom";
 import { BlamePanel } from "./BlamePanel";
 import { BranchesPanel } from "./BranchesPanel";
 import { ChangesPanel } from "./ChangesPanel";
@@ -43,18 +41,18 @@ import { GitHookFailureDialog } from "./GitHookFailureDialog";
 import { GitRail } from "./GitRail";
 import { HistoryPanel } from "./HistoryPanel";
 import { ReflogPanel } from "./ReflogPanel";
-import { WorktreesPanel } from "./WorktreesPanel";
 import { ShortcutsOverlay } from "./ShortcutsOverlay";
 import { StashPanel } from "./StashPanel";
+import { WorktreesPanel } from "./WorktreesPanel";
 import {
-  fetchGitJson,
-  postGitAction,
-  readFullscreenPref,
-  repoApi,
-  writeFullscreenPref,
-  type BranchesPayload,
-  type RepoGitTabId,
-  type StatusPayload,
+fetchGitJson,
+postGitAction,
+readFullscreenPref,
+repoApi,
+writeFullscreenPref,
+type BranchesPayload,
+type RepoGitTabId,
+type StatusPayload,
 } from "./shared";
 
 export type { RepoGitTabId } from "./shared";
@@ -536,7 +534,6 @@ export function RepoGitWorkspace({
         cwd: repoPath,
         repoName,
         promptText: agentGitSyncConflictPrompt(opts),
-        promptCommand: await agentGitSyncConflictCommand(opts),
         mode: "interactive",
         forceTerminal: true,
         alreadyConfirmed: true,
@@ -553,7 +550,6 @@ export function RepoGitWorkspace({
         cwd: repoPath,
         repoName,
         promptText: agentStashConflictPrompt(opts),
-        promptCommand: await agentStashConflictCommand(opts),
         mode: "interactive",
         forceTerminal: true,
         alreadyConfirmed: true,

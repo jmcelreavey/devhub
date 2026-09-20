@@ -103,6 +103,7 @@ async function planDesign(message: string, history: ChatMessage[], ctx: Briefing
 
   try {
     const result = await generateAiText({
+      activity: { source: "briefing", action: "Design briefing" },
       maxOutputTokens: 900,
       prompt: [
         "You are the controller for a bespoke personal briefing screen. The user chats to reshape it.",

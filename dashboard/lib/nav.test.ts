@@ -1,21 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { describe,expect,it } from "vitest";
 import {
-  ALL_NAV_DESTINATIONS,
-  LEGACY_NAV_ITEMS,
-  NAV_GROUPS,
-  buildCrumbs,
-  NAV_ITEMS,
-  SECTION_TABS,
-  filterNavBySetup,
-  groupSidebarNav,
+ALL_NAV_DESTINATIONS,
+LEGACY_NAV_ITEMS,
+NAV_GROUPS,
+NAV_ITEMS,
+SECTION_TABS,
+buildCrumbs,
+filterNavBySetup,
+groupSidebarNav,
 } from "./nav";
 import { PLUGIN_NAV_ITEMS } from "./plugin-nav.generated";
 
 const hrefs = (items: ReturnType<typeof filterNavBySetup>) => items.map((i) => i.href);
 
 describe("NAV_ITEMS (sidebar IA)", () => {
-  it("has exactly 20 core sidebar destinations", () => {
-    expect(NAV_ITEMS).toHaveLength(20);
+  it("has one shared Agents destination among 14 core destinations", () => {
+    expect(NAV_ITEMS).toHaveLength(14);
   });
 
   it("gives the database client a library slot beside Repos", () => {
@@ -129,9 +129,9 @@ describe("filterNavBySetup", () => {
     expect(hidden).not.toContain("/opencode");
   });
 
-  it("shows Chamber and OpenCode only when gated on", () => {
-    expect(hrefs(filterNavBySetup(NAV_ITEMS, { chamber: true }))).toContain("/chamber");
-    expect(hrefs(filterNavBySetup(NAV_ITEMS, { opencode: true }))).toContain("/opencode");
+  it("keeps retired launch destinations out even when installed", () => {
+    expect(hrefs(filterNavBySetup(NAV_ITEMS, { chamber: true }))).not.toContain("/chamber");
+    expect(hrefs(filterNavBySetup(NAV_ITEMS, { opencode: true }))).not.toContain("/opencode");
   });
 
   it("hides Claude unless it is installed", () => {
@@ -139,29 +139,29 @@ describe("filterNavBySetup", () => {
     expect(hrefs(filterNavBySetup(NAV_ITEMS, {}))).not.toContain("/claude");
   });
 
-  it("shows Claude only when installed", () => {
-    expect(hrefs(filterNavBySetup(NAV_ITEMS, { claude: true }))).toContain("/claude");
+  it("keeps Claude in the Agents picker", () => {
+    expect(hrefs(filterNavBySetup(NAV_ITEMS, { claude: true }))).not.toContain("/claude");
   });
   it("hides Cursor unless it is installed", () => {
     expect(hrefs(filterNavBySetup(NAV_ITEMS, { cursor: false }))).not.toContain("/cursor");
     expect(hrefs(filterNavBySetup(NAV_ITEMS, {}))).not.toContain("/cursor");
   });
-  it("shows Cursor only when installed", () => {
-    expect(hrefs(filterNavBySetup(NAV_ITEMS, { cursor: true }))).toContain("/cursor");
+  it("keeps Cursor in the Agents picker", () => {
+    expect(hrefs(filterNavBySetup(NAV_ITEMS, { cursor: true }))).not.toContain("/cursor");
   });
   it("hides ChatGPT unless it is installed", () => {
     expect(hrefs(filterNavBySetup(NAV_ITEMS, { chatgpt: false }))).not.toContain("/chatgpt");
     expect(hrefs(filterNavBySetup(NAV_ITEMS, {}))).not.toContain("/chatgpt");
   });
-  it("shows ChatGPT only when installed", () => {
-    expect(hrefs(filterNavBySetup(NAV_ITEMS, { chatgpt: true }))).toContain("/chatgpt");
+  it("keeps Codex in the Agents picker", () => {
+    expect(hrefs(filterNavBySetup(NAV_ITEMS, { chatgpt: true }))).not.toContain("/chatgpt");
   });
   it("hides Antigravity unless it is installed", () => {
     expect(hrefs(filterNavBySetup(NAV_ITEMS, { antigravity: false }))).not.toContain("/antigravity");
     expect(hrefs(filterNavBySetup(NAV_ITEMS, {}))).not.toContain("/antigravity");
   });
-  it("shows Antigravity only when installed", () => {
-    expect(hrefs(filterNavBySetup(NAV_ITEMS, { antigravity: true }))).toContain("/antigravity");
+  it("keeps Antigravity in the Agents picker", () => {
+    expect(hrefs(filterNavBySetup(NAV_ITEMS, { antigravity: true }))).not.toContain("/antigravity");
   });
 });
 

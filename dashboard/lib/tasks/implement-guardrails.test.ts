@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { afterEach,describe,expect,it,vi } from "vitest";
 import {
-  MAX_CONCURRENT_AGENT_RUNS,
-  checkImplementGuardrails,
-  countBusyAgentRuns,
-  describeAgentRunGuardrail,
+MAX_CONCURRENT_AGENT_RUNS,
+checkImplementGuardrails,
+countBusyAgentRuns,
+describeAgentRunGuardrail,
 } from "./implement-guardrails";
 
 const busyAgent = { kind: "agent" as const, status: "open", busy: true };
@@ -11,7 +11,7 @@ const busyAgent = { kind: "agent" as const, status: "open", busy: true };
 function stubSessions(sessions: unknown[]): void {
   vi.stubGlobal(
     "fetch",
-    vi.fn().mockResolvedValue({ ok: true, json: async () => ({ sessions }) }),
+    vi.fn().mockResolvedValue({ ok: true, json: async () => ({ activeCount: sessions.filter(row => (row as { kind: string }).kind === "agent").length }) }),
   );
 }
 

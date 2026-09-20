@@ -1,10 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
-import { parseBody, requireDashboardAuth, withErrorHandler } from "@/lib/api-utils";
-import { AgentDispatchError, dispatchAgentRun } from "@/lib/agent-runs/dispatch";
+import { AgentDispatchError,dispatchAgentRun } from "@/lib/agent-runs/dispatch";
 import { clip } from "@/lib/agent-runs/events";
-import { isActiveAgentRunState, readRunEvents } from "@/lib/agent-runs/run-files";
-import { cancelAgentRun, readAgentRun, toAgentRunSummary } from "@/lib/agent-runs/store";
+import { isActiveAgentRunState,readRunEvents } from "@/lib/agent-runs/run-files";
+import { cancelAgentRun,readAgentRun,toAgentRunSummary } from "@/lib/agent-runs/store";
+import { cancelManagedRun,reconcileManagedRun } from "@/lib/aionui/lifecycle";
+import { parseBody,requireDashboardAuth,withErrorHandler } from "@/lib/api-utils";
+import { NextRequest,NextResponse } from "next/server";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +26,9 @@ function notFound(): NextResponse {
 export const GET = withErrorHandler(async (req: NextRequest, { params }: RouteContext) => {
   const auth = requireDashboardAuth(req);
   if (!auth.ok) return auth.response;
-  const run = readAgentRun((await params).id);
+  let run = readAgentRun((await params).id);
   if (!run) return notFound();
+  run = await reconcileManagedRun(run);
   const search = new URL(req.url).searchParams;
   const page = readRunEvents(
     run.dir,
@@ -41,23 +43,28 @@ export const DELETE = withErrorHandler(async (req: NextRequest, { params }: Rout
   if (!auth.ok) return auth.response;
   const run = readAgentRun((await params).id);
   if (!run) return notFound();
-  const { run: updated, outcome } = cancelAgentRun(run);
+  if (isActiveAgentRunState(run.status.state) && run.spec.runtime === "generation") {
+    return NextResponse.json({ error: "Stop this generation from the feature that started it." }, { status: 409 });
+  }
+  const { run: updated, outcome } = run.spec.runtime === "aionui" ? await cancelManagedRun(run) : cancelAgentRun(run);
   return NextResponse.json({ run: toAgentRunSummary(updated), outcome });
 }, "agent.runs.id.delete");
 
 const FollowupSchema = z.object({
+  requestId: z.string().min(1).max(200).optional(),
   prompt: z.string().trim().min(1, "prompt is required").max(32_000, "prompt too long"),
   model: z.string().trim().max(120).optional(),
   maxTurns: z.number().int().min(1).max(500).optional(),
   depth: z.number().int().min(0).max(20).default(0),
 });
 
-/** Follow-up: a new run resuming this run's CLI session, in the same cwd/worktree. */
+/** Follow-up: a new turn in the same managed conversation and worktree. */
 export const POST = withErrorHandler(async (req: NextRequest, { params }: RouteContext) => {
   const auth = requireDashboardAuth(req);
   if (!auth.ok) return auth.response;
-  const run = readAgentRun((await params).id);
-  if (!run) return notFound();
+  const saved = readAgentRun((await params).id);
+  if (!saved) return notFound();
+  const run = await reconcileManagedRun(saved);
   const parsed = await parseBody(req, FollowupSchema);
   if (!parsed.ok) return parsed.response;
 
@@ -72,6 +79,8 @@ export const POST = withErrorHandler(async (req: NextRequest, { params }: RouteC
   }
   try {
     const next = await dispatchAgentRun({
+      requestId: parsed.data.requestId,
+      activity: run.spec.activity ? { ...run.spec.activity, source: "interactive", action: "resume" } : undefined,
       provider: run.spec.provider,
       prompt: parsed.data.prompt,
       cwd: run.spec.cwd,

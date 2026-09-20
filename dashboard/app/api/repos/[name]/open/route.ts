@@ -1,22 +1,23 @@
-import fs from "node:fs";
-import path from "node:path";
-import { NextRequest, NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { parseBody } from "@/lib/api-utils";
 import { openPathInCursor } from "@/lib/cursor-open";
+import { hasBrowserNavigationIntent } from "@/lib/desktop/navigation-intent";
+import { mergeEntityRefs,parseEntityLinksFromMarkdown,upsertEntityLinksInMarkdown } from "@/lib/entity-note";
 import { materializeGitRevisionFile } from "@/lib/git/open-at-revision";
-import { mergeEntityRefs, parseEntityLinksFromMarkdown, upsertEntityLinksInMarkdown } from "@/lib/entity-note";
-import { blocksToText, textToBlocks } from "@/lib/markdown-convert";
+import { blocksToText,textToBlocks } from "@/lib/markdown-convert";
 import {
-  applyCursorDraft,
-  createCursorDraft,
-  CursorDraftError,
-  deleteCursorDraft,
-  getCursorDraft,
+applyCursorDraft,
+createCursorDraft,
+CursorDraftError,
+deleteCursorDraft,
+getCursorDraft,
 } from "@/lib/notes/cursor-draft";
 import { resolveScannedRepo } from "@/lib/scanned-repo";
 import { getVaultStorage } from "@/lib/vault/vault-registry";
+import { revalidatePath } from "next/cache";
+import { NextRequest,NextResponse } from "next/server";
+import fs from "node:fs";
+import path from "node:path";
+import { z } from "zod";
 
 type Params = { params: Promise<{ name: string }> };
 const OpenBodySchema = z
@@ -50,6 +51,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 }
 
 export async function POST(req: NextRequest, { params }: Params) {
+  if (!hasBrowserNavigationIntent(req.headers)) return NextResponse.json({ error: "Open the repository from DevHub to show it in your editor. Agent requests do not change your screen." }, { status: 403 });
   const { name } = await params;
   const repoPath = resolveScannedRepo(name);
   if (!repoPath) return NextResponse.json({ error: "Repo not found" }, { status: 404 });

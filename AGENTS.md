@@ -10,7 +10,7 @@ Cursor: L1 is always-on via `~/.cursor/rules/devhub-persona-shared.mdc`. Cloud: 
 
 ### Persona (Cloud)
 
-This file does **not** inline L0/L1 — Cursor already has them via `~/.cursor/rules/devhub-persona-*.mdc`. If those rules are missing from the system prompt, read `persona/identity.txt` then `persona/shared-persona.md` before the first substantial reply.
+This file does **not** inline L0/L1 — Cursor already has them via `~/.cursor/rules/devhub-persona-*.mdc`. If those rules are missing from the system prompt, read `persona/identity.txt` then `persona/shared-persona.md` before the first substantial reply. Paths are repo-root `persona/` only — never `notes/persona/`.
 
 ### Repo nature — personal mirror, NOT the public template
 

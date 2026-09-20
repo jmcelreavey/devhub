@@ -98,7 +98,7 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
     "notes_devhub_open",
     {
       description:
-        "Open an existing note in a new workspace tab in the running DevHub app (desktop webview or browser dashboard). Fails cleanly when no DevHub client is connected. For non-note pages use ui_open.",
+        "Resolve an existing note to a DevHub link. Agent calls return the link without changing the user's page or focus. For non-note pages use ui_open.",
       inputSchema: {
         path: z.string().describe("Notes-relative path, with or without .json"),
       },
@@ -111,7 +111,8 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
       if (!href) return { content: [{ type: "text", text: `Could not resolve note path: ${notePath}` }], isError: true };
 
       return withDashboardErrors(async () => {
-        await dashboard.post("/api/desktop/navigation", { href, newTab: true });
+        const result = await dashboard.post<{ suppressed?: boolean }>("/api/desktop/navigation", { href, newTab: true });
+        if (result?.suppressed) return { content: [{ type: "text", text: `Ready: ${href}. Share this link with the user; agent work does not change their screen.` }] };
         return { content: [{ type: "text", text: `Opened ${id} in a new DevHub workspace tab.` }] };
       });
     },
@@ -121,7 +122,7 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
     "notes_cursor_open",
     {
       description:
-        "Open a note as a persistent Markdown working copy in Cursor alongside a linked local repo. Rich notes that cannot safely round-trip open read-only.",
+        "Request a Cursor working copy of a note. Opening an editor requires a click in DevHub; background and MCP calls cannot open windows. Use notes_write to update the note directly.",
       inputSchema: {
         path: z.string().describe("Notes-relative path, with or without .json"),
         repoName: z.string().describe("Local repo name as shown by repos_list"),

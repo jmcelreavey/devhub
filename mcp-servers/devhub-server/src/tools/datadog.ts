@@ -60,15 +60,18 @@ export function registerDatadogTools(server: McpServer, ctx: Context): void {
     },
     async ({ title, scope, status, tags }) =>
       withDashboardErrors(async () => {
-        const r = await dashboard.post<{ ok: boolean; sessionId?: string; error?: string }>(
-          "/api/datadog/investigate",
-          { title, scope, status, tags },
-          60_000,
-        );
-        if (!r.ok || !r.sessionId) {
+        const r = await dashboard.post<{
+          ok: boolean;
+          sessionId?: string;
+          runId?: string;
+          providerLabel?: string;
+          error?: string;
+        }>("/api/datadog/investigate", { title, scope, status, tags }, 60_000);
+        const id = r.runId ? `agent run ${r.runId}` : r.sessionId ? `OpenCode session ${r.sessionId}` : null;
+        if (!r.ok || !id) {
           return { content: [{ type: "text", text: `Could not start investigation: ${r.error ?? "unknown error"}` }], isError: true };
         }
-        return { content: [{ type: "text", text: `Started investigation — OpenCode session ${r.sessionId}.` }] };
+        return { content: [{ type: "text", text: `Started investigation on ${r.providerLabel ?? "agent"} — ${id}.` }] };
       }),
   );
 }

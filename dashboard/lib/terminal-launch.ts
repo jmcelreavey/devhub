@@ -3,7 +3,7 @@
 import { getAgentCliConfig, type AgentCli, type AgentCliConfig } from "@/lib/agent/cli-config";
 import { shellQuote } from "@/lib/shell-quote";
 import type { TerminalSessionKind } from "@/lib/terminal-meta";
-import { agentReviewPrompt } from "@/lib/pr-review-prompt";
+import { agentReviewPrompt, agentReviewSessionTitle } from "@/lib/pr-review-prompt";
 import { agentPipelineInvestigatePrompt } from "@/lib/pr-pipeline-prompt";
 
 export interface TerminalLaunchOptions {
@@ -112,9 +112,9 @@ export function opencodeCliCommand(): string {
   );
 }
 
-/** Run a DevHub-managed upstart script (cwd should already be the target repo). */
-export function repoUpstartCommand(upstartPath: string): string {
-  return `bash ${shellQuote(upstartPath)}`;
+/** Run a DevHub-managed upstart script from the target repository. */
+export function repoUpstartCommand(upstartPath: string, repoPath: string): string {
+  return `cd -- ${shellQuote(repoPath)} && bash ${shellQuote(upstartPath)}`;
 }
 
 function upstartContextSuffix(context?: string): string {
@@ -274,7 +274,7 @@ export async function agentLocalCommitReviewCommand(
   );
 }
 
-export { agentReviewPrompt };
+export { agentReviewPrompt, agentReviewSessionTitle };
 
 export async function agentReviewCommand(prUrl: string, notePath?: string): Promise<string> {
   const cli = await activeAgentCliSpec();

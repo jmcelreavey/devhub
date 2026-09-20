@@ -157,12 +157,18 @@ export function resolveTaskNotePath(task: Task, date: string): string {
 export async function checkTaskImplementReady(
   task: Task,
   date: string,
-  opts: { selectedRepoId?: string | null; hubRepoId?: string | null; hardBlock: boolean },
-): Promise<ImplementReadyResult & { notePath: string; repoIds: string[] }> {
+  opts: {
+    selectedRepoId?: string | null;
+    hubRepoId?: string | null;
+    hardBlock: boolean;
+    requirePlanSection?: boolean;
+  },
+): Promise<ImplementReadyResult & { notePath: string; noteExists: boolean; repoIds: string[] }> {
   const notePath = resolveTaskNotePath(task, date);
   const repoIds = (task.links ?? []).filter((l) => l.kind === "repo").map((l) => l.id);
+  const noteMarkdown = readTaskNoteMarkdown(notePath);
   const result = evaluateImplementReady({
-    noteMarkdown: readTaskNoteMarkdown(notePath),
+    noteMarkdown,
     jiraDescriptionText: task.jiraKey ? await fetchJiraDescriptionText(task.jiraKey) : null,
     hasJiraKey: Boolean(task.jiraKey),
     repoIds,
@@ -170,8 +176,9 @@ export async function checkTaskImplementReady(
     hubRepoId: opts.hubRepoId ?? null,
     openPrerequisiteBlockers: collectOpenPrerequisiteBlockers(task.id, task.links),
     hardBlock: opts.hardBlock,
+    requirePlanSection: opts.requirePlanSection,
     notePath,
     taskDate: date,
   });
-  return { ...result, notePath, repoIds };
+  return { ...result, notePath, noteExists: noteMarkdown !== null, repoIds };
 }

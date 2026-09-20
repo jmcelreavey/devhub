@@ -74,7 +74,14 @@ describe("evaluateImplementReady", () => {
     expect(result.items.find((i) => i.id === "acceptance")?.ok).toBe(false);
     expect(result.items.find((i) => i.id === "repo")?.ok).toBe(false);
     expect(result.items.find((i) => i.id === "prerequisites")?.ok).toBe(true);
-    expect(result.items.find((i) => i.id === "acceptance")?.fixHref).toContain("/notes/");
+    expect(result.items.find((i) => i.id === "acceptance")?.fixHref).toBeUndefined();
+  });
+
+  it("counts an existing note as the plan unless a plan section is required", () => {
+    const withNote = { ...base, noteMarkdown: "# Task\n\n## Notes\n\n- ", repoIds: ["owner/repo"] };
+    const loose = evaluateImplementReady(withNote).items.find((i) => i.id === "acceptance");
+    expect(loose).toMatchObject({ ok: true, detail: "Task note exists", fixLabel: "Open task note" });
+    expect(evaluateImplementReady({ ...withNote, requirePlanSection: true }).ok).toBe(false);
   });
 
   it("hard-blocks when the setting is on and items fail", () => {

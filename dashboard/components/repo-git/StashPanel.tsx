@@ -1,25 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Download, Trash2 } from "lucide-react";
+import { useConfirm,usePrompt } from "@/components/shell/ConfirmDialog";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
-import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
+import { launchAgentJob } from "@/lib/agent-job";
 import { useStoredFraction } from "@/lib/hooks/use-stored-state";
 import { useToast } from "@/lib/hooks/use-toast";
-import { launchAgentJob } from "@/lib/agent-job";
-import { agentStashMessageCommand, agentStashMessagePrompt } from "@/lib/terminal-launch";
 import type { DiffLine } from "@/lib/repos/git-parsers";
+import { agentStashMessagePrompt } from "@/lib/terminal-launch";
+import { Download,Trash2 } from "lucide-react";
+import { useCallback,useEffect,useState } from "react";
 import { DiffMaximizeModal } from "./DiffMaximizeModal";
-import { DiffToolbar, DIFF_CONTEXT_LINES, useDiffViewMode, type DiffContextMode } from "./DiffToolbar";
+import { DIFF_CONTEXT_LINES,DiffToolbar,useDiffViewMode,type DiffContextMode } from "./DiffToolbar";
 import { GitDiffView } from "./GitDiffView";
 import { RepoSplit } from "./SplitResize";
 import {
-  fetchGitJson,
-  IconBtn,
-  postGitAction,
-  readError,
-  repoApi,
-  type GitPanelHandlers,
+fetchGitJson,
+IconBtn,
+postGitAction,
+readError,
+repoApi,
+type GitPanelHandlers,
 } from "./shared";
 
 interface StashEntry {
@@ -168,7 +168,6 @@ export function StashPanel({
           cwd: repoPath,
           repoName,
           promptText: agentStashMessagePrompt(repoName),
-          promptCommand: await agentStashMessageCommand(repoName),
           mode: "oneshot",
           alreadyConfirmed: true,
         });

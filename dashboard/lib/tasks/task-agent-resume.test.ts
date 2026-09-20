@@ -1,15 +1,16 @@
-import { describe, expect, it } from "vitest";
 import {
-  agentActivityHrefForRun,
-  buildTaskAgentResumePrompt,
-  canResumeTaskAgentRun,
-  isTaskAgentResumableStatus,
-  mapAgentDispatchProviderToUi,
-  mapUiProviderToAgentDispatch,
-  newInteractiveTaskAgentRunId,
-  taskAgentChipForLatestRun,
-  willResumeFollowUpSession,
+agentActivityHrefForRun,
+buildTaskAgentResumePrompt,
+canResumeTaskAgentRun,
+formatAgentActivityTrailForResume,
+isTaskAgentResumableStatus,
+mapAgentDispatchProviderToUi,
+mapUiProviderToAgentDispatch,
+newInteractiveTaskAgentRunId,
+taskAgentChipForLatestRun,
+willResumeFollowUpSession,
 } from "@/lib/tasks/task-agent-resume";
+import { describe,expect,it } from "vitest";
 
 describe("canResumeTaskAgentRun / resumable statuses", () => {
   it("allows paused, abandoned, and failed", () => {
@@ -100,7 +101,7 @@ describe("mapUiProviderToAgentDispatch / agentActivityHrefForRun", () => {
     expect(mapUiProviderToAgentDispatch("default")).toBeNull();
     expect(mapUiProviderToAgentDispatch("openchamber")).toBeNull();
     expect(mapUiProviderToAgentDispatch("cursor")).toBe("cursor");
-    expect(agentActivityHrefForRun("run-x1-abcd1234")).toBe("/agent-activity?run=run-x1-abcd1234");
+    expect(agentActivityHrefForRun("run-x1-abcd1234")).toBe("/agents?view=activity&run=run-x1-abcd1234");
   });
 });
 
@@ -173,3 +174,32 @@ describe("PR-aware chips and prompts", () => {
     expect(prompt).toContain("Changes requested — @sam requested changes");
   });
 });
+
+describe("formatAgentActivityTrailForResume / resume prompt trail", () => {
+  it("keeps text and result notes, drops other event types", () => {
+    const trail = formatAgentActivityTrailForResume([
+      { type: "session", text: "ignored" },
+      { type: "text", text: "Check-in: fix forgot-password" },
+      { type: "tool_call", text: "ignored" },
+      { type: "result", ok: true, text: "Shipped on branch x" },
+    ]);
+    expect(trail).toContain("Check-in: fix forgot-password");
+    expect(trail).toContain("[done] Shipped on branch x");
+    expect(trail).not.toContain("ignored");
+  });
+
+  it("injects the trail into the resume prompt for steering", () => {
+    const prompt = buildTaskAgentResumePrompt({
+      origin: "http://127.0.0.1:1400",
+      taskId: "task-1",
+      date: "2026-09-16",
+      handoff: "## Next\nFinish PR",
+      priorRunId: "run-m1abc2-deadbeef",
+      activityTrail: "- Check-in: no questions\n- User said commit and push",
+    });
+    expect(prompt).toContain("prior Agent Activity notes");
+    expect(prompt).toContain("User said commit and push");
+    expect(prompt).toContain("steer from these");
+  });
+});
+

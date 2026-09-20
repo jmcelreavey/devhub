@@ -4,7 +4,7 @@
  * clipboard data and the PTY inject text.
  */
 
-import { isImageAttach } from "@/lib/agent-attach";
+import { isImageAttach } from "@/lib/image-file";
 
 export const TERMINAL_PASTE_IMAGE_MAX_BYTES = 8_000_000;
 export const TERMINAL_PASTE_IMAGE_MAX_FILES = 8;

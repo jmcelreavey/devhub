@@ -36,7 +36,7 @@ export const POST = withErrorHandler(async (req: Request) => {
   const repoPath = resolveRepoPath(repoName);
   if (!repoPath) return NextResponse.json({ error: "Repo not found" }, { status: 404 });
 
-  const model = getNotesAiModel();
+  const model = getNotesAiModel({ action: "Capability tutor" });
   if (!model) return NextResponse.json({ error: NOTES_AI_NOT_CONFIGURED }, { status: 503 });
 
   // Focus details from the latest snapshot (best-effort).

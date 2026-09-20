@@ -26,7 +26,7 @@ interface RepoFacts {
 }
 
 export async function enrichSignalsWithAi(files: ScanFile[], existing: DetectedSignal[]): Promise<DetectedSignal[]> {
-  const model = getNotesAiModel();
+  const model = getNotesAiModel({ action: "Enrich capability signals" });
   if (!model) return existing;
 
   const facts = collectFacts(files);

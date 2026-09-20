@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { describe,expect,it } from "vitest";
 
 /**
  * Guards the chrome every page is supposed to come with.
@@ -62,8 +62,9 @@ function routeDirs(): string[] {
 const CHROME_EXEMPT: Record<string, "redirect" | "shell"> = {
   activity: "redirect",
   tasks: "redirect",
-  chamber: "shell",
-  opencode: "shell",
+   chamber: "redirect",
+   opencode: "redirect",
+   "agent-activity": "redirect",
 };
 
 describe("page chrome", () => {

@@ -15,6 +15,11 @@ const BIND_HOST = "127.0.0.1";
 const OWNED_ENV = "DEVHUB_OPENCODE_OWNED";
 const PINNED_PORT_SET = new Set<number>(PINNED_OPENCODE_PORTS);
 const SPAWN_WAIT_MS = 15_000;
+/**
+ * `opencode serve` ignores SIGTERM, so the polite kill left every restart's
+ * server running for weeks. Its session store is SQLite (crash-safe) — KILL.
+ */
+const SERVE_KILL_SIGNAL: NodeJS.Signals = "SIGKILL";
 
 let child: ChildProcess | null = null;
 let port: number | null = null;
@@ -107,7 +112,7 @@ export function reapOrphanOpenCodeServers(
     if (PINNED_PORT_SET.has(proc.port)) continue;
     if (proc.ppid !== 1 && proc.ppid !== process.pid) continue;
     try {
-      process.kill(proc.pid, "SIGTERM");
+      process.kill(proc.pid, SERVE_KILL_SIGNAL);
       killed.push(proc.pid);
     } catch {
       /* already gone */
@@ -122,13 +127,23 @@ export function reapOrphanOpenCodeServers(
 export function stopDevHubOpenCode(): void {
   if (child?.pid) {
     try {
-      child.kill("SIGTERM");
+      child.kill(SERVE_KILL_SIGNAL);
     } catch {
       /* already gone */
     }
   }
   child = null;
   port = null;
+}
+
+let exitCleanupRegistered = false;
+
+/** Take our server down with the dashboard instead of orphaning it to launchd. */
+function registerExitCleanup(): void {
+  if (exitCleanupRegistered) return;
+  exitCleanupRegistered = true;
+  // `exit` handlers must be synchronous — process.kill is.
+  process.once("exit", stopDevHubOpenCode);
 }
 
 /**
@@ -191,7 +206,7 @@ async function startOpenCode(log: (msg: string) => void): Promise<number> {
 
   if (!started && !(await canConnect(nextPort, BIND_HOST))) {
     try {
-      spawned.kill("SIGTERM");
+      spawned.kill(SERVE_KILL_SIGNAL);
     } catch {
       /* already gone */
     }
@@ -200,6 +215,7 @@ async function startOpenCode(log: (msg: string) => void): Promise<number> {
 
   child = spawned;
   port = nextPort;
+  registerExitCleanup();
   spawned.once("exit", () => {
     if (port === nextPort) {
       child = null;

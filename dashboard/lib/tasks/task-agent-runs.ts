@@ -5,11 +5,11 @@
  * Sidecar layout (vault): `notes/.config/task-agent-runs/<taskId>.json`
  * plus `_index.json` mapping runId → taskId for status sync hooks.
  */
+import type { AgentRunState } from "@/lib/agent-runs/run-files";
+import { safeReadJSON,withMutex,writeAtomic } from "@/lib/atomic-write";
+import { getNotesDir } from "@/lib/notes/dir";
 import fs from "node:fs";
 import path from "node:path";
-import { getNotesDir } from "@/lib/notes/dir";
-import { writeAtomic, safeReadJSON, withMutex } from "@/lib/atomic-write";
-import type { AgentRunState } from "@/lib/agent-runs/run-files";
 
 export const TASK_AGENT_RUN_STATUSES = [
   "queued",
@@ -96,10 +96,14 @@ export function isActiveTaskAgentRunStatus(status: TaskAgentRunStatus): boolean 
 export function mapAgentRunStateToTaskStatus(state: AgentRunState): TaskAgentRunStatus {
   switch (state) {
     case "queued":
+    case "starting":
       return "queued";
     case "running":
       return "running";
+    case "needs-attention":
+      return "paused";
     case "succeeded":
+    case "completed":
       return "done";
     case "failed":
       return "failed";

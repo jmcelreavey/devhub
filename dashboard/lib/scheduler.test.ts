@@ -87,9 +87,14 @@ describe("jobs file", () => {
       error: "Provide exactly one of script or agent",
     });
     expect(s.createJob({ name: "x", cron: "* * * * *", script: "validate", agent }, { approved: true })).toHaveProperty("error");
-    expect(s.createJob({ name: "x", cron: "* * * * *", agent: { ...agent, provider: "nope" } }, { approved: true })).toHaveProperty(
+    expect(s.createJob({ name: "x", cron: "* * * * *", agent: { ...agent, provider: " " } }, { approved: true })).toHaveProperty(
       "error",
     );
+  });
+
+  it("preserves an AionUi catalog assistant ID while the client is offline", () => {
+    const job = created(s.createJob({ name: "Custom assistant", cron: "0 7 * * *", agent: { ...agent, provider: "custom-codex-assistant" } }, { approved: true }));
+    expect(job.agent?.provider).toBe("custom-codex-assistant");
   });
 
   it("wakes for new jobs unless asked not to", () => {

@@ -1,30 +1,29 @@
-/**
- * Dispatch: validate, record a run, and hand it to the terminal dock.
- *
- * The run does not start here. It becomes an auto-run terminal proposal, the
- * dock opens a tab running scripts/agent-run.ts, and that runner owns the CLI's
- * lifetime — so every dispatched agent is visible and killable in DevHub.
- */
+/** Server-owned dispatch. Starting work never opens or targets a user interface. */
+import { agentBudgets,costRefusalMessage,spentToday } from "@/lib/agent-runs/budget";
+import { clip } from "@/lib/agent-runs/events";
+import { createRunWorktree,gitHead,type AgentWorktreeLabel } from "@/lib/agent-runs/git";
+import { parseJiraIssueKey } from "@/lib/entity-note";
+import { getTasks } from "@/lib/tasks/storage";
+import { writeRunSpec,type AgentActivityContext,type AgentRunWorktree } from "@/lib/agent-runs/run-files";
+import {
+agentRunDir,
+countActiveAgentRuns,
+createAgentRun,
+listAgentRuns,
+newAgentRunId,
+readAgentRun,
+updateAgentRunStatus,
+type AgentRun,
+} from "@/lib/agent-runs/store";
+import { aionCatalog,assistantForProvider } from "@/lib/aionui/catalog";
+import { modelAllowedForAssistant, resolveAionDispatchDefaults } from "@/lib/aionui/dispatch-defaults";
+import { AionRequestError } from "@/lib/aionui/client";
+import { aionConnectionId } from "@/lib/aionui/connection";
+import { upsertTaskAgentRun } from "@/lib/tasks/task-agent-runs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { clip } from "@/lib/agent-runs/events";
-import { agentRunnerCommand } from "@/lib/agent-runs/launch";
-import { createRunWorktree, gitHead } from "@/lib/agent-runs/git";
-import { agentBudgets, costRefusalMessage, effectiveMaxTurns, spentToday } from "@/lib/agent-runs/budget";
-import { agentConsentFile, hasConsented } from "@/lib/agent-runs/consent";
-import { getAgentProvider } from "@/lib/agent-runs/providers";
-import type { AgentRunWorktree } from "@/lib/agent-runs/run-files";
-import {
-  agentRunDir,
-  countActiveAgentRuns,
-  createAgentRun,
-  listAgentRuns,
-  newAgentRunId,
-  updateAgentRunStatus,
-  type AgentRun,
-} from "@/lib/agent-runs/store";
-import { createTerminalProposal } from "@/lib/terminal-proposals";
+import { claimAgentRequest,readAgentRequest,withAgentAdmission } from "./claims";
 
 export class AgentDispatchError extends Error {
   constructor(
@@ -37,6 +36,8 @@ export class AgentDispatchError extends Error {
 }
 
 export interface AgentDispatchInput {
+  requestId?: string;
+  activity?: AgentActivityContext;
   provider: string;
   prompt: string;
   cwd: string;
@@ -61,6 +62,24 @@ export interface AgentDispatchInput {
    * to click it at 3am. Server-internal: the dispatch API schema cannot set it.
    */
   scheduledJobId?: string;
+  /**
+   * Same idea for other server-internal jobs the user already opted into (the
+   * auto-review poller): the reason stands in for the first-run chip.
+   */
+  unattendedReason?: string;
+}
+
+
+function worktreeLabelForDispatch(input: AgentDispatchInput, title: string): AgentWorktreeLabel {
+  const task = input.activity?.taskId && input.activity.taskDate
+    ? getTasks(input.activity.taskDate).find((item) => item.id === input.activity?.taskId)
+    : undefined;
+  const fromText = parseJiraIssueKey(task?.jiraKey || task?.text || title || "");
+  return {
+    repoName: input.activity?.repoName,
+    jiraKey: task?.jiraKey || fromText || undefined,
+    title: task?.text || title,
+  };
 }
 
 function envInt(key: string, fallback: number): number {
@@ -81,9 +100,10 @@ export function cwdAllowedRoots(env: NodeJS.ProcessEnv = process.env): string[] 
 }
 
 /** Same rule as the PTY peer: an existing directory under $HOME. */
-function validateCwd(raw: string, env: NodeJS.ProcessEnv = process.env): string {
+export function validateAgentCwd(raw: string, env: NodeJS.ProcessEnv = process.env): string {
   const home = os.homedir();
-  const resolved = path.resolve(raw.replace(/^~(?=$|\/)/, home));
+  let resolved = path.resolve(raw.replace(/^~(?=$|\/)/, home));
+  try { resolved = fs.realpathSync(resolved); } catch { throw new AgentDispatchError("The working directory does not exist.", 400); }
   if (resolved !== home && !resolved.startsWith(home + path.sep)) {
     throw new AgentDispatchError(`cwd must be inside ${home}`, 400);
   }
@@ -110,6 +130,7 @@ function defaultTitle(prompt: string): string {
 }
 
 export async function dispatchAgentRun(input: AgentDispatchInput): Promise<AgentRun> {
+  if (!input.prompt.trim() || input.prompt.length > 32_000) throw new AgentDispatchError("A prompt between 1 and 32,000 characters is required.", 400);
   const maxDepth = envInt("DEVHUB_AGENT_MAX_DEPTH", 1);
   if (input.depth >= maxDepth) {
     throw new AgentDispatchError(
@@ -118,14 +139,35 @@ export async function dispatchAgentRun(input: AgentDispatchInput): Promise<Agent
     );
   }
 
-  const resolved = getAgentProvider(input.provider);
-  if (!resolved) throw new AgentDispatchError(`Unknown provider "${input.provider}" — see agent_providers.`, 400);
-  const { spec: provider, binPath } = resolved;
-  if (!binPath) {
-    throw new AgentDispatchError(`${provider.label} is not installed (looked for ${provider.binaries.join(", ")}).`, 400);
+  let catalog: Awaited<ReturnType<typeof aionCatalog>>;
+  try { catalog = await aionCatalog(); } catch (error) { throw new AgentDispatchError(error instanceof Error ? error.message : "Connect AionUi in Agents.", 503); }
+  const { client, session, assistants } = catalog;
+  const defaults = resolveAionDispatchDefaults({
+    provider: input.provider || session.defaultAssistantId,
+    model: input.model,
+    assistants,
+  });
+  const assistant = assistantForProvider(assistants, defaults.provider);
+  if (!assistant?.enabled || assistant.agent_status !== "online") throw new AgentDispatchError("The selected agent is not ready. Check it in AionUi's Assistants view.", 400);
+  if (!modelAllowedForAssistant(assistant, defaults.model)) throw new AgentDispatchError("The selected model is not advertised by this assistant. Choose its default model or configure it in AionUi.", 400);
+  const model = defaults.model;
+  const permission = defaults.permission;
+  const autoconfirmPermissions = defaults.autoconfirmPermissions;
+
+  if (input.requestId) {
+    const existingId = readAgentRequest(input.requestId);
+    if (existingId) {
+      const existing = readAgentRun(existingId);
+      if (!existing) throw new AgentDispatchError("This request was already claimed. Check Activity before retrying.", 409);
+      if (existing.spec.prompt !== input.prompt || existing.spec.model !== model) throw new AgentDispatchError("This request already started with different content. Open its activity or start a new handoff.", 409);
+      return existing;
+    }
   }
-  if (input.resumeSessionId && !provider.supportsResume) {
-    throw new AgentDispatchError(`${provider.label} runs cannot be resumed.`, 400);
+  if (input.maxTurns !== undefined) throw new AgentDispatchError("This AionUi release does not support DevHub's max-turns override. Use the agent's own controls in AionUi.", 400);
+  const connectionId = aionConnectionId(session);
+  const parent = input.parentRunId ? readAgentRun(input.parentRunId) : null;
+  if (input.resumeSessionId && (!parent || parent.spec.runtime !== "aionui" || parent.status.connectionId !== connectionId || parent.status.conversationId !== input.resumeSessionId || parent.spec.provider !== assistant.id)) {
+    throw new AgentDispatchError("This session cannot be continued through AionUi. Start a new conversation with its saved handoff.", 400);
   }
 
   const budgets = agentBudgets();
@@ -137,90 +179,96 @@ export async function dispatchAgentRun(input: AgentDispatchInput): Promise<Agent
   }
 
   const maxActive = envInt("DEVHUB_AGENT_MAX_RUNS", 6);
-  if (countActiveAgentRuns() >= maxActive) {
-    throw new AgentDispatchError(
-      `${maxActive} agent runs are already queued or running (DEVHUB_AGENT_MAX_RUNS). Wait for one or cancel it.`,
-      429,
-    );
-  }
-
-  let cwd = validateCwd(input.cwd);
+  let cwd = validateAgentCwd(input.cwd);
   const id = newAgentRunId();
   const dir = agentRunDir(id);
   if (!dir) throw new Error(`Generated an invalid run id: ${id}`);
-  // Resolve before touching git so a missing runner doesn't leave a stray worktree.
-  const command = agentRunnerCommand(dir);
+  let alreadyClaimed = false;
+  let run = withAgentAdmission(() => {
+  const priorId = input.requestId ? readAgentRequest(input.requestId) : null;
+  if (priorId) {
+    const prior = readAgentRun(priorId);
+    if (!prior || prior.spec.prompt !== input.prompt || prior.spec.model !== model) throw new AgentDispatchError("This request was already claimed with different content. Check Activity.", 409);
+    alreadyClaimed = true;
+    return prior;
+  }
+  if (countActiveAgentRuns() >= maxActive) throw new AgentDispatchError(`${maxActive} agent runs are already active. Wait for one or cancel it.`, 429);
+  if (input.requestId) {
+    const claimed = claimAgentRequest(input.requestId, id);
+    if (claimed !== id) {
+      const existing = readAgentRun(claimed);
+      if (existing) { alreadyClaimed = true; return existing; }
+      throw new AgentDispatchError("This request was already claimed. Check Activity before retrying.", 409);
+    }
+  }
 
-  let worktree = input.inherit?.worktree;
-  let baseSha = input.inherit?.baseSha;
+  return createAgentRun({ id, schemaVersion: 2, runtime: "aionui", requestId: input.requestId,
+    activity: input.activity ?? { source: input.scheduledJobId ? "schedule" : input.unattendedReason ? "investigation" : "interactive", action: "agent", jobId: input.scheduledJobId },
+    provider: assistant.id, providerLabel: assistant.name, bin: "aionui", args: [], format: "text", cwd,
+    title: input.title?.trim() || defaultTitle(input.prompt), prompt: input.prompt, model,
+    depth: input.depth, createdAt: Date.now(), parentRunId: input.parentRunId,
+  });
+  });
+  if (alreadyClaimed) return run;
+  run = updateAgentRunStatus(run, { state: "starting", connectionId, connectivity: "connected" });
+
+  try {
+
+  if (input.activity?.taskId && input.activity.action !== "plan") {
+    await upsertTaskAgentRun({ taskId: input.activity.taskId, runId: id, status: "queued", provider: assistant.id });
+  }
+
+  const inherit = input.resumeSessionId && parent ? { worktree: parent.spec.worktree, baseSha: parent.spec.baseSha } : input.inherit;
+  if (input.resumeSessionId && parent) cwd = validateAgentCwd(parent.spec.cwd);
+  let worktree = inherit?.worktree;
+  let baseSha = inherit?.baseSha;
   // Isolation is the default: a caller that means to edit the live checkout
   // says worktree: false. DEVHUB_AGENT_DEFAULT_WORKTREE=0 restores the old
   // shared-checkout-by-default behaviour.
   const wantWorktree =
     input.worktree ?? envInt("DEVHUB_AGENT_DEFAULT_WORKTREE", 1) !== 0;
-  if (!input.inherit) {
+  if (!inherit) {
     if (wantWorktree) {
       try {
-        const created = await createRunWorktree(cwd, id);
+        const created = await createRunWorktree(cwd, id, worktreeLabelForDispatch(input, run.spec.title));
         worktree = created.worktree;
         baseSha = created.baseSha;
         cwd = created.cwd;
-      } catch (err) {
-        throw new AgentDispatchError(err instanceof Error ? err.message : String(err), 400);
-      }
+      } catch (err) { throw new AgentDispatchError(err instanceof Error ? err.message : String(err), 400); }
     } else {
       baseSha = await gitHead(cwd);
     }
   }
 
-  const title = input.title?.trim() || defaultTitle(input.prompt);
-  const consentFile = agentConsentFile();
-  const trustAll = process.env.DEVHUB_AGENT_TRUST_ALL === "1";
-  // The repo key is stable across worktree re-creation: the repo we aimed at,
-  // not the throwaway checkout path.
-  const repoKey = worktree?.repoRoot ?? cwd;
-  const firstRunForRepo =
-    !trustAll && !input.scheduledJobId && !hasConsented(consentFile, provider.id, repoKey);
-  const run = createAgentRun({
-    id,
-    provider: provider.id,
-    providerLabel: provider.label,
-    bin: binPath,
-    args: provider.buildArgs({
-      prompt: input.prompt,
-      model: input.model,
-      resumeSessionId: input.resumeSessionId,
-      maxTurns: provider.supportsMaxTurns ? effectiveMaxTurns(input.maxTurns, budgets) : undefined,
-    }),
-    format: provider.format,
-    cwd,
-    title,
-    prompt: input.prompt,
-    model: input.model,
-    depth: input.depth,
-    createdAt: Date.now(),
-    parentRunId: input.parentRunId,
-    baseSha,
-    worktree,
-  });
-
-  try {
-    const proposal = createTerminalProposal({
-      command,
-      cwd,
-      label: `${provider.label} · ${title}`,
-      summary: `${provider.label}: ${title}`,
-      kind: "shell",
-      repoName: path.basename(repoKey),
-      reason: `Agent run ${id}${input.scheduledJobId ? ` — scheduled job ${input.scheduledJobId}` : ""}${firstRunForRepo ? " — first run of this agent in this repo, approve once to remember" : ""}`,
-      source: "api",
-      autoRun: !firstRunForRepo,
-    });
-    // First-run consent is recorded by the dock approval (store.ts reconcile).
-    return updateAgentRunStatus(run, { proposalId: proposal.id });
+    run.spec = { ...run.spec, cwd, baseSha, worktree };
+    writeRunSpec(run.dir, run.spec);
+    let mcpIds: string[] = [];
+    if (!input.resumeSessionId) {
+      try { mcpIds = await client.listEnabledMcpIds(); } catch { /* create without MCP attach */ }
+    }
+    const conversation = input.resumeSessionId
+      ? await client.getConversation(input.resumeSessionId)
+      : await client.createConversation({
+          assistantId: assistant.id,
+          title: run.spec.title,
+          cwd,
+          runId: id,
+          model,
+          permission,
+          autoconfirmPermissions,
+          mcpIds,
+        });
+    run = updateAgentRunStatus(run, { conversationId: conversation.id, sessionId: conversation.id });
+    // Persist intent before the non-idempotent write. A restart must never send it twice.
+    run = updateAgentRunStatus(run, { submissionAttemptedAt: Date.now() });
+    const accepted = await client.sendMessage(conversation.id, input.prompt);
+    if (accepted.delivered_midturn) return updateAgentRunStatus(run, { state: "needs-attention", messageId: accepted.msg_id, turnId: accepted.turn_id, error: "The conversation became busy during submission. Open it to inspect the delivered message." });
+    return updateAgentRunStatus(run, { state: "running", startedAt: Date.now(), messageId: accepted.msg_id, turnId: accepted.turn_id });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    updateAgentRunStatus(run, { state: "failed", finishedAt: Date.now(), error: message });
-    throw new AgentDispatchError(message, 429);
+    const ambiguous = err instanceof AionRequestError && err.ambiguous;
+    run = updateAgentRunStatus(run, { state: ambiguous ? "needs-attention" : "failed", ...(ambiguous ? {} : { finishedAt: Date.now() }), error: message });
+    // Return the durable record even when startup failed so the caller can open it.
+    return run;
   }
 }

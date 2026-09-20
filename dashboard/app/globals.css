@@ -5673,12 +5673,29 @@ body[data-motion="off"] .context-menu:not([hidden]) {
 
 .row-note-glyph {
   display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--accent);
   opacity: 0.85;
+  cursor: pointer;
 }
 .row-note-glyph:hover,
 .row-note-glyph:focus-visible {
   opacity: 1;
+  background: var(--bg-muted);
+}
+@media (pointer: coarse) {
+  .row-note-glyph {
+    width: 44px;
+    height: 44px;
+  }
 }
 
 .pr-row {

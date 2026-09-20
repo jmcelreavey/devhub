@@ -7,6 +7,7 @@ import path from "node:path";
 import { clip } from "@/lib/agent-runs/events";
 import type { AgentRunSpec, AgentRunWorktree } from "@/lib/agent-runs/run-files";
 import { runGitRepoAsync } from "@/lib/git/repo-local";
+import { worktreeSlug } from "@/lib/repos/worktree-parsers";
 
 const PATCH_MAX = 60_000;
 
@@ -15,8 +16,43 @@ export async function gitHead(cwd: string): Promise<string | undefined> {
   return r.status === 0 ? r.stdout.trim() || undefined : undefined;
 }
 
+export interface AgentWorktreeLabel {
+  repoName?: string;
+  jiraKey?: string;
+  title?: string;
+}
+
 /**
- * A worktree on a fresh `devhub/agent/<run>` branch, kept under the repo's git
+ * Folder/branch leaf for an agent worktree.
+ *
+ * Readable prefix (repo + ticket or task) for the Cursor sidebar, with the
+ * run id always as the suffix so resume / task-agent-runs matching can still
+ * find `run-…` in the path. Do not drop the suffix.
+ */
+export function agentWorktreeDirName(
+  runId: string,
+  repoRoot: string,
+  label?: AgentWorktreeLabel,
+): string {
+  const repo = worktreeSlug(
+    label?.repoName?.trim() || path.basename(repoRoot.replace(/\/+$/, "")),
+  );
+  const ticket = label?.jiraKey?.trim().toUpperCase();
+  const task = !ticket && label?.title?.trim()
+    ? worktreeSlug(label.title).toLowerCase().slice(0, 40)
+    : "";
+  const human = ticket
+    ? `${repo}-${ticket}`
+    : task && task !== "worktree"
+      ? `${repo}-${task}`
+      : repo && repo !== "worktree"
+        ? repo
+        : "";
+  return human ? `${human}-${runId}` : runId;
+}
+
+/**
+ * A worktree on a fresh `devhub/agent/<name>` branch, kept under the repo's git
  * dir so it never shows in the checkout, IDE file tree, or repo scans. Used when
  * several agents work the same repo at once; otherwise runs edit the checkout
  * the user already has open.
@@ -24,6 +60,7 @@ export async function gitHead(cwd: string): Promise<string | undefined> {
 export async function createRunWorktree(
   cwd: string,
   runId: string,
+  label?: AgentWorktreeLabel,
 ): Promise<{ worktree: AgentRunWorktree; baseSha: string; cwd: string }> {
   const top = await runGitRepoAsync(cwd, ["rev-parse", "--show-toplevel"]);
   if (top.status !== 0) throw new Error(`worktree: ${cwd} is not inside a git repository`);
@@ -35,8 +72,9 @@ export async function createRunWorktree(
   const common = await runGitRepoAsync(repoRoot, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
   if (common.status !== 0) throw new Error(`worktree: ${common.stderr.trim() || "could not resolve the git dir"}`);
 
-  const worktreePath = path.join(common.stdout.trim(), "devhub-worktrees", runId);
-  const branch = `devhub/agent/${runId}`;
+  const leaf = agentWorktreeDirName(runId, repoRoot, label);
+  const worktreePath = path.join(common.stdout.trim(), "devhub-worktrees", leaf);
+  const branch = `devhub/agent/${leaf}`;
   const add = await runGitRepoAsync(repoRoot, ["worktree", "add", "-b", branch, worktreePath, baseSha]);
   if (add.status !== 0) throw new Error(`worktree: ${add.stderr.trim() || "git worktree add failed"}`);
 

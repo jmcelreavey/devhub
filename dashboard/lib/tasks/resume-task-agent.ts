@@ -2,27 +2,27 @@
  * Resume a DevHub task's agent work: prefer follow-up on the latest linked run
  * (POST /api/agent/runs/<id> semantics), else dispatch a new run quoting handoff.
  */
-import { AgentDispatchError, dispatchAgentRun } from "@/lib/agent-runs/dispatch";
-import { getAgentProvider, listAgentProviders } from "@/lib/agent-runs/providers";
-import { readAgentRun, toAgentRunSummary, type AgentRun, type AgentRunSummary } from "@/lib/agent-runs/store";
+import { AgentDispatchError,dispatchAgentRun } from "@/lib/agent-runs/dispatch";
+import { readRunEvents } from "@/lib/agent-runs/run-files";
+import { readAgentRun,toAgentRunSummary,type AgentRun,type AgentRunSummary } from "@/lib/agent-runs/store";
+import { aionCatalog,assistantForProvider } from "@/lib/aionui/catalog";
+import { resolveLocalGithubRepos } from "@/lib/repos/resolution";
+import { selectTaskImplementationRepo } from "@/lib/tasks/implement-repo";
+import { reconcileTaskAgentRunSidecar } from "@/lib/tasks/reconcile-task-agent-sidecar";
 import { getTasks } from "@/lib/tasks/storage";
-import type { Task } from "@/lib/tasks/types";
 import {
-  getTaskAgentHandoff,
-  isActiveTaskAgentRunStatus,
-  upsertTaskAgentRun,
-  type TaskAgentRunRecord,
+buildTaskAgentResumePrompt,
+canResumeTaskAgentRun,
+formatAgentActivityTrailForResume,
+willResumeFollowUpSession,
+} from "@/lib/tasks/task-agent-resume";
+import {
+getTaskAgentHandoff,
+isActiveTaskAgentRunStatus,
+type TaskAgentRunRecord,
 } from "@/lib/tasks/task-agent-runs";
 import { handleTaskPrAttention } from "@/lib/tasks/task-pr-watch";
-import { reconcileTaskAgentRunSidecar } from "@/lib/tasks/reconcile-task-agent-sidecar";
-import {
-  buildTaskAgentResumePrompt,
-  canResumeTaskAgentRun,
-  mapUiProviderToAgentDispatch,
-  willResumeFollowUpSession,
-} from "@/lib/tasks/task-agent-resume";
-import { selectTaskImplementationRepo } from "@/lib/tasks/implement-repo";
-import { resolveLocalGithubRepos } from "@/lib/repos/resolution";
+import type { Task } from "@/lib/tasks/types";
 
 export class TaskAgentResumeError extends Error {
   constructor(
@@ -53,24 +53,11 @@ export interface ResumeTaskAgentResult {
   handoffChars: number;
 }
 
-function pickInstalledProvider(preferred?: string): string {
-  // "default" / "openchamber" map to null → fall back to an installed CLI.
-  const mapped = preferred ? (mapUiProviderToAgentDispatch(preferred) ?? "") : "";
-  const { providers } = listAgentProviders();
-  const installed = providers.filter((p) => p.binPath);
-  if (mapped) {
-    const hit = installed.find((p) => p.spec.id === mapped);
-    if (hit) return hit.spec.id;
-    throw new TaskAgentResumeError(
-      `Provider "${mapped}" is not installed. Install it or pass another provider.`,
-      400,
-    );
-  }
-  const fallback = installed.find((p) => p.spec.id === "claude") ?? installed[0];
-  if (!fallback) {
-    throw new TaskAgentResumeError("No agent CLI is installed for dispatch.", 400);
-  }
-  return fallback.spec.id;
+async function pickInstalledProvider(preferred?: string): Promise<string> {
+  const { assistants, session } = await aionCatalog();
+  const assistant = assistantForProvider(assistants, preferred && preferred !== "default" ? preferred : session.defaultAssistantId);
+  if (!assistant?.enabled || assistant.agent_status !== "online") throw new TaskAgentResumeError("The selected agent needs setup in Agents.", 400);
+  return assistant.id;
 }
 
 /** Where a fresh run works: explicit cwd, else the prior run's, else the task's linked repo. */
@@ -99,13 +86,8 @@ async function resolveImplementCwd(
 async function linkRun(taskId: string, run: AgentRun, prior: TaskAgentRunRecord | null): Promise<void> {
   // The agent was sent back for the PR finding — don't raise it again.
   if (prior?.attention) await handleTaskPrAttention(taskId, prior.runId);
-  await upsertTaskAgentRun({
-    taskId,
-    runId: run.spec.id,
-    status: "queued",
-    provider: run.spec.provider,
-    sessionId: run.status.sessionId ?? null,
-  });
+  // Dispatch links the task before submission so completion cannot race the sidecar.
+  void run;
 }
 
 /**
@@ -132,7 +114,7 @@ export async function resumeTaskAgent(input: ResumeTaskAgentInput): Promise<Resu
   }
   const prior = latest ? readAgentRun(latest.runId) : null;
   const priorSessionId = prior?.status.sessionId ?? latest?.sessionId ?? null;
-  const provider = pickInstalledProvider(input.provider ?? latest?.provider ?? prior?.spec.provider);
+  const provider = await pickInstalledProvider(input.provider ?? latest?.provider ?? prior?.spec.provider);
   const result = (mode: ResumeTaskAgentResult["mode"], run: AgentRun): ResumeTaskAgentResult => ({
     mode,
     run: toAgentRunSummary(run),
@@ -147,10 +129,13 @@ export async function resumeTaskAgent(input: ResumeTaskAgentInput): Promise<Resu
       priorDispatchProvider: prior.spec.provider,
       selectedUiProvider: provider,
       priorSessionId,
-      priorSupportsResume: getAgentProvider(prior.spec.provider)?.spec.supportsResume === true,
+      priorSupportsResume: prior.spec.runtime === "aionui",
     });
 
   const cwd = followUp ? { cwd: prior.spec.cwd } : await resolveImplementCwd(input.cwd, prior?.spec.cwd, task);
+  const activityTrail = prior
+    ? formatAgentActivityTrailForResume(readRunEvents(prior.dir, 0, 500).events)
+    : "";
   const prompt = buildTaskAgentResumePrompt({
     origin: input.origin,
     taskId: input.taskId,
@@ -160,6 +145,7 @@ export async function resumeTaskAgent(input: ResumeTaskAgentInput): Promise<Resu
     cwd: cwd.cwd,
     repoName: input.repoName ?? cwd.repoName,
     jiraKey: task.jiraKey,
+    activityTrail: activityTrail || undefined,
     ...(latest?.attention ? { attention: { ...latest.attention, prUrl: latest.prUrl } } : {}),
   });
   const common = {
@@ -170,6 +156,7 @@ export async function resumeTaskAgent(input: ResumeTaskAgentInput): Promise<Resu
     depth: 0,
     worktree: false,
     parentRunId: latest?.runId,
+    activity: { source: "interactive" as const, action: "resume", taskId: input.taskId, taskDate: input.date },
   };
 
   if (followUp) {
@@ -183,8 +170,8 @@ export async function resumeTaskAgent(input: ResumeTaskAgentInput): Promise<Resu
       await linkRun(input.taskId, next, latest);
       return result("followup", next);
     } catch (err) {
-      // A refused follow-up (e.g. expired session) falls back to a fresh run.
-      if (!(err instanceof AgentDispatchError)) throw err;
+      if (err instanceof AgentDispatchError) throw new TaskAgentResumeError(err.message, err.status);
+      throw err;
     }
   }
 

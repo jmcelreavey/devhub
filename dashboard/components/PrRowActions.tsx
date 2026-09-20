@@ -1,36 +1,35 @@
 "use client";
 
+import type { ContextMenuGroup,ContextMenuItem } from "@/components/shell/ContextMenu";
+import { launchAgentJob } from "@/lib/agent-job";
+import { createOrOpenVaultNote } from "@/lib/create-vault-note";
+import { openInBrowser } from "@/lib/desktop/bridge";
+import type { GithubPrRow,GithubPrsApiPayload } from "@/lib/github/prs";
+import { withTagsGroup } from "@/lib/hooks/use-tag-menu";
+import type { useToast } from "@/lib/hooks/use-toast";
+import { openPrInCursor } from "@/lib/open-in-cursor-client";
+import { buildPrNoteMarkdown,prNotePath } from "@/lib/pr-note";
+import { notifyPrReviewNoteWatch,prReviewNotePath } from "@/lib/pr-review-notes";
+import { buildSlackMessage,copyTextAndToast } from "@/lib/pr-slack";
 import {
-  CircleCheck,
-  CircleSlash,
-  Dumbbell,
-  ExternalLink,
-  FileText,
-  GitPullRequest,
-  Link2,
-  MessageSquare,
-  ScanSearch,
-  Wrench,
+agentPipelineInvestigatePrompt,
+agentReviewPrompt,
+agentReviewSessionTitle,
+} from "@/lib/terminal-launch";
+import { jiraBrowseUrl,jiraKeyFromText } from "@/lib/utils";
+import {
+CircleCheck,
+CircleSlash,
+Dumbbell,
+ExternalLink,
+FileText,
+GitPullRequest,
+Link2,
+MessageSquare,
+ScanSearch,
+Wrench,
 } from "lucide-react";
 import { mutate as globalMutate } from "swr";
-import type { GithubPrRow, GithubPrsApiPayload } from "@/lib/github/prs";
-import { buildSlackMessage, copyTextAndToast } from "@/lib/pr-slack";
-import { launchAgentJob } from "@/lib/agent-job";
-import {
-  agentPipelineInvestigateCommand,
-  agentPipelineInvestigatePrompt,
-  agentReviewCommand,
-  agentReviewPrompt,
-} from "@/lib/terminal-launch";
-import { notifyPrReviewNoteWatch, prReviewNotePath } from "@/lib/pr-review-notes";
-import { buildPrNoteMarkdown, prNotePath } from "@/lib/pr-note";
-import { createOrOpenVaultNote } from "@/lib/create-vault-note";
-import { openPrInCursor } from "@/lib/open-in-cursor-client";
-import { openInBrowser } from "@/lib/desktop/bridge";
-import type { ContextMenuGroup, ContextMenuItem } from "@/components/shell/ContextMenu";
-import type { useToast } from "@/lib/hooks/use-toast";
-import { jiraBrowseUrl, jiraKeyFromText } from "@/lib/utils";
-import { withTagsGroup } from "@/lib/hooks/use-tag-menu";
 
 export type PrRowKind = "authored" | "reviews" | "reviewed";
 
@@ -104,27 +103,24 @@ export function buildPrRowMenuGroups({
   const agentReview = {
     id: "agent-review",
     label: "Review with agent",
-    description: "Explain & review this PR (OpenCode or Agent tab)",
+    description: "Explain and review this PR in Agents",
     icon: <ScanSearch size={12} />,
     onSelect: async () => {
       const note = watchPath || notePath;
-      const result = await launchAgentJob({
-        title: `Review PR #${row.number}`,
+      const title = agentReviewSessionTitle(row);
+      await launchAgentJob({
+        title,
         kind: "review",
         repoName: row.repo,
         notePath: note,
-        promptText: agentReviewPrompt(row.url, note),
-        promptCommand: await agentReviewCommand(row.url, note),
+        promptText: agentReviewPrompt(row.url, note, title),
+        prUrl: row.url,
         mode: "oneshot",
         reason: `PR review ${row.repo}#${row.number}`,
         alreadyConfirmed: true,
       });
       notifyPrReviewNoteWatch(row);
-      toast.info(
-        result.channel === "opencode"
-          ? "Review running in OpenCode — note glyph appears here when saved."
-          : "Review queued in the Agent tab — note glyph appears when saved.",
-      );
+
     },
   };
   const repFirst = {
@@ -185,23 +181,19 @@ export function buildPrRowMenuGroups({
     danger: failing,
     onSelect: async () => {
       const note = watchPath || notePath;
-      const result = await launchAgentJob({
+      await launchAgentJob({
         title: `Pipeline PR #${row.number}`,
         kind: "agent",
         repoName: row.repo,
         notePath: note,
         promptText: agentPipelineInvestigatePrompt(row.url, note),
-        promptCommand: await agentPipelineInvestigateCommand(row.url, note),
+        prUrl: row.url,
         mode: "oneshot",
         reason: `Pipeline investigate ${row.repo}#${row.number}`,
         alreadyConfirmed: true,
       });
       notifyPrReviewNoteWatch(row);
-      toast.info(
-        result.channel === "opencode"
-          ? "Pipeline investigate running in OpenCode — findings land in the review note."
-          : "Pipeline investigate queued in the Agent tab — findings land in the review note.",
-      );
+
     },
   };
 

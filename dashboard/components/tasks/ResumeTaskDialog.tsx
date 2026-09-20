@@ -1,18 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { Task } from "@/lib/tasks/types";
-import type { TaskAgentRunRecord } from "@/lib/tasks/task-agent-runs";
-import { SkillAgentDialog, type SkillAgentLaunchTarget } from "@/components/tasks/SkillAgentDialog";
-import {
-  buildTaskAgentResumePrompt,
-  mapAgentDispatchProviderToUi,
-  willResumeFollowUpSession,
-} from "@/lib/tasks/task-agent-resume";
-import { taskImplementPlanUrl } from "@/lib/tasks/implement-prompt";
+import { SkillAgentDialog,type SkillAgentLaunchTarget } from "@/components/tasks/SkillAgentDialog";
 import { useLive } from "@/lib/hooks/use-fetch";
-import { mutate } from "swr";
+import { taskImplementPlanUrl } from "@/lib/tasks/implement-prompt";
+import {
+buildTaskAgentResumePrompt,
+formatAgentActivityTrailForResume,
+mapAgentDispatchProviderToUi,
+willResumeFollowUpSession,
+} from "@/lib/tasks/task-agent-resume";
+import type { TaskAgentRunRecord } from "@/lib/tasks/task-agent-runs";
+import type { Task } from "@/lib/tasks/types";
 import { TASK_AGENT_RUNS_KEY } from "@/lib/tasks/use-task-agent-runs";
+import { useMemo,useState } from "react";
+import { mutate } from "swr";
 
 type AgentRunDetail = {
   run?: {
@@ -21,6 +22,7 @@ type AgentRunDetail = {
     sessionId: string | null;
     state: string;
   };
+  events?: Array<{ type: string; text?: string; ok?: boolean }>;
 };
 
 type AgentProvidersResponse = {
@@ -46,7 +48,9 @@ export function ResumeTaskDialog({
   cwd?: string;
   repoName?: string;
 }) {
-  const priorRunKey = open && latestRun?.runId ? `/api/agent/runs/${encodeURIComponent(latestRun.runId)}` : null;
+  const priorRunKey = open && latestRun?.runId
+    ? `/api/agent/runs/${encodeURIComponent(latestRun.runId)}?since=0&limit=500`
+    : null;
   const { data: priorDetail } = useLive<AgentRunDetail>(priorRunKey, {
     refreshInterval: 0,
     revalidateOnFocus: false,
@@ -86,6 +90,8 @@ export function ResumeTaskDialog({
     priorSupportsResume,
   });
 
+  const activityTrail = formatAgentActivityTrailForResume(priorDetail?.events ?? []);
+
   const promptInput = () => ({
     origin: typeof window === "undefined" ? "" : window.location.origin,
     taskId: task.id,
@@ -95,6 +101,7 @@ export function ResumeTaskDialog({
     cwd,
     repoName,
     jiraKey: task.jiraKey,
+    activityTrail: activityTrail || undefined,
     ...(attention ? { attention: { ...attention, prUrl: latestRun?.prUrl } } : {}),
   });
 
@@ -128,6 +135,8 @@ export function ResumeTaskDialog({
       summary={`${attention ? "Fix PR for" : "Resume"} ${task.text}`}
       reason={`Resume DevHub task ${task.id}`}
       taskId={task.id}
+      taskDate={date}
+      parentRunId={latestRun?.runId}
       resumeSessionId={followUp ? priorSessionId ?? undefined : undefined}
       launchButtonLabel={attention ? "Send agent back" : "Resume agent"}
       banner={

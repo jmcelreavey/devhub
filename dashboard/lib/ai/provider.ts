@@ -1,7 +1,8 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createOpenAI } from "@ai-sdk/openai";
-import type { LanguageModel } from "ai";
+import { wrapLanguageModel, type LanguageModel } from "ai";
 import { isNotesAiConfigured } from "@/lib/notes-ai/config";
+import { aiActivityMiddleware, type AiActivityOptions } from "./activity";
 
 // Defaults target z.ai's Coding Plan, but any OpenAI-compatible endpoint works:
 // point AI_BASE_URL / AI_MODEL at OpenAI, OpenRouter, Together, a local Ollama /
@@ -39,13 +40,13 @@ function isOpenAiEndpoint(baseURL: string): boolean {
  * openai-compatible provider doesn't); everything else (GLM/z.ai, OpenRouter,
  * Together, local Ollama/LM Studio, …) uses the openai-compatible provider.
  */
-export function getNotesAiModel(): LanguageModel | null {
+export function getNotesAiModel(activity?: AiActivityOptions): LanguageModel | null {
   if (!isNotesAiConfigured()) return null;
   const { apiKey, baseURL, modelId } = resolveProviderConfig();
-  if (isOpenAiEndpoint(baseURL)) {
-    return createOpenAI({ apiKey, baseURL })(modelId);
-  }
-  return createOpenAICompatible({ name: PROVIDER_NAME, baseURL, apiKey })(modelId);
+  const model = isOpenAiEndpoint(baseURL)
+    ? createOpenAI({ apiKey, baseURL })(modelId)
+    : createOpenAICompatible({ name: PROVIDER_NAME, baseURL, apiKey })(modelId);
+  return wrapLanguageModel({ model, middleware: aiActivityMiddleware(activity) });
 }
 
 const DISABLE_THINKING = {

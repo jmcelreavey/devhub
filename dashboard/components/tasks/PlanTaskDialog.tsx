@@ -1,8 +1,8 @@
 "use client";
 
-import type { Task } from "@/lib/tasks/types";
-import { buildTaskPlanPrompt, taskImplementPlanUrl } from "@/lib/tasks/implement-prompt";
 import { SkillAgentDialog } from "@/components/tasks/SkillAgentDialog";
+import { buildTaskPlanPrompt,taskImplementPlanUrl } from "@/lib/tasks/implement-prompt";
+import type { Task } from "@/lib/tasks/types";
 
 /**
  * Draft → plan. The agent investigates and writes Plan / Acceptance / Open
@@ -17,6 +17,7 @@ export function PlanTaskDialog({
   onClose,
   cwd,
   repoName,
+  onLaunched,
 }: {
   open: boolean;
   task: Task;
@@ -24,6 +25,7 @@ export function PlanTaskDialog({
   onClose: () => void;
   cwd?: string;
   repoName?: string;
+  onLaunched?: () => void;
 }) {
   const promptInput = () => ({
     origin: typeof window === "undefined" ? "" : window.location.origin,
@@ -39,6 +41,8 @@ export function PlanTaskDialog({
       open={open}
       onClose={onClose}
       stage="plan"
+      taskId={task.id}
+      taskDate={date}
       title="Write plan with agent"
       description="A planning pass: the agent investigates and writes the plan into the task note. It doesn't change code. Pick a model that's good at reasoning."
       launchButtonLabel="Start planning"
@@ -47,6 +51,7 @@ export function PlanTaskDialog({
       repoName={promptInput().repoName}
       summary={`Plan ${task.text}`}
       reason={`Write the plan for DevHub task ${task.id}`}
+      onLaunched={onLaunched}
       resolveCwd={
         cwd
           ? undefined

@@ -159,6 +159,7 @@ export class AiSqlRefusedError extends Error {
 
 export async function generateSql(request: AiSqlRequest): Promise<AiSqlResult> {
   const result = await generateAiText({
+    activity: { action: "Generate SQL" },
     system: systemPrompt(request.connection, request.mode),
     prompt: userPrompt(request),
     maxOutputTokens: 900,

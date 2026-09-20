@@ -246,6 +246,7 @@ export async function generateCanvasHtml(
 
   try {
     const result = await generateAiText({
+      activity: { source: "briefing", action: "Build briefing canvas" },
       maxOutputTokens: 16_000,
       // A full canvas legitimately takes minutes (134s measured for a simple
       // prompt). The old 300s wall-clock ceiling cut real work off mid-flight;

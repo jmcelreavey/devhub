@@ -38,7 +38,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
         ? false
         : prefs.hardBlock;
 
-  const { notePath, repoIds, ...result } = await checkTaskImplementReady(task, date, {
+  const { notePath, noteExists, repoIds, ...result } = await checkTaskImplementReady(task, date, {
     selectedRepoId,
     hubRepoId,
     hardBlock,
@@ -48,6 +48,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     taskId: task.id,
     date,
     notePath,
+    noteExists,
     repoIds,
     prefsHardBlock: prefs.hardBlock,
     ...result,

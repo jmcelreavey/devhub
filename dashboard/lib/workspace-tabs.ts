@@ -1,6 +1,7 @@
 import { ALL_NAV_DESTINATIONS } from "@/lib/nav";
 import {
   appendSessionHistory,
+  uniqueSessionHistory,
   type SessionHistoryEntry,
 } from "@/lib/session-history";
 
@@ -310,7 +311,7 @@ function hydrateTab(tab: StoredTab): WorkspaceTab {
     href: tab.href,
     title: tab.title,
     kind: tab.kind,
-    history: parseHistory(tab.history) ?? seedHistory(tab.href, tab.title, 0),
+    history: uniqueSessionHistory(parseHistory(tab.history) ?? seedHistory(tab.href, tab.title, 0), 10),
   };
 }
 

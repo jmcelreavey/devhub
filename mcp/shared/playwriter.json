@@ -1,5 +1,6 @@
 {
-  "command": "npx",
-  "args": ["playwriter@latest"],
-  "description": "Playwriter MCP — controls explicitly enabled tabs in the user's existing Chrome session through the Playwriter Chrome extension and local relay. Requires installing the extension and clicking its icon on each tab to connect."
+  "command": "REPO_ROOT/mcp-servers/devhub-server/node_modules/.bin/tsx",
+  "args": ["REPO_ROOT/dashboard/lib/mcp/playwriter-compact.ts"],
+  "startupTimeoutSec": 30,
+  "description": "Playwriter MCP — controls explicitly enabled tabs in the user's existing Chrome session through the Playwriter Chrome extension and local relay. Requires installing the extension and clicking its icon on each tab to connect. execute/reset are wrapped so Cursor ACP does not drop them under its tool-description budget."
 }

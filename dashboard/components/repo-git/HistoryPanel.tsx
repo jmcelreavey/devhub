@@ -1,66 +1,66 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import {
-  Check,
-  CornerDownLeft,
-  Columns3,
-  Download,
-  GitBranch,
-  GitMerge,
-  Layers,
-  RefreshCw,
-  RotateCcw,
-  Search,
-  ShieldCheck,
-  Upload,
-} from "lucide-react";import { SkeletonRows } from "@/components/ui/SkeletonRows";
-import { ContextMenu, useContextMenu } from "@/components/shell/ContextMenu";
-import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
-import { copyTextToClipboard } from "@/lib/clipboard";
-import { useMediaQuery } from "@/lib/hooks/use-media-query";
-import { useStoredFraction, useStoredState } from "@/lib/hooks/use-stored-state";
-import { useToast } from "@/lib/hooks/use-toast";
-import type { GitHookFailurePayload } from "@/lib/git/hook-failure";
 import type { StashConflictPayload } from "@/app/repos/types";
-import type { DiffLine, GraphCommitRaw } from "@/lib/repos/git-parsers";
+import { useConfirm,usePrompt } from "@/components/shell/ConfirmDialog";
+import { ContextMenu,useContextMenu } from "@/components/shell/ContextMenu";
+import { SkeletonRows } from "@/components/ui/SkeletonRows";
+import { launchAgentJob } from "@/lib/agent-job";
+import { copyTextToClipboard } from "@/lib/clipboard";
+import type { GitHookFailurePayload } from "@/lib/git/hook-failure";
+import { recordUndo } from "@/lib/git/undo-stack";
 import type { BranchOpenPr } from "@/lib/github/branch-pr";
-import { jiraBrowseUrl } from "@/lib/utils";
+import { useMediaQuery } from "@/lib/hooks/use-media-query";
+import { useStoredFraction,useStoredState } from "@/lib/hooks/use-stored-state";
+import { useToast } from "@/lib/hooks/use-toast";
 import { lookupByEmail } from "@/lib/people/identity";
 import {
-  isMergedIntoDefaultBranch,
-  isOnDefaultBranch,
-  shouldOfferSwitchToDefault,
-  shortDefaultBranchName,
+isMergedIntoDefaultBranch,
+isOnDefaultBranch,
+shortDefaultBranchName,
+shouldOfferSwitchToDefault,
 } from "@/lib/repos/branch-relation";
-import { layoutCommitGraph, type GraphLaneCommit } from "@/lib/repos/git-graph";
+import { layoutCommitGraph,type GraphLaneCommit } from "@/lib/repos/git-graph";
+import type { DiffLine,GraphCommitRaw } from "@/lib/repos/git-parsers";
+import { jiraBrowseUrl } from "@/lib/utils";
 import {
-  type GraphColumnsPartial,
-} from "./CommitGraph";
-import { recordUndo } from "@/lib/git/undo-stack";
+Check,
+Columns3,
+CornerDownLeft,
+Download,
+GitBranch,
+GitMerge,
+Layers,
+RefreshCw,
+RotateCcw,
+Search,
+ShieldCheck,
+Upload,
+} from "lucide-react";
+import { useCallback,useEffect,useMemo,useRef,useState } from "react";
+import { createPortal } from "react-dom";
 import { CommitAvatar } from "./CommitAvatar";
 import { CommitContextChips } from "./CommitContextChips";
-import { CommitGraph } from "./CommitGraph";
+import {
+CommitGraph,
+type GraphColumnsPartial,
+} from "./CommitGraph";
 import { DiffMaximizeModal } from "./DiffMaximizeModal";
-import { DiffToolbar, DIFF_CONTEXT_LINES, useDiffViewMode, type DiffContextMode } from "./DiffToolbar";
+import { DIFF_CONTEXT_LINES,DiffToolbar,useDiffViewMode,type DiffContextMode } from "./DiffToolbar";
 import { GitDiffView } from "./GitDiffView";
-import { RangeCompareButton, RangeCompareModal } from "./RangeCompareModal";
+import { RangeCompareButton,RangeCompareModal } from "./RangeCompareModal";
 import { RebasePlanModal } from "./RebasePlanModal";
 import { RepoFileOpenMenu } from "./RepoFileOpenMenu";
-import { WhyExistsAction } from "./WhyExistsAction";
 import { RepoSplit } from "./SplitResize";
-import { shareGitShowPatch } from "./shareGitPatch";
+import { WhyExistsAction } from "./WhyExistsAction";
 import { buildCommitMenuGroups } from "./commitMenuGroups";
-import { usePointerDrag } from "./usePointerDrag";
-import { launchAgentJob } from "@/lib/agent-job";
-import { agentLocalCommitReviewCommand } from "@/lib/terminal-launch";
+import { shareGitShowPatch } from "./shareGitPatch";
 import {
-  fetchGitJson,
-  postGitAction,
-  repoApi,
-  type BranchesPayload,
+fetchGitJson,
+postGitAction,
+repoApi,
+type BranchesPayload,
 } from "./shared";
+import { usePointerDrag } from "./usePointerDrag";
 
 interface CommitShowPayload {
   hash: string;
@@ -1020,27 +1020,18 @@ export function HistoryPanel({
             ]
               .filter(Boolean)
               .join(" ");
-            const result = await launchAgentJob({
+            await launchAgentJob({
               title: `review · ${commit.shortHash}`,
               kind: "review",
               cwd: repoPath,
               repoName,
               notePath,
               promptText,
-              promptCommand: await agentLocalCommitReviewCommand(
-                repoName,
-                commit.hash,
-                commit.subject,
-              ),
               mode: "oneshot",
               alreadyConfirmed: true,
               reason: `Review commit ${commit.shortHash}`,
             });
-            toast.info(
-              result.channel === "opencode"
-                ? `Review running in OpenCode — note at ${notePath}.`
-                : `Review queued in the Agent tab — note at ${notePath}.`,
-            );
+
           })();
         },
       }),

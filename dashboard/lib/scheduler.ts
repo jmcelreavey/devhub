@@ -11,27 +11,26 @@
  * root wake helper to wake the Mac for the next job that wants it, and holds
  * an idle-sleep assertion around runs so a woken Mac stays up to do the work.
  */
+import { getHome } from "@/lib/notes/dir";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
-import { getHome } from "@/lib/notes/dir";
-import {
-  getAllowedScripts,
-  getRun,
-  getRunLogPayload,
-  startRun,
-  isAnyScriptRunning,
-  type AllowedScript,
-} from "./scripts-runner";
-import { writeAtomicNow } from "./atomic-write";
-import { dueOccurrence, earliestOccurrence, nextOccurrence } from "./scheduler-plan";
-import { AgentDispatchError, dispatchAgentRun } from "./agent-runs/dispatch";
-import { getAgentProvider } from "./agent-runs/providers";
-import { readAgentRun } from "./agent-runs/store";
+import { AgentDispatchError,dispatchAgentRun } from "./agent-runs/dispatch";
 import { isActiveAgentRunState } from "./agent-runs/run-files";
-import { holdAwake, releaseFinishedHolds } from "./keep-awake";
-import { cancelWake, scheduleWake, wakeHelperStatus } from "./wake-helper";
+import { readAgentRun } from "./agent-runs/store";
+import { writeAtomicNow } from "./atomic-write";
+import { holdAwake,releaseFinishedHolds } from "./keep-awake";
 import { appendSchedulerLog } from "./scheduler-log";
+import { dueOccurrence,earliestOccurrence,nextOccurrence } from "./scheduler-plan";
+import {
+getAllowedScripts,
+getRun,
+getRunLogPayload,
+isAnyScriptRunning,
+startRun,
+type AllowedScript,
+} from "./scripts-runner";
+import { cancelWake,scheduleWake,wakeHelperStatus } from "./wake-helper";
 
 export interface AgentJobSpec {
   provider: string;
@@ -228,8 +227,9 @@ function validateAction(input: { script?: string; agent?: AgentJobSpec }): strin
   if (Boolean(input.script) === Boolean(input.agent)) return "Provide exactly one of script or agent";
   if (input.script && !getAllowedScripts().includes(input.script as AllowedScript)) return "Unknown script";
   if (input.agent) {
-    const provider = getAgentProvider(input.agent.provider);
-    if (!provider) return `Unknown agent provider "${input.agent.provider}"`;
+    // Catalog IDs belong to the connected workspace and may be custom profiles.
+    // Validate readiness at dispatch so schedules can still be edited offline.
+    if (!input.agent.provider.trim() || input.agent.provider.length > 200) return "Agent provider required";
     if (!input.agent.prompt.trim()) return "Agent prompt required";
     if (!input.agent.cwd.trim()) return "Agent cwd required";
   }
@@ -415,7 +415,10 @@ async function runJob(job: Job, occurrence?: number): Promise<{ runId: string } 
   if (!job.agent) return { error: "Job has no action" };
   logStart(job, occurrence);
   try {
-    const run = await dispatchAgentRun({ ...job.agent, title: job.name, depth: 0, scheduledJobId: job.id });
+    const run = await dispatchAgentRun({ ...job.agent, title: job.name, depth: 0, scheduledJobId: job.id,
+      requestId: occurrence === undefined ? undefined : `schedule:${job.id}:${occurrence}`,
+      activity: { source: "schedule", action: "scheduled-agent", jobId: job.id, occurrence },
+    });
     patchJob(job.id, { ...handled, lastRunAt: Date.now(), lastRunId: run.spec.id, lastError: undefined });
     watchRun(job, "agent", run.spec.id);
     holdAwake(`agent:${run.spec.id}`, () => {

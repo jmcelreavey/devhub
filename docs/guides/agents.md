@@ -6,10 +6,13 @@ icon: Bot
 tags: [agents]
 related:
   - guides/skills
+  - guides/aionui-agents
   - architecture/persona-system
 ---
 
 # Shared Agents
+
+For the dashboard **Agents** page that embeds AionUi (coding chats, auto-review, MCP), see [Agents (AionUi)](aionui-agents.md).
 
 Shared agents are reusable subagent personas synced from `agents/shared/` into local tool directories (Cursor, Codex, OpenCode, Antigravity, and others). The dashboard **Agents → Agents** tab lists the catalog and runs **Sync agents**.
 

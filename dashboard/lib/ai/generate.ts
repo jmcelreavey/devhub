@@ -6,6 +6,7 @@
 import { generateText } from "ai";
 import { generateTextViaCli } from "@/lib/ai/cli-runner";
 import { getNotesAiCallOptions, getNotesAiModel } from "@/lib/ai/provider";
+import { startGenerationActivity, type AiActivityOptions } from "@/lib/ai/activity";
 import {
   isAiConfigured,
   resolveAiProvider,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/ai/preference";
 
 export interface GenerateAiTextOptions {
+  activity?: AiActivityOptions;
   prompt: string;
   system?: string;
   maxOutputTokens?: number;
@@ -22,7 +24,7 @@ export interface GenerateAiTextOptions {
   timeoutMs?: number;
   /** CLI only — give up after this long with no output at all. */
   idleTimeoutMs?: number;
-  /** Abort in-flight CLI generation when the HTTP client disconnects. */
+  /** Abort in-flight API or CLI generation when the caller disconnects. */
   abortSignal?: AbortSignal;
   /** Preferred CLI cwd (still rejected if it's the app bundle). */
   cwd?: string | null;
@@ -51,11 +53,11 @@ export async function generateAiText(
   const provider = resolved.provider;
 
   if (provider === "api") {
-    const model = getNotesAiModel();
+    const model = getNotesAiModel({ ...opts.activity, cwd: opts.cwd ?? opts.activity?.cwd });
     if (!model) {
       throw new Error("AI_API_KEY is not set.");
     }
-    const callOptions = getNotesAiCallOptions();
+    const callOptions = { ...getNotesAiCallOptions(), abortSignal: opts.abortSignal };
     const images = (opts.images ?? []).filter((img) => img.dataUrl.startsWith("data:image/"));
     const tokenOpts =
       opts.maxOutputTokens !== undefined ? { maxOutputTokens: opts.maxOutputTokens } : {};
@@ -101,14 +103,27 @@ export async function generateAiText(
     ? `${opts.system}\n\n${opts.prompt}`
     : opts.prompt;
   // CLI providers approximate maxOutputTokens via prompt budget (see applyCliTokenBudget).
-  const cli = await generateTextViaCli(provider, fullPrompt, {
-    timeoutMs: opts.timeoutMs,
-    idleTimeoutMs: opts.idleTimeoutMs,
-    maxOutputTokens: opts.maxOutputTokens,
-    cwd: opts.cwd,
-    abortSignal: opts.abortSignal,
+  const activity = startGenerationActivity({
+    provider,
+    prompt: fullPrompt,
+    context: { ...opts.activity, cwd: opts.cwd ?? opts.activity?.cwd },
+    signal: opts.abortSignal,
   });
-  return { text: cli.text, provider };
+  try {
+    const cli = await generateTextViaCli(provider, fullPrompt, {
+      timeoutMs: opts.timeoutMs,
+      idleTimeoutMs: opts.idleTimeoutMs,
+      maxOutputTokens: opts.maxOutputTokens,
+      cwd: opts.cwd,
+      abortSignal: opts.abortSignal,
+    });
+    activity.append(cli.text);
+    activity.succeed();
+    return { text: cli.text, provider };
+  } catch (err) {
+    activity.fail(err);
+    throw err;
+  }
 }
 
 /** Compact a generation failure for UI — keep the real reason, drop the wall of CLI noise. */

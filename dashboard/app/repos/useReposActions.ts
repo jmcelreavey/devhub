@@ -1,19 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { useLaunchClaudeDesktop } from "@/lib/launch/claude";
-import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
+import { useConfirm,usePrompt } from "@/components/shell/ConfirmDialog";
 import { launchAgentJob } from "@/lib/agent-job";
-import {
-  agentRepoDxAuditCommand,
-  agentRepoDxAuditPrompt,
-  agentRepoUpstartCommand,
-  agentRepoUpstartDebugCommand,
-  agentRepoUpstartUpdateCommand,
-  openTerminal,
-  repoUpstartCommand,
-} from "@/lib/terminal-launch";
 import { useToast } from "@/lib/hooks/use-toast";
+import {
+agentRepoDxAuditPrompt,
+openTerminal,
+repoUpstartCommand
+} from "@/lib/terminal-launch";
+import { useState } from "react";
 import type { RepoInfo } from "./types";
 
 /**
@@ -29,7 +24,6 @@ export function useReposActions(opts: {
   const [cloning, setCloning] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const toast = useToast();
-  const launchClaudeDesktop = useLaunchClaudeDesktop();
   const prompt = usePrompt();
   const confirm = useConfirm();
 
@@ -103,30 +97,22 @@ export function useReposActions(opts: {
         label,
         kind: "upstart",
         repoName: repo.name,
-        command: repoUpstartCommand(upstartPath),
+        command: repoUpstartCommand(upstartPath, repo.path),
       });
       return;
     }
-    const command = debug
-      ? await agentRepoUpstartDebugCommand(repo.name, upstartPath, trimmedContext)
-      : repo.hasUpstart && trimmedContext
-        ? await agentRepoUpstartUpdateCommand(repo.name, upstartPath, trimmedContext)
-        : await agentRepoUpstartCommand(repo.name, upstartPath, trimmedContext);
-    const result = await launchAgentJob({
+    await launchAgentJob({
       title: label,
       kind: "upstart",
       cwd: repo.path,
       repoName: repo.name,
-      promptCommand: command,
+      promptText: `Use devhub-repo-upstart. ${debug ? "Debug" : repo.hasUpstart ? "Update" : "Create"} ${upstartPath} for ${repo.name} in the DevHub private store. Keep one-command startup, use nvm use when .nvmrc exists and refresh dependencies. Do not run the resulting script; it requires the existing DevHub review before execution. Context: ${trimmedContext || "none"}`,
       // Upstart generation is interactive-ish / must land in a PTY near the script.
       mode: debug ? "interactive" : "oneshot",
       forceTerminal: true,
       reason: label,
       alreadyConfirmed: true,
     });
-    if (result.channel === "terminal") {
-      /* dock handles confirm/inject */
-    }
   }
 
   async function openDxAudit(repo: RepoInfo) {
@@ -139,23 +125,18 @@ export function useReposActions(opts: {
     });
     if (context === null) return;
     const audit = agentRepoDxAuditPrompt(repo.name, context.trim() || undefined);
-    const result = await launchAgentJob({
+    await launchAgentJob({
       title: `DX audit · ${repo.name}`,
       kind: "review",
       cwd: repo.path,
       repoName: repo.name,
       notePath: audit.notePath,
       promptText: audit.prompt,
-      promptCommand: await agentRepoDxAuditCommand(repo.name, context.trim() || undefined),
       mode: "oneshot",
       reason: `DX audit ${repo.name}`,
       alreadyConfirmed: true,
     });
-    toast.info(
-      result.channel === "opencode"
-        ? `DX audit running in OpenCode — note at ${audit.notePath}.`
-        : `DX audit queued in the Agent tab — note at ${audit.notePath}.`,
-    );
+
   }
 
   async function cloneFromUrl() {
@@ -276,6 +257,5 @@ export function useReposActions(opts: {
     cloneFromUrl,
     initRepo,
     removeRepo,
-    launchClaudeDesktop,
   };
 }

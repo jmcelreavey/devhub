@@ -30,7 +30,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   if (!task) return NextResponse.json({ error: `Task ${taskId} not found on ${date}` }, { status: 404 });
 
   if (stage === "ready" && !force) {
-    const ready = await checkTaskImplementReady(task, date, { hardBlock: true });
+    const ready = await checkTaskImplementReady(task, date, { hardBlock: true, requirePlanSection: true });
     if (!ready.ok) {
       const gaps = ready.items.filter((item) => !item.ok);
       return NextResponse.json(

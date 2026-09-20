@@ -106,8 +106,8 @@ export function buildTutorSystemPrompt(context: RepoContext): string {
 
 export async function generateRepoLearnArtifacts(context: RepoContext): Promise<RepoLearnArtifacts> {
   const [briefResult, packResult] = await Promise.all([
-    generateAiText({ prompt: buildBriefPrompt(context) }),
-    generateAiText({ prompt: buildPackPrompt(context), maxOutputTokens: 4096 }),
+    generateAiText({ activity: { action: "Repository learning brief" }, prompt: buildBriefPrompt(context) }),
+    generateAiText({ activity: { action: "Repository learning pack" }, prompt: buildPackPrompt(context), maxOutputTokens: 4096 }),
   ]);
 
   const briefMarkdown = briefResult.text.trim();

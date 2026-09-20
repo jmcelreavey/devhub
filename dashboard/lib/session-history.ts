@@ -23,19 +23,48 @@ function hrefKey(href: string): string {
   return query ? `${trimmed}?${query}` : trimmed;
 }
 
+/**
+ * Crumb identity ignores query strings so `/agents?view=activity` and
+ * `/agents` collapse to one Agents entry (views share the same nav label).
+ */
+export function crumbKey(href: string): string {
+  const key = hrefKey(href);
+  const q = key.indexOf("?");
+  return q === -1 ? key : key.slice(0, q);
+}
+
+/**
+ * Session trail for hub breadcrumbs / palette. Unique by crumb path —
+ * revisiting Agents (any ?view=) moves that crumb to the end instead of
+ * stacking Agents › Agents › Agents.
+ */
 export function appendSessionHistory(
   history: readonly SessionHistoryEntry[],
   entry: SessionHistoryEntry,
   limit = LIMIT,
 ): SessionHistoryEntry[] {
   const href = hrefKey(entry.href);
-  const last = history.at(-1);
-  const back = history.at(-2);
-  if (back && hrefKey(back.href) === href) return history.slice(0, -1);
-  if (last && hrefKey(last.href) === href) {
-    return [...history.slice(0, -1), { ...last, ts: entry.ts }];
+  const key = crumbKey(href);
+  const without = history.filter((item) => crumbKey(item.href) !== key);
+  return [...without, { ...entry, href }].slice(-limit);
+}
+
+/** Unique crumb paths in visit order (last occurrence wins) — for HubTopBar. */
+export function uniqueSessionHistory(
+  history: readonly SessionHistoryEntry[],
+  limit = 5,
+): SessionHistoryEntry[] {
+  const seen = new Set<string>();
+  const out: SessionHistoryEntry[] = [];
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const item = history[i]!;
+    const key = crumbKey(item.href);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+    if (out.length >= limit) break;
   }
-  return [...history, { ...entry, href }].slice(-limit);
+  return out.reverse();
 }
 
 function emit(): void {

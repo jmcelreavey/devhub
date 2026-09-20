@@ -1,50 +1,48 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { AlertTriangle, Plus, ShieldCheck } from "lucide-react";
-import { EmptyState, FetchError, PageHeader } from "@/components";
-import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
-import { launchAgentJob } from "@/lib/agent-job";
-import {
-  ContextMenu,
-  RowMenuKebab,
-  useContextMenu,
-} from "@/components/shell/ContextMenu";
+import type { RepoInfo,ReposApiPayload } from "@/app/repos/types";
+import { EmptyState,FetchError,PageHeader } from "@/components";
 import { RepoGitWorkspace } from "@/components/repo-git/RepoGitWorkspace";
-import { useLive } from "@/lib/hooks/use-fetch";
-import { revalidateOwnedRepos } from "@/lib/ownership/owned-repos-swr";
-import { useToast } from "@/lib/hooks/use-toast";
-import { obligationCells } from "@/lib/ownership/obligations";
-import type { AttentionSummary } from "@/lib/ownership/obligations";
+import { useConfirm,usePrompt } from "@/components/shell/ConfirmDialog";
 import {
-  OWN_INDEX_FILTERS,
-  ownedCardMeta,
-  ownIndexFilterCounts,
-  presentOwnedIndex,
-  type OwnedIndexSignals,
-  type OwnIndexFilter,
-} from "@/lib/ownership/index-view";
-import type { ObligationTone, RepoObligations, ResolvedOwnedRepo } from "@/lib/ownership/types";
-import type { RepoInfo, ReposApiPayload } from "@/app/repos/types";
-import { copyTextAndToast } from "@/lib/pr-slack";
+ContextMenu,
+RowMenuKebab,
+useContextMenu,
+} from "@/components/shell/ContextMenu";
+import { launchAgentJob } from "@/lib/agent-job";
 import { openInBrowser } from "@/lib/desktop/bridge";
+import { useLive } from "@/lib/hooks/use-fetch";
+import { useToast } from "@/lib/hooks/use-toast";
 import { openRepoInCursor } from "@/lib/open-in-cursor-client";
 import {
-  agentRepoUpstartCommand,
-  agentSkillCommand,
-  openTerminal,
-  repoUpstartCommand,
-} from "@/lib/terminal-launch";
+OWN_INDEX_FILTERS,
+ownedCardMeta,
+ownIndexFilterCounts,
+presentOwnedIndex,
+type OwnedIndexSignals,
+type OwnIndexFilter,
+} from "@/lib/ownership/index-view";
+import type { AttentionSummary } from "@/lib/ownership/obligations";
+import { obligationCells } from "@/lib/ownership/obligations";
+import { revalidateOwnedRepos } from "@/lib/ownership/owned-repos-swr";
+import type { ObligationTone,RepoObligations,ResolvedOwnedRepo } from "@/lib/ownership/types";
+import { copyTextAndToast } from "@/lib/pr-slack";
 import {
-  buildOwnedRepoMenuGroups,
-  ownedRepoCatchUpHref,
-  ownedRepoCloneUrl,
-  ownedRepoGapsHref,
-  ownedRepoHref,
-  ownedRepoLearnHref,
-  ownedRepoPullsUrl,
+openTerminal,
+repoUpstartCommand
+} from "@/lib/terminal-launch";
+import { AlertTriangle,Plus,ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useMemo,useState } from "react";
+import {
+buildOwnedRepoMenuGroups,
+ownedRepoCatchUpHref,
+ownedRepoCloneUrl,
+ownedRepoGapsHref,
+ownedRepoHref,
+ownedRepoLearnHref,
+ownedRepoPullsUrl,
 } from "./owned-repo-menu";
 
 interface SummaryRow {
@@ -321,7 +319,7 @@ export function OwnRepoCard({
               label: `Upstart · ${clonedName}`,
               kind: "upstart",
               repoName: clonedName,
-              command: repoUpstartCommand(upstartPath),
+              command: repoUpstartCommand(upstartPath, clonedPath),
             });
           } else {
             await launchAgentJob({
@@ -329,8 +327,7 @@ export function OwnRepoCard({
               kind: "upstart",
               cwd: clonedPath,
               repoName: clonedName,
-              promptText: `Use devhub-repo-upstart. Create ${upstartPath} for ${clonedName} in the DevHub private store (not .devhub/ in the target repo). Must run nvm use if .nvmrc, refresh deps, and start dev env. Do not just print instructions. Exit; terminal runs the script with cwd=${clonedName}.`,
-              promptCommand: await agentRepoUpstartCommand(clonedName, upstartPath, trimmedContext),
+              promptText: `Use devhub-repo-upstart. Create ${upstartPath} for ${clonedName} in the DevHub private store (not .devhub/ in the target repo). Use nvm use if .nvmrc exists, refresh dependencies and prepare startup. Do not run the script; it requires the existing DevHub review before execution. Context: ${trimmedContext || "none"}`,
               mode: "oneshot",
               forceTerminal: true,
               alreadyConfirmed: true,
@@ -371,11 +368,6 @@ export function OwnRepoCard({
             cwd: clonedPath,
             repoName: clonedName,
             promptText: `Use the scope-creep-detector skill. ${instruction}`,
-            promptCommand: await agentSkillCommand(
-              "scope-creep-detector",
-              instruction,
-              "run scope-creep-detector",
-            ),
             mode: "oneshot",
             alreadyConfirmed: true,
             reason: `Scope creep · ${clonedName}`,

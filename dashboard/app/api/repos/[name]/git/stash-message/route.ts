@@ -26,7 +26,7 @@ export async function POST(_req: NextRequest, { params }: RepoParams) {
     return NextResponse.json({ error: "No changes to stash." }, { status: 400 });
   }
 
-  const model = getNotesAiModel();
+  const model = getNotesAiModel({ action: "Suggest a stash message" });
   if (!model) {
     return NextResponse.json(
       {

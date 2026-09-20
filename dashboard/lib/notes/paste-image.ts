@@ -3,7 +3,7 @@
  * Writes go through `POST /api/notes-assets`; this module shapes paths and FormData.
  */
 
-import { isImageAttach } from "@/lib/agent-attach";
+import { isImageAttach } from "@/lib/image-file";
 import { toNoteAssetApiUrl } from "@/lib/notes-assets/markdown";
 import { NOTE_ASSET_DIR_NAME } from "@/lib/notes/tree-sidebar-filter";
 

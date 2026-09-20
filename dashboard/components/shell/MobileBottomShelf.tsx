@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useMobileShelf } from "@/lib/hooks/use-mobile-shelf";
+import { CalendarDays,ChevronDown,ChevronUp,FileText,ListTodo,Menu,Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, FileText, Search, Menu, ChevronUp, ChevronDown, ListTodo } from "lucide-react";
-import { useMobileShelf } from "@/lib/hooks/use-mobile-shelf";
+import { useEffect } from "react";
 
 const SHELF_EXPANDED_H = 56;
 const SHELF_COLLAPSED_H = 24; // WCAG 2.5.8 AA minimum touch target
@@ -21,20 +21,20 @@ function openPalette() {
 
 export function MobileBottomShelf() {
   const pathname = usePathname();
-  // On /chamber the OpenChamber iframe owns the screen and the mobile top
+  // On /agents the chat workspace owns the screen and the mobile top
   // bar already carries the burger + quick actions, so the shelf is pure
   // overhead — drop it and reclaim its height for the iframe.
-  const isChamber = pathname === "/chamber";
+  const isAgents = pathname === "/agents";
   const { collapsed, toggle } = useMobileShelf(pathname);
 
-  const shelfH = isChamber ? 0 : collapsed ? SHELF_COLLAPSED_H : SHELF_EXPANDED_H;
+  const shelfH = isAgents ? 0 : collapsed ? SHELF_COLLAPSED_H : SHELF_EXPANDED_H;
 
-  // Expose --shelf-h so PersistentChamber / <main> padding can account for it.
+  // Expose --shelf-h so workspace padding can account for it.
   useEffect(() => {
     document.documentElement.style.setProperty("--shelf-h", `${shelfH}px`);
   }, [shelfH]);
 
-  if (isChamber) return null;
+  if (isAgents) return null;
 
   return (
     <div

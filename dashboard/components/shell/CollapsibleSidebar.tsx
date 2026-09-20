@@ -1,24 +1,23 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useSyncExternalStore } from "react";
-import { createPersistedBoolStore } from "@/lib/hooks/use-persisted-bool";
 import { NavLink } from "@/components/shell/NavLink";
-import { NavLaunchMenu } from "@/components/shell/NavLaunchMenu";
-import {
-  NAV_ITEMS,
-  NAV_GROUPS,
-  groupSidebarNav,
-  type NavItem,
-  type SetupGateStatus,
-} from "@/lib/nav";
-import { PLUGIN_NAV_ITEMS } from "@/lib/plugin-nav.generated";
 import { IconPicker } from "@/components/ui/IconPicker";
 import { BRAND_LABEL } from "@/lib/brand-mark";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useLive } from "@/lib/hooks/use-fetch";
-import { useNavBadges, countForItem, unseenForItem, type NavBadges } from "@/lib/hooks/use-nav-badges";
 import { useClientMounted } from "@/lib/hooks/use-client-mounted";
+import { useLive } from "@/lib/hooks/use-fetch";
+import { countForItem,unseenForItem,useNavBadges,type NavBadges } from "@/lib/hooks/use-nav-badges";
+import { createPersistedBoolStore } from "@/lib/hooks/use-persisted-bool";
+import {
+NAV_GROUPS,
+NAV_ITEMS,
+groupSidebarNav,
+type NavItem,
+type SetupGateStatus,
+} from "@/lib/nav";
+import { PLUGIN_NAV_ITEMS } from "@/lib/plugin-nav.generated";
+import { ChevronLeft,ChevronRight } from "lucide-react";
+import Link from "next/link";
+import { useEffect,useMemo,useSyncExternalStore } from "react";
 
 const STORAGE_KEY = "sidebar-collapsed";
 const usePersistedBool = createPersistedBoolStore("devhub:sidebar-storage");
@@ -176,22 +175,6 @@ function NavSection({
         const link = (
           <NavLink item={item} collapsed={collapsed} count={count} unseen={hasUnseen} />
         );
-        if (
-          !collapsed &&
-          (item.icon === "chamber" ||
-            item.icon === "opencode" ||
-            item.icon === "claude" ||
-            item.icon === "cursor" ||
-            item.icon === "chatgpt" ||
-            item.icon === "antigravity")
-        ) {
-          return (
-            <div key={item.href} style={{ position: "relative" }}>
-              {link}
-              <NavLaunchMenu icon={item.icon} label={item.label} />
-            </div>
-          );
-        }
         return <div key={item.href}>{link}</div>;
       })}
     </div>

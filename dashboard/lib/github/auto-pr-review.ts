@@ -2,23 +2,25 @@
  * Auto agent-review for review-requested PRs (P0).
  *
  * Selection is pure and unit-tested. Starting a review uses the same prompt /
- * note path as the UI "Review with agent" action, via OpenCode
- * (`/api/agent/run` seam) — never posts a GitHub review comment.
+ * note path as the UI "Review with agent" action, on the default AI provider
+ * (`startBackgroundAgent`) — never posts a GitHub review comment.
  */
-import { ensureDevHubOpenCode } from "@/lib/opencode/listen";
-import { agentReviewPrompt } from "@/lib/pr-review-prompt";
-import { prNotePath } from "@/lib/pr-note";
-import { reviewNotePathForPr } from "@/lib/github/review-requested-sort";
-import { fetchMyGithubPrs, readGithubPrsListCache, type GithubPrRow } from "@/lib/github/prs";
-import { fetchPrState } from "@/lib/github/pr-state";
+import { startBackgroundAgent } from "@/lib/agent-runs/background";
+import { readAgentRun } from "@/lib/agent-runs/store";
 import {
-  getAutoPrReviewRecord,
-  isSameReviewedHead,
-  pruneStaleAutoPrReviews,
-  recordAutoPrReviewStart,
-  type AutoPrReviewRecord,
+getAutoPrReviewRecord,
+wasAlreadyAutoReviewed,
+pruneStaleAutoPrReviews,
+recordAutoPrReviewStart,
+type AutoPrReviewRecord,
 } from "@/lib/github/auto-pr-review-state";
+import { fetchPrState } from "@/lib/github/pr-state";
+import { fetchMyGithubPrs,readGithubPrsListCache,type GithubPrRow } from "@/lib/github/prs";
+import { reviewNotePathForPr } from "@/lib/github/review-requested-sort";
+import { getNotesDir } from "@/lib/notes/dir";
 import { pMap } from "@/lib/p-limit";
+import { prNotePath } from "@/lib/pr-note";
+import { agentReviewPrompt, agentReviewSessionTitle } from "@/lib/pr-review-prompt";
 
 export type AutoReviewSkipReason =
   | "draft"
@@ -39,7 +41,10 @@ export interface AutoReviewStarted {
   number: number;
   url: string;
   notePath: string;
-  sessionId: string;
+  /** Agent run id (CLI providers). */
+  runId?: string;
+  /** OpenCode session id. */
+  sessionId?: string;
   updatedAt?: string;
 }
 
@@ -135,7 +140,9 @@ export function selectAutoReviewCandidates(input: SelectAutoReviewInput): {
 
     const updatedAt = row.updatedAt ?? "";
     const prior = priorByUrl.get(row.url);
-    if (prior && isSameReviewedHead(prior, row)) {
+    // Once started for this PR URL, never auto-review again (pushes included).
+    // Failed runs are omitted from priorByUrl by runAutoPrReview so they can retry.
+    if (wasAlreadyAutoReviewed(prior)) {
       skipped.push(skipEntry(row, "already-reviewed-head"));
       continue;
     }
@@ -178,52 +185,45 @@ export function autoReviewConcurrency(raw: string | undefined = process.env.DEVH
   return Math.max(1, Math.min(n, 2));
 }
 
-function opencodeHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  };
-  const password = process.env.OPENCODE_SERVER_PASSWORD?.trim();
-  if (password) {
-    headers.Authorization = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
-  }
-  return headers;
+/** A failed run is retried on later ticks until it has been tried this often. */
+export const MAX_AUTO_REVIEW_ATTEMPTS = 3;
+
+/**
+ * Start one review on the default AI provider — same prompt/note path as UI
+ * Review with agent. Does not post GitHub review comments.
+ */
+export async function startPrReviewAgent(opts: {
+  row: GithubPrRow;
+  notePath: string;
+}): Promise<{ runId?: string; sessionId?: string }> {
+  const prior = getAutoPrReviewRecord(opts.row.url);
+  const attempt = prior && shouldRetryAutoReview(prior) ? (prior.attempts ?? 1) + 1 : prior ? prior.attempts ?? 1 : 1;
+  const title = agentReviewSessionTitle(opts.row);
+  const prompt = agentReviewPrompt(opts.row.url, opts.notePath, title);
+  const started = await startBackgroundAgent({
+    prompt: `${prompt}\n\n(Write results via notes MCP to path: ${opts.notePath})`,
+    title,
+    cwd: getNotesDir(),
+    unattendedReason: "auto PR review is switched on",
+    requestId: `pr-review:${opts.row.url}:${attempt}`,
+    activity: { source: "auto-review", action: "pr-review", prUrl: opts.row.url, headSha: opts.row.headSha, repoName: opts.row.repo, notePath: opts.notePath },
+  });
+  return { runId: started.runId };
 }
 
 /**
- * Start one OpenCode review session — same prompt/note path as UI Review with agent.
- * Does not post GitHub review comments.
+ * A prior start whose agent run failed or was cancelled doesn't count as a
+ * review — let it retry, up to MAX_AUTO_REVIEW_ATTEMPTS. Runs pruned from disk
+ * (finished > 3 days ago) count as done.
  */
-export async function startOpenCodePrReview(opts: {
-  row: GithubPrRow;
-  notePath: string;
-}): Promise<{ sessionId: string }> {
-  const prompt = agentReviewPrompt(opts.row.url, opts.notePath);
-  const text = `${prompt}\n\n(Write results via notes MCP to path: ${opts.notePath})`;
-  const title = `Review PR #${opts.row.number}`.slice(0, 80);
-  const base = `http://127.0.0.1:${await ensureDevHubOpenCode()}`;
-  const headers = opencodeHeaders();
-
-  const sessionRes = await fetch(`${base}/session`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ title }),
-  });
-  if (!sessionRes.ok) {
-    throw new Error(`OpenCode session create failed (${sessionRes.status})`);
-  }
-  const session = (await sessionRes.json()) as { id?: string };
-  if (!session.id) throw new Error("OpenCode returned no session id");
-
-  const promptRes = await fetch(`${base}/session/${session.id}/prompt_async`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ parts: [{ type: "text", text }] }),
-  });
-  if (!promptRes.ok && promptRes.status !== 204) {
-    throw new Error(`OpenCode prompt failed (${promptRes.status})`);
-  }
-  return { sessionId: session.id };
+export function shouldRetryAutoReview(
+  record: Pick<AutoPrReviewRecord, "runId" | "attempts">,
+  readRun: typeof readAgentRun = readAgentRun,
+): boolean {
+  if (!record.runId) return false;
+  if ((record.attempts ?? 1) >= MAX_AUTO_REVIEW_ATTEMPTS) return false;
+  const state = readRun(record.runId)?.status.state;
+  return state === "failed" || state === "cancelled";
 }
 
 export interface RunAutoPrReviewOptions {
@@ -239,7 +239,9 @@ export interface RunAutoPrReviewOptions {
   concurrency?: number;
   allowlist?: ReadonlySet<string> | null;
   /** Injected for tests. */
-  startReview?: typeof startOpenCodePrReview;
+  startReview?: typeof startPrReviewAgent;
+  /** Injected for tests. */
+  retryFailed?: (record: AutoPrReviewRecord) => boolean;
 }
 
 /**
@@ -253,11 +255,12 @@ export async function runAutoPrReview(opts: RunAutoPrReviewOptions): Promise<Aut
 
   await pruneStaleAutoPrReviews(opts.reviews);
 
+  const retryFailed = opts.retryFailed ?? ((record: AutoPrReviewRecord) => shouldRetryAutoReview(record));
   const priorByUrl = new Map(
     opts.reviews
       .map((r) => {
         const rec = getAutoPrReviewRecord(r.url);
-        return rec ? ([r.url, rec] as const) : null;
+        return rec && !retryFailed(rec) ? ([r.url, rec] as const) : null;
       })
       .filter((x): x is readonly [string, AutoPrReviewRecord] => x !== null),
   );
@@ -307,7 +310,7 @@ export async function runAutoPrReview(opts: RunAutoPrReviewOptions): Promise<Aut
     };
   }
 
-  const startReview = opts.startReview ?? startOpenCodePrReview;
+  const startReview = opts.startReview ?? startPrReviewAgent;
   const started: AutoReviewStarted[] = [];
   const errors: AutoReviewError[] = [];
 
@@ -315,7 +318,7 @@ export async function runAutoPrReview(opts: RunAutoPrReviewOptions): Promise<Aut
   await pMap(toStart, concurrency, async (candidate) => {
     const { row, notePath } = candidate;
     try {
-      const { sessionId } = await startReview({ row, notePath });
+      const { runId, sessionId } = await startReview({ row, notePath });
       await recordAutoPrReviewStart({
         url: row.url,
         updatedAt: row.updatedAt ?? "",
@@ -323,6 +326,7 @@ export async function runAutoPrReview(opts: RunAutoPrReviewOptions): Promise<Aut
         repo: row.repo,
         number: row.number,
         title: row.title,
+        runId,
         sessionId,
         notePath,
       });
@@ -331,6 +335,7 @@ export async function runAutoPrReview(opts: RunAutoPrReviewOptions): Promise<Aut
         number: row.number,
         url: row.url,
         notePath,
+        runId,
         sessionId,
         updatedAt: row.updatedAt,
       });

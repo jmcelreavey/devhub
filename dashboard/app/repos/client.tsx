@@ -1,29 +1,29 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { AlertCircle, Folder, Plus, RefreshCw } from "lucide-react";
-import { useLive } from "@/lib/hooks/use-fetch";
-import { revalidateRepoOpenPrs } from "@/lib/github/repo-open-pr-swr";
-import { revalidateOwnedRepos } from "@/lib/ownership/owned-repos-swr";
-import { FetchError } from "@/components/ui/FetchError";
-import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
-import {
-  EmptyReposCard,
-  GithubRepoCard,
-  LocalRepoCard,
-  SearchCard,
-  SectionHeader,
-} from "./cards";
-import { LearnPanel } from "./LearnPanel";
-import { EvolutionStrip } from "./EvolutionStrip";
-import { useReposActions } from "./useReposActions";
-import { useToast } from "@/lib/hooks/use-toast";
-import { usePrompt } from "@/components/shell/ConfirmDialog";
 import OwnIndex from "@/app/own/client";
-import type { GithubReposApiPayload, LocalRepoFilter, RepoInfo, ReposApiPayload } from "./types";
+import { usePrompt } from "@/components/shell/ConfirmDialog";
+import { BootScreen,useBootGate } from "@/components/today/TodayBootScreen";
+import { FetchError } from "@/components/ui/FetchError";
+import { revalidateRepoOpenPrs } from "@/lib/github/repo-open-pr-swr";
+import { useLive } from "@/lib/hooks/use-fetch";
+import { useToast } from "@/lib/hooks/use-toast";
+import { revalidateOwnedRepos } from "@/lib/ownership/owned-repos-swr";
 import type { ResolvedOwnedRepo } from "@/lib/ownership/types";
 import type { RepoProject } from "@/lib/projects";
+import { AlertCircle,Folder,Plus,RefreshCw } from "lucide-react";
+import { usePathname,useRouter,useSearchParams } from "next/navigation";
+import { useEffect,useMemo,useRef,useState } from "react";
+import {
+EmptyReposCard,
+GithubRepoCard,
+LocalRepoCard,
+SearchCard,
+SectionHeader,
+} from "./cards";
+import { EvolutionStrip } from "./EvolutionStrip";
+import { LearnPanel } from "./LearnPanel";
+import type { GithubReposApiPayload,LocalRepoFilter,RepoInfo,ReposApiPayload } from "./types";
+import { useReposActions } from "./useReposActions";
 
 function parseGithubFetchErrorMessage(error: unknown): string {
   if (!(error instanceof Error)) return "Couldn’t load GitHub repos.";
@@ -403,7 +403,6 @@ export default function ReposPage() {
               onRevealFolder={(name) => actions.openInFolder(name, apps?.revealLabel ?? "folder")}
               onGitKraken={actions.openInGitKraken}
               onCursor={actions.openInCursor}
-              onClaudeDesktop={actions.launchClaudeDesktop}
               onRemove={actions.removeRepo}
               onRefreshLocal={() => {
                 void mutateLocal();

@@ -1,27 +1,24 @@
-import { NextResponse } from "next/server";
-import { ensureDevHubOpenCode } from "@/lib/opencode/listen";
+import { startBackgroundAgent } from "@/lib/agent-runs/background";
+import { parseBody, withErrorHandler } from "@/lib/api-utils";
+import { z } from "zod";
 import {
-  buildDatadogInvestigationPrompt,
-  type DatadogInvestigationInput,
+buildDatadogInvestigationPrompt,
+type DatadogInvestigationInput,
 } from "@/lib/datadog/investigation-prompt";
-import { withErrorHandler } from "@/lib/api-utils";
+import { getNotesDir } from "@/lib/notes/dir";
+import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
-
-function opencodeHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  };
-  const password = process.env.OPENCODE_SERVER_PASSWORD?.trim();
-  if (password) {
-    headers.Authorization = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
-  }
-  return headers;
-}
+const Input = z.object({
+  prepare: z.boolean().optional(), scope: z.enum(["oncall", "team", "general"]).default("general"),
+  title: z.string().max(1000).optional(), status: z.string().max(1000).optional(),
+  tags: z.array(z.string().max(200)).max(100).optional(), timestampMs: z.number().finite().optional(),
+});
 
 export const POST = withErrorHandler(async (req: Request) => {
-  const body = (await req.json().catch(() => ({}))) as Partial<DatadogInvestigationInput>;
+  const parsed = await parseBody(req, Input);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
   const scope: DatadogInvestigationInput["scope"] =
     body.scope === "oncall" || body.scope === "team" ? body.scope : "general";
 
@@ -33,46 +30,23 @@ export const POST = withErrorHandler(async (req: Request) => {
     timestampMs: typeof body.timestampMs === "number" ? body.timestampMs : undefined,
   });
 
-  const base = `http://127.0.0.1:${await ensureDevHubOpenCode()}`;
-  const headers = opencodeHeaders();
-  const title = `Datadog: ${body.title ? body.title.slice(0, 60) : scope}`;
-
   try {
-    const sessionRes = await fetch(`${base}/session`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ title }),
+    if (body.prepare === true) return NextResponse.json({ ok: true, prompt, title: `Datadog: ${typeof body.title === "string" ? body.title.slice(0, 60) : scope}`, cwd: getNotesDir() });
+    const started = await startBackgroundAgent({
+      prompt,
+      title: `Datadog: ${body.title ? body.title.slice(0, 60) : scope}`,
+      cwd: getNotesDir(),
+      activity: { source: "investigation", action: "datadog" },
     });
-    if (!sessionRes.ok) {
-      return NextResponse.json(
-        { ok: false, error: `OpenCode session create failed (${sessionRes.status})` },
-        { status: 502 },
-      );
-    }
-    const session = (await sessionRes.json()) as { id?: string };
-    if (!session.id) {
-      return NextResponse.json({ ok: false, error: "OpenCode returned no session id" }, { status: 502 });
-    }
-
-    const promptRes = await fetch(`${base}/session/${session.id}/prompt_async`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ parts: [{ type: "text", text: prompt }] }),
+    return NextResponse.json({
+      ok: true,
+      providerLabel: started.providerLabel,
+      runId: started.runId,
+      conversationId: started.conversationId,
     });
-    if (!promptRes.ok && promptRes.status !== 204) {
-      return NextResponse.json(
-        { ok: false, error: `OpenCode prompt failed (${promptRes.status})`, sessionId: session.id },
-        { status: 502 },
-      );
-    }
-
-    return NextResponse.json({ ok: true, sessionId: session.id });
   } catch (e) {
     return NextResponse.json(
-      {
-        ok: false,
-        error: e instanceof Error ? e.message : "Could not reach OpenCode.",
-      },
+      { ok: false, error: e instanceof Error ? e.message : "Could not start the investigation agent." },
       { status: 502 },
     );
   }

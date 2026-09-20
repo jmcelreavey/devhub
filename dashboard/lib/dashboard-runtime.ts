@@ -102,6 +102,21 @@ export function readDashboardRuntime(file = dashboardRuntimePath()): DashboardRu
   }
 }
 
+/**
+ * Is this process the dashboard agents are pointed at? Background work that
+ * hands off to the terminal dock (auto PR review) must run there: proposals
+ * live in one server's memory, and a second dashboard nobody has open queues
+ * work that never starts. No file, or a dead advertiser, means nobody else owns it.
+ */
+export function isAdvertisedDashboard(
+  file = dashboardRuntimePath(),
+  pid: number = process.pid,
+): boolean {
+  const info = readDashboardRuntime(file);
+  if (!info || info.pid === pid) return true;
+  return !isRuntimeAlive(info);
+}
+
 /** Is the advertised process still alive? A crashed server leaves its file behind. */
 export function isRuntimeAlive(info: DashboardRuntimeInfo): boolean {
   if (!info.pid) return false;

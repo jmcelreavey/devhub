@@ -14,7 +14,7 @@ import { isGithubCliAuthenticated, mapGithubCliError } from "@/lib/gh-exec";
 import {
   pipelineInvestigateNotePath,
   rerunFailedChecksForPr,
-  startOpenCodePipelineInvestigate,
+  startPipelineInvestigateAgent,
 } from "@/lib/github/pipeline-investigate";
 import { agentPipelineInvestigatePrompt } from "@/lib/pr-pipeline-prompt";
 
@@ -88,7 +88,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       }
     }
 
-    const started = await startOpenCodePipelineInvestigate({ row, notePath });
+    const started = await startPipelineInvestigateAgent({ row, notePath });
     return NextResponse.json({
       configured: true,
       dryRun: false,
@@ -96,7 +96,9 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         repo,
         number,
         url,
+        runId: started.runId,
         sessionId: started.sessionId,
+        providerLabel: started.providerLabel,
         notePath: started.notePath,
       },
       rerun,

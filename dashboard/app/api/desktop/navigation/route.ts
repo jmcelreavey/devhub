@@ -1,11 +1,12 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { z } from "zod";
-import { parseBody, requireDashboardAuth, withErrorHandler } from "@/lib/api-utils";
+import { parseBody,requireDashboardAuth,withErrorHandler } from "@/lib/api-utils";
 import {
-  publishDesktopNavigation,
-  subscribeToDesktopNavigation,
-  type DesktopNavigation,
+publishDesktopNavigation,
+subscribeToDesktopNavigation,
+type DesktopNavigation,
 } from "@/lib/desktop/navigation";
+import { hasBrowserNavigationIntent } from "@/lib/desktop/navigation-intent";
+import { NextResponse,type NextRequest } from "next/server";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,10 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   if (!auth.ok) return auth.response;
   const parsed = await parseBody(req, NavigationSchema);
   if (!parsed.ok) return parsed.response;
+
+  if (!hasBrowserNavigationIntent(req.headers)) {
+    return NextResponse.json({ delivered: 0, suppressed: true, href: parsed.data.href });
+  }
 
   const delivered = publishDesktopNavigation(parsed.data);
   if (delivered === 0) {

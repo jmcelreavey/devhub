@@ -6,11 +6,11 @@
  * keeps the tab list + session ids so the UI can reattach.
  */
 
-import {
-  parseTerminalSessionKind,
-  type TerminalSessionKind,
-} from "@/lib/terminal-meta";
 import { isDestructiveTerminalCommand } from "@/lib/terminal-inject";
+import {
+parseTerminalSessionKind,
+type TerminalSessionKind,
+} from "@/lib/terminal-meta";
 
 export const TERMINAL_DOCK_STORAGE_KEY = "devhub:terminal-dock.v1";
 
@@ -357,4 +357,44 @@ export function shouldFallBackToRawView(opts: {
   if (age <= (opts.longRunningMs ?? LONG_RUNNING_MS)) return false;
   const provenShell = opts.blocks.some((b) => !b.pending);
   return provenShell || age > (opts.unprovenGraceMs ?? UNPROVEN_SHELL_GRACE_MS);
+}
+
+export interface TerminalPopoutSize {
+  w: number;
+  h: number;
+}
+
+export function readTerminalPopoutSize(): TerminalPopoutSize | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem("devhub:terminal-popout-size");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<TerminalPopoutSize>;
+    const w = typeof parsed.w === "number" && parsed.w >= 360 ? parsed.w : null;
+    const h = typeof parsed.h === "number" && parsed.h >= 280 ? parsed.h : null;
+    if (w == null || h == null) return null;
+    return { w, h };
+  } catch {
+    return null;
+  }
+}
+
+export function writeTerminalPopoutSize(size: TerminalPopoutSize): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      "devhub:terminal-popout-size",
+      JSON.stringify({
+        w: Math.round(Math.min(Math.max(size.w, 360), 1600)),
+        h: Math.round(Math.min(Math.max(size.h, 280), 1400)),
+      }),
+    );
+  } catch {
+    /* private mode / quota */
+  }
+}
+
+/** Terminal proposals always target a real shell. */
+export function injectKindForPropose(opts: { kind?: import("./terminal-meta").TerminalSessionKind; source?: string }): import("./terminal-meta").TerminalSessionKind {
+  return opts.kind === "agent" || opts.kind === "review" ? "shell" : opts.kind ?? "shell";
 }

@@ -1,23 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Bot, Check, Play, RefreshCw, Trash2, X } from "lucide-react";
 import { useConfirm } from "@/components/shell/ConfirmDialog";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
-import {
-  parseConflictHunks,
-  resolveConflictHunk,
-  type ConflictChoice,
-} from "@/lib/git/conflict-markers";
-import { useToast } from "@/lib/hooks/use-toast";
 import { launchAgentJob } from "@/lib/agent-job";
 import {
-  agentStashConflictCommand,
-  agentStashConflictPrompt,
-} from "@/lib/terminal-launch";
-import { fetchGitJson, postGitAction, repoApi } from "./shared";
-import { GitDiffView } from "./GitDiffView";
+parseConflictHunks,
+resolveConflictHunk,
+type ConflictChoice,
+} from "@/lib/git/conflict-markers";
+import { useToast } from "@/lib/hooks/use-toast";
 import type { DiffLine } from "@/lib/repos/git-parsers";
+import {
+agentStashConflictPrompt
+} from "@/lib/terminal-launch";
+import { AlertTriangle,Bot,Check,Play,RefreshCw,Trash2,X } from "lucide-react";
+import { useCallback,useEffect,useMemo,useState } from "react";
+import { GitDiffView } from "./GitDiffView";
+import { fetchGitJson,postGitAction,repoApi } from "./shared";
 
 interface ConflictItem {
   path: string;
@@ -167,7 +166,6 @@ export function ConflictsPanel({
       cwd: repoPath,
       repoName,
       promptText: agentStashConflictPrompt(opts),
-      promptCommand: await agentStashConflictCommand(opts),
       mode: "interactive",
       forceTerminal: true,
       alreadyConfirmed: true,

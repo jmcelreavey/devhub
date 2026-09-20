@@ -1,37 +1,82 @@
 "use client";
 
-import Link from "next/link";
+import type { ReactNode } from "react";
 import { AlertTriangle, Check, Circle } from "lucide-react";
 import type { ImplementReadyItem, ImplementReadyResult } from "@/lib/tasks/implement-ready";
-
-const HARD_BLOCK_KEY = "devhub:implement-ready-hard-block";
-
-export function readLocalImplementHardBlock(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(HARD_BLOCK_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-export function writeLocalImplementHardBlock(value: boolean): void {
-  try {
-    window.localStorage.setItem(HARD_BLOCK_KEY, value ? "1" : "0");
-  } catch {
-    // private mode / quota
-  }
-}
 
 export type ImplementReadyApiResponse = ImplementReadyResult & {
   taskId: string;
   date: string;
   notePath: string;
+  noteExists: boolean;
   repoIds: string[];
   prefsHardBlock: boolean;
 };
 
-function ItemRow({ item }: { item: ImplementReadyItem }) {
+export interface ImplementReadyActions {
+  /** Leave the dialog for an in-app page (note, prerequisite task). */
+  onNavigate: (href: string) => void;
+  onOpenNote: () => void;
+  onGeneratePlan: () => void;
+  onCreateNote: () => void;
+  /** Open the link picker; `replace` swaps the current repo links instead of adding. */
+  onLinkRepo: (replace: boolean) => void;
+  creatingNote: boolean;
+  planRunning: boolean;
+}
+
+function ActionButton({ onClick, disabled, children }: { onClick: () => void; disabled?: boolean; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      className="text-accent underline-offset-2 hover:underline disabled:opacity-50 disabled:no-underline"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function itemActions(
+  item: ImplementReadyItem,
+  ready: ImplementReadyApiResponse,
+  repoIds: string[],
+  actions: ImplementReadyActions,
+): ReactNode {
+  if (item.id === "acceptance") {
+    if (ready.noteExists) return <ActionButton onClick={actions.onOpenNote}>Open task note</ActionButton>;
+    if (item.ok) return null;
+    return (
+      <>
+        <ActionButton onClick={actions.onGeneratePlan} disabled={actions.planRunning}>
+          {actions.planRunning ? "Plan agent running…" : "Generate plan"}
+        </ActionButton>
+        <ActionButton onClick={actions.onCreateNote} disabled={actions.creatingNote}>
+          {actions.creatingNote ? "Creating…" : "Create blank note"}
+        </ActionButton>
+        <ActionButton onClick={actions.onOpenNote}>Open task note</ActionButton>
+      </>
+    );
+  }
+  if (item.id === "repo") {
+    return repoIds.length > 0 ? (
+      <ActionButton onClick={() => actions.onLinkRepo(true)}>Change repo</ActionButton>
+    ) : (
+      <ActionButton onClick={() => actions.onLinkRepo(false)}>Link repo</ActionButton>
+    );
+  }
+  if (!item.ok && item.fixHref) {
+    const href = item.fixHref;
+    return <ActionButton onClick={() => actions.onNavigate(href)}>{item.fixLabel ?? "Fix"}</ActionButton>;
+  }
+  return null;
+}
+
+function ItemRow({ item, children }: { item: ImplementReadyItem; children: ReactNode }) {
   return (
     <li className="flex items-start gap-2 text-xs">
       {item.ok ? (
@@ -42,15 +87,7 @@ function ItemRow({ item }: { item: ImplementReadyItem }) {
       <span className="min-w-0">
         <span className="font-medium text-text">{item.label}</span>
         {item.detail ? <span className="block text-text-muted">{item.detail}</span> : null}
-        {!item.ok && item.fixHref ? (
-          <Link
-            href={item.fixHref}
-            className="mt-0.5 inline-block text-accent underline-offset-2 hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {item.fixLabel ?? "Fix"}
-          </Link>
-        ) : null}
+        {children ? <span className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">{children}</span> : null}
       </span>
     </li>
   );
@@ -62,18 +99,15 @@ export function ImplementReadyPanel({
   repoIds,
   selectedRepoId,
   onSelectRepo,
-  hardBlockLocal,
-  onHardBlockLocal,
+  actions,
 }: {
   loading: boolean;
   ready: ImplementReadyApiResponse | null;
   repoIds: string[];
   selectedRepoId: string | null;
   onSelectRepo: (id: string) => void;
-  hardBlockLocal: boolean;
-  onHardBlockLocal: (value: boolean) => void;
+  actions: ImplementReadyActions;
 }) {
-  const effectiveHardBlock = Boolean(ready?.hardBlock || hardBlockLocal);
   const showWarn = ready && !ready.ok;
 
   return (
@@ -82,19 +116,9 @@ export function ImplementReadyPanel({
       style={{ border: "1px solid var(--border-muted)", background: "var(--bg-elevated)" }}
       aria-label="Implement ready checklist"
     >
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-xs font-medium text-text">
-          {showWarn ? <AlertTriangle size={12} className="text-amber-500" aria-hidden /> : null}
-          Ready to implement
-        </span>
-        <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-text-muted">
-          <input
-            type="checkbox"
-            checked={effectiveHardBlock}
-            onChange={(e) => onHardBlockLocal(e.target.checked)}
-          />
-          Hard-block Launch
-        </label>
+      <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-text">
+        {showWarn ? <AlertTriangle size={12} className="text-amber-500" aria-hidden /> : null}
+        Ready to implement
       </div>
 
       {loading && !ready ? (
@@ -102,7 +126,9 @@ export function ImplementReadyPanel({
       ) : ready ? (
         <ul className="grid gap-2">
           {ready.items.map((item) => (
-            <ItemRow key={item.id} item={item} />
+            <ItemRow key={item.id} item={item}>
+              {itemActions(item, ready, repoIds, actions)}
+            </ItemRow>
           ))}
         </ul>
       ) : (
@@ -127,12 +153,7 @@ export function ImplementReadyPanel({
         </fieldset>
       ) : null}
 
-      {showWarn && !effectiveHardBlock ? (
-        <p className="mt-2 text-[11px] text-text-muted">Warnings only — Launch stays available.</p>
-      ) : null}
-      {showWarn && effectiveHardBlock ? (
-        <p className="mt-2 text-[11px] text-amber-600">Hard-block on — fix the items above to Launch.</p>
-      ) : null}
+      {showWarn ? <p className="mt-2 text-[11px] text-text-muted">Warnings only — Launch stays available.</p> : null}
     </section>
   );
 }

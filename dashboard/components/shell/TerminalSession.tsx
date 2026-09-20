@@ -159,6 +159,7 @@ interface SessionProps {
   fontSize?: number;
   onStatus?: (status: Status) => void;
   onSessionId?: (sessionId: string | null) => void;
+  onCwd?: (cwd: string) => void;
   onBusy?: (busy: boolean) => void;
   onExitCode?: (code: number) => void;
   onReattached?: (reattached: boolean) => void;
@@ -208,6 +209,7 @@ export function TerminalSession({
   fontSize = TERMINAL_FONT_SIZE_DEFAULT,
   onStatus,
   onSessionId,
+  onCwd,
   onBusy,
   onExitCode,
   onReattached,
@@ -241,6 +243,7 @@ export function TerminalSession({
   } | null>(null);
   const onStatusRef = useLatestRef(onStatus);
   const onSessionIdRef = useLatestRef(onSessionId);
+  const onCwdRef = useLatestRef(onCwd);
   const onBusyRef = useLatestRef(onBusy);
   const onExitCodeRef = useLatestRef(onExitCode);
   const onReattachedRef = useLatestRef(onReattached);
@@ -825,6 +828,7 @@ export function TerminalSession({
             const ctl = JSON.parse(event.data) as {
               type?: string;
               sessionId?: string;
+              cwd?: string;
               reattached?: boolean;
               exitCode?: number;
               integrated?: boolean;
@@ -832,6 +836,7 @@ export function TerminalSession({
             if (ctl.type === "session" && typeof ctl.sessionId === "string") {
               sessionIdRef.current = ctl.sessionId;
               onSessionIdRef.current?.(ctl.sessionId);
+              if (typeof ctl.cwd === "string" && ctl.cwd.startsWith("/")) onCwdRef.current?.(ctl.cwd);
               shellIntegrationExpected = ctl.integrated === true;
               if (ctl.integrated) serverIntegrated = true;
               else markShellReady();

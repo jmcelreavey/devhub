@@ -38,6 +38,12 @@ export interface ImplementReadyInput {
   hubRepoId?: string | null;
   openPrerequisiteBlockers: OpenPrerequisiteBlocker[];
   hardBlock: boolean;
+  /**
+   * The Implement dialog counts an existing task note as the plan (you wrote or
+   * generated it; the agent reads it either way). Stage → ready sets this so
+   * only a real Plan / Acceptance section passes.
+   */
+  requirePlanSection?: boolean;
   notePath?: string;
   taskDate?: string;
 }
@@ -142,29 +148,35 @@ export function evaluateImplementReady(input: ImplementReadyInput): ImplementRea
         ? repoIds[0]!
         : null;
 
-  const hasAcceptance =
-    noteHasPlanOrAcceptanceSection(input.noteMarkdown) ||
-    jiraDescriptionHasContent(input.jiraDescriptionText);
+  const hasPlanSection = noteHasPlanOrAcceptanceSection(input.noteMarkdown);
+  const hasJiraDescription = jiraDescriptionHasContent(input.jiraDescriptionText);
+  const noteExists = input.noteMarkdown !== null;
+  const noteHref = input.notePath && noteExists ? `/notes/${input.notePath}` : undefined;
 
-  const acceptance: ImplementReadyItem = hasAcceptance
-    ? {
-        id: "acceptance",
-        ok: true,
-        label: "Acceptance / plan",
-        detail: noteHasPlanOrAcceptanceSection(input.noteMarkdown)
-          ? "Task note has a Plan or Acceptance section"
-          : "Jira description present",
-      }
-    : {
-        id: "acceptance",
-        ok: false,
-        label: "Acceptance / plan",
-        detail: input.hasJiraKey
-          ? "Add a Jira description or a ## Plan / ## Acceptance section in the task note"
-          : "Add a ## Plan or ## Acceptance section in the task note",
-        fixHref: input.notePath ? `/notes/${input.notePath}` : undefined,
-        fixLabel: input.notePath ? "Open task note" : undefined,
-      };
+  const acceptance: ImplementReadyItem =
+    hasPlanSection || hasJiraDescription || (noteExists && !input.requirePlanSection)
+      ? {
+          id: "acceptance",
+          ok: true,
+          label: "Acceptance / plan",
+          detail: hasPlanSection
+            ? "Task note has a Plan or Acceptance section"
+            : hasJiraDescription
+              ? "Jira description present"
+              : "Task note exists",
+          fixHref: noteHref,
+          fixLabel: noteHref ? "Open task note" : undefined,
+        }
+      : {
+          id: "acceptance",
+          ok: false,
+          label: "Acceptance / plan",
+          detail: input.hasJiraKey
+            ? "Add a Jira description or a ## Plan / ## Acceptance section in the task note"
+            : "Add a ## Plan or ## Acceptance section in the task note",
+          fixHref: noteHref,
+          fixLabel: noteHref ? "Open task note" : undefined,
+        };
 
   const openQuestions = noteOpenQuestions(input.noteMarkdown);
   const questions: ImplementReadyItem =

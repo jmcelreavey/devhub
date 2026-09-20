@@ -54,6 +54,7 @@ export const TOOL_DIRS: Record<string, string> = {
   // (that folder is Cursor's internal builtins and must not be a sync target).
   agents: ".agents/skills",
   antigravity: ".gemini/config/skills",
+  aionui: ".local/share/devhub/aionui/data/skills",
   "ai-skills": ".ai-skills",
   "config-ai": ".config/ai/skills",
 };
@@ -204,6 +205,12 @@ function blockedVendorSkillNames(
   return blocked;
 }
 
+/** Low-use vendored skills kept in-repo for provenance/evals but not synced to tools by default. */
+const DEFAULT_SYNC_EXCLUDE_SKILLS = [
+  "project-graveyard",
+  "scope-creep-detector",
+] as const;
+
 export async function syncSkills(opts: SyncSkillsOptions): Promise<number> {
   const { emit, repoRoot } = opts;
   const devhubSkillsDir = devhubSharedSkillsDir(/*turbopackIgnore: true*/ repoRoot);
@@ -221,12 +228,12 @@ export async function syncSkills(opts: SyncSkillsOptions): Promise<number> {
   }
 
   const fullCatalog = buildMergedSkillCatalog(repoRoot);
-  const excluded = new Set((opts.excludeSkills ?? []).map((s) => s.trim()).filter(Boolean));
-  const blocked = blockedVendorSkillNames(filterSkillCatalog(fullCatalog, opts), emit);
-  const catalog = filterSkillCatalog(fullCatalog, opts).filter((entry) => !blocked.has(entry.name));
-  const pruneKeepNames = filterSkillCatalog(fullCatalog, { excludeSkills: opts.excludeSkills })
-    .filter((entry) => !blocked.has(entry.name))
-    .map((e) => e.name);
+  const eyeExcluded = new Set((opts.excludeSkills ?? []).map((s) => s.trim()).filter(Boolean));
+  const excluded = new Set<string>([...DEFAULT_SYNC_EXCLUDE_SKILLS, ...eyeExcluded]);
+  const filterOpts = { ...opts, excludeSkills: [...excluded] };
+  const blocked = blockedVendorSkillNames(filterSkillCatalog(fullCatalog, filterOpts), emit);
+  const catalog = filterSkillCatalog(fullCatalog, filterOpts).filter((entry) => !blocked.has(entry.name));
+  const pruneKeepNames = catalog.map((e) => e.name);
 
   const home = os.homedir();
   if (opts.tool) {
@@ -276,7 +283,7 @@ export async function syncSkills(opts: SyncSkillsOptions): Promise<number> {
       for (const existing of fs.readdirSync(targetRoot, { withFileTypes: true })) {
         if (!existing.isDirectory() && !existing.isSymbolicLink()) continue;
         if (pruneKeepNames.includes(existing.name)) continue;
-        if (excluded.has(existing.name)) continue;
+        if (eyeExcluded.has(existing.name)) continue;
         const stale = path.join(targetRoot, existing.name);
         if (opts.dryRun) {
           emit(`  WOULD PRUNE: ${existing.name}`);

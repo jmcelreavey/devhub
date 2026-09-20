@@ -1,6 +1,6 @@
 ---
 name: devhub-specialist
-description: Expert on the DevHub repo — dashboard, skills/agents catalog, sync engine, notes MCP (filesystem + dashboard tiers), EntityRef linking, Jira integration, share_publish, persona layers, and BI Ops UI. Use when working in devhub or devhub-private, debugging sync/validate/collect flows, or extending shared skills, agents, MCP, or OpenCode config.
+description: Expert on the DevHub repo — dashboard, AionUi Agents cockpit, skills/agents/persona catalog, sync engine, notes MCP, EntityRef linking, Jira, share_publish, auto-PR review, and BI Ops UI. Use when working in devhub or devhub-private, debugging sync/validate/collect flows, Agents/MCP, or extending shared skills, agents, persona, or OpenCode config.
 mode: subagent
 readonly: false
 ---
@@ -125,6 +125,15 @@ npm run test
 npm run verify    # lint + typecheck + test + production build
 ```
 
+## Current Platform Notes (keep fresh)
+
+- **Packaged app:** `/Applications/DevHub.app` on `:1337` is production. Never verify checkout UI against `:1337` — use `devhub-dashboard-verify` / a free-port webpack origin.
+- **Agents (AionUi):** coding chats, Implement/Resume, auto-PR review, MCP attach on conversation create. Per-harness YOLO/auto-approve (Cursor has no `yolo` — permission `agent` + DevHub auto-confirm of Allow cards).
+- **Auto-PR review:** once per PR URL (failed runs may retry ≤3). Prefer Mac checkout commits straight to `main` for routine DevHub work — no feature-branch PRs unless asked.
+- **Browser automation:** use **playwriter** MCP/skill (real Chrome). Do not use retired `playwright-interactive`.
+- **Design skills:** keep `taste-skill` (briefing canvas), `impeccable`, and `ui-ux-pro-max` when needed. Prefer `john-voice` for human-facing summaries.
+- **Persona:** edit `persona/identity.txt` + `shared-persona.md`, then **Sync persona**. L2 modes stay on-demand under `persona/modes/`.
+
 ## Related Skills (load when relevant)
 
 - `devhub-mcp` — MCP tool tiers and practices
@@ -143,6 +152,8 @@ npm run verify    # lint + typecheck + test + production build
 
 ## Response Style
 
+- Explain simply: answer first, short practical paragraphs, exact technical nouns.
+- Outbound blurbs John would send: load `john-voice` (`full-voice`).
 - Prefer reading `dashboard/lib/*`, `mcp-servers/devhub-server/src/`, and tests over guessing sync behavior.
 - Call out which paths are repo catalog vs local-only vs ai-tools upstream vs plugin-materialized.
 - Keep diffs minimal; match existing TypeScript and test patterns in `dashboard/`.

@@ -6,6 +6,7 @@ import {
   buildRuntimeInfo,
   DASHBOARD_FEATURES,
   dashboardRuntimePath,
+  isAdvertisedDashboard,
   isRuntimeAlive,
   readDashboardRuntime,
   writeDashboardRuntime,
@@ -97,5 +98,30 @@ describe("isRuntimeAlive", () => {
 
   it("rejects a missing pid", () => {
     expect(isRuntimeAlive({ ...buildRuntimeInfo(), pid: 0 })).toBe(false);
+  });
+});
+
+describe("isAdvertisedDashboard", () => {
+  const advertise = (pid: number) =>
+    fs.writeFileSync(file, JSON.stringify({ ...buildRuntimeInfo(), pid }));
+
+  it("owns background work when nothing is advertised", () => {
+    expect(isAdvertisedDashboard(file)).toBe(true);
+  });
+
+  it("owns it when this process is the advertised one", () => {
+    advertise(process.pid);
+    expect(isAdvertisedDashboard(file)).toBe(true);
+  });
+
+  /** process.ppid is alive and is not us: another dashboard owns it. */
+  it("defers to another live dashboard", () => {
+    advertise(process.ppid);
+    expect(isAdvertisedDashboard(file)).toBe(false);
+  });
+
+  it("takes over from a dead advertiser", () => {
+    advertise(0);
+    expect(isAdvertisedDashboard(file)).toBe(true);
   });
 });

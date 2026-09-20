@@ -1,42 +1,43 @@
-import type { Metadata, Viewport } from "next";
+import { getLogoBootstrapInlineScript } from "@/lib/brand-mark";
+import {
+DEFAULT_THEME_MODE_SETTING,
+DEFAULT_THEME_PRESET_ID,
+getThemeBootstrapInlineScript,
+resolveMode,
+} from "@/lib/theme-presets";
+import type { Metadata,Viewport } from "next";
 import { Instrument_Sans } from "next/font/google";
 import { Suspense } from "react";
-import {
-  DEFAULT_THEME_MODE_SETTING,
-  DEFAULT_THEME_PRESET_ID,
-  getThemeBootstrapInlineScript,
-  resolveMode,
-} from "@/lib/theme-presets";
-import { getLogoBootstrapInlineScript } from "@/lib/brand-mark";
 import "./globals.css";
 // Machine-local palette + @font-face for the active branding plugin (empty baseline
 // when none is enabled). Imported after globals so a plugin can override core tokens.
-import "./plugin-branding.generated.css";
-import { CollapsibleSidebar } from "@/components/shell/CollapsibleSidebar";
-import { MobileShell } from "@/components/shell/MobileShell";
+import { AgentLaunchSheet } from "@/components/agents/AgentLaunchSheet";
+import { LegacyChatMigration } from "@/components/agents/LegacyChatMigration";
+import { PackagedCheckoutBanner } from "@/components/desktop/PackagedCheckoutBanner";
+import { UpdateBanner } from "@/components/desktop/UpdateBanner";
 import { NotesOverlayProvider } from "@/components/notes/NotesOverlayProvider";
+import { PersistentAgents } from "@/components/persistent/PersistentAgents";
+import { PersistentRepoLearnDock } from "@/components/persistent/PersistentRepoLearnDock";
+import { CollapsibleSidebar } from "@/components/shell/CollapsibleSidebar";
+import { ConfirmProvider } from "@/components/shell/ConfirmDialog";
+import { DashboardShell } from "@/components/shell/DashboardShell";
+import { ExternalLinks } from "@/components/shell/ExternalLinks";
+import { HubTopBar } from "@/components/shell/HubTopBar";
+import { KeyboardShortcuts } from "@/components/shell/KeyboardShortcuts";
+import { KonamiGate } from "@/components/shell/KonamiGate";
+import { MobileShell } from "@/components/shell/MobileShell";
+import { NavProgress } from "@/components/shell/NavProgress";
+import { PWAInstallPrompt } from "@/components/shell/PWAInstallPrompt";
+import { RouteUsageRecorder } from "@/components/shell/RouteUsageRecorder";
+import { ServiceWorkerRegister } from "@/components/shell/ServiceWorkerRegister";
+import { TabTitle } from "@/components/shell/TabTitle";
 import { TerminalDock } from "@/components/shell/TerminalDock";
 import { TerminalTranscriptModal } from "@/components/shell/TerminalTranscriptModal";
-import { PWAInstallPrompt } from "@/components/shell/PWAInstallPrompt";
-import { ServiceWorkerRegister } from "@/components/shell/ServiceWorkerRegister";
 import { ThemeSystemSync } from "@/components/shell/ThemeSystemSync";
-import { KeyboardShortcuts } from "@/components/shell/KeyboardShortcuts";
-import { ExternalLinks } from "@/components/shell/ExternalLinks";
-import { DashboardShell } from "@/components/shell/DashboardShell";
-import { TabTitle } from "@/components/shell/TabTitle";
 import { ToastProvider } from "@/components/shell/ToastProvider";
-import { UpdateBanner } from "@/components/desktop/UpdateBanner";
-import { PackagedCheckoutBanner } from "@/components/desktop/PackagedCheckoutBanner";
-import { ConfirmProvider } from "@/components/shell/ConfirmDialog";
-import { HubTopBar } from "@/components/shell/HubTopBar";
-import { WorkspaceTabsProvider, WorkspaceTabStrip, WorkspaceTabPanels } from "@/components/shell/WorkspaceTabs";
-import { NavProgress } from "@/components/shell/NavProgress";
-import { PersistentChamber } from "@/components/persistent/PersistentChamber";
-import { PersistentOpenCode } from "@/components/persistent/PersistentOpenCode";
-import { PersistentRepoLearnDock } from "@/components/persistent/PersistentRepoLearnDock";
 import { UiPrefsBootstrap } from "@/components/shell/UiPrefsBootstrap";
-import { KonamiGate } from "@/components/shell/KonamiGate";
-import { RouteUsageRecorder } from "@/components/shell/RouteUsageRecorder";
+import { WorkspaceTabPanels,WorkspaceTabsProvider,WorkspaceTabStrip } from "@/components/shell/WorkspaceTabs";
+import "./plugin-branding.generated.css";
 
 /** Display face for headings — pairs with the system body stack (Hallmark 2+1). */
 const displayFont = Instrument_Sans({
@@ -177,14 +178,15 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
 
               <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto relative">
                   <WorkspaceTabPanels>{children}</WorkspaceTabPanels>
-                  <PersistentChamber />
-                  <PersistentOpenCode />
+                  <PersistentAgents />
               </main>
             </div>
 
             <PersistentRepoLearnDock />
             <NotesOverlayProvider />
             <TerminalDock />
+            <AgentLaunchSheet />
+            <LegacyChatMigration />
             <TerminalTranscriptModal />
             <PWAInstallPrompt />
             <KonamiGate />

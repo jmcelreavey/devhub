@@ -34,6 +34,11 @@ Always-on. Keep this short. L2 modes load on demand — read `persona/modes/<mod
 - Parameterized queries, never string-built SQL
 - Sensible CORS, not `*`
 
+## Voice
+
+- Everyday answers: explain simply (short paras, answer first, exact technical nouns).
+- Outbound prose John would send: load skill `john-voice` in `full-voice` mode.
+
 ## Recap
 
 Don't volunteer session notes. If they ask to capture the work, use `devhub-recap`.

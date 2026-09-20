@@ -27,6 +27,7 @@ const baseRun: AgentRunSummary = {
 describe("callerDepth", () => {
   it("reads DEVHUB_AGENT_DEPTH and treats junk as a top-level caller", () => {
     expect(callerDepth({ DEVHUB_AGENT_DEPTH: "2" })).toBe(2);
+    expect(callerDepth({ AIONUI_CONVERSATION_ID: "chat" })).toBe(1);
     expect(callerDepth({ DEVHUB_AGENT_DEPTH: "nope" })).toBe(0);
     expect(callerDepth({})).toBe(0);
   });

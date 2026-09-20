@@ -418,7 +418,7 @@ export async function loadRepoDigest(
       return domain ? [domain.id] : [];
     }))],
   }));
-  const model = getNotesAiModel();
+  const model = getNotesAiModel({ action: "Repository ownership digest" });
   let summaryMarkdown: string | null = null;
   if (options.generate && model && rows.length) {
     const result = await generateText({

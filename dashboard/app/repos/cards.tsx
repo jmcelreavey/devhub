@@ -1,45 +1,45 @@
 "use client";
+import { openAgentHandoff } from "@/lib/agent-handoff";
 
-import { type CSSProperties, type ReactNode } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import {
-  Archive,
-  Bot,
-  Brain,
-  ClipboardCheck,
-  Copy,
-  Download,
-  ExternalLink,
-  FolderOpen,
-  GitBranch,
-  GitFork,
-  MonitorPlay,
-  Rocket,
-  ScanSearch,
-  Shield,
-  ShieldCheck,
-  TerminalSquare,
-  Trash2,
-} from "lucide-react";
-import { SearchInput } from "@/components/ui/SearchInput";
-import { HoverTip } from "@/components/ui/HoverTip";
-import { usePrompt } from "@/components/shell/ConfirmDialog";
-import {
-  ContextMenu,
-  RowMenuKebab,
-  SectionMenuHint,
-  useContextMenu,
-  type ContextMenuGroup,
-} from "@/components/shell/ContextMenu";
 import { RepoGitWorkspace } from "@/components/repo-git/RepoGitWorkspace";
 import { RepoOpenPrLink } from "@/components/repos/RepoOpenPrLink";
+import { usePrompt } from "@/components/shell/ConfirmDialog";
+import {
+ContextMenu,
+RowMenuKebab,
+SectionMenuHint,
+useContextMenu,
+type ContextMenuGroup,
+} from "@/components/shell/ContextMenu";
+import { HoverTip } from "@/components/ui/HoverTip";
+import { SearchInput } from "@/components/ui/SearchInput";
+import { launchAgentJob } from "@/lib/agent-job";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { useToast } from "@/lib/hooks/use-toast";
-import { launchAgentJob } from "@/lib/agent-job";
-import { agentSkillCommand, claudeCliCommand, opencodeCliCommand, openTerminal } from "@/lib/terminal-launch";
-import type { GithubRepoInfo, LocalRepoFilter, RepoInfo } from "./types";
 import type { RepoProject } from "@/lib/projects";
+import {
+Archive,
+Bot,
+Brain,
+ClipboardCheck,
+Copy,
+Download,
+ExternalLink,
+FolderOpen,
+GitBranch,
+GitFork,
+MonitorPlay,
+Rocket,
+ScanSearch,
+Shield,
+ShieldCheck,
+TerminalSquare,
+Trash2,
+} from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { type CSSProperties,type ReactNode } from "react";
+import type { GithubRepoInfo,LocalRepoFilter,RepoInfo } from "./types";
 
 interface RepoApps {
   gitkraken: boolean;
@@ -60,7 +60,6 @@ interface LocalRepoCardProps {
   onRevealFolder: (name: string) => void;
   onGitKraken: (name: string) => void;
   onCursor: (name: string) => void;
-  onClaudeDesktop: () => void | Promise<void>;
   onRemove: (name: string) => void;
   onRefreshLocal: () => void;
   ownershipFullName: string | null;
@@ -233,7 +232,6 @@ export function LocalRepoCard({
   onRevealFolder,
   onGitKraken,
   onCursor,
-  onClaudeDesktop,
   onRemove,
   onRefreshLocal,
   ownershipFullName,
@@ -259,11 +257,6 @@ export function LocalRepoCard({
         kind: "agent",
         cwd: projectsDir,
         promptText: `Use the project-graveyard skill. ${instruction}`,
-        promptCommand: await agentSkillCommand(
-          "project-graveyard",
-          instruction,
-          "run project-graveyard",
-        ),
         mode: "oneshot",
         alreadyConfirmed: true,
         reason: "Project graveyard",
@@ -290,7 +283,7 @@ export function LocalRepoCard({
             void (async () => {
               const context = await prompt({
                 title: target.hasUpstart ? "Update and run upstart" : "Create and run upstart",
-                message: "Optional startup context for OpenCode. Leave blank to continue without it.",
+                message: "Optional startup context for the agent. Leave blank to continue without it.",
                 input: { placeholder: "Context..." },
                 confirmLabel: "Run",
               });
@@ -331,11 +324,6 @@ export function LocalRepoCard({
                 cwd: target.path,
                 repoName: target.name,
                 promptText: `Use the scope-creep-detector skill. ${instruction}`,
-                promptCommand: await agentSkillCommand(
-                  "scope-creep-detector",
-                  instruction,
-                  "run scope-creep-detector",
-                ),
                 mode: "oneshot",
                 alreadyConfirmed: true,
                 reason: `Scope creep · ${target.name}`,
@@ -400,34 +388,7 @@ export function LocalRepoCard({
               () => toast.error("Could not copy path"),
             ),
         },
-        {
-          id: "opencode",
-          label: "OpenCode CLI",
-          icon: <TerminalSquare size={12} />,
-          onSelect: () =>
-            openTerminal({
-              cwd: target.path,
-              label: `OpenCode · ${target.name}`,
-              command: opencodeCliCommand(),
-            }),
-        },
-        {
-          id: "claude-cli",
-          label: "Claude CLI",
-          icon: <TerminalSquare size={12} />,
-          onSelect: () =>
-            openTerminal({
-              cwd: target.path,
-              label: `Claude · ${target.name}`,
-              command: claudeCliCommand(),
-            }),
-        },
-        {
-          id: "claude-app",
-          label: "Claude app",
-          icon: <Bot size={12} />,
-          onSelect: () => void onClaudeDesktop(),
-        },
+        { id: "agents", label: "Ask Agent", icon: <Bot size={12} />, onSelect: () => openAgentHandoff({ title: "Ask Agent · " + target.name, cwd: target.path, repoName: target.name, worktree: false }) },
         ...(isDesktop && apps?.gitkraken
           ? [
               {

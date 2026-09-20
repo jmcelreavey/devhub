@@ -9,6 +9,8 @@ import { HoverTip } from "@/components/ui/HoverTip";
 import { ImplementTaskDialog } from "@/components/tasks/ImplementTaskDialog";
 import { PlanTaskDialog } from "@/components/tasks/PlanTaskDialog";
 import { ResumeTaskDialog } from "@/components/tasks/ResumeTaskDialog";
+import { useVaultNoteExists } from "@/components/EntityNoteAction";
+import { taskNotePath } from "@/lib/task-note";
 import { openInBrowser } from "@/lib/desktop/bridge";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { useToast } from "@/lib/hooks/use-toast";
@@ -63,6 +65,7 @@ export function useTaskAgentActions({
   const agentChip = taskAgentChipForLatestRun(latestRun);
   const attention = latestRun?.attention;
   const canResume = Boolean(attention) || canResumeTaskAgentRun(latestRun?.status, latestRun?.sessionId);
+  const noteExists = useVaultNoteExists(taskNotePath({ id: task.id, text: task.text, date, jiraKey: task.jiraKey }));
 
   const setStage = async (stage: "draft" | "ready", force = false) => {
     const { ok, json } = await postJson("/api/tasks/stage", { taskId: task.id, date, stage, force });
@@ -106,11 +109,13 @@ export function useTaskAgentActions({
 
   const menuItems: ContextMenuItem[] = [];
   if (open) {
+    // Drafts always offer planning (capture already creates their note); past
+    // draft, only while the task has no note yet.
+    if (isDraft || !noteExists) {
+      menuItems.push(item("plan-agent", "Write plan with Agent…", <FilePen size={12} aria-hidden />, () => setDialog("plan")));
+    }
     if (isDraft) {
-      menuItems.push(
-        item("plan-agent", "Write plan with Agent…", <FilePen size={12} aria-hidden />, () => setDialog("plan")),
-        item("mark-ready", "Mark ready for an agent", <Flag size={12} aria-hidden />, () => void setStage("ready")),
-      );
+      menuItems.push(item("mark-ready", "Mark ready for an agent", <Flag size={12} aria-hidden />, () => void setStage("ready")));
     } else if (isTaskReadyForAgent(task)) {
       menuItems.push(item("implement-agent", "Implement with Agent…", <Bot size={12} aria-hidden />, () => setDialog("implement")));
     }

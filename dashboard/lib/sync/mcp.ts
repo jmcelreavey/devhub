@@ -27,6 +27,8 @@ import { listPersonalMcpServerNames, readPersonalMcpServer } from "@/lib/mcp/per
 import { pluginAssetDirs } from "@/lib/plugins/registry";
 import type { AssetOrigin } from "@/lib/plugins/types";
 import { readJsonObjectFile, writeJsonObjectFile, type Json } from "@/lib/json-file";
+import { applyCursorAcpServerOverlay, orderCursorMcpServers } from "@/lib/mcp/cursor-acp-surface";
+import { syncAionMcpServers } from "@/lib/sync/aionui-mcp";
 
 export type { Json };
 
@@ -106,6 +108,28 @@ function remoteToTool(server: SharedMcpServer): Json {
   if (server.oauth && Object.keys(server.oauth).length > 0) out.oauth = server.oauth;
   if (server.headers && Object.keys(server.headers).length > 0) out.headers = server.headers;
   return out;
+}
+
+function asMcpRecord(value: Json | undefined): Record<string, Json> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, Json>;
+}
+
+/**
+ * Catalog wins overlapping keys; wrap extras (autoApprove, instructions) and
+ * wrap-only env (DEVHUB_MCP_TOOLSETS, LEAN_CTX_TOOL_PROFILE) survive.
+ */
+function mergeMcpEntry(existing: Json | undefined, next: Json): Json {
+  const current = asMcpRecord(existing);
+  const incoming = asMcpRecord(next);
+  if (!current || !incoming) return next;
+  const merged: Record<string, Json> = { ...current, ...incoming };
+  const currentEnv = asMcpRecord(current.env);
+  const incomingEnv = asMcpRecord(incoming.env);
+  if (currentEnv || incomingEnv) {
+    merged.env = { ...(currentEnv ?? {}), ...(incomingEnv ?? {}) };
+  }
+  return merged;
 }
 
 /**
@@ -647,8 +671,10 @@ export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<numbe
         writes++;
         continue;
       }
-      nextServers[name] = entry;
-      upserts[name] = entry;
+      let mergedEntry = mergeMcpEntry(existingServers[name], entry);
+      if (tool.id === "cursor") mergedEntry = applyCursorAcpServerOverlay(name, mergedEntry);
+      nextServers[name] = mergedEntry;
+      upserts[name] = mergedEntry;
       emit(`  SYNCED: ${name} (${source})`);
       writes++;
     }
@@ -684,7 +710,7 @@ export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<numbe
       writeCodexMcpServers(configPath, upserts, removals);
     } else {
       const merged: Record<string, Json> = tool.mergeRest ? { ...existing } : {};
-      merged[tool.topKey] = nextServers;
+      merged[tool.topKey] = tool.id === "cursor" ? orderCursorMcpServers(nextServers) : nextServers;
       writeJsonObjectFile(configPath, merged);
     }
 
@@ -706,6 +732,20 @@ export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<numbe
       writeJsonObjectFile(legacyPath, cleared);
       emit(`  MIGRATED: cleared mcpServers from ${legacyPath} (now using ${configPath})`);
     }
+  }
+
+  if (!opts.tool) {
+    const aionServers = new Map<string, SharedMcpServer>();
+    for (const name of selected) {
+      const resolved = readCatalogMcpServer(repoRoot, home, name, pluginServerMap);
+      if (!resolved) continue;
+      let substituted = substituteRepoRoot(resolved.server as unknown as Json, repoRoot) as SharedMcpServer;
+      if (resolved.source === "plugin" && resolved.pluginPath) {
+        substituted = substitutePlaceholder(substituted as unknown as Json, "PLUGIN_ROOT", resolved.pluginPath) as SharedMcpServer;
+      }
+      aionServers.set(name, substituted);
+    }
+    await syncAionMcpServers(aionServers, { emit, dryRun: opts.dryRun, prune: opts.prune });
   }
 
   emit(`Done. ${writes} write(s)${opts.prune ? `, ${prunes} prune(s)` : ""}.`);

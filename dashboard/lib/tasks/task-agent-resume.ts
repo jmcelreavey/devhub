@@ -2,8 +2,8 @@
  * Pure helpers for Resume with Agent + task-row agent-run chips.
  * Orchestration (follow-up vs new dispatch) lives in resume-task-agent.ts.
  */
-import type { TaskAgentRunRecord, TaskAgentRunStatus, TaskPrAttention } from "@/lib/tasks/task-agent-runs";
-import { buildTaskImplementPrompt, taskImplementPlanUrl } from "@/lib/tasks/implement-prompt";
+import { buildTaskImplementPrompt,taskImplementPlanUrl } from "@/lib/tasks/implement-prompt";
+import type { TaskAgentRunRecord,TaskAgentRunStatus,TaskPrAttention } from "@/lib/tasks/task-agent-runs";
 
 /** Sidecar statuses where the human can pick work back up. */
 export const TASK_AGENT_RESUMABLE_STATUSES = ["paused", "abandoned", "failed"] as const;
@@ -83,7 +83,7 @@ export function taskAgentChipForLatestRun(
 }
 
 export function agentActivityHrefForRun(runId: string): string {
-  return `/agent-activity?run=${encodeURIComponent(runId)}`;
+  return `/agents?view=activity&run=${encodeURIComponent(runId)}`;
 }
 
 export interface BuildTaskAgentResumePromptInput {
@@ -98,6 +98,44 @@ export interface BuildTaskAgentResumePromptInput {
   priorRunId?: string;
   /** The run's PR needs fixing — the resume is about this, not the original plan. */
   attention?: Pick<TaskPrAttention, "kind" | "summary"> & { prUrl?: string };
+  /**
+   * Prior Agent Activity notes (interactive agent_interactive_note / result text).
+   * Prefer formatAgentActivityTrailForResume so Resume steers from the audit trail.
+   */
+  activityTrail?: string;
+}
+
+/** Max characters of Activity trail injected into a resume prompt. */
+const ACTIVITY_TRAIL_MAX = 12_000;
+
+export type ActivityTrailEvent = {
+  type: string;
+  text?: string;
+  ok?: boolean;
+};
+
+/**
+ * Turn Agent Activity events into a resume-steering block. Keeps text notes and
+ * result summaries (the interactive audit trail); drops tool noise.
+ */
+export function formatAgentActivityTrailForResume(
+  events: ActivityTrailEvent[],
+  opts?: { maxChars?: number },
+): string {
+  const max = opts?.maxChars ?? ACTIVITY_TRAIL_MAX;
+  const out: string[] = [];
+  for (const ev of events) {
+    const note = typeof ev.text === "string" ? ev.text.replace(/\r\n/g, "\n").trim() : "";
+    if (!note) continue;
+    if (ev.type === "text") out.push(`- ${note}`);
+    else if (ev.type === "result") out.push(`- [${ev.ok === false ? "failed" : "done"}] ${note}`);
+  }
+  if (out.length === 0) return "";
+  let body = out.join("\n");
+  if (body.length > max) {
+    body = `…(earlier notes truncated)\n${body.slice(body.length - max)}`;
+  }
+  return body;
 }
 
 /**
@@ -126,9 +164,24 @@ export function buildTaskAgentResumePrompt(input: BuildTaskAgentResumePromptInpu
   } else {
     lines.push("", "(No durable handoff yet — curl the plan URL and inspect the repo/branch before coding.)", "");
   }
+  const trail = input.activityTrail?.replace(/\r\n/g, "\n").trim();
+  if (trail) {
+    lines.push(
+      "--- prior Agent Activity notes (steer from these; they are the audit trail) ---",
+      trail,
+      "--- end Activity notes ---",
+      "",
+    );
+  } else if (input.priorRunId) {
+    lines.push(
+      "(No Agent Activity notes on the prior run — curl the plan URL, read the handoff, and inspect the repo/branch before coding.)",
+      "",
+    );
+  }
   lines.push(base);
   return lines.join("\n");
 }
+
 
 /**
  * Map SkillAgentDialog / terminal CLI ids onto agent_dispatch provider ids.
@@ -181,4 +234,3 @@ export function newInteractiveTaskAgentRunId(): string {
   const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
   return `run-${mid}-${hex}`;
 }
-

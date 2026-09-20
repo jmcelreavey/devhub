@@ -1,17 +1,20 @@
 "use client";
 
-import { useState, type CSSProperties, type FormEvent } from "react";
-import { useSearchParams } from "next/navigation";
-import { AlertTriangle, Ban, Check, ChevronDown, ChevronRight, CircleDashed, Loader2 } from "lucide-react";
-import { FetchError, LoadingLine } from "@/components";
+import { FetchError,LoadingLine } from "@/components";
+import { agentsHref,requestAgentConversation } from "@/lib/agent-handoff";
+import { describeAgentEvent,type RecordedAgentRunEvent } from "@/lib/agent-runs/events";
+import type { AgentRunSummary } from "@/lib/agent-runs/store";
+import type { IndexedConversation } from "@/lib/aionui/conversation-index";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
 import { localCalendarDateISO } from "@/lib/local/calendar-date";
 import { useMinuteTick } from "@/lib/minute-tick";
 import { formatRelativePastAge } from "@/lib/utils";
-import { describeAgentEvent, type RecordedAgentRunEvent } from "@/lib/agent-runs/events";
-import type { AgentRunSummary } from "@/lib/agent-runs/store";
-import type { McpHistoryEntry, McpHistorySummary } from "@shared/mcp-history/index.ts";
+import type { McpHistoryEntry,McpHistorySummary } from "@shared/mcp-history/index.ts";
+import { AlertTriangle,Ban,Check,ChevronDown,ChevronRight,CircleDashed } from "lucide-react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useState,type CSSProperties,type FormEvent } from "react";
 
 /**
  * What agents did through DevHub: runs dispatched with `agent_dispatch`, and
@@ -56,7 +59,7 @@ function AgentActivityInner({ runParam }: { runParam: string | null }) {
             Agent activity
           </h1>
           <div className="text-xs mt-1 text-text-subtle">
-            Agent runs dispatched through DevHub, and every MCP tool call made against it.
+            Coding work, AI generation and MCP calls across DevHub.
           </div>
         </div>
         <div className="flex items-center gap-1.5" role="tablist" aria-label="Activity views">
@@ -80,10 +83,25 @@ function AgentActivityInner({ runParam }: { runParam: string | null }) {
   );
 }
 
+function DirectChats({ attention, query }: { attention: boolean; query: string }) {
+  const { data } = useLive<{ conversations: IndexedConversation[]; offline?: boolean }>("/api/aionui/conversations", { refreshInterval: 60_000 });
+  if (!data?.conversations.length) return null;
+  return <div className="mt-6 border-t border-border pt-4">
+    <h3 className="text-sm font-medium mb-2">Conversations started in AionUi</h3>
+    {data.offline && <p className="text-xs text-text-muted mb-2">Showing saved history. Reconnect the workspace to open these chats.</p>}
+    <ul className="space-y-2">{data.conversations.filter(chat => (!attention || chat.state === "needs-attention") && chat.title.toLowerCase().includes(query.toLowerCase())).map(chat => <li key={chat.connectionId + chat.id} className="flex gap-3 items-center text-sm">
+      <span className="text-xs text-text-subtle w-24 truncate">{chat.assistant}</span>
+      {data.offline ? <span className="flex-1">{chat.title}</span> : <Link href={agentsHref(chat.id)} onClick={() => requestAgentConversation(chat.id)} className="flex-1 text-accent">{chat.title}</Link>}
+      <span className="text-xs text-text-muted">{chat.state === "needs-attention" ? "Needs attention" : chat.state === "running" ? "Running" : "Idle"}</span>
+    </li>)}</ul>
+  </div>;
+}
+
 /* ── Agent runs ─────────────────────────────────────────────────────────── */
 
 interface RunsResponse {
   runs: AgentRunSummary[];
+  total: number;
   providers: Array<{ id: string; label: string; installed: boolean; custom: boolean }>;
   providersConfigError: string | null;
 }
@@ -106,7 +124,7 @@ interface RunDiff {
 }
 
 function isActive(state: AgentRunSummary["state"]): boolean {
-  return state === "queued" || state === "running";
+  return state === "queued" || state === "starting" || state === "running" || state === "needs-attention";
 }
 
 function basename(p: string): string {
@@ -114,19 +132,24 @@ function basename(p: string): string {
 }
 
 function RunStateIcon({ state }: { state: AgentRunSummary["state"] }) {
+  if (state === "completed") return <Check size={13} className="text-text-muted shrink-0" aria-label="Finished; outcome not verified" />;
   if (state === "succeeded") return <Check size={13} className="text-success shrink-0" aria-label="Succeeded" />;
   if (state === "failed") return <AlertTriangle size={13} className="text-danger shrink-0" aria-label="Failed" />;
+  if (state === "needs-attention") return <AlertTriangle size={13} className="text-warning shrink-0" aria-label="Needs attention" />;
   if (state === "cancelled") return <Ban size={13} className="shrink-0 text-text-subtle" aria-label="Cancelled" />;
   if (state === "running") {
-    return <Loader2 size={13} className="animate-spin shrink-0" style={{ color: "var(--accent)" }} aria-label="Running" />;
+    return <CircleDashed size={13} className="shrink-0" style={{ color: "var(--accent)" }} aria-label="Running" />;
   }
-  return <CircleDashed size={13} className="shrink-0 text-text-subtle" aria-label="Queued" />;
+  return <CircleDashed size={13} className="shrink-0 text-text-subtle" aria-label={state === "starting" ? "Starting" : "Queued"} />;
 }
 
 function AgentRunsPanel({ initialRunId }: { initialRunId?: string | null }) {
   const now = useMinuteTick();
   const [openId, setOpenId] = useState<string | null>(initialRunId ?? null);
-  const { data, error, isLoading, mutate } = useLive<RunsResponse>("/api/agent/runs?limit=50");
+  const [limit, setLimit] = useState(50);
+  const [scope, setScope] = useState("all");
+  const [query, setQuery] = useState("");
+  const { data, error, isLoading, mutate } = useLive<RunsResponse>(`/api/agent/runs?limit=${limit}&scope=${scope}&q=${encodeURIComponent(query)}`, { keepPreviousData: true });
 
   if (isLoading) return <LoadingLine />;
   if (error) {
@@ -141,21 +164,33 @@ function AgentRunsPanel({ initialRunId }: { initialRunId?: string | null }) {
 
   const runs = data?.runs ?? [];
   const installed = (data?.providers ?? []).filter((p) => p.installed).map((p) => p.label);
+  const groups = new Map<string, AgentRunSummary[]>();
+  for (const run of runs) {
+    if (run.runtime !== "generation" || !run.activity?.groupId) continue;
+    const group = groups.get(run.activity.groupId) ?? [];
+    group.push(run); groups.set(run.activity.groupId, group);
+  }
+  const groupedIds = new Set([...groups.values()].filter(group => group.length > 1).flatMap(group => group.map(run => run.id)));
 
   return (
     <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-2 items-center" aria-label="Filter activity">
+        {[['all', 'All'], ['mine', 'Mine'], ['background', 'Background'], ['attention', 'Needs attention']].map(([value, label]) => <button key={value} className={scope === value ? "btn btn-primary" : "btn btn-ghost"} aria-pressed={scope === value} onClick={() => { setScope(value); setLimit(50); }}>{label}</button>)}
+        <input className="input flex-1 min-w-48" aria-label="Search activity" placeholder="Search title, repository, task or job…" value={query} onChange={event => { setQuery(event.target.value); setLimit(50); }} />
+      </div>
+      {initialRunId && !runs.some(run => run.id === initialRunId) && <RunDetail runId={initialRunId} onChanged={() => void mutate()} />}
       <div className="text-xs text-text-subtle" style={{ paddingTop: 2, paddingBottom: 6 }}>
-        {runs.length} recent run{runs.length === 1 ? "" : "s"} · providers: {installed.join(", ") || "none installed"}
+        {runs.length} of {data?.total ?? runs.length} runs · agents: {installed.join(", ") || "none ready"}
         {data?.providersConfigError ? <span className="text-danger"> · {data.providersConfigError}</span> : null}
       </div>
 
       {runs.length === 0 ? (
         <p className="text-sm text-text-subtle">
-          No agent runs yet. An MCP client starts one with <code>agent_dispatch</code>; each run opens its own terminal tab.
+          No activity yet. Coding work and AI requests will appear here as they run.
         </p>
       ) : (
         <ul className="flex flex-col">
-          {runs.map((run) => {
+          {runs.filter(run => !groupedIds.has(run.id)).map((run) => {
             const open = openId === run.id;
             return (
               <li key={run.id}>
@@ -170,6 +205,7 @@ function AgentRunsPanel({ initialRunId }: { initialRunId?: string | null }) {
                   <RunStateIcon state={run.state} />
                   <span className="shrink-0 w-24 truncate text-xs text-text-subtle">{run.providerLabel}</span>
                   <span className="truncate flex-1 min-w-0">{run.title}</span>
+                  <span className="hidden xl:inline text-xs text-text-subtle">{run.activity?.source}</span>
                   <span className="shrink-0 w-28 truncate text-right text-xs text-text-subtle" title={run.cwd}>
                     {run.worktree ? run.worktree.branch.replace("devhub/agent/", "⎇ ") : basename(run.cwd)}
                   </span>
@@ -181,8 +217,12 @@ function AgentRunsPanel({ initialRunId }: { initialRunId?: string | null }) {
               </li>
             );
           })}
+          {[...groups.entries()].filter(([, group]) => group.length > 1).map(([id, group]) => <li key={id}><details className="p-2" open={group.some(run => run.id === initialRunId)}><summary className="text-sm cursor-pointer">{group[0].title} · {group.length} AI requests</summary><div className="space-y-2 mt-2">{group.map(run => <details key={run.id} open={run.id === initialRunId}><summary className="text-xs cursor-pointer flex gap-2"><RunStateIcon state={run.state} />{run.title} · {run.model || run.providerLabel}</summary><RunDetail runId={run.id} onChanged={() => void mutate()} /></details>)}</div></details></li>)}
         </ul>
       )}
+      {(data?.total ?? 0) > runs.length && limit < 2000 && <button className="btn btn-ghost self-start" onClick={() => setLimit(value => value + 100)}>Show older activity</button>}
+      {limit >= 2000 && (data?.total ?? 0) > runs.length && <p className="text-xs text-text-muted">Narrow the search to find older activity.</p>}
+      {scope !== "background" && <DirectChats attention={scope === "attention"} query={query} />}
     </div>
   );
 }
@@ -242,17 +282,21 @@ function RunDetail({ runId, onChanged }: { runId: string; onChanged: () => void 
 
   const meta = [
     run.id,
+    run.activity?.source,
     run.model,
     run.worktree ? `worktree ${run.worktree.path}` : run.cwd,
     run.turns !== null ? `${run.turns} turns` : null,
     run.exitCode !== null ? `exit ${run.exitCode}` : null,
     run.parentRunId ? `follow-up of ${run.parentRunId}` : null,
+    run.inputTokens != null ? `${run.inputTokens} input tokens` : null,
+    run.outputTokens != null ? `${run.outputTokens} output tokens` : null,
   ].filter(Boolean);
 
   return (
     <div className="agent-activity-detail flex flex-col gap-2 px-8 pb-3 pt-1 text-xs">
       <div className="text-text-subtle break-all">{meta.join(" · ")}</div>
       {run.error && <div className="text-danger">{run.error}</div>}
+      {run.state === "completed" && <p className="text-text-muted">The agent has stopped and its reply is available. Open the chat to review the result.</p>}
       {!active && run.resultText && (
         <pre className="whitespace-pre-wrap rounded p-2" style={PRE}>
           {run.resultText}
@@ -260,14 +304,20 @@ function RunDetail({ runId, onChanged }: { runId: string; onChanged: () => void 
       )}
 
       <div className="flex gap-1.5">
-        {active && (
+        {run.conversationId && <Link href={agentsHref(run.conversationId)} onClick={() => requestAgentConversation(run.conversationId!)} className="btn btn-primary" style={SMALL_BTN}>Open chat</Link>}
+        {run.activity?.notePath && <Link className="btn btn-ghost" style={SMALL_BTN} href={`/notes/${run.activity.notePath.split("/").map(encodeURIComponent).join("/")}`}>View result</Link>}
+        {run.activity?.taskId && <Link className="btn btn-ghost" style={SMALL_BTN} href={`/work?date=${encodeURIComponent(run.activity.taskDate || "")}&task=${encodeURIComponent(run.activity.taskId)}`}>Task</Link>}
+        {run.activity?.prUrl && <a className="btn btn-ghost" style={SMALL_BTN} href={run.activity.prUrl} target="_blank" rel="noreferrer">Pull request</a>}
+        {run.activity?.jobId && <Link className="btn btn-ghost" style={SMALL_BTN} href="/actions">Schedule</Link>}
+        {active && run.runtime !== "generation" && (
           <button type="button" className="btn btn-ghost" style={SMALL_BTN} disabled={busy} onClick={() => void stop()}>
             Stop run
           </button>
         )}
-        <button type="button" className="btn btn-ghost" style={SMALL_BTN} disabled={busy} onClick={() => void loadDiff()}>
+        {run.runtime !== "generation" && <button type="button" className="btn btn-ghost" style={SMALL_BTN} disabled={busy} onClick={() => void loadDiff()}>
           {diff ? "Refresh diff" : "Show diff"}
-        </button>
+        </button>}
+        {active && run.runtime === "generation" && <span className="text-text-subtle">Manage this request in the feature that started it.</span>}
       </div>
 
       {diff && (
@@ -289,12 +339,27 @@ function RunDetail({ runId, onChanged }: { runId: string; onChanged: () => void 
         {total > events.length ? `, first ${events.length} shown` : ""}
       </div>
       {events.length > 0 && (
-        <ol className="flex flex-col gap-0.5 rounded p-2" style={PRE}>
-          {events.map((event) => (
-            <li key={event.seq} className={`whitespace-pre-wrap break-words ${eventTone(event)}`}>
-              {describeAgentEvent(event)}
-            </li>
-          ))}
+        <ol className="flex flex-col rounded p-2" style={PRE}>
+          {events.map((event, i) => {
+            const isNewStep = event.type !== "tool_result" && event.type !== "stderr";
+            return (
+              <li
+                key={event.seq}
+                className={`flex items-start gap-2 whitespace-pre-wrap break-words ${eventTone(event)}`}
+                style={{
+                  paddingLeft: event.type === "tool_result" ? 16 : 0,
+                  paddingTop: i > 0 && isNewStep ? 5 : 1,
+                  marginTop: i > 0 && isNewStep ? 5 : 0,
+                  borderTop: i > 0 && isNewStep ? "1px solid var(--border-muted)" : undefined,
+                }}
+              >
+                <span className="shrink-0 tabular-nums text-text-subtle" style={{ width: 60 }}>
+                  {clock(event.ts)}
+                </span>
+                <span className="min-w-0">{describeAgentEvent(event)}</span>
+              </li>
+            );
+          })}
         </ol>
       )}
     </div>

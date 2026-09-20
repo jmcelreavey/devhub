@@ -1,4 +1,4 @@
-import { PLUGIN_NAV_ITEMS, PLUGIN_SECTION_TABS } from "./plugin-nav.generated";
+import { PLUGIN_NAV_ITEMS,PLUGIN_SECTION_TABS } from "./plugin-nav.generated";
 
 export type NavGroup = "workspace" | "library" | "bi" | "system";
 
@@ -17,7 +17,6 @@ export interface NavItem {
    * Not a route — clicking opens this CLI as a terminal-dock tab (see NavLink).
    * Excluded from ALL_NAV_DESTINATIONS; `href` only keys the sidebar row.
    */
-  terminal?: "claude" | "cursor" | "chatgpt" | "antigravity";
 }
 
 export const NAV_GROUPS: { id: NavGroup; label: string }[] = [
@@ -101,14 +100,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/datadog", label: "Datadog", icon: "datadog", group: "bi", gate: "datadog" },
 
   { href: "/status", label: "System", icon: "status", group: "system" },
-  // What agents did through DevHub: dispatched runs and the MCP call history.
-  { href: "/agent-activity", label: "Agent activity", icon: "activity", group: "system" },
-  { href: "/chamber", label: "Chamber", icon: "chamber", group: "system", gate: "chamber" },
-  { href: "/opencode", label: "OpenCode", icon: "opencode", group: "system", gate: "opencode" },
-  { href: "/claude", label: "Claude", icon: "claude", group: "system", gate: "claude", desktopOnly: true, terminal: "claude" },
-  { href: "/cursor", label: "Cursor", icon: "cursor", group: "system", gate: "cursor", desktopOnly: true, terminal: "cursor" },
-  { href: "/chatgpt", label: "ChatGPT", icon: "chatgpt", group: "system", gate: "chatgpt", desktopOnly: true, terminal: "chatgpt" },
-  { href: "/antigravity", label: "Antigravity", icon: "antigravity", group: "system", gate: "antigravity", desktopOnly: true, terminal: "antigravity" },
+  { href: "/agents", label: "Agents", icon: "activity", group: "system" },
 ];
 
 /**
@@ -141,7 +133,7 @@ export const LEGACY_NAV_ITEMS: NavItem[] = [
 /** Every routable destination — sidebar items first, then legacy + plugin pages.
  *  Terminal-launch rows (Claude/Cursor/ChatGPT) have no page behind them. */
 export const ALL_NAV_DESTINATIONS: NavItem[] = [
-  ...NAV_ITEMS.filter((i) => !i.terminal),
+  ...NAV_ITEMS,
   ...LEGACY_NAV_ITEMS,
   ...PLUGIN_NAV_ITEMS,
 ];

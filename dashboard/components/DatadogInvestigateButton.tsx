@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { ScanSearch } from "lucide-react";
-import { useToast } from "@/lib/hooks/use-toast";
-import { requestOpenCodeSession } from "@/lib/opencode/session";
+import { openAgentHandoff } from "@/lib/agent-handoff";
 import type { RecentEvent } from "@/lib/datadog/recent-events";
+import { useToast } from "@/lib/hooks/use-toast";
+import { ScanSearch } from "lucide-react";
+import { useState } from "react";
 
 interface DatadogInvestigateButtonProps {
   scope: "oncall" | "team" | "general";
@@ -15,17 +14,18 @@ interface DatadogInvestigateButtonProps {
 }
 
 export function DatadogInvestigateButton({ scope, alert, label, compact }: DatadogInvestigateButtonProps) {
-  const router = useRouter();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
 
   const run = async () => {
     setBusy(true);
+    const locationAtStart = window.location.href;
     try {
       const res = await fetch("/api/datadog/investigate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          prepare: true,
           scope,
           title: alert?.title,
           status: alert?.status,
@@ -37,13 +37,13 @@ export function DatadogInvestigateButton({ scope, alert, label, compact }: Datad
         ok?: boolean;
         error?: string;
         sessionId?: string;
+        runId?: string;
+        providerLabel?: string;
+        prompt?: string; title?: string; cwd?: string;
       };
       if (!res.ok || !json.ok) throw new Error(json.error || "Investigation failed");
-      // Steer the persistent OpenCode iframe to the session we just created so
-      // the user lands on it (the iframe is cross-origin; we can only set src).
-      if (json.sessionId) requestOpenCodeSession(json.sessionId);
-      toast.success("Investigation started in OpenCode.");
-      router.push("/opencode");
+      if (window.location.href === locationAtStart) openAgentHandoff({ title: json.title || "Investigate", prompt: json.prompt, cwd: json.cwd, worktree: false });
+      setBusy(false);
     } catch (e) {
       console.error("datadog investigate:", e);
       toast.error(e instanceof Error ? e.message : "Couldn't start investigation.");
@@ -61,8 +61,8 @@ export function DatadogInvestigateButton({ scope, alert, label, compact }: Datad
       disabled={busy}
       className={compact ? "hub-icon-btn" : "btn btn-ghost text-xs"}
       style={compact ? undefined : { padding: "3px 8px" }}
-      title="Investigate in OpenCode"
-      aria-label={`Investigate ${alert?.title ?? scope} in OpenCode`}
+      title="Investigate with agent"
+      aria-label={`Investigate ${alert?.title ?? scope} with agent`}
     >
       <ScanSearch size={compact ? 11 : 12} aria-hidden />
       {!compact && <span className="ml-1">{busy ? "Starting…" : (label ?? "Investigate")}</span>}

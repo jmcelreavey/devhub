@@ -1,25 +1,24 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, useSyncExternalStore, type ReactNode } from "react";
-import Link from "next/link";
-import { RefreshCw, Server, Link2, RotateCw, GitBranch, ArrowUp, ArrowDown, Play, AlertTriangle, Check, Wifi, QrCode, Cloud, ExternalLink, History, Hammer } from "lucide-react";
-import QRCode from "qrcode";
-import { CommitMessageModal, defaultCommitCheckpointMessage } from "@/components/runs/CommitMessageModal";
-import { getNow, subscribeMinute } from "@/lib/minute-tick";
-import { revalidateScriptsHistory } from "@/lib/scripts-history-swr";
-import { waitForScriptRun } from "@/lib/wait-for-script-run";
-import { formatRelativePastAge } from "@/lib/utils";
-import { copyTextToClipboard } from "@/lib/clipboard";
+import { CommitMessageModal,defaultCommitCheckpointMessage } from "@/components/runs/CommitMessageModal";
 import { ConflictResolverPanel } from "@/components/runs/ConflictResolverPanel";
-import { SyncHealthPanel } from "@/components/runs/SyncHealthPanel";
-import { RecentRunsPanel } from "@/components/runs/RecentRunsPanel";
 import { MaterializeHonestyBanner } from "@/components/runs/MaterializeHonestyBanner";
-import { StatusDot } from "@/components/ui/StatusDot";
+import { RecentRunsPanel } from "@/components/runs/RecentRunsPanel";
+import { SyncHealthPanel } from "@/components/runs/SyncHealthPanel";
+import { BootScreen,useBootGate } from "@/components/today/TodayBootScreen";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { HoverTip } from "@/components/ui/HoverTip";
+import { StatusDot } from "@/components/ui/StatusDot";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { useLive } from "@/lib/hooks/use-fetch";
-import type { SetupGateStatus } from "@/lib/nav";
-import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
+import { getNow,subscribeMinute } from "@/lib/minute-tick";
+import { revalidateScriptsHistory } from "@/lib/scripts-history-swr";
+import { formatRelativePastAge } from "@/lib/utils";
+import { waitForScriptRun } from "@/lib/wait-for-script-run";
+import { AlertTriangle,ArrowDown,ArrowUp,Check,Cloud,ExternalLink,GitBranch,Hammer,History,Link2,Play,QrCode,RefreshCw,RotateCw,Wifi } from "lucide-react";
+import Link from "next/link";
+import QRCode from "qrcode";
+import { useCallback,useEffect,useRef,useState,useSyncExternalStore,type ReactNode } from "react";
 
 interface ServiceInfo {
   name: string;
@@ -28,8 +27,7 @@ interface ServiceInfo {
 }
 
 interface ServicesStatus {
-  openchamber: ServiceInfo;
-  opencode: ServiceInfo;
+  agents: ServiceInfo;
 }
 
 interface McpRuntimeEntry {
@@ -205,53 +203,12 @@ function McpStateDot({ running, binaryMissing }: { running: boolean; binaryMissi
   );
 }
 
-function ServiceCard({ info, onRestart, restarting }: {
-  info: ServiceInfo;
-  onRestart: () => void;
-  restarting: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-2 py-2">
-      <div className="flex min-w-0 items-center gap-2.5">
-        <StatusDot ok={info.active} />
-        <span className="truncate text-sm font-medium text-text">{info.name}</span>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {info.uptime && (
-          <span className="text-xs text-text-subtle">
-            since {info.uptime}
-          </span>
-        )}
-        <span className={`badge ${info.active ? "badge-success" : "badge-danger"}`}>
-          {info.active ? "running" : "stopped"}
-        </span>
-        <HoverTip label={restarting ? `Restarting ${info.name}…` : `Restart ${info.name}`}>
-          <button
-            className="btn btn-ghost"
-            style={{ fontSize: "11px", padding: "2px 6px" }}
-            onClick={onRestart}
-            disabled={restarting}
-            aria-label={restarting ? `Restarting ${info.name}` : `Restart ${info.name}`}
-          >
-            <RotateCw size={11} className={restarting ? "animate-spin" : ""} aria-hidden />
-          </button>
-        </HoverTip>
-      </div>
-    </div>
-  );
-}
-
 interface BiSnapshot {
   awsProfile: string | null;
   awsIdentity: { account: string; arn: string } | null;
   kubeContext: string | null;
 }
 
-/**
- * Compact infra snapshot: AWS profile + identity + current Kubernetes context.
- * Surfaces whether the dashboard process has working AWS credentials and links to
- * /ops for the full controls (provided by an infra plugin when installed).
- */
 function InfraCard() {
   const [snapshot, setSnapshot] = useState<BiSnapshot | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -337,16 +294,12 @@ function InfraCard() {
 
 export default function StatusPage() {
   const tickNow = useSyncExternalStore(subscribeMinute, getNow, () => 0);
-  const { data: setup } = useLive<SetupGateStatus>("/api/setup/status", { refreshInterval: 60_000 });
-  const showChamber = setup?.chamber === true;
-  const showOpenCode = setup?.opencode === true;
   const [services, setServices] = useState<ServicesStatus | null>(null);
   const [mcpRuntime, setMcpRuntime] = useState<McpRuntimeEntry[]>([]);
   const [git, setGit] = useState<GitStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const boot = useBootGate(!loading);
   const [refreshed, setRefreshed] = useState(0);
-  const [restarting, setRestarting] = useState<string | null>(null);
   const [rebuildInfo, setRebuildInfo] = useState<RebuildCapability | null>(null);
   const [rebuilding, setRebuilding] = useState(false);
   const [rebuildMessage, setRebuildMessage] = useState<string | null>(null);
@@ -503,20 +456,6 @@ export default function StatusPage() {
     }
   }
 
-  async function restartService(service: string) {
-    setRestarting(service);
-    try {
-      await fetch("/api/status/services/restart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ service }),
-      });
-      setTimeout(() => setRefreshed((n) => n + 1), 2000);
-    } finally {
-      setRestarting(null);
-    }
-  }
-
   async function quickSync() {
     const latestGit = await fetch("/api/status/git")
       .then((r) => (r.ok ? r.json() : null))
@@ -578,7 +517,7 @@ export default function StatusPage() {
     }
   }
 
-  function buildChamberPrompt(failure: FailedSyncRun): string {
+  function buildAgentPrompt(failure: FailedSyncRun): string {
     const excerpt = failure.log.lines.slice(-120).join("\n");
     return [
       "Fix the push blockers in this repo.",
@@ -646,8 +585,7 @@ export default function StatusPage() {
   const healthItems: string[] = [];
   if (services) {
     const visible = [
-      showChamber ? services.openchamber : null,
-      showOpenCode ? services.opencode : null,
+      services.agents,
     ].filter((s): s is ServiceInfo => !!s);
     const stopped = visible.filter((s) => !s.active).length;
     if (stopped > 0) healthItems.push(`${stopped} service${stopped > 1 ? "s" : ""} stopped`);
@@ -950,8 +888,8 @@ export default function StatusPage() {
                       </p>
                     </div>
                     <CopyButton
-                      text={latestFailedSyncRun ? buildChamberPrompt(latestFailedSyncRun) : ""}
-                      label="Chamber prompt"
+                      text={latestFailedSyncRun ? buildAgentPrompt(latestFailedSyncRun) : ""}
+                      label="Agent prompt"
                     />
                   </div>
                   <pre
@@ -1051,37 +989,7 @@ export default function StatusPage() {
         {/* Services + MCP + BI: shared row on large screens */}
         <SectionLabel>Services &amp; Integrations</SectionLabel>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,0.9fr)] lg:items-stretch">
-        {(showChamber || showOpenCode) && (
-        <div className="card min-w-0 flex flex-col">
-          <div className="card-header">
-            <span className="flex items-center gap-1.5"><Server size={12} />Services</span>
-          </div>
-          <div className="card-body flex-1" style={{ padding: "8px 16px" }}>
-            {services ? (
-              <>
-                {showChamber && (
-                  <ServiceCard
-                    info={{ ...services.openchamber, name: "OpenChamber" }}
-                    onRestart={() => restartService("openchamber")}
-                    restarting={restarting === "openchamber"}
-                  />
-                )}
-                {showOpenCode && services.opencode && (
-                  <div style={{ borderTop: showChamber ? "1px solid var(--border-muted)" : undefined }}>
-                    <ServiceCard
-                      info={{ ...services.opencode, name: "OpenCode" }}
-                      onRestart={() => restartService("opencode")}
-                      restarting={restarting === "opencode"}
-                    />
-                  </div>
-                )}
-              </>
-            ) : (
-              <p className="text-xs py-2 text-text-subtle">Loading…</p>
-            )}
-          </div>
-        </div>
-        )}
+        <div className="card p-5 space-y-3"><h3 className="font-medium">Agents workspace</h3><p className="text-sm text-text-muted">{services?.agents?.active ? "Connected" : "Not connected"}</p><a className="btn btn-ghost" href="/agents?view=connection">Manage connection</a></div>
 
         <div className="card min-w-0 flex flex-col">
           <div className="card-header">

@@ -20,6 +20,7 @@ import {
   chatgptCliCommand,
   claudeCliCommand,
   cursorCliCommand,
+  repoUpstartCommand,
   taskImplementationCommand,
 } from "./terminal-launch";
 
@@ -32,8 +33,17 @@ afterEach(() => {
 
 /** Seed the module cache so builders never hit the (unavailable) API in tests. */
 function useConfig(overrides: Partial<AgentCliConfig> = {}) {
-  setAgentCliConfigCache({ ...AGENT_CLI_DEFAULTS, ...overrides });
+  // OpenCode baseline: these cases were written against it; Cursor ones override.
+  setAgentCliConfigCache({ ...AGENT_CLI_DEFAULTS, cli: "opencode", ...overrides });
 }
+
+describe("repoUpstartCommand", () => {
+  it("changes to the target repository before running the stored script", () => {
+    expect(repoUpstartCommand("/repo/devhub/upstarts/app/upstart.sh", "/Users/dev/app repo")).toBe(
+      "cd -- '/Users/dev/app repo' && bash '/repo/devhub/upstarts/app/upstart.sh'",
+    );
+  });
+});
 
 describe("agentSkillCommand", () => {
   it("pins the named vendored skill into a one-shot CLI run", async () => {

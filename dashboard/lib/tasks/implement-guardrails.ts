@@ -1,14 +1,6 @@
-/**
- * Guardrail before launching another spendy agent implementation.
- *
- * This deliberately reads `/api/terminal/sessions`, not the proposal store.
- * `proposeTerminalRun` is a `window.dispatchEvent` — a UI launch never creates
- * a server-side proposal, so counting pending proposals meant this never fired
- * for the flow it exists to protect. The dock heartbeats every visible tab into
- * the session registry, so live agent tabs are the honest signal.
- */
+/** Check durable agent activity before starting another implementation. */
 
-import { isAgentLikeKind, type TerminalSessionKind } from "@/lib/terminal-meta";
+import { isAgentLikeKind,type TerminalSessionKind } from "@/lib/terminal-meta";
 
 /** Concurrent busy agent tabs tolerated before we make the user resolve one. */
 export const MAX_CONCURRENT_AGENT_RUNS = 2;
@@ -37,17 +29,17 @@ export function describeAgentRunGuardrail(runningCount: number): ImplementGuardr
   return {
     blocked: true,
     runningCount,
-    reason: `${runningCount} agent runs are already working in the terminal — let one finish before starting another.`,
+    reason: `${runningCount} agent runs are already working — let one finish before starting another.`,
   };
 }
 
 /** Fails open: a guardrail that can't read the registry must not block work. */
 export async function checkImplementGuardrails(): Promise<ImplementGuardrailResult> {
   try {
-    const res = await fetch("/api/terminal/sessions", { cache: "no-store" });
+    const res = await fetch("/api/agent/runs?summary=1", { cache: "no-store" });
     if (!res.ok) return { blocked: false, runningCount: 0 };
-    const data = (await res.json()) as { sessions?: SessionRow[] };
-    return describeAgentRunGuardrail(countBusyAgentRuns(data.sessions ?? []));
+    const data = (await res.json()) as { activeCount?: number };
+    return describeAgentRunGuardrail(data.activeCount ?? 0);
   } catch {
     return { blocked: false, runningCount: 0 };
   }

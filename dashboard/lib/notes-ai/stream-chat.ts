@@ -9,7 +9,7 @@ export interface NotesAiChatBody {
 }
 
 export async function streamNotesAiChat(body: NotesAiChatBody) {
-  const model = getNotesAiModel();
+  const model = getNotesAiModel({ action: "Notes assistant" });
   if (!model) return null;
 
   return streamText({

@@ -1,9 +1,7 @@
 "use client";
 
-import { Pickaxe } from "lucide-react";
 import { launchAgentJob } from "@/lib/agent-job";
-import { agentSkillCommand } from "@/lib/terminal-launch";
-import { useToast } from "@/lib/hooks/use-toast";
+import { Pickaxe } from "lucide-react";
 
 /** Icon-only launch of commit-archaeologist for the selected history file. */
 export function WhyExistsAction({
@@ -17,7 +15,6 @@ export function WhyExistsAction({
   filePath: string;
   disabled?: boolean;
 }) {
-  const toast = useToast();
   return (
     <button
       type="button"
@@ -29,26 +26,17 @@ export function WhyExistsAction({
       onClick={() => {
         void (async () => {
           const instruction = `Explain why ${filePath} exists in ${repoName}.`;
-          const result = await launchAgentJob({
+          await launchAgentJob({
             title: `why · ${filePath}`,
             kind: "agent",
             cwd: repoPath,
             repoName,
             promptText: `Use the commit-archaeologist skill. ${instruction}`,
-            promptCommand: await agentSkillCommand(
-              "commit-archaeologist",
-              instruction,
-              "run commit-archaeologist",
-            ),
             mode: "oneshot",
             alreadyConfirmed: true,
             reason: `Why does ${filePath} exist?`,
           });
-          toast.info(
-            result.channel === "opencode"
-              ? "Archaeology running in OpenCode."
-              : "Archaeology queued in the Agent tab.",
-          );
+
         })();
       }}
     >

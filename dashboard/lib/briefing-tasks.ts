@@ -109,7 +109,7 @@ function slug(input: string): string {
 
 async function aiBrief(topic: string): Promise<{ markdown: string } | null> {
   if (!isNotesAiConfigured()) return null;
-  const model = getNotesAiModel();
+  const model = getNotesAiModel({ source: "briefing", action: "Extract briefing tasks" });
   if (!model) return null;
   try {
     const result = await generateText({

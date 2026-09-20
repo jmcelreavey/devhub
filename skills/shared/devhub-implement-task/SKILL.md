@@ -86,8 +86,17 @@ Sidecar files live at `notes/.config/task-agent-runs/<taskId>.json` (plus `_inde
 
 When the prompt includes a DevHub Agent Activity run id (injected by the UI):
 
-1. After your first meaningful progress update, call `agent_interactive_note` with that `runId` and a short status.
-2. When you finish (success or stop), call `agent_interactive_finish` with `runId`, `ok`, your `sessionId`, and a short `resultText` (or `error`). DevHub closes the run itself when the CLI exits or the tab closes, but only this call records the session so the task can be continued later.
+Post a separate `agent_interactive_note` for **each** milestone — do not batch into one end-of-run dump:
+
+1. **Check-in** (before any code): goal, assumptions, questions (or "no questions").
+2. **After I answer** (or you proceed with no questions): what we decided.
+3. **Tooling / verify / review**: when you finish a review note, open Cursor or another tool, start or finish tests/CI, or change the plan.
+4. **My instruction**: when I ask you to commit, push, open a PR, pause, or stop — note that before you act.
+5. **After commit / push / PR**: branch, SHA or PR URL, verify status.
+
+When the implement goal is done (or I tell you to stop), call `agent_interactive_finish` with `runId`, `ok`, your CLI `sessionId`, and a short `resultText` (or `error`) — **even if the terminal stays open**. Closing the tab only auto-closes the run as a backup and does not record the session id.
+
+On **Resume / Continue**, the prompt includes those Activity notes under `prior Agent Activity notes` — treat them as the source of truth for what already happened (check-ins, decisions, commits) and continue from there; do not re-ask settled questions.
 
 **Before pause, end-of-day, or abandon**
 
@@ -131,8 +140,14 @@ Do not skip this because the task text looks self-explanatory. The list item
 is the headline, not the spec.
 
 Before editing, write a short acceptance checklist from the task, Jira, and
-notes. If those sources conflict or leave a product decision open, ask once
-and resolve it before coding.
+notes.
+
+**Then check in before you write code.** Post two or three lines: the goal as
+you understand it, the assumptions you are making, and anything that would
+change the approach if answered differently — then wait. If the plan and notes
+already settle it, say "no questions" and start. The launch dialog has a box
+for extra context; when the user filled it in, it arrives under
+`## Extra context from me` and overrides your assumptions.
 
 ## 1.5 Start-of-work Jira status
 

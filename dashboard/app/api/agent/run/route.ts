@@ -1,21 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
-import { ensureDevHubOpenCode } from "@/lib/opencode/listen";
+import { startBackgroundAgent } from "@/lib/agent-runs/background";
+import { parseBody,withErrorHandler } from "@/lib/api-utils";
+import { getNotesDir } from "@/lib/notes/dir";
+import { NextRequest,NextResponse } from "next/server";
 import { z } from "zod";
-import { parseBody, withErrorHandler } from "@/lib/api-utils";
 
 export const dynamic = "force-dynamic";
-
-function opencodeHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  };
-  const password = process.env.OPENCODE_SERVER_PASSWORD?.trim();
-  if (password) {
-    headers.Authorization = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
-  }
-  return headers;
-}
 
 const AgentRunSchema = z.object({
   prompt: z.string().trim().min(1, "prompt is required").max(32_000, "prompt too long"),
@@ -29,8 +18,8 @@ const AgentRunSchema = z.object({
 });
 
 /**
- * Start an OpenCode session with a prompt (same seam as Datadog Investigate).
- * Callers navigate to /opencode and requestOpenCodeSession(sessionId).
+ * Start a managed conversation without changing any browser or terminal.
+ * The caller receives durable run and conversation IDs for an explicit link.
  */
 export const POST = withErrorHandler(async (req: NextRequest) => {
   const parsed = await parseBody(req, AgentRunSchema);
@@ -54,50 +43,23 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     text = `${prompt}\n\n(Write results via notes MCP to path: ${body.notePath.trim()})`;
   }
 
-  const base = `http://127.0.0.1:${await ensureDevHubOpenCode()}`;
-  const headers = opencodeHeaders();
-
   try {
-    const sessionBody: Record<string, unknown> = { title: title.slice(0, 80) };
-    if (body.directory?.trim()) {
-      sessionBody.directory = body.directory.trim();
-    }
-
-    const sessionRes = await fetch(`${base}/session`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(sessionBody),
+    const started = await startBackgroundAgent({
+      prompt: text,
+      title,
+      cwd: body.directory?.trim() || getNotesDir(),
+      provider: body.provider,
+      activity: { source: "interactive", action: body.kind || "agent", repoName: body.repoName, notePath: body.notePath },
     });
-    if (!sessionRes.ok) {
-      return NextResponse.json(
-        { ok: false, error: `OpenCode session create failed (${sessionRes.status})` },
-        { status: 502 },
-      );
-    }
-    const session = (await sessionRes.json()) as { id?: string };
-    if (!session.id) {
-      return NextResponse.json({ ok: false, error: "OpenCode returned no session id" }, { status: 502 });
-    }
-
-    const promptRes = await fetch(`${base}/session/${session.id}/prompt_async`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ parts: [{ type: "text", text }] }),
+    return NextResponse.json({
+      ok: true,
+      providerLabel: started.providerLabel,
+      runId: started.runId,
+      conversationId: started.conversationId,
     });
-    if (!promptRes.ok && promptRes.status !== 204) {
-      return NextResponse.json(
-        { ok: false, error: `OpenCode prompt failed (${promptRes.status})`, sessionId: session.id },
-        { status: 502 },
-      );
-    }
-
-    return NextResponse.json({ ok: true, sessionId: session.id });
   } catch (e) {
     return NextResponse.json(
-      {
-        ok: false,
-        error: e instanceof Error ? e.message : "Could not reach OpenCode.",
-      },
+      { ok: false, error: e instanceof Error ? e.message : "Could not start the agent." },
       { status: 502 },
     );
   }

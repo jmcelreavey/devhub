@@ -1,12 +1,6 @@
-import { Suspense } from "react";
-import Client from "./client";
+import { redirect } from "next/navigation";
 
-export const metadata = { title: "Agent activity" };
-
-export default function Page() {
-  return (
-    <Suspense fallback={null}>
-      <Client />
-    </Suspense>
-  );
+export default async function Page({ searchParams }: { searchParams: Promise<{ run?: string }> }) {
+  const { run } = await searchParams;
+  redirect(`/agents?view=activity${run ? `&run=${encodeURIComponent(run)}` : ""}`);
 }

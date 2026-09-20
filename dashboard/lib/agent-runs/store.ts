@@ -27,8 +27,6 @@ import { syncTaskAgentRunFromAgentState } from "@/lib/tasks/task-agent-runs";
 import { getNotesDir } from "@/lib/notes/dir";
 import { recordRunSnapshot } from "@/lib/tasks/run-snapshot";
 
-/** Finished runs older than this are pruned whenever a new run is created. */
-const RUN_TTL_MS = 3 * 24 * 60 * 60 * 1_000;
 /** Proposals expire after 15 minutes, so a run still queued past this never started. */
 const NEVER_STARTED_MS = 16 * 60 * 1_000;
 const RUN_ID_RE = /^run-[a-z0-9]{6,12}-[0-9a-f]{8}$/;
@@ -39,9 +37,12 @@ export interface AgentRun {
   dir: string;
 }
 
-/** Transient like terminal logs — the OS temp dir unless overridden. */
 export function agentRunsDir(): string {
-  return process.env.DEVHUB_AGENT_RUNS_DIR?.trim() || path.join(os.tmpdir(), "devhub-agent-runs");
+  return process.env.DEVHUB_AGENT_RUNS_DIR?.trim() || path.join(getNotesDir(), ".config", "agent-runs");
+}
+
+function legacyAgentRunsDir(): string | null {
+  return process.env.DEVHUB_AGENT_RUNS_DIR?.trim() ? null : path.join(os.tmpdir(), "devhub-agent-runs");
 }
 
 export function newAgentRunId(): string {
@@ -65,16 +66,27 @@ function safeReaddir(dir: string): string[] {
   }
 }
 
-function pruneFinishedRuns(root: string): void {
-  const now = Date.now();
-  for (const name of safeReaddir(root)) {
-    if (!isValidAgentRunId(name)) continue;
-    const dir = path.join(root, name);
-    const status = readRunStatus(dir);
-    if (status && isActiveAgentRunState(status.state)) continue;
-    if (now - (status?.updatedAt ?? 0) < RUN_TTL_MS) continue;
-    fs.rmSync(dir, { recursive: true, force: true });
+export function archiveLegacyAgentRun(run: AgentRun, root = agentRunsDir()): AgentRun {
+  if (!isValidAgentRunId(run.spec.id)) throw new Error("Invalid legacy agent run id");
+  if (isActiveAgentRunState(run.status.state)) return run;
+  const target = path.join(root, run.spec.id);
+  const existing = readRunFromDir(target);
+  if (existing) return existing;
+  fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+  const temporary = `${target}.migration-${randomBytes(6).toString("hex")}`;
+  try {
+    fs.cpSync(run.dir, temporary, { recursive: true, errorOnExist: true, force: false });
+    fs.chmodSync(temporary, 0o700);
+    try {
+      fs.renameSync(temporary, target);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST" && code !== "ENOTEMPTY") throw err;
+    }
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
   }
+  return readRunFromDir(target) ?? run;
 }
 
 export function createAgentRun(spec: AgentRunSpec): AgentRun {
@@ -83,10 +95,12 @@ export function createAgentRun(spec: AgentRunSpec): AgentRun {
   const root = path.dirname(dir);
   // 0700: specs hold prompts and events hold whatever the agent read.
   fs.mkdirSync(root, { recursive: true, mode: 0o700 });
-  pruneFinishedRuns(root);
   fs.mkdirSync(dir, { mode: 0o700 });
   writeRunSpec(dir, spec);
-  const status = writeRunStatus(dir, { state: "queued", updatedAt: Date.now(), eventCount: 0 });
+  const status = writeRunStatus(dir, {
+    state: "queued", updatedAt: Date.now(), eventCount: 0,
+    ...(spec.runtime === "generation" ? { ownerPid: process.pid } : {}),
+  });
   return { spec, status, dir };
 }
 
@@ -127,6 +141,7 @@ export function createInteractiveAgentRun(input: {
 }
 
 function syncLinkedTaskAgentRun(run: AgentRun, status: AgentRunStatus): void {
+  if (run.spec.runtime === "generation" && !run.spec.activity?.taskId) return;
   // Runner process writes status.json directly; dashboard paths sync here.
   // notesDir is resolved now, not when the promise runs — see recordRunSnapshot.
   void syncTaskAgentRunFromAgentState(run.spec.id, status.state, {
@@ -142,7 +157,7 @@ export function updateAgentRunStatus(run: AgentRun, patch: Partial<AgentRunStatu
   const current = readRunStatus(run.dir) ?? run.status;
   const status = writeRunStatus(run.dir, { ...current, ...patch });
   syncLinkedTaskAgentRun(run, status);
-  if (isActiveAgentRunState(current.state) && !isActiveAgentRunState(status.state)) {
+  if (run.spec.runtime !== "generation" && isActiveAgentRunState(current.state) && !isActiveAgentRunState(status.state)) {
     // Finished here (MCP finish, cancel, closed tab): leave the next agent a handoff.
     void recordRunSnapshot(
       run.spec.worktree?.path ?? run.spec.cwd,
@@ -170,6 +185,16 @@ function pidAlive(pid: number): boolean {
 }
 
 export function reconcileAgentRun(run: AgentRun): AgentRun {
+  if (run.spec.runtime === "aionui") return run;
+  if (run.spec.runtime === "generation") {
+    if (isActiveAgentRunState(run.status.state) && run.status.ownerPid && !pidAlive(run.status.ownerPid)) {
+      return updateAgentRunStatus(run, {
+        state: "failed", finishedAt: Date.now(),
+        error: "DevHub stopped before the generation reported a result. The request was not replayed.",
+      });
+    }
+    return run;
+  }
   const { status } = run;
   const now = Date.now();
   // The dock chip approved (or already injected) this run's proposal: that is
@@ -230,7 +255,12 @@ function readRunFromDir(dir: string): AgentRun | null {
 export function readAgentRun(id: string): AgentRun | null {
   const dir = agentRunDir(id);
   if (!dir) return null;
-  const run = readRunFromDir(dir);
+  let run = readRunFromDir(dir);
+  const legacyRoot = legacyAgentRunsDir();
+  if (!run && legacyRoot) {
+    const legacy = readRunFromDir(path.join(legacyRoot, id));
+    if (legacy) run = archiveLegacyAgentRun(reconcileAgentRun(legacy));
+  }
   if (!run) return null;
   const reconciled = reconcileAgentRun(run);
   // Heal task sidecar when status.json already shows a terminal state.
@@ -247,6 +277,15 @@ export function listAgentRuns(limit = 20): AgentRun[] {
     .filter(isValidAgentRunId)
     .map((name) => readRunFromDir(path.join(root, name)))
     .filter((run): run is AgentRun => run !== null);
+  const ids = new Set(runs.map((run) => run.spec.id));
+  const legacyRoot = legacyAgentRunsDir();
+  if (legacyRoot) {
+    for (const id of safeReaddir(legacyRoot).filter(isValidAgentRunId)) {
+      if (ids.has(id)) continue;
+      const legacy = readRunFromDir(path.join(legacyRoot, id));
+      if (legacy) runs.push(archiveLegacyAgentRun(reconcileAgentRun(legacy)));
+    }
+  }
   return runs
     .sort((a, b) => b.spec.createdAt - a.spec.createdAt)
     .slice(0, limit)
@@ -254,7 +293,9 @@ export function listAgentRuns(limit = 20): AgentRun[] {
 }
 
 export function countActiveAgentRuns(): number {
-  return listAgentRuns(Number.MAX_SAFE_INTEGER).filter((run) => isActiveAgentRunState(run.status.state)).length;
+  return listAgentRuns(Number.MAX_SAFE_INTEGER).filter((run) =>
+    run.spec.runtime !== "generation" && isActiveAgentRunState(run.status.state),
+  ).length;
 }
 
 export type AgentRunCancelOutcome = "signalled" | "cancelled" | "already-finished";
@@ -265,6 +306,9 @@ export type AgentRunCancelOutcome = "signalled" | "cancelled" | "already-finishe
  */
 export function cancelAgentRun(run: AgentRun): { run: AgentRun; outcome: AgentRunCancelOutcome } {
   const { status } = run;
+  if ((run.spec.runtime === "generation" || run.spec.runtime === "aionui") && isActiveAgentRunState(status.state)) {
+    throw new Error("Cancel this request through its owning runtime; it has no terminal process to signal.");
+  }
   // Interactive runs' pid is the user's shell — never signal it; just close the record.
   if (status.state === "running" && run.spec.bin === "interactive") {
     return {
@@ -338,6 +382,8 @@ export function toAgentRunSummary(run: AgentRun) {
   const { spec, status } = run;
   return {
     id: spec.id,
+    runtime: spec.runtime ?? "legacy-cli",
+    activity: spec.activity ?? null,
     provider: spec.provider,
     providerLabel: spec.providerLabel,
     title: spec.title,
@@ -354,6 +400,11 @@ export function toAgentRunSummary(run: AgentRun) {
     eventCount: status.eventCount,
     sessionId: status.sessionId ?? null,
     terminalSessionId: status.terminalSessionId ?? null,
+    conversationId: status.conversationId ?? null,
+    turnId: status.turnId ?? null,
+    connectivity: status.connectivity ?? null,
+    inputTokens: status.inputTokens ?? null,
+    outputTokens: status.outputTokens ?? null,
     resultText: status.resultText ? clip(status.resultText, 4_000) : null,
     costUsd: status.costUsd ?? null,
     turns: status.turns ?? null,

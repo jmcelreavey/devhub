@@ -31,7 +31,7 @@ export function registerUiTools(server: McpServer, ctx: Context): void {
     "ui_open",
     {
       description:
-        "Open a DevHub page in a new workspace tab in the running DevHub app (desktop webview or dashboard browser). Accepts internal hrefs: /notes/<path>, /repos/<name>, /work, /briefing, /tasks, /skills, /search — the same paths the dashboard sidebar uses. Fails cleanly (isError) when no DevHub client is connected; ask the user to open DevHub, or keep going — nothing is lost.",
+        "Resolve a DevHub page link for the user. Agent calls never change the selected page, chat or focus. Accepts internal hrefs such as /notes/<path>, /repos/<name>, /work, /briefing, /agents, /skills and /search. Return the resulting link with your answer.",
       inputSchema: {
         href: InternalHref.describe("Internal DevHub path to open, e.g. /notes/discovery/example or /work"),
         title: z.string().max(80).optional().describe("Unused today; reserved for a future tab-title override"),
@@ -39,7 +39,8 @@ export function registerUiTools(server: McpServer, ctx: Context): void {
     },
     async ({ href }) =>
       withDashboardErrors(async () => {
-        const r = await dashboard.post<{ delivered: number }>("/api/desktop/navigation", { href, newTab: true });
+        const r = await dashboard.post<{ delivered: number; suppressed?: boolean }>("/api/desktop/navigation", { href, newTab: true });
+        if (r.suppressed) return { content: [{ type: "text", text: `Ready: ${href}. Share this link with the user; agent work does not change their screen.` }] };
         if (r.delivered === 0) {
           return {
             content: [

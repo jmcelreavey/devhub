@@ -3,12 +3,16 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { GithubPrRow } from "@/lib/github/prs";
+import type { readAgentRun } from "@/lib/agent-runs/store";
 import {
+  MAX_AUTO_REVIEW_ATTEMPTS,
   parseAutoReviewAllowlist,
   selectAutoReviewCandidates,
   runAutoPrReview,
   autoReviewConcurrency,
+  shouldRetryAutoReview,
 } from "@/lib/github/auto-pr-review";
+import { getAutoPrReviewRecord } from "@/lib/github/auto-pr-review-state";
 
 function pr(partial: Partial<GithubPrRow> & Pick<GithubPrRow, "number" | "repo" | "url">): GithubPrRow {
   return {
@@ -44,7 +48,7 @@ describe("selectAutoReviewCandidates", () => {
     expect(skipped.some((s) => s.reason === "not-allowlisted" && s.url === c.url)).toBe(true);
   });
 
-  it("dedupes on head SHA even after updatedAt moves (comments, labels)", () => {
+  it("dedupes on PR URL even after head SHA or updatedAt moves (pushes, comments)", () => {
     const withSha = { ...a, headSha: "abc123", updatedAt: "2026-09-12T00:00:00.000Z" };
     const same = selectAutoReviewCandidates({
       reviews: [withSha],
@@ -59,7 +63,8 @@ describe("selectAutoReviewCandidates", () => {
       priorByUrl: new Map([[a.url, { updatedAt: withSha.updatedAt, headSha: "abc123" }]]),
       concurrency: 2,
     });
-    expect(pushed.toStart).toHaveLength(1);
+    expect(pushed.toStart).toHaveLength(0);
+    expect(pushed.skipped[0]?.reason).toBe("already-reviewed-head");
   });
 
   it("skips rows flagged draft by the list query", () => {
@@ -77,13 +82,14 @@ describe("selectAutoReviewCandidates", () => {
     expect(skipped[0]?.reason).toBe("already-reviewed-head");
   });
 
-  it("re-queues when updatedAt moved past prior start", () => {
-    const { toStart } = selectAutoReviewCandidates({
+  it("does not re-queue when updatedAt moved past prior start", () => {
+    const { toStart, skipped } = selectAutoReviewCandidates({
       reviews: [a],
       priorByUrl: new Map([[a.url, { updatedAt: "2026-09-01T00:00:00.000Z" }]]),
       concurrency: 2,
     });
-    expect(toStart).toHaveLength(1);
+    expect(toStart).toHaveLength(0);
+    expect(skipped[0]?.reason).toBe("already-reviewed-head");
   });
 
   it("skips when review note mtime covers PR updatedAt", () => {
@@ -164,6 +170,48 @@ describe("runAutoPrReview", () => {
     expect(result.started).toHaveLength(1);
     expect(result.started[0]?.sessionId).toBe("ses-1");
     expect(result.skipped.some((s) => s.reason === "concurrency-cap")).toBe(true);
+  });
+
+  it("retries a head whose agent run failed, counting attempts", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-auto-review-"));
+    process.env.NOTES_DIR = tmp;
+    const row = pr({ repo: "acme/app", number: 4, url: "https://github.com/acme/app/pull/4", headSha: "abc" });
+    const start = async () => ({ runId: "run-x" });
+
+    await runAutoPrReview({ reviews: [row], concurrency: 1, startReview: start, retryFailed: () => false });
+    const skippedAgain = await runAutoPrReview({
+      reviews: [row],
+      concurrency: 1,
+      startReview: start,
+      retryFailed: () => false,
+    });
+    expect(skippedAgain.started).toHaveLength(0);
+
+    const retried = await runAutoPrReview({
+      reviews: [row],
+      concurrency: 1,
+      startReview: start,
+      retryFailed: () => true,
+    });
+    expect(retried.started[0]?.runId).toBe("run-x");
+    expect(getAutoPrReviewRecord(row.url)?.attempts).toBe(2);
+  });
+});
+
+describe("shouldRetryAutoReview", () => {
+  const run = (state: string) => () => ({ status: { state } }) as unknown as ReturnType<typeof readAgentRun>;
+
+  it("retries failed or cancelled runs under the attempt cap", () => {
+    expect(shouldRetryAutoReview({ runId: "r" }, run("failed"))).toBe(true);
+    expect(shouldRetryAutoReview({ runId: "r", attempts: 2 }, run("cancelled"))).toBe(true);
+    expect(shouldRetryAutoReview({ runId: "r", attempts: MAX_AUTO_REVIEW_ATTEMPTS }, run("failed"))).toBe(false);
+  });
+
+  it("keeps running, finished, pruned and OpenCode starts", () => {
+    expect(shouldRetryAutoReview({ runId: "r" }, run("running"))).toBe(false);
+    expect(shouldRetryAutoReview({ runId: "r" }, run("succeeded"))).toBe(false);
+    expect(shouldRetryAutoReview({ runId: "r" }, () => null)).toBe(false);
+    expect(shouldRetryAutoReview({}, run("failed"))).toBe(false);
   });
 });
 

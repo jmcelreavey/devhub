@@ -93,7 +93,7 @@ export async function explainDelta(
   }
 
   const evidence = await gatherEvidence(snapshot, entry);
-  const model = getNotesAiModel();
+  const model = getNotesAiModel({ action: "Explain a capability" });
 
   let result: DeltaExplanation;
   if (!model) {

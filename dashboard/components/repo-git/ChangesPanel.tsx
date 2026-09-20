@@ -1,62 +1,60 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  Bot,
-  Check,
-  ChevronDown,
-  CloudUpload,
-  Copy,
-  Eye,
-  File,
-  Folder,
-  GitCommit,
-  MessageSquarePlus,
-  RefreshCw,
-  RotateCcw,
-  Sparkles,
-  Trash2,
-  Upload,
-  X,
-} from "lucide-react";
+import { useConfirm,usePrompt } from "@/components/shell/ConfirmDialog";
+import { ContextMenu,useContextMenu,type ContextMenuGroup } from "@/components/shell/ContextMenu";
+import { SimpleMarkdown } from "@/components/ui/SimpleMarkdown";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
-import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
+import { launchAgentJob } from "@/lib/agent-job";
+import { copyTextToClipboard } from "@/lib/clipboard";
+import { reviewCommentsStore,useReviewComments,type ReviewComment } from "@/lib/git/review-comments";
+import { recordUndo } from "@/lib/git/undo-stack";
 import { useStoredFraction } from "@/lib/hooks/use-stored-state";
 import { useToast } from "@/lib/hooks/use-toast";
-import {
-  agentCommitMessageCommand,
-  agentCommitMessagePrompt,
-  agentDiffSelectionCommand,
-  agentDiffSelectionPrompt,
-} from "@/lib/terminal-launch";
-import { launchAgentJob } from "@/lib/agent-job";
-import { isGitNoisePath, isUnmergedFile, looksLikeDirectoryPath, type DiffLine } from "@/lib/repos/git-parsers";
-import { SimpleMarkdown } from "@/components/ui/SimpleMarkdown";
-import { ContextMenu, useContextMenu, type ContextMenuGroup } from "@/components/shell/ContextMenu";
-import { copyTextToClipboard } from "@/lib/clipboard";
 import { openRepoFileInCursor } from "@/lib/open-in-cursor-client";
-import { reviewCommentsStore, useReviewComments, type ReviewComment } from "@/lib/git/review-comments";
-import { recordUndo } from "@/lib/git/undo-stack";
+import { isGitNoisePath,isUnmergedFile,looksLikeDirectoryPath,type DiffLine } from "@/lib/repos/git-parsers";
+import {
+agentCommitMessagePrompt,
+agentDiffSelectionPrompt
+} from "@/lib/terminal-launch";
+import {
+Bot,
+Check,
+ChevronDown,
+CloudUpload,
+Copy,
+Eye,
+File,
+Folder,
+GitCommit,
+MessageSquarePlus,
+RefreshCw,
+RotateCcw,
+Sparkles,
+Trash2,
+Upload,
+X,
+} from "lucide-react";
+import { useCallback,useEffect,useMemo,useRef,useState,type ReactNode } from "react";
 import { CouplingHints } from "./CouplingHints";
 import { DiffMaximizeModal } from "./DiffMaximizeModal";
-import { DiffToolbar, DIFF_CONTEXT_LINES, useDiffViewMode, type DiffContextMode } from "./DiffToolbar";
+import { DIFF_CONTEXT_LINES,DiffToolbar,useDiffViewMode,type DiffContextMode } from "./DiffToolbar";
 import { GitDiffView } from "./GitDiffView";
 import { RepoFileOpenMenu } from "./RepoFileOpenMenu";
+import {
+fetchGitJson,
+IconBtn,
+postGitAction,
+readCommitModePref,
+readError,
+repoApi,
+writeCommitModePref,
+type CommitMode,
+type GitPanelHandlers,
+type StatusFile,
+type StatusPayload,
+} from "./shared";
 import { RepoSplit } from "./SplitResize";
 import { usePointerDrag } from "./usePointerDrag";
-import {
-  fetchGitJson,
-  IconBtn,
-  postGitAction,
-  readCommitModePref,
-  readError,
-  repoApi,
-  writeCommitModePref,
-  type CommitMode,
-  type GitPanelHandlers,
-  type StatusFile,
-  type StatusPayload,
-} from "./shared";
 
 interface DiffDirEntry {
   name: string;
@@ -117,7 +115,6 @@ function ReviewBasket({
             .join("\n")}`,
       )
       .join("\n\n");
-    const files = [...byFile.keys()].join(", ");
     const promptText = [
       `Review notes for ${repoName} — ${comments.length} comment${comments.length === 1 ? "" : "s"} across ${byFile.size} file${byFile.size === 1 ? "" : "s"}.`,
       `Work through each note against the current working tree:`,
@@ -130,7 +127,6 @@ function ReviewBasket({
       cwd: repoPath,
       repoName,
       promptText,
-      promptCommand: `In ${repoName}, address these review comments on ${files}. Ask if intent is unclear. Do not commit unless asked.`,
       mode: "interactive",
       reason: `${comments.length} review comments on ${byFile.size} files`,
       alreadyConfirmed: true,
@@ -530,7 +526,6 @@ export function ChangesPanel({
       cwd: repoPath,
       repoName,
       promptText: agentDiffSelectionPrompt(opts),
-      promptCommand: await agentDiffSelectionCommand(opts),
       mode: "interactive",
       forceTerminal: true,
       reason: `Diff selection in ${selected.path}`,
@@ -637,7 +632,6 @@ export function ChangesPanel({
             cwd: repoPath,
             repoName,
             promptText: agentCommitMessagePrompt(repoName),
-            promptCommand: await agentCommitMessageCommand(repoName),
             mode: "oneshot",
             alreadyConfirmed: true,
           });

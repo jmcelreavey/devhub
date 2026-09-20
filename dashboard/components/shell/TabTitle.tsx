@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 
 const PAGE_TITLES: Record<string, string> = {
   "/": "Today",
@@ -10,7 +10,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/prs": "PRs",
   "/notes": "Notes",
   "/docs": "Docs",
-  "/chamber": "Chamber",
+  "/agents": "Agents",
   "/status": "Status",
   "/logs": "Logs",
   "/ops": "Ops",

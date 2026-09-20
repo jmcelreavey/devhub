@@ -1,27 +1,27 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  ExternalLink,
-  FileCode,
-  FolderGit2,
-  GitCommitHorizontal,
-  GraduationCap,
-  Loader2,
-  RefreshCw,
-  SquareArrowOutUpRight,
-  TerminalSquare,
-} from "lucide-react";
-import { LabTutor } from "@/components/capability/LabTutor";
 import { LabMarkdown } from "@/components/capability/LabMarkdown";
-import { cursorFileUrl } from "@/lib/cursor-link";
-import { openLabWorkspaceInCursor } from "@/lib/open-in-cursor-client";
+import { LabTutor } from "@/components/capability/LabTutor";
 import { launchAgentJob } from "@/lib/agent-job";
-import { agentLabCommand, openTerminal, type LabLaunchPlan } from "@/lib/terminal-launch";
+import { cursorFileUrl } from "@/lib/cursor-link";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
+import { openLabWorkspaceInCursor } from "@/lib/open-in-cursor-client";
+import { openTerminal,type LabLaunchPlan } from "@/lib/terminal-launch";
+import {
+AlertTriangle,
+CheckCircle2,
+ExternalLink,
+FileCode,
+FolderGit2,
+GitCommitHorizontal,
+GraduationCap,
+Loader2,
+RefreshCw,
+SquareArrowOutUpRight,
+TerminalSquare,
+} from "lucide-react";
+import { useEffect,useRef,useState } from "react";
 
 /** One generated lab, as returned by GET /api/capability/journey. */
 export interface LabRecordSummary {
@@ -185,7 +185,6 @@ export function useLab(signalId: string, repoName?: string, builtHint?: boolean)
         cwd: plan.repoPath,
         repoName: plan.repoName,
         promptText,
-        promptCommand: await agentLabCommand(plan, refresh),
         mode: "oneshot",
         forceTerminal: true,
         alreadyConfirmed: true,

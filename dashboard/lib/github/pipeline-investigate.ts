@@ -1,69 +1,46 @@
 /**
  * Start a pipeline-investigate agent job for one PR (P5).
  *
- * Same OpenCode seam as auto-review; prompt uses the devhub-fix-pipeline skill.
- * Optional confirm-gated re-run of failed Actions runs.
+ * Same default-provider seam as auto-review; prompt uses the
+ * devhub-fix-pipeline skill. Optional confirm-gated re-run of failed Actions runs.
  */
-import { ensureDevHubOpenCode } from "@/lib/opencode/listen";
-import { agentPipelineInvestigatePrompt } from "@/lib/pr-pipeline-prompt";
-import { prNotePath } from "@/lib/pr-note";
+import { startBackgroundAgent } from "@/lib/agent-runs/background";
 import { execGh } from "@/lib/gh-exec";
 import type { GithubPrRow } from "@/lib/github/prs";
+import { getNotesDir } from "@/lib/notes/dir";
+import { prNotePath } from "@/lib/pr-note";
+import { agentPipelineInvestigatePrompt } from "@/lib/pr-pipeline-prompt";
 
 export interface PipelineInvestigateStartResult {
-  sessionId: string;
+  /** Agent run id (CLI providers). */
+  runId?: string;
+  /** OpenCode session id. */
+  sessionId?: string;
+  conversationId?: string;
+  providerLabel: string;
   notePath: string;
   prompt: string;
-}
-
-function opencodeHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  };
-  const password = process.env.OPENCODE_SERVER_PASSWORD?.trim();
-  if (password) {
-    headers.Authorization = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
-  }
-  return headers;
 }
 
 export function pipelineInvestigateNotePath(row: Pick<GithubPrRow, "repo" | "number">): string {
   return prNotePath({ repo: row.repo, number: row.number });
 }
 
-/** Start one OpenCode session for pipeline investigate. Does not post GitHub reviews. */
-export async function startOpenCodePipelineInvestigate(opts: {
+/** Start pipeline investigate on the default AI provider. Does not post GitHub reviews. */
+export async function startPipelineInvestigateAgent(opts: {
   row: Pick<GithubPrRow, "repo" | "number" | "url" | "title">;
   notePath?: string;
 }): Promise<PipelineInvestigateStartResult> {
   const notePath = opts.notePath ?? pipelineInvestigateNotePath(opts.row);
   const prompt = agentPipelineInvestigatePrompt(opts.row.url, notePath);
-  const text = `${prompt}\n\n(Write findings via notes MCP to path: ${notePath})`;
-  const title = `Pipeline PR #${opts.row.number}`.slice(0, 80);
-  const base = `http://127.0.0.1:${await ensureDevHubOpenCode()}`;
-  const headers = opencodeHeaders();
-
-  const sessionRes = await fetch(`${base}/session`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ title }),
+  const started = await startBackgroundAgent({
+    prompt: `${prompt}\n\n(Write findings via notes MCP to path: ${notePath})`,
+    title: `Pipeline PR #${opts.row.number}`,
+    cwd: getNotesDir(),
+    activity: { source: "investigation", action: "pipeline", prUrl: opts.row.url, repoName: opts.row.repo, notePath },
   });
-  if (!sessionRes.ok) {
-    throw new Error(`OpenCode session create failed (${sessionRes.status})`);
-  }
-  const session = (await sessionRes.json()) as { id?: string };
-  if (!session.id) throw new Error("OpenCode returned no session id");
-
-  const promptRes = await fetch(`${base}/session/${session.id}/prompt_async`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ parts: [{ type: "text", text }] }),
-  });
-  if (!promptRes.ok && promptRes.status !== 204) {
-    throw new Error(`OpenCode prompt failed (${promptRes.status})`);
-  }
-  return { sessionId: session.id, notePath, prompt };
+  const ids = { runId: started.runId, conversationId: started.conversationId };
+  return { ...ids, providerLabel: started.providerLabel, notePath, prompt };
 }
 
 export interface RerunFailedResult {

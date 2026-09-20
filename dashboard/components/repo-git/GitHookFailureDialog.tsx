@@ -1,17 +1,16 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
-import { Bot, Copy, X } from "lucide-react";
-import {
-  hookFailureTitle,
-  type GitHookFailurePayload,
-} from "@/lib/git/hook-failure";
 import { launchAgentJob } from "@/lib/agent-job";
 import {
-  agentGitHookFailureCommand,
-  agentGitHookFailurePrompt,
-} from "@/lib/terminal-launch";
+hookFailureTitle,
+type GitHookFailurePayload,
+} from "@/lib/git/hook-failure";
 import { useToast } from "@/lib/hooks/use-toast";
+import {
+agentGitHookFailurePrompt
+} from "@/lib/terminal-launch";
+import { Bot,Copy,X } from "lucide-react";
+import { useEffect,useId,useRef,useState } from "react";
 
 interface GitHookFailureDialogProps {
   failure: GitHookFailurePayload | null;
@@ -65,7 +64,6 @@ export function GitHookFailureDialog({
         cwd: repoPath,
         repoName,
         promptText: agentGitHookFailurePrompt(opts),
-        promptCommand: await agentGitHookFailureCommand(opts),
         mode: "interactive",
         forceTerminal: true,
         alreadyConfirmed: true,

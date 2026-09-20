@@ -29,6 +29,7 @@ Each skill should have a clear name and a `SKILL.md` file that explains when and
 | OpenCode | `~/.opencode/skills`, `~/.config/opencode/skills` |
 | Cursor | `~/.cursor/skills` and `~/.agents/skills` |
 | Antigravity | `~/.gemini/config/skills` |
+| AionUi | `~/.local/share/devhub/aionui/data/skills` |
 
 Cursor Customize → Skills lists `~/.agents/skills` as **User**. `~/.cursor/skills-cursor` is Cursor's internal builtin store — never a sync target. Antigravity also gets a generated `~/.gemini/config/skills/index.json` listing synced skills.
 
@@ -119,6 +120,9 @@ Some dashboard actions launch a one-shot agent in the terminal dock with a prelo
 | `git-hook-fix` | Repo Git **GitHookFailureDialog** | Diagnose and fix pre-commit/pre-push hook failures after a `422 hook_failed` response. |
 | `git-conflict-resolve` | Repo Git stash conflicts | Walk through resolving conflict markers after a failed stash apply/pop (`409 stash_conflict`). |
 | `taste-skill` | Briefing canvas generation (house aesthetic) | Anti-slop frontend rules distilled into briefing prompts via `lib/briefing-taste.ts`. Install under `skills/shared/` (or sync to tool paths) for stricter default palettes; **fresh look** / custom aesthetics bypass house rules until reset. |
+| `impeccable` / `ui-ux-pro-max` | Product UI polish / searchable design DB | Prefer these over `frontend-design` / `hallmark` for general UI work. Keep `taste-skill` for briefing canvas. |
+| `john-voice` | Human-facing prose as John | `explain-simply` for chat; `full-voice` for outbound email/Slack. |
+| `vercel-react-best-practices` / `web-design-guidelines` | Next.js dashboard UI | Vercel-labs skills for DevHub dashboard work. |
 
 Configure the underlying provider (`cursor-cli`, `chatgpt-cli`, `antigravity-cli`, `opencode`, or `api`) from **/setup → AI Provider**. See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md#agent-cli-selection).
 

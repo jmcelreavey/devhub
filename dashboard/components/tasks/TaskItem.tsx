@@ -499,9 +499,21 @@ export function TaskItem({
               </div>
             )}
             {noteExists ? (
-              <span className="row-note-glyph" title="Note exists" aria-hidden>
-                <FileText size={14} />
-              </span>
+              <HoverTip label="Open note">
+                <button
+                  type="button"
+                  className="row-note-glyph"
+                  aria-label="Open note"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void openTaskNote();
+                  }}
+                >
+                  <FileText size={14} aria-hidden />
+                </button>
+              </HoverTip>
             ) : null}
             <HoverTip label="Tags">
               <button

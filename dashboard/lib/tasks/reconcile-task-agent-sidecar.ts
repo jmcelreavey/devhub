@@ -4,11 +4,12 @@
  */
 import { isActiveAgentRunState } from "@/lib/agent-runs/run-files";
 import { readAgentRun } from "@/lib/agent-runs/store";
+import { reconcileManagedRun } from "@/lib/aionui/lifecycle";
 import {
-  getTaskAgentRuns,
-  isActiveTaskAgentRunStatus,
-  syncTaskAgentRunFromAgentState,
-  type TaskAgentRunsFile,
+getTaskAgentRuns,
+isActiveTaskAgentRunStatus,
+syncTaskAgentRunFromAgentState,
+type TaskAgentRunsFile,
 } from "@/lib/tasks/task-agent-runs";
 
 export async function reconcileTaskAgentRunSidecar(
@@ -19,12 +20,13 @@ export async function reconcileTaskAgentRunSidecar(
   let changed = false;
   for (const record of file.runs) {
     if (!isActiveTaskAgentRunStatus(record.status)) continue;
-    const agent = readAgentRun(record.runId);
-    if (!agent) {
+    const saved = readAgentRun(record.runId);
+    if (!saved) {
       await syncTaskAgentRunFromAgentState(record.runId, "cancelled", { notesDir });
       changed = true;
       continue;
     }
+    const agent = await reconcileManagedRun(saved);
     if (!isActiveAgentRunState(agent.status.state)) {
       await syncTaskAgentRunFromAgentState(record.runId, agent.status.state, {
         sessionId: agent.status.sessionId ?? null,

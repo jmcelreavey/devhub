@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname,useRouter } from "next/navigation";
+import { useEffect,useState } from "react";
 
 export function KeyboardShortcuts() {
   const pathname = usePathname();
@@ -53,7 +53,7 @@ export function KeyboardShortcuts() {
           a: "/actions",
           r: "/repos",
           k: "/skills",
-          c: "/chamber",
+          c: "/agents",
           l: "/calendar",
           j: "/work?tab=jira",
           d: "/datadog",

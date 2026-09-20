@@ -1,20 +1,27 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { Task } from "@/lib/tasks/types";
-import {
-  buildTaskImplementPrompt,
-  taskImplementPlanUrl,
-  type TaskImplementPromptInput,
-} from "@/lib/tasks/implement-prompt";
+import { EntityLinkDialog } from "@/components/EntityLinkDialog";
+import { ImplementReadyPanel,type ImplementReadyApiResponse } from "@/components/tasks/ImplementReadyPanel";
+import { PlanTaskDialog } from "@/components/tasks/PlanTaskDialog";
 import { SkillAgentDialog } from "@/components/tasks/SkillAgentDialog";
-import {
-  ImplementReadyPanel,
-  readLocalImplementHardBlock,
-  writeLocalImplementHardBlock,
-  type ImplementReadyApiResponse,
-} from "@/components/tasks/ImplementReadyPanel";
+import { createOrOpenVaultNote } from "@/lib/create-vault-note";
+import type { EntityRef } from "@/lib/entity-note";
+import { mergeEntityRefs } from "@/lib/entity-note";
 import { useLive } from "@/lib/hooks/use-fetch";
+import { useToast } from "@/lib/hooks/use-toast";
+import { buildTaskNoteMarkdown } from "@/lib/task-note";
+import {
+buildTaskImplementPrompt,
+taskImplementPlanUrl,
+type TaskImplementPromptInput,
+} from "@/lib/tasks/implement-prompt";
+import type { Task } from "@/lib/tasks/types";
+import { jiraBrowseUrl } from "@/lib/utils";
+import { useRouter } from "next/navigation";
+import { useMemo,useState } from "react";
+import { mutate } from "swr";
+
+const PLAN_POLL_MS = 5000;
 
 export function ImplementTaskDialog({
   open,
@@ -32,31 +39,50 @@ export function ImplementTaskDialog({
   cwd?: string;
   repoName?: string;
 }) {
-  const repoLinks = task.links?.filter((link) => link.kind === "repo") ?? [];
-  const repoIds = repoLinks.map((l) => l.id);
-  const inferred = repoLinks[0]?.id;
+  const router = useRouter();
+  const toast = useToast();
+  // Links edited from the checklist show immediately, before /api/tasks refetches.
+  const [linksOverride, setLinksOverride] = useState<EntityRef[] | null>(null);
+  const links = linksOverride ?? task.links ?? [];
+  const repoIds = links.filter((link) => link.kind === "repo").map((l) => l.id);
 
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(
     repoIds.length === 1 ? repoIds[0]! : null,
   );
-  const [hardBlockLocal, setHardBlockLocal] = useState(readLocalImplementHardBlock);
+  const [linkMode, setLinkMode] = useState<"add" | "replace" | null>(null);
+  const [planOpen, setPlanOpen] = useState(false);
+  const [planRunning, setPlanRunning] = useState(false);
+  const [creatingNote, setCreatingNote] = useState(false);
 
-  const effectiveRepoId = hubRepoName ?? selectedRepoId ?? (repoIds.length === 1 ? inferred : null);
+  const effectiveRepoId = hubRepoName ?? selectedRepoId ?? (repoIds.length === 1 ? repoIds[0] : null);
   const repoName = effectiveRepoId ?? undefined;
 
   const readyKey = useMemo(() => {
     if (!open) return null;
-    const params = new URLSearchParams({ taskId: task.id, date });
+    const params = new URLSearchParams({ taskId: task.id, date, hardBlock: "0" });
     if (selectedRepoId) params.set("selectedRepoId", selectedRepoId);
     if (hubRepoName) params.set("hubRepoId", hubRepoName);
-    if (hardBlockLocal) params.set("hardBlock", "1");
     return `/api/tasks/implement/ready?${params.toString()}`;
-  }, [open, task.id, date, selectedRepoId, hubRepoName, hardBlockLocal]);
+  }, [open, task.id, date, selectedRepoId, hubRepoName]);
 
-  const { data: ready, isLoading: readyLoading } = useLive<ImplementReadyApiResponse>(readyKey, {
-    refreshInterval: 0,
+  const {
+    data: ready,
+    isLoading: readyLoading,
+    mutate: refreshReady,
+  } = useLive<ImplementReadyApiResponse>(readyKey, {
+    // A launched plan agent writes the note out of band; poll until it lands.
+    refreshInterval: (latest) => (planRunning && !latest?.noteExists ? PLAN_POLL_MS : 0),
     revalidateOnFocus: false,
   });
+
+  const noteSource = {
+    id: task.id,
+    text: task.text,
+    date,
+    jiraKey: task.jiraKey,
+    jiraUrl: task.jiraKey ? jiraBrowseUrl(task.jiraKey) : undefined,
+    related: links,
+  };
 
   const promptInput = (): TaskImplementPromptInput => ({
     origin: typeof window === "undefined" ? "" : window.location.origin,
@@ -67,49 +93,124 @@ export function ImplementTaskDialog({
     jiraKey: task.jiraKey,
   });
 
-  const launchBlocked = Boolean((ready?.blocked || (hardBlockLocal && ready && !ready.ok)));
+  const close = () => {
+    setLinksOverride(null);
+    setPlanRunning(false);
+    onClose();
+  };
+
+  const navigate = (href: string) => {
+    close();
+    router.push(href);
+  };
+
+  const ensureNote = async () => {
+    if (!ready) throw new Error("Checklist not loaded");
+    const result = await createOrOpenVaultNote({
+      path: ready.notePath,
+      markdown: buildTaskNoteMarkdown(noteSource),
+    });
+    await refreshReady();
+    return result;
+  };
+
+  const saveLinks = async (picked: EntityRef[]) => {
+    const kept = linkMode === "replace" ? links.filter((l) => l.kind !== "repo") : links;
+    const next = mergeEntityRefs(kept, picked);
+    const res = await fetch("/api/tasks", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: task.id, date, links: next }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    setLinksOverride(next);
+    const nextRepos = next.filter((l) => l.kind === "repo").map((l) => l.id);
+    setSelectedRepoId(nextRepos.length === 1 ? nextRepos[0]! : null);
+    void mutate("/api/tasks");
+    await refreshReady();
+    toast.success(linkMode === "replace" ? "Repo link updated" : "Link added");
+  };
 
   return (
-    <SkillAgentDialog
-      open={open}
-      onClose={onClose}
-      title="Implement with agent"
-      description="Choose the CLI for this task. Leave model blank to use that CLI's default."
-      getPrompt={() => buildTaskImplementPrompt(promptInput())}
-      cwd={cwd}
-      repoName={repoName}
-      summary={`Implement ${task.text}`}
-      reason={`Implement DevHub task ${task.id}`}
-      taskId={task.id}
-      launchDisabled={launchBlocked}
-      launchDisabledReason="Fix the ready checklist (hard-block is on) before launching."
-      banner={
-        <ImplementReadyPanel
-          loading={readyLoading}
-          ready={ready ?? null}
-          repoIds={repoIds}
-          selectedRepoId={selectedRepoId}
-          onSelectRepo={setSelectedRepoId}
-          hardBlockLocal={hardBlockLocal}
-          onHardBlockLocal={(value) => {
-            writeLocalImplementHardBlock(value);
-            setHardBlockLocal(value);
-          }}
-        />
-      }
-      resolveCwd={
-        cwd
-          ? undefined
-          : async () => {
-              const planResponse = await fetch(taskImplementPlanUrl(promptInput()), { cache: "no-store" });
-              const plan = (await planResponse.json().catch(() => ({}))) as {
-                error?: string;
-                repoPath?: string | null;
-              };
-              if (!planResponse.ok) throw new Error(plan.error || "Couldn't load the task implementation plan");
-              return plan.repoPath ?? undefined;
-            }
-      }
-    />
+    <>
+      <SkillAgentDialog
+        open={open}
+        onClose={close}
+        title="Implement with agent"
+        description="Choose the CLI for this task. Leave model blank to use that CLI's default."
+        getPrompt={() => buildTaskImplementPrompt(promptInput())}
+        cwd={cwd}
+        repoName={repoName}
+        summary={`Implement ${task.text}`}
+        reason={`Implement DevHub task ${task.id}`}
+        taskId={task.id}
+        taskDate={date}
+        banner={
+          <ImplementReadyPanel
+            loading={readyLoading}
+            ready={ready ?? null}
+            repoIds={repoIds}
+            selectedRepoId={selectedRepoId}
+            onSelectRepo={setSelectedRepoId}
+            actions={{
+              onNavigate: navigate,
+              onOpenNote: () => {
+                ensureNote()
+                  .then((result) => navigate(result.href))
+                  .catch(() => toast.error("Couldn't open task note."));
+              },
+              onGeneratePlan: () => setPlanOpen(true),
+              onCreateNote: () => {
+                setCreatingNote(true);
+                ensureNote()
+                  .then(() => toast.success("Task note created"))
+                  .catch(() => toast.error("Couldn't create task note."))
+                  .finally(() => setCreatingNote(false));
+              },
+              onLinkRepo: (replace) => setLinkMode(replace ? "replace" : "add"),
+              creatingNote,
+              planRunning: planRunning && !ready?.noteExists,
+            }}
+          />
+        }
+        resolveCwd={
+          cwd
+            ? undefined
+            : async () => {
+                const planResponse = await fetch(taskImplementPlanUrl(promptInput()), { cache: "no-store" });
+                const plan = (await planResponse.json().catch(() => ({}))) as {
+                  error?: string;
+                  repoPath?: string | null;
+                };
+                if (!planResponse.ok) throw new Error(plan.error || "Couldn't load the task implementation plan");
+                return plan.repoPath ?? undefined;
+              }
+        }
+      />
+      <PlanTaskDialog
+        open={open && planOpen}
+        task={{ ...task, links }}
+        date={date}
+        cwd={cwd}
+        repoName={repoName}
+        onClose={() => setPlanOpen(false)}
+        onLaunched={() => setPlanRunning(true)}
+      />
+      <EntityLinkDialog
+        open={open && linkMode !== null}
+        onClose={() => setLinkMode(null)}
+        defaultKind="repo"
+        excludeTaskId={task.id}
+        // Replacing: current repos stay pickable so re-selecting one is allowed.
+        existing={linkMode === "replace" ? links.filter((l) => l.kind !== "repo") : links}
+        title={linkMode === "replace" ? "Change repo" : "Link repo"}
+        description={
+          linkMode === "replace"
+            ? "Pick the repo(s) for this task. They replace the current repo links."
+            : "Link a repo (or anything else) to this task."
+        }
+        onSave={saveLinks}
+      />
+    </>
   );
 }
