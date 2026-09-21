@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTaskImplementPrompt } from "./implement-prompt";
+import { buildTaskImplementPrompt, taskImplementPlanUrl } from "./implement-prompt";
 
 describe("buildTaskImplementPrompt", () => {
   it("points the skill at the encoded task plan and post-implementation gates", () => {
@@ -19,6 +19,19 @@ describe("buildTaskImplementPrompt", () => {
     expect(prompt).toContain("Do not create a clone or worktree by default");
     expect(prompt).toContain("ask before using a worktree");
     expect(prompt).toContain("Never commit without asking");
+  });
+
+  it("carries the picked repo on the plan URL so the plan route starts there", () => {
+    const withRepo = taskImplementPlanUrl({
+      origin: "http://localhost:1337",
+      taskId: "task-1",
+      date: "2026-08-27",
+      repoName: "example-org/app",
+    });
+    expect(withRepo).toContain("&repo=example-org%2Fapp");
+    expect(
+      taskImplementPlanUrl({ origin: "http://localhost:1337", taskId: "task-1", date: "2026-08-27" }),
+    ).not.toContain("repo=");
   });
 
   it("pins the checkout and Jira key when the hub supplies them", () => {

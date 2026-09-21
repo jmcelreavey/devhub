@@ -31,6 +31,7 @@ import type { JiraTicket } from "@/lib/jira/client";
 import type { Task } from "@/lib/tasks/types";
 import type { ReposApiPayload } from "@/app/repos/types";
 import { isDiagramStoragePath } from "@/lib/diagram-utils";
+import { fieldMatchScore, paletteCommandScore } from "@/lib/command-palette-score";
 import { todayISO } from "@/lib/utils";
 
 const TASK_PICKER_DAY_LIMIT = 14;
@@ -61,7 +62,7 @@ interface TreeNode {
   children?: TreeNode[];
 }
 
-interface PickRow {
+export interface PickRow {
   id: string;
   title: string;
   meta: string;
@@ -271,7 +272,7 @@ function calendarRows(data: CalendarResponse | undefined): PickRow[] {
 }
 
 /** Tab order is the order of this map. */
-const KIND_CONFIG = {
+export const KIND_CONFIG = {
   calendar: defineKind<CalendarResponse>({
     label: "Calendar",
     endpoint: "/api/calendar",
@@ -371,7 +372,7 @@ const KIND_CONFIG = {
   }),
 } satisfies Partial<Record<EntityKind, KindConfig<unknown>>>;
 
-type PickerKind = keyof typeof KIND_CONFIG;
+export type PickerKind = keyof typeof KIND_CONFIG;
 
 const KIND_ORDER = Object.keys(KIND_CONFIG) as PickerKind[];
 
@@ -379,16 +380,22 @@ function isPickerKind(kind: EntityKind): kind is PickerKind {
   return kind in KIND_CONFIG;
 }
 
-function filterRows(rows: PickRow[], query: string): PickRow[] {
-  const q = query.trim().toLowerCase();
+/** Title matches outrank meta/id matches; both are fuzzy ("mobtrack" finds "Mobile App Tracking"). */
+function rowScore(row: PickRow, query: string): number {
+  const title = fieldMatchScore(query, row.title);
+  const other = paletteCommandScore(query, [row.meta, row.id]);
+  return Math.max(title, other / 2);
+}
+
+export function filterRows(rows: PickRow[], query: string): PickRow[] {
+  const q = query.trim();
   if (!q) return rows.slice(0, LIST_LIMIT);
   return rows
-    .filter(
-      (r) =>
-        r.title.toLowerCase().includes(q) ||
-        r.meta.toLowerCase().includes(q) ||
-        r.id.toLowerCase().includes(q),
-    )
+    .map((row) => ({ row, score: rowScore(row, q) }))
+    .filter((r) => r.score > 0)
+    // Stable: equal scores keep the list's own order (recent first, etc.).
+    .sort((a, b) => b.score - a.score)
+    .map((r) => r.row)
     .slice(0, LIST_LIMIT);
 }
 
@@ -423,7 +430,7 @@ function selectionSummary(rows: PickRow[], selectedIds: string[]): string | null
   return `Selected: ${titles.length} · ${titles.join(", ")}`;
 }
 
-function refFromRow(kind: PickerKind, raw: string, rows: PickRow[]): EntityRef {
+export function refFromRow(kind: PickerKind, raw: string, rows: PickRow[]): EntityRef {
   const ref = buildEntityRefFromInput(kind, raw);
   const picked = rows.find((r) => r.id === raw);
   return picked?.overrides ? { ...ref, ...picked.overrides } : ref;

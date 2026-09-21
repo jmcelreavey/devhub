@@ -16,6 +16,11 @@ import { AddToJiraModal } from "@/components/tasks/AddToJiraModal";
 import { JiraTransitionModal } from "@/components/jira/JiraTransitionModal";
 import { EntityLinkDialog } from "@/components/EntityLinkDialog";
 import { KIND_ICON } from "@/components/EntityLinkChips";
+import {
+  MENTION_TAIL,
+  useMentionSuggestions,
+  type MentionSuggestion,
+} from "@/components/tasks/useMentionSuggestions";
 import { SortableList } from "@/components/ui/SortableList";
 import { HoverTip } from "@/components/ui/HoverTip";
 import { useGridSize } from "@/lib/hooks/use-grid-size";
@@ -59,6 +64,10 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
   const [linkOpen, setLinkOpen] = useState(false);
   /** Open while the text ends in `#fragment` — tag autocomplete for the composer. */
   const [tagSugs, setTagSugs] = useState<{ items: string[]; active: number } | null>(null);
+  /** Open while the text ends in `@fragment` — search anything linkable; a pick becomes a chip. */
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionActive, setMentionActive] = useState(0);
+  const mentionItems = useMentionSuggestions(mentionQuery);
   const [jiraStatuses, setJiraStatuses] = useState<Record<string, JiraStatus>>({});
   const [jiraModalTask, setJiraModalTask] = useState<Task | null>(null);
   const [transitionPrompt, setTransitionPrompt] = useState<{
@@ -148,6 +157,8 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
   const tagTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleTextChange = useCallback((value: string) => {
     handleInputChange(value);
+    setMentionQuery(MENTION_TAIL.exec(value)?.[2] ?? null);
+    setMentionActive(0);
     if (tagTimer.current) clearTimeout(tagTimer.current);
     const m = /#([a-z0-9_-]*)$/.exec(value);
     if (!m) {
@@ -186,6 +197,14 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
     [],
   );
 
+  /** Drop the trailing `@fragment` and link the picked entity instead. */
+  const applyMention = useCallback((pick: MentionSuggestion) => {
+    setNewText((prev) => prev.replace(MENTION_TAIL, "$1"));
+    setPendingLinks((prev) => mergeEntityRefs(prev, [pick.ref]));
+    setMentionQuery(null);
+    inputRef.current?.focus();
+  }, []);
+
   const confirmLink = useCallback(() => {
     if (!detectedUrl || !linkName.trim()) return;
     const mdLink = `[${linkName.trim()}](${detectedUrl})`;
@@ -223,6 +242,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
       setDetectedUrl(null);
       setLinkName("");
       setTagSugs(null);
+      setMentionQuery(null);
       await mutate(
         (cur) => ({
           ...(cur ?? {}),
@@ -753,11 +773,33 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
           id={inputId}
           ref={inputRef}
           className="input task-add-text"
-          placeholder="Add a task… (paste a link or Jira key)"
+          placeholder="Add a task… (paste a link or Jira key, @ to link)"
           value={newText}
           onChange={(e) => handleTextChange(e.target.value)}
-          onBlur={() => setTagSugs(null)}
+          onBlur={() => {
+            setTagSugs(null);
+            setMentionQuery(null);
+          }}
           onKeyDown={(e) => {
+            if (mentionQuery !== null && mentionItems.length > 0) {
+              const active = Math.min(mentionActive, mentionItems.length - 1);
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault();
+                const step = e.key === "ArrowDown" ? 1 : -1;
+                setMentionActive((active + step + mentionItems.length) % mentionItems.length);
+                return;
+              }
+              if (e.key === "Tab" || e.key === "Enter") {
+                e.preventDefault();
+                applyMention(mentionItems[active]!);
+                return;
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setMentionQuery(null);
+                return;
+              }
+            }
             if (tagSugs && tagSugs.items.length > 0) {
               if (e.key === "ArrowDown") {
                 e.preventDefault();
@@ -821,8 +863,36 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
             ))}
           </ul>
         )}
+        {mentionQuery !== null && mentionItems.length > 0 && (
+          <ul className="task-tag-sugs" role="listbox" aria-label="Link suggestions">
+            {mentionItems.map((item, i) => {
+              const Icon = KIND_ICON[item.kind];
+              const active = i === Math.min(mentionActive, mentionItems.length - 1);
+              return (
+                <li key={entityKey(item.ref)}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    data-active={active || undefined}
+                    // mousedown, not click — blur would close the list first
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      applyMention(item);
+                    }}
+                    onMouseEnter={() => setMentionActive(i)}
+                  >
+                    <Icon size={11} className="mr-1.5 inline-block align-[-1px]" aria-hidden />
+                    {item.title}
+                    <span className="ml-2 text-text-muted">{item.meta}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
         {pendingLinks.length > 0 ? (
-          <ul className="entity-link-chips" aria-label="Repos to link">
+          <ul className="entity-link-chips" aria-label="Links for this task">
             {pendingLinks.map((ref) => {
               const text = ref.label || ref.id;
               const href = defaultHrefForRef(ref);

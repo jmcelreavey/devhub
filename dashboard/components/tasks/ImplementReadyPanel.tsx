@@ -19,8 +19,8 @@ export interface ImplementReadyActions {
   onOpenNote: () => void;
   onGeneratePlan: () => void;
   onCreateNote: () => void;
-  /** Open the link picker; `replace` swaps the current repo links instead of adding. */
-  onLinkRepo: (replace: boolean) => void;
+  /** Open the link picker. Always additive — picking a repo never drops the others. */
+  onLinkRepo: () => void;
   creatingNote: boolean;
   planRunning: boolean;
 }
@@ -63,11 +63,7 @@ function itemActions(
     );
   }
   if (item.id === "repo") {
-    return repoIds.length > 0 ? (
-      <ActionButton onClick={() => actions.onLinkRepo(true)}>Change repo</ActionButton>
-    ) : (
-      <ActionButton onClick={() => actions.onLinkRepo(false)}>Link repo</ActionButton>
-    );
+    return <ActionButton onClick={actions.onLinkRepo}>{repoIds.length > 0 ? "Add repo" : "Link repo"}</ActionButton>;
   }
   if (!item.ok && item.fixHref) {
     const href = item.fixHref;
@@ -137,7 +133,7 @@ export function ImplementReadyPanel({
 
       {repoIds.length > 1 ? (
         <fieldset className="mt-3 grid gap-1.5">
-          <legend className="text-[11px] font-medium text-text-muted">Pick repo</legend>
+          <legend className="text-[11px] font-medium text-text-muted">Start in (other linked repos stay on the task)</legend>
           {repoIds.map((id) => (
             <label key={id} className="flex cursor-pointer items-center gap-2 text-xs text-text">
               <input

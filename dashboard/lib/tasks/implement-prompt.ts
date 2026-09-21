@@ -9,7 +9,8 @@ export interface TaskImplementPromptInput {
 }
 
 export function taskImplementPlanUrl(input: TaskImplementPromptInput): string {
-  return `${input.origin.replace(/\/$/, "")}/api/tasks/implement/plan?taskId=${encodeURIComponent(input.taskId)}&date=${encodeURIComponent(input.date)}`;
+  const repo = input.repoName ? `&repo=${encodeURIComponent(input.repoName)}` : "";
+  return `${input.origin.replace(/\/$/, "")}/api/tasks/implement/plan?taskId=${encodeURIComponent(input.taskId)}&date=${encodeURIComponent(input.date)}${repo}`;
 }
 
 export function buildTaskImplementPrompt(input: TaskImplementPromptInput): string {

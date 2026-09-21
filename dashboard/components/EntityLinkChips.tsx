@@ -26,7 +26,13 @@ import {
   X,
 } from "lucide-react";
 import type { EntityKind, EntityRef } from "@/lib/entity-note";
-import { defaultHrefForRef, entityKey, extractTags, mergeEntityRefs } from "@/lib/entity-note";
+import {
+  canonicalizeEntityRef,
+  defaultHrefForRef,
+  entityKey,
+  extractTags,
+  mergeEntityRefs,
+} from "@/lib/entity-note";
 import { ContextMenu, useContextMenu, type ContextMenuGroup } from "@/components/shell/ContextMenu";
 import { useTagMenuGroup } from "@/lib/hooks/use-tag-menu";
 import { buildEntityRefMenuGroups } from "@/lib/entity-ref-menu";
@@ -252,8 +258,10 @@ export function EntityLinkChips({
     [suppressKey],
   );
   const seedKey = JSON.stringify(seed ?? []);
+  // Canonical keys: chips are canonicalized by mergeEntityRefs, so a seed stored
+  // under an alias id (e.g. a calendar URL) must still be recognised as removable.
   const seedKeys = useMemo(
-    () => new Set((JSON.parse(seedKey) as EntityRef[]).map(refKey)),
+    () => new Set((JSON.parse(seedKey) as EntityRef[]).map((r) => refKey(canonicalizeEntityRef(r) ?? r))),
     [seedKey],
   );
   const [data, setData] = useState<EntityLinksPayload | null>(

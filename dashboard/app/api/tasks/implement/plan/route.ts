@@ -46,9 +46,12 @@ export async function GET(req: NextRequest) {
   // further — a prerequisite task's plan note, a linked ticket's PR.
   const graph = resolveEntityContext("task", task.id, { date, label: task.text, depth: 2 });
   const jira = task.jiraKey ? await getTicket(task.jiraKey).catch(() => null) : null;
-  // More than one linked repo: take the first rather than handing the agent nothing.
+  // More than one linked repo: start in the requested one (if it is linked),
+  // else the first. The others stay in `repos` — this only picks the checkout.
+  const requestedRepo = req.nextUrl.searchParams.get("repo")?.trim().toLowerCase();
   const localRepos = repoIds.length > 0 ? await resolveLocalGithubRepos().catch(() => []) : [];
-  const repoId = repoIds[0]?.toLowerCase();
+  const repoId =
+    repoIds.find((id) => id.toLowerCase() === requestedRepo)?.toLowerCase() ?? repoIds[0]?.toLowerCase();
   const localRepo = repoId ? selectTaskImplementationRepo(repoId, localRepos) : null;
 
   return NextResponse.json({

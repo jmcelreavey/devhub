@@ -255,6 +255,26 @@ describe("format + build + parse round-trip", () => {
     expect(merged.find((r) => r.kind === "jira")?.id).toBe("PTF-4783");
   });
 
+  it("collapses a calendar event linked by picker id and by Google event URL", () => {
+    const url =
+      "https://www.google.com/calendar/event?eid=YWJjMTIzZGVmNDU2IG1lQGV4YW1wbGUuY29t";
+    const picked = {
+      kind: "calendar" as const,
+      id: "me@example.com::abc123def456",
+      label: "Team sync ",
+      href: url,
+    };
+    const parsed = parseEntityLinksFromMarkdown(`## Links\n\n**Event:** [Team sync](${url})\n`);
+    expect(mergeEntityRefs([picked], parsed)).toEqual([picked]);
+    // Order doesn't matter: the URL-id ref is rewritten to the picker id.
+    expect(mergeEntityRefs(parsed, [picked])[0]).toMatchObject({ id: picked.id, href: url });
+  });
+
+  it("leaves calendar ids that aren't Google event URLs alone", () => {
+    const ref = { kind: "calendar" as const, id: "old-standup", label: "Standup" };
+    expect(canonicalizeEntityRef(ref)).toEqual(ref);
+  });
+
   it("drops unusable Open-in-Work task hops", () => {
     expect(
       canonicalizeEntityRef({

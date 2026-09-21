@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
 import { type Task } from "@/lib/tasks/types";
 import { TaskTextContent } from "@/components/tasks/TaskText";
 import { stripLinkedJiraKeyFromText, stripTagToken } from "@/lib/tasks/task-text";
-import { extractTags } from "@/lib/entity-note";
+import { canonicalizeEntityRef, entityKey, extractTags } from "@/lib/entity-note";
 import { useTagMenuGroup, withTagsGroup } from "@/lib/hooks/use-tag-menu";
 import { statusTone } from "@/components/jira/JiraWidget";
 import {
@@ -557,8 +557,9 @@ export function TaskItem({
               readOnly || isInactive
                 ? undefined
                 : async (ref) => {
+                    // Compare canonical keys: the chip's id may be the canonical form of an alias stored on the task.
                     const next = (task.links ?? []).filter(
-                      (r) => !(r.kind === ref.kind && r.id === ref.id),
+                      (r) => entityKey(canonicalizeEntityRef(r as EntityRef) ?? r) !== entityKey(ref),
                     );
                     const res = await fetch("/api/tasks", {
                       method: "PATCH",

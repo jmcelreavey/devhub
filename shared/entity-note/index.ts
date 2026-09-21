@@ -352,6 +352,22 @@ function isPathLikeNoteId(id: string): boolean {
 }
 
 /**
+ * A Google Calendar event URL carries `eid=base64url("<eventId> <calendarId>")`;
+ * the Link picker stores the same event as `<calendarId>::<eventId>`.
+ */
+function calendarIdFromEventUrl(url: string): string | null {
+  const eid = /^https?:\/\/[^/]*google\.com\/calendar\/[^?#]*\?(?:[^#]*&)?eid=([^&#]+)/i.exec(url)?.[1];
+  if (!eid) return null;
+  try {
+    const decoded = atob(decodeURIComponent(eid).replace(/-/g, "+").replace(/_/g, "/"));
+    const [eventId, calendarId] = decoded.split(" ");
+    return eventId && calendarId ? `${calendarId}::${eventId}` : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Normalize EntityRef ids so the same logical hop collapses under `entityKey`.
  * Drops unusable task hops (e.g. id=`/work?tab=tasks` from BlockNote round-trips).
  */
@@ -383,6 +399,12 @@ export function canonicalizeEntityRef(ref: EntityRef): EntityRef | null {
       }
     }
     return { ...ref, id };
+  }
+
+  if (ref.kind === "calendar") {
+    // A `## Links` line parses to id=<event URL>; the task link holds the picker id.
+    const id = calendarIdFromEventUrl(ref.id);
+    return id ? { ...ref, id, href: ref.href ?? ref.id } : ref;
   }
 
   if (ref.kind === "task") {

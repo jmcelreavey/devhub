@@ -49,7 +49,7 @@ export function ImplementTaskDialog({
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(
     repoIds.length === 1 ? repoIds[0]! : null,
   );
-  const [linkMode, setLinkMode] = useState<"add" | "replace" | null>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [planRunning, setPlanRunning] = useState(false);
   const [creatingNote, setCreatingNote] = useState(false);
@@ -115,8 +115,7 @@ export function ImplementTaskDialog({
   };
 
   const saveLinks = async (picked: EntityRef[]) => {
-    const kept = linkMode === "replace" ? links.filter((l) => l.kind !== "repo") : links;
-    const next = mergeEntityRefs(kept, picked);
+    const next = mergeEntityRefs(links, picked);
     const res = await fetch("/api/tasks", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -125,10 +124,17 @@ export function ImplementTaskDialog({
     if (!res.ok) throw new Error(await res.text());
     setLinksOverride(next);
     const nextRepos = next.filter((l) => l.kind === "repo").map((l) => l.id);
-    setSelectedRepoId(nextRepos.length === 1 ? nextRepos[0]! : null);
+    // Keep an existing pick; a newly added repo only becomes the start when none was chosen.
+    setSelectedRepoId((current) =>
+      current && nextRepos.some((id) => id.toLowerCase() === current.toLowerCase())
+        ? current
+        : nextRepos.length === 1
+          ? nextRepos[0]!
+          : null,
+    );
     void mutate("/api/tasks");
     await refreshReady();
-    toast.success(linkMode === "replace" ? "Repo link updated" : "Link added");
+    toast.success("Link added");
   };
 
   return (
@@ -167,7 +173,7 @@ export function ImplementTaskDialog({
                   .catch(() => toast.error("Couldn't create task note."))
                   .finally(() => setCreatingNote(false));
               },
-              onLinkRepo: (replace) => setLinkMode(replace ? "replace" : "add"),
+              onLinkRepo: () => setLinkOpen(true),
               creatingNote,
               planRunning: planRunning && !ready?.noteExists,
             }}
@@ -197,18 +203,13 @@ export function ImplementTaskDialog({
         onLaunched={() => setPlanRunning(true)}
       />
       <EntityLinkDialog
-        open={open && linkMode !== null}
-        onClose={() => setLinkMode(null)}
+        open={open && linkOpen}
+        onClose={() => setLinkOpen(false)}
         defaultKind="repo"
         excludeTaskId={task.id}
-        // Replacing: current repos stay pickable so re-selecting one is allowed.
-        existing={linkMode === "replace" ? links.filter((l) => l.kind !== "repo") : links}
-        title={linkMode === "replace" ? "Change repo" : "Link repo"}
-        description={
-          linkMode === "replace"
-            ? "Pick the repo(s) for this task. They replace the current repo links."
-            : "Link a repo (or anything else) to this task."
-        }
+        existing={links}
+        title="Link repo"
+        description="Link a repo (or anything else) to this task. Existing links stay."
         onSave={saveLinks}
       />
     </>
