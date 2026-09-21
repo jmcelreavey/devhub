@@ -96,6 +96,9 @@ notes/.cache/
 # DevHub local app state (machine-local)
 .devhub/
 
+# AionUi conversation index — rewritten every few seconds, so it keeps the tree dirty
+notes/.config/aionui-conversations.json
+
 # Ad-hoc review screenshots
 /.review-shots/
 
