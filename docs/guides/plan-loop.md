@@ -50,7 +50,7 @@ Draft rows show a dashed **Draft** chip and don't offer **Implement with Agent**
 
 Task menu → **Write plan with Agent…** opens a planning run with the `devhub-plan-write` skill. Pick a model that reasons well; the dialog remembers the planning model per CLI separately from the implementing one.
 
-The agent investigates (read-only), writes `## Plan` and `## Acceptance`, lists anything only you can decide under `## Open questions`, and marks the task ready when nothing is left open. Planning runs show in Agent Activity but aren't linked to the task, so Resume stays about the implementation.
+The agent investigates (read-only), writes `## Plan` and `## Acceptance`, lists anything only you can decide under `## Open questions`, and marks the task ready when nothing is left open. Planning runs show on **Agents → Activity** but aren't linked to the task, so Resume stays about the implementation.
 
 ## 3. Mark ready
 
@@ -65,7 +65,7 @@ Gaps come back as an error toast with **Mark anyway**. **Move back to draft** is
 
 ## 4. Implement
 
-**Implement with Agent…** opens the CLI in the terminal dock and links the run to the task. The dialog has an optional **Anything else the agent should know?** box, which reaches the agent under `## Extra context from me`, and the prompt makes the agent restate the goal, list its assumptions and ask anything open **before** it writes code. That check-in is posted to Agent Activity (`agent_interactive_note`) so the scoping decisions are auditable next to the run. The chip shows **Running** until the CLI exits or the tab closes (see [Task agent handoff](task-agent-handoff.md#interactive-run-lifecycle)). When it ends, a snapshot (branch, commit, changes, session) is appended to the handoff.
+**Implement with Agent…** opens the Agents handoff sheet and starts an AionUi conversation linked to the task. The dialog has an optional **Anything else the agent should know?** box, which reaches the agent under `## Extra context from me`, and the prompt makes the agent restate the goal, list its assumptions and ask anything open **before** it writes code. That check-in is posted to Activity (`agent_interactive_note`) so the scoping decisions are auditable next to the run. The chip shows **Running** until the conversation finishes or you cancel it (see [Task agent handoff](task-agent-handoff.md#interactive-leftover)). When it ends, a snapshot (branch, commit, changes, session) is appended to the handoff.
 
 ## 5. Follow the PR
 

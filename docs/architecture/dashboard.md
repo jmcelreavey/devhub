@@ -26,6 +26,7 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 | Skills       | Shared skill viewing, creation, sync, and collection                                                        |
 | Actions      | Safe script runner for maintenance tasks                                                                    |
 | Status       | Health checks for repo, services, MCP, sync health, merge conflicts, and network access                     |
+| Agents       | AionUi workspace: chats, activity, archive, connection (`/agents`)                                          |
 | Setup        | Environment and integration configuration                                                                   |
 | Repos        | Sibling git checkout discovery, per-repo **work hub**, GitHub clone/search, Cursor/GitKraken/CLI launch, compose-up, Repo Learning, and owned-repo radar (`?view=owned`) |
 | Databases    | In-app client for PostgreSQL, MongoDB, and SQLite (`/db`) — see [Database client](database-client.md)       |
@@ -51,9 +52,11 @@ When allowlisted script runs failed since your last visit, Today shows a dismiss
 
 [Status, Datadog, actions, and setup walkthrough](/api/notes-assets/assets/feature-demos/demo-11-status-datadog-actions-setup.mp4)
 
-## Navigation (2026-06 IA)
+## Navigation (2026-09 IA)
 
-The sidebar is driven by `dashboard/lib/nav.ts` — **19** core sidebar destinations in `NAV_ITEMS` (plugin items such as Ops merge in separately), grouped into **Workspace**, **Library**, **BI**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`. Claude, Cursor, ChatGPT, and Antigravity rows are not pages — they open a terminal-dock tab (`NavItem.terminal`).
+The sidebar is driven by `dashboard/lib/nav.ts` — **14** core sidebar destinations in `NAV_ITEMS` (plugin items such as Ops merge in separately), grouped into **Workspace**, **Library**, **BI**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`.
+
+Coding chats live on **Agents** (`/agents`). `/chamber` and `/opencode` redirect there; `/agent-activity` redirects to `/agents?view=activity`. There are no sidebar rows that open a Claude / Cursor / ChatGPT / Antigravity terminal tab.
 
 | Sidebar    | Route       | Notes                                                                                         |
 | ---------- | ----------- | --------------------------------------------------------------------------------------------- |
@@ -65,18 +68,13 @@ The sidebar is driven by `dashboard/lib/nav.ts` — **19** core sidebar destinat
 | Review     | `/review`   | Weekly retrospective; desktop nav only                                                        |
 | Notes      | `/notes`    | Library landing. Top-bar tabs: Notes, Search, Docs, Radar, Appraisal, Research, Diagrams, Live links (gated) |
 | Search     | `/search`   | Unified discovery (notes/docs + Recall). Library sidebar slot                                 |
-| Agents     | `/skills`   | Skills, persona, MCP catalog                                                                  |
+| Skills     | `/skills`   | Shared skill catalog, persona, MCP catalog                                                    |
 | Repos      | `/repos`    | Desktop nav only; sibling clones sorted by recent git activity. Click a card for `/repos/<name>` (work hub). Owned radar at `?view=owned` |
 | Databases  | `/db`       | Desktop nav only, **ungated**. SQLite works with no setup; BI connections appear with the plugin. See [Database client](database-client.md) |
 | Ops        | `/ops`      | BI group; from BI plugin (`gate: bi`)                                                         |
 | Datadog    | `/datadog`  | BI group; gated on `datadog`                                                                  |
 | System     | `/status`   | Top-bar tabs: Status, Logs (desktop), Actions (desktop), Setup                                |
-| Chamber    | `/chamber`  | Gated on `chamber`                                                                            |
-| OpenCode   | `/opencode` | Gated on `opencode`                                                                           |
-| Claude     | `/claude`   | Gated on `claude`; desktop nav only                                                           |
-| Cursor     | `/cursor`   | Gated on `cursor`; desktop nav only                                                           |
-| ChatGPT    | `/chatgpt`  | Gated on `chatgpt`; desktop nav only. ChatGPT.app is the Codex desktop.                       |
-| Antigravity | `/antigravity` | Gated on `antigravity`; desktop nav only. Opens the `agy` CLI in the terminal dock (no desktop IDE). |
+| Agents     | `/agents`   | System group. Tabs: Chats / Activity / Archive / Connection. See [Agents (AionUi)](../guides/aionui-agents.md) |
 
 ### Merged destinations
 
@@ -100,7 +98,7 @@ are AND-ed on every tab.
 
 ### Legacy routes
 
-Older URLs still work and remain reachable via **⌘K** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/own`, `/appraisal`, `/one-on-one`, `/recall`, `/radar`, `/research`, `/learnings`, `/diagrams`, `/docs`, `/shared`, `/actions`, `/logs`, `/setup`. They no longer have permanent sidebar slots — Library section tabs cover `/radar`, `/appraisal`, `/research`, `/diagrams`, `/docs`, and `/shared`; `/learnings` stays palette-only. `/own` redirects to `/repos?view=owned`. `/tasks` and `/tickets` redirect to `/work` and are not in `ALL_NAV_DESTINATIONS`. `/ops` (plugin) and `/datadog` live under the **BI** sidebar group.
+Older URLs still work and remain reachable via **⌘K** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/own`, `/appraisal`, `/one-on-one`, `/recall`, `/radar`, `/research`, `/learnings`, `/diagrams`, `/docs`, `/shared`, `/actions`, `/logs`, `/setup`. They no longer have permanent sidebar slots — Library section tabs cover `/radar`, `/appraisal`, `/research`, `/diagrams`, `/docs`, and `/shared`; `/learnings` stays palette-only. `/own` redirects to `/repos?view=owned`. `/tasks` and `/tickets` redirect to `/work` and are not in `ALL_NAV_DESTINATIONS`. `/ops` (plugin) and `/datadog` live under the **BI** sidebar group. `/chamber` and `/opencode` redirect to `/agents`; `/agent-activity` redirects to `/agents?view=activity`.
 
 On mobile, the bottom shelf uses **Work** (`/work`) instead of separate Tasks/Tickets entries.
 
@@ -183,11 +181,11 @@ When Jira is configured, each task exposes an **Add to Jira** action. The modal 
 
 ### Implement with agent
 
-Task overflow **Implement with Agent…** (Today, Work, and the repo hub) launches the `devhub-implement-task` skill in the Agent dock. It does not start until you pick a CLI.
+Task overflow **Implement with Agent…** (Today, Work, and the repo hub) opens the Agents handoff sheet and starts an AionUi conversation with the `devhub-implement-task` skill. It does not start until you pick an assistant.
 
 The agent curls `GET /api/tasks/implement/plan?taskId=&date=` first — tags, linked notes/repos, Jira ticket, and a depth-2 entity graph. Repo choice comes from the **task's own** `kind: "repo"` links (a back-link from another repo must not steal the checkout). Hub rows pass the hub's `cwd` so the agent stays in that tree.
 
-A guardrail (`lib/tasks/implement-guardrails.ts`) blocks a third launch when **two** agent-kind dock tabs are already busy. It reads `/api/terminal/sessions` (live heartbeats), not the proposal store — UI launches never create a server-side proposal. If the registry cannot be read, the guardrail fails open.
+A guardrail (`lib/tasks/implement-guardrails.ts`) blocks a third launch when **two** agent runs are already active. It reads `GET /api/agent/runs?summary=1` (`activeCount`), not the terminal dock. If the summary cannot be read, the guardrail fails open. Server-side `DEVHUB_AGENT_MAX_RUNS` (default 6) is a separate cap.
 
 The agent must ask before commit, PR, Jira transition, or completing the task. See [Notes System — Create tasks from plan](notes-system.md#create-tasks-from-plan) for the inverse flow (plan → tickets).
 
@@ -236,7 +234,7 @@ On `/prs`, if today's unfinished rep is a review-requested PR, that row's **Revi
 
 ## Agent CLI
 
-One shared **AI provider** covers in-app generation (briefings, learn-repo, Agent tab chat) and agent launches (PR review, capability **Build lab**, DX audit, repo upstart). Local CLIs are preferred over requiring `AI_API_KEY`.
+One shared **AI provider** covers in-app generation (briefings, learn-repo, Agent tab chat). Coding work — Implement, Review with agent, auto-review, schedules, MCP `agent_dispatch` — goes through **AionUi** (`POST /api/agent/runs`). Local CLIs still matter for `/setup → AI Provider` generation and leftover terminal handoffs.
 
 | Surface    | Route / env                           | Behavior                                                                                                           |
 | ---------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -244,18 +242,19 @@ One shared **AI provider** covers in-app generation (briefings, learn-repo, Agen
 | Skills     | **Skills → Agent CLI**                | Same settings                                                                                                      |
 | API        | `GET/PUT /api/agent-cli`              | Read/save `DEVHUB_AI_PROVIDER`, `DEVHUB_AGENT_CLI`, model overrides in `dashboard/.env.local`                      |
 | Setup poll | `GET /api/setup/status` → `agentVars` | Resolved provider plus install flags                                                                               |
+| Dispatch   | `GET/POST /api/agent/runs`            | AionUi conversations. See [Agents (AionUi)](../guides/aionui-agents.md)                                            |
 
 Unset `DEVHUB_AI_PROVIDER` auto-picks the first available of Cursor CLI → ChatGPT/Codex CLI → Antigravity CLI (`agy`) → OpenCode → HTTP API. `PUT` with a provider whose binary/key is missing returns `400`. Legacy `DEVHUB_AGENT_CLI` (`opencode` \| `cursor` \| `chatgpt` \| `antigravity`) still maps in. Aliases `agy` / `antigravity` resolve to `antigravity-cli`.
 
-Agent/review jobs open the **Agent** dock tab (`POST /api/agent/chat`) or an OpenCode HTTP session (`POST /api/agent/run`). They do **not** inject into a live shell unless the job is an upstart that must share a PTY with bash. Concurrent CLI generations are capped at `DEVHUB_AI_MAX_CONCURRENT` (default 3); queued wait time is not counted against the job timeout.
+`launchAgentJob` opens the Agents handoff sheet (`openAgentHandoff`) for agent-like kinds; ordinary `promptCommand` jobs still go through the terminal propose chip. Concurrent CLI generations are capped at `DEVHUB_AI_MAX_CONCURRENT` (default 3); queued wait time is not counted against the job timeout.
 
-Launch wiring lives in `dashboard/lib/agent-job.ts` and `dashboard/lib/ai/preference.ts`. See [OpenCode and OpenChamber — Agent CLI selection](../guides/opencode-and-chamber.md#agent-cli-selection).
+Launch wiring lives in `dashboard/lib/agent-job.ts`, `dashboard/lib/agent-runs/dispatch.ts`, and `dashboard/lib/ai/preference.ts`. See [OpenCode and OpenChamber — Agent CLI selection](../guides/opencode-and-chamber.md#agent-cli-selection).
 
 ## Pull Request Reviews
 
 **PRs** (`/prs`, gated on `github`) and the Today GitHub panel read `GET /api/github/prs` — authored PRs, review-requested PRs, and recently reviewed PRs (archived repos filtered from active queues; up to 100 rows per active bucket). The screen search box filters those buckets client-side or pins a pasted PR URL; unmatched phrases fall back to `GET /api/github/prs/search` (**Elsewhere on GitHub**). See [GitHub — Search and pin](../integrations/github.md#search-and-pin).
 
-The **Review with agent** row action does **not** call a GitHub review API. It queues an agent job (`launchAgentJob`) that opens the Agent dock tab (or OpenCode) with the `pr-explain-review` skill. The skill pulls conversation, inline review threads, and the linked Jira/GitHub ticket, then saves a note at `pr-reviews/<owner-repo-slug>-<pr-number>` via notes MCP. The **Notes** link polls `GET /api/notes/pr-reviews/<slug>` every few seconds until the note exists. There is no dashboard **Request review** action.
+The **Review with agent** row action does **not** call a GitHub review API. It opens the Agents handoff sheet (`launchAgentJob` → `openAgentHandoff` → `POST /api/agent/runs`) and starts an AionUi conversation with the `pr-explain-review` skill. The skill pulls conversation, inline review threads, and the linked Jira/GitHub ticket, then saves a note at `pr-reviews/<owner-repo-slug>-<pr-number>` via notes MCP. The **Notes** link polls `GET /api/notes/pr-reviews/<slug>` every few seconds until the note exists. There is no dashboard **Request review** action.
 
 Full workflow, constraints, and troubleshooting: [GitHub integration](../integrations/github.md#row-actions).
 

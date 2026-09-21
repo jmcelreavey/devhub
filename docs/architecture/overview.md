@@ -81,11 +81,11 @@ During normal use, DevHub may run several local services:
 | Service     | Default port | Typical role                                  |
 | ----------- | ------------ | --------------------------------------------- |
 | Dashboard   | `1337`       | Main web app                                  |
-| OpenChamber | `1336`       | `/chamber` lazy-starts the embed; not always-on |
-| OpenCode    | ephemeral    | `/opencode` lazy-starts a loopback instance; not on 1338 |
+| Agents      | AionUi `:25818` | `/agents` coding workspace                  |
 | MCP server  | —            | Stdio server launched by AI tools when needed |
+| Terminal    | `1339`       | Docked PTY                                    |
 
-OpenChamber starts its own managed OpenCode. DevHub does not pass `OPENCODE_PORT` or `OPENCODE_SKIP_START` into Chamber, so Claude/Cursor Setup can restart that process. See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md).
+`/chamber` and `/opencode` redirect to `/agents`. Recap and leftover listen APIs can still lazy-start OpenCode. See [Agents (AionUi)](../guides/aionui-agents.md) and [OpenCode and OpenChamber](../guides/opencode-and-chamber.md).
 
 The dashboard can also run local actions, such as syncing skills or validating the repo.
 

@@ -144,9 +144,9 @@ with `DEVHUB_MCP_TOOLSETS` before exposing it beyond this machine.
 | Recall     | `recall`, `recall_graph`, `recall_remember`, `recall_index`                                                                                                                                                                                                                                                                                                   |
 | Tags       | `tags_list`, `tags_lookup`, `tags_rename` — discover the existing `#tag` vocabulary before inventing near-duplicates, get everything tied to one tag, and rename globally (confirm-gated). There is no `tags_create`: writing `#tag` in a task or note body _is_ the create path                                                                              |
 | Ownership  | `owned_repos`, `repo_owner_brief`, `repo_pr_radar`, `repo_who_owns`, `repo_knowledge_gaps` — dashboard-backed proxies for `/api/own/*`                                                                                                                                                                                                                        |
-| Terminal   | `terminal_list`, `terminal_tail`, `terminal_propose_run`, `terminal_proposal_status`, `terminal_wait_for` — dock tabs, propose-then-confirm command runs, and blocking until output matches a pattern. The MCP process never injects stdin; the dock must confirm, unless the user has **Auto-run** on for a non-destructive command (agent dispatch's auto-run tabs are the one server-side exception). |
+| Terminal   | `terminal_list`, `terminal_tail`, `terminal_propose_run`, `terminal_proposal_status`, `terminal_wait_for` — dock tabs, propose-then-confirm command runs, and blocking until output matches a pattern. The MCP process never injects stdin; the dock must confirm, unless the user has **Auto-run** on for a non-destructive command. Agent dispatch does **not** use the dock — it creates an AionUi conversation. |
 | Database   | `db_connections`, `db_preflight`, `db_connect`, `db_schema`, `db_table`, `db_query`, `db_explain`, `db_execute`, `db_cancel`, `db_diff`, `db_history` — proxy `/api/db/*`. Reads via `db_query`; writes via `db_execute` (`confirm: true`, plus `confirmLabel` on dangerous connections). The MCP process never opens a database. See [Database client](database-client.md). |
-| Agents     | `agent_providers`, `agent_dispatch`, `agent_race`, `agent_runs`, `agent_output`, `agent_wait`, `agent_followup`, `agent_cancel`, `agent_diff`, `agent_interactive_note`, `agent_interactive_finish` — hand a task to another agent CLI (Claude Code, Cursor, Codex, Gemini, OpenCode, Antigravity, or a custom CLI). Each run executes with approvals off in its own visible dock tab; the first dispatch to a repo with a given agent waits on a one-time dock confirmation, and turn/wall-clock/cost caps apply; proxies `/api/agent/runs`. See [Dispatch work to another agent](#dispatch-work-to-another-agent). |
+| Agents     | `agent_providers`, `agent_dispatch`, `agent_race`, `agent_runs`, `agent_output`, `agent_wait`, `agent_followup`, `agent_cancel`, `agent_diff`, `agent_interactive_note`, `agent_interactive_finish` — start work in AionUi (Cursor, Claude, Codex, Gemini, OpenCode, Antigravity, Copilot, or a custom assistant). Each dispatch creates a conversation with YOLO permissions; no terminal tab opens. Isolated git worktrees are the default. Proxies `/api/agent/runs`. See [Dispatch work to another agent](#dispatch-work-to-another-agent) and [Agents (AionUi)](../guides/aionui-agents.md). |
 | Plans      | `tasks_capture`, `tasks_set_stage`, `tasks_plan_status`, `tasks_plan_markdown`, `tasks_pr_watch`, `tasks_alert_drafts`, `tasks_retro_inputs` — the plan loop: capture drafts with context, mark them ready through the checklist, see where every task stands, follow agent PRs (fix / merged / closed), and feed the retro. Dashboard-backed (`plans` toolset). See [Plan loop](../guides/plan-loop.md). |
 | Resources  | `devhub://notes/{path}`, `devhub://docs/{path}`, `devhub://agent-runs/{runId}/events`, `devhub://jobs`, `devhub://jobs/log` — cacheable reads of vault content, run event streams and scheduled jobs, with best-effort update notifications. Selected with the `resources` toolset. |
 | History    | `mcp_history`, `mcp_history_summary` — filesystem-backed trace of every DevHub MCP tool call (redacted args, duration, outcome, client, dispatching run) and a per-day rollup. See [Trace what agents did](#trace-what-agents-did). |
@@ -322,7 +322,7 @@ Use `status_exec` first when the dashboard is hanging or a page never loads — 
 
 Use `sessions_recap` (or the `devhub-recap` skill) when you need **what happened** in an OpenCode run — commands, MCP calls, file changes, failures — without prompts or reasoning.
 
-1. Start the dashboard and open `/opencode` (or trigger recap/Investigate) so DevHub can lazy-start OpenCode on an ephemeral loopback port.
+1. Start the dashboard. Recap/Investigate still lazy-start OpenCode on an ephemeral loopback port via `GET /api/opencode/listen` (`/opencode` itself now redirects to `/agents`).
 2. Call `sessions_recap` with `directory` set to the workspace path. Omit `sessionId` to pick the current busy root, then the latest root in that directory.
 3. Pass `includeChildren: true` only when subagent/child sessions matter.
 4. On `409`, multiple root sessions are busy — pass an explicit `sessionId`.
@@ -344,15 +344,15 @@ Proposals live in the dashboard process (15 min TTL, max 20 pending). Desktop WS
 
 ### Dispatch work to another agent
 
-Agent tools proxy `/api/agent/runs`. Start the dashboard and keep it open — a run starts when the terminal dock opens its tab.
+Agent tools proxy `/api/agent/runs`. Start the dashboard and connect **Agents** (`/agents?view=connection`) — dispatch creates an AionUi conversation. No terminal tab opens.
 
-1. `agent_providers` — which CLIs are installed (built-ins plus `~/.config/devhub/agent-providers.json`).
-2. `agent_dispatch` with `provider`, a self-contained `prompt`, and `cwd`. Approvals are **off** for the dispatched CLI. Runs are **isolated by default** on a `devhub/agent/<repo>-<ticket-or-task>-<runId>` worktree (run id kept as the suffix so resume can still find the run) under the repo's `.git/devhub-worktrees/`; `worktree: false` edits `cwd` directly, so changes appear in the user's IDE. The first dispatch of a provider into a repo queues behind the dock chip (approval is remembered in the app-data `agent-consent.json`); `DEVHUB_AGENT_TRUST_ALL=1` skips that. Caps via env: `DEVHUB_AGENT_MAX_TURNS` (200), `DEVHUB_AGENT_MAX_SECONDS` (1800), `DEVHUB_AGENT_MAX_COST_USD` per local day (25), `DEVHUB_AGENT_MAX_RUNS` (6), and optional `DEVHUB_AGENT_ALLOWED_ROOTS` (colon-separated cwd allowlist).
-3. `agent_wait` (blocks up to 300s and sends progress notifications) or `agent_output` with the returned `since` cursor.
-4. `agent_diff` shows what changed against HEAD at dispatch. `agent_followup` resumes the same CLI session (Claude Code, Cursor, or a custom CLI with `resumeArgs`); `agent_cancel` stops a run.
-5. `agent_race` sends one prompt to 2–4 providers, each in its own worktree, for side-by-side diffs.
+1. `agent_providers` — enabled AionUi assistants, readiness, and advertised models. Empty/`503` until Agents is connected.
+2. `agent_dispatch` with `provider`, a self-contained `prompt`, and `cwd`. Permissions are the harness **YOLO** mode (Cursor `yolo`, Claude `bypassPermissions`, …). Isolated worktrees are the default (`devhub/agent/<repo>-<ticket-or-task>-<runId>` under the repo's `.git/devhub-worktrees/`); `worktree: false` edits `cwd` directly. Pass `requestId` when retrying the same submission so a duplicate POST returns the existing run. Caps: `DEVHUB_AGENT_MAX_RUNS` (6), `DEVHUB_AGENT_MAX_COST_USD` per local day (25), `DEVHUB_AGENT_MAX_DEPTH` (1 — a dispatched agent cannot dispatch another), optional `DEVHUB_AGENT_ALLOWED_ROOTS` (colon-separated cwd allowlist). `DEVHUB_AGENT_DEFAULT_WORKTREE=0` restores shared-checkout-by-default. Current AionUi **refuses** `maxTurns` (`400`) — use the assistant's own controls.
+3. `agent_wait` (blocks up to 300s and sends progress notifications) or `agent_output` with the returned `since` cursor. `needs-attention` means open the conversation in Agents.
+4. `agent_diff` shows what changed against HEAD at dispatch. `agent_followup` continues the same AionUi conversation; `agent_cancel` stops the managed run.
+5. `agent_race` sends one prompt to 2–4 assistants, each in its own worktree and conversation.
 
-The runner (`dashboard/scripts/agent-run.ts`, bundled as `services/agent-run.cjs` in the desktop app) prints a readable stream into the tab and appends normalised events to `events.jsonl` under `DEVHUB_AGENT_RUNS_DIR`. It sets `DEVHUB_AGENT_DEPTH`, so an agent it started cannot dispatch another (`DEVHUB_AGENT_MAX_DEPTH`, default 1). At most `DEVHUB_AGENT_MAX_RUNS` (6) runs are queued or running at once.
+Watch runs on **Agents → Activity** (`/agents?view=activity`). Durable files live under `DEVHUB_AGENT_RUNS_DIR`. The leftover CLI runner (`dashboard/scripts/agent-run.ts`) is only for historic `legacy-cli` records and `POST /api/agent/runs/interactive`.
 
 ### Trace what agents did
 
@@ -517,7 +517,9 @@ plugin MCP packages. See [Plugin System](plugins.md) and
 | `db_query` refuses a write              | Use `db_execute` with `confirm: true`. `db_query` always sends `readOnly: true`.                                                 |
 | `db_execute` `confirm_required`         | Pass `confirmLabel` equal to the connection label from `db_connections` (prd + privileged).                                      |
 | `db_connect` still unavailable          | Check Tailscale / AWS profile from Ops. `fix: true` only applies remedies the provider declared.                                 |
-| Status page says a command is missing   | Bare commands such as `npx`, `tsx`, and `uvx` must resolve on `PATH`; absolute or relative command paths must exist on disk.     |
+| `agent_dispatch` `503` “Connect AionUi” | Open `/agents?view=connection` and connect or run managed setup. Local dashboard only. |
+| `agent_dispatch` `400` maxTurns         | Current AionUi refuses DevHub's turn override. Drop `maxTurns` or use the assistant's controls. |
+| `agent_dispatch` `429`                  | Wait, cancel on Activity, or raise `DEVHUB_AGENT_MAX_RUNS` / `DEVHUB_AGENT_MAX_COST_USD`. |
 
 ## Safety Model
 

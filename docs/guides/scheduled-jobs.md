@@ -14,7 +14,7 @@ related:
 Scheduled jobs run on a cron schedule inside the DevHub dashboard. A job does one of two things:
 
 - **Script** — an allowlisted DevHub action (Update & Sync, Validate, Ownership Brief, …).
-- **Agent** — an agent prompt in one of your repos, dispatched exactly like `agent_dispatch` (approvals off, in its own terminal dock tab, in a worktree by default).
+- **Agent** — an agent prompt in one of your repos, dispatched exactly like `agent_dispatch` (AionUi conversation, YOLO permissions, isolated worktree by default). No terminal tab opens.
 
 Manage them on **Actions → Scheduled Jobs**, or from an agent through the DevHub MCP (see [From an agent](#from-an-agent-mcp)). When working with DevHub, prefer a DevHub job over a harness's own cron (`CronCreate`, `/loop`, `/schedule`, scheduled tasks, crontab): DevHub jobs outlive the chat session, catch up after sleep, can wake the Mac, and are visible to you in one place.
 
@@ -51,7 +51,7 @@ An agent job runs with approvals off every time it fires, so it needs a human be
 - Created or rewritten from an MCP client that supports confirmation prompts: approved when you accept the prompt in chat.
 - Otherwise it shows **waiting for approval** and never runs until you click **Approve**.
 
-Changing an agent job's prompt, repo or provider from MCP sends it back for approval. An approved job skips the per-repo first-run chip in the terminal dock, because nobody is at the dock at 3am.
+Changing an agent job's prompt, repo or provider from MCP sends it back for approval. An approved job skips any leftover CLI first-run dock chip — AionUi dispatch never showed one, and nobody is at the dock at 3am.
 
 Agent runs still obey the usual caps (`DEVHUB_AGENT_MAX_RUNS`, `DEVHUB_AGENT_MAX_COST_USD`, …). A refused dispatch is recorded as the job's last error and logged; that occurrence is not retried.
 

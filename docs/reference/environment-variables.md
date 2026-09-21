@@ -167,11 +167,11 @@ at sync time. See [Plugins](../architecture/plugins.md).
 
 ## OpenCode And OpenChamber
 
-See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md). Do not configure companion ports; both UIs lazy-start.
+See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md). Coding chats are on `/agents`; `/chamber` and `/opencode` redirect there. Do not pin companion ports.
 
 | Variable                                | Default                         | Purpose                                                                                                                                                                        |
 | --------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `OPENCHAMBER_PORT`                      | `1336`                          | Internal default for the lazy `/chamber` tab. You do not need to set this.                                                                                                     |
+| `OPENCHAMBER_PORT`                      | `1336`                          | Internal default for leftover `GET /api/openchamber/listen`. You do not need to set this.                                                                                      |
 | `OPENCHAMBER_HOST`                      | `0.0.0.0`                       | OpenChamber bind host                                                                                                                                                          |
 | `OPENCHAMBER_UI_PASSWORD`               | —                               | UI password required to bind a LAN host on OpenChamber ≥1.13. Configure from `/setup`. Without it (or the override below) DevHub falls back to binding `127.0.0.1`.            |
 | `OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN` | `false`                         | Set `true` to expose OpenChamber over the LAN without a UI password (not recommended)                                                                                          |
@@ -200,15 +200,22 @@ Do not set `OPENCODE_HOST` or `OPENCODE_SKIP_START` either — Chamber Setup can
 
 ## DevHub MCP: Agents, Toolsets, History
 
-The DevHub MCP's `agent_*` tools hand work to the connected **AionUi** workspace (Agents). Each dispatch creates a conversation with **YOLO** permissions and the defaults in [Agents (AionUi)](../guides/aionui-agents.md) (Cursor + Grok unless overridden). DevHub-managed MCP servers are synced into AionUi and enabled on connect. Built-in assistants include Claude Code, Cursor, Codex, Gemini, OpenCode, Antigravity, and Aion CLI. GUI agent apps such as AutoClaw still connect to DevHub as MCP clients; `sync` also writes those catalogs into AionUi.
+The DevHub MCP's `agent_*` tools hand work to the connected **AionUi** workspace (Agents). Each dispatch creates a conversation with **YOLO** permissions and the defaults in [Agents (AionUi)](../guides/aionui-agents.md) (Cursor + Grok unless overridden). No terminal tab opens. Built-in assistants include Claude Code, Cursor, Codex, Gemini, OpenCode, Antigravity, Copilot, and Aion CLI. GUI agent apps such as AutoClaw still connect to DevHub as MCP clients; `sync` also writes those catalogs into AionUi.
 
 | Variable                      | Default                                 | Purpose                                                                                                                                                           |
 | ----------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DEVHUB_AGENT_PROVIDERS_FILE` | `~/.config/devhub/agent-providers.json` | Custom providers: `{ "providers": [{ "id", "label", "command", "args" }] }`. `args` must contain `{prompt}`; optional `modelArgs` (`{model}`), `resumeArgs` (`{sessionId}`), and `format` (`text` default, or `claude-stream-json` / `cursor-stream-json` / `codex-json`). |
-| `DEVHUB_AGENT_RUNS_DIR`       | `<NOTES_DIR>/.config/agent-runs`        | Durable `spec.json`, `status.json` and `events.jsonl`, including AI generation. Finished history is retained. Without an override, available legacy temporary runs are read and completed records archived; active legacy runs remain at their original path. |
+| `DEVHUB_AGENT_PROVIDERS_FILE` | `~/.config/devhub/agent-providers.json` | Custom CLI provider file used by leftover `legacy-cli` / interactive wrap code. Live `agent_providers` lists **AionUi assistants**, not this file. |
+| `DEVHUB_AGENT_RUNS_DIR`       | `<NOTES_DIR>/.config/agent-runs`        | Durable `spec.json`, `status.json` and `events.jsonl` for AionUi conversations, leftover CLI runs, and AI generation. Finished history is retained. |
 | `DEVHUB_AGENT_MAX_RUNS`       | `6`                                     | Active coding runs allowed at once. Small AI generation calls do not consume these slots. |
+| `DEVHUB_AGENT_MAX_COST_USD`   | `25`                                    | Refuse **new** dispatches once finished runs today have recorded this much USD. `0` disables. Mid-run cost is not enforced. |
+| `DEVHUB_AGENT_MAX_TURNS`      | `200`                                   | Default turn cap for leftover CLI runners. Current AionUi dispatch **rejects** `maxTurns` (`400`) — use the assistant's own controls. `0` disables. |
+| `DEVHUB_AGENT_MAX_SECONDS`    | `1800`                                  | Wall-clock kill for leftover CLI runners. AionUi conversations are not killed by this cap. `0` disables. |
+| `DEVHUB_AGENT_MAX_DEPTH`      | `1`                                     | How deep dispatch may nest. `1` means an agent that was itself dispatched cannot dispatch another. |
+| `DEVHUB_AGENT_DEFAULT_WORKTREE` | `1`                                   | Isolated git worktree on dispatch unless the caller sets `worktree: false`. `0` restores editing `cwd` by default. |
+| `DEVHUB_AGENT_ALLOWED_ROOTS`  | `$HOME`                                 | Colon-separated directories a dispatch `cwd` must sit under (`~` allowed). Unset keeps the historical home-wide rule. |
+| `DEVHUB_AGENT_TRUST_ALL`      | unset                                   | Leftover CLI dock-consent bypass. AionUi dispatch does not show a first-run dock chip. |
+| `DEVHUB_AGENT_CONSENT_FILE`   | `<app-data>/agent-consent.json`         | Leftover CLI first-run consent store (`0600`). |
 | `DEVHUB_TASK_PR_WATCH_INTERVAL_MS` | `600000` (10 min, min 60s) | How often the dashboard checks PRs opened by task-linked agent runs (CI failures, review changes, merges) and drafts tasks from new alerts when enabled. Runs only in the process that owns the scheduler (`DEVHUB_SCHEDULER` ≠ `0`). |
-| `DEVHUB_AGENT_MAX_DEPTH`      | `1`                                     | How deep dispatch may nest. `1` means an agent that was itself dispatched cannot dispatch another.                                                                |
 | `DEVHUB_MCP_TOOLSETS`         | all                                     | Comma-separated tool groups the DevHub MCP registers, e.g. `notes,tasks,terminal,agents`. Cursor ACP / AionUi `devhub` get a slimmer overlay at sync time; Claude Code stays full unless you set this yourself.         |
 | `DEVHUB_MCP_HISTORY`          | on                                      | Set `0` to stop recording DevHub MCP tool calls.                                                                                                                  |
 | `DEVHUB_MCP_HISTORY_DIR`      | `~/.local/state/devhub/mcp-history`     | One `YYYY-MM-DD.jsonl` per local day: tool, redacted/clipped args, duration, outcome, client, agent run id. Read with `mcp_history` / `mcp_history_summary`.        |

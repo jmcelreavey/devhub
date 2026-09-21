@@ -18,7 +18,7 @@ Authored and review-requested PR rows show a **CI glance** glyph (passing / fail
 ## Behaviour
 
 - **Glance:** check buckets folded into the PR list GraphQL meta query (no per-PR `gh pr view`).
-- **Agent:** OpenCode / Agent tab with `agentPipelineInvestigatePrompt` + note under `pr-reviews/` (same note family as Review with agent).
+- **Agent:** AionUi conversation with `agentPipelineInvestigatePrompt` + note under `pr-reviews/` (same note family as Review with agent).
 - **Skill:** pull PR state + failed checks/logs; classify flake vs real; reproduce locally when practical; fix on branch with **push only on confirm**; write findings to the review note.
 - **Never** auto-posts GitHub PR review comments.
 - **Optional:** confirm-gated re-run of failed Actions (`rerunFailed`) via the API/MCP.

@@ -1,6 +1,6 @@
 ---
 title: OpenCode and OpenChamber
-description: How DevHub's dashboard, terminal, lazy OpenChamber tab, and lazy OpenCode tab work together.
+description: How DevHub's dashboard, terminal dock, leftover OpenCode listen APIs, and Agents workspace fit together.
 order: 11
 icon: Terminal
 tags: [workflow]
@@ -11,20 +11,21 @@ related:
 
 # OpenCode and OpenChamber
 
-DevHub runs the dashboard and a localhost terminal during `npm run dev` / `npm run start`. OpenChamber and OpenCode are **not** always-on peers:
+DevHub runs the dashboard and a localhost terminal during `npm run dev` / `npm run start`. Coding chats live on **Agents** (`/agents`); `/chamber` and `/opencode` redirect there. OpenChamber and OpenCode listen APIs remain for recap and leftover tooling:
 
 | Service     | Default port | Dashboard route | Role                              |
 | ----------- | ------------ | --------------- | --------------------------------- |
 | Dashboard   | `1337`       | `/`             | Main Next.js app                  |
-| OpenChamber | `1336`       | `/chamber`      | Thinking/workspace UI (iframe)    |
-| OpenCode    | ephemeral    | `/opencode`     | Lazy loopback instance; never 1338 |
+| Agents      | AionUi `:25818` / core `:25819` | `/agents` | Coding chats, activity, archive |
+| OpenChamber | `1336`       | listen API only | Leftover embed start (`GET /api/openchamber/listen`) |
+| OpenCode    | ephemeral    | listen API only | Recap / Investigate lazy-start; never 1338 |
 | Terminal    | `1339`       | Docked drawer   | In-app PTY shell (WebSocket peer) |
 
-DevHub does **not** start always-on OpenCode on `1338`, and does **not** start OpenChamber until you open `/chamber`. Always-on Chamber on 1336 spawned a second OpenCode that raced OpenChamber.app on `opencode.json`. The `/opencode` tab, session recap, and Datadog Investigate lazy-start a **loopback ephemeral** instance. Chamber (app or embed) starts and restarts its **own** OpenCode. DevHub never exports `OPENCODE_PORT` / `OPENCODE_SKIP_START` into Chamber.
+DevHub does **not** start always-on OpenCode on `1338`. Session recap and Datadog Investigate still lazy-start a **loopback ephemeral** OpenCode via `GET /api/opencode/listen`. Opening `/chamber` or `/opencode` now redirects to `/agents`. Chamber (if you still run the app yourself) starts and restarts its **own** OpenCode. DevHub never exports `OPENCODE_PORT` / `OPENCODE_SKIP_START` into Chamber.
 
 The **terminal peer** is a separate localhost-only WebSocket PTY (`dashboard/scripts/terminal-pty-server.ts`). The docked terminal (`TerminalDock`) connects over `ws://127.0.0.1:1339` and keeps sessions alive while hidden — long-running commands (including PR reviews) continue when you switch tabs.
 
-OpenChamber is **developer-managed**: DevHub does not bundle it. Install it yourself (`npm i -g @openchamber/web`, or point `OPENCHAMBER_BIN` at any build) and DevHub lazy-starts it when you open `/chamber`. When no `openchamber` is found on `PATH` (and `OPENCHAMBER_BIN` is unset), the Chamber tab and its iframe are hidden and nothing is started.
+OpenChamber is **developer-managed**: DevHub does not bundle it. Install it yourself (`npm i -g @openchamber/web`, or point `OPENCHAMBER_BIN` at any build). `GET /api/openchamber/listen` can still lazy-start it; the `/chamber` page now redirects to `/agents`. When no `openchamber` is found on `PATH` (and `OPENCHAMBER_BIN` is unset), listen is a no-op.
 
 ## Startup Flow
 
@@ -34,9 +35,11 @@ npm run dev
                               (does not start OpenCode or OpenChamber)
 -> terminal-pty-server.ts  -> WebSocket PTY on TERMINAL_PORT (default 1339)
 -> dashboard (Next.js on PORT, default 1337)
-     /chamber  -> GET /api/openchamber/listen -> OpenChamber on 1336
-                  without OPENCODE_PORT / OPENCODE_SKIP_START
-     /opencode -> GET /api/opencode/listen -> ephemeral loopback OpenCode
+     /agents   -> AionUi workspace (managed WebUI typically :25818)
+     listen APIs still exist:
+     GET /api/openchamber/listen -> OpenChamber on 1336 (no skip-start / OPENCODE_PORT)
+     GET /api/opencode/listen    -> ephemeral loopback OpenCode
+     /chamber and /opencode redirect to /agents
 ```
 
 `start-peer-services.ts` only frees pinned OpenCode ports. `terminal-pty-server.ts` is the docked shell. `npm run dev` starts dashboard + peers boot + terminal + optional LAN proxy via `concurrently`. Peer boot calls `loadEnvWithOnePasswordFallback` so provider keys can be resolved from 1Password when local env vars are empty.
@@ -77,7 +80,7 @@ Keep one. `OPENCHAMBER_BIN` pins the choice outright if you want to be explicit.
 
 ### Port Reuse
 
-`ensureChamberListening()` is the single entry point (the `/chamber` tab, the desktop-app launcher, and Restart all call it; concurrent callers share one start). It reuses a healthy listener on 1336, but **replaces** a daemon whose env still has skip-start or `OPENCODE_PORT` (that leftover is what broke Setup). It also replaces a stale nvm binary. OpenCode listen never binds 1338/4096.
+`ensureChamberListening()` is the single entry point (`GET /api/openchamber/listen`, the desktop-app launcher, and Restart all call it; concurrent callers share one start). It reuses a healthy listener on 1336, but **replaces** a daemon whose env still has skip-start or `OPENCODE_PORT` (that leftover is what broke Setup). It also replaces a stale nvm binary. OpenCode listen never binds 1338/4096. The `/chamber` page itself redirects to `/agents`.
 
 ### OpenChamber → OpenCode Wiring
 
@@ -99,7 +102,7 @@ Finished commands render as **block cards** (Warp-style) while the xterm grid st
 | Trigger                            | Behavior                                                                                                                          |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | Terminal drawer button             | Opens a new shell session at the developer directory                                                                              |
-| PR **Review with agent** (`/prs`)  | Queues an **Agent** dock tab (or OpenCode session) with the `pr-explain-review` skill — not a PTY inject                          |
+| PR **Review with agent** (`/prs`)  | Opens the Agents handoff sheet and starts an AionUi conversation with `pr-explain-review` — not a PTY inject                      |
 | Repo Learning **OpenCode handoff** | Opens a terminal in the target repo with a copied handoff prompt                                                                  |
 | Repos **DX Audit**                 | Runs the `dx-audit` skill via the resolved AI provider                                                                            |
 | Capability **Build lab**           | Runs the `capability-lab` skill in the kitchen-sink workspace                                                                     |
@@ -109,9 +112,9 @@ The PTY server binds **localhost only** and has no authentication — acceptable
 
 Visible dock tabs heartbeat to `GET`/`POST /api/terminal/sessions` so MCP `terminal_list` can see label, cwd, kind, and busy state. Empty until the dock has opened at least once this process.
 
-Agents that need a shell command use **propose-then-confirm**: `POST /api/terminal/propose` (MCP `terminal_propose_run`) stores an in-memory proposal (15 min TTL, max 20 pending). The dock must approve before inject **unless** the dock **Auto-run** toggle is on (`localStorage` key `devhub:terminal-autorun`). Auto-run skips the chip for ordinary commands and injects into a new tab immediately. Destructive patterns (`rm -rf`, `git push --force`, `kubectl delete`, `DROP TABLE`, … — `isDestructiveTerminalCommand`) **always** keep the confirm modal. Poll `terminal_proposal_status` — do not assume the command ran. Every approved (or auto-run) proposal opens its own tab, so a run never waits on another session.
+Agents that need a **shell command** use **propose-then-confirm**: `POST /api/terminal/propose` (MCP `terminal_propose_run`) stores an in-memory proposal (15 min TTL, max 20 pending). The dock must approve before inject **unless** the dock **Auto-run** toggle is on (`localStorage` key `devhub:terminal-autorun`). Auto-run skips the chip for ordinary commands and injects into a new tab immediately. Destructive patterns (`rm -rf`, `git push --force`, `kubectl delete`, `DROP TABLE`, … — `isDestructiveTerminalCommand`) **always** keep the confirm modal. Poll `terminal_proposal_status` — do not assume the command ran. Every approved (or auto-run) proposal opens its own tab, so a run never waits on another session.
 
-The one exception is **agent dispatch** (MCP `agent_dispatch`, `POST /api/agent/runs`): the dashboard queues the proposal itself with a server-only `autoRun` flag, and the dock opens a tab and starts the run without a chip. The tab is the control — it shows the agent's stream live, and Ctrl+C or closing it stops the agent. Destructive-looking commands still get the chip.
+MCP `agent_dispatch` / `POST /api/agent/runs` do **not** use this queue — they create an AionUi conversation. See [Agents (AionUi)](aionui-agents.md).
 
 Each session's output is **tee'd to disk** (`DEVHUB_TERMINAL_LOG_DIR`, default `<tmpdir>/devhub-terminal-logs/<session-uuid>.log`) so **Copy all output** in the terminal drawer can return the full log via `GET /api/terminal/log?session=<uuid>`. Browser xterm scrollback is RAM-capped; the on-disk log is the source of truth for long PR reviews or builds. Session logs older than three days are pruned on terminal peer startup.
 
@@ -135,9 +138,9 @@ One **AI provider** (`DEVHUB_AI_PROVIDER`) covers in-app generation and agent la
 
 `PUT /api/agent-cli` with a provider whose binary/key is missing returns `400`. Legacy `DEVHUB_AGENT_CLI` (`opencode` \| `cursor` \| `chatgpt` \| `antigravity`) still maps in; aliases `agy` / `antigravity` resolve to `antigravity-cli`. Saving a provider writes both keys. Blank `opencodeModel` keeps the shared `opencode.json` default. Optional `DEVHUB_AGENT_ANTIGRAVITY_MODEL` is passed as `agy --model`.
 
-There is no Antigravity desktop IDE in DevHub — the sidebar **Antigravity** row and the repo-hub Terminal split both open `agy` in the dock. Interactive launches use `agy --dangerously-skip-permissions` (same idea as Claude skip-permissions).
+There is no Antigravity desktop IDE in DevHub — the repo-hub Terminal split can still open `agy` in the dock. Interactive leftover launches use `agy --dangerously-skip-permissions` (same idea as Claude skip-permissions). Coding work from Implement / Review / MCP dispatch goes through AionUi instead.
 
-Agent/review jobs open the Agent dock tab or an OpenCode HTTP session (`dashboard/lib/agent-job.ts`). MCP `terminal_propose_run` still goes through the dock confirm chip onto a real PTY — never into the chat pane — unless the user has Auto-run on for non-destructive commands. Concurrent CLI runs are capped at `DEVHUB_AI_MAX_CONCURRENT` (default 3); queue wait is not counted against the job timeout.
+`launchAgentJob` opens the Agents handoff sheet for agent-like kinds. MCP `terminal_propose_run` still goes through the dock confirm chip onto a real PTY — never into the chat pane — unless the user has Auto-run on for non-destructive commands. Concurrent CLI generations are capped at `DEVHUB_AI_MAX_CONCURRENT` (default 3); queue wait is not counted against the job timeout.
 
 Settings are managed `.env.local` keys so the 1Password `devhub` item can populate them like other managed config. Server read/detection: `dashboard/lib/ai/preference.ts` + `dashboard/lib/agent/cli-env.ts` (`GET`/`PUT /api/agent-cli`). Local CLIs see the same skills and notes MCP because sync writes them to `~/.cursor/skills`, `~/.cursor/mcp.json`, `~/.gemini/config/skills`, and `~/.gemini/config/mcp_config.json` as well as the OpenCode paths — run **Sync skills** / **Sync MCP** before first use.
 
@@ -151,7 +154,7 @@ Agents can summarize **what an OpenCode session did** (commands, MCP calls, file
 | Skill   | `devhub-recap` — call the tool and return the JSON unchanged                                              |
 | HTTP    | `GET /api/opencode/recap` (requires `requireDashboardAuth`; see [API Routes](../reference/api-routes.md)) |
 
-Open `/opencode` (or recap / Investigate) so DevHub can lazy-start OpenCode on an ephemeral loopback port. The recap builder reads the OpenCode HTTP API, redacts secrets, and omits prompts/reasoning. Use `directory` to scope sessions to a workspace.
+Trigger recap / Investigate so DevHub can lazy-start OpenCode on an ephemeral loopback port (`GET /api/opencode/listen`). `/opencode` itself redirects to `/agents`. The recap builder reads the OpenCode HTTP API, redacts secrets, and omits prompts/reasoning. Use `directory` to scope sessions to a workspace.
 
 ## Configuration
 
@@ -215,11 +218,11 @@ The **Status** page probes whether Chamber (1336) or the lazy OpenCode instance 
 
 | Symptom                                 | Things to check                                                                                                                                           |
 | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Chamber iframe blank                    | Open `/chamber` so listen can start it; Status page Chamber indicator; `openchamber` on PATH                                                              |
+| Chamber listen does nothing             | `/chamber` redirects to `/agents`. Call `GET /api/openchamber/listen` or Status; `openchamber` on PATH. |
 | OpenCode won't start                    | `which opencode` or set `DEVHUB_OPENCODE_BINARY`; confirm nothing is still bound to 1338                                                                   |
 | Provider auth errors                    | `/setup` or 1Password item fields; run sync after env vars are set; `DEVHUB_OP_REFRESH=1` once to refresh                                                 |
 | LAN device can't reach Chamber          | Enable LAN mode in `/setup`; proxy is dashboard `1337` + Chamber `1336` only. OpenCode is loopback-only. On WSL, forward those ports from Windows (see root README) |
-| Two OpenCode instances                  | Expected if both `/opencode` and Chamber are open — different ports. Do not point Chamber at 1338 via env                                                 |
+| Two OpenCode instances                  | Recap/Investigate listen plus a self-managed Chamber app — different ports. Do not point Chamber at 1338 via env                                          |
 | Claude/Cursor Setup fails in Chamber    | Something is still listening on 1338, or `OPENCODE_PORT`/`OPENCODE_SKIP_START` is in Chamber's env. Quit OpenChamber.app, confirm `lsof -iTCP:1338 -sTCP:LISTEN` is empty, reopen the app, then Setup. |
 | Terminal drawer blank or stuck          | Terminal peer on `1339`; check `concurrently` `term` process. Heavy zsh themes may need `DEVHUB_TERMINAL_ARGS=-f`. Terminal is never LAN-proxied          |
 | PR review note in wrong repo            | Set `NEXT_PUBLIC_REPO_ROOT` in `dashboard/.env.local` to match `REPO_ROOT`; restart dev server                                                            |

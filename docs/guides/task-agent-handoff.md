@@ -48,24 +48,17 @@ When a task-linked run ends — CLI exit, `agent_interactive_finish`, cancel, or
 
 It also stores `branch` and `cwd` on the run so the PR watcher can find the pull request. Agent-written notes stay above; the snapshot only appends.
 
-## Interactive run lifecycle
+## Interactive leftover
 
-Implement, Resume and Write plan all open the CLI interactively in the terminal dock. The tab runs:
+Implement, Resume and Write plan now dispatch through AionUi (`POST /api/agent/runs`), not a docked CLI. `POST /api/agent/runs/interactive` still exists for wrap fragments around a shell CLI (`--interactive-start` / `--interactive-finish`); the current UI does not call it.
 
-```bash
-<agent-run> --interactive-start <run-dir> $; <cli …>; __devhub_rc=$?; <agent-run> --interactive-finish <run-dir> "$__devhub_rc"
-```
-
-- `--interactive-start` records the tab's shell pid → state `running`. Until then the run is `queued` (never-started runs fail after 16 minutes).
-- `--interactive-finish` records the CLI exit: `0` → `succeeded`, `130` (Ctrl+C) → `cancelled`, anything else → `failed`. A run the agent already finished with `agent_interactive_finish` keeps that result.
-- Closing the tab kills the shell; the dead-pid reconcile marks the run `cancelled` ("Terminal tab closed before the CLI exited").
-- Cancelling an interactive run from Agent Activity closes the record and never signals your shell.
+Cancelling a run from **Agents → Activity** closes the AionUi conversation. Isolated worktrees are the default unless the launch set `worktree: false` (planning runs do).
 
 ## UI
 
-- **Implement with Agent…** (ready tasks only) opens the chosen CLI interactively in the terminal dock, registers the run in Agent Activity, and links it to the task. "Default" resolves to your configured CLI first, so Activity names the CLI that actually ran.
+- **Implement with Agent…** (ready tasks only) opens the Agents handoff sheet, starts an AionUi conversation, registers the run on **Agents → Activity**, and links it to the task. "Default" is the Agents default assistant (usually Cursor).
 - The dialog stays on the page; the toast has **View activity**.
-- Task row **chip**, most urgent first: Running · CI failing / Changes requested / New PR comments (opens Fix PR) · PR merged · PR closed · PR open · Paused · Continue / Ready to resume · Draft. PR chips open the pull request; the rest open `/agent-activity?run=<id>`.
+- Task row **chip**, most urgent first: Running · CI failing / Changes requested / New PR comments (opens Fix PR) · PR merged · PR closed · PR open · Paused · Continue / Ready to resume · Draft. PR chips open the pull request; the rest open `/agents?view=activity&run=<id>`.
 - **Resume with Agent…** when the latest run is `paused`, `abandoned` or `failed`; **Continue with Agent…** when it is `done` with a CLI session; **Fix PR with Agent…** when the PR needs attention. Picking the prior CLI continues its session; the banner says which will happen.
 - Task rows share one poll of `GET /api/tasks/agent-runs/summary` (15s) instead of one request per row.
 - The model field remembers the last model per stage (planning vs implementing) and CLI.

@@ -124,7 +124,7 @@ The reviewer facepile is display-only. There is no dashboard **Request review** 
 
 **Open in Cursor** calls `POST /api/github/prs/open-in-cursor` — finds the local clone under the Repos scan directory, stashes dirty work, checks out the PR branch, and launches Cursor. Optional `notePath` opens a notes working copy alongside. MCP parity: `prs_open_in_cursor`. Requires the repo to be cloned locally.
 
-**Review with agent** is intentionally local. It queues an agent job (`launchAgentJob`) that opens the **Agent** dock tab (or an OpenCode session when that is the resolved provider) with the `pr-explain-review` skill. It does **not** inject into a live shell tab. The skill saves the write-up through notes MCP. It does **not** post comments, approve, or request changes on GitHub unless the human explicitly asks the tool to do that later.
+**Review with agent** is intentionally local. It opens the Agents handoff sheet (`launchAgentJob` → `openAgentHandoff`) and starts an AionUi conversation with the `pr-explain-review` skill. It does **not** inject into a live shell tab. The skill saves the write-up through notes MCP. It does **not** post comments, approve, or request changes on GitHub unless the human explicitly asks the tool to do that later.
 
 On the **Review requested** tab, if today's [daily review rep](../architecture/dashboard.md#daily-review-reps) is this PR and findings are not saved yet, the menu swaps **Review with agent** for **Finish your daily rep first** so the AI-free pass happens before the agent looks.
 
@@ -153,9 +153,7 @@ the scaffold with MCP `notes_create_pr`. See [Notes System — Cross-entity link
 
 ### Review Note Constraints
 
-- A usable AI provider must be installed or configured (`DEVHUB_AI_PROVIDER`:
-  Cursor CLI, ChatGPT/Codex CLI, Antigravity CLI, OpenCode, or `AI_API_KEY`). Otherwise the Agent
-  tab shows a setup hint instead of crashing the UI. See [Agent CLI selection](../guides/opencode-and-chamber.md#agent-cli-selection).
+- Connect **Agents** (`/agents?view=connection`) so Review with agent can create an AionUi conversation. See [Agents (AionUi)](../guides/aionui-agents.md).
 - When `NEXT_PUBLIC_REPO_ROOT` is set, the launch command exports `REPO_ROOT`
   and `NOTES_DIR` for the agent run so the notes MCP writes into
   `notes/pr-reviews/...`, even if the review targets a different repository.
@@ -180,7 +178,7 @@ GitHub activity can contribute to standup markdown, especially merged PRs and re
 | PRs do not load                       | `gh auth status` succeeds.                                                                                                                                               |
 | Repo is missing                       | It has a GitHub remote and is discoverable from DevHub's repo search scope.                                                                                              |
 | Archived repo PRs are missing         | Expected: authored and review-requested rows from archived repos are hidden.                                                                                             |
-| **Review with agent** shows a setup hint | A local CLI (`cursor-agent`, ChatGPT/Codex, `agy`, or `opencode`) is on `PATH`, or `AI_API_KEY` is set. See [Agent CLI selection](../guides/opencode-and-chamber.md#agent-cli-selection). |
+| **Review with agent** shows a setup hint | Connect AionUi on **Agents → Connection**. Background defaults still prefer Cursor + Grok (`DEVHUB_AGENT_CLI` / `DEVHUB_AION_CURSOR_MODEL`). See [Agents (AionUi)](../guides/aionui-agents.md). |
 | Approved tick missing on a reviewed PR | Expected when the repo does not *require* reviews **and** the GraphQL approval lookup failed. The Search API `review:approved` qualifier is not used — it misses those PRs. |
 | **Open in Cursor** fails               | The PR's repo is cloned under the Repos scan directory and `cursor` is on `PATH`.                                                                                          |
 | **Finish your daily rep first**        | Expected when this PR is today's unfinished [daily review rep](../architecture/dashboard.md#daily-review-reps). Save findings on `/review/rep` first.                     |

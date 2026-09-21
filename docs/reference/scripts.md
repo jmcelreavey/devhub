@@ -179,7 +179,7 @@ The hook (`.githooks/pre-push`) runs `scripts/scan-leaks.sh tree`, scrubs pollut
 
 When the active shell's Node does not match `.nvmrc`, the hook sources `nvm.sh` and runs `nvm use` before verify — so pushes from IDEs or GUI clients do not false-fail under a system Node. Install the pinned version (`nvm install` from repo root) if you see a warning about a Node mismatch.
 
-Before verify, the hook unsets `NODE_ENV=production`, `PORT`, `NOTES_DIR`/`TASKS_DIR`/other content-dir overrides, most `DEVHUB_*` layout vars, and `__NEXT_PRIVATE_*` keys. Desktop sidecars and IDE terminals often inherit these from a running app; without the scrub, `next build` inside verify can fail with opaque `TypeError: generate is not a function`.
+Before verify, the hook unsets `NODE_ENV=production`, `PORT`, `NOTES_DIR`/`TASKS_DIR`/other content-dir overrides, most `DEVHUB_*` layout vars, `__NEXT_PRIVATE_*` keys, **and every `GIT_*` variable**. Desktop sidecars and IDE terminals often inherit the first set from a running app; without the scrub, `next build` inside verify can fail with opaque `TypeError: generate is not a function`. Git hands hooks `GIT_DIR` (absolute when pushing from a linked worktree) and `GIT_CONFIG_*` overrides — tests that build throwaway repos would otherwise commit, branch, or run hooks against **this** checkout. That is why verify can look like it passed locally and then fail (or mutate the real repo) on push.
 
 If `dashboard/node_modules` is missing, the hook prints a reminder and **exits 0** (push proceeds) — run `npm install` at the repo root to enable checks.
 
