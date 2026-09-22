@@ -79,7 +79,9 @@ export function buildRuntimeInfo(): DashboardRuntimeInfo {
  * Last writer wins, deliberately: the dashboard you started most recently is
  * the one you are working in, and it is the one an agent should reach. Two
  * instances racing is not a case worth arbitrating — the second one is the
- * answer.
+ * answer. Only a primary instance calls this (see instrumentation.ts): a
+ * `DEVHUB_SCHEDULER=0` secondary beside the desktop app never takes agents
+ * away from the one the user has open.
  */
 export function writeDashboardRuntime(file = dashboardRuntimePath()): void {
   try {

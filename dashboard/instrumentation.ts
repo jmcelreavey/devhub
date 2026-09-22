@@ -1,16 +1,22 @@
 // Next.js calls this once on server start (Node runtime).
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  // DEVHUB_SCHEDULER=0 marks a second dashboard (a dev server beside the
+  // desktop app, the installer's self-test): both read the same jobs.json,
+  // and one process should own the background work.
+  const primary = process.env.DEVHUB_SCHEDULER !== "0";
   // Advertise this instance before anything else, so an agent starting
   // alongside the server finds the right one rather than whichever DevHub
-  // happens to hold port 1337.
-  const { writeDashboardRuntime } = await import("./lib/dashboard-runtime");
-  writeDashboardRuntime();
+  // happens to hold port 1337. Only the primary does: MCP follows the
+  // advertisement, and terminal proposals live in one server's memory, so
+  // agents routed to a secondary nobody has open queue work that never starts.
+  if (primary) {
+    const { writeDashboardRuntime } = await import("./lib/dashboard-runtime");
+    writeDashboardRuntime();
+  }
   const { startAionReconciliation } = await import("./lib/aionui/lifecycle");
   startAionReconciliation();
-  // DEVHUB_SCHEDULER=0 for a second dashboard (a dev server beside the desktop
-  // app): both read the same jobs.json, and one scheduler should own it.
-  if (process.env.DEVHUB_SCHEDULER !== "0") {
+  if (primary) {
     const { startScheduler } = await import("./lib/scheduler");
     startScheduler();
     // Same single-owner rule: it writes the shared task sidecars.

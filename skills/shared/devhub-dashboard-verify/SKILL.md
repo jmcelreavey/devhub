@@ -33,10 +33,14 @@ appear there. Testing a UI fix against 1337 is testing production.
 3. Start webpack on a **free** port (1337 is usually taken). Example:
 
    ```bash
-   cd dashboard && PORT=1342 npx tsx scripts/run-next-with-env.ts dev --port 1342 --hostname 127.0.0.1
+   cd dashboard && DEVHUB_SCHEDULER=0 NEXT_PUBLIC_TERMINAL_PORT=1343 PORT=1342 npx tsx scripts/run-next-with-env.ts dev --port 1342 --hostname 127.0.0.1
    ```
 
    Then verify against that origin. Cold compile can take ~30s.
+   `DEVHUB_SCHEDULER=0` is not optional: it keeps scheduled jobs, auto PR review
+   and the MCP advertisement with the packaged app, so agents keep working
+   against 1337 while you test. `.claude/launch.json` (`dashboard-dev-1342`)
+   already sets it.
 4. **Do not kill 1337** unless the user asks — that process is the daily driver.
 5. To get a checkout fix into the packaged app: **View → Rebuild Dashboard…**
    (or attach the shell to the webpack origin). Reopen does not rebuild.

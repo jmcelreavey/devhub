@@ -47,10 +47,23 @@ export class DashboardUnreachableError extends Error {
 }
 
 export class DashboardClient {
-  constructor(readonly baseUrl: string) {}
+  private readonly resolveBaseUrl: () => string;
 
-  private buildUrl(path: string, query?: DashboardRequestOptions["query"]): string {
-    const url = new URL(path.replace(/^\//, ""), this.baseUrl.endsWith("/") ? this.baseUrl : `${this.baseUrl}/`);
+  /**
+   * A fixed URL, or a resolver called once per request. Resolving per request
+   * is what lets a long-lived session follow the dashboard: one resolved at
+   * startup kept calling whatever it found then, even after that server quit.
+   */
+  constructor(baseUrl: string | (() => string)) {
+    this.resolveBaseUrl = typeof baseUrl === "string" ? () => baseUrl : baseUrl;
+  }
+
+  get baseUrl(): string {
+    return this.resolveBaseUrl();
+  }
+
+  private buildUrl(baseUrl: string, path: string, query?: DashboardRequestOptions["query"]): string {
+    const url = new URL(path.replace(/^\//, ""), baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
     if (query) {
       for (const [k, v] of Object.entries(query)) {
         if (v !== undefined) url.searchParams.set(k, String(v));
@@ -59,8 +72,8 @@ export class DashboardClient {
     return url.toString();
   }
 
-  private authHeaders(): Record<string, string> {
-    const headers: Record<string, string> = { Origin: this.baseUrl, "X-DevHub-Client": "mcp" };
+  private authHeaders(baseUrl: string): Record<string, string> {
+    const headers: Record<string, string> = { Origin: baseUrl, "X-DevHub-Client": "mcp" };
     const secret = process.env.DEVHUB_API_SECRET?.trim();
     if (secret) headers["X-DevHub-Secret"] = secret;
     return headers;
@@ -69,7 +82,9 @@ export class DashboardClient {
   /** Perform a request and return the parsed JSON (or text) body. Throws on non-2xx / unreachable. */
   async request<T = unknown>(path: string, opts: DashboardRequestOptions = {}): Promise<T> {
     const { method = "GET", body, query, timeoutMs = 30_000 } = opts;
-    const url = this.buildUrl(path, query);
+    // One resolution per request, so the URL, Origin and error all agree.
+    const baseUrl = this.baseUrl;
+    const url = this.buildUrl(baseUrl, path, query);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let res: Response;
@@ -78,13 +93,13 @@ export class DashboardClient {
         method,
         signal: controller.signal,
         headers: {
-          ...this.authHeaders(),
+          ...this.authHeaders(baseUrl),
           ...(body !== undefined ? { "content-type": "application/json" } : {}),
         },
         body: body !== undefined ? JSON.stringify(body) : undefined,
       });
     } catch (err) {
-      throw new DashboardUnreachableError(this.baseUrl, err);
+      throw new DashboardUnreachableError(baseUrl, err);
     } finally {
       clearTimeout(timer);
     }

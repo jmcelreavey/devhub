@@ -57,7 +57,7 @@ Load `devhub-mcp` for tool details. Summary:
 | **Filesystem-backed** | No | `notes_*`, `docs_*`, `tasks_*`, `diagrams_*`, `appraisal_*`, `tags_*` |
 | **Dashboard-backed** | Yes (`npm run dev`) | `status_*`, `scripts_*`, `briefing_get`, `prs_*`, `jira_*`, `repos_*`, `share_*`, `search`, `agents_list`, `skills_list` |
 
-- `DEVHUB_BASE_URL` defaults to `http://localhost:1337`.
+- The dashboard is discovered from `~/.config/devhub/dashboard.json` (primary instance only), falling back to `http://localhost:1337`; `DEVHUB_BASE_URL` pins it.
 - Dashboard-backed tools return a clear error when the dashboard is down — start the dev server and retry.
 - Mutating dashboard tools need `confirm: true`; long-running actions return `runId` — poll the matching `*_status` tool.
 - BI tools live in a separate `devhub-bi` MCP server — see `devhub-bi-mcp` skill.
@@ -66,7 +66,7 @@ Load `devhub-mcp` for tool details. Summary:
 
 - Dev server: `npm run dev` from repo root (webpack, not Turbopack — `../shared/` vault imports).
 - **localhost:1337 is usually the packaged DevHub.app**, not your checkout's webpack build. For UI verification of local changes, load `devhub-dashboard-verify` and use a free-port webpack origin instead.
-- MCP dashboard-backed tools default to `localhost:1337` — ensure the dev server is what's running there, or set `DEVHUB_BASE_URL` to your webpack port.
+- MCP dashboard-backed tools follow the primary dashboard. A verification dev server started with `DEVHUB_SCHEDULER=0` doesn't take them over; to point a session at it, set `DEVHUB_BASE_URL` to its port.
 
 ## Common Workflows
 

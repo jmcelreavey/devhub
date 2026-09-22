@@ -32,6 +32,25 @@ describe("DashboardClient.request", () => {
     expect(seenUrl).not.toContain("b=");
   });
 
+  it("resolves the base URL on every request, not once", async () => {
+    const seen: string[] = [];
+    mockFetch((url, init) => {
+      seen.push(`${url} origin=${(init?.headers as Record<string, string>).Origin}`);
+      return new Response("{}", { status: 200 });
+    });
+    let current = "http://127.0.0.1:1342";
+    const client = new DashboardClient(() => current);
+
+    await client.get("/api/x");
+    current = "http://localhost:1337";
+    await client.get("/api/x");
+
+    expect(seen).toEqual([
+      "http://127.0.0.1:1342/api/x origin=http://127.0.0.1:1342",
+      "http://localhost:1337/api/x origin=http://localhost:1337",
+    ]);
+  });
+
   it("throws DashboardHttpError with the payload error message on non-2xx", async () => {
     mockFetch(() => new Response(JSON.stringify({ error: "boom" }), { status: 409 }));
     const client = new DashboardClient("http://localhost:1337");

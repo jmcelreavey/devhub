@@ -420,6 +420,29 @@ describe("syncMcpServers", () => {
     expect(claude.mcpServers.notes.command).toBe(`${repo}/bin/notes.mjs`);
   });
 
+  it("retires the pinned DEVHUB_BASE_URL but keeps a value the user changed", async () => {
+    const { repo, home } = makeTempRepo();
+    writeJson(path.join(repo, "mcp", "shared", "devhub.json"), {
+      command: "REPO_ROOT/bin/devhub-mcp.mjs",
+      env: { NOTES_DIR: "REPO_ROOT/notes" },
+    });
+    writeJson(path.join(home, ".claude.json"), {
+      mcpServers: {
+        devhub: { command: "/old", env: { NOTES_DIR: "/old/notes", DEVHUB_BASE_URL: "http://localhost:1337" } },
+      },
+    });
+    writeJson(path.join(home, ".cursor/mcp.json"), {
+      mcpServers: { devhub: { command: "/old", env: { DEVHUB_BASE_URL: "http://127.0.0.1:4000" } } },
+    });
+
+    await syncMcpServers({ emit: () => undefined, repoRoot: repo, servers: ["devhub"] });
+
+    const claude = JSON.parse(fs.readFileSync(path.join(home, ".claude.json"), "utf-8"));
+    expect(claude.mcpServers.devhub.env).toEqual({ NOTES_DIR: `${repo}/notes` });
+    const cursor = JSON.parse(fs.readFileSync(path.join(home, ".cursor/mcp.json"), "utf-8"));
+    expect(cursor.mcpServers.devhub.env.DEVHUB_BASE_URL).toBe("http://127.0.0.1:4000");
+  });
+
   it("drops a stale remote type when a server switches to stdio", async () => {
     const { repo, home } = makeTempRepo();
     writeJson(path.join(repo, "mcp", "shared", "notes.json"), { command: "REPO_ROOT/bin/notes.mjs" });

@@ -5,8 +5,10 @@ description: Use DevHub MCP for notes, tasks, diagrams, dashboard operations, an
 
 DevHub ships a **stdio MCP server** at `mcp-servers/devhub-server`, wired from
 `mcp/shared/devhub.json`. The dashboard's sync/bootstrap substitutes `REPO_ROOT` and writes
-per-tool configs. `NOTES_DIR`/`TASKS_DIR`/`DOCS_DIR` default under `REPO_ROOT`, and
-`DEVHUB_BASE_URL` defaults to `http://localhost:1337`.
+per-tool configs. `NOTES_DIR`/`TASKS_DIR`/`DOCS_DIR` default under `REPO_ROOT`. The
+dashboard is discovered per request from `~/.config/devhub/dashboard.json` (written by
+the primary dashboard, never a `DEVHUB_SCHEDULER=0` dev server beside it), falling back
+to `http://localhost:1337`; `DEVHUB_BASE_URL` pins it instead.
 
 BI-specific tools (AWS profile, CAPI, jumpbox, RDS/Mongo/EKS, IAM) live in a **separate**
 server contributed by the `bi` plugin — see the `devhub-bi-mcp` skill.
@@ -15,7 +17,7 @@ server contributed by the `bi` plugin — see the `devhub-bi-mcp` skill.
 
 1. **Filesystem-backed** (work headless, no dashboard needed) — notes, docs, tasks,
    diagrams, appraisal. These talk straight to disk.
-2. **Dashboard-backed** (proxy `http://localhost:1337`; need the dashboard running) —
+2. **Dashboard-backed** (proxy the discovered dashboard; need it running) —
    status, scripts/sync, briefing, calendar, work/PRs, repos, search. If the dashboard is
    down they return a clear "start it with `npm run dev`" error — that's expected, not a
    bug. Start the dashboard and retry.

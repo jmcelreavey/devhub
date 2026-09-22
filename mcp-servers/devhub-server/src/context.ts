@@ -32,11 +32,6 @@ export function createContext(): Context {
   const notesDir = resolveContentDir("NOTES_DIR", repoRoot, "notes");
   const tasksDir = resolveContentDir("TASKS_DIR", repoRoot, "tasks");
   const docsDir = resolveContentDir("DOCS_DIR", repoRoot, "docs");
-  // Discovered rather than assumed: the dashboard advertises its port, so a
-  // checkout on a free port is reachable and a stale packaged build on 1337
-  // can be recognised instead of silently 404-ing every newer tool.
-  const dashboardInfo = resolveDashboard();
-
   const storage = new NotesStorage(notesDir);
   return {
     repoRoot,
@@ -47,7 +42,13 @@ export function createContext(): Context {
     docsStorage: new VaultStorage(docsDir, markdownVaultCodec),
     tasksStorage: new TasksStorage(tasksDir),
     diagramsStorage: new DiagramsStorage(storage),
-    dashboard: new DashboardClient(dashboardInfo.baseUrl),
-    dashboardInfo,
+    // Discovered rather than assumed, and per request: the dashboard advertises
+    // its port, so a checkout on a free port is reachable, a stale packaged
+    // build on 1337 is recognised instead of 404-ing every newer tool, and a
+    // session outlives whichever dashboard was up when it started.
+    dashboard: new DashboardClient(() => resolveDashboard().baseUrl),
+    get dashboardInfo() {
+      return resolveDashboard();
+    },
   };
 }
