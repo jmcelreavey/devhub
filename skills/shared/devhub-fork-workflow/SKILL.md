@@ -1,6 +1,6 @@
 ---
 name: devhub-fork-workflow
-description: Move DevHub changes safely between the private mirror and public core.
+description: Move DevHub changes safely between the private mirror and public core. Use when backporting DevHub changes to public core, pulling public core into the private mirror, or when git history across the two looks unrelated.
 metadata:
   short-description: Push/pull features with the public DevHub core
 ---

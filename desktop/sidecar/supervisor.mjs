@@ -242,6 +242,39 @@ async function shutdown(code = 0) {
   process.exit(code);
 }
 
+const TERMINAL_MAX_RESTARTS = 5;
+/** Up this long counts as healthy again, so an old crash doesn't eat the budget. */
+const TERMINAL_STABLE_MS = 60_000;
+
+/**
+ * Run the PTY server, restarting it if it dies.
+ *
+ * Unlike Next, a dead terminal server doesn't fail the app — but nothing
+ * brought it back either, so one node-pty crash left the dock's Restart
+ * button reconnecting to nothing until DevHub itself was relaunched.
+ * Exponential backoff, capped, so a server that dies on start can't spin.
+ */
+function startTerminal(entry, cwd, env, attempt = 0) {
+  const startedAt = Date.now();
+  const child = track(
+    spawn(process.execPath, [entry], { cwd, env, stdio: ["ignore", "inherit", "inherit"] }),
+    "terminal",
+  );
+  child.on("exit", () => {
+    if (stopping) return;
+    const next = Date.now() - startedAt >= TERMINAL_STABLE_MS ? 0 : attempt + 1;
+    if (next > TERMINAL_MAX_RESTARTS) {
+      log(`terminal server keeps exiting — giving up after ${TERMINAL_MAX_RESTARTS} restarts`);
+      return;
+    }
+    const delay = Math.min(30_000, 1_000 * 2 ** next);
+    log(`restarting terminal server in ${delay}ms`);
+    setTimeout(() => {
+      if (!stopping) startTerminal(entry, cwd, env, next);
+    }, delay);
+  });
+}
+
 async function main() {
   const resourceRoot = process.env.DEVHUB_RESOURCE_ROOT;
   const serverDir = process.env.DEVHUB_SERVER_DIR ?? path.resolve(here, "..", "server");
@@ -321,14 +354,7 @@ async function main() {
   const ptyEntry = path.join(here, "terminal-pty-server.cjs");
   if (fs.existsSync(ptyEntry)) {
     emit({ state: "starting", service: "terminal" });
-    track(
-      spawn(process.execPath, [ptyEntry], {
-        cwd: serverDir,
-        env: { ...env, TERMINAL_PORT: String(terminalPort) },
-        stdio: ["ignore", "inherit", "inherit"],
-      }),
-      "terminal",
-    );
+    startTerminal(ptyEntry, serverDir, { ...env, TERMINAL_PORT: String(terminalPort) });
   } else {
     log(`no terminal server staged at ${ptyEntry} — the terminal dock will not connect`);
   }

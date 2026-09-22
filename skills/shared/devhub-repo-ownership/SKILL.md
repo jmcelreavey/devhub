@@ -1,6 +1,6 @@
 ---
 name: devhub-repo-ownership
-description: Triage an owned repository, its changes, ownership, and next work.
+description: Triage an owned repository, its changes, ownership, and next work. Use when the user asks to catch up on a repo they own, what needs review, who owns a path, or what to learn next in an owned repo.
 metadata:
   short-description: Triage an owned repo
 ---
@@ -26,6 +26,10 @@ Use DevHub's repo-centric ownership evidence to decide what needs attention. Kee
 - Commit and review history is familiarity, not authority.
 - Churn-inferred grouping is a hint, never a team assignment.
 - A partial or remote-only brief must say what could not be calculated.
+
+## Output
+
+A short ordered brief: immediate obligations, inbound changes by team, blast-radius risks, knowledge gaps, and the next concrete action.
 
 ## Verification
 

@@ -100,7 +100,7 @@ paths, query strings, or credentials.
 ```bash
 npm run desktop:stage     # build the dashboard + stage everything the bundle needs
 npm run desktop:dev       # stage, then run the shell with a live window
-npm run desktop:build     # stage, build a release bundle, ad-hoc sign it
+npm run desktop:build     # stage, build a release bundle (macOS: .app only), sign it
 npm run desktop:selftest  # run the built app's own --self-test
 npm run desktop:verify    # the pre-signing gate (leak checks, manifest)
 npm run desktop:install   # replace /Applications/DevHub.app, safely

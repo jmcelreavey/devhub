@@ -1,11 +1,19 @@
 ---
 name: devhub-recap
-description: Recap the commands, changes, failures, and mutations in an OpenCode session.
+description: Recap the commands, changes, failures, and mutations in an OpenCode session. Use when working in OpenCode and the user asks for a recap of the session or to capture the work — sessions_recap can only see OpenCode sessions.
 metadata:
   short-description: Recap OpenCode session activity
 ---
 
 # DevHub Recap
+
+## Only for OpenCode
+
+`sessions_recap` reads the OpenCode HTTP API. From Claude Code, Cursor, Codex or
+any other harness it cannot see the current session — it would return the latest
+*unrelated* OpenCode session in this directory. Outside OpenCode, don't call it:
+recap from your own tool history instead (commands run, files changed, failures,
+anything that mutated remote state), in the same terse shape.
 
 ## Workflow
 

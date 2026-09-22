@@ -1,6 +1,6 @@
 ---
 name: rubber-duck
-description: Pressure-test a plan or draft with an independent second opinion.
+description: Pressure-test a plan or draft with an independent second opinion. Use when the user asks for a second opinion, a sanity check, or to pressure-test a plan before committing to it.
 ---
 
 # Rubber Duck

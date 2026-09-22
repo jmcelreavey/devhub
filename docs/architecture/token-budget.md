@@ -23,7 +23,7 @@ AI tools have limited context. Loading too much stale or irrelevant information 
 | --- | --- | --- | --- |
 | L0 Identity | Tiny (~250 tok) | Tone and how to work with JM | Cursor: `~/.cursor/rules/devhub-persona-identity.mdc`. Claude/Codex/OpenCode: marker blocks. **Not** inlined in repo `AGENTS.md`. |
 | L1 Shared persona | Small (~400 tok) | Engineering standards that actually apply here | Same as L0. Repo `AGENTS.md` is a pointer. |
-| L2 Deep preferences | On demand (~200 tok per mode) | Teaching, review, greenfield, Python/API/DB, etc. | Read `persona/modes/<mode>.md` directly. Do not load a wrapper skill body first. |
+| L2 Deep preferences | On demand (~200 tok per mode) | Teaching, review, greenfield, DevOps, tooling | `deep-preferences` skill: SKILL.md is the index, then one `modes/<mode>.md`. |
 
 Repo `AGENTS.md` keeps Cloud/plugin/gotcha rules only. Inlining L0/L1 there **and** in Cursor `.mdc` files loaded the same text twice.
 

@@ -1,6 +1,6 @@
 ---
 name: devhub-mcp
-description: Use DevHub MCP for notes, tasks, diagrams, dashboard operations, and scheduled jobs.
+description: Use DevHub MCP for notes, tasks, diagrams, dashboard operations, and scheduled jobs. Use when working with DevHub notes, tasks, docs, diagrams, scheduled jobs or dashboard MCP tools, or when a DevHub MCP tool errors or seems missing.
 ---
 
 DevHub ships a **stdio MCP server** at `mcp-servers/devhub-server`, wired from

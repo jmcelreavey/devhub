@@ -121,8 +121,7 @@ MCP tools: `owned_repos`, `repo_owner_brief`, `repo_pr_radar`, `repo_who_owns`, 
 
 ## Agents and skills
 
-- **`repo-ownership` skill** (`skills/shared/repo-ownership/`) — workflow for triaging the radar, deciding review vs learn, and recording familiarity.
-- **`repo-owner` agent** (`agents/shared/repo-owner.md`) — reads domain maps and team tables for a single owned repo.
+- **`devhub-repo-ownership` skill** (`skills/shared/devhub-repo-ownership/`) — workflow for triaging the radar, deciding review vs learn, and recording familiarity.
 
 ## Related surfaces
 

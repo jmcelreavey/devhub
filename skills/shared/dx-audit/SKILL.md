@@ -1,6 +1,6 @@
 ---
 name: dx-audit
-description: Audit a repository's developer experience and save findings to DevHub notes.
+description: Audit a repository's developer experience and save findings to DevHub notes. Use when asked to audit a repo's developer experience, onboarding friction, slow CI or local setup pain.
 metadata:
   short-description: Audit a repo's developer experience
 ---

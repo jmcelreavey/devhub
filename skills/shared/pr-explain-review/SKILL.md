@@ -1,6 +1,6 @@
 ---
 name: pr-explain-review
-description: Explain and review a GitHub pull request with its discussion and linked Jira context.
+description: Explain and review a GitHub pull request with its discussion and linked Jira context. Use when the user shares a PR link or number and asks what it does, to review it, or to explain a branch before opening a PR.
 metadata:
   short-description: Explain + review a GitHub PR
 ---

@@ -1,6 +1,6 @@
 ---
 name: create-pr
-description: Create or draft a GitHub pull request with repository conventions and safe git defaults.
+description: Create or draft a GitHub pull request with repository conventions and safe git defaults. Use when the user asks to open, create, draft or submit a PR, or to write a PR title/body for the current branch.
 ---
 
 # Create Pull Request

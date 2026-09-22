@@ -65,6 +65,13 @@ function run(cmd, args, opts = {}) {
   return execFileSync(cmd, args, { encoding: "utf8", ...opts });
 }
 
+/** Relative paths under a content root that are derived, not user data. */
+const DERIVED_PATHS = ["logs", ".cache", path.join(".index", "recall")];
+
+function isWithin(relative, prefix) {
+  return relative === prefix || relative.startsWith(prefix + path.sep);
+}
+
 /**
  * Content fingerprint: file count plus a digest over sorted name+size+mtime.
  *
@@ -83,8 +90,9 @@ function fingerprint(dir) {
       const full = path.join(current, entry.name);
       // The app writes shutdown breadcrumbs while this installer is running.
       // Logs are diagnostic output, not user content, so including them makes
-      // a correct replacement look like it modified personal data.
-      if (path.relative(dir, full).split(path.sep)[0] === "logs") continue;
+      // a correct replacement look like it modified personal data. Same for
+      // the vault's disposable caches, which any running DevHub rewrites.
+      if (DERIVED_PATHS.some((derived) => isWithin(path.relative(dir, full), derived))) continue;
       if (entry.isDirectory()) {
         walk(full);
         continue;
@@ -190,18 +198,7 @@ process.stdout.write(
 
 if (process.platform !== "darwin") die("This installer is macOS-only.");
 
-// 1. Fingerprint everything the user owns, before touching anything.
-heading("Recording what your data looks like now");
-const tracked = contentPaths();
-const before = new Map();
-for (const [label, dir] of tracked) {
-  const fp = fingerprint(dir);
-  before.set(label, fp);
-  info(`${label}: ${fp.files} files (${fp.digest}) — ${dir}`);
-}
-ok(`${tracked.size} content locations recorded`);
-
-// 2. Verify the build we are about to install.
+// 1. Verify the build we are about to install.
 heading("Verifying the build");
 const built = findBuiltApp();
 if (!built) die("No built DevHub.app found. Run `npm run desktop:build` first.");
@@ -220,7 +217,7 @@ const selfTest = spawnSync(
 if (selfTest.status !== 0) die("The built app failed its own --self-test. Not installing it.");
 ok("packaged --self-test passed against a temporary data directory");
 
-// 3. Ask any running DevHub to quit.
+// 2. Ask any running DevHub to quit.
 heading("Stopping any running DevHub");
 if (!DRY_RUN) {
   // By bundle ID and by our own executable name — never "anything on port 1337".
@@ -232,6 +229,20 @@ if (!DRY_RUN) {
   await new Promise((r) => setTimeout(r, 3000));
 }
 ok("no DevHub asked to keep running");
+
+// 3. Fingerprint everything the user owns — after DevHub has stopped, before
+// touching anything. Taken earlier, whatever the still-running app wrote
+// during the self-test (a scheduled job, an agent run) read as damage done by
+// this script and rolled back a good install.
+heading("Recording what your data looks like now");
+const tracked = contentPaths();
+const before = new Map();
+for (const [label, dir] of tracked) {
+  const fp = fingerprint(dir);
+  before.set(label, fp);
+  info(`${label}: ${fp.files} files (${fp.digest}) — ${dir}`);
+}
+ok(`${tracked.size} content locations recorded`);
 
 // 4. Confirm what is installed really is the Electron app.
 heading("Identifying the currently installed app");

@@ -1,6 +1,6 @@
 ---
 name: devhub-plugin-workflow
-description: Develop, edit, or review a DevHub Tier-2 dashboard plugin.
+description: Develop, edit, or review a DevHub Tier-2 dashboard plugin. Use when editing devhub-bi or another plugin repo, adding plugin pages/routes, or debugging materialized plugin files in the dashboard.
 metadata:
   short-description: Develop a DevHub dashboard plugin
 ---

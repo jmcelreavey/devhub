@@ -330,7 +330,7 @@ export function PersonaPanel() {
         <strong className="text-text">L2 deep preferences</strong> (modes on demand via the{" "}
         <code className="font-mono">deep-preferences</code> skill). Edit sources below, then{" "}
         <strong className="text-text">Sync to all tools</strong> to update Claude, Codex, OpenCode,
-        Cursor, and repo <code className="font-mono">AGENTS.md</code>. L2 is not synced.
+        Cursor, and repo <code className="font-mono">AGENTS.md</code>. L2 syncs as a skill.
       </div>
 
       <div className="flex items-center justify-end gap-2">
@@ -475,8 +475,7 @@ export function PersonaPanel() {
                       </div>
                       {t.id === "deep-preferences" && (
                         <div>
-                          Mode files: <code className="font-mono">persona/modes/*.md</code> - skill{" "}
-                          <code className="font-mono">skills/shared/deep-preferences</code>
+                          Mode files: <code className="font-mono">skills/shared/deep-preferences/modes/*.md</code>
                         </div>
                       )}
                     </div>

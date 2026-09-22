@@ -14,14 +14,7 @@ pub(crate) fn install(app: &tauri::AppHandle) -> tauri::Result<()> {
 
     let show = MenuItem::with_id(app, "tray-show-devhub", "Show DevHub", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "tray-quit-devhub", "Quit DevHub", true, None::<&str>)?;
-    let menu = Menu::with_items(
-        app,
-        &[
-            &show,
-            &PredefinedMenuItem::separator(app)?,
-            &quit,
-        ],
-    )?;
+    let menu = Menu::with_items(app, &[&show, &PredefinedMenuItem::separator(app)?, &quit])?;
 
     // Black-on-transparent silhouette (@2x). Full-colour Dock icons flatten to a
     // muddy square when marked as template — menu-bar needs a real glyph.

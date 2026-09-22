@@ -28,6 +28,14 @@ export function devhubVendorSkillsDir(repoRoot: string): string {
 }
 
 /**
+ * Retired skills kept in-repo for reference. Sync removes these names from
+ * every target so parking a skill actually uninstalls it.
+ */
+export function devhubParkedSkillsDir(repoRoot: string): string {
+  return path.join(repoRoot, "skills", "parked");
+}
+
+/**
  * Skills installed at the root of `skills/` — not under shared/ or vendor/.
  *
  * These are local installs of externally-owned skills. make-public-seed keeps only

@@ -1,6 +1,6 @@
 ---
 name: devhub-plan-write
-description: Turn a draft DevHub task into a plan an agent can implement without design questions.
+description: Turn a draft DevHub task into a plan an agent can implement without design questions. Use when turning a draft DevHub task into an implementation plan, or when a task prompt includes a plan URL to fill in.
 metadata:
   short-description: Write the plan for a draft task
 ---

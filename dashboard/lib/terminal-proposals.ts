@@ -58,6 +58,28 @@ const globalStore = globalThis as typeof globalThis & {
 };
 const proposals = (globalStore.__devhubTerminalProposals ??= new Map<string, TerminalProposal>());
 
+type ProposalListener = () => void;
+const listenerStore = globalThis as typeof globalThis & {
+  __devhubTerminalProposalListeners?: Set<ProposalListener>;
+};
+const listeners = (listenerStore.__devhubTerminalProposalListeners ??= new Set<ProposalListener>());
+
+/** Notified on every new proposal so the dock can fetch instead of polling. */
+export function subscribeToTerminalProposals(listener: ProposalListener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function notifyProposalListeners(): void {
+  for (const listener of listeners) {
+    try {
+      listener();
+    } catch {
+      listeners.delete(listener);
+    }
+  }
+}
+
 function prune(): void {
   const now = Date.now();
   for (const [id, p] of proposals) {
@@ -113,6 +135,7 @@ export function createTerminalProposal(input: {
     createdAt: Date.now(),
   };
   proposals.set(proposal.id, proposal);
+  notifyProposalListeners();
   return proposal;
 }
 

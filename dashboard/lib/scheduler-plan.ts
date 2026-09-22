@@ -28,9 +28,12 @@ export function dueOccurrence(cron: string, since: number, now: number): number 
   try {
     // cron-parser's prev() is strictly before currentDate; nudge past `now`
     // so an occurrence landing exactly on this tick still counts.
-    const prev = CronExpressionParser.parse(cron, { currentDate: new Date(now + 1_000) })
-      .prev()
-      .getTime();
+    const occurrences = CronExpressionParser.parse(cron, { currentDate: new Date(now + 1_000) });
+    let prev = occurrences.prev().getTime();
+    // In the last second before an occurrence the nudge lands prev() on that
+    // still-future occurrence; step back once so the one actually due counts
+    // instead of the tick silently skipping a job.
+    if (prev > now) prev = occurrences.prev().getTime();
     return prev > since && prev <= now ? prev : null;
   } catch {
     return null;

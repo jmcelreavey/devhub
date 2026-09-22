@@ -30,8 +30,8 @@ export const PERSONA_SOURCE_META: Record<PersonaSourceId, PersonaSourceMeta> = {
   "deep-preferences": {
     id: "deep-preferences",
     layer: "L2",
-    loadLabel: "On demand — read persona/modes/<mode>.md directly",
-    syncLabel: "Not synced — repo + skill description only",
+    loadLabel: "On demand — deep-preferences skill reads one modes/<mode>.md",
+    syncLabel: "Synced as the deep-preferences skill (SKILL.md + modes/)",
     tokenHint: "~200 per mode",
   },
 };

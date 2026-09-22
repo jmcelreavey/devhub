@@ -14,6 +14,11 @@ describe("dueOccurrence", () => {
     expect(dueOccurrence("0 7 * * *", since, at("2026-09-14T07:00:00"))).toBe(at("2026-09-14T07:00:00"));
   });
 
+  it("still sees the due occurrence in the last second before the next one", () => {
+    const since = at("2026-09-14T11:59:30");
+    expect(dueOccurrence("* * * * *", since, at("2026-09-14T12:00:59.600"))).toBe(at("2026-09-14T12:00:00"));
+  });
+
   it("is not due before the occurrence", () => {
     expect(dueOccurrence("0 7 * * *", at("2026-09-14T06:00:00"), at("2026-09-14T06:59:59"))).toBeNull();
   });

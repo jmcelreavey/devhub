@@ -3,14 +3,20 @@
  *
  * The original 378-line bash version checked shell+python syntax and script
  * permissions, which are now gone (the scripts moved into lib/). What
- * remains: skill, persona, notes, gitignore, MCP config, and rubber-duck
- * compatibility checks.
+ * remains: skill, agent, gitignore, persona, MCP config, and OpenCode checks.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { agentFrontmatterMalformed, agentHasLegacyFrontmatter } from "@/lib/agent/sync-format";
 import { findRawSecretPath } from "@/lib/opencode/secrets";
-import { devhubSharedSkillsDir, listSkillDirNames, SKILL_MD } from "@/lib/skills/shared";
+import {
+  descriptionFromFrontmatter,
+  devhubSharedSkillsDir,
+  listSkillDirNames,
+  SKILL_MD,
+} from "@/lib/skills/shared";
+
+const SKILL_TRIGGER_CLAUSE = /\b(use (this |it )?when|should be used when|triggers? on)\b/i;
 
 export interface ValidateOptions {
   emit: (line: string) => void;
@@ -51,6 +57,12 @@ export async function validateRepo(opts: ValidateOptions): Promise<number> {
       if (!content.startsWith("---")) {
         warn(`${name}: missing YAML frontmatter`);
         continue;
+      }
+      // Agents pick skills from the description alone; one that only says
+      // what the skill does, not when, rarely gets auto-invoked.
+      const description = descriptionFromFrontmatter(content) ?? "";
+      if (!SKILL_TRIGGER_CLAUSE.test(description)) {
+        warn(`${name}: description has no "Use when…" trigger clause`);
       }
       valid++;
     }
@@ -126,32 +138,14 @@ export async function validateRepo(opts: ValidateOptions): Promise<number> {
   for (const f of [
     "persona/shared-persona.md",
     "persona/identity.txt",
-    "persona/deep-preferences.md",
     "skills/shared/deep-preferences/SKILL.md",
   ]) {
     if (exists(f)) ok(f);
     else err(`${f} missing`);
   }
 
-  // [6] Notes system
-  emit("[6] Notes system...");
-  for (const f of [
-    "notes/index.json",
-    "notes/learnings/engineering.json",
-    "notes/learnings/tools.json",
-    "notes/learnings/prompts.json",
-    "notes/learnings/projects.json",
-  ]) {
-    if (exists(f)) ok(f);
-    else warn(`${f} missing`);
-  }
-  for (const d of ["notes/learnings/archive", "notes/sessions"]) {
-    if (exists(d)) ok(`${d}/ exists`);
-    else warn(`${d}/ missing`);
-  }
-
-  // [7] MCP configs (mcp/shared/<name>.json — one file per server)
-  emit("[7] MCP server configs...");
+  // [6] MCP configs (mcp/shared/<name>.json — one file per server)
+  emit("[6] MCP server configs...");
   const sharedMcp = path.join(repoRoot, "mcp/shared");
   if (!fs.existsSync(sharedMcp)) {
     err("mcp/shared/ directory missing");
@@ -184,8 +178,8 @@ export async function validateRepo(opts: ValidateOptions): Promise<number> {
   if (exists("dashboard/package.json")) ok("Dashboard package.json exists");
   else err("dashboard/package.json missing");
 
-  // [8] OpenCode shared config — parses + no raw secrets
-  emit("[8] OpenCode shared config...");
+  // [7] OpenCode shared config — parses + no raw secrets
+  emit("[7] OpenCode shared config...");
   const ocFile = path.join(repoRoot, "opencode/shared/opencode.json");
   if (!fs.existsSync(ocFile)) {
     warn("opencode/shared/opencode.json missing — run Collect from local or Sync OpenCode");
@@ -198,19 +192,6 @@ export async function validateRepo(opts: ValidateOptions): Promise<number> {
     } catch {
       err("opencode/shared/opencode.json: invalid JSON");
     }
-  }
-
-  // [9] Rubber-duck skill compatibility (sanity check that it's persona-agnostic)
-  emit("[9] Rubber-duck skill compatibility...");
-  const rd = path.join(repoRoot, "skills/shared/rubber-duck/SKILL.md");
-  if (fs.existsSync(rd)) {
-    const c = fs.readFileSync(rd, "utf-8");
-    if (/L0|L1|L2/.test(c)) ok("rubber-duck skill is persona-agnostic");
-    else warn("rubber-duck skill: layer-tier hints not found");
-    if (/##\s/.test(c)) ok("rubber-duck has standard skill sections");
-    else warn("rubber-duck: missing standard sections");
-  } else {
-    warn("rubber-duck skill missing");
   }
 
   emit("=== Results ===");

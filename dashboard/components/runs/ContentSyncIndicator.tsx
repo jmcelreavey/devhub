@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import useSWR from "swr";
 import { AlertTriangle, CloudUpload, Loader2, Upload } from "lucide-react";
 import { revalidateScriptsHistory } from "@/lib/scripts-history-swr";
 import {
@@ -63,8 +64,10 @@ function contentChangeCount(git: GitSyncState): number {
   return git.notesCount + git.tasksCount + git.diagramsCount + (git.docsCount ?? 0);
 }
 
+const GIT_SYNC_KEY = "/api/status/git";
+
 async function loadGitSyncState(): Promise<GitSyncState> {
-  const git = (await fetch("/api/status/git")
+  const git = (await fetch(GIT_SYNC_KEY)
     .then((r) => (r.ok ? r.json() : null))
     .catch(() => null)) as Partial<GitSyncState> | null;
 
@@ -85,7 +88,17 @@ async function loadGitSyncState(): Promise<GitSyncState> {
  */
 export function ContentSyncIndicator() {
   const toast = useToast();
-  const [gitDirty, setGitDirty] = useState<GitSyncState>(EMPTY_GIT_SYNC);
+  // Both top bars mount this component (the mobile one is only CSS-hidden), so
+  // the poll goes through SWR: one shared request per key, paused while the
+  // tab is hidden, refreshed on focus.
+  const { data: gitData, mutate: mutateGit } = useSWR(GIT_SYNC_KEY, loadGitSyncState, {
+    refreshInterval: 30_000,
+  });
+  const gitDirty = gitData ?? EMPTY_GIT_SYNC;
+  const setGitDirty = useCallback(
+    (next: GitSyncState) => void mutateGit(next, { revalidate: false }),
+    [mutateGit],
+  );
   const [syncing, setSyncing] = useState(false);
   const [syncPhase, setSyncPhase] = useState("Syncing…");
   const [updating, setUpdating] = useState(false);
@@ -122,21 +135,6 @@ export function ContentSyncIndicator() {
     }
     return `${gitDirty.behind} upstream commit${gitDirty.behind !== 1 ? "s" : ""} waiting.${updating ? " Updating…" : " Click to pull and sync."}`;
   })();
-
-  useEffect(() => {
-    let cancelled = false;
-    const loadGit = async () => {
-      const git = await loadGitSyncState();
-      if (cancelled) return;
-      setGitDirty(git);
-    };
-    void loadGit();
-    const interval = setInterval(() => void loadGit(), 30_000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, []);
 
   async function runScript(
     script: string,

@@ -1,6 +1,6 @@
 ---
 name: devhub-create-shared-x
-description: Create or update shared DevHub skills, personas, agents, MCP configuration, or model configuration.
+description: Create or update shared DevHub skills, personas, agents, MCP configuration, or model configuration. Use when adding or editing a shared skill, agent, persona file, MCP server entry or OpenCode model config in DevHub.
 metadata:
   short-description: Create shared DevHub assets
 ---
@@ -92,7 +92,7 @@ Choose the smallest layer that fits:
 
 - `persona/identity.txt` for tiny identity or always-on behavior only.
 - `persona/shared-persona.md` for core engineering standards loaded every session.
-- `persona/deep-preferences.md` (index) and `persona/modes/*.md` for context-heavy preferences; wire behavior with `skills/shared/deep-preferences/SKILL.md`.
+- `skills/shared/deep-preferences/modes/*.md` for context-heavy preferences; add each new mode to the table in that skill's `SKILL.md`.
 
 Persona edits should be concise. Avoid adding project-specific implementation trivia, long examples, or instructions that belong in a skill.
 
@@ -201,11 +201,18 @@ so OpenCode keeps auto-updating its model catalogue.
 After OpenCode config edits, remind the user to run **Agents → OpenCode →
 Sync OpenCode** from the dashboard.
 
+## Retiring A Skill
+
+`git mv skills/shared/<slug> skills/parked/<slug>` and add a row to
+`skills/parked/README.md` saying why. The next skill sync removes it from every
+tool directory (only copies identical to the parked one — a user-edited copy is
+kept). Deleting instead of parking leaves stale installs behind.
+
 ## Verification
 
 Use the narrowest verification that proves the shared asset is valid:
 
-- For shared skills: ensure `SKILL.md` exists and starts with YAML frontmatter.
+- For shared skills: ensure `SKILL.md` exists, starts with YAML frontmatter, and its `description` has a "Use when…" clause (validate warns without one).
 - For MCP configs: ensure JSON parses and includes `command` or `url`.
 - For persona files: ensure the relevant persona file still reads cleanly and is not bloated.
 - For agents: ensure the file is under `agents/shared/` and has a focused responsibility.

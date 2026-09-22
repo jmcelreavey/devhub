@@ -71,11 +71,12 @@ function resolveTargetForRead(t: PersonaTarget): string {
 
 function deepPreferencesTokenEstimate(repoRoot: string): number {
   let total = 0;
-  const indexPath = path.join(repoRoot, "persona", "deep-preferences.md");
+  const skillDir = path.join(repoRoot, "skills", "shared", "deep-preferences");
+  const indexPath = path.join(skillDir, "SKILL.md");
   if (fs.existsSync(indexPath)) {
     total += estimatePersonaTokens(fs.readFileSync(indexPath, "utf-8"));
   }
-  const modesDir = path.join(repoRoot, "persona", "modes");
+  const modesDir = path.join(skillDir, "modes");
   if (!fs.existsSync(modesDir)) return total;
   for (const name of fs.readdirSync(modesDir)) {
     if (!name.endsWith(".md")) continue;
@@ -108,10 +109,10 @@ const TARGETS: PersonaTarget[] = [
   {
     id: "deep-preferences",
     label: "Deep preferences (load on demand)",
-    filepath: "persona/deep-preferences.md",
+    filepath: "skills/shared/deep-preferences/SKILL.md",
     description:
-      "L2 — index for context-specific modes under persona/modes/. " +
-      "Not synced. Open persona/modes/<mode>.md directly; do not load a wrapper skill body first.",
+      "L2 — index for context-specific modes under skills/shared/deep-preferences/modes/. " +
+      "Ships with the deep-preferences skill so it resolves in every repo.",
     kind: "source",
   },
   {
