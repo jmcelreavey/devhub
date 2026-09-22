@@ -25,7 +25,10 @@ fn log(app: &AppHandle, line: &str) {
 fn log_outcome(app: &AppHandle, what: &str, result: &Result<(), String>) {
     match result {
         Ok(()) => log(app, &format!("[wake-helper] {what} succeeded")),
-        Err(err) if err == "Cancelled" => log(app, &format!("[wake-helper] {what} cancelled at the admin prompt")),
+        Err(err) if err == "Cancelled" => log(
+            app,
+            &format!("[wake-helper] {what} cancelled at the admin prompt"),
+        ),
         Err(err) => log(app, &format!("[wake-helper] {what} failed: {err}")),
     }
 }
@@ -49,7 +52,9 @@ fn run_osascript(lines: &[&str], args: &[&std::ffi::OsStr]) -> Result<(), String
         cmd.arg("-e").arg(line);
     }
     cmd.args(args);
-    let output = cmd.output().map_err(|e| format!("could not run osascript: {e}"))?;
+    let output = cmd
+        .output()
+        .map_err(|e| format!("could not run osascript: {e}"))?;
     if output.status.success() {
         return Ok(());
     }
@@ -76,7 +81,10 @@ pub async fn wake_helper_install(app: AppHandle) -> Result<(), String> {
             log(&app, &format!("[wake-helper] install refused: {message}"));
             return Err(message.into());
         }
-        log(&app, "[wake-helper] install requested — showing the macOS admin prompt");
+        log(
+            &app,
+            "[wake-helper] install requested — showing the macOS admin prompt",
+        );
         let result = tauri::async_runtime::spawn_blocking(move || {
             run_osascript(INSTALL_SCRIPT, &[binary.as_os_str(), plist.as_os_str()])
         })
@@ -96,7 +104,10 @@ pub async fn wake_helper_install(app: AppHandle) -> Result<(), String> {
 pub async fn wake_helper_uninstall(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        log(&app, "[wake-helper] uninstall requested — showing the macOS admin prompt");
+        log(
+            &app,
+            "[wake-helper] uninstall requested — showing the macOS admin prompt",
+        );
         let result = tauri::async_runtime::spawn_blocking(|| run_osascript(UNINSTALL_SCRIPT, &[]))
             .await
             .map_err(|e| e.to_string())?;
@@ -129,8 +140,14 @@ pub fn login_item_set(app: AppHandle, enabled: bool) -> Result<String, String> {
     {
         let result = login_item::set(enabled).map(str::to_string);
         match &result {
-            Ok(status) => log(&app, &format!("[login-item] set enabled={enabled} → {status}")),
-            Err(err) => log(&app, &format!("[login-item] set enabled={enabled} failed: {err}")),
+            Ok(status) => log(
+                &app,
+                &format!("[login-item] set enabled={enabled} → {status}"),
+            ),
+            Err(err) => log(
+                &app,
+                &format!("[login-item] set enabled={enabled} failed: {err}"),
+            ),
         }
         result
     }
