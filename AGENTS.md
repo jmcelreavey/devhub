@@ -39,7 +39,7 @@ This file does **not** inline L0/L1 — Cursor already has them via `~/.cursor/r
 All from the repo root:
 - `npm run lint` — ESLint
 - `npm run typecheck` — TypeScript (`tsc --noEmit`)
-- `npm run test` — Vitest (~530 unit tests)
+- `npm run test` — Vitest (dashboard unit tests; ~3.7k, about 15 s)
 - `npm run verify` — runs lint, typecheck, tests, and production build sequentially
 
 ### UI / UX Review

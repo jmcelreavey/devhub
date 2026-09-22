@@ -201,11 +201,18 @@ so OpenCode keeps auto-updating its model catalogue.
 After OpenCode config edits, remind the user to run **Agents → OpenCode →
 Sync OpenCode** from the dashboard.
 
+## Retiring A Skill
+
+`git mv skills/shared/<slug> skills/parked/<slug>` and add a row to
+`skills/parked/README.md` saying why. The next skill sync removes it from every
+tool directory (only copies identical to the parked one — a user-edited copy is
+kept). Deleting instead of parking leaves stale installs behind.
+
 ## Verification
 
 Use the narrowest verification that proves the shared asset is valid:
 
-- For shared skills: ensure `SKILL.md` exists and starts with YAML frontmatter.
+- For shared skills: ensure `SKILL.md` exists, starts with YAML frontmatter, and its `description` has a "Use when…" clause (validate warns without one).
 - For MCP configs: ensure JSON parses and includes `command` or `url`.
 - For persona files: ensure the relevant persona file still reads cleanly and is not bloated.
 - For agents: ensure the file is under `agents/shared/` and has a focused responsibility.

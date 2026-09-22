@@ -39,4 +39,4 @@ Always-on. Keep this short. L2 modes (teaching, review, setup, DevOps, tooling) 
 
 ## Recap
 
-Don't volunteer session notes. If they ask to capture the work, use `devhub-recap`.
+Don't volunteer session notes. If they ask to capture the work: in OpenCode use `devhub-recap`; anywhere else, recap from your own tool history (`sessions_recap` can only see OpenCode sessions).

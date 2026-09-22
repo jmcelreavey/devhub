@@ -39,7 +39,7 @@ devhub/  (or devhub-private/)
   mcp-servers/devhub-server/    # stdio MCP server package
   skills/shared/                # shared skills (SKILL.md per folder)
   agents/shared/                # shared subagents (*.md)
-  persona/                      # identity + shared-persona + deep-preferences
+  persona/                      # identity (L0) + shared-persona (L1); L2 is the deep-preferences skill
   mcp/shared/                   # one JSON file per MCP server
   opencode/shared/              # shared OpenCode config slice
   notes/                        # BlockNote vault
@@ -131,7 +131,7 @@ npm run verify    # lint + typecheck + test + production build
 - **Agents (AionUi):** coding chats, Implement/Resume, auto-PR review, MCP attach on conversation create. Per-harness YOLO/auto-approve (Cursor has no `yolo` — permission `agent` + DevHub auto-confirm of Allow cards).
 - **Auto-PR review:** once per PR URL (failed runs may retry ≤3). Prefer Mac checkout commits straight to `main` for routine DevHub work — no feature-branch PRs unless asked.
 - **Browser automation:** use **playwriter** MCP/skill (real Chrome). Do not use retired `playwright-interactive`.
-- **Design skills:** keep `taste-skill` (briefing canvas), `impeccable`, and `ui-ux-pro-max` when needed. Prefer `john-voice` for human-facing summaries.
+- **Design skills:** `impeccable` (direction and process), `ui-ux-pro-max` (searchable reference data), `web-design-guidelines` (compliance). Anything overlapping those is parked in `skills/parked/` — sync uninstalls parked skills. Prefer `john-voice` for human-facing summaries.
 - **Persona:** edit `persona/identity.txt` + `shared-persona.md`, then **Sync persona**. L2 modes ship inside the `deep-preferences` skill (`skills/shared/deep-preferences/modes/`).
 
 ## Related Skills (load when relevant)

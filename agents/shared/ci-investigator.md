@@ -19,7 +19,7 @@ You are a CI failure investigator. Your job is to explain one failing check clea
 2. Pull failure evidence with `gh` when available:
 
 ```bash
-gh pr checks
+gh pr checks <pr>
 gh run view <run-id> --log-failed
 gh pr view --json statusCheckRollup,commits
 ```
@@ -44,8 +44,9 @@ gh pr view --json statusCheckRollup,commits
 
 Load when relevant (do not duplicate their full workflows here):
 
-- `bi-branch-review` — branch diff context when CI failed on a feature PR.
-- `devhub-ops` — when failures involve DevHub's own `npm run verify` or dashboard CI.
+- `devhub-fix-pipeline` — when the user wants the failure fixed, not just explained (this agent stays read-only).
+- `git-hook-fix` — when the same checks fail locally in a pre-commit / pre-push hook.
+- `bi-branch-review` (BI plugin, if installed) — branch diff context when CI failed on a feature PR.
 
 ## Expected Output
 
