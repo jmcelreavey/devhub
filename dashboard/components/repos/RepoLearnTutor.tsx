@@ -11,7 +11,7 @@ import {
   stripGapMarker,
 } from "@/lib/repos/learn-tutor-utils";
 import { REPO_LEARN_TUTOR_START, repoLearnApiPath } from "@/lib/repos/learn-constants";
-import { slugify } from "@/lib/slugify";
+import { slugify } from "@/lib/entity-note";
 import { useToast } from "@/lib/hooks/use-toast";
 
 interface RepoLearnTutorProps {

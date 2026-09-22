@@ -1,6 +1,6 @@
 ---
 name: git-conflict-resolve
-description: Resolve Git merge or stash conflicts in the working tree.
+description: Resolve Git merge or stash conflicts in the working tree. Use when git status shows unmerged paths, after a failed stash pop, merge or rebase.
 metadata:
   short-description: Resolve git stash/merge conflicts
 ---

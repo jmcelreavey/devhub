@@ -6,6 +6,7 @@
  */
 import { getRepoRoot } from "@/lib/content/dirs";
 import { devhubSharedSkillsDir, listSkillDirNames } from "@/lib/skills/shared";
+import { skillUsageFor, type SkillUsage } from "@/lib/skills/usage";
 import { listAgentRuns } from "@/lib/agent-runs/store";
 import { listTaskDays } from "@/lib/tasks/storage";
 import { getTaskAgentRuns, listTaskAgentRuns } from "@/lib/tasks/task-agent-runs";
@@ -13,6 +14,8 @@ import { mcpHistoryDir, readMcpHistoryWindow } from "@shared/mcp-history/index.t
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HANDOFF_CHARS = 1_500;
+/** A week is too short to call a skill unused; usage looks back a month. */
+const SKILL_USAGE_DAYS = 30;
 
 export interface RetroTask {
   taskId: string;
@@ -32,13 +35,15 @@ export interface RetroInputs {
   agentRuns: Array<{ id: string; title: string; provider: string; state: string; error?: string; turns?: number; costUsd?: number }>;
   mcpFailures: Array<{ tool: string; count: number; lastError: string }>;
   skills: string[];
+  /** Claude Code invocations over the last SKILL_USAGE_DAYS, least-used first. */
+  skillUsage: { windowDays: number; source: "claude-code-transcripts"; skills: SkillUsage[] };
 }
 
 function inWindow(iso: string | undefined, sinceMs: number): boolean {
   return Boolean(iso) && Date.parse(iso!) >= sinceMs;
 }
 
-export function buildRetroInputs(days = 7, now = Date.now()): RetroInputs {
+export async function buildRetroInputs(days = 7, now = Date.now()): Promise<RetroInputs> {
   const sinceMs = now - Math.max(1, Math.min(days, 31)) * DAY_MS;
 
   const tasks: RetroTask[] = [];
@@ -93,12 +98,19 @@ export function buildRetroInputs(days = 7, now = Date.now()): RetroInputs {
     .sort((a, b) => b.count - a.count)
     .slice(0, 20);
 
+  const skills = listSkillDirNames(devhubSharedSkillsDir(getRepoRoot()));
+
   return {
     since: new Date(sinceMs).toISOString(),
     until: new Date(now).toISOString(),
     tasks,
     agentRuns,
     mcpFailures,
-    skills: listSkillDirNames(devhubSharedSkillsDir(getRepoRoot())),
+    skills,
+    skillUsage: {
+      windowDays: SKILL_USAGE_DAYS,
+      source: "claude-code-transcripts",
+      skills: await skillUsageFor(skills, now - SKILL_USAGE_DAYS * DAY_MS),
+    },
   };
 }

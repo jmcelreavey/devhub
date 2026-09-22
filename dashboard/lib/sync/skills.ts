@@ -22,7 +22,12 @@ import {
 } from "@/lib/skill-catalog";
 import { formatProvenanceProblems, validateVendorProvenance } from "@/lib/skills/provenance";
 import { auditVendorSkillDir, formatVendorFindings } from "@/lib/skills/vendor-audit";
-import { devhubSharedSkillsDir, SKILL_MD } from "@/lib/skills/shared";
+import {
+  devhubParkedSkillsDir,
+  devhubSharedSkillsDir,
+  listSkillDirNames,
+  SKILL_MD,
+} from "@/lib/skills/shared";
 import { copyTreeSync, safeRemovePath } from "@/lib/server-utils";
 
 export interface SyncSkillsOptions {
@@ -135,27 +140,46 @@ function readSkillFileForSync(entry: SkillCatalogEntry, relativePath: string): s
   return fs.readFileSync(file);
 }
 
-export function skillTreesEqualForSync(entry: SkillCatalogEntry, targetDir: string): boolean {
+type SkillTreeSnapshot = Map<string, { kind: TreeEntryKind; content?: string | Buffer; link?: string }>;
+
+/**
+ * Source tree + file contents as sync would write them. Taken once per skill
+ * and reused for every target — re-reading the source per target read large
+ * skills (ui-ux-pro-max is 3.6 MB) a dozen times each sync.
+ */
+export function snapshotSkillTree(entry: SkillCatalogEntry): SkillTreeSnapshot {
+  const snapshot: SkillTreeSnapshot = new Map();
+  for (const [relativePath, kind] of listRelativeTreeEntries(entry.dir)) {
+    if (kind === "directory") snapshot.set(relativePath, { kind });
+    else if (kind === "symlink") snapshot.set(relativePath, { kind, link: fs.readlinkSync(path.join(entry.dir, relativePath)) });
+    else snapshot.set(relativePath, { kind, content: readSkillFileForSync(entry, relativePath) });
+  }
+  return snapshot;
+}
+
+export function skillTreesEqualForSync(
+  entry: SkillCatalogEntry,
+  targetDir: string,
+  snapshot?: SkillTreeSnapshot,
+): boolean {
   try {
-    const sourceEntries = listRelativeTreeEntries(entry.dir);
+    const source = snapshot ?? snapshotSkillTree(entry);
     const targetEntries = listRelativeTreeEntries(targetDir);
-    if (sourceEntries.size !== targetEntries.size) return false;
+    if (source.size !== targetEntries.size) return false;
 
-    for (const [relativePath, sourceKind] of sourceEntries) {
-      const targetKind = targetEntries.get(relativePath);
-      if (targetKind !== sourceKind) return false;
-      if (sourceKind === "directory") continue;
+    for (const [relativePath, expected] of source) {
+      if (targetEntries.get(relativePath) !== expected.kind) return false;
+      if (expected.kind === "directory") continue;
 
-      const sourceFile = path.join(entry.dir, relativePath);
       const targetFile = path.join(targetDir, relativePath);
-      if (sourceKind === "symlink") {
-        if (fs.readlinkSync(sourceFile) !== fs.readlinkSync(targetFile)) return false;
+      if (expected.kind === "symlink") {
+        if (fs.readlinkSync(targetFile) !== expected.link) return false;
         continue;
       }
 
-      const expected = readSkillFileForSync(entry, relativePath);
-      const actual = typeof expected === "string" ? fs.readFileSync(targetFile, "utf-8") : fs.readFileSync(targetFile);
-      if (typeof expected === "string" ? actual !== expected : !expected.equals(actual as Buffer)) {
+      const content = expected.content!;
+      const actual = typeof content === "string" ? fs.readFileSync(targetFile, "utf-8") : fs.readFileSync(targetFile);
+      if (typeof content === "string" ? actual !== content : !content.equals(actual as Buffer)) {
         return false;
       }
     }
@@ -233,7 +257,25 @@ export async function syncSkills(opts: SyncSkillsOptions): Promise<number> {
   const filterOpts = { ...opts, excludeSkills: [...excluded] };
   const blocked = blockedVendorSkillNames(filterSkillCatalog(fullCatalog, filterOpts), emit);
   const catalog = filterSkillCatalog(fullCatalog, filterOpts).filter((entry) => !blocked.has(entry.name));
-  const pruneKeepNames = catalog.map((e) => e.name);
+  const pruneKeepNames = new Set(catalog.map((e) => e.name));
+  // Parked skills are removed from targets even without prune: prune is off
+  // for routine syncs because targets also hold skills DevHub doesn't own.
+  // Only an exact copy of the parked tree is removed, so a same-named skill the
+  // user installed or edited themselves survives.
+  const parkedDir = devhubParkedSkillsDir(repoRoot);
+  const parkedEntries: SkillCatalogEntry[] = listSkillDirNames(parkedDir)
+    .filter((name) => !pruneKeepNames.has(name) && !eyeExcluded.has(name))
+    .map((name) => ({ name, origin: "devhub", dir: path.join(parkedDir, name) }));
+
+  const snapshots = new Map<string, SkillTreeSnapshot>();
+  const sourceSnapshot = (entry: SkillCatalogEntry): SkillTreeSnapshot => {
+    let snapshot = snapshots.get(entry.name);
+    if (!snapshot) {
+      snapshot = snapshotSkillTree(entry);
+      snapshots.set(entry.name, snapshot);
+    }
+    return snapshot;
+  };
 
   const home = os.homedir();
   if (opts.tool) {
@@ -270,6 +312,13 @@ export async function syncSkills(opts: SyncSkillsOptions): Promise<number> {
         continue;
       }
       try {
+        // Rewriting unchanged trees on every sync cost ~40 MB of writes
+        // across all targets; compare first.
+        if (skillTreesEqualForSync(entry, dst, sourceSnapshot(entry))) {
+          emit(`  UNCHANGED [${tag}]: ${entry.name}`);
+          syncedTotal++;
+          continue;
+        }
         safeRemovePath(dst);
         copySkillForSync(entry, dst);
         emit(`  SYNCED [${tag}]: ${entry.name}`);
@@ -279,10 +328,30 @@ export async function syncSkills(opts: SyncSkillsOptions): Promise<number> {
       }
     }
 
+    for (const parkedEntry of parkedEntries) {
+      const { name } = parkedEntry;
+      const parked = path.join(targetRoot, name);
+      if (!fs.existsSync(parked)) continue;
+      if (!skillTreesEqualForSync(parkedEntry, parked)) {
+        emit(`  KEPT PARKED (differs from skills/parked copy): ${name}`);
+        continue;
+      }
+      if (opts.dryRun) {
+        emit(`  WOULD REMOVE PARKED: ${name}`);
+        continue;
+      }
+      try {
+        fs.rmSync(parked, { recursive: true, force: true });
+        emit(`  REMOVED PARKED: ${name}`);
+      } catch (e) {
+        emit(`  REMOVE PARKED FAILED: ${name} (${e instanceof Error ? e.message : String(e)})`);
+      }
+    }
+
     if (opts.prune && fs.existsSync(targetRoot)) {
       for (const existing of fs.readdirSync(targetRoot, { withFileTypes: true })) {
         if (!existing.isDirectory() && !existing.isSymbolicLink()) continue;
-        if (pruneKeepNames.includes(existing.name)) continue;
+        if (pruneKeepNames.has(existing.name)) continue;
         if (eyeExcluded.has(existing.name)) continue;
         const stale = path.join(targetRoot, existing.name);
         if (opts.dryRun) {

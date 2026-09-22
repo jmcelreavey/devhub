@@ -1,6 +1,6 @@
 ---
 name: devhub-1password-env
-description: Configure DevHub environment variables to load local secrets through 1Password.
+description: Configure DevHub environment variables to load local secrets through 1Password. Use when moving DevHub .env.local secrets into 1Password, wiring `op` into DevHub env loading, or debugging missing 1Password-backed env vars.
 metadata:
   short-description: DevHub 1Password env secrets
 ---

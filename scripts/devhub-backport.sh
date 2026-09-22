@@ -111,6 +111,24 @@ LOCAL_SKILLS="$(git diff --name-only "$BASE_REF" "$SOURCE_REF" -- skills ':(excl
   | awk -F/ 'NF > 1 { print $1 "/" $2 }' | sort -u || true)"
 [[ -n "$LOCAL_SKILLS" ]] && { log "Dropping non-catalog skills from the PR:"; echo "$LOCAL_SKILLS" | sed 's/^/  - /'; }
 
+# Deletions of files public core still has. Retiring a path from PUBLIC_PATHS
+# (persona/modes moved into a skill) otherwise strands the old copies in core
+# for good, because the patch below never looks at that path again.
+RETIRED_PATHS=()
+PERSONAL_EXCLUDES=()
+for personal in "${PERSONAL_PATHS[@]}"; do PERSONAL_EXCLUDES+=(":(exclude)${personal}"); done
+while IFS= read -r deleted; do
+  [[ -n "$deleted" ]] || continue
+  if git cat-file -e "${UPSTREAM_REF}:${deleted}" 2>/dev/null; then RETIRED_PATHS+=("$deleted"); fi
+done < <(git diff --no-renames --diff-filter=D --name-only "$BASE_REF" "$SOURCE_REF" -- . \
+  "${PERSONAL_EXCLUDES[@]}" ':(exclude)skills' ':(exclude).devhub' 2>/dev/null || true)
+if [[ ${#RETIRED_PATHS[@]} -gt 0 ]]; then
+  log "Porting deletions of retired public paths:"
+  printf '  - %s\n' "${RETIRED_PATHS[@]}"
+fi
+# bash 3.2 + set -u rejects "${empty[@]}"; this form expands to nothing instead.
+PATCH_PATHS=("${PUBLIC_PATHS[@]}" ${RETIRED_PATHS[@]+"${RETIRED_PATHS[@]}"})
+
 # The feature's patch (hunks only), constrained to the public catalog.
 #
 # --binary is required, not optional. Without it `git diff` emits
@@ -119,7 +137,7 @@ LOCAL_SKILLS="$(git diff --name-only "$BASE_REF" "$SOURCE_REF" -- skills ':(excl
 # That silently made any feature containing an image, icon or font
 # un-backportable — found when the desktop app's icons blocked the first
 # attempt to port it upstream.
-PATCH="$(git diff --binary "$BASE_REF" "$SOURCE_REF" -- "${PUBLIC_PATHS[@]}")"
+PATCH="$(git diff --binary "$BASE_REF" "$SOURCE_REF" -- "${PATCH_PATHS[@]}")"
 if [[ -z "$PATCH" ]]; then
   log "No public-catalog changes to backport after exclusions."
   [[ "$PATCH_ONLY" == "1" ]] && exit 3
@@ -131,7 +149,7 @@ if [[ "$PATCH_ONLY" == "1" ]]; then
   ADDED_LINES="$(printf '%s\n' "$PATCH" | grep -E '^\+' | grep -vE '^\+\+\+' || true)"
   printf '%s\n' "$ADDED_LINES" | bash "$REPO_ROOT/scripts/scan-leaks.sh" stdin
   echo "----- public patch (stat) -----"
-  git diff --stat "$BASE_REF" "$SOURCE_REF" -- "${PUBLIC_PATHS[@]}"
+  git diff --stat "$BASE_REF" "$SOURCE_REF" -- "${PATCH_PATHS[@]}"
   echo "----- public patch -----"
   printf '%s\n' "$PATCH"
   exit 0

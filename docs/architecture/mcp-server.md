@@ -193,12 +193,16 @@ relative paths; dashboard `@/` aliases are not resolved when tools spawn the ser
 
 ## Configuration
 
-The shared config starts the server with `tsx` from the MCP server package:
+The shared config starts the server through `bin/devhub-mcp.mjs`, which runs a
+cached esbuild bundle (`dist/mcp.mjs`, ~200 ms to first response vs ~500 ms
+under `tsx`). The bundle rebuilds on spawn whenever a `.ts` file under `src/` or
+the repo's `shared/` is newer, and falls back to `tsx` if the build fails. It is
+executable with a `#!/usr/bin/env node` shebang, so GUI clients resolve `node`
+exactly as they did for the `tsx` binary it replaces:
 
 ```json
 {
-  "command": "REPO_ROOT/mcp-servers/devhub-server/node_modules/.bin/tsx",
-  "args": ["REPO_ROOT/mcp-servers/devhub-server/src/mcp.ts"],
+  "command": "REPO_ROOT/mcp-servers/devhub-server/bin/devhub-mcp.mjs",
   "env": {
     "NOTES_DIR": "REPO_ROOT/notes",
     "TASKS_DIR": "REPO_ROOT/tasks",
@@ -411,7 +415,7 @@ Ownership tools proxy `/api/own/*`. Start the dashboard and ensure `gh auth logi
 4. `repo_who_owns` with `repo` and `path` — CODEOWNERS/domain mapping plus historical reviewers from co-change (`POST /api/own/.../blast`).
 5. `repo_knowledge_gaps` — ranked learning queue for unfamiliar inbound churn.
 
-User-facing workflow and storage layout: [Repo ownership](../guides/repo-ownership.md). The `repo-ownership` skill and `repo-owner` agent under `skills/shared/` and `agents/shared/` mirror these panels for terminal handoffs.
+User-facing workflow and storage layout: [Repo ownership](../guides/repo-ownership.md). The `devhub-repo-ownership` skill under `skills/shared/` mirrors these panels for terminal handoffs.
 
 ### Capture appraisal notes from an agent
 

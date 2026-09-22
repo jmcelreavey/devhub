@@ -15,8 +15,7 @@
 PUBLIC_PATHS=(.gitattributes .githooks .github .gitignore .nvmrc AGENTS.md
               CONTRIBUTING.md LICENSE PLAN.md README.md ROADMAP.md package.json
               agents/shared dashboard desktop docs mcp/shared mcp-servers
-              opencode/shared persona/deep-preferences.md persona/modes
-              persona/shared-persona.md scripts shared skills/shared skills/vendor
+              opencode/shared persona/shared-persona.md scripts shared skills/shared skills/vendor
               ':!dashboard/.env.local' ':!scripts/make-public-seed.sh')
 
 # Personal data that lives happily in this mirror and must never be pushed to

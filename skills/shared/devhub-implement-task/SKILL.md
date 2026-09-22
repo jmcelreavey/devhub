@@ -1,6 +1,6 @@
 ---
 name: devhub-implement-task
-description: Implement a DevHub task from its context through verification and requested handoff steps.
+description: Implement a DevHub task from its context through verification and requested handoff steps. Use when the user asks to implement, pick up or work on a DevHub task, or a prompt contains a DevHub task id/context.
 metadata:
   short-description: Implement a DevHub task end-to-end
 ---

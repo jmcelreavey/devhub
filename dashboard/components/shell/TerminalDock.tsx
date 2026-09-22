@@ -1084,7 +1084,7 @@ export function TerminalDock() {
     };
   }, [toggle, addTab, handlePropose, templatesOpen, dockFrame, closeTab, zoomFont]);
 
-  // Poll MCP/API proposals so OpenCode tools surface in the dock UI (FIFO enqueue).
+  // Fetch MCP/API proposals on push so OpenCode tools surface in the dock UI (FIFO enqueue).
   useEffect(() => {
     if (!hydrated) return;
     let cancelled = false;
@@ -1168,9 +1168,30 @@ export function TerminalDock() {
       }
     };
     void tick();
-    const timer = window.setInterval(tick, 2_500);
+    // The stream pings on each new proposal; `onopen` also covers anything
+    // created while it was down. It is held only while the tab is visible:
+    // browsers allow ~6 HTTP/1.1 connections per origin across *all* tabs, so
+    // a stream per background tab would starve the dashboard's other requests.
+    // The slow interval covers hidden tabs and a stream that silently stalls.
+    let events: EventSource | null = null;
+    const connect = () => {
+      if (events || document.hidden) return;
+      events = new EventSource("/api/terminal/propose/stream");
+      events.onopen = () => void tick();
+      events.onmessage = () => void tick();
+    };
+    const disconnect = () => {
+      events?.close();
+      events = null;
+    };
+    const onVisibility = () => (document.hidden ? disconnect() : connect());
+    connect();
+    document.addEventListener("visibilitychange", onVisibility);
+    const timer = window.setInterval(tick, 30_000);
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+      disconnect();
       window.clearInterval(timer);
     };
   }, [hydrated, addTab, expandDock, injectProposalNow]);

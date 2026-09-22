@@ -1,6 +1,6 @@
 ---
 name: playwriter
-description: Control the user's real Chrome tabs via the Playwriter extension and MCP relay for interactive browser automation with existing auth/sessions.
+description: Control the user's real Chrome tabs via the Playwriter extension and MCP relay for interactive browser automation with existing auth/sessions. Use when a browser task needs the user's own logged-in Chrome session.
 ---
 
 ## CLI Usage

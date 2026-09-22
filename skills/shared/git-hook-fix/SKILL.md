@@ -1,6 +1,6 @@
 ---
 name: git-hook-fix
-description: Diagnose and fix a failing Git hook without bypassing it.
+description: Diagnose and fix a failing Git hook without bypassing it. Use when a commit or push is blocked by a pre-commit, commit-msg or pre-push hook failure.
 metadata:
   short-description: Fix failing git hooks (commit/push)
 ---

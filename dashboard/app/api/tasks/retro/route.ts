@@ -9,5 +9,5 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const auth = requireDashboardAuth(req);
   if (!auth.ok) return auth.response;
   const days = Number.parseInt(req.nextUrl.searchParams.get("days") ?? "7", 10);
-  return NextResponse.json(buildRetroInputs(Number.isFinite(days) ? days : 7));
+  return NextResponse.json(await buildRetroInputs(Number.isFinite(days) ? days : 7));
 }, "tasks.retro.get");

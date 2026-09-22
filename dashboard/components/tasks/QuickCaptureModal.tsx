@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BookOpen, ListTodo, StickyNote } from "lucide-react";
 import { ModalShell } from "@/components/shell/ModalShell";
 import { textToBlocks } from "@/lib/markdown-convert";
-import { slugify } from "@/lib/slugify";
+import { slugify } from "@/lib/entity-note";
 import { todayISO } from "@/lib/utils";
 import { useToast } from "@/lib/hooks/use-toast";
 

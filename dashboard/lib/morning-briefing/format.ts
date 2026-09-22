@@ -1,4 +1,5 @@
 /** Formatters + one-line briefing summary. */
+import { formatRelativePastAge } from "@/lib/utils";
 import type { DailyBriefing } from "./types";
 
 export function formatStars(n: number): string {
@@ -11,13 +12,7 @@ export function relativeTime(iso: string | undefined, now = new Date()): string 
   if (!iso) return undefined;
   const then = Date.parse(iso);
   if (Number.isNaN(then)) return undefined;
-  const diffMin = Math.round((now.getTime() - then) / 60000);
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffH = Math.round(diffMin / 60);
-  if (diffH < 24) return `${diffH}h ago`;
-  const diffD = Math.round(diffH / 24);
-  return `${diffD}d ago`;
+  return formatRelativePastAge(now.getTime() - then);
 }
 
 /** A single compact line for the focus-view strip and notifications. */

@@ -1,6 +1,6 @@
 ---
 name: devhub-fix-pipeline
-description: Investigate failing or flaky CI checks on a GitHub PR, classify root cause, and fix on confirm.
+description: Investigate failing or flaky CI checks on a GitHub PR, classify root cause, and fix on confirm. Use when a PR has red or flaky CI checks, or the user asks why a GitHub Actions check failed and wants it fixed.
 metadata:
   short-description: Investigate PR CI / pipeline failures
 ---

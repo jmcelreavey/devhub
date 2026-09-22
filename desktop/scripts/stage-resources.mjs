@@ -36,8 +36,6 @@ const ALLOWLIST = [
   { from: "agents/shared", to: "agents/shared" },
   { from: "mcp/shared", to: "mcp/shared", optional: true },
   { from: "persona/shared-persona.md", to: "persona/shared-persona.md" },
-  { from: "persona/deep-preferences.md", to: "persona/deep-preferences.md", optional: true },
-  { from: "persona/modes", to: "persona/modes", optional: true },
   { from: "docs", to: "docs", optional: true },
 ];
 

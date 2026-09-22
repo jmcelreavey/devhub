@@ -2,7 +2,7 @@
 
 **Use when:** which package manager, editor, terminal, git GUI, Python/JS tooling
 
-- Package managers: pnpm (JS), pip with venv (Python), cargo (Rust)
+- Package managers: in an existing repo, use whatever its lockfile says (DevHub is npm). Greenfield: pnpm (JS), pip with venv (Python), cargo (Rust)
 - Editors: respect the user's choice; don't push editor-specific configs
 - Terminals: recommend modern alternatives when asked, but don't insist
 - Git GUIs: lazygit for terminal, Fork for GUI — CLI git is always fine

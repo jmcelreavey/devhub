@@ -145,6 +145,38 @@ describe("syncSkills merged catalog", () => {
     expect(fs.existsSync(path.join(codex, "stale-skill"))).toBe(false);
   });
 
+  it("removes parked skills from targets without prune", async () => {
+    setup();
+    fs.mkdirSync(path.join(repo, "skills/parked/retired-skill"), { recursive: true });
+    fs.writeFileSync(path.join(repo, "skills/parked/retired-skill", SKILL_MD), "retired\n");
+    const codex = path.join(home, ".codex/skills");
+    fs.mkdirSync(path.join(repo, "skills/parked/edited-skill"), { recursive: true });
+    fs.writeFileSync(path.join(repo, "skills/parked/edited-skill", SKILL_MD), "retired\n");
+    for (const [name, body] of [["retired-skill", "retired\n"], ["edited-skill", "mine now\n"], ["user-owned", "old\n"]]) {
+      fs.mkdirSync(path.join(codex, name), { recursive: true });
+      fs.writeFileSync(path.join(codex, name, SKILL_MD), body);
+    }
+
+    await syncSkills({ repoRoot: repo, emit: () => {}, refreshAiTools: false, tool: "codex" });
+
+    expect(fs.existsSync(path.join(codex, "retired-skill"))).toBe(false);
+    expect(fs.existsSync(path.join(codex, "edited-skill"))).toBe(true);
+    expect(fs.existsSync(path.join(codex, "user-owned"))).toBe(true);
+  });
+
+  it("leaves unchanged skill trees in place", async () => {
+    setup();
+    const lines: string[] = [];
+    await syncSkills({ repoRoot: repo, emit: () => {}, refreshAiTools: false, tool: "codex" });
+    const skillMd = path.join(home, ".codex/skills/local-skill", SKILL_MD);
+    const before = fs.statSync(skillMd).ino;
+
+    await syncSkills({ repoRoot: repo, emit: (l) => lines.push(l), refreshAiTools: false, tool: "codex" });
+
+    expect(fs.statSync(skillMd).ino).toBe(before);
+    expect(lines).toContain("  UNCHANGED [devhub]: local-skill");
+  });
+
   it("skips configured all-target destinations but honors an explicit target", async () => {
     setup();
     process.env[SKILL_SYNC_EXCLUDE_TOOLS_ENV] = "agents";

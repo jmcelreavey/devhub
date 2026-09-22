@@ -1,6 +1,5 @@
 {
-  "command": "REPO_ROOT/mcp-servers/devhub-server/node_modules/.bin/tsx",
-  "args": ["REPO_ROOT/mcp-servers/devhub-server/src/mcp.ts"],
+  "command": "REPO_ROOT/mcp-servers/devhub-server/bin/devhub-mcp.mjs",
   "env": {
     "NOTES_DIR": "REPO_ROOT/notes",
     "TASKS_DIR": "REPO_ROOT/tasks",

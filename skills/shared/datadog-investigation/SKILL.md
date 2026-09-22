@@ -1,6 +1,6 @@
 ---
 name: datadog-investigation
-description: Investigate a BI Datadog alert, its owner, recent changes, and next mitigations.
+description: Investigate a BI Datadog alert, its owner, recent changes, and next mitigations. Use when the user pastes a Datadog alert or monitor link, asks why a monitor fired, or clicks Investigate on the DevHub Datadog page.
 ---
 
 # Datadog Investigation

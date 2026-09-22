@@ -387,6 +387,52 @@ describe("syncMcpServers", () => {
     });
   });
 
+  it("drops launch fields the catalog no longer sets", async () => {
+    const { repo, home } = makeTempRepo();
+    writeJson(path.join(repo, "mcp", "shared", "notes.json"), { command: "REPO_ROOT/bin/notes.mjs" });
+    writeJson(path.join(home, ".cursor/mcp.json"), {
+      mcpServers: {
+        notes: { command: "/old/tsx", args: ["/old/src/mcp.ts"], autoApprove: ["notes_read"] },
+      },
+    });
+
+    await syncMcpServers({ emit: () => undefined, repoRoot: repo, servers: ["notes"] });
+
+    const cursor = JSON.parse(fs.readFileSync(path.join(home, ".cursor/mcp.json"), "utf-8"));
+    expect(cursor.mcpServers.notes).toEqual({
+      command: `${repo}/bin/notes.mjs`,
+      autoApprove: ["notes_read"],
+    });
+  });
+
+  it("writes absolute commands when given a relative repoRoot", async () => {
+    const { repo, home } = makeTempRepo();
+    writeJson(path.join(repo, "mcp", "shared", "notes.json"), { command: "REPO_ROOT/bin/notes.mjs" });
+
+    await syncMcpServers({
+      emit: () => undefined,
+      repoRoot: path.relative(process.cwd(), repo),
+      servers: ["notes"],
+      tool: "claude",
+    });
+
+    const claude = JSON.parse(fs.readFileSync(path.join(home, ".claude.json"), "utf-8"));
+    expect(claude.mcpServers.notes.command).toBe(`${repo}/bin/notes.mjs`);
+  });
+
+  it("drops a stale remote type when a server switches to stdio", async () => {
+    const { repo, home } = makeTempRepo();
+    writeJson(path.join(repo, "mcp", "shared", "notes.json"), { command: "REPO_ROOT/bin/notes.mjs" });
+    writeJson(path.join(home, ".claude.json"), {
+      mcpServers: { notes: { type: "http", url: "https://example.test/mcp" } },
+    });
+
+    await syncMcpServers({ emit: () => undefined, repoRoot: repo, servers: ["notes"], tool: "claude" });
+
+    const claude = JSON.parse(fs.readFileSync(path.join(home, ".claude.json"), "utf-8"));
+    expect(claude.mcpServers.notes).toEqual({ command: `${repo}/bin/notes.mjs` });
+  });
+
   it("preserves wrap-only env keys when the catalog also has env", async () => {
     const { repo, home } = makeTempRepo();
     writeJson(path.join(repo, "mcp", "shared", "notes.json"), {

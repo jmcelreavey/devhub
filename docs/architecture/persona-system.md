@@ -21,9 +21,9 @@ Instead of rewriting instructions in every app, DevHub stores shared persona fil
 | ----- | ---- | ------- | ----------- |
 | L0 Identity | `persona/identity.txt` | Tone, role, how to work with you | Every message (keep small) |
 | L1 Shared persona | `persona/shared-persona.md` | Engineering standards | Every session |
-| L2 Deep preferences | `persona/modes/*.md` | Teaching, review, debug, greenfield, Python/API | On demand — read the mode file |
+| L2 Deep preferences | `skills/shared/deep-preferences/modes/*.md` | Teaching, review, greenfield, DevOps, tooling | On demand — via the `deep-preferences` skill |
 
-L0 and L1 sync to Claude/Codex/OpenCode marker blocks and Cursor `~/.cursor/rules/devhub-persona-*.mdc`. Repo `AGENTS.md` gets a **pointer**, not the full text, so Cursor does not load L0/L1 twice. L2 is **not** synced.
+L0 and L1 sync to Claude/Codex/OpenCode marker blocks and Cursor `~/.cursor/rules/devhub-persona-*.mdc`. Repo `AGENTS.md` gets a **pointer**, not the full text, so Cursor does not load L0/L1 twice. L2 syncs as the `deep-preferences` skill, so the mode files resolve in every repo, not just this one.
 
 ## What Belongs In Persona
 
@@ -45,7 +45,7 @@ Avoid adding project facts that change often. Those belong in docs, notes, or co
 | ---- | -------- | ----- |
 | Shared persona (L1) | Yes | `persona/shared-persona.md` — engineering standards |
 | Identity (L0) | Yes | `persona/identity.txt` — keep very small |
-| Deep preferences (L2) | Index only | `persona/deep-preferences.md` plus `persona/modes/*.md` — not synced |
+| Deep preferences (L2) | Index only | `skills/shared/deep-preferences/SKILL.md` plus `modes/*.md` — synced as a skill |
 | AGENTS.md, Claude, Codex, OpenCode, Cursor | No (synced) | Marker blocks written by sync; use **Synced output** to preview |
 
 The list shows token estimates for each source file. Expand a source card to edit inline; saves go through `PUT /api/persona` with `{ id, content }` (source targets only).
@@ -54,18 +54,17 @@ The list shows token estimates for each source file. Expand a source card to edi
 
 ## L2 Mode Files
 
-Mode files under `persona/modes/` are listed in `persona/deep-preferences.md`. Open **only** the matching file. The `deep-preferences` skill description is the index — do not read the skill body first.
+Mode files live in `skills/shared/deep-preferences/modes/`, indexed by that skill's `SKILL.md`. They used to sit under `persona/modes/`, which only resolved when the agent was working inside this repo. Open **only** the matching file.
 
 | Mode | File |
 | ---- | ---- |
-| Teaching | `persona/modes/teaching.md` |
-| Writing code | `persona/modes/writing-code.md` |
-| Code review | `persona/modes/code-review.md` |
-| Debugging | `persona/modes/debugging.md` |
-| Project setup | `persona/modes/project-setup.md` |
-| Deployment & DevOps | `persona/modes/deployment-devops.md` |
-| Tool preferences | `persona/modes/tool-preferences.md` |
-| Existing codebases | `persona/modes/existing-codebases.md` |
+| Teaching | `modes/teaching.md` |
+| Code review | `modes/code-review.md` |
+| Project setup | `modes/project-setup.md` |
+| Deployment & DevOps | `modes/deployment-devops.md` |
+| Tool preferences | `modes/tool-preferences.md` |
+
+Writing code, debugging, and existing-codebase guidance live in L1.
 
 See [Token Budget](token-budget.md) for why L2 stays off the sync path.
 

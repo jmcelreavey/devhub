@@ -115,6 +115,9 @@ function asMcpRecord(value: Json | undefined): Record<string, Json> | null {
   return value as Record<string, Json>;
 }
 
+/** Transport fields every target's `toTool` derives from the catalog entry. */
+const CATALOG_LAUNCH_KEYS = new Set(["command", "args", "url", "serverUrl", "type"]);
+
 /**
  * Catalog wins overlapping keys; wrap extras (autoApprove, instructions) and
  * wrap-only env (DEVHUB_MCP_TOOLSETS, LEAN_CTX_TOOL_PROFILE) survive.
@@ -123,7 +126,13 @@ function mergeMcpEntry(existing: Json | undefined, next: Json): Json {
   const current = asMcpRecord(existing);
   const incoming = asMcpRecord(next);
   if (!current || !incoming) return next;
-  const merged: Record<string, Json> = { ...current, ...incoming };
+  // How the server launches belongs to the catalog outright. Merging these
+  // left a dropped `args` behind, or a stale `type`/`url` next to a new
+  // `command` after a remote → stdio switch, in every tool config.
+  const kept = Object.fromEntries(
+    Object.entries(current).filter(([key]) => !CATALOG_LAUNCH_KEYS.has(key)),
+  );
+  const merged: Record<string, Json> = { ...kept, ...incoming };
   const currentEnv = asMcpRecord(current.env);
   const incomingEnv = asMcpRecord(incoming.env);
   if (currentEnv || incomingEnv) {
@@ -556,7 +565,10 @@ export function readCatalogMcpServer(
 }
 
 export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<number> {
-  const { emit, repoRoot } = opts;
+  const { emit } = opts;
+  // REPO_ROOT is substituted verbatim into commands that clients spawn from
+  // their own cwd, so a relative root would write broken configs everywhere.
+  const repoRoot = path.resolve(opts.repoRoot);
   const sourceDir = sharedMcpDir(repoRoot);
   if (!fs.existsSync(sourceDir)) {
     fs.mkdirSync(sourceDir, { recursive: true });

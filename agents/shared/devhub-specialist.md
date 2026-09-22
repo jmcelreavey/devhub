@@ -132,7 +132,7 @@ npm run verify    # lint + typecheck + test + production build
 - **Auto-PR review:** once per PR URL (failed runs may retry ≤3). Prefer Mac checkout commits straight to `main` for routine DevHub work — no feature-branch PRs unless asked.
 - **Browser automation:** use **playwriter** MCP/skill (real Chrome). Do not use retired `playwright-interactive`.
 - **Design skills:** keep `taste-skill` (briefing canvas), `impeccable`, and `ui-ux-pro-max` when needed. Prefer `john-voice` for human-facing summaries.
-- **Persona:** edit `persona/identity.txt` + `shared-persona.md`, then **Sync persona**. L2 modes stay on-demand under `persona/modes/`.
+- **Persona:** edit `persona/identity.txt` + `shared-persona.md`, then **Sync persona**. L2 modes ship inside the `deep-preferences` skill (`skills/shared/deep-preferences/modes/`).
 
 ## Related Skills (load when relevant)
 

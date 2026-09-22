@@ -1,6 +1,6 @@
 ---
 name: devhub-repo-upstart
-description: Create, run, debug, or update a DevHub-private repository upstart script.
+description: Create, run, debug, or update a DevHub-private repository upstart script. Use when the user wants a one-command way to start a repo locally, or an upstart script under upstarts/ fails.
 metadata:
   short-description: Create or debug repo startup scripts
 ---
