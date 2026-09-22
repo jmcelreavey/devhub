@@ -163,4 +163,13 @@ describe("gitUnpushedCount", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-nogit-"));
     expect(await gitUnpushedCount(tmp)).toBe(0);
   });
+  it("does not count commits when the upstream branch is gone", async () => {
+    const repo = await gitInitRepo();
+    await commit(repo, "first");
+    await commit(repo, "second");
+    await exec("git", ["config", "branch.main.remote", "origin"], { cwd: repo });
+    await exec("git", ["config", "branch.main.merge", "refs/heads/main"], { cwd: repo });
+    expect(await gitUnpushedCount(repo)).toBe(0);
+  });
+
 });

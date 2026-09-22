@@ -73,6 +73,8 @@ describe("isGitNoisePath", () => {
     expect(isGitNoisePath("__pycache__/x.pyc")).toBe(true);
     expect(isGitNoisePath("mod.pyc")).toBe(true);
     expect(isGitNoisePath("src/app.ts")).toBe(false);
+    expect(isGitNoisePath("infrastructure/terraform/.terraform/")).toBe(true);
+    expect(isGitNoisePath("infrastructure/terraform/main.tf")).toBe(false);
   });
 });
 

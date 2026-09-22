@@ -122,11 +122,16 @@ export function isUnmergedFile(file: { indexStatus: string; worktreeStatus: stri
   return UNMERGED_PAIRS.has(`${file.indexStatus}${file.worktreeStatus}`);
 }
 
-/** macOS / Python clutter that rarely belongs in a staging UI. */
+/** macOS, Python, and Terraform cache clutter that rarely belongs in a staging UI. */
 export function isGitNoisePath(filePath: string): boolean {
-  const parts = filePath.split(/[/\\]/);
+  const parts = filePath.split(/[/\\]/).filter(Boolean);
   const base = parts[parts.length - 1] ?? filePath;
-  return base === ".DS_Store" || base.endsWith(".pyc") || parts.includes("__pycache__");
+  return (
+    base === ".DS_Store" ||
+    base.endsWith(".pyc") ||
+    parts.includes("__pycache__") ||
+    parts.includes(".terraform")
+  );
 }
 
 /**

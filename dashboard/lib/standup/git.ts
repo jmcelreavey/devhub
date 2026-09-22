@@ -149,13 +149,48 @@ export async function gitLogLinesLocalMidnightWindow(
   }
 }
 
-async function currentBranchUnpushedArgs(cwd: string): Promise<string[]> {
+/**
+ * Log range for commits that still need a push.
+ *
+ * `null` means the branch has an upstream that no longer exists. Those commits
+ * are not a push queue — `HEAD --not --remotes` would count them anyway after
+ * the remote branch is deleted (typical once a PR merges and the branch is
+ * removed), which is what made a gone upstream look like "5 unpushed".
+ */
+async function currentBranchUnpushedArgs(cwd: string): Promise<string[] | null> {
+  let branch = "";
+  try {
+    const { stdout } = await exec("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd });
+    branch = stdout.trim();
+  } catch {
+    return ["HEAD", "--not", "--remotes"];
+  }
+  if (!branch || branch === "HEAD") return ["HEAD", "--not", "--remotes"];
+
+  try {
+    const { stdout } = await exec(
+      "git",
+      ["for-each-ref", "--format=%(upstream:track)", `refs/heads/${branch}`],
+      { cwd },
+    );
+    if (/gone/i.test(stdout)) return null;
+  } catch {
+    // Fall through and resolve @{u} directly.
+  }
+
   try {
     const { stdout } = await exec("git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], { cwd });
     const upstream = stdout.trim();
     if (upstream) return [`${upstream}..HEAD`];
   } catch {
-    // No upstream configured. Fall back to current HEAD versus all remotes.
+    // @{u} missing. A configured merge ref means the upstream was pruned.
+  }
+
+  try {
+    const { stdout } = await exec("git", ["config", "--get", `branch.${branch}.merge`], { cwd });
+    if (stdout.trim()) return null;
+  } catch {
+    // No upstream configured.
   }
   return ["HEAD", "--not", "--remotes"];
 }
@@ -163,11 +198,12 @@ async function currentBranchUnpushedArgs(cwd: string): Promise<string[]> {
 /**
  * Count local commits on the current branch that are not on its upstream.
  * Returns 0 on failure — this is informational only, surfaced as an
- * "unpushed" badge.
+ * "unpushed" badge. A deleted upstream also returns 0.
  */
 export async function gitUnpushedCount(cwd: string): Promise<number> {
   try {
     const rangeArgs = await currentBranchUnpushedArgs(cwd);
+    if (!rangeArgs) return 0;
     const { stdout } = await exec(
       "git",
       ["log", ...rangeArgs, "--pretty=format:%H"],

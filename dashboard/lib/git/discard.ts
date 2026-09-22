@@ -232,7 +232,15 @@ async function discardUnstagedOnly(repoRoot: string, filePath: string): Promise<
   if (!st) return { ok: true };
 
   if (st.untracked) {
-    const clean = await runGitRepoAsync(repoRoot, ["clean", "-f", "--", filePath]);
+    // git clean -f refuses directories, so an untracked cache dir looked discardable and then did nothing.
+    const rel = filePath.replace(/\/+$/, "");
+    let directory = filePath.endsWith("/");
+    try {
+      directory = fs.statSync(path.join(repoRoot, rel)).isDirectory();
+    } catch {
+      // Path already gone, or status still has the trailing slash.
+    }
+    const clean = await runGitRepoAsync(repoRoot, ["clean", directory ? "-fd" : "-f", "--", rel]);
     if (clean.status !== 0) return fail(clean, "Discard failed");
     return { ok: true };
   }

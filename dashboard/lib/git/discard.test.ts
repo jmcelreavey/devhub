@@ -196,4 +196,16 @@ describe("discardGitPaths", () => {
     expect(fs.statSync(path.join(repo, "file.txt")).mode & 0o111).not.toBe(0);
     expect(runGitRepo(repo, ["status", "--porcelain=v1"]).stdout).toBe(" M file.txt\n");
   });
+  it("removes an untracked directory on unstaged discard", async () => {
+    const repo = mkTempRepo();
+    repos.push(repo);
+    runGitRepo(repo, ["commit", "--allow-empty", "-m", "init"]);
+    write(repo, "cache/provider/file", "x\n");
+    const status = runGitRepo(repo, ["status", "--porcelain"]).stdout;
+    expect(status).toContain("cache/");
+    const result = await discardGitPaths(repo, ["cache/"], "unstaged");
+    expect(result.ok).toBe(true);
+    expect(fs.existsSync(path.join(repo, "cache"))).toBe(false);
+  });
+
 });
