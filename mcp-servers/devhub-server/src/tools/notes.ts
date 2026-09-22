@@ -122,7 +122,7 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
     "notes_cursor_open",
     {
       description:
-        "Request a Cursor working copy of a note. Opening an editor requires a click in DevHub; background and MCP calls cannot open windows. Use notes_write to update the note directly.",
+        "Open a Cursor working copy of a note beside a local repo. Use notes_cursor_apply to write safe Markdown edits back to the note.",
       inputSchema: {
         path: z.string().describe("Notes-relative path, with or without .json"),
         repoName: z.string().describe("Local repo name as shown by repos_list"),

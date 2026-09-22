@@ -1,6 +1,5 @@
 import { parseBody } from "@/lib/api-utils";
 import { openPathInCursor } from "@/lib/cursor-open";
-import { hasBrowserNavigationIntent } from "@/lib/desktop/navigation-intent";
 import { mergeEntityRefs,parseEntityLinksFromMarkdown,upsertEntityLinksInMarkdown } from "@/lib/entity-note";
 import { materializeGitRevisionFile } from "@/lib/git/open-at-revision";
 import { blocksToText,textToBlocks } from "@/lib/markdown-convert";
@@ -51,7 +50,6 @@ export async function GET(req: NextRequest, { params }: Params) {
 }
 
 export async function POST(req: NextRequest, { params }: Params) {
-  if (!hasBrowserNavigationIntent(req.headers)) return NextResponse.json({ error: "Open the repository from DevHub to show it in your editor. Agent requests do not change your screen." }, { status: 403 });
   const { name } = await params;
   const repoPath = resolveScannedRepo(name);
   if (!repoPath) return NextResponse.json({ error: "Repo not found" }, { status: 404 });
