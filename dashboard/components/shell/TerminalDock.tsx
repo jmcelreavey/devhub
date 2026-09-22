@@ -1175,7 +1175,11 @@ export function TerminalDock() {
     // The slow interval covers hidden tabs and a stream that silently stalls.
     let events: EventSource | null = null;
     const connect = () => {
-      if (events || document.hidden) return;
+      if (document.hidden) return;
+      // EventSource retries network drops itself, but a non-200 answer (say a
+      // route still compiling) closes it for good; replace a closed one.
+      if (events && events.readyState !== EventSource.CLOSED) return;
+      events?.close();
       events = new EventSource("/api/terminal/propose/stream");
       events.onopen = () => void tick();
       events.onmessage = () => void tick();
@@ -1187,7 +1191,10 @@ export function TerminalDock() {
     const onVisibility = () => (document.hidden ? disconnect() : connect());
     connect();
     document.addEventListener("visibilitychange", onVisibility);
-    const timer = window.setInterval(tick, 30_000);
+    const timer = window.setInterval(() => {
+      connect();
+      void tick();
+    }, 30_000);
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisibility);

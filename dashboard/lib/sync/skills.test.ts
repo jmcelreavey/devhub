@@ -177,6 +177,20 @@ describe("syncSkills merged catalog", () => {
     expect(lines).toContain("  UNCHANGED [devhub]: local-skill");
   });
 
+  it("re-syncs a skill whose script lost its executable bit", async () => {
+    setup();
+    const script = path.join(repo, "skills/shared/local-skill/run.sh");
+    fs.writeFileSync(script, "#!/bin/sh\n");
+    fs.chmodSync(script, 0o755);
+    await syncSkills({ repoRoot: repo, emit: () => {}, refreshAiTools: false, tool: "codex" });
+    const target = path.join(home, ".codex/skills/local-skill/run.sh");
+    fs.chmodSync(target, 0o644);
+
+    await syncSkills({ repoRoot: repo, emit: () => {}, refreshAiTools: false, tool: "codex" });
+
+    expect(fs.statSync(target).mode & 0o111).not.toBe(0);
+  });
+
   it("skips configured all-target destinations but honors an explicit target", async () => {
     setup();
     process.env[SKILL_SYNC_EXCLUDE_TOOLS_ENV] = "agents";

@@ -140,7 +140,14 @@ function readSkillFileForSync(entry: SkillCatalogEntry, relativePath: string): s
   return fs.readFileSync(file);
 }
 
-type SkillTreeSnapshot = Map<string, { kind: TreeEntryKind; content?: string | Buffer; link?: string }>;
+type SkillTreeSnapshot = Map<
+  string,
+  { kind: TreeEntryKind; content?: string | Buffer; link?: string; executable?: boolean }
+>;
+
+function isExecutable(file: string): boolean {
+  return (fs.statSync(file).mode & 0o111) !== 0;
+}
 
 /**
  * Source tree + file contents as sync would write them. Taken once per skill
@@ -152,7 +159,15 @@ export function snapshotSkillTree(entry: SkillCatalogEntry): SkillTreeSnapshot {
   for (const [relativePath, kind] of listRelativeTreeEntries(entry.dir)) {
     if (kind === "directory") snapshot.set(relativePath, { kind });
     else if (kind === "symlink") snapshot.set(relativePath, { kind, link: fs.readlinkSync(path.join(entry.dir, relativePath)) });
-    else snapshot.set(relativePath, { kind, content: readSkillFileForSync(entry, relativePath) });
+    else {
+      snapshot.set(relativePath, {
+        kind,
+        content: readSkillFileForSync(entry, relativePath),
+        // Skills ship runnable scripts (impeccable, lean-ctx); a target copy
+        // that lost +x must count as changed so sync restores it.
+        executable: isExecutable(path.join(entry.dir, relativePath)),
+      });
+    }
   }
   return snapshot;
 }
@@ -177,6 +192,7 @@ export function skillTreesEqualForSync(
         continue;
       }
 
+      if (isExecutable(targetFile) !== expected.executable) return false;
       const content = expected.content!;
       const actual = typeof content === "string" ? fs.readFileSync(targetFile, "utf-8") : fs.readFileSync(targetFile);
       if (typeof content === "string" ? actual !== content : !content.equals(actual as Buffer)) {

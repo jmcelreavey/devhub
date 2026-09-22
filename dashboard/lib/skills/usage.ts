@@ -1,8 +1,10 @@
 /**
  * How often each skill was invoked, read from Claude Code session transcripts
  * (`~/.claude/projects/<project>/<session>.jsonl`, plus subagent transcripts
- * nested under `<session>/subagents/`). Skill tool calls land there as
- * `"skill":"<name>"` in the tool input, so a line scan is enough — no JSON parse.
+ * nested under `<session>/subagents/`). A Skill tool call is recorded as
+ * `"name":"Skill","input":{"skill":"<name>"…`, so a line scan is enough — no
+ * JSON parse. Match that whole prefix: the same line echoes the input again
+ * under `wireToolInputs`, and a bare `"skill":"…"` match counted every call twice.
  *
  * Transcripts run to hundreds of MB (single files past 100 MB), so they are
  * streamed line by line: reading them whole would block the dashboard's one
@@ -16,8 +18,8 @@ import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 
-const SKILL_CALL = /"skill"\s*:\s*"([a-z0-9][a-z0-9_:-]{0,80})"/g;
-const SKILL_KEY = '"skill"';
+const SKILL_CALL = /"name"\s*:\s*"Skill"\s*,\s*"input"\s*:\s*\{\s*"skill"\s*:\s*"([a-z0-9][a-z0-9_:-]{0,80})"/g;
+const SKILL_TOOL = '"Skill"';
 
 export function claudeProjectsDir(): string {
   return path.join(os.homedir(), ".claude", "projects");
@@ -39,7 +41,7 @@ async function transcriptsSince(dir: string, sinceMs: number): Promise<string[]>
 async function countInFile(file: string, counts: Map<string, number>): Promise<void> {
   const lines = readline.createInterface({ input: fs.createReadStream(file, "utf-8"), crlfDelay: Infinity });
   for await (const line of lines) {
-    if (!line.includes(SKILL_KEY)) continue;
+    if (!line.includes(SKILL_TOOL)) continue;
     for (const match of line.matchAll(SKILL_CALL)) {
       counts.set(match[1], (counts.get(match[1]) ?? 0) + 1);
     }
