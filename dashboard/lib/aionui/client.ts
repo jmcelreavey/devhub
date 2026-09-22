@@ -190,11 +190,12 @@ export class AionClient {
       .map((item) => item.id);
   }
 
-  /** Every enabled non-builtin AionUi MCP server — Implement/Plan attach. */
-  async listEnabledMcpIds(): Promise<string[]> {
+  /** Enabled non-builtin AionUi MCP servers, optionally narrowed for a workflow. */
+  async listEnabledMcpIds(names?: readonly string[]): Promise<string[]> {
     const servers = await this.listMcpServers();
+    const allowed = names ? new Set(names) : null;
     return servers
-      .filter((item) => item.enabled !== false && !item.builtin)
+      .filter((item) => item.enabled !== false && !item.builtin && (!allowed || allowed.has(item.name)))
       .map((item) => item.id);
   }
 

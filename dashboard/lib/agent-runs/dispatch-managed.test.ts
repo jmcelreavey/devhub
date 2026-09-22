@@ -46,6 +46,10 @@ describe("durable managed dispatch", () => {
     expect((await dispatchAgentRun(input())).spec.id).toBe(first.spec.id);
     expect(first.status.terminalSessionId).toBeUndefined();
   });
+  it.each(["review", "pr-review"])("attaches only review MCP servers for %s runs", async (action) => {
+    await dispatchAgentRun({ ...input(), requestId: `review-${action}`, activity: { source: "auto-review", action } });
+    expect(native.listEnabledMcpIds).toHaveBeenCalledWith(["devhub", "lean-ctx"]);
+  });
   it("persists submission intent before sending and never retries a lost acknowledgement", async () => {
     native.sendMessage.mockImplementation(async () => {
       expect(listAgentRuns()[0].status.submissionAttemptedAt).toBeGreaterThan(0);

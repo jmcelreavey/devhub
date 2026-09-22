@@ -140,5 +140,9 @@ describe("AionUi MCP attach ids", () => {
     const { client } = harness((url) => url.endsWith("/api/mcp/servers") ? ok(servers) : undefined);
     await expect(client.listEnabledMcpIds()).resolves.toEqual(["managed", "lean"]);
   });
-});
 
+  it("can narrow attached servers for tool-budgeted workflows", async () => {
+    const { client } = harness((url) => url.endsWith("/api/mcp/servers") ? ok(servers) : undefined);
+    await expect(client.listEnabledMcpIds(["devhub"])).resolves.toEqual(["managed"]);
+  });
+});
