@@ -46,7 +46,7 @@ function bundleIsFresh() {
 }
 
 async function buildBundle() {
-  const { build } = await import("esbuild");
+  const { build, stop } = await import("esbuild");
   // Several clients can start at once; write to a private file and rename so
   // none of them ever imports a half-written bundle.
   const tmp = `${bundle}.${process.pid}.tmp`;
@@ -64,6 +64,9 @@ async function buildBundle() {
     fs.renameSync(tmp, bundle);
   } finally {
     fs.rmSync(tmp, { force: true });
+    // The JS API keeps an esbuild service process alive for reuse; this
+    // server builds once, so without stop() it idled for the server's lifetime.
+    await stop();
   }
 }
 

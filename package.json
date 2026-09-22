@@ -10,7 +10,7 @@
     "install": "npm install --prefix ./dashboard && rm -f package-lock.json",
     "desktop:stage": "node desktop/scripts/stage-all.mjs",
     "desktop:dev": "node desktop/scripts/stage-all.mjs && cargo tauri dev --config desktop/src-tauri/tauri.conf.json",
-    "desktop:build": "node desktop/scripts/stage-all.mjs && cargo tauri build --config desktop/src-tauri/tauri.conf.json --config '{\"bundle\":{\"createUpdaterArtifacts\":false}}' && node desktop/scripts/sign-local.mjs",
+    "desktop:build": "node desktop/scripts/build-local.mjs",
     "desktop:doctor": "node desktop/scripts/doctor.mjs",
     "desktop:test": "node --test \"desktop/**/*.test.mjs\"",
     "aionui:test": "node --test scripts/aionui-patches.test.mjs",
