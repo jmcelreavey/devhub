@@ -142,6 +142,34 @@ function mergeMcpEntry(existing: Json | undefined, next: Json): Json {
 }
 
 /**
+ * Env values the catalog used to ship and no longer does. Tool-config env
+ * survives a merge on purpose (wrap-only keys, local secrets), so a value
+ * dropped from mcp/shared would otherwise live on in every tool config. It is
+ * removed only while it still equals the old default — a value someone
+ * changed is theirs — and never while the catalog sets the key again.
+ */
+const RETIRED_CATALOG_ENV: Record<string, Record<string, string>> = {
+  // Pinning this switched dashboard discovery off: an explicit URL beats the
+  // advertisement in ~/.config/devhub/dashboard.json.
+  devhub: { DEVHUB_BASE_URL: "http://localhost:1337" },
+};
+
+function dropRetiredCatalogEnv(name: string, merged: Json, incoming: Json): Json {
+  const retired = RETIRED_CATALOG_ENV[name];
+  const record = asMcpRecord(merged);
+  const env = asMcpRecord(record?.env);
+  if (!retired || !record || !env) return merged;
+  const catalogEnv = asMcpRecord(asMcpRecord(incoming)?.env) ?? {};
+  const kept = Object.fromEntries(
+    Object.entries(env).filter(([key, value]) => key in catalogEnv || retired[key] !== value),
+  );
+  if (Object.keys(kept).length === Object.keys(env).length) return merged;
+  const next: Record<string, Json> = { ...record, env: kept };
+  if (Object.keys(kept).length === 0) delete next.env;
+  return next;
+}
+
+/**
  * Cursor's mcp.json remote shape is just `{ url, headers? }` — it does NOT
  * understand OpenCode's `type: "remote"` / `enabled` keys. Worse than being
  * ignored, ONE unrecognized entry makes cursor-agent silently discard the
@@ -683,7 +711,7 @@ export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<numbe
         writes++;
         continue;
       }
-      let mergedEntry = mergeMcpEntry(existingServers[name], entry);
+      let mergedEntry = dropRetiredCatalogEnv(name, mergeMcpEntry(existingServers[name], entry), entry);
       if (tool.id === "cursor") mergedEntry = applyCursorAcpServerOverlay(name, mergedEntry);
       nextServers[name] = mergedEntry;
       upserts[name] = mergedEntry;

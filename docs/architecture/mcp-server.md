@@ -54,6 +54,15 @@ Dashboard-backed tools proxy through `DashboardClient`, defaulting to
 `http://localhost:1337`, because the dashboard owns runtime state such as service
 status, script run history, loaded integration secrets, and repo actions.
 
+Which dashboard: the MCP server reads `~/.config/devhub/dashboard.json`, which the
+primary dashboard writes on start (the desktop app, or `npm run dev` on its own).
+A second dashboard started beside it with `DEVHUB_SCHEDULER=0` does not advertise,
+so agents stay on the instance you have open — terminal proposals and auto PR
+review live in that server's memory. It resolves on every request, so a session
+follows a restart rather than holding on to a dashboard that has gone. With no
+live advertiser it falls back to `http://localhost:1337`; `DEVHUB_BASE_URL`
+overrides all of it.
+
 If a dashboard-backed tool returns `Could not reach the DevHub dashboard`, start the
 dashboard with `npm run dev` or set `DEVHUB_BASE_URL` to the port where it is
 running.
@@ -66,7 +75,7 @@ groups and does not hold business logic.
 | Path                                            | Role                                                                              |
 | ----------------------------------------------- | --------------------------------------------------------------------------------- |
 | `src/mcp.ts`                                    | Entry point — creates `McpServer`, calls each `register*Tools`                    |
-| `src/context.ts`                                | `createContext()` — reads `NOTES_DIR`, `TASKS_DIR`, `DOCS_DIR`, `DEVHUB_BASE_URL` |
+| `src/context.ts`                                | `createContext()` — reads `NOTES_DIR`, `TASKS_DIR`, `DOCS_DIR`; resolves the dashboard per request (`discover-dashboard.ts`) |
 | `src/tools/*.ts`                                | One registrar per tool group (`notes.ts`, `status.ts`, …)                         |
 | `src/storage.ts`, `src/task-diagram-storage.ts` | Filesystem-backed vault access                                                    |
 | `src/dashboard-client.ts`                       | HTTP proxy for dashboard-backed tools                                             |
@@ -206,11 +215,14 @@ exactly as they did for the `tsx` binary it replaces:
   "env": {
     "NOTES_DIR": "REPO_ROOT/notes",
     "TASKS_DIR": "REPO_ROOT/tasks",
-    "DOCS_DIR": "REPO_ROOT/docs",
-    "DEVHUB_BASE_URL": "http://localhost:1337"
+    "DOCS_DIR": "REPO_ROOT/docs"
   }
 }
 ```
+
+`DEVHUB_BASE_URL` is deliberately absent: pinning it would switch discovery off.
+MCP sync removes the `http://localhost:1337` value earlier catalogs wrote into
+client configs, and leaves any other value alone.
 
 When `DEVHUB_API_SECRET` is set in `dashboard/.env.local`, add the same value to the `env` block in `mcp/shared/devhub.json` (or your personal MCP overlay), then re-run MCP sync so client configs pick it up. `DashboardClient` sends `Origin` and `X-DevHub-Secret` on every dashboard request when the secret is present in the MCP process env.
 
