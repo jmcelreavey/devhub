@@ -181,37 +181,54 @@ pub fn relaunch(app: AppHandle) {
     app.restart()
 }
 
-/// Check once, in the background, after the app is already usable.
+/// How often a running shell re-checks. DevHub is meant to stay up for days —
+/// closing the window only hides it — so a launch-only check left a long-lived
+/// instance on an old version until someone happened to quit it.
+const RECHECK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(6 * 60 * 60);
+
+static BACKGROUND_CHECKS_STARTED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Check in the background once the app is usable, then every few hours.
 ///
 /// Never blocks startup and never opens a modal. An update dialog in front of
 /// someone who just wanted to open their notes is an interruption dressed up as
 /// diligence; the banner can wait until they look at it. A failed check is
 /// logged and dropped — being offline is not an error worth a notification.
+///
+/// Called on every healthy start, and a retried start in the same process
+/// reaches it again, so only the first call starts the loop.
 pub fn check_in_background(app: &AppHandle) {
+    if BACKGROUND_CHECKS_STARTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
     let handle = app.clone();
-    tauri::async_runtime::spawn(async move {
+    std::thread::spawn(move || {
         // A beat after ready, so the check competes with nothing the user can see.
-        tokio_sleep(std::time::Duration::from_secs(5)).await;
-        match check_update(handle.clone()).await {
-            Ok(info) if info.available => {
-                let _ = handle.emit("devhub://update-available", info);
-            }
-            Ok(_) => {}
-            Err(err) => {
-                if let Some(state) = handle.try_state::<crate::AppState>() {
-                    state
-                        .log
-                        .write_line("updater", &format!("check failed: {err}"));
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        let mut announced: Option<String> = None;
+        loop {
+            match tauri::async_runtime::block_on(check_update(handle.clone())) {
+                Ok(info) if info.available => {
+                    // Once per version: re-announcing the same one every few
+                    // hours would keep reopening a banner the user dismissed.
+                    if announced != info.version {
+                        announced = info.version.clone();
+                        let _ = handle.emit("devhub://update-available", info);
+                    }
+                }
+                Ok(_) => {}
+                Err(err) => {
+                    if let Some(state) = handle.try_state::<crate::AppState>() {
+                        state
+                            .log
+                            .write_line("updater", &format!("check failed: {err}"));
+                    }
                 }
             }
+            std::thread::sleep(RECHECK_INTERVAL);
         }
     });
-}
-
-async fn tokio_sleep(duration: std::time::Duration) {
-    tauri::async_runtime::spawn_blocking(move || std::thread::sleep(duration))
-        .await
-        .ok();
 }
 
 use tauri::Manager;
