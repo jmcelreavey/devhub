@@ -355,13 +355,20 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   let ahead = 0;
   let behind = 0;
-  if (upstream && aheadBehindResult.status === 0) {
+  let unpushedCommits = parseUnpushedCommits(unpushedResult.stdout || "");
+  const currentUpstreamGone = branchList.some((b) => b.current && b.upstreamGone);
+  if (currentUpstreamGone) {
+    // The remote branch was deleted. Counting HEAD --not --remotes makes
+    // those commits look unpushed, which is how a merged PR reads as 5 unpushed.
+    ahead = 0;
+    unpushedCommits = [];
+  } else if (upstream && aheadBehindResult.status === 0) {
     // left = commits on upstream not in HEAD (behind); right = commits on HEAD not in upstream (ahead)
     const counts = parseLeftRightCount(aheadBehindResult.stdout || "");
     behind = counts.left;
     ahead = counts.right;
   } else if (!upstream) {
-    ahead = parseUnpushedCommits(unpushedResult.stdout || "").length;
+    ahead = unpushedCommits.length;
   }
   const mainCounts = mainAheadBehindResult.status === 0 ? parseLeftRightCount(mainAheadBehindResult.stdout) : { left: 0, right: 0 };
 
@@ -375,7 +382,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     stashCount,
     hasChanges,
     changedFiles: parseChangedFiles(statusResult.stdout || ""),
-    unpushedCommits: parseUnpushedCommits(unpushedResult.stdout || ""),
+    unpushedCommits,
     mainBranch,
     aheadMain: mainCounts.right,
     behindMain: mainCounts.left,
