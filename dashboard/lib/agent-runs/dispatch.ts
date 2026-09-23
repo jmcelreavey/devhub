@@ -129,6 +129,13 @@ function defaultTitle(prompt: string): string {
   return clip(firstLine, 60);
 }
 
+const REVIEW_MCP_SERVERS = ["devhub", "lean-ctx"] as const;
+
+/** Keep review conversations below Cursor ACP's tool cap so Jira stays visible. */
+export function mcpServersForActivity(action: string | undefined): readonly string[] | undefined {
+  return action === "review" || action === "pr-review" ? REVIEW_MCP_SERVERS : undefined;
+}
+
 export async function dispatchAgentRun(input: AgentDispatchInput): Promise<AgentRun> {
   if (!input.prompt.trim() || input.prompt.length > 32_000) throw new AgentDispatchError("A prompt between 1 and 32,000 characters is required.", 400);
   const maxDepth = envInt("DEVHUB_AGENT_MAX_DEPTH", 1);
@@ -244,7 +251,9 @@ export async function dispatchAgentRun(input: AgentDispatchInput): Promise<Agent
     writeRunSpec(run.dir, run.spec);
     let mcpIds: string[] = [];
     if (!input.resumeSessionId) {
-      try { mcpIds = await client.listEnabledMcpIds(); } catch { /* create without MCP attach */ }
+      try {
+        mcpIds = await client.listEnabledMcpIds(mcpServersForActivity(input.activity?.action));
+      } catch { /* create without MCP attach */ }
     }
     const conversation = input.resumeSessionId
       ? await client.getConversation(input.resumeSessionId)
