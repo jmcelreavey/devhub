@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { FormEvent } from "react";
 import { GitPullRequest, RefreshCw, RotateCcw, X } from "lucide-react";
 import { AutoReviewBar } from "./AutoReviewBar";
@@ -16,8 +17,14 @@ import { PrRow } from "@/components/PrRow";
 import { useToast } from "@/lib/hooks/use-toast";
 import { FetchError, EmptyState, InlineSearch, SkeletonRows } from "@/components";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
+import {
+  WorktreeCleanupPanel,
+  WORKTREE_CLEANUP_KEY,
+  WORKTREE_CLEANUP_OPTS,
+} from "@/components/prs/WorktreeCleanupPanel";
+import type { WorktreeCleanupResult } from "@/lib/repos/worktree-cleanup";
 
-type PrTab = "authored" | "reviews" | "recent" | "skipped";
+type PrTab = "authored" | "reviews" | "recent" | "skipped" | "cleanup";
 
 const EMPTY_PR_ROWS: GithubPrRow[] = [];
 const EMPTY_RECENTLY_REVIEWED: RecentlyReviewedPr[] = [];
@@ -47,11 +54,15 @@ function StateBadge({ state }: { state: PrSearchRow["prState"] }) {
 }
 
 export default function PrsPage() {
-  const [prTab, setPrTab] = useState<PrTab>("authored");
+  // `?tab=cleanup` so the Today nudge can land you straight on the worktrees.
+  const initialTab = useSearchParams().get("tab");
+  const [prTab, setPrTab] = useState<PrTab>(initialTab === "cleanup" ? "cleanup" : "authored");
   const [query, setQuery] = useState("");
   const [pinned, setPinned] = useState<GithubPrRow[]>([]);
   const { data, error, isLoading, mutate, isValidating } = useLive<GithubPrsApiPayload>("/api/github/prs");
   const skippedState = useLive<{ skipped: SkippedPrRecord[] }>("/api/github/prs/skip");
+  // Same SWR key as the panel, so the badge and the list share one scan.
+  const cleanupState = useLive<WorktreeCleanupResult>(WORKTREE_CLEANUP_KEY, WORKTREE_CLEANUP_OPTS);
   const toast = useToast();
   const boot = useBootGate(data !== undefined || !!error);
 
@@ -125,6 +136,16 @@ export default function PrsPage() {
         : prTab === "recent"
           ? filteredRecent
           : filteredSkipped;
+
+  // A list rather than a ternary per tab: five tabs made the inline chains for
+  // label and count unreadable, and the next tab would have been worse.
+  const tabs: { id: PrTab; label: string; count: number }[] = [
+    { id: "authored", label: "Mine", count: filteredAuthored.length },
+    { id: "reviews", label: "Review requested", count: filteredReviews.length },
+    { id: "recent", label: "Recently reviewed", count: filteredRecent.length },
+    { id: "skipped", label: "Skipped", count: filteredSkipped.length },
+    { id: "cleanup", label: "Worktrees", count: cleanupState.data?.rows.length ?? 0 },
+  ];
 
   const addPinnedPr = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -241,30 +262,24 @@ export default function PrsPage() {
       </div>
 
       <div className="mb-4 flex gap-1" style={{ borderBottom: "1px solid var(--border-muted)" }}>
-        {(["authored", "reviews", "recent", "skipped"] as const).map((t) => (
+        {tabs.map((tab) => (
           <button
-            key={t}
+            key={tab.id}
             type="button"
-            onClick={() => setPrTab(t)}
+            onClick={() => setPrTab(tab.id)}
             className="px-3 py-2 text-xs font-medium transition-colors"
             style={{
-              color: prTab === t ? "var(--text)" : "var(--text-muted)",
-              borderBottom: prTab === t ? "2px solid var(--accent)" : "2px solid transparent",
+              color: prTab === tab.id ? "var(--text)" : "var(--text-muted)",
+              borderBottom: prTab === tab.id ? "2px solid var(--accent)" : "2px solid transparent",
               background: "none",
               cursor: "pointer",
               marginBottom: "-1px",
             }}
-            aria-pressed={prTab === t}
+            aria-pressed={prTab === tab.id}
           >
-            {t === "authored" ? "Mine" : t === "reviews" ? "Review requested" : t === "recent" ? "Recently reviewed" : "Skipped"}
+            {tab.label}
             <span className="ml-1 badge badge-muted" style={{ fontSize: 12 }}>
-              {t === "authored"
-                ? filteredAuthored.length
-                : t === "reviews"
-                  ? filteredReviews.length
-                  : t === "recent"
-                    ? filteredRecent.length
-                    : filteredSkipped.length}
+              {tab.count}
             </span>
           </button>
         ))}
@@ -272,7 +287,11 @@ export default function PrsPage() {
 
       {prTab === "reviews" && <AutoReviewBar disabled={reviews.length === 0} />}
 
-      {isLoading && !data && <SkeletonRows count={5} height={40} variant="list" />}
+      {prTab === "cleanup" && <WorktreeCleanupPanel />}
+
+      {isLoading && !data && prTab !== "cleanup" && (
+        <SkeletonRows count={5} height={40} variant="list" />
+      )}
 
       <div className="space-y-2">
         {prTab === "recent"
@@ -300,12 +319,14 @@ export default function PrsPage() {
                   </div>
                 );
               })
-            : activePrs.map((row) => (
-                <PrCard key={`${row.repo}-${row.number}`} row={row} mode={prTab as "authored" | "reviews"} />
-              ))}
+            : prTab === "cleanup"
+              ? null
+              : activePrs.map((row) => (
+                  <PrCard key={`${row.repo}-${row.number}`} row={row} mode={prTab as "authored" | "reviews"} />
+                ))}
       </div>
 
-      {!isLoading && !error && activePrs.length === 0 && data?.configured && (
+      {prTab !== "cleanup" && !isLoading && !error && activePrs.length === 0 && data?.configured && (
         <EmptyState
           title={
             isFiltering
@@ -334,7 +355,7 @@ export default function PrsPage() {
         />
       )}
       {/* GitHub-wide fallback: PRs outside your authored/review buckets. */}
-      {isFiltering && (remoteResults.length > 0 || remote.loading) && (
+      {prTab !== "cleanup" && isFiltering && (remoteResults.length > 0 || remote.loading) && (
         <section className="mt-6" aria-label="Elsewhere on GitHub">
           <div className="mb-2 flex items-baseline gap-2 px-1">
             <h2 className="text-xs font-medium text-text-muted">Elsewhere on GitHub</h2>

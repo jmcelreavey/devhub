@@ -92,12 +92,35 @@ export function worktreeSlug(branch: string): string {
 }
 
 /**
+ * Find a worktree by absolute path or branch name.
+ *
+ * Callers pass user- or agent-supplied text, so this matches against what git
+ * itself reported rather than checking the string: anything that names no real
+ * worktree of this repo is rejected before it reaches the filesystem. The
+ * `devhub/agent/` fallback lets an agent run be named by its leaf alone.
+ */
+export function findWorktree(worktrees: Worktree[], query: string): Worktree | null {
+  const wanted = query.trim().replace(/\/+$/, "");
+  if (!wanted) return null;
+  return (
+    worktrees.find((tree) => tree.path.replace(/\/+$/, "") === wanted) ??
+    worktrees.find((tree) => tree.branch === wanted) ??
+    worktrees.find((tree) => tree.branch === `devhub/agent/${wanted}`) ??
+    null
+  );
+}
+
+/**
  * Default location for a new worktree: a sibling of the repository.
  *
  * Sibling rather than nested. A worktree inside the repo shows up as untracked
  * files in its own parent unless it is gitignored, and a sibling lands in the
  * same scan directory — so DevHub lists it as a repo of its own, which is what
  * it is and what you want when handing it to an agent.
+ *
+ * Agent runs use the same rule but a different parent: `agentWorktreeRoot` in
+ * `lib/agent-runs/git.ts` puts them in a hidden folder beside the repos, so
+ * dozens of transient runs do not crowd the repo list.
  */
 export function defaultWorktreePath(repoRoot: string, branch: string): string {
   const clean = repoRoot.replace(/\/+$/, "");

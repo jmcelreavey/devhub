@@ -2,6 +2,8 @@ import { parseBody } from "@/lib/api-utils";
 import { openPathInCursor } from "@/lib/cursor-open";
 import { mergeEntityRefs,parseEntityLinksFromMarkdown,upsertEntityLinksInMarkdown } from "@/lib/entity-note";
 import { materializeGitRevisionFile } from "@/lib/git/open-at-revision";
+import { runGitRepoAsync } from "@/lib/git/repo-local";
+import { findWorktree,parseWorktreeList } from "@/lib/repos/worktree-parsers";
 import { blocksToText,textToBlocks } from "@/lib/markdown-convert";
 import {
 applyCursorDraft,
@@ -26,6 +28,12 @@ const OpenBodySchema = z
     filePath: z.string().min(1).optional(),
     /** When set with filePath, open the blob at this commit alongside the repo. */
     commit: z.string().min(1).optional(),
+    /**
+     * Open one of the repo's worktrees instead of the main checkout, named by
+     * absolute path or branch. Agent runs work in a worktree, so the review and
+     * the code it describes are only side by side if we open that folder.
+     */
+    worktree: z.string().min(1).max(4096).optional(),
   })
   .refine((b) => !(b.notePath && b.filePath), {
     message: "Pass notePath or filePath, not both",
@@ -58,6 +66,27 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
 
+  // Everything below resolves against the folder we are actually opening, so a
+  // worktree request also reads its files, not the main checkout's copies.
+  let openRoot = repoPath;
+  if (body.worktree) {
+    const list = await runGitRepoAsync(repoPath, ["worktree", "list", "--porcelain"]);
+    if (list.status !== 0) {
+      return NextResponse.json(
+        { error: list.stderr.trim() || "Could not list worktrees" },
+        { status: 500 },
+      );
+    }
+    const match = findWorktree(parseWorktreeList(list.stdout || ""), body.worktree);
+    if (!match) {
+      return NextResponse.json(
+        { error: `No worktree of ${name} matches "${body.worktree}".` },
+        { status: 404 },
+      );
+    }
+    openRoot = match.path;
+  }
+
   const additionalPaths: string[] = [];
   let writable = false;
   let revisionPath: string | null = null;
@@ -78,7 +107,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
   } else if (body.filePath) {
     if (body.commit) {
-      const materialized = await materializeGitRevisionFile(repoPath, name, body.commit, body.filePath);
+      const materialized = await materializeGitRevisionFile(openRoot, name, body.commit, body.filePath);
       if ("error" in materialized) {
         return NextResponse.json({ error: materialized.error }, { status: 400 });
       }
@@ -86,18 +115,18 @@ export async function POST(req: NextRequest, { params }: Params) {
       revisionPath = materialized.absolutePath;
       shortHash = materialized.shortHash;
     } else {
-      const abs = pathResolveUnderRepo(repoPath, body.filePath);
+      const abs = pathResolveUnderRepo(openRoot, body.filePath);
       if (!abs) return NextResponse.json({ error: "Invalid path" }, { status: 400 });
       additionalPaths.push(abs);
     }
   }
 
-  const error = openPathInCursor(repoPath, additionalPaths);
+  const error = openPathInCursor(openRoot, additionalPaths);
   if (error) return NextResponse.json({ error }, { status: 503 });
 
   return NextResponse.json({
     ok: true,
-    path: repoPath,
+    path: openRoot,
     writable,
     revisionPath,
     shortHash,

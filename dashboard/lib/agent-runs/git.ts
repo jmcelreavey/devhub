@@ -7,7 +7,8 @@ import path from "node:path";
 import { clip } from "@/lib/agent-runs/events";
 import type { AgentRunSpec, AgentRunWorktree } from "@/lib/agent-runs/run-files";
 import { runGitRepoAsync } from "@/lib/git/repo-local";
-import { worktreeSlug } from "@/lib/repos/worktree-parsers";
+import { getReposScanDir } from "@/lib/repos";
+import { worktreePathError,worktreeSlug } from "@/lib/repos/worktree-parsers";
 
 const PATCH_MAX = 60_000;
 
@@ -52,10 +53,25 @@ export function agentWorktreeDirName(
 }
 
 /**
- * A worktree on a fresh `devhub/agent/<name>` branch, kept under the repo's git
- * dir so it never shows in the checkout, IDE file tree, or repo scans. Used when
- * several agents work the same repo at once; otherwise runs edit the checkout
- * the user already has open.
+ * Where agent worktrees live: a hidden folder beside the repos, not inside one.
+ *
+ * These used to sit under the repo's own `.git/`, which hid them from the IDE
+ * tree and repo scans but also hid them from every tool that skips
+ * dot-directories — Jest among them, so an agent could not run the suite in the
+ * tree it had just edited. A hidden sibling keeps tooling working, and because
+ * `listRepos` only accepts direct children of the scan dir that contain a
+ * `.git`, neither this folder nor the worktrees one level inside it are listed
+ * as repos.
+ */
+export function agentWorktreeRoot(repoRoot: string): string {
+  const repo = path.basename(repoRoot.replace(/\/+$/, ""));
+  return path.join(getReposScanDir(), ".devhub-worktrees", repo);
+}
+
+/**
+ * A worktree on a fresh `devhub/agent/<name>` branch, under
+ * {@link agentWorktreeRoot}. Used when several agents work the same repo at
+ * once; otherwise runs edit the checkout the user already has open.
  */
 export async function createRunWorktree(
   cwd: string,
@@ -69,11 +85,14 @@ export async function createRunWorktree(
   const baseSha = await gitHead(repoRoot);
   if (!baseSha) throw new Error(`worktree: ${repoRoot} has no commits to branch from`);
 
-  const common = await runGitRepoAsync(repoRoot, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
-  if (common.status !== 0) throw new Error(`worktree: ${common.stderr.trim() || "could not resolve the git dir"}`);
-
   const leaf = agentWorktreeDirName(runId, repoRoot, label);
-  const worktreePath = path.join(common.stdout.trim(), "devhub-worktrees", leaf);
+  const worktreePath = path.join(agentWorktreeRoot(repoRoot), leaf);
+  // Same rule the manual worktree UI enforces, so both paths agree on what a
+  // legal target is rather than each carrying its own idea.
+  const pathError = worktreePathError(repoRoot, worktreePath);
+  if (pathError) throw new Error(`worktree: ${pathError}`);
+
+  fs.mkdirSync(path.dirname(worktreePath), { recursive: true });
   const branch = `devhub/agent/${leaf}`;
   const add = await runGitRepoAsync(repoRoot, ["worktree", "add", "-b", branch, worktreePath, baseSha]);
   if (add.status !== 0) throw new Error(`worktree: ${add.stderr.trim() || "git worktree add failed"}`);

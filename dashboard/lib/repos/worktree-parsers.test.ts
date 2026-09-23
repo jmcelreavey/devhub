@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   defaultWorktreePath,
+  findWorktree,
   parseWorktreeList,
   worktreePathError,
   worktreeSlug,
@@ -128,5 +129,40 @@ describe("worktreePathError", () => {
   it("does not confuse a sibling with a prefix match", () => {
     // "/repo-other" starts with "/repo" as a string but is not inside it.
     expect(worktreePathError("/repo", "/repo-other")).toBeNull();
+  });
+});
+
+describe("findWorktree", () => {
+  const trees = parseWorktreeList(
+    [
+      "worktree /Users/j/Developer/app\nHEAD 087ccfd\nbranch refs/heads/main\n",
+      "worktree /Users/j/Developer/app/.git/devhub-worktrees/app-run-abc\nHEAD fdd3334\nbranch refs/heads/devhub/agent/app-run-abc\n",
+      "worktree /Users/j/Developer/app--detached\nHEAD 712acec\ndetached\n",
+    ].join("\n\n"),
+  );
+
+  it("matches an absolute path, with or without a trailing slash", () => {
+    expect(findWorktree(trees, "/Users/j/Developer/app--detached")?.head).toBe("712acec");
+    expect(findWorktree(trees, "/Users/j/Developer/app--detached/")?.head).toBe("712acec");
+  });
+
+  it("matches a full branch name", () => {
+    expect(findWorktree(trees, "devhub/agent/app-run-abc")?.head).toBe("fdd3334");
+  });
+
+  it("matches an agent run by its leaf alone", () => {
+    expect(findWorktree(trees, "app-run-abc")?.head).toBe("fdd3334");
+  });
+
+  it("prefers a path match over a branch match", () => {
+    expect(findWorktree(trees, "/Users/j/Developer/app")?.branch).toBe("main");
+  });
+
+  it("returns null for anything that names no real worktree", () => {
+    // The caller passes this to the filesystem, so a miss must not fall back
+    // to the main checkout — that silently opens the wrong code.
+    expect(findWorktree(trees, "/etc/passwd")).toBeNull();
+    expect(findWorktree(trees, "../../etc")).toBeNull();
+    expect(findWorktree(trees, "   ")).toBeNull();
   });
 });

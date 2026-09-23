@@ -247,7 +247,7 @@ export function registerAgentTools(server: McpServer, ctx: Context): void {
             "Race dispatched:",
             ...lines,
             "",
-            "agent_wait each run, then agent_diff each to compare. Worktrees live under the repo's .git/devhub-worktrees/.",
+            "agent_wait each run, then agent_diff each to compare. Worktrees live in <repos-dir>/.devhub-worktrees/<repo>/.",
           ].join("\n"),
         );
       }),

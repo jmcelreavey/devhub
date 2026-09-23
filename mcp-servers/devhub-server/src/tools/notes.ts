@@ -126,20 +126,26 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
       inputSchema: {
         path: z.string().describe("Notes-relative path, with or without .json"),
         repoName: z.string().describe("Local repo name as shown by repos_list"),
+        worktree: z
+          .string()
+          .optional()
+          .describe(
+            "Open one of the repo's worktrees instead of the main checkout, by absolute path or branch. Pass this when the work under review lives in an agent-run worktree, otherwise Cursor shows the note beside the wrong code.",
+          ),
       },
     },
-    async ({ path: notePath, repoName }) =>
+    async ({ path: notePath, repoName, worktree }) =>
       withDashboardErrors(async () => {
-        const result = await dashboard.post<{ writable: boolean }>(
+        const result = await dashboard.post<{ writable: boolean; path: string }>(
           `/api/repos/${encodeURIComponent(repoName)}/open`,
-          { notePath },
+          { notePath, ...(worktree ? { worktree } : {}) },
         );
         return {
           content: [{
             type: "text",
             text: result.writable
-              ? `Opened ${notePath} with ${repoName} in Cursor. Edit the Markdown copy, then use notes_cursor_apply.`
-              : `Opened ${notePath} with ${repoName} in Cursor as read-only Markdown; rich blocks prevent safe write-back.`,
+              ? `Opened ${notePath} in Cursor beside ${result.path}. Edit the Markdown copy, then use notes_cursor_apply.`
+              : `Opened ${notePath} in Cursor beside ${result.path} as read-only Markdown; rich blocks prevent safe write-back.`,
           }],
         };
       }),

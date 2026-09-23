@@ -307,6 +307,13 @@ the diff are readable together — which is the point of asking for a commit
 decision at all. Do this **before** the step 5.1 question, not after, and
 mention it in one short line when you ask.
 
+**If you worked in a worktree, say so.** `notes_cursor_open` opens the repo's
+main checkout unless you pass `worktree`. An agent run works on its own branch
+under the repo's git dir, so without it Cursor shows the review next to code
+that does not contain the change — the one thing this step exists to prevent.
+Pass the worktree's branch or absolute path (`pwd` is enough; `agent_runs`
+reports it too). Say which folder opened, not just that Cursor opened.
+
 Use `notes_cursor_open`, not `prs_open_in_cursor`, at this stage: the branch is
 already checked out with uncommitted work, and `prs_open_in_cursor` stashes and
 re-checks-out. It is the right call only later, when reviewing an existing PR
