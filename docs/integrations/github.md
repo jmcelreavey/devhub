@@ -8,6 +8,7 @@ related:
   - guides/standup
   - guides/repo-learning
   - getting-started/setup
+  - guides/aionui-agents
 ---
 
 # GitHub
@@ -58,11 +59,11 @@ See [Sharing](../guides/sharing.md) for the full workflow, security model, and t
 
 | Section       | API                                     | Behavior                                                                                                                                               |
 | ------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Local repos   | `GET /api/repos`                        | Branch, remote, dirty/unpushed counts, `worktreeOf` (owning clone when this folder is a git worktree), and whether a compose file exists (`docker-compose.yml`, `compose.yaml`, etc.). Filter chips: changed / unpushed / worktree. |
+| Local repos   | `GET /api/repos`                        | Branch, remote, dirty/unpushed counts, `worktreeOf` (owning clone when this folder is a git worktree), and whether a compose file exists (`docker-compose.yml`, `compose.yaml`, etc.). Filter chips: changed / unpushed / worktree. **Changed** ignores macOS/Python/Terraform cache clutter (`.DS_Store`, `__pycache__`, `.pyc`, `.terraform`) so those files do not light the chip; in the DevHub checkout, vault content (`notes/`, `tasks/`, …) is also excluded (it uses content-sync instead). **Unpushed** is `0` when the upstream branch is gone (typical after a merged PR deletes the remote branch) — those commits are not a push queue. |
 | GitHub search | `GET /api/repos/github?q=`              | Requires `gh auth login`. Shows clone targets; already-cloned repos link to the local card.                                                            |
 | Clone         | `POST /api/repos/clone`                 | Body `{ fullName: "owner/repo" }`. Clones into the scan directory using the repo name as the folder.                                                   |
 | Remove        | `DELETE /api/repos/<name>`              | Deletes the local folder. Cannot remove the current DevHub checkout.                                                                                   |
-| Open          | `POST /api/repos/<name>/open`           | Cursor CLI when available. Optional `{ notePath }` opens a linked note as a persistent Markdown working copy alongside the repo (see [Cursor note working copies](../architecture/notes-system.md#cursor-note-working-copies)). Optional `{ filePath, commit? }` opens a working-tree file or a historical revision materialized beside the repo. |
+| Open          | `POST /api/repos/<name>/open`           | Cursor CLI when available. Optional `{ notePath }` opens a linked note as a persistent Markdown working copy alongside the repo (see [Cursor note working copies](../architecture/notes-system.md#cursor-note-working-copies)). Optional `{ filePath, commit? }` opens a working-tree file or a historical revision materialized beside the repo. Optional `{ worktree }` (absolute path or branch) opens that linked worktree instead of the main checkout — use it when an agent run's code lives under `<repos-dir>/.devhub-worktrees/<repo>/`. |
 | Open PR       | `GET /api/repos/<name>/pr`              | When `gh` is authenticated and the checkout is on a feature branch, shows a link to the open PR for that head branch plus rolled-up CI checks (`passing` / `failing` / `pending`). Skipped on the repo's default branch. Fetch is deferred until the card is near the viewport so large repo lists do not hammer `gh`. |
 | Open Git      | `RepoGitWorkspace` on the card          | Full in-dashboard git UI (changes, branches, stash, history, conflicts, blame). Same component as the top-bar warning control for the DevHub checkout. |
 | GitKraken     | `POST /api/repos/<name>/open-gitkraken` | When `GET /api/repos/apps` reports `gitkraken: true`.                                                                                                  |
@@ -101,7 +102,7 @@ The `/prs` search box is one control with two modes:
 
 | Input | Behavior |
 | ----- | -------- |
-| Free text | Filters all three tabs (authored, review-requested, recently reviewed) client-side on title, repo, `repo#number`, author, and requested reviewers. Whitespace-separated terms are AND-ed (`meta syndication` narrows). |
+| Free text | Filters the PR tabs (Mine, Review requested, Recently reviewed, Skipped) client-side on title, repo, `repo#number`, author, and requested reviewers. Whitespace-separated terms are AND-ed (`meta syndication` narrows). The **Worktrees** tab is a local git scan, not a PR list — search does not apply there. |
 | PR URL or `owner/repo#123` | Switches to **add** mode — pins the row at the top without leaving the page. |
 
 When a phrase matches nothing locally, **Elsewhere on GitHub** calls
@@ -109,6 +110,33 @@ When a phrase matches nothing locally, **Elsewhere on GitHub** calls
 your GitHub orgs unless the query already carries search qualifiers (`author:foo`,
 `repo:org/name`, etc.). Up to ten remote hits are shown, excluding PRs already in
 your buckets. Closed/merged PRs show a state badge.
+
+### Finished worktrees
+
+Agent runs (and some PR checkouts) leave extra git worktrees under
+`<repos-dir>/.devhub-worktrees/<repo>/`. They accumulate until something deletes
+them. **PRs → Worktrees** (`/prs?tab=cleanup`) is the cross-repo list of leftovers
+that look safe to remove — not a dump of every `git worktree list` row.
+
+A worktree is listed only when one of these is true:
+
+| Reason | Evidence |
+| ------ | -------- |
+| `pr-merged` | Its branch has a merged GitHub PR (last 100 merges for that repo) |
+| `run-finished` | An agent run used this path and is no longer active |
+| `folder-missing` | Git still lists it but the folder is gone (`prunable`) |
+
+Locked worktrees, the main checkout, active runs, and anything without that
+evidence stay off the list (returned as `kept`). Removing a row deletes **the
+folder only** — the branch and commits stay. A dirty tree returns `409` with
+`code: "worktree_dirty"`; the UI asks before force-remove.
+
+Today shows a one-line count (`WorktreeCleanupNudge`) that links here. It is not
+dismissible; it disappears when the folders are gone. Per-repo add/remove/lock
+still lives on the Git workspace **Worktrees** tab.
+
+API: `GET`/`POST /api/repos/worktree-cleanup`. There is no MCP tool — this is a
+human cleanup surface. See [API Routes](../reference/api-routes.md).
 
 ### Row actions
 
@@ -181,6 +209,9 @@ GitHub activity can contribute to standup markdown, especially merged PRs and re
 | **Review with agent** shows a setup hint | Connect AionUi on **Agents → Connection**. Background defaults still prefer Cursor + Grok (`DEVHUB_AGENT_CLI` / `DEVHUB_AION_CURSOR_MODEL`). See [Agents (AionUi)](../guides/aionui-agents.md). |
 | Approved tick missing on a reviewed PR | Expected when the repo does not *require* reviews **and** the GraphQL approval lookup failed. The Search API `review:approved` qualifier is not used — it misses those PRs. |
 | **Open in Cursor** fails               | The PR's repo is cloned under the Repos scan directory and `cursor` is on `PATH`.                                                                                          |
+| Repo card says "changed" with no real edits | Expected for leftover `.DS_Store` / `__pycache__` / `.terraform` — those are noise and no longer increment `dirtyCount`. If you still see a count, the Git workspace Changes list is the source of truth. |
+| Repo card says "unpushed" after the PR merged | A gone upstream (`[gone]`) now counts as `0`. If the chip remains, the branch still has a live upstream with commits ahead. |
+| Worktrees tab is empty while folders remain | Expected when there is no merged PR and no finished agent run for that path (or the worktree is locked). Check the repo's Git **Worktrees** tab. |
 | **Finish your daily rep first**        | Expected when this PR is today's unfinished [daily review rep](../architecture/dashboard.md#daily-review-reps). Save findings on `/review/rep` first.                     |
 | **Notes** link never appears          | The agent job finished, the skill had notes MCP access, and it wrote to the exact `Notes MCP path` from the prompt.                                                       |
 | Review note landed in the wrong place | `NEXT_PUBLIC_REPO_ROOT` mirrors `REPO_ROOT` in `dashboard/.env.local`; restart DevHub so the agent run can pin `NOTES_DIR`.                                                |

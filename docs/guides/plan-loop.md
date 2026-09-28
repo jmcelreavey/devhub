@@ -58,7 +58,7 @@ Task menu → **Mark ready for an agent** (MCP `tasks_set_stage`). It runs the i
 
 1. Plan or acceptance written (or a Jira description).
 2. No unchecked `## Open questions`.
-3. Exactly one repo.
+3. At least one repo link (or a hub checkout). Several links are fine — the launch sheet picks which checkout to **start in**; **Add repo** never drops the others.
 4. No open `#prerequisite` / `#blocker` tasks.
 
 Gaps come back as an error toast with **Mark anyway**. **Move back to draft** is there for ready tasks that haven't started.

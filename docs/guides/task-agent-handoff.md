@@ -111,7 +111,7 @@ Checks:
 
 1. **Acceptance / plan** — Jira description has content, **or** the task note has a `## Plan` / `## Acceptance` section with real body text (scaffold `- ` alone does not count).
 2. **Open questions** — no unchecked lines under `## Open questions` in the task note (`- [x]` counts as answered).
-3. **Repo** — exactly one `kind: "repo"` link, **or** the user picks one in the modal, **or** a hub checkout (`hubRepoId`) when links are empty.
+3. **Repo** — at least one `kind: "repo"` link (or a hub checkout when links are empty). Several links stay on the task; **Add repo** is additive. If more than one is linked, pick which checkout to start in (`selectedRepoId`) — the others are not dropped.
 4. **Prerequisites** — no open linked task (outbound or inbound) tagged `#prerequisite`, `#prereq`, or `#blocker`.
 
 ```bash

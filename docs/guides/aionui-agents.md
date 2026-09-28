@@ -11,6 +11,7 @@ related:
   - architecture/mcp-server
   - reference/environment-variables
   - plans/agents-workspace
+  - integrations/github
 ---
 
 # Agents (AionUi)
@@ -38,7 +39,7 @@ Anything DevHub fires into AionUi (auto-PR review, schedules, MCP `agent_dispatc
 | Model | **Grok 4.6 high** (`grok-4.6[effort=high]`, fast off) | `DEVHUB_AION_CURSOR_MODEL` or mapped from `DEVHUB_AGENT_CURSOR_MODEL` |
 | Permission | **Per-harness YOLO** | Claude `bypassPermissions`, Codex `agent-full-access`, Gemini/Aion `yolo`, OpenCode `build`, Antigravity `yolo`, **Cursor `yolo`** (AionCore `yolo_id`; session catalog is still agent/plan/ask), Copilot `autopilot` |
 | Auto-confirm | Cursor/Copilot ACP prompts | Backstop: reconciliation `allow-always`s leftover confirmations on DevHub-managed chats |
-| MCP attach | Every enabled non-builtin AionUi MCP server | Passed as `mcp_ids` / `selected_mcp_server_ids` on conversation create |
+| MCP attach | Every enabled non-builtin AionUi MCP server, **except Review / auto-review** | Passed as `mcp_ids` / `selected_mcp_server_ids` on conversation create. `action: "review"` and auto-review `pr-review` attach only **`devhub`** and **`lean-ctx`** so Jira/`jira_ticket_get` stay under Cursor ACP's ~190-tool cap. Implement, dispatch, and free-form still attach the full enabled set. |
 | Theme | **Graphite Neon** | DevHub graphite tokens (`#111416` / `#9ed84a`); CSS kills Arco blues in managed WebUI |
 | CSRF | Fetch bridge | Injected into managed `index.html` so iframe POSTs send `x-csrf-token` |
 
@@ -46,7 +47,7 @@ Free-form chats you start inside the AionUi iframe use that UI’s own picker; t
 
 Finished **Review with agent** / auto-review conversations are archived in AionUi’s sidebar when the run completes, fails, or is cancelled, so they don’t pile up in the active chat list. Activity still keeps the run.
 
-Dispatch is `POST /api/agent/runs` (`dashboard/lib/agent-runs/dispatch.ts`). Isolated git worktrees are the default; `worktree: false` edits the live checkout. Reuse `requestId` on retries. Current AionUi refuses `maxTurns`. Caps: `DEVHUB_AGENT_MAX_RUNS`, `DEVHUB_AGENT_MAX_COST_USD`, `DEVHUB_AGENT_MAX_DEPTH`, optional `DEVHUB_AGENT_ALLOWED_ROOTS`. See [MCP — Dispatch work to another agent](../architecture/mcp-server.md#dispatch-work-to-another-agent).
+Dispatch is `POST /api/agent/runs` (`dashboard/lib/agent-runs/dispatch.ts`). Isolated git worktrees are the default; `worktree: false` edits the live checkout. Reuse `requestId` on retries. Current AionUi refuses `maxTurns`. Caps: `DEVHUB_AGENT_MAX_RUNS`, `DEVHUB_AGENT_MAX_COST_USD`, `DEVHUB_AGENT_MAX_DEPTH`, optional `DEVHUB_AGENT_ALLOWED_ROOTS`. Finished worktrees (merged PR or stopped run) are listed on **PRs → Worktrees**. See [MCP — Dispatch work to another agent](../architecture/mcp-server.md#dispatch-work-to-another-agent) and [GitHub — Finished worktrees](../integrations/github.md#finished-worktrees).
 
 ### Thinking / effort level
 
@@ -60,7 +61,7 @@ DevHub’s MCP catalog syncs into AionUi via `syncMcpServers` → `syncAionMcpSe
 
 On **Agents connect / managed setup**, DevHub also **enables** those managed servers (`ensureAionMcpBootstrap`). Sync alone used to leave them disabled, so Agents could not call notes/tasks/PRs until you toggled them by hand.
 
-New DevHub→AionUi conversations **attach every enabled non-builtin MCP server** (managed catalog plus personal ones such as `lean-ctx`) so Agents get `ctx_search` and the rest, not an empty `mcp_server_ids` list.
+New DevHub→AionUi conversations **attach every enabled non-builtin MCP server** (managed catalog plus personal ones such as `lean-ctx`) so Agents get `ctx_search` and the rest, not an empty `mcp_server_ids` list. **Review with agent** and auto-review are the exception: they pass only `devhub` and `lean-ctx` (`mcpServersForActivity` in `dispatch.ts`) so the Cursor ACP tool list does not drop Jira.
 
 Cursor ACP still has a ~190-tool cap. Sync slims the attached `devhub` process (`DEVHUB_MCP_TOOLSETS`), launches Playwriter through a compact stdio wrapper, and pins `lean-ctx` to `standard`. Reload Cursor MCP after sync or `execute` / `ctx_search` stay missing. See [MCP Server — Cursor ACP tool budget](../architecture/mcp-server.md#cursor-acp-tool-budget).
 
@@ -93,6 +94,8 @@ Never `notes/persona/`. Cursor already gets L0/L1 from `~/.cursor/rules/devhub-p
 | `400` on `maxTurns` | This AionUi release has no DevHub turn override. Use the assistant’s own controls. |
 | `429` too many runs / cost cap | Wait, cancel on Activity, or raise `DEVHUB_AGENT_MAX_RUNS` / `DEVHUB_AGENT_MAX_COST_USD`. |
 | MCP tools missing in Agents | **Sync MCP**, then reconnect Agents so managed servers stay enabled. Cursor ACP still has the ~190-tool cap. |
+| Review chat has no `jira_ticket_get` | Expected if the run attached the full MCP catalog and overflowed Cursor's ~190-tool cap. Review / auto-review should attach only `devhub` + `lean-ctx`. Reload Cursor MCP after sync. |
+| Leftover folders under `.devhub-worktrees/` | **PRs → Worktrees** (`/prs?tab=cleanup`) removes finished ones. Locked or still-running trees are left out on purpose. |
 
 ## Related code
 

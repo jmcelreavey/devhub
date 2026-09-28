@@ -8,6 +8,7 @@ related:
   - reference/api-routes
   - architecture/notes-system
   - architecture/database-client
+  - integrations/github
 ---
 
 # Dashboard Architecture
@@ -40,6 +41,8 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 
 When allowlisted script runs failed since your last visit, Today shows a dismissible **While you were away** banner (`WhileYouWereAway` → `GET /api/since?ts=<epoch-ms>`). The client stores the last-visit timestamp in `localStorage` (`devhub:last-visit`) and stamps it on unmount so opening the page does not immediately mark failures as seen. Successes are counted in the payload but do not surface a banner — only failures earn the alert. Default lookback is 12 hours when no prior visit is recorded.
 
+Finished agent/PR worktrees get a **non-dismissible** one-line count (`WorktreeCleanupNudge` → `GET /api/repos/worktree-cleanup`) linking to `/prs?tab=cleanup`. It disappears when those folders are gone. See [GitHub — Finished worktrees](../integrations/github.md#finished-worktrees).
+
 ### Morning briefing
 
 [Briefing and design controls walkthrough](/api/notes-assets/assets/feature-demos/demo-02-briefing.mp4)
@@ -64,7 +67,7 @@ Coding chats live on **Agents** (`/agents`). `/chamber` and `/opencode` redirect
 | Briefing   | `/briefing` | Full morning digest                                                                           |
 | Calendar   | `/calendar` | Gated on `calendar`                                                                           |
 | Work       | `/work`     | Tasks + Jira + History tabs (see below)                                                       |
-| PRs        | `/prs`      | Gated on `github`                                                                             |
+| PRs        | `/prs`      | Gated on `github`. Tabs: Mine / Review requested / Recently reviewed / Skipped / Worktrees (`?tab=cleanup`) |
 | Review     | `/review`   | Weekly retrospective; desktop nav only                                                        |
 | Notes      | `/notes`    | Library landing. Top-bar tabs: Notes, Search, Docs, Radar, Appraisal, Research, Diagrams, Live links (gated) |
 | Search     | `/search`   | Unified discovery (notes/docs + Recall). Library sidebar slot                                 |
@@ -252,7 +255,7 @@ Launch wiring lives in `dashboard/lib/agent-job.ts`, `dashboard/lib/agent-runs/d
 
 ## Pull Request Reviews
 
-**PRs** (`/prs`, gated on `github`) and the Today GitHub panel read `GET /api/github/prs` — authored PRs, review-requested PRs, and recently reviewed PRs (archived repos filtered from active queues; up to 100 rows per active bucket). The screen search box filters those buckets client-side or pins a pasted PR URL; unmatched phrases fall back to `GET /api/github/prs/search` (**Elsewhere on GitHub**). See [GitHub — Search and pin](../integrations/github.md#search-and-pin).
+**PRs** (`/prs`, gated on `github`) and the Today GitHub panel read `GET /api/github/prs` — authored PRs, review-requested PRs, and recently reviewed PRs (archived repos filtered from active queues; up to 100 rows per active bucket). Tabs: **Mine**, **Review requested**, **Recently reviewed**, **Skipped**, and **Worktrees** (`?tab=cleanup`). The screen search box filters those buckets client-side or pins a pasted PR URL; unmatched phrases fall back to `GET /api/github/prs/search` (**Elsewhere on GitHub**). See [GitHub — Search and pin](../integrations/github.md#search-and-pin) and [Finished worktrees](../integrations/github.md#finished-worktrees).
 
 The **Review with agent** row action does **not** call a GitHub review API. It opens the Agents handoff sheet (`launchAgentJob` → `openAgentHandoff` → `POST /api/agent/runs`) and starts an AionUi conversation with the `pr-explain-review` skill. The skill pulls conversation, inline review threads, and the linked Jira/GitHub ticket, then saves a note at `pr-reviews/<owner-repo-slug>-<pr-number>` via notes MCP. The **Notes** link polls `GET /api/notes/pr-reviews/<slug>` every few seconds until the note exists. There is no dashboard **Request review** action.
 
@@ -266,7 +269,7 @@ Tasks, calendar events, PRs, and notes share hop-around links through the `Entit
 
 | Area                          | Actions                                                                                                                                                |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Work → Tasks**              | **Note** opens or creates `task-notes/…`; **Link** opens searchable pickers for PR/calendar/note/repo/Jira/task refs; overflow holds secondary actions |
+| **Work → Tasks**              | **Note** opens or creates `task-notes/…`; **Link** opens searchable pickers for PR/calendar/note/repo/Jira/task refs; type `@` in the composer to search the same lists and attach a chip (calendar events are left out of `@`); overflow holds secondary actions |
 | **Calendar** / Today briefing | Meeting **Note** button; link chips on events                                                                                                          |
 | **PRs**                       | Review note action; link chips on PR rows                                                                                                              |
 | **Notes** editor              | Relations panel; **Open with** / **Apply Cursor changes** when the note links a local repo (persistent Markdown working copies)                         |
@@ -433,6 +436,8 @@ Open PRs are partitioned mine/others; **Commits** is a collapsible History panel
 The header **Terminal** split launches a dock tab in this checkout: a plain shell, or Claude / ChatGPT (Codex) / Antigravity (`agy --dangerously-skip-permissions`) / Cursor Agent / OpenCode. **IDE** still opens the desktop app. `⌘⇧T` is the shell; `⌘Enter` is upstart.
 
 On the `/repos` list, chips filter **changed**, **unpushed**, and **worktree**. A worktree is a second checkout whose `.git` is a file pointing at another clone in the scan folder — `GET /api/repos` sets `worktreeOf` to that parent path. Cards show a `worktree of <parent>` chip so they are not mistaken for a stray clone with a detached HEAD (the old `.git/HEAD` read threw on worktrees and scored them as high-risk).
+
+**Changed** (`dirtyCount`) matches the Git workspace: `.DS_Store`, `__pycache__`, `.pyc`, and `.terraform` do not count, and in the DevHub checkout vault content is excluded too (it uses content-sync). **Unpushed** is `0` when the current branch's upstream is gone (`[gone]` / deleted remote after merge) — `HEAD --not --remotes` used to count those commits as a push queue. Agent-run worktrees live under `<repos-dir>/.devhub-worktrees/<repo>/` (a hidden sibling, not listed as repos); clean them from [PRs → Worktrees](../integrations/github.md#finished-worktrees).
 
 ### Repo Git workspace
 

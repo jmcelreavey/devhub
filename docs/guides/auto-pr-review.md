@@ -20,7 +20,7 @@ DevHub can start the same **Review with agent** job the PR row context menu star
 
 - **Source:** review-requested queue from `GET /api/github/prs` (already applies **Skip until updated**).
 - **Skips:** drafts; optional repo allowlist misses; PRs already auto-reviewed **once** for that PR URL (later pushes, comments, labels and CI do **not** re-queue — failed agent runs may still retry up to 3 attempts); PRs whose `pr-reviews/<slug>` note mtime already covers the PR's `updatedAt`; excess rows past the concurrency cap (1–2).
-- **Starts:** an AionUi conversation (default **Cursor** + **Grok 4.6 high**, fast off; per-harness YOLO / Cursor auto-confirm) with `agentReviewPrompt` + note path under `pr-reviews/` (identical to the UI action). The agent writes the note via notes MCP; **nothing is posted to GitHub as a PR review**. Override with `DEVHUB_AGENT_CLI` / `DEVHUB_AGENT_CURSOR_MODEL` (or `DEVHUB_AION_CURSOR_MODEL`).
+- **Starts:** an AionUi conversation (default **Cursor** + **Grok 4.6 high**, fast off; per-harness YOLO / Cursor auto-confirm) with `agentReviewPrompt` + note path under `pr-reviews/` (identical to the UI action). The conversation attaches only **`devhub`** and **`lean-ctx`** MCP servers so Jira stays under Cursor ACP's tool cap. The agent writes the note via notes MCP; **nothing is posted to GitHub as a PR review**. Override with `DEVHUB_AGENT_CLI` / `DEVHUB_AGENT_CURSOR_MODEL` (or `DEVHUB_AION_CURSOR_MODEL`).
 - **Dedupe state:** `notes/.config/auto-pr-reviews.json` keyed by PR URL (once reviewed, stay reviewed; `headSha` is stored for diagnostics only).
 
 ## Enable / trigger

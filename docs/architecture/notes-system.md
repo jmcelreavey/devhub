@@ -184,7 +184,7 @@ Because tags are free text, precision comes from convention: prefer short lowerc
 
 | Surface            | Behavior                                                                                                                               |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Task row           | **Note** (open-or-create task note), **Link** (searchable PR/calendar/note/repo/Jira/task picker), overflow menu for secondary actions |
+| Task row           | **Note** (open-or-create task note), **Link** (searchable PR/calendar/note/repo/Jira/task picker), overflow menu for secondary actions. In the composer, type `@fragment` to search the same lists (repo / task / Jira / PR / note / diagram — not calendar) and attach a chip; `#` still autocompletes tags. |
 | Calendar / Today   | Meeting note button; **EntityLinkChips** on events                                                                                     |
 | PR row             | Review note action; link chips for related entities (note chips hidden when the row already has a **Notes** action)                    |
 | Note editor footer | **EntityRelationsPanel**, **Add link** (same dialog as task **Link**), plus persistent Cursor Markdown working copies for linked repos |
@@ -203,6 +203,10 @@ Task rows and the note editor footer share one modal (`dashboard/components/Enti
 | Task     | Last 14 days from `GET /api/tasks/history?includeTasks=1` | Task UUID                                            |
 
 Pickers load once per kind when the dialog opens; filtering is in-memory (no per-keystroke remote search). Selecting a row or pasting a valid value calls `buildEntityRefFromInput` (`dashboard/lib/entity-links/build-ref.ts`) and appends the ref to the task's `links` array or the note's `## Links` section. Duplicate refs are ignored.
+
+`canonicalizeEntityRef` collapses aliases so one logical hop is one chip. Calendar is the easy miss: a `## Links` line often stores the Google event URL (`eid=`), while the task **Link** picker stores `<calendarId>::<eventId>`. Those two ids used to render as two Event chips; they now share a key. The same helper drops unusable task hops (`id=/work?tab=tasks` from BlockNote round-trips).
+
+The task composer `@` search reuses these picker lists (`useMentionSuggestions`). A pick becomes a pending chip on the new task; it does not insert `@name` into the text. Calendar is omitted from `@` — use **Link** for events.
 
 ### API and MCP
 
@@ -232,7 +236,7 @@ Files are mode `0600`; the directory is `0700`. Reopening the same note reuses a
 ### Dashboard workflow
 
 1. Add a **repo** link to the note (`## Links` or **Add link** → Repo).
-2. **Open with** → pick the linked repo. Cursor launches on the checkout with the Markdown copy in the same window group.
+2. **Open with** → pick the linked repo. Cursor launches on the checkout with the Markdown copy in the same window group. Agents reviewing work in an isolated tree should pass `worktree` (path or branch) so Cursor opens `<repos-dir>/.devhub-worktrees/<repo>/…` instead of the main checkout.
 3. Edit the `.md` file in Cursor (keep the header comment block).
 4. Back in DevHub, **Apply Cursor changes** writes the Markdown back to BlockNote JSON, or **Delete working copy** removes the persistent files without touching the source note.
 
@@ -242,11 +246,11 @@ The footer actions appear only when the note has at least one repo link and the 
 
 | Action      | Route / tool                                               | Body / args                                                                      |
 | ----------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Open        | `POST /api/repos/<name>/open`, MCP `notes_cursor_open`     | `{ notePath }` — also opens the repo in Cursor; returns `{ ok, path, writable }` |
+| Open        | `POST /api/repos/<name>/open`, MCP `notes_cursor_open`     | `{ notePath, worktree? }` — also opens the repo (or named worktree) in Cursor; returns `{ ok, path, writable }` |
 | Apply       | `PATCH /api/repos/<name>/open`, MCP `notes_cursor_apply`   | `{ notePath }` — returns the updated note payload from vault storage             |
 | Delete copy | `DELETE /api/repos/<name>/open`, MCP `notes_cursor_delete` | `{ notePath }`                                                                   |
 
-`POST` still accepts `{ path?, line? }` for `repo://` links without a note projection. `503` when `cursor` is not on `PATH`.
+`POST` accepts `{ filePath, commit? }` for a working-tree file or historical revision, and `{ worktree }` to open a linked worktree. `503` when `cursor` is not on `PATH`.
 
 See [API Routes](../reference/api-routes.md) and [MCP Server — Edit a note in Cursor](mcp-server.md#edit-a-note-in-cursor-with-repo-context).
 
@@ -259,6 +263,7 @@ See [API Routes](../reference/api-routes.md) and [MCP Server — Edit a note in 
 | Apply returns stale error | The DevHub note changed after Cursor opened — use **Open with** again to refresh the working copy.          |
 | Header missing in `.md`   | Do not delete the `<!-- DEVHUB NOTE WORKING COPY … -->` block; reopen from DevHub if it was removed.        |
 | Working copy orphaned     | **Delete working copy** from the note footer, or remove files under `.devhub/cursor-notes/` manually.       |
+| Opened the main checkout, not the agent tree | Pass `worktree` (absolute path or branch) to `notes_cursor_open` / `POST /api/repos/<name>/open`. Agent-run folders live under `<repos-dir>/.devhub-worktrees/<repo>/`. |
 
 ## Learnings
 
