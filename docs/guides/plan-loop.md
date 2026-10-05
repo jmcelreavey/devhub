@@ -8,6 +8,7 @@ related:
   - guides/task-agent-handoff
   - guides/auto-pr-review
   - guides/scheduled-jobs
+  - guides/skills
   - reference/api-routes
   - architecture/mcp-server
 ---
@@ -98,6 +99,8 @@ Task menu → **Copy plan as markdown**, MCP `tasks_plan_markdown`, or `GET /api
 
 ## 8. Retro
 
-The `devhub-retro` skill reads `tasks_retro_inputs` (finished and abandoned tasks, run outcomes, PR findings, failing MCP tools) and writes `retro/YYYY-MM-DD` with concrete, quoted skill edits backed by at least two occurrences. It proposes; it never edits skills.
+The `devhub-retro` skill reads `tasks_retro_inputs` (finished and abandoned tasks, run outcomes, PR findings, failing MCP tools, and `skillUsage`) and writes `retro/YYYY-MM-DD` with concrete, quoted skill edits backed by at least two occurrences. It proposes; it never edits skills.
+
+`skillUsage` is Claude Code Skill-tool invocations over the last **30 days**, least-used first (`lib/skills/usage.ts` streams `~/.claude/projects/**/*.jsonl`). A skill at zero is a retirement candidate for `skills/parked/` — but the count only covers Claude Code, not Cursor / Codex / OpenCode. This is not the `/review` weekly task bars; those are a different surface. See [Skills — Retiring a skill](skills.md#retiring-a-skill).
 
 Run it weekly as a [scheduled job](scheduled-jobs.md): an agent job in the DevHub repo with the prompt "Use the devhub-retro skill for the last 7 days."

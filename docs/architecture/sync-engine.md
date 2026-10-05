@@ -76,6 +76,10 @@ On **Sync skills**, DevHub may fetch the ai-tools default branch into `~/.cache/
 
 **Prune:** off by default for skills, agents, and MCP. Enable prune to remove local entries that are no longer in the repo catalog (recognized shapes only).
 
+**Parked skills:** `skills/parked/<slug>/` is the retirement shelf. The next skill sync **uninstalls** those names from every tool directory even when prune is off — but only when the installed copy is identical to the parked tree. A user-edited or independently installed copy is kept (`KEPT PARKED`). Deleting a skill from `skills/shared/` without parking it leaves stale installs behind. See [Skills — Retiring a skill](../guides/skills.md#retiring-a-skill).
+
+**Default skill excludes:** `project-graveyard` and `scope-creep-detector` are skipped on all-target sync (`DEFAULT_SYNC_EXCLUDE_SKILLS`) so they stay in-repo for provenance/evals without landing in every tool. The eye icon adds to this list; it does not replace it. Explicit `sync_skills --tool …` of a named skill still copies it.
+
 **Cursor skill paths:** Sync writes user skills to `~/.cursor/skills` and `~/.agents/skills` (the Agent Skills spec root Cursor Customize → Skills actually lists). Do not write catalog skills to `~/.cursor/skills-cursor` — that directory is Cursor's internal builtin store.
 
 **Cursor MCP path:** DevHub syncs to `~/.cursor/mcp.json` (where Cursor stores user MCP servers such as agentmemory). A legacy `~/.config/cursor/mcp.json` is merged on read and cleared after sync.

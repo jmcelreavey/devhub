@@ -16,8 +16,7 @@ Third-party skills copied into `skills/vendor/` from upstream projects, under
 their own licence. Three are installed today, all Apache-2.0 from
 [awesome-llm-apps](https://github.com/Shubhamsaboo/awesome-llm-apps).
 
-They sync to your tools exactly like the skills in `skills/shared/` — ask your
-agent for them by name or describe the problem, and it loads the right one.
+They are in the catalog and the Skills page like `skills/shared/`, but two of the three (`project-graveyard`, `scope-creep-detector`) are **excluded from all-target skill sync** by default (`DEFAULT_SYNC_EXCLUDE_SKILLS` in `lib/sync/skills.ts`) — they stay in-repo for provenance and evals without landing in every tool directory. `commit-archaeologist` does sync. Ask your agent for them by name, or copy a named skill with an explicit `sync_skills --tool …`. See [Sync Engine](../architecture/sync-engine.md).
 
 ---
 

@@ -7,6 +7,8 @@ tags: [agents]
 related:
   - guides/agents
   - architecture/sync-engine
+  - guides/plan-loop
+  - guides/vendored-skills
 ---
 
 # Skills
@@ -15,7 +17,7 @@ Skills are reusable instructions for AI agents. They capture repeatable workflow
 
 ## Where Skills Live
 
-Shared skills live in the DevHub repo under `skills/shared/` and can be synced into local AI tools.
+Shared skills live in the DevHub repo under `skills/shared/` and can be synced into local AI tools. Retired skills live under `skills/parked/` — they stay in git for reference, and sync **uninstalls** matching copies from tool directories (see [Retiring a skill](#retiring-a-skill)). Vendored third-party skills live under `skills/vendor/` ([Vendored skills](vendored-skills.md)).
 
 Optional shared/team skills can live in an **ai-tools** checkout under `skills/`. DevHub merges them at sync time from a local clone and exposes them with a `bi-` catalog prefix unless they already have one. They appear on the Skills page with an **ai-tools** badge and are read-only in DevHub (edit them in ai-tools, then **Refresh** or run sync).
 
@@ -110,9 +112,21 @@ Preview response fields:
 
 Preview is read-only. It does not replace `dry_run_scoped_sync` (that action previews **content** git paths only). See [Sync Engine](../architecture/sync-engine.md#preview-without-applying).
 
-## Terminal handoff skills
+## Retiring a skill
 
-Some dashboard actions launch a one-shot agent in the terminal dock with a preloaded skill:
+Move it, don't delete it:
+
+```bash
+git mv skills/shared/<slug> skills/parked/<slug>
+```
+
+Add a row to `skills/parked/README.md` saying why. The next **Sync skills** removes that name from every tool directory (`REMOVED PARKED`) when the installed copy still matches the parked tree. A copy the user edited locally is left alone (`KEPT PARKED`). Parking is the only way to uninstall without turning prune on — prune stays off because tool directories also hold skills DevHub does not own.
+
+The plan-loop retro (`devhub-retro` / `GET /api/tasks/retro`) lists Claude Code invocation counts over 30 days, least-used first, as retirement candidates. A zero means unused in Claude Code transcripts, not unused in Cursor / Codex / OpenCode.
+
+## Skills launched from the dashboard
+
+Some dashboard actions preload a skill. Review-with-agent starts an AionUi conversation; git hook/conflict fix still go through the terminal dock:
 
 | Skill | Triggered from | Purpose |
 | ----- | -------------- | ------- |

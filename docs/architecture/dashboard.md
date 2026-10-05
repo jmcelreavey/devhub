@@ -114,7 +114,10 @@ repo://my-service/src/auth.ts#L42
 repo:my-service/docs/README.md
 ```
 
-Clicking calls `POST /api/repos/<name>/open` with optional `{ path, line }` and opens the target in Cursor (`cursor -g path:line` when a line is present). Invalid repo names or `..` path segments are rejected. Links only work for repos DevHub already tracks — use the Repos page to clone first.
+Clicking calls `POST /api/repos/<name>/open`. The route body is `{ filePath?, notePath?, worktree? }` — not `path` / `line`. `openPathInCursor` passes those paths to the `cursor` CLI as extra folders/files (no `cursor -g path:line`). Invalid repo names or `..` path segments are rejected. Links only work for repos DevHub already tracks — use the Repos page to clone first.
+
+> [!WARNING]
+> The in-app `repo://` click handler (`openRepoLinkHref` in `lib/repos/link.ts`) still posts the legacy `{ path, line }` keys. Zod strips unknown fields, so Cursor currently opens the repo folder rather than the file or `#L42` line. Callers that need a file should POST `{ filePath }`.
 
 ## Page Pattern
 
@@ -209,7 +212,7 @@ Completing, abandoning, or deleting a task settles any running timer into `timeS
 
 ## Weekly Review
 
-The **Review** page (`/review`, desktop nav) is a retrospective view over the last seven calendar days ending on a chosen date.
+The **Review** page (`/review`, desktop nav) is a retrospective view over the last seven calendar days ending on a chosen date. It is not the plan-loop `devhub-retro` skill (that one proposes skill edits from finished work — see [Plan loop — Retro](../guides/plan-loop.md#8-retro)).
 
 | Surface     | Route                                  | Behavior                                                                              |
 | ----------- | -------------------------------------- | ------------------------------------------------------------------------------------- |

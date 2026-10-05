@@ -419,7 +419,7 @@ BlockNote link clicks in notes and docs resolve in-app when possible:
 | ------------------------------ | -------------------------------------------------------------------- |
 | `/notes/...`, `/docs/...`      | Navigate within the dashboard                                        |
 | Relative `.md` / `.json` paths | Resolve relative to the current note or doc slug                     |
-| `repo://` / `repo:`            | Open a sibling repo file in Cursor via `POST /api/repos/<name>/open` |
+| `repo://` / `repo:`            | Open a sibling repo in Cursor via `POST /api/repos/<name>/open`. Body is `{ filePath?, notePath?, worktree? }` — not `path`/`line`. The in-app click handler still posts the legacy keys, which the route ignores; see [Dashboard — Repo-aware links](dashboard.md#repo-aware-links). |
 | `http(s):`, `mailto:`, `tel:`  | Open externally (⌘/Ctrl-click opens in a new tab)                    |
 
 See [Dashboard — Repo-aware links](dashboard.md#repo-aware-links) for repo link syntax.
