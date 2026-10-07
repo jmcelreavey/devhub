@@ -115,6 +115,10 @@ jobs:
             desktop-file-utils \
             file
 
+      # Icon staging runs before tauri-action installs its build tools.
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version 2.11.4 --locked
+
       - name: Resolve version
         id: version
         shell: bash
@@ -324,6 +328,10 @@ jobs:
         with:
           workspaces: desktop/src-tauri -> target
           key: x86_64-pc-windows-msvc
+
+      # Icon staging runs before tauri-action installs its build tools.
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version 2.11.4 --locked
 
       - name: Resolve version
         id: version
