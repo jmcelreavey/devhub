@@ -142,11 +142,8 @@ test.describe("app shell", () => {
   test("command palette opens on the keyboard shortcut", async ({ page }) => {
     await page.goto("/");
 
-    // The ⌘P listener lives in a client component, so it only exists after
-    // hydration. Pressing before then does nothing and the test flakes — it
-    // failed roughly one run in three without this wait. Not a regression from
-    // making the palette a dynamic import (the listener was always client-side
-    // and still is); the shortcut simply isn't live until React has attached it.
+    // Search stays disabled until the client has committed. The enabled SSR
+    // button and document.readyState alone did not prove React was hydrated.
     const searchTrigger = page.getByRole("button", { name: /search everything/i });
     await expect(searchTrigger).toBeEnabled();
     await page.waitForFunction(() => document.readyState === "complete");

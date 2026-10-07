@@ -60,6 +60,7 @@ export function HubTopBar() {
       <button
         type="button"
         className="hub-search"
+        disabled={!mounted}
         onClick={openPalette}
         aria-label={`Search everything (${modifier}P)`}
       >
