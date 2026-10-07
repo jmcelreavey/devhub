@@ -55,6 +55,8 @@ const brandingSchema = z
       })
       .strict()
       .optional(),
+    // Deprecated and ignored (DevHub no longer runs OpenChamber); kept so existing
+    // manifests still pass the strict schema.
     openchamber: z
       .object({
         themes: z.string().min(1).optional(),

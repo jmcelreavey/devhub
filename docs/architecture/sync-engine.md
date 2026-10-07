@@ -91,7 +91,7 @@ On **Sync skills**, DevHub may fetch the ai-tools default branch into `~/.cache/
 ### MCP catalog resolution
 
 Forward sync resolves each server name through three catalogs (`readCatalogMcpServer` in
-`dashboard/lib/sync-mcp.ts`):
+`dashboard/lib/sync/mcp.ts`):
 
 1. **Core** — `mcp/shared/<name>.json` in the DevHub repo
 2. **Plugins** — `<plugin>/mcp/<name>.json` for enabled plugins in `~/.config/devhub/plugins.json`

@@ -3,13 +3,25 @@
  *
  * Areas are the top-level folders under `notes/`. As with docs sections, the
  * filesystem stays the source of truth and this table only adds what a folder
- * name cannot carry: a human label, a summary, an icon and an ordering.
+ * name cannot carry: a human label, a summary, an icon, a tie-break ordering
+ * and how to split a big flat folder into sections.
  *
- * Unknown folders still render — they get a title-cased label and sort last, so
- * a new folder appears in the UI the moment it has a file in it.
+ * Unknown folders still render — they get a title-cased label, so a new folder
+ * appears in the UI the moment it has a file in it.
  *
  * Client-safe: no `node:fs`.
  */
+
+/**
+ * How an area's notes are split into sections in the sidebar and on its page.
+ * Real subfolders always become sections; this only covers notes sitting flat
+ * in the area folder, which is where generated notes pile up by the hundred.
+ *
+ * - `repo`   — the repository a PR review is about, read from the note body.
+ * - `ticket` — the first tracker id (`PTF-4897`) in the title or filename.
+ * - `period` — This week / Last week / month, from a `YYYY-MM-DD` filename.
+ */
+export type NoteGrouping = "repo" | "ticket" | "period";
 
 export interface NoteAreaMeta {
   id: string;
@@ -17,9 +29,11 @@ export interface NoteAreaMeta {
   description: string;
   /** Lucide icon name, resolved through the shared docs icon allowlist. */
   icon: string;
+  /** Tie-break only — busier areas sort first. */
   order: number;
-  /** Collapsed by default in the sidebar and demoted on the landing page. */
+  /** Collapsed by default in the sidebar and sorted last. */
   secondary?: boolean;
+  groupBy?: NoteGrouping;
 }
 
 export const NOTE_AREAS: NoteAreaMeta[] = [
@@ -29,6 +43,7 @@ export const NOTE_AREAS: NoteAreaMeta[] = [
     description: "Day-by-day working notes and standups.",
     icon: "Calendar",
     order: 10,
+    groupBy: "period",
   },
   {
     id: "learnings",
@@ -57,6 +72,15 @@ export const NOTE_AREAS: NoteAreaMeta[] = [
     description: "Notes linked to a specific task.",
     icon: "ListTodo",
     order: 45,
+    groupBy: "period",
+  },
+  {
+    id: "discovery",
+    label: "Discovery",
+    description: "Contract probes, evidence and open questions, one per ticket.",
+    icon: "Map",
+    order: 47,
+    groupBy: "ticket",
   },
   {
     id: "reviews",
@@ -71,7 +95,7 @@ export const NOTE_AREAS: NoteAreaMeta[] = [
     description: "Generated review notes, one per pull request.",
     icon: "GitPullRequest",
     order: 60,
-    secondary: true,
+    groupBy: "repo",
   },
   {
     id: "research",

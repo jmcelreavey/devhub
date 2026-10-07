@@ -8,7 +8,6 @@ related:
   - guides/standup
   - guides/repo-learning
   - getting-started/setup
-  - guides/aionui-agents
 ---
 
 # GitHub
@@ -22,10 +21,6 @@ DevHub uses GitHub data for pull request tracking, repo awareness, and standup g
 - Recently merged PRs for standup notes.
 - Repo discovery and quick actions.
 - OpenCode-powered PR explanation/review notes from the dashboard.
-
-## Walkthrough
-
-[Pull requests and weekly review walkthrough](/api/notes-assets/assets/feature-demos/demo-05-prs-and-weekly-review.mp4)
 
 ## Recommended Setup
 
@@ -135,8 +130,39 @@ Today shows a one-line count (`WorktreeCleanupNudge`) that links here. It is not
 dismissible; it disappears when the folders are gone. Per-repo add/remove/lock
 still lives on the Git workspace **Worktrees** tab.
 
-API: `GET`/`POST /api/repos/worktree-cleanup`. There is no MCP tool — this is a
-human cleanup surface. See [API Routes](../reference/api-routes.md).
+The older cross-repo panel uses `GET`/`POST /api/repos/worktree-cleanup`.
+
+For reviewed bulk removal, open **Repos → worktree count → Worktrees**.
+Extra checkouts appear first, with their cleanup status and linked work under
+**Details & linked work**. The main checkout is always kept. The Worktrees tab
+checks GitHub and offers **Select ready** when merged checkouts can be removed. Previews share
+results for up to a minute; removal always fetches fresh evidence. A checkout qualifies
+when its HEAD matches, or is an ancestor of, the merged PR's original head. It
+also checks the current remote default branch: if a conflict-free trial merge
+would leave its files unchanged, the checkout is already integrated. This covers
+squash merges, rebased or cherry-picked commits, and deleted remote branches.
+The check uses `git merge-tree`; it never rebases, edits files or moves branches.
+Custom merge drivers cannot be used as evidence because they can discard changes.
+Open PRs, dirty files, active agent runs, open DevHub terminals, locks and
+unverified local commits still block removal. A finished task alone does not
+make an open PR ready for cleanup. Ignored files require a separate acknowledgement.
+
+MCP uses `repos_git_worktrees` with `action:"review"`, then `action:"cleanup"`
+with the reviewed `entries:[{path,head}]` and `confirm:true`. Set
+`includeIgnored:true` only after reviewing those files. Cleanup verifies merge
+evidence again, checks that HEAD hasn't moved and never force-removes. The API is
+`GET /api/repos/<name>/worktrees?details=1` and `POST /api/repos/<name>/worktrees`
+with `confirmed:true` and `mergedOnly:true`; results include `removed` and
+per-path `errors`.
+
+**Clear missing entries** only forgets missing folders. The scheduled worktree scan reports
+candidates; it doesn't delete them. Paseo unpinning also leaves the checkout on
+disk. Planning uses the existing checkout; a new task implementation gets an
+isolated worktree by default, and follow-ups reuse it. DevHub pins the task
+workspace while work is active, then releases its pin when the task is done,
+abandoned or deleted (or when a plan moves to implementation). A merge makes
+the checkout eligible for review; removal still needs confirmation.
+See [API Routes](../reference/api-routes.md).
 
 ### Row actions
 
@@ -147,12 +173,15 @@ Each PR row shows the title (links to GitHub), metadata (`repo#number`, author, 
 | **Mine** (authored) | Open on GitHub · Copy PR URL · Copy Jira URL (when title contains a key) · **Open in Cursor** (stash if dirty, `gh pr checkout`) · **Review with agent** · Copy Slack request · Open review note |
 | **Review requested** | **Review with agent** (or **Finish your daily rep first** when that PR is today's unfinished rep) · Open in Cursor · Open on GitHub · Copy URLs · Open note |
 | **Recently reviewed** | Copy approved · Copy reviewed · Open in Cursor · Open on GitHub · Copy URLs |
+| **Skipped** | PRs you hid with **Skip until updated**. Un-skip to put one back in the queue. |
+
+**Skip until updated** (review-requested rows) hides a PR you don't intend to review yet. It stays hidden until the author pushes or the PR otherwise changes (`updatedAt` moves), then it returns to **Review requested**. Stored in `notes/.config/skipped-prs.json`; API `GET`/`POST`/`DELETE /api/github/prs/skip`.
 
 The reviewer facepile is display-only. There is no dashboard **Request review** action and no `/api/github/prs/reviewers` route — request reviewers on GitHub.
 
 **Open in Cursor** calls `POST /api/github/prs/open-in-cursor` — finds the local clone under the Repos scan directory, stashes dirty work, checks out the PR branch, and launches Cursor. Optional `notePath` opens a notes working copy alongside. MCP parity: `prs_open_in_cursor`. Requires the repo to be cloned locally.
 
-**Review with agent** is intentionally local. It opens the Agents handoff sheet (`launchAgentJob` → `openAgentHandoff`) and starts an AionUi conversation with the `pr-explain-review` skill. It does **not** inject into a live shell tab. The skill saves the write-up through notes MCP. It does **not** post comments, approve, or request changes on GitHub unless the human explicitly asks the tool to do that later.
+**Review with agent** is intentionally local. It opens the Agents handoff sheet (`launchAgentJob` → `openAgentHandoff`) and starts a Paseo agent with the `pr-explain-review` skill. It does **not** inject into a live shell tab. The skill saves the write-up through notes MCP. It does **not** post comments, approve, or request changes on GitHub unless the human explicitly asks the tool to do that later.
 
 On the **Review requested** tab, if today's [daily review rep](../architecture/dashboard.md#daily-review-reps) is this PR and findings are not saved yet, the menu swaps **Review with agent** for **Finish your daily rep first** so the AI-free pass happens before the agent looks.
 
@@ -181,7 +210,7 @@ the scaffold with MCP `notes_create_pr`. See [Notes System — Cross-entity link
 
 ### Review Note Constraints
 
-- Connect **Agents** (`/agents?view=connection`) so Review with agent can create an AionUi conversation. See [Agents (AionUi)](../guides/aionui-agents.md).
+- Set up Paseo on **Agents → Connection** (`/agents?view=connection`) so Review with agent can start an agent. See [Agents (Paseo)](../guides/paseo-agents.md).
 - When `NEXT_PUBLIC_REPO_ROOT` is set, the launch command exports `REPO_ROOT`
   and `NOTES_DIR` for the agent run so the notes MCP writes into
   `notes/pr-reviews/...`, even if the review targets a different repository.
@@ -206,7 +235,7 @@ GitHub activity can contribute to standup markdown, especially merged PRs and re
 | PRs do not load                       | `gh auth status` succeeds.                                                                                                                                               |
 | Repo is missing                       | It has a GitHub remote and is discoverable from DevHub's repo search scope.                                                                                              |
 | Archived repo PRs are missing         | Expected: authored and review-requested rows from archived repos are hidden.                                                                                             |
-| **Review with agent** shows a setup hint | Connect AionUi on **Agents → Connection**. Background defaults still prefer Cursor + Grok (`DEVHUB_AGENT_CLI` / `DEVHUB_AION_CURSOR_MODEL`). See [Agents (AionUi)](../guides/aionui-agents.md). |
+| **Review with agent** shows a setup hint | Start or set up Paseo on **Agents → Connection**. Background defaults still prefer Cursor + Grok (`DEVHUB_AGENT_CLI` / `DEVHUB_AGENT_CURSOR_MODEL`). See [Agents (Paseo)](../guides/paseo-agents.md). |
 | Approved tick missing on a reviewed PR | Expected when the repo does not *require* reviews **and** the GraphQL approval lookup failed. The Search API `review:approved` qualifier is not used — it misses those PRs. |
 | **Open in Cursor** fails               | The PR's repo is cloned under the Repos scan directory and `cursor` is on `PATH`.                                                                                          |
 | Repo card says "changed" with no real edits | Expected for leftover `.DS_Store` / `__pycache__` / `.terraform` — those are noise and no longer increment `dirtyCount`. If you still see a count, the Git workspace Changes list is the source of truth. |

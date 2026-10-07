@@ -1,5 +1,5 @@
 import {
-agentActivityHrefForRun,
+agentChatHrefForRun,
 buildTaskAgentResumePrompt,
 canResumeTaskAgentRun,
 formatAgentActivityTrailForResume,
@@ -95,13 +95,13 @@ describe("buildTaskAgentResumePrompt", () => {
   });
 });
 
-describe("mapUiProviderToAgentDispatch / agentActivityHrefForRun", () => {
+describe("mapUiProviderToAgentDispatch / agentChatHrefForRun", () => {
   it("maps UI provider ids and builds activity hrefs", () => {
     expect(mapUiProviderToAgentDispatch("chatgpt")).toBe("codex");
     expect(mapUiProviderToAgentDispatch("default")).toBeNull();
     expect(mapUiProviderToAgentDispatch("openchamber")).toBeNull();
     expect(mapUiProviderToAgentDispatch("cursor")).toBe("cursor");
-    expect(agentActivityHrefForRun("run-x1-abcd1234")).toBe("/agents?view=activity&run=run-x1-abcd1234");
+    expect(agentChatHrefForRun("run-x1-abcd1234")).toBe("/agents?run=run-x1-abcd1234");
   });
 });
 

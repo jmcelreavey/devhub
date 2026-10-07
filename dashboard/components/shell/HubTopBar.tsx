@@ -2,28 +2,31 @@
 
 import { ContentSyncIndicator } from "@/components/runs/ContentSyncIndicator";
 import { AccentPicker } from "@/components/shell/AccentPicker";
+import { ProfileSwitcher } from "@/components/shell/ProfileSwitcher";
 import { QuickActions } from "@/components/shell/QuickActions";
 import { SectionTabs } from "@/components/shell/SectionTabs";
-import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { useWorkspaceTabs } from "@/components/shell/WorkspaceTabs";
-import { uniqueSessionHistory } from "@/lib/session-history";
+import { crumbKey, uniqueSessionHistory } from "@/lib/session-history";
 import { FocusTimer } from "@/components/tasks/FocusTimer";
 import { HoverTip } from "@/components/ui/HoverTip";
-import { Search,Settings } from "lucide-react";
+import { Search, Settings } from "lucide-react";
 import Link from "next/link";
-import { usePathname,useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 
 /**
- * Desktop chrome — breadcrumbs, pending-changes indicator, focus timer,
+ * Desktop chrome — recent pages, pending-changes indicator, focus timer,
  * quick-add panel buttons, ⌘P search, and theme picker. Panels: ⌘N
  * (notes), ⌘T (tasks), ⌘D (diagrams). Terminal: ⌃`.
  */
 export function HubTopBar() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const query = searchParams.toString();
-  const currentHref = query ? `${pathname}?${query}` : pathname;
-  const trail = uniqueSessionHistory(useWorkspaceTabs().history, 5);
+  // Previous pages only, newest first. The current page is already named by
+  // the workspace tab directly below, and a "›" trail read as a hierarchy —
+  // "Docs › Logs" looked like Logs lived inside Docs.
+  const recent = uniqueSessionHistory(useWorkspaceTabs().history, 5)
+    .filter((entry) => crumbKey(entry.href) !== crumbKey(pathname))
+    .reverse()
+    .slice(0, 4);
   function openPalette() {
     window.dispatchEvent(new CustomEvent("devhub:palette-toggle"));
   }
@@ -32,11 +35,17 @@ export function HubTopBar() {
     // Visibility (desktop-only) is owned by `.hub-topbar` in globals.css —
     // a Tailwind `hidden md:flex` here would be silently overridden.
     <header className="hub-topbar">
-      <nav aria-label="Navigation history" className="hub-crumbs">
-        {trail.map((entry, i) => (
+      <nav aria-label="Recent pages" className="hub-crumbs">
+        {recent.length > 0 && <span className="hub-recent-label">Recent</span>}
+        {/* Separator leads its entry so an entry that wraps out of view takes its dot with it. */}
+        {recent.map((entry, i) => (
           <span key={`${entry.href}:${entry.ts}`} className="hub-crumb">
-            {entry.href === currentHref ? <span>{entry.label}</span> : <Link href={entry.href}>{entry.label}</Link>}
-            {i < trail.length - 1 && <span aria-hidden className="hub-crumb-sep">›</span>}
+            {i > 0 && (
+              <span aria-hidden className="hub-crumb-sep">
+                ·
+              </span>
+            )}
+            <Link href={entry.href}>{entry.label}</Link>
           </span>
         ))}
       </nav>
@@ -50,21 +59,25 @@ export function HubTopBar() {
       >
         <Search size={13} aria-hidden />
         <span className="hub-search-label">Search…</span>
-        <kbd className="hub-search-kbd" aria-hidden>⌘P</kbd>
+        <kbd className="hub-search-kbd" aria-hidden>
+          ⌘P
+        </kbd>
       </button>
       <div className="hub-topbar-actions">
-        {/* Signal cluster - git sync + dirty indicators */}
         <ContentSyncIndicator />
-
-        {/* Focus cluster - timer */}
-        <span role="group" className="flex items-center gap-0.5" aria-label="Focus">
+        <div
+          role="group"
+          className="hub-toolbar-group"
+          aria-label="Workspace tools"
+        >
           <FocusTimer />
-        </span>
-
-        {/* Quick cluster - notes/tasks/diagrams/theme/accent */}
-        <span role="group" className="hub-cluster" aria-label="Quick actions">
           <QuickActions />
-          <ThemeToggle />
+        </div>
+        <div
+          role="group"
+          className="hub-toolbar-group hub-preferences"
+          aria-label="Preferences"
+        >
           <AccentPicker />
           <HoverTip label="Setup & integrations" pos="bottom-end">
             <Link
@@ -75,7 +88,8 @@ export function HubTopBar() {
               <Settings size={14} aria-hidden />
             </Link>
           </HoverTip>
-        </span>
+          <ProfileSwitcher />
+        </div>
       </div>
     </header>
   );

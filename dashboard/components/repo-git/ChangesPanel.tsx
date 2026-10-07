@@ -223,6 +223,7 @@ export function ChangesPanel({
   onPush,
   focusPath = null,
   onFocusPathConsumed,
+  stacked = false,
 }: GitPanelHandlers & {
   repoName: string;
   repoPath: string;
@@ -231,6 +232,8 @@ export function ChangesPanel({
   onPush: () => Promise<void>;
   focusPath?: string | null;
   onFocusPathConsumed?: () => void;
+  /** File lists above the diff — for the narrow pane beside the history graph. */
+  stacked?: boolean;
 }) {
   const toast = useToast();
   const confirm = useConfirm();
@@ -815,7 +818,7 @@ export function ChangesPanel({
           <div style={{ color: "var(--text-subtle)", fontSize: 11 }}>
             {noiseOnly
               ? "No real changes — only system junk left behind."
-              : "Nothing to stage. History and branches are one tab over."}
+              : "Nothing to stage."}
           </div>
           {contentSyncHint && <div style={{ marginTop: 10 }}>{contentSyncHint}</div>}
           {noiseOnly && (
@@ -842,6 +845,7 @@ export function ChangesPanel({
         onPrimaryFrChange={setListFr}
         minPrimaryFr={0.22}
         maxPrimaryFr={0.62}
+        stacked={stacked}
         handleLabel="Resize file list and diff"
         primary={
         <div className="repo-git-file-cols">

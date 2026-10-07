@@ -3,20 +3,22 @@
 import { useState, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { mutate } from "swr";
-import { Ban, Bot, CheckCircle2, ClipboardCopy, FilePen, Flag, RotateCcw, Undo2, Wrench, X } from "lucide-react";
+import { Ban, Bot, CheckCircle2, ClipboardCopy, FilePen, Flag, Rocket, RotateCcw, Undo2, Wrench, X } from "lucide-react";
 import type { ContextMenuItem } from "@/components/shell/ContextMenu";
 import { HoverTip } from "@/components/ui/HoverTip";
+import { TaskUpstartButton, useTaskUpstart } from "@/components/tasks/TaskUpstartButton";
 import { ImplementTaskDialog } from "@/components/tasks/ImplementTaskDialog";
 import { PlanTaskDialog } from "@/components/tasks/PlanTaskDialog";
 import { ResumeTaskDialog } from "@/components/tasks/ResumeTaskDialog";
 import { useVaultNoteExists } from "@/components/EntityNoteAction";
 import { taskNotePath } from "@/lib/task-note";
+import { vaultNoteHref } from "@/lib/create-vault-note";
 import { openInBrowser } from "@/lib/desktop/bridge";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { useToast } from "@/lib/hooks/use-toast";
 import { taskImplementPlanUrl } from "@/lib/tasks/implement-prompt";
 import {
-  agentActivityHrefForRun,
+  agentChatHrefForRun,
   canResumeTaskAgentRun,
   taskAgentChipForLatestRun,
 } from "@/lib/tasks/task-agent-resume";
@@ -56,8 +58,10 @@ export function useTaskAgentActions({
   enabled: boolean;
   onComplete: () => void;
   onAbandon: (reason?: string) => void;
-}): { chip: ReactNode; menuItems: ContextMenuItem[]; dialogs: ReactNode } {
+}): { chip: ReactNode; upstart: ReactNode; menuItems: ContextMenuItem[]; dialogs: ReactNode } {
   const toast = useToast();
+  const taskRepo = repoName || task.links?.find((link) => link.kind === "repo")?.id.split("/").at(-1);
+  const upstart = useTaskUpstart(task.id, taskRepo);
   const { latestRun, handoff } = useTaskAgentRuns(task.id, enabled);
   const [dialog, setDialog] = useState<"implement" | "resume" | "plan" | null>(null);
   const open = enabled && !task.done;
@@ -65,7 +69,8 @@ export function useTaskAgentActions({
   const agentChip = taskAgentChipForLatestRun(latestRun);
   const attention = latestRun?.attention;
   const canResume = Boolean(attention) || canResumeTaskAgentRun(latestRun?.status, latestRun?.sessionId);
-  const noteExists = useVaultNoteExists(taskNotePath({ id: task.id, text: task.text, date, jiraKey: task.jiraKey }));
+  const notePath = taskNotePath({ ...task, date });
+  const noteExists = useVaultNoteExists(notePath);
 
   const setStage = async (stage: "draft" | "ready", force = false) => {
     const { ok, json } = await postJson("/api/tasks/stage", { taskId: task.id, date, stage, force });
@@ -108,6 +113,14 @@ export function useTaskAgentActions({
   });
 
   const menuItems: ContextMenuItem[] = [];
+  if (enabled && taskRepo) {
+    menuItems.push({
+      id: "upstart", label: upstart.busy ? "Preparing checkout…" : "Upstart",
+      description: "Start the checkout associated with this task",
+      icon: <Rocket size={12} aria-hidden />, disabled: upstart.busy,
+      onSelect: upstart.start,
+    });
+  }
   if (open) {
     // Drafts always offer planning (capture already creates their note); past
     // draft, only while the task has no note yet.
@@ -178,11 +191,11 @@ export function useTaskAgentActions({
           </a>
         ) : (
           <Link
-            href={agentActivityHrefForRun(agentChip.runId)}
+            href={agentChatHrefForRun(agentChip.runId)}
             className="task-agent-chip"
             data-kind={agentChip.kind}
             onClick={stop}
-            aria-label={`${agentChip.label} — open agent activity`}
+            aria-label={`${agentChip.label} — open agent chat`}
           >
             {icon}
             {agentChip.label}
@@ -192,11 +205,24 @@ export function useTaskAgentActions({
     );
   } else if (isDraft && open) {
     chip = (
-      <HoverTip label="Captured idea — write a plan before handing it to an agent">
-        <span className="task-agent-chip" data-kind="draft">
-          <FilePen size={11} aria-hidden />
-          Draft
-        </span>
+      <HoverTip label={noteExists ? "Open draft note" : "Captured idea — write a plan before handing it to an agent"} pos="top-end">
+        {noteExists ? (
+          <Link
+            href={vaultNoteHref(notePath)}
+            className="task-agent-chip"
+            data-kind="draft"
+            onClick={stop}
+            aria-label="Open draft note"
+          >
+            <FilePen size={11} aria-hidden />
+            Draft
+          </Link>
+        ) : (
+          <span className="task-agent-chip" data-kind="draft">
+            <FilePen size={11} aria-hidden />
+            Draft
+          </span>
+        )}
       </HoverTip>
     );
   }
@@ -219,5 +245,5 @@ export function useTaskAgentActions({
     </>
   ) : null;
 
-  return { chip, menuItems, dialogs };
+  return { chip, upstart: enabled && taskRepo ? <TaskUpstartButton {...upstart} /> : null, menuItems, dialogs };
 }

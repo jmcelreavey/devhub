@@ -33,7 +33,7 @@ Gaps: 22 files hand-roll `animate-spin` spinners; zero `loading.tsx` route skele
 6. **Tab crossfades.** Work tabs (`/work`) and the main Today card tabs swap content instantly; wrap panels in a keyed 150ms fade-rise (the `briefing-settle` class already does exactly this — reuse it).
 7. **Collapse/expand glide.** Today cards snap on collapse. Animate via CSS grid trick (`grid-template-rows: 0fr→1fr`, 200ms) on the card body — no JS height measurement needed.
 8. **Sidebar active pill slide.** The active nav background jumps between items; animate a shared pill (transform between item positions, 200ms). Small `NavLink` change, big perceived polish.
-9. **Palette entrance.** ⌘K overlay: backdrop fade (120ms) + panel scale `0.98→1` rise (180ms), exit reversed. Results list gets a 20ms-stagger on first open only.
+9. **Palette entrance.** ⌘P overlay: backdrop fade (120ms) + panel scale `0.98→1` rise (180ms), exit reversed. Results list gets a 20ms-stagger on first open only.
 10. **Done-row exit.** Completing a task: row holds 300ms (let the check-draw land), then height-collapses out (200ms) as the Done count ticks up — completion reads as _departure_, not teleport.
 
 ## Phase 3 — Micro-interactions (~1 day)
@@ -63,7 +63,7 @@ Ship phases as separate commits (1 → 2 → 3 → 4); each phase ends with `npm
 ## Status (2026-06-10) — all four phases landed
 
 - **Phase 1** (commit `b656549`): route `loading.tsx` skeletons everywhere, `SkeletonRows` list variant, `.btn[aria-busy]` busy states, vocabulary rule in AGENTS.md. Most of the 22 spinner sites turned out to be legitimate action feedback — left alone.
-- **Phase 2**: route entrance via `app/template.tsx` (replaces the per-`.hub` animation; no experimental flags needed), tab crossfades (`.fade-rise`) on Work + Today tabs, Done-section glide (grid-rows 0fr→1fr), sidebar active-item slide-in (one pass, CSS-only), ⌘K palette entrance, done-row exit (row holds 440ms while the check lands, then collapses out).
+- **Phase 2**: route entrance via `app/template.tsx` (replaces the per-`.hub` animation; no experimental flags needed), tab crossfades (`.fade-rise`) on Work + Today tabs, Done-section glide (grid-rows 0fr→1fr), sidebar active-item slide-in (one pass, CSS-only), ⌘P palette entrance, done-row exit (row holds 440ms while the check lands, then collapses out).
 - **Phase 3**: check stroke draw-in (`check-draw` on the lucide paths), `.btn:active` press scale, card hover lift (hover devices only). Focus-timer ring skipped — the running pill already shows progress as a horizontal fill; a ring would duplicate the same information.
 - **Phase 4**: queue-cleared line in TaskList (date-seeded, one pass), greeting variants (Early start / Late one), `EmptyState` quips (PR reviews + tickets), n-day completion streak in the Focus whisper (from `/api/tasks/history`, shown from 2 days). Seasonal accent tint skipped — it would fight the user-owned AccentPicker.
 

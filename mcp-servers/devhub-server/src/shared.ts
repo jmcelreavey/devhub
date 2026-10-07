@@ -8,5 +8,6 @@ export {
   flattenTree,
   markdownVaultCodec,
   resolveContentDir,
+  resolveActiveTasksDir,
   type TreeEntry,
 } from "../../../shared/vault/index.ts";

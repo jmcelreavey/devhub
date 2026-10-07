@@ -22,7 +22,20 @@ export const dynamic = "force-dynamic";
  * an allowlist, so a doc cannot coax this route into handing back `.env` or a
  * `.md` source file just by linking to it.
  */
-export const GET = withErrorHandler(async (_req: NextRequest, { params }: Params) => {
+/**
+ * WebKit (the desktop shell's webview) will not play a video whose server
+ * ignores `Range`, so honour a single `bytes=` range. Anything else gets the
+ * whole file, which every client accepts.
+ */
+function byteRange(header: string | null, size: number): { start: number; end: number } | null {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header?.trim() ?? "");
+  if (!match || (!match[1] && !match[2])) return null;
+  const start = match[1] ? Number(match[1]) : Math.max(0, size - Number(match[2]));
+  const end = match[1] && match[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
+  return start <= end && start < size ? { start, end } : null;
+}
+
+export const GET = withErrorHandler(async (req: NextRequest, { params }: Params) => {
   const { path: segments } = await params;
   const relPath = segments.map((s) => decodeURIComponent(s)).join("/");
 
@@ -46,11 +59,17 @@ export const GET = withErrorHandler(async (_req: NextRequest, { params }: Params
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  return new NextResponse(new Uint8Array(data), {
-    status: 200,
-    headers: {
-      "Content-Type": contentType,
-      "Cache-Control": "private, max-age=3600",
-    },
-  });
+  const headers = {
+    "Content-Type": contentType,
+    "Cache-Control": "private, max-age=3600",
+    "Accept-Ranges": "bytes",
+  };
+  const range = byteRange(req.headers.get("range"), data.length);
+  if (range) {
+    return new NextResponse(new Uint8Array(data.subarray(range.start, range.end + 1)), {
+      status: 206,
+      headers: { ...headers, "Content-Range": `bytes ${range.start}-${range.end}/${data.length}` },
+    });
+  }
+  return new NextResponse(new Uint8Array(data), { status: 200, headers });
 }, "docs-assets.get");

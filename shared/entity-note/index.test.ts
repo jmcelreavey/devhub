@@ -275,6 +275,14 @@ describe("format + build + parse round-trip", () => {
     expect(canonicalizeEntityRef(ref)).toEqual(ref);
   });
 
+  it("keys a PR parsed from a ## Links URL by owner/repo#n so it dedupes", () => {
+    const url = "https://github.com/acme/web/pull/42";
+    const parsed = parseEntityLinksFromMarkdown(`## Links\n\n**PR:** [web#42](${url})`);
+    expect(parsed[0]).toMatchObject({ kind: "pr", id: "acme/web#42", label: "web#42", href: url });
+    const inferred = { kind: "pr" as const, id: "acme/web#42", label: "acme/web#42", href: url };
+    expect(mergeEntityRefs(parsed, [inferred])).toHaveLength(1);
+  });
+
   it("drops unusable Open-in-Work task hops", () => {
     expect(
       canonicalizeEntityRef({

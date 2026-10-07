@@ -1,6 +1,6 @@
 #Requires -RunAsAdministrator
 <#
-  NAT-mode WSL2: forward DevHub (1337) and OpenChamber (1336) from Windows to your
+  NAT-mode WSL2: forward DevHub (1337) from Windows to your
   default WSL distro so phones on Wi-Fi can use http://<Windows-LAN-IP>:1337.
 
   Prefer mirrored networking (README) — then you usually skip this script.
@@ -9,10 +9,10 @@
 #>
 $ErrorActionPreference = "Stop"
 
-$ports = @(1337, 1336)
-# 1338 was forwarded when OpenCode was an always-on peer. It is now a loopback
-# ephemeral instance, so tear down any leftover forwarding for it.
-$retiredPorts = @(1338)
+$ports = @(1337)
+# Retired peers: OpenChamber (1336) is gone and OpenCode (1338) is a loopback
+# ephemeral instance, so tear down any leftover forwarding for them.
+$retiredPorts = @(1336, 1338)
 $listen = "0.0.0.0"
 
 $raw = (& wsl.exe -e sh -c "hostname -I").Trim()
@@ -39,8 +39,8 @@ foreach ($p in $ports) {
   Write-Host "portproxy $listen`:$p -> ${wslIp}:$p"
 }
 
-$ruleName = "DevHub WSL TCP 1337 1336"
-foreach ($name in @($ruleName, "DevHub WSL TCP 1337 1336 1338")) {
+$ruleName = "DevHub WSL TCP 1337"
+foreach ($name in @($ruleName, "DevHub WSL TCP 1337 1336", "DevHub WSL TCP 1337 1336 1338")) {
   if (Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue) {
     Remove-NetFirewallRule -DisplayName $name
   }
@@ -51,7 +51,7 @@ New-NetFirewallRule `
   -Direction Inbound `
   -Action Allow `
   -Protocol TCP `
-  -LocalPort 1337,1336 `
+  -LocalPort 1337 `
   -Profile Private, Domain `
   | Out-Null
 

@@ -34,9 +34,9 @@ afterEach(() => {
 
 describe("repo-upstart paths", () => {
   it("builds a stable relative path under upstarts/", () => {
-    expect(upstartScriptRelativePath("insider-app")).toBe("upstarts/insider-app/upstart.sh");
-    expect(resolveUpstartScriptPath("insider-app")).toBe(
-      path.join(tmpRoot, "upstarts", "insider-app", "upstart.sh"),
+    expect(upstartScriptRelativePath("example-app")).toBe("upstarts/example-app/upstart.sh");
+    expect(resolveUpstartScriptPath("example-app")).toBe(
+      path.join(tmpRoot, "upstarts", "example-app", "upstart.sh"),
     );
   });
 

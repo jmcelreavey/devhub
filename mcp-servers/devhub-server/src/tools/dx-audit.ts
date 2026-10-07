@@ -41,7 +41,7 @@ export function registerDxAuditTools(server: McpServer, ctx: Context): void {
       description:
         "List developer-experience audit reports written by the dx-audit skill (notes under reviews/dx-audit-<repo>-<date>). Optionally filter by repo name. Newest first.",
       inputSchema: {
-        repo: z.string().optional().describe("Repo name to filter by (e.g. 'insider-app')"),
+        repo: z.string().optional().describe("Repo name to filter by (e.g. 'example-app')"),
       },
     },
     async ({ repo }) => {
@@ -67,7 +67,7 @@ export function registerDxAuditTools(server: McpServer, ctx: Context): void {
       description:
         "Read a DX audit report as markdown. Give a repo name to get its latest audit, or a repo plus date (YYYY-MM-DD) for a specific one.",
       inputSchema: {
-        repo: z.string().describe("Repo name (e.g. 'insider-app')"),
+        repo: z.string().describe("Repo name (e.g. 'example-app')"),
         date: z.string().optional().describe("Specific audit date YYYY-MM-DD; defaults to latest"),
       },
     },

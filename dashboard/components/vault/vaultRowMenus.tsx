@@ -20,7 +20,7 @@ const icon = { size: 12 as const };
 export const SPAWN_TASKS_FROM_PLAN = {
   id: "spawn-tasks-from-plan",
   label: "Spawn tasks from plan",
-  description: "Jira sub-tasks and DevHub tasks from PR sections",
+  description: "Jira tickets and DevHub tasks from issues, checklists, or PR sections",
 } as const;
 
 /** Launch-menu row for dashboard card menus (Today notes panel, etc.). */

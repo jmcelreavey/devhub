@@ -2,6 +2,8 @@
 
 export interface AgentHandoff {
   title: string;
+  /** Descriptive session name; the dialog can keep a short action heading. */
+  runTitle?: string;
   prompt?: string;
   /** Captured output remains separate, quoted context until Start chat is clicked. */
   context?: string;
@@ -15,7 +17,7 @@ export interface AgentHandoff {
   worktree?: boolean;
   taskId?: string;
   taskDate?: string;
-  stage?: "plan" | "implement" | "resume";
+  stage?: "plan" | "implement" | "resume" | "create-pr";
   parentRunId?: string;
   resumeSessionId?: string;
 }
@@ -30,7 +32,7 @@ export function requestAgentConversation(conversationId: string): void {
 
 export function agentsHref(conversationId?: string, runId?: string): string {
   if (conversationId) return `/agents?conversation=${encodeURIComponent(conversationId)}`;
-  return runId ? `/agents?view=activity&run=${encodeURIComponent(runId)}` : "/agents";
+  return runId ? `/agents?run=${encodeURIComponent(runId)}` : "/agents";
 }
 
 /** A request for a preview, never a request to submit to a model. */

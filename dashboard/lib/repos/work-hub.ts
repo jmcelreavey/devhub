@@ -1,4 +1,4 @@
-import { extractTags, type EntityRef } from "../entity-note";
+import type { EntityRef } from "../entity-note";
 import { repoLinkMatches } from "./repo-link-match";
 
 export interface WorkHubTask {
@@ -6,6 +6,7 @@ export interface WorkHubTask {
   text: string;
   date: string;
   createdAt?: string;
+  notePath?: string;
   jiraKey?: string;
   links?: EntityRef[];
   /** Archive rows only: ISO of completion/abandonment. */
@@ -44,8 +45,6 @@ export interface WorkHubEvent {
   start: string;
   end?: string;
   htmlLink?: string;
-  /** Lowercase #tags from the title / meeting note. */
-  tags?: string[];
   links?: EntityRef[];
 }
 
@@ -101,17 +100,14 @@ export function taskLinksRepo(
   );
 }
 
-/** Today writes `kind=repo` entity-links; free-form `#repo` tags also count. */
+/** A task belongs on a repo hub only through an explicit repo link. */
 export function taskBelongsToRepo(
-  task: { text?: string; links?: EntityRef[] },
+  task: { links?: EntityRef[] },
   repoName: string,
   fullName: string | null,
   aliases: readonly string[] = [],
 ): boolean {
-  if (taskLinksRepo(task, repoName, fullName, aliases)) return true;
-  return extractTags(task.text ?? "").some((tag) =>
-    repoLinkMatches(tag, repoName, fullName, aliases),
-  );
+  return taskLinksRepo(task, repoName, fullName, aliases);
 }
 
 /**
@@ -130,10 +126,7 @@ export function noteBelongsToRepo(
   if (lower === prefix || lower.startsWith(`${prefix}/`) || lower.startsWith(`${prefix}-`)) {
     return true;
   }
-  if (slug.split("/").some((segment) => repoLinkMatches(segment, repoName, fullName))) {
-    return true;
-  }
-  return extractTags(note.title ?? "").some((tag) => repoLinkMatches(tag, repoName, fullName));
+  return slug.split("/").some((segment) => repoLinkMatches(segment, repoName, fullName));
 }
 
 export function eventOverlapsHubWindow(
@@ -151,13 +144,12 @@ export function eventOverlapsHubWindow(
 }
 
 export function calendarEventBelongsOnHub(
-  event: Pick<WorkHubEvent, "tags" | "links">,
+  event: Pick<WorkHubEvent, "links">,
   repoName: string,
   fullName: string | null,
   aliases: readonly string[] = [],
 ): boolean {
-  if (hopsIncludeRepo(event.links ?? [], repoName, fullName, aliases)) return true;
-  return (event.tags ?? []).some((tag) => repoLinkMatches(tag, repoName, fullName, aliases));
+  return hopsIncludeRepo(event.links ?? [], repoName, fullName, aliases);
 }
 
 export function capHubList<T>(items: readonly T[], limit: number, expanded: boolean): T[] {
@@ -234,7 +226,7 @@ export function hubCalendarEvents(model: WorkHubModel, nowMs = Date.now()): Work
 
 /**
  * One-hop work clusters for a repo hub (this repo only).
- * Seeds: tasks that entity-link or #tag this repo, plus in-progress Jira whose
+ * Seeds: tasks that entity-link this repo, plus in-progress Jira whose
  * one-hop graph touches the repo (or a repo-linked task). Open tickets that
  * are already clustered still receive jira hops/notes.
  */

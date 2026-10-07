@@ -96,6 +96,43 @@ test("rebuildInstalledServer copies staged peers, not only the Next server", asy
   fs.rmSync(stagedRoot, { recursive: true, force: true });
 });
 
+test("replaceDirContents keeps a staging tree used directly by desktop:dev", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-rebuild-same-"));
+  try {
+    fs.writeFileSync(path.join(root, "server.js"), "fresh-server");
+    const alias = root + "-link";
+    fs.symlinkSync(root, alias, "dir");
+    try {
+      replaceDirContents(root, alias);
+      assert.equal(fs.readFileSync(path.join(root, "server.js"), "utf8"), "fresh-server");
+    } finally { fs.unlinkSync(alias); }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+for (const missing of ["static", "supervisor"]) {
+  test(`an incomplete staged ${missing} leaves the installed server untouched`, async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-rebuild-invalid-"));
+    const serverTarget = path.join(root, "installed", "server");
+    const servicesTarget = path.join(root, "installed", "services");
+    const stagedServer = path.join(root, "staged", "server");
+    const stagedServices = path.join(root, "staged", "services");
+    try {
+      for (const dir of [serverTarget, servicesTarget, stagedServer, stagedServices]) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(serverTarget, "server.js"), "old-server");
+      fs.writeFileSync(path.join(servicesTarget, "supervisor.mjs"), "old-supervisor");
+      fs.writeFileSync(path.join(stagedServer, "server.js"), "fresh-server");
+      fs.writeFileSync(path.join(stagedServices, "start-peer-services.mjs"), "fresh-peers");
+      if (missing !== "static") fs.mkdirSync(path.join(stagedServer, ".next", "static"), { recursive: true });
+      if (missing !== "supervisor") fs.writeFileSync(path.join(stagedServices, "supervisor.mjs"), "fresh-supervisor");
+      await assert.rejects(rebuildInstalledServer({
+        serverTarget, servicesTarget, stagedServer, stagedServices, async stage() {},
+      }), /stage-dashboard produced no/);
+      assert.equal(fs.readFileSync(path.join(serverTarget, "server.js"), "utf8"), "old-server");
+      assert.equal(fs.readFileSync(path.join(servicesTarget, "supervisor.mjs"), "utf8"), "old-supervisor");
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+}
+
 test("bundleRootFor finds the .app that owns the server tree", () => {
   assert.equal(
     bundleRootFor("/Applications/DevHub.app/Contents/Resources/server"),

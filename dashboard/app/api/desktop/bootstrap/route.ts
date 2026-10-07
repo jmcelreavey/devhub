@@ -35,7 +35,16 @@ export async function GET(req: NextRequest) {
   const destination =
     target.origin === req.nextUrl.origin ? `${target.pathname}${target.search}` : "/";
 
-  const response = NextResponse.redirect(new URL(destination, req.nextUrl.origin), 303);
+  // A relative Location, not NextResponse.redirect(absolute). Next normalises a
+  // 127.0.0.1 request origin to "localhost" when it builds `nextUrl.origin`, so
+  // an absolute redirect bounced a window that loaded us via 127.0.0.1 onto
+  // localhost — a different origin, without the cookie set just above, and on
+  // Windows the very host (::1) that WebView2 could not reach through WSL.
+  // A relative target keeps whichever host the shell chose.
+  const response = new NextResponse(null, {
+    status: 303,
+    headers: { Location: destination, "Cache-Control": "no-store" },
+  });
   response.cookies.set(desktopCookieOptions().name, token!, desktopCookieOptions());
   return response;
 }

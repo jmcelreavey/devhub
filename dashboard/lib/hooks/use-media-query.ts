@@ -8,7 +8,7 @@ import { useCallback, useSyncExternalStore } from "react";
  * SSR / first paint returns `false` so the server render and the hydrated render
  * agree — callers should be written desktop-first and narrow from there.
  */
-export function useMediaQuery(query: string): boolean {
+export function useMediaQuery(query: string, serverValue = false): boolean {
   const subscribe = useCallback(
     (onChange: () => void) => {
       if (typeof window === "undefined" || !window.matchMedia) return () => {};
@@ -21,7 +21,7 @@ export function useMediaQuery(query: string): boolean {
 
   const getSnapshot = useCallback(() => matchesMediaQuery(query), [query]);
 
-  return useSyncExternalStore(subscribe, getSnapshot, () => false);
+  return useSyncExternalStore(subscribe, getSnapshot, () => serverValue);
 }
 
 /** One-shot, SSR-safe check for event handlers where a reactive value isn't needed. */

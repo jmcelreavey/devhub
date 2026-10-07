@@ -1,10 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { getTasksDir } from "@/lib/notes/dir";
+import { getActiveTasksDir } from "@/lib/notes/dir";
 import { writeAtomic, safeReadJSON, withMutex } from "@/lib/atomic-write";
 import { todayISO, JIRA_KEY_RE } from "@/lib/utils";
-import { normalizeTaskLinkState } from "@/lib/task-note";
+import { normalizeTaskLinkState, taskNotePath } from "@/lib/task-note";
+import { createTaskNoteResolver } from "./task-notes";
+import { currentTaskNode, loadTaskIndex, taskLineageIds, type TaskNode } from "./task-index";
 import { relinkTaskAgentRuns } from "@/lib/tasks/task-agent-runs";
 
 // Canonical shape lives in ./types so client components can import it too
@@ -17,7 +19,7 @@ import { isTaskOpen } from "@/lib/tasks/types";
 export { isTaskOpen } from "@/lib/tasks/types";
 
 function tasksDir(): string {
-  return getTasksDir();
+  return getActiveTasksDir();
 }
 
 function tasksFile(date: string): string {
@@ -31,13 +33,12 @@ function extractJiraKey(text: string): string | undefined {
 
 export function getTasks(date?: string): Task[] {
   const target = date ?? todayISO();
-  const file = tasksFile(target);
-  return safeReadJSON<Task[]>(file, []).map((task) => {
-    // Heal stale rows where a Jira hop exists but jiraKey was never promoted
-    // (MCP write path historically skipped promotion). In-memory only.
-    if (task.jiraKey || !task.links?.some((l) => l.kind === "jira")) return task;
+  const resolveNotes = createTaskNoteResolver();
+  return safeReadJSON<Task[]>(tasksFile(target), []).map((task) => {
+    const notePath = resolveNotes(task, target).notePath;
+    if (task.jiraKey || !task.links?.some((l) => l.kind === "jira")) return { ...task, notePath };
     const normalized = normalizeTaskLinkState(task.text, task.jiraKey, task.links);
-    return { ...task, text: normalized.text, jiraKey: normalized.jiraKey, links: normalized.links };
+    return { ...task, notePath, text: normalized.text, jiraKey: normalized.jiraKey, links: normalized.links };
   });
 }
 
@@ -51,111 +52,67 @@ export function listPastDatesWithOpenTasks(beforeDate: string): string[] {
     .map((f) => f.replace(".json", ""))
     .filter((d) => d < beforeDate)
     .sort()
-    .filter((d) => getTasks(d).some(isTaskOpen));
+    .filter((d) => safeReadJSON<Task[]>(tasksFile(d), []).some(isTaskOpen));
 }
 
 export async function rolloverTasks(): Promise<Task[]> {
   const today = todayISO();
   const todayFile = tasksFile(today);
 
-  // Serialize rollover — /api/tasks and /api/sidebar/counts both call this on load.
   return withMutex(todayFile, async () => {
-    const existingToday = fs.existsSync(todayFile) ? getTasks(today) : [];
+    let todayTasks = getTasks(today);
     const pastDates = listPastDatesWithOpenTasks(today);
-
-    if (pastDates.length === 0) {
-      return existingToday;
-    }
-
+    if (pastDates.length === 0) return todayTasks;
+    const index = loadTaskIndex();
     const now = new Date().toISOString();
-    const allCopies: Task[] = [];
-    const datesToMark: Array<{ date: string; taskIds: string[] }> = [];
 
-    for (const date of pastDates) {
+    // Newest first: after an interrupted rollover, the latest snapshot owns the task.
+    for (const date of pastDates.reverse()) {
       await withMutex(tasksFile(date), async () => {
-        const dayTasks = getTasks(date);
-        const toRoll = dayTasks.filter(isTaskOpen);
-        if (toRoll.length === 0) return;
+        const sourceTasks = getTasks(date);
+        const openTasks = sourceTasks.filter(isTaskOpen);
+        if (openTasks.length === 0) return;
+        const destinations = new Map<string, TaskNode>();
+        const additions: Task[] = [];
 
-        const alreadyRolledIds = new Set(
-          [...existingToday, ...allCopies]
-            .filter((task) => task.rolledFromDate === date && task.rolledFromId)
-            .map((task) => task.rolledFromId!),
-        );
-        const pendingRoll = toRoll.filter((task) => !alreadyRolledIds.has(task.id));
-
-        // Crash recovery: today's copies exist but the source day was never marked moved.
-        if (pendingRoll.length === 0) {
-          let changed = false;
-          for (const task of toRoll) {
-            if (!task.movedAt) {
-              task.movedAt = now;
-              task.movedToDate = today;
-              changed = true;
-            }
+        for (const source of openTasks) {
+          const latest = currentTaskNode(index, source.id);
+          if (latest && latest.date > date && latest.date <= today && !isTaskOpen(latest.task)) {
+            destinations.set(source.id, latest);
+            continue;
           }
-          if (changed) {
-            await saveTasks(date, dayTasks);
+          const aliases = taskLineageIds(index, source.id);
+          const existing = [...todayTasks, ...additions].find((task) => aliases.has(task.id));
+          if (existing) {
+            destinations.set(source.id, { task: existing, date: today });
+            continue;
           }
-          return;
+          const snapshot = { ...source };
+          delete snapshot.movedAt;
+          delete snapshot.movedToDate;
+          additions.push(snapshot);
+          destinations.set(source.id, { task: snapshot, date: today });
         }
 
-        const copies = pendingRoll.map((t) => {
-          const rest = { ...t };
-          delete rest.movedAt;
-          delete rest.movedToDate;
-          delete rest.rolledFromId;
-          delete rest.rolledFromDate;
-          return {
-            ...rest,
-            id: randomUUID(),
-            createdAt: now,
-            rolledFromId: t.id,
-            rolledFromDate: date,
-          };
-        });
-        allCopies.push(...copies);
-        datesToMark.push({ date, taskIds: toRoll.map((t) => t.id) });
+        // Destination first, source second. A failed source write is retried using
+        // the same IDs; rolling back the destination can lose already-moved tasks.
+        if (additions.length > 0) {
+          const merged = [...todayTasks, ...additions];
+          await saveTasks(today, merged);
+          todayTasks = merged;
+        }
+        for (const source of openTasks) {
+          const destination = destinations.get(source.id)!;
+          // Only needed to finish a rollover interrupted under the old UUID scheme.
+          if (source.id !== destination.task.id) await relinkTaskAgentRuns(source.id, destination.task.id);
+          source.movedAt = now;
+          source.movedToDate = destination.date;
+          delete source.timerStartedAt;
+        }
+        await saveTasks(date, sourceTasks);
       });
     }
-
-    if (allCopies.length === 0) {
-      return existingToday;
-    }
-
-    const merged = [...existingToday, ...allCopies];
-
-    // Write today before marking source days moved. If today's save fails, sources
-    // must stay open — marking first made tasks vanish from both days on retry.
-    await saveTasks(today, merged);
-    // Agent run history is keyed by task id; carry it to the new copy.
-    for (const copy of allCopies) {
-      if (copy.rolledFromId) await relinkTaskAgentRuns(copy.rolledFromId, copy.id).catch(() => false);
-    }
-
-    for (const { date, taskIds } of datesToMark) {
-      await withMutex(tasksFile(date), async () => {
-        const dayTasks = getTasks(date);
-        const markIds = new Set(taskIds);
-        let changed = false;
-        for (const task of dayTasks) {
-          if (!isTaskOpen(task) || !markIds.has(task.id)) continue;
-          task.movedAt = now;
-          task.movedToDate = today;
-          changed = true;
-        }
-        if (changed) {
-          try {
-            await saveTasks(date, dayTasks);
-          } catch (err) {
-            await saveTasks(today, existingToday).catch(() => undefined);
-            throw err;
-          }
-        }
-      });
-    }
-
-    return merged;
+    return todayTasks;
   });
 }
 
@@ -183,6 +140,7 @@ export async function addTask(
       ...(links && links.length > 0 ? { links } : {}),
       ...(stage ? { stage } : {}),
     };
+    task.notePath = taskNotePath({ ...task, date: target });
     tasks.push(task);
     await saveTasks(target, tasks);
     return task;
@@ -194,7 +152,7 @@ export async function toggleTask(taskId: string, date?: string): Promise<Task | 
   return withMutex(tasksFile(target), async () => {
     const tasks = getTasks(target);
     const task = tasks.find((t) => t.id === taskId);
-    if (!task) return null;
+    if (!task || task.movedAt) return null;
     task.done = !task.done;
     task.completedAt = task.done ? new Date().toISOString() : undefined;
     if (task.done) {
@@ -425,6 +383,7 @@ export async function backfillMovedTasks(): Promise<{ updated: number }> {
 }
 
 export function listTaskDays(): TaskDay[] {
+  const resolveNotes = createTaskNoteResolver();
   const dir = tasksDir();
   if (!fs.existsSync(dir)) return [];
   const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json")).sort().reverse();
@@ -434,7 +393,7 @@ export function listTaskDays(): TaskDay[] {
     const tasks: Task[] = safeReadJSON(fp, []);
     return {
       ...summarizeTaskDay(date, fp, tasks),
-      tasks,
+      tasks: tasks.map((task) => ({ ...task, notePath: resolveNotes(task, date).notePath })),
     };
   });
 }

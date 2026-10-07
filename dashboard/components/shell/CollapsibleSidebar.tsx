@@ -4,41 +4,32 @@ import { NavLink } from "@/components/shell/NavLink";
 import { IconPicker } from "@/components/ui/IconPicker";
 import { BRAND_LABEL } from "@/lib/brand-mark";
 import { useClientMounted } from "@/lib/hooks/use-client-mounted";
-import { useLive } from "@/lib/hooks/use-fetch";
+import { useIsDesktopPointer } from "@/lib/hooks/use-is-mobile";
+import { useSetupStatus } from "@/lib/hooks/use-setup-status";
 import { countForItem,unseenForItem,useNavBadges,type NavBadges } from "@/lib/hooks/use-nav-badges";
 import { createPersistedBoolStore } from "@/lib/hooks/use-persisted-bool";
 import {
 NAV_GROUPS,
 NAV_ITEMS,
+activeNavHref,
 groupSidebarNav,
 type NavItem,
-type SetupGateStatus,
 } from "@/lib/nav";
 import { PLUGIN_NAV_ITEMS } from "@/lib/plugin-nav.generated";
 import { ChevronLeft,ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { useEffect,useMemo,useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
+import { useEffect,useMemo } from "react";
 
 const STORAGE_KEY = "sidebar-collapsed";
 const usePersistedBool = createPersistedBoolStore("devhub:sidebar-storage");
 
-function subscribeMedia(cb: () => void) {
-  const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
-  mq.addEventListener("change", cb);
-  return () => mq.removeEventListener("change", cb);
-}
-
 export function CollapsibleSidebar() {
   const [collapsed, setCollapsed] = usePersistedBool(STORAGE_KEY);
-  const isDesktop = useSyncExternalStore(
-    subscribeMedia,
-    () => window.matchMedia("(hover: hover) and (pointer: fine)").matches,
-    () => true,
-  );
+  const isDesktop = useIsDesktopPointer();
+  const pathname = usePathname();
 
-  const { data: setup } = useLive<SetupGateStatus>("/api/setup/status", {
-    refreshInterval: 0,
-  });
+  const setup = useSetupStatus();
 
   const mounted = useClientMounted();
   const { counts, unseen, calendarRemaining } = useNavBadges();
@@ -70,6 +61,11 @@ export function CollapsibleSidebar() {
     };
   }, [isDesktop, setup]);
 
+  const activeHref = activeNavHref(
+    pathname,
+    NAV_GROUPS.flatMap((g) => grouped[g.id].map((i) => i.href)),
+  );
+
   const width = collapsed ? 44 : 232;
 
   return (
@@ -84,7 +80,7 @@ export function CollapsibleSidebar() {
       }}
     >
       {/* Brand */}
-      <div className="flex items-center px-3 py-4 shrink-0 gap-1">
+      <div className="flex items-center px-3 py-3 shrink-0 gap-1">
         <IconPicker sidebarCollapsed={collapsed} />
         {!collapsed && BRAND_LABEL && (
           <span
@@ -104,6 +100,7 @@ export function CollapsibleSidebar() {
             label={g.label}
             items={grouped[g.id]}
             collapsed={collapsed}
+            activeHref={activeHref}
             counts={navCounts}
             unseen={unseen}
             calendarRemaining={navCalendarRemaining}
@@ -116,7 +113,8 @@ export function CollapsibleSidebar() {
           connected yet" - the features are simply absent. Hidden when collapsed
           (no room) and when nothing is gated (nothing to say).
         */}
-        {!collapsed && hiddenCount > 0 && (
+        {/* `setup` undefined = still loading, not "nothing configured". */}
+        {!collapsed && setup && hiddenCount > 0 && (
           <Link
             href="/setup"
             className="mx-2 mt-2 block rounded px-2 py-1.5 text-[11px] leading-snug hover:bg-[var(--bg-elevated)]"
@@ -127,7 +125,7 @@ export function CollapsibleSidebar() {
         )}
       </nav>
 
-      {/* Footer - collapse toggle. Theme picker lives in /setup. */}
+      {/* Footer - collapse toggle. Appearance lives in the top bar. */}
       <div
         className="shrink-0 flex items-center justify-center"
         style={{ borderTop: "1px solid var(--border-muted)" }}
@@ -150,6 +148,7 @@ function NavSection({
   label,
   items,
   collapsed,
+  activeHref,
   counts,
   unseen,
   calendarRemaining,
@@ -157,13 +156,14 @@ function NavSection({
   label: string;
   items: NavItem[];
   collapsed: boolean;
+  activeHref: string | undefined;
   counts: NavBadges["counts"];
   unseen: NavBadges["unseen"];
   calendarRemaining: number;
 }) {
   if (items.length === 0) return null;
   return (
-    <div className={collapsed ? "py-1" : "px-2 pt-3 pb-1"}>
+    <div className={collapsed ? "nav-section-collapsed py-1" : "px-2 pt-3 pb-1"}>
       {!collapsed && (
         <div className="nav-group-label">
           {label}
@@ -173,7 +173,13 @@ function NavSection({
         const count = countForItem(item.icon, counts, { calendarRemaining });
         const hasUnseen = unseenForItem(item.icon, unseen);
         const link = (
-          <NavLink item={item} collapsed={collapsed} count={count} unseen={hasUnseen} />
+          <NavLink
+            item={item}
+            collapsed={collapsed}
+            active={item.href === activeHref}
+            count={count}
+            unseen={hasUnseen}
+          />
         );
         return <div key={item.href}>{link}</div>;
       })}

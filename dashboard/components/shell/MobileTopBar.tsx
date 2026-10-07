@@ -11,12 +11,6 @@ import { ContentSyncIndicator } from "@/components/runs/ContentSyncIndicator";
  * Mobile-only chrome: hamburger nav + brand + search + a single overflow
  * menu holding the Notes/Tasks/Diagrams panels and the terminal toggle
  * (kept off the bar itself to avoid crowding a phone-width row).
- *
- * Kept on every route including /chamber — the burger covers navigation
- * and the quick-action panels are the only way to reach Notes/Tasks/
- * Diagrams from inside the OpenChamber iframe. On /chamber the bottom
- * shelf is dropped instead (see MobileBottomShelf) so the iframe still
- * gets maximum height with no redundant chrome.
  */
 export function MobileTopBar() {
   return (

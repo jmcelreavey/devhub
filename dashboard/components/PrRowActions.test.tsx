@@ -89,6 +89,12 @@ describe("buildPrRowMenuGroups", () => {
     expect(itemIds("reviews")).not.toContain("daily-rep-first");
   });
 
+  it("offers Skip until updated on authored and review-requested rows only", () => {
+    expect(itemIds("authored")).toContain("skip-pr");
+    expect(itemIds("reviews")).toContain("skip-pr");
+    expect(itemIds("reviewed")).not.toContain("skip-pr");
+  });
+
   it("never locks authored rows", () => {
     expect(itemIds("authored", row(), { repLocked: true })).toContain("agent-review");
   });

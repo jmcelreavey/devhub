@@ -102,7 +102,7 @@ export function docAssetSrc(src: string, docPath: string | undefined): string {
 }
 
 /**
- * Rewrite every image `src` in a parsed doc tree.
+ * Rewrite every image and video `src` in a parsed doc tree.
  *
  * A whole-tree pass rather than resolution at render time, for two reasons.
  * `DocContent` is a Server Component, so a React context is unavailable — that
@@ -128,7 +128,8 @@ export function resolveDocAssets<T>(nodes: T, docPath: string | undefined): T {
     const mapped: Record<string, unknown> = {};
     for (const [key, child] of Object.entries(record)) mapped[key] = walk(child);
 
-    if (record.type === "image" && typeof record.src === "string") {
+    // Videos too: a relative `../assets/demos/x.mp4` link has the same route-vs-file problem.
+    if ((record.type === "image" || record.type === "video") && typeof record.src === "string") {
       mapped.src = docAssetSrc(record.src, docPath);
     }
     return mapped;

@@ -7,13 +7,13 @@
   blank reason or, for Apple Events, the request is refused outright and the
   action fails with a errAEEventNotPermitted that surfaces as an unexplained
   "nothing happened". The sidecars DevHub spawns (the Next server, the terminal
-  PTY, OpenCode, OpenChamber, agent CLIs) inherit the app's TCC identity, so
+  PTY, OpenCode for session recap) inherit the app's TCC identity, so
   these cover them too — they are not separately grantable.
 -->
 <plist version="1.0">
   <dict>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>DevHub serves its dashboard, OpenChamber and the docked terminal over localhost, and can proxy them to your other devices on the LAN.</string>
+    <string>DevHub serves its dashboard, agents and the docked terminal over localhost, and can proxy the dashboard and agents to your other devices on the LAN.</string>
 
     <key>NSAppleEventsUsageDescription</key>
     <string>DevHub opens repositories, pull requests and terminals in your editor and other apps on request.</string>

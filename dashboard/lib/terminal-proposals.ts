@@ -3,13 +3,13 @@
  *
  * MCP `terminal_propose_run` posts here; TerminalDock polls/resolves via
  * `/api/terminal/propose`. Desktop tickets alone never imply user intent —
- * the dock UI must confirm before inject.
+ * ordinary agent-requested commands launch automatically in the visible dock.
  *
  * Two exceptions set `autoRun` server-side, never by hand in the dock:
  * - agent dispatch (`/api/agent/runs`), whose POST schema cannot set it;
  * - `autoRunConfirmed` on the public POST (`/api/terminal/propose`), which an
- *   MCP client may only set after the user accepted an elicitation prompt in
- *   its own chat surface (see mcp tools/terminal.ts). Destructive commands
+ *   MCP tool sets for agent-requested execution (see mcp tools/terminal.ts).
+ *   Destructive commands
  *   still always get the chip below, whoever asked.
  */
 
@@ -105,7 +105,7 @@ export function createTerminalProposal(input: {
   reason?: string;
   source?: "mcp" | "api";
   autoRun?: boolean;
-  /** Caller already obtained user consent out-of-band (MCP elicitation). */
+  /** Caller requests automatic dock execution; destructive commands still prompt. */
   autoRunConfirmed?: boolean;
 }): TerminalProposal {
   prune();

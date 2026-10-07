@@ -284,7 +284,7 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
 
   const jsonText = (data: unknown, fallback = "OK"): string => {
     if (typeof data === "string") return data || fallback;
-    return JSON.stringify(data, null, 2);
+    return JSON.stringify(data);
   };
 
   server.registerTool(

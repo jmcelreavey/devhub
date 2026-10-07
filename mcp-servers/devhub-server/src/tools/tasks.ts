@@ -2,11 +2,11 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Context } from "../context.ts";
 import { withDashboardErrors } from "../dashboard-client.ts";
+import { callerDepth } from "./agents.ts";
 import { escapeHtml, uiResult, widgetDocument } from "../ui.ts";
 import { blocksToText, textToBlocks } from "../convert.ts";
 import {
   buildEntityLinksSection,
-  extractTags,
   parseEntityLinksFromMarkdown,
 } from "../../../../shared/entity-note/index.ts";
 import {
@@ -15,7 +15,6 @@ import {
   taskNotePath,
 } from "../../../../shared/task-note/index.ts";
 
-const CONTEXT_TAG_RE = /^[a-z_][a-z0-9_-]{0,31}$/;
 const singleLine = (max: number) =>
   z.string().trim().min(1).max(max).refine((value) => !/[\u0000-\u001f\u007f]/.test(value), "must be one line");
 const linkLabel = singleLine(500).refine((value) => !/[\[\]]/.test(value), "must not contain markdown brackets");
@@ -89,11 +88,11 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
     "tasks_create",
     {
       description:
-        "Create a new task. Auto-extracts Jira keys from text (e.g. DAD-1234). Inline #tags (e.g. 'fix login #auth') become first-class tags — call tags_list first to reuse existing ones. Optionally create a linked task note (EntityRef ## Links) and/or attach hop-around links (PR/calendar/note).",
+        "Create a new task. Auto-extracts Jira keys from text (e.g. DAD-1234). Optionally create a linked task note (EntityRef ## Links) and/or attach hop-around links (PR/calendar/note/repo).",
       inputSchema: {
         text: z
           .string()
-          .describe("Task description (1-500 chars). Jira keys like DAD-1234 are auto-detected; inline #tags become hop chips."),
+          .describe("Task description (1-500 chars). Jira keys like DAD-1234 are auto-detected."),
         date: z.string().optional().describe("Date in YYYY-MM-DD format. Defaults to today."),
         due: z.string().optional().describe("Due date in YYYY-MM-DD format."),
         withNote: z.boolean().optional().describe("If true, also create the linked task-notes/ note"),
@@ -126,7 +125,7 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
         );
         const { textToBlocks } = await import("../convert.ts");
         const day = date || new Date().toISOString().split("T")[0];
-        const source = { id: task.id, text: task.text, date: day, jiraKey: task.jiraKey };
+        const source = { ...task, date: day };
         const notePath = taskNotePath(source);
         ctx.storage.write(notePath, textToBlocks(buildTaskNoteMarkdown(source)));
         noteLine = `\nLinked note: ${notePath}`;
@@ -200,13 +199,48 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
     "tasks_history",
     {
       description:
-        "List task history across all days. Returns summaries (date, total, completed, abandoned) or full task lists.",
+        "List task history across all days. Returns summaries (date, total, completed, abandoned) or full task lists. To find a task by Jira key, id or wording, pass `query` — it searches every day and returns only the matches with their date.",
       inputSchema: {
         includeTasks: z.boolean().optional().describe("Include full task details (default: summaries only)"),
         date: z.string().optional().describe("Filter to a specific date (YYYY-MM-DD)"),
+        query: z
+          .string()
+          .trim()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe("Case-insensitive match on task text, id or Jira key, across all days (or `date`)"),
+        days: z
+          .number()
+          .int()
+          .min(1)
+          .max(3650)
+          .optional()
+          .describe("With includeTasks and no date/query: only the most recent N days (default: all)"),
       },
     },
-    async ({ includeTasks, date }) => {
+    async ({ includeTasks, date, query, days: dayLimit }) => {
+      if (query) {
+        // Full history is ~120 days of tasks; callers looking for one Jira key
+        // were pulling all of it (70k+ chars) to scan it themselves.
+        const needle = query.toLowerCase();
+        const dates = date ? [date] : tasksStorage.list().map((d) => d.date);
+        const matches: string[] = [];
+        for (const d of dates) {
+          for (const task of tasksStorage.getDay(d).tasks) {
+            const haystack = `${task.text}\n${task.id}\n${task.jiraKey ?? ""}`.toLowerCase();
+            if (!haystack.includes(needle)) continue;
+            const note = task.notePath ? ` (note: ${task.notePath})` : "";
+            matches.push(`${d} ${taskHistoryLine(task).slice(2)}${note}`);
+          }
+        }
+        if (matches.length === 0) {
+          return { content: [{ type: "text", text: `No tasks matching "${query}"${date ? ` on ${date}` : ""}` }] };
+        }
+        return {
+          content: [{ type: "text", text: `${matches.length} matching task(s):\n${matches.map((m) => `- ${m}`).join("\n")}` }],
+        };
+      }
       if (date) {
         const day = tasksStorage.getDay(date);
         if (day.tasks.length === 0) {
@@ -232,11 +266,14 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
         return { content: [{ type: "text", text: "No task history" }] };
       }
       if (includeTasks) {
-        const sections = days.map((summary) => {
+        const window = dayLimit ? days.slice(0, dayLimit) : days;
+        const sections = window.map((summary) => {
           const day = tasksStorage.getDay(summary.date);
           return `${summary.date} (${day.completed}/${day.total} done):\n${day.tasks.map(taskHistoryLine).join("\n")}`;
         });
-        return { content: [{ type: "text", text: sections.join("\n\n") }] };
+        const older = days.length - window.length;
+        const more = older > 0 ? `\n\n(${older} older day(s) not shown — raise days, or pass date/query.)` : "";
+        return { content: [{ type: "text", text: sections.join("\n\n") + more }] };
       }
       const lines = days.map(
         (d) => `${d.date}: ${d.total} tasks, ${d.completed} done, ${d.abandoned} abandoned, ${d.moved} moved`,
@@ -249,7 +286,7 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
     "tasks_context_sync",
     {
       description:
-        "Merge context into a task and its linked note in one server-side operation: adds canonical #tags to the task text (dedup, existing tags preserved), merges hop-around links by kind+id (never drops existing links), appends missing note link/tag blocks without rewriting rich content, and appends an idempotent keyed implementation summary. Call tags_list first to reuse canonical tag names.",
+        "Merge context into a task and its linked note in one server-side operation: merges hop-around links by kind+id (never drops existing links), appends missing note link blocks without rewriting rich content, and appends an idempotent keyed implementation summary.",
       inputSchema: {
         id: z.string().trim().min(1).max(200).describe("Task ID (UUID)"),
         date: z
@@ -257,11 +294,6 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
           .regex(/^\d{4}-\d{2}-\d{2}$/)
           .optional()
           .describe("Date the task belongs to (YYYY-MM-DD). Defaults to today."),
-        tags: z
-          .array(z.string().trim().min(1).max(64))
-          .max(20)
-          .optional()
-          .describe("Canonical tag ids to add (with or without #). Existing tags are kept; duplicates are dropped."),
         links: z
           .array(
             z.object({
@@ -290,7 +322,7 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
           .describe("Required with noteSummary. Exact idempotency key, e.g. the PR URL or commit SHA."),
       },
     },
-    async ({ id, date, tags, links, noteSummary, noteSummaryKey }) => {
+    async ({ id, date, links, noteSummary, noteSummaryKey }) => {
       const target = date || new Date().toISOString().split("T")[0];
       const task = tasksStorage.getDay(target).tasks.find((t) => t.id === id);
       if (!task) {
@@ -300,23 +332,6 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
         return {
           isError: true,
           content: [{ type: "text", text: "noteSummaryKey is required when noteSummary is provided." }],
-        };
-      }
-
-      const requested = (tags ?? [])
-        .map((t) => t.replace(/^#/, "").trim().toLowerCase())
-        .filter((t) => CONTEXT_TAG_RE.test(t));
-      const skippedTags = (tags?.length ?? 0) - requested.length;
-      const knownTags = extractTags(task.text);
-      const known = new Set(knownTags);
-      const requestedTags = [...new Set(requested)];
-      const addedTags = requestedTags.filter((t) => !known.has(t));
-      const canonicalTags = [...new Set([...knownTags, ...requestedTags])];
-      const nextText = addedTags.length ? `${task.text} ${addedTags.map((t) => `#${t}`).join(" ")}` : task.text;
-      if (nextText.length > 500) {
-        return {
-          isError: true,
-          content: [{ type: "text", text: "Tag merge would exceed the 500-character task text limit." }],
         };
       }
 
@@ -337,14 +352,14 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
         }
       }
 
-      const textChanged = nextText !== task.text;
       const linksChanged = linksAdded > 0 || linksUpdated > 0;
       let synced = task;
-      if (textChanged || linksChanged) {
-        synced = tasksStorage.update(id, { text: nextText, links: merged }, target) ?? task;
+      if (linksChanged) {
+        synced = tasksStorage.update(id, { links: merged }, target) ?? task;
       }
 
       const noteSource = {
+        notePath: synced.notePath,
         id: synced.id,
         text: synced.text,
         date: target,
@@ -356,14 +371,13 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
       const existingNote = ctx.storage.read(notePath);
       const existingMarkdown =
         existingNote?.content != null ? blocksToText(existingNote.content as unknown[]) : null;
-      const shouldCreateNote = !existingNote && !!(noteSummary || requestedTags.length);
+      const shouldCreateNote = !existingNote && !!noteSummary;
       const noteCreated = shouldCreateNote;
       let summaryAdded = false;
       let noteChanged = false;
 
       if (shouldCreateNote) {
         const parts = [buildTaskNoteMarkdown(noteSource)];
-        if (canonicalTags.length) parts.push(`Tags: ${canonicalTags.map((tag) => `#${tag}`).join(" ")}`);
         if (noteSummary && noteSummaryKey) {
           parts.push(`## Implementation ${noteSummaryKey}\n\n${noteSummary}`);
           summaryAdded = true;
@@ -377,10 +391,6 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
           (ref) => !existingRefs.some((existingRef) => sameRef(existingRef, ref)),
         );
         if (missingRefs.length) append.push(buildEntityLinksSection(missingRefs).trim());
-
-        const noteTags = new Set(extractTags(existingMarkdown));
-        const missingTags = canonicalTags.filter((tag) => !noteTags.has(tag));
-        if (missingTags.length) append.push(`Tags: ${missingTags.map((tag) => `#${tag}`).join(" ")}`);
 
         if (noteSummary && noteSummaryKey) {
           const heading = `## Implementation ${noteSummaryKey}`;
@@ -399,8 +409,6 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
       }
 
       const changes = [
-        addedTags.length ? `tags added: ${addedTags.map((t) => `#${t}`).join(" ")}` : null,
-        skippedTags > 0 ? `${skippedTags} invalid tag(s) skipped` : null,
         linksChanged ? `links: +${linksAdded} added, ${linksUpdated} updated` : null,
         existingNote || noteCreated
           ? `note ${notePath}${noteCreated ? " created" : noteChanged ? " updated" : " unchanged"}${noteSummary ? (summaryAdded ? " (summary added)" : " (summary already present)") : ""}`
@@ -680,5 +688,92 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
       }),
   );
 
+  const reviewerLine = (r: { provider: string; model: string | null | "" }) =>
+    r.provider ? `${r.provider}${r.model ? ` / ${r.model}` : " (provider default model)"}` : "none: the implementing agent reviews its own diff";
 
+  server.registerTool(
+    "tasks_implement_review_settings_get",
+    {
+      description:
+        "Read which assistant reviews a finished implementation before it asks to commit (provider + model). Blank provider means the implementing agent reviews its own diff. Stored in notes/.config/implement-review.json. Requires the dashboard running.",
+    },
+    async () =>
+      withDashboardErrors(async () => {
+        const data = await dashboard.get<{ provider: string; model: string }>("/api/tasks/implement/review-settings");
+        return { content: [{ type: "text" as const, text: `Implement reviewer: ${reviewerLine(data)}` }] };
+      }),
+  );
+
+  server.registerTool(
+    "tasks_implement_review_settings_set",
+    {
+      description:
+        "Assign the assistant that reviews a finished implementation (provider id from agent_providers, optional model). An empty provider switches back to the implementing agent reviewing its own diff. Changing the provider clears the model unless you pass one. Applies to implement runs that start afterwards. Requires the dashboard running.",
+      inputSchema: {
+        provider: z
+          .string()
+          .trim()
+          .max(64)
+          .optional()
+          .describe("Provider id from agent_providers, e.g. codex. Empty string clears the reviewer."),
+        model: z.string().trim().max(120).optional().describe("Provider-specific model id; omit for the provider's default."),
+      },
+    },
+    async ({ provider, model }) =>
+      withDashboardErrors(async () => {
+        if (provider === undefined && model === undefined) {
+          return { content: [{ type: "text" as const, text: "Provide provider, model or both." }], isError: true };
+        }
+        const data = await dashboard.put<{ provider: string; model: string }>("/api/tasks/implement/review-settings", {
+          ...(provider !== undefined ? { provider } : {}),
+          ...(model !== undefined ? { model } : {}),
+        });
+        return { content: [{ type: "text" as const, text: `Implement reviewer set: ${reviewerLine(data)}` }] };
+      }),
+  );
+
+  server.registerTool(
+    "tasks_implement_review",
+    {
+      description:
+        "Start the assistant assigned as reviewer (see tasks_implement_review_settings_get) on your implementation checkout. It reviews read-only with the pr-explain-review skill, saves the review as the note at notePath, and replies with a verdict and must-fix list. Returns a run id: agent_wait on it, then notes_read the note. Use only when the plan payload's `reviewer` is set; errors with no_reviewer otherwise, in which case review your own diff. A review run cannot start another review. Requires the dashboard.",
+      inputSchema: {
+        taskId: z.string().trim().min(1).max(128).describe("DevHub task UUID"),
+        date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD")
+          .describe("Day file the task lives in"),
+        cwd: z.string().trim().min(1).max(1_000).describe("Absolute path of the checkout or worktree holding the implementation"),
+        notePath: z
+          .string()
+          .trim()
+          .min(1)
+          .max(300)
+          .describe("Where the review note is saved, under pr-reviews/, e.g. pr-reviews/payments-api-pay-482"),
+        branch: z.string().trim().min(1).max(200).optional().describe("Implementation branch"),
+        base: z.string().trim().min(1).max(200).optional().describe("Intended remote base, e.g. origin/main"),
+        origin: z.string().url().optional().describe("Dashboard origin for the plan URL (defaults to the MCP dashboard base URL)"),
+      },
+    },
+    async (input) =>
+      withDashboardErrors(async () => {
+        const data = await dashboard.post<{
+          run: { id: string; state: string; providerLabel?: string };
+          reviewer: { provider: string; model: string | null };
+          notePath: string;
+        }>("/api/tasks/implement/review", { ...input, depth: callerDepth() });
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: [
+                `Review started by ${reviewerLine(data.reviewer)}: ${data.run.id} (${data.run.state}).`,
+                `Note: ${data.notePath}`,
+                `Next: agent_wait(runId="${data.run.id}"), then notes_read the note and fix every must-fix finding.`,
+              ].join("\n"),
+            },
+          ],
+        };
+      }),
+  );
 }

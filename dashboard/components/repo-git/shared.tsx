@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { DecisionOption } from "@/components/shell/ConfirmDialog";
 import {
   parseHookFailurePayload,
   type GitHookFailurePayload,
@@ -180,37 +179,18 @@ export function parseCheckoutConflict(body: string): CheckoutConflictPayload | n
   }
 }
 
-export async function chooseCheckoutStrategy(
-  decide: (opts: {
-    title: string;
-    message: string;
-    cancelLabel: string;
-    options: DecisionOption[];
-  }) => Promise<string | null>,
-  conflict: CheckoutConflictPayload,
-): Promise<"stash" | "merge" | null> {
-  const choice = await decide({
-    title: `Local changes block ${conflict.branch}`,
-    message: "Git found local work that the target branch would overwrite. Choose how to preserve it.",
-    cancelLabel: "Stay here",
-    options: [
-      {
-        value: "stash",
-        label: "Stash & switch",
-        description: "Safest: stash local work, switch branches, then re-apply it.",
-      },
-      {
-        value: "merge",
-        label: "Switch & resolve conflicts",
-        description: conflict.canMerge
-          ? "Keep local edits in place and let Git create conflicts for the resolver."
-          : "Unavailable because untracked files would be overwritten; Git cannot merge those safely.",
-        variant: "danger",
-        disabled: !conflict.canMerge,
-      },
-    ],
-  });
-  return choice === "stash" || choice === "merge" ? choice : null;
+/**
+ * Every branch switch auto-stashes: stash → switch → re-apply (staged stays
+ * staged), the way GitKraken does it. The server only stashes when the tree is
+ * actually dirty, so a clean switch is still a plain checkout. The old flow
+ * tried a bare checkout first and stopped on a two-option dialog whenever Git
+ * refused — an interruption for what is nearly always "keep my work".
+ * A re-apply that conflicts comes back as a stash conflict, as before.
+ */
+export const CHECKOUT_AUTOSTASH = { strategy: "stash" } as const;
+
+export function switchedToast(branch: string, stashed: boolean): string {
+  return stashed ? `Switched to ${branch} — your changes came with you` : `Switched to ${branch}`;
 }
 
 /** GET a git API payload; throws a user-facing Error on failure. */
@@ -272,11 +252,12 @@ export async function postGitAction<T = Record<string, unknown>>(
 const FULLSCREEN_PREF_KEY = "devhub.repo-git.fullscreen";
 const COMMIT_MODE_PREF_KEY = "devhub.repo-git.commit-mode";
 
+/** Full screen unless the user explicitly chose the smaller dialog (`"0"`). */
 export function readFullscreenPref(): boolean {
   try {
-    return window.localStorage.getItem(FULLSCREEN_PREF_KEY) === "1";
+    return window.localStorage.getItem(FULLSCREEN_PREF_KEY) !== "0";
   } catch {
-    return false;
+    return true;
   }
 }
 

@@ -6,8 +6,8 @@ import type { Json } from "@/lib/json-file";
  * / BI overflows; later servers stay connected (resources list) but their tools
  * never appear — `execute`, `ctx_search`.
  *
- * Claude Code / Codex keep the full catalog. Only Cursor's mcp.json and AionUi's
- * attached `devhub` process get this allowlist.
+ * Claude Code / Codex keep the full catalog. Only Cursor's mcp.json and the
+ * `devhub` process DevHub passes to Cursor agents in Paseo get this allowlist.
  */
 export const CURSOR_ACP_DEVHUB_TOOLSETS =
   "notes,docs,tasks,plans,status,jobs,work,search,agents,terminal,events,ui,tags,recall,repos,history";
@@ -34,7 +34,7 @@ function withEnv(
   return { ...entry, env: { ...env, ...extra } };
 }
 
-/** Force Cursor-ACP env onto a synced mcp.json / AionUi transport entry. Overlay wins. */
+/** Force Cursor-ACP env onto a synced mcp.json or Paseo launch entry. Overlay wins. */
 export function applyCursorAcpServerOverlay(name: string, entry: Json): Json {
   const rec = asRecord(entry);
   if (!rec) return entry;

@@ -5,7 +5,7 @@ order: 3
 icon: SquareTerminal
 tags: [reference]
 related:
-  - guides/opencode-and-chamber
+  - guides/terminal-and-agent-cli
 ---
 
 # Scripts
@@ -22,19 +22,29 @@ Run these from the repo root.
 | `npm run dev`            | Start the dashboard in development mode                |
 | `npm run start`          | Start the dashboard in production mode                 |
 | `npm run build`          | Build the dashboard                                    |
-| `npm run verify`         | Run lint, typecheck, and tests                         |
+| `npm run verify`         | Lint, typecheck and tests in parallel, vendored-skill audit, production build, dynamic-route check (what `pre-push` runs) |
 | `npm run lint`           | Run dashboard linting                                  |
 | `npm run typecheck`      | Run TypeScript checks                                  |
 | `npm run test`           | Run tests                                              |
+| `npm run restart`        | Production build of the dashboard, then restart it     |
 | `npm run doctor`         | Run diagnostics                                        |
+| `npm run agents:install` | Install or update the managed Paseo daemon (see [Agents (Paseo)](../guides/paseo-agents.md)) |
+| `npm run mcp:inventory`  | List every tool the DevHub MCP server registers       |
 | `npm run setup`          | Show setup guidance                                    |
 | `npm run desktop:doctor` | Check desktop build prerequisites                      |
 | `npm run desktop:dev`    | Stage and run the Tauri shell against a live window  |
+| `npm run desktop:stage`  | Stage the server, resources and sidecars without building |
+| `npm run desktop:verify` | Check the staged bundle is complete                   |
+| `npm run desktop:test`   | Desktop script unit tests (`node --test`)             |
+| `npm run desktop:selftest` | Run the packaged app's `--self-test` storage round-trip |
 | `npm run desktop:build`  | Stage, build, and sign a release bundle              |
 | `npm run desktop:install`| Replace `/Applications/DevHub.app` safely            |
 | `npm run desktop:sign:identity`  | Create the stable local signing certificate (once per Mac) |
 | `npm run desktop:sign:installed` | Re-seal `/Applications/DevHub.app` after an in-place edit  |
 | `npm run demos:record`     | Record `docs/assets/demos/dashboard.gif` by driving the dashboard against a throwaway fixture |
+| `npm run demos:walkthroughs` | Record the feature walkthrough MP4s in `docs/assets/demos/` (needs ffmpeg) — see [Recording demos](../contributing/recording-demos.md) |
+| `npm run skills:demos`     | Re-record the vendored-skill GIFs in `docs/assets/demos/` against the synthetic fixture |
+| `npm run skills:verify-vendor` | Audit vendored skills (provenance and content checks) before they sync; part of `verify` |
 
 The two signing scripts exist because macOS ties permission grants to the code
 signature: an unsealed or ad-hoc-signed bundle gets asked for Full Disk Access,
@@ -84,12 +94,22 @@ The dashboard owns most operational scripts. They handle tasks such as:
 - Post-install setup.
 - Action runner execution.
 - Plugin dashboard/branding materialisation before `dev`, `build`, `start`, and full sync.
-- Peer boot (`start-peer-services.ts`) frees leftover OpenCode on 1338/4096; OpenChamber and OpenCode lazy-start from the dashboard tabs.
+- Peer boot (`start-peer-services.ts`) is now a no-op note: Paseo runs under launchd, and OpenCode only lazy-starts for session recap.
 - 1Password secret fallback (`op-secrets.ts`) before services bind ports.
 - Standup diagnostics.
 - PWA icon generation.
 
 Prefer root commands or dashboard UI actions unless you are debugging a specific script.
+
+Useful dashboard-only scripts (`npm run <name> --prefix dashboard`):
+
+| Command | Purpose |
+| ------- | ------- |
+| `test:watch` | Vitest in watch mode, with desktop and content-dir env scrubbed |
+| `test:e2e`, `test:e2e:ui` | Playwright journeys (`PLAYWRIGHT_VIDEO=1` records them — see [Recording demos](../contributing/recording-demos.md)) |
+| `check:contrast` | WCAG contrast check across theme presets |
+| `check:dynamic-routes` | Fail if a content route would be prerendered at build time |
+| `icons:pwa`, `build:seasonal-icons` | Regenerate PWA icons and the seasonal icon subset |
 
 ## In-Process Action Catalog
 

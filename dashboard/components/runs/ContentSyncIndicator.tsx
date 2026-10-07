@@ -13,10 +13,8 @@ import { useToast } from "@/lib/hooks/use-toast";
 import { waitForScriptRun } from "@/lib/wait-for-script-run";
 import { HoverTip } from "@/components/ui/HoverTip";
 import { GitHookFailureDialog } from "@/components/repo-git/GitHookFailureDialog";
-import {
-  RepoGitWorkspace,
-  type RepoGitTabId,
-} from "@/components/repo-git/RepoGitWorkspace";
+import { RepoGitWorkspace } from "@/components/repo-git/RepoGitWorkspace";
+import type { RepoGitTabId } from "@/components/repo-git/shared";
 
 interface GitSyncState {
   dirtyCount: number;
@@ -293,12 +291,8 @@ export function ContentSyncIndicator() {
     void pushUnpushedCommits();
   }
 
-  // Stay mounted while the Git modal / hook dialog is open so a mid-session
-  // clean doesn't tear down the portal under the user. Keep visible for
-  // unpushed commits too — otherwise a commit+failed-push looks like success.
-  // Also stay up while a content sync/push is in flight (long pre-push hooks).
+  // Keep hook failures and in-flight sync visible even if a refresh reports clean.
   if (
-    !gitOpen &&
     !hookFailure &&
     !syncing &&
     !updating &&
@@ -402,34 +396,28 @@ export function ContentSyncIndicator() {
         )}
       </span>
 
-      {/* Keep mounted while open even if dirty/ahead briefly flickers after commit —
-          otherwise the portal unmounts and the modal feels like it "closed". */}
-      {(canOpenWorkspace || gitOpen) && gitDirty.repoName && gitDirty.repoPath && (
-        <RepoGitWorkspace
-          repoName={gitDirty.repoName}
-          repoPath={gitDirty.repoPath}
-          dirtyCount={otherDirty}
-          unpushedCount={gitDirty.ahead}
-          hideTrigger
-          open={gitOpen}
-          onOpenChange={(next) => {
-            setGitOpen(next);
-            if (!next) void loadGitSyncState().then(setGitDirty);
-          }}
-          initialTab={gitTab}
-          onMutate={() => {
-            void loadGitSyncState().then(setGitDirty);
-          }}
-        />
-      )}
-
       {canOpenWorkspace && (
-        <GitHookFailureDialog
-          failure={hookFailure}
-          repoName={gitDirty.repoName!}
-          repoPath={gitDirty.repoPath!}
-          onClose={() => setHookFailure(null)}
-        />
+        <>
+          <RepoGitWorkspace
+            repoName={gitDirty.repoName!}
+            repoPath={gitDirty.repoPath!}
+            dirtyCount={gitDirty.dirtyCount}
+            unpushedCount={gitDirty.ahead}
+            onMutate={() => {
+              void mutateGit();
+            }}
+            hideTrigger
+            open={gitOpen}
+            onOpenChange={setGitOpen}
+            initialTab={gitTab}
+          />
+          <GitHookFailureDialog
+            failure={hookFailure}
+            repoName={gitDirty.repoName!}
+            repoPath={gitDirty.repoPath!}
+            onClose={() => setHookFailure(null)}
+          />
+        </>
       )}
     </>
   );

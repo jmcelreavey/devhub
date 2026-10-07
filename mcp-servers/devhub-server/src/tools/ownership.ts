@@ -19,7 +19,7 @@ function ownershipPath(repo: string, suffix: string): string {
 }
 
 function text(value: unknown): { content: { type: "text"; text: string }[] } {
-  return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };
+  return { content: [{ type: "text", text: JSON.stringify(value) }] };
 }
 
 const repoSchema = z.string().describe("Owned GitHub repo in owner/name form");

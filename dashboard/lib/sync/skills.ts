@@ -59,7 +59,6 @@ export const TOOL_DIRS: Record<string, string> = {
   // (that folder is Cursor's internal builtins and must not be a sync target).
   agents: ".agents/skills",
   antigravity: ".gemini/config/skills",
-  aionui: ".local/share/devhub/aionui/data/skills",
   "ai-skills": ".ai-skills",
   "config-ai": ".config/ai/skills",
 };

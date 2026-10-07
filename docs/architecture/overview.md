@@ -54,7 +54,7 @@ synced copies — never the other way round, unless you explicitly pull from a t
 
 DevHub is built for one user on a trusted machine or trusted LAN.
 
-There is no user login or session system. Mutating API routes are guarded globally by `dashboard/proxy.ts` via `requireDashboardAuth` (strict same-origin `Origin` **or** `X-DevHub-Secret` when `DEVHUB_API_SECRET` is set). Sensitive **GET** routes that need the same guard must enforce it per handler — OpenCode recap/listen, OpenChamber listen, and every `/api/db` route. See [API Routes — Common Behavior](../reference/api-routes.md#common-behavior) and [Environment Variables](../reference/environment-variables.md#core-variables).
+There is no user login or session system. Mutating API routes are guarded globally by `dashboard/proxy.ts` via `requireDashboardAuth` (strict same-origin `Origin` **or** `X-DevHub-Secret` when `DEVHUB_API_SECRET` is set). Sensitive **GET** routes that need the same guard must enforce it per handler — OpenCode recap, agent usage, the Paseo routes, and every `/api/db` route. See [API Routes — Common Behavior](../reference/api-routes.md#common-behavior) and [Environment Variables](../reference/environment-variables.md#core-variables).
 
 Do not expose DevHub to the public internet without adding a proper perimeter auth layer on top of these guards.
 
@@ -81,11 +81,11 @@ During normal use, DevHub may run several local services:
 | Service     | Default port | Typical role                                  |
 | ----------- | ------------ | --------------------------------------------- |
 | Dashboard   | `1337`       | Main web app                                  |
-| Agents      | AionUi `:25818` | `/agents` coding workspace                  |
+| Agents      | Paseo `:6767`   | `/agents` coding workspace                  |
 | MCP server  | —            | Stdio server launched by AI tools when needed |
 | Terminal    | `1339`       | Docked PTY                                    |
 
-`/chamber` and `/opencode` redirect to `/agents`. Recap and leftover listen APIs can still lazy-start OpenCode. See [Agents (AionUi)](../guides/aionui-agents.md) and [OpenCode and OpenChamber](../guides/opencode-and-chamber.md).
+`/chamber` and `/opencode` redirect to `/agents`. Only OpenCode session recap still lazy-starts a loopback OpenCode server. See [Agents (Paseo)](../guides/paseo-agents.md) and [Terminal and agent CLI](../guides/terminal-and-agent-cli.md).
 
 The dashboard can also run local actions, such as syncing skills or validating the repo.
 

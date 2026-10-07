@@ -43,7 +43,8 @@ export interface AgentRunSpec {
   id: string;
   schemaVersion?: 2;
   /** Records without this field were launched by the legacy terminal runner. */
-  runtime?: "legacy-cli" | "aionui" | "generation";
+  /** "aionui" only on records from before Paseo; they load read-only. */
+  runtime?: "legacy-cli" | "aionui" | "paseo" | "generation";
   activity?: AgentActivityContext;
   requestId?: string;
   provider: string;
@@ -87,8 +88,12 @@ export interface AgentRunStatus {
   connectivity?: "connected" | "reconnecting";
   submissionAttemptedAt?: number;
   cancelRequestedAt?: number;
-  /** Set after a PR-review chat is archived in the AionUi sidebar. */
+  /** Set after a PR-review chat is archived in the Paseo sidebar. */
   sidebarArchivedAt?: number;
+  /** Paseo workspace DevHub pinned for a task's plan/implement chat. DevHub only unpins its own pins. */
+  pinnedWorkspaceId?: string;
+  /** Set once that pin is released: implementation started (plans) or the task closed. */
+  workspaceUnpinnedAt?: number;
   inputTokens?: number;
   outputTokens?: number;
   resultText?: string;

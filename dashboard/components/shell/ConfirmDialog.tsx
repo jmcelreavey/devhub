@@ -21,6 +21,8 @@ interface ConfirmOptions {
 }
 
 export interface DecisionOption {
+  /** Extra context shown on hover and included in search. */
+  hint?: string;
   value: string;
   label: string;
   description: string;
@@ -152,6 +154,7 @@ function ConfirmDialogView({
   const previousFocus = useRef<HTMLElement | null>(null);
   const [inputValue, setInputValue] = useState(pending.input?.defaultValue ?? "");
   const [aiBusy, setAiBusy] = useState(false);
+  const [decisionQuery, setDecisionQuery] = useState("");
   const [aiError, setAiError] = useState<string | null>(null);
   const generateAi = pending.kind === "prompt" ? pending.input?.generateAi : undefined;
 
@@ -244,7 +247,7 @@ function ConfirmDialogView({
         className="card modal-panel"
         style={{
           width: "100%",
-          maxWidth: 420,
+          maxWidth: pending.kind === "decision" ? 560 : 420,
           padding: 20,
           background: "var(--bg-surface)",
         }}
@@ -290,23 +293,31 @@ function ConfirmDialogView({
             )}
           </>
         )}
+        {pending.kind === "decision" && pending.options.length > 6 && (
+          <label className="mb-3 block text-xs text-text-muted">Find a workspace or option
+            <input className="input mt-1 w-full" type="search" value={decisionQuery}
+              onChange={(event) => setDecisionQuery(event.target.value)} placeholder="Search title, branch, task or note…" />
+          </label>
+        )}
         {pending.kind === "decision" && (
-          <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
-            {pending.options.map((option, index) => (
+          <div style={{ display: "grid", gap: 8, marginBottom: 16, maxHeight: "min(55dvh, 480px)", overflowY: "auto" }}>
+            {!pending.options.some((option) => `${option.label} ${option.description} ${option.hint ?? ""}`.toLowerCase().includes(decisionQuery.toLowerCase())) && <p role="status">No matching options.</p>}
+            {pending.options.filter((option) => `${option.label} ${option.description} ${option.hint ?? ""}`.toLowerCase().includes(decisionQuery.toLowerCase())).map((option, index) => (
               <button
                 key={option.value}
                 ref={index === 0 ? confirmRef : undefined}
                 type="button"
                 className={option.variant === "danger" ? "btn btn-danger-ghost" : "btn btn-ghost"}
                 disabled={option.disabled}
-                style={{ height: "auto", padding: "10px 12px", alignItems: "flex-start", textAlign: "left" }}
+                title={option.hint}
+                style={{ height: "auto", padding: "10px 12px", alignItems: "flex-start", textAlign: "left", whiteSpace: "normal", overflowWrap: "anywhere" }}
                 onClick={() => onDecision(option.value)}
               >
                 <span>
                   <strong style={{ display: "block", color: "var(--text)", fontWeight: 600 }}>
                     {option.label}
                   </strong>
-                  <span style={{ display: "block", marginTop: 2, color: "var(--text-muted)", fontSize: 12, fontWeight: 400 }}>
+                  <span style={{ display: "block", marginTop: 2, color: "var(--text-muted)", fontSize: 12, fontWeight: 400, whiteSpace: "pre-line" }}>
                     {option.description}
                   </span>
                 </span>

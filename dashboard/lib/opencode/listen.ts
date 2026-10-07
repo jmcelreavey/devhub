@@ -1,15 +1,16 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { getOpenCodeEnv, resolveOpenCodeBinary } from "@/lib/opencode/command";
-import { OPENCODE_EXTERNAL_KEYS } from "@/lib/openchamber-command";
 import {
   canConnect,
-  killPidsListeningOnPort,
   reserveEphemeralPort,
   waitForPortListening,
 } from "@/lib/port-probe";
 
-/** Ports Chamber/OpenCode treat as "configured" external servers. Never bind these. */
+/** Ports other OpenCode clients treat as a "configured" external server. Never bind these. */
 export const PINNED_OPENCODE_PORTS = [1338, 4096] as const;
+
+/** Inherited env that would pin our serve to a port or server we do not own. */
+const OPENCODE_EXTERNAL_KEYS = ["OPENCODE_PORT", "OPENCODE_HOST", "OPENCODE_SKIP_START"] as const;
 
 const BIND_HOST = "127.0.0.1";
 const OWNED_ENV = "DEVHUB_OPENCODE_OWNED";
@@ -38,7 +39,6 @@ export function isDevHubOpenCodeCommand(cmd: string): boolean {
 
 export function opencodeSpawnEnv(): NodeJS.ProcessEnv {
   const env = getOpenCodeEnv();
-  // Same keys Chamber must not inherit: they pin a serve to a port we do not own.
   for (const key of OPENCODE_EXTERNAL_KEYS) delete env[key];
   // Basic auth here makes the iframe 401 — the tab cannot send it, and this
   // instance is loopback-only. Recap/agent callers still send the header; a
@@ -47,19 +47,6 @@ export function opencodeSpawnEnv(): NodeJS.ProcessEnv {
   delete env.OPENCODE_SERVER_USERNAME;
   env[OWNED_ENV] = "1";
   return env;
-}
-
-/** Kill leftover DevHub OpenCode on the old pinned port so Chamber.app can own OpenCode. */
-export function freePinnedOpenCodePorts(log: (msg: string) => void = () => undefined): number[] {
-  const killed: number[] = [];
-  for (const pinned of PINNED_OPENCODE_PORTS) {
-    const pids = killPidsListeningOnPort(pinned);
-    if (pids.length > 0) {
-      log(`freed leftover OpenCode on ${pinned} (pids ${pids.join(",")})`);
-      killed.push(...pids);
-    }
-  }
-  return killed;
 }
 
 interface ServeProcess {
@@ -99,7 +86,7 @@ function listDevHubOpenCodeServes(): ServeProcess[] {
  *
  * Dashboard restarts drop the in-memory child handle (ppid 1). Webpack HMR
  * drops the handle while next-server is still the parent (`process.pid`).
- * Chamber's OpenCode is neither.
+ * Anyone else's OpenCode is neither.
  */
 export function reapOrphanOpenCodeServers(
   log: (msg: string) => void = () => undefined,
@@ -147,9 +134,8 @@ function registerExitCleanup(): void {
 }
 
 /**
- * Start (or reuse) DevHub's own OpenCode for `/opencode`, recap, and Datadog
- * Investigate. Always an ephemeral loopback port — never 1338/4096, never
- * exported as OPENCODE_PORT into Chamber.
+ * Start (or reuse) DevHub's own OpenCode for session recap. Always an ephemeral
+ * loopback port — never 1338/4096, never exported as OPENCODE_PORT.
  */
 export async function ensureDevHubOpenCode(log: (msg: string) => void = () => undefined): Promise<number> {
   if (port != null && (await canConnect(port, BIND_HOST))) {

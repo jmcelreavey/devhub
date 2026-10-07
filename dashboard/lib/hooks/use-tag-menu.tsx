@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState, type MouseEvent, type ReactNode } from "react";
-import { Hash } from "lucide-react";
+import { Link2 } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { type EntityKind, type EntityRef } from "@/lib/entity-note";
-import { TagsModal } from "@/components/shell/TagsModal";
+import { LinksModal } from "@/components/shell/LinksModal";
 import type { ContextMenuGroup } from "@/components/shell/ContextMenu";
 
 interface EntityLinksTagPayload {
@@ -13,28 +13,15 @@ interface EntityLinksTagPayload {
 
 type TagMenuLookup = Pick<
   UseTagMenuGroupParams,
-  "kind" | "id" | "date" | "label" | "href" | "meetingTitle" | "prRepo" | "prNumber" | "extraTags"
+  "kind" | "id" | "date" | "label" | "href" | "meetingTitle" | "prRepo" | "prNumber"
 >;
 
-/** Merge client-side #tags with /api/entity-links related — menu count and modal list both use this. */
-export function collectTagMenuRefs(
-  extraTags: string[] | undefined,
-  related: EntityRef[] | undefined,
-): EntityRef[] {
+/** Deduped related entities for the links menu and dialog. Hashtags are not a link. */
+export function collectTagMenuRefs(related: EntityRef[] | undefined): EntityRef[] {
   const seen = new Set<string>();
   const refs: EntityRef[] = [];
-  for (const tag of extraTags ?? []) {
-    const refKey = `tag:${tag}`;
-    if (seen.has(refKey)) continue;
-    seen.add(refKey);
-    refs.push({
-      kind: "tag",
-      id: tag,
-      label: `#${tag}`,
-      href: `/work?tag=${encodeURIComponent(tag)}`,
-    });
-  }
   for (const ref of related ?? []) {
+    if (ref.kind === "tag") continue;
     const refKey = `${ref.kind}:${ref.id}`;
     if (seen.has(refKey)) continue;
     seen.add(refKey);
@@ -44,42 +31,41 @@ export function collectTagMenuRefs(
 }
 
 export function tagMenuCountLabel(count: number): string {
-  return count > 0 ? `${count} linked` : "No tags yet";
+  return count > 0 ? `${count} linked` : "No links yet";
 }
 
 export interface UseTagMenuGroupParams {
-  /** Entity kind /api/entity-links understands; null skips the server lookup (extraTags only). */
+  /** Entity kind /api/entity-links understands; null skips the server lookup. */
   kind: EntityKind | null;
   id: string;
   date?: string;
   label?: string;
+  /** Dialog header when `label` (which also feeds the lookup) carries noise like a Jira key. */
+  title?: string;
   href?: string;
   meetingTitle?: string;
   prRepo?: string;
   prNumber?: number;
-  /** Tags already known client-side (e.g. parsed from visible title text) — merged with the server lookup. */
-  extraTags?: string[];
   /** Fetch only once the menu is actually open, so a long list doesn't fire a request per row on mount. */
   enabled: boolean;
-  onAddTag?: (tag: string) => void | Promise<void>;
   onRemoveRef?: (ref: EntityRef) => void | Promise<void>;
   onAddLink?: () => void;
   onTagContextMenu?: (e: MouseEvent, ref: EntityRef) => void;
 }
 
 export interface TagMenuResult {
-  /** Single "Tags" entry for the row's context menu — opens `modal` on select. */
+  /** Single "Links" entry for the row's context menu — opens `modal` on select. */
   group: ContextMenuGroup;
   /** Render this once alongside the row's own <ContextMenu>. */
   modal: ReactNode;
-  /** Open the tags dialog from a visible control, not only the hover kebab. */
+  /** Open the links dialog from a visible control, not only the hover kebab. */
   openModal: () => void;
 }
 
 /**
- * "Tags" context-menu entry shared by every right-clickable row: real #tags
- * on the entity plus anything else linked to it (a task that references this
- * Jira ticket, a note that mentions this PR, …) — reusing /api/entity-links,
+ * "Links" context-menu entry shared by every right-clickable row: everything
+ * linked to the entity (a task that references this Jira ticket, a note that
+ * mentions this PR, …) — reusing /api/entity-links,
  * the same lookup EntityLinkChips already does for its inline chips, so SWR
  * dedupes when both are mounted on a row.
  *
@@ -92,13 +78,12 @@ export function useTagMenuGroup({
   id,
   date,
   label,
+  title,
   href,
   meetingTitle,
   prRepo,
   prNumber,
-  extraTags,
   enabled,
-  onAddTag,
   onRemoveRef,
   onAddLink,
   onTagContextMenu,
@@ -113,16 +98,13 @@ export function useTagMenuGroup({
     meetingTitle,
     prRepo,
     prNumber,
-    extraTags,
   };
   const [held, setHeld] = useState(live);
-  // ContextMenu calls onClose in the same click as "View tags" onSelect, so
-  // `enabled` flips false and chip-derived kind/id/extraTags go empty before
-  // the modal paints. Hold the lookup from the last enabled render and keep
-  // using it while the modal is open — fetch key, count, and list all read
-  // this snapshot, otherwise the modal opens on "Nothing tagged yet."
-  const extraTagsKey = (live.extraTags ?? []).join("\0");
-  const heldKey = (held.extraTags ?? []).join("\0");
+  // ContextMenu calls onClose in the same click as "View links" onSelect, so
+  // `enabled` flips false and chip-derived kind/id go empty before the modal
+  // paints. Hold the lookup from the last enabled render and keep using it
+  // while the modal is open — fetch key, count, and list all read this
+  // snapshot, otherwise the modal opens on "Nothing linked yet."
   if (
     enabled &&
     (held.kind !== live.kind ||
@@ -132,8 +114,7 @@ export function useTagMenuGroup({
       held.href !== live.href ||
       held.meetingTitle !== live.meetingTitle ||
       held.prRepo !== live.prRepo ||
-      held.prNumber !== live.prNumber ||
-      heldKey !== extraTagsKey)
+      held.prNumber !== live.prNumber)
   ) {
     setHeld(live);
   }
@@ -162,30 +143,29 @@ export function useTagMenuGroup({
     lookup.prNumber,
   ]);
   const { data } = useLive<EntityLinksTagPayload>(key);
-  const refs = collectTagMenuRefs(lookup.extraTags, data?.related);
+  const refs = collectTagMenuRefs(data?.related);
 
   const group: ContextMenuGroup = {
     id: "tags",
-    label: "Tags",
+    label: "Links",
     items: [
       {
         id: "view-tags",
-        label: "View tags",
+        label: "View links",
         description: tagMenuCountLabel(refs.length),
-        icon: <Hash size={12} aria-hidden />,
+        icon: <Link2 size={12} aria-hidden />,
         onSelect: () => setOpen(true),
       },
     ],
   };
 
   const modal = (
-    <TagsModal
+    <LinksModal
       open={open}
       onClose={() => setOpen(false)}
       kind={lookup.kind ?? undefined}
-      title={lookup.label}
+      title={title ?? lookup.label}
       refs={refs}
-      onAddTag={onAddTag}
       onRemoveRef={onRemoveRef}
       onAddLink={onAddLink}
       onTagContextMenu={onTagContextMenu}

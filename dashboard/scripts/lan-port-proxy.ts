@@ -1,7 +1,7 @@
 /**
  * Expose localhost-only DevHub services on one non-Tailscale LAN IP.
  *
- * Next/OpenCode/OpenChamber/terminal stay bound to 127.0.0.1 so the Electron
+ * The dashboard, Paseo and the terminal stay bound to 127.0.0.1 so the desktop
  * app can always use localhost. This process adds LAN listeners only when
  * DEVHUB_LAN_PROXY_HOST is set, usually to `auto` from /setup.
  */
@@ -81,7 +81,9 @@ async function main(): Promise<void> {
    */
   const proxies: PortProxy[] = [
     { label: "dashboard", port: parsePort("PORT", 1337) },
-    { label: "openchamber", port: parsePort("OPENCHAMBER_PORT", 1336) },
+    // Same home-LAN / no-Tailscale rule as the dashboard: daemon stays on
+    // 127.0.0.1:6767; this only publishes it on the non-CGNAT LAN IP.
+    { label: "paseo", port: parsePort("DEVHUB_PASEO_PORT", 6767) },
   ];
 
   for (const proxy of proxies) startProxy(proxy, host);

@@ -1,20 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { NavLink } from "@/components/shell/NavLink";
 import {
   NAV_ITEMS,
   NAV_GROUPS,
+  activeNavHref,
   groupSidebarNav,
   type NavGroup,
   type NavItem,
-  type SetupGateStatus,
 } from "@/lib/nav";
 import { PLUGIN_NAV_ITEMS } from "@/lib/plugin-nav.generated";
-import { useLive } from "@/lib/hooks/use-fetch";
+import { useSetupStatus } from "@/lib/hooks/use-setup-status";
 import { useNavBadges, countForItem, unseenForItem } from "@/lib/hooks/use-nav-badges";
-import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { AccentPicker } from "@/components/shell/AccentPicker";
 import { FocusTimer } from "@/components/tasks/FocusTimer";
 
@@ -22,9 +22,7 @@ type GroupedNav = Record<NavGroup, NavItem[]>;
 
 export function MobileNav() {
   const [open, setOpen] = useState(false);
-  const { data: setup } = useLive<SetupGateStatus>("/api/setup/status", {
-    refreshInterval: 0,
-  });
+  const setup = useSetupStatus();
   const { counts, unseen, calendarRemaining } = useNavBadges();
 
   useEffect(() => {
@@ -52,6 +50,10 @@ export function MobileNav() {
         setup: setup ?? null,
       }),
     [setup],
+  );
+  const activeHref = activeNavHref(
+    usePathname(),
+    NAV_GROUPS.flatMap((g) => coreGrouped[g.id].map((i) => i.href)),
   );
 
   return (
@@ -99,6 +101,7 @@ export function MobileNav() {
                         key={item.href}
                         item={item}
                         onClick={() => setOpen(false)}
+                        active={item.href === activeHref}
                         count={countForItem(item.icon, counts, { calendarRemaining })}
                         unseen={unseenForItem(item.icon, unseen)}
                       />
@@ -117,8 +120,7 @@ export function MobileNav() {
                 className="flex items-center gap-0.5"
               >
                 <FocusTimer />
-                <ThemeToggle />
-                <AccentPicker />
+                      <AccentPicker />
               </div>
             </div>
           </div>

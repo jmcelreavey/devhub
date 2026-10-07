@@ -20,10 +20,10 @@ if [[ -d "$REPO_ROOT/.githooks" ]] && command -v git &>/dev/null; then
     log "Git hooks enabled (pre-push runs dashboard verify)."
 fi
 
-# --- 2. Install dashboard dependencies (includes OpenChamber via devDependency + start script) ---
+# --- 2. Install dashboard dependencies ---
 DASHBOARD_DIR="$REPO_ROOT/dashboard"
 if ! command -v npm &>/dev/null; then
-    warn "npm not found — install Node.js (>=20) before continuing."
+    warn "npm not found — install Node.js 22 (>=22.14) and npm 10, then run nvm use before continuing."
     exit 1
 fi
 if [[ ! -f "$DASHBOARD_DIR/package.json" ]]; then
@@ -41,7 +41,7 @@ if ! command -v safe-chain &>/dev/null; then
 fi
 
 log "Installing dashboard dependencies..."
-npm ci --prefix "$DASHBOARD_DIR" --silent 2>/dev/null || {
+npm ci --prefix "$DASHBOARD_DIR" --silent || {
     warn "npm ci failed — falling back to npm install"
     npm install --prefix "$DASHBOARD_DIR" --silent || {
         warn "Dependency install failed — run manually: npm install (repo root) or cd dashboard && npm install"
@@ -52,7 +52,8 @@ npm ci --prefix "$DASHBOARD_DIR" --silent 2>/dev/null || {
 # --- 3. Everything else: sync, MCP, notes-server, build, validate (TypeScript) ---
 log "Running bootstrap (TypeScript)..."
 (cd "$DASHBOARD_DIR" && npx --no-install tsx scripts/bootstrap-install.ts) || {
-    warn "Bootstrap had issues — see output above"
+    warn "Bootstrap failed — see output above. Fix the error and re-run bash scripts/install.sh."
+    exit 1
 }
 
 echo ""

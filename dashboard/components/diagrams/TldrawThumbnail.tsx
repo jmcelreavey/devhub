@@ -11,7 +11,7 @@ import { useTheme } from "@/components/shell/ThemeToggle";
  * list bundle until there's a diagram with content to draw.
  */
 export function TldrawThumbnail({ snapshot }: { snapshot: Record<string, unknown> }) {
-  const { mode } = useTheme();
+  const { resolvedMode: mode } = useTheme();
 
   return (
     <div

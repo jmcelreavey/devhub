@@ -8,6 +8,7 @@ import { TasksStorage } from "../task-diagram-storage.ts";
 import type { Context } from "../context.ts";
 import { blocksToText, textToBlocks } from "../convert.ts";
 import { registerTasksTools } from "./tasks.ts";
+import { registerNotesTools } from "./notes.ts";
 
 const DAY = "2026-08-25";
 const TASK_ID = "11111111-1111-4111-8111-111111111111";
@@ -46,6 +47,7 @@ function setup() {
     storage: new NotesStorage(notesDir),
   } as unknown as Context;
   registerTasksTools(server, ctx);
+  registerNotesTools(server, ctx);
   return { handlers, ctx, tasksDir, notesDir, root };
 }
 
@@ -60,7 +62,6 @@ afterEach(() => {
 const syncArgs = {
   id: TASK_ID,
   date: DAY,
-  tags: ["#Existing", "New-Tag", "Not A Tag!"],
   links: [
     { kind: "pr", id: "owner/repo#9", label: "PR #9", href: "https://github.com/owner/repo/pull/9" },
   ],
@@ -79,22 +80,43 @@ function noteMarkdown() {
 }
 
 describe("tasks_context_sync", () => {
-  it("merges tags, links, note links, tags line, and keyed summary", async () => {
+  it("opens and updates the inherited plan through both MCP note entry points", async () => {
+    const previousDate = "2026-08-24";
+    const previousId = "22222222-2222-4222-8222-222222222222";
+    const notePath = `task-notes/${previousDate}-${previousId}`;
+    const previous = { id: previousId, text: "Do the thing", done: false, createdAt: previousDate };
+    fs.writeFileSync(path.join(env.tasksDir, `${previousDate}.json`), JSON.stringify([previous]));
+    fs.writeFileSync(path.join(env.tasksDir, `${DAY}.json`), JSON.stringify([{
+      ...previous, id: TASK_ID, rolledFromId: previousId, rolledFromDate: previousDate,
+    }]));
+    env.ctx.storage.write(notePath, textToBlocks("## Plan\n\nKeep the original plan."));
+    const original = fs.readFileSync(path.join(env.notesDir, `${notePath}.json`), "utf8");
+    const result = await env.handlers.get("notes_create_task")!({ id: TASK_ID, text: previous.text, date: DAY });
+    expect(JSON.stringify(result)).toContain(`Already exists: ${notePath}`);
+    expect(fs.readFileSync(path.join(env.notesDir, `${notePath}.json`), "utf8")).toBe(original);
+
+    await call({ id: TASK_ID, date: DAY, noteSummary: "Implementation update.", noteSummaryKey: "carryover" });
+    const markdown = blocksToText(env.ctx.storage.read(notePath)!.content as unknown[]);
+    expect(markdown).toContain("Keep the original plan.");
+    expect(markdown).toContain("Implementation update.");
+    expect(env.ctx.tasksStorage.getDay(DAY).tasks[0]!.notePath).toBe(notePath);
+    expect(fs.existsSync(path.join(env.notesDir, `task-notes/${DAY}-${TASK_ID}.json`))).toBe(false);
+  });
+
+  it("merges links, note links, and keyed summary", async () => {
     const out = await call(syncArgs);
 
-    expect(out).toContain("tags added: #new-tag");
-    expect(out).toContain("1 invalid tag(s) skipped");
     expect(out).toContain("links: +1 added");
     expect(out).toContain("note task-notes/2026-08-25-11111111-1111-4111-8111-111111111111 created");
     expect(out).toContain("summary added");
 
     const task = env.ctx.tasksStorage.getDay(DAY).tasks[0];
-    expect(task.text).toBe("Do the thing #existing #new-tag");
+    expect(task.text).toBe("Do the thing #existing");
     expect(task.links).toHaveLength(2);
 
     const markdown = noteMarkdown();
     expect(markdown).toContain("## Implementation https://github.com/owner/repo/pull/9");
-    expect(markdown).toContain("Tags: #existing #new-tag");
+    expect(markdown).not.toContain("Tags:");
     expect(markdown).toContain("**PR:** [PR #9](https://github.com/owner/repo/pull/9)");
     expect(markdown).toContain("**Note:** Plan");
   });
@@ -104,11 +126,10 @@ describe("tasks_context_sync", () => {
     const out = await call(syncArgs);
 
     expect(out).toContain("summary already present");
-    expect(out).not.toContain("tags added");
     expect(out).not.toContain("links: +");
 
     const task = env.ctx.tasksStorage.getDay(DAY).tasks[0];
-    expect(task.text).toBe("Do the thing #existing #new-tag");
+    expect(task.text).toBe("Do the thing #existing");
     expect(task.links).toHaveLength(2);
     expect(noteMarkdown().match(/## Implementation /g)).toHaveLength(1);
   });
@@ -196,3 +217,36 @@ describe("tasks_update jira link promotion", () => {
   });
 });
 
+
+describe("tasks_history query", () => {
+  async function history(args: Record<string, unknown>) {
+    const result = (await env.handlers.get("tasks_history")!(args)) as { content: { text: string }[] };
+    return result.content[0].text;
+  }
+
+  it("returns only matching tasks, with their date, across every day", async () => {
+    fs.writeFileSync(
+      path.join(env.tasksDir, "2026-08-20.json"),
+      JSON.stringify([
+        { id: "22222222-2222-4222-8222-222222222222", text: "Ship PTF-4801 fix", done: true, createdAt: "2026-08-20T09:00:00.000Z" },
+        { id: "33333333-3333-4333-8333-333333333333", text: "Unrelated", done: false, createdAt: "2026-08-20T09:00:00.000Z" },
+      ]),
+    );
+    const text = await history({ query: "ptf-4801" });
+    expect(text).toContain("1 matching task(s)");
+    expect(text).toContain("2026-08-20 [x] 22222222-2222-4222-8222-222222222222 - Ship PTF-4801 fix");
+    expect(text).not.toContain("Unrelated");
+  });
+
+  it("says so when nothing matches", async () => {
+    expect(await history({ query: "nope" })).toBe('No tasks matching "nope"');
+  });
+
+  it("still returns every day by default, and trims only when days is passed", async () => {
+    fs.writeFileSync(path.join(env.tasksDir, "2026-08-20.json"), JSON.stringify([]));
+    expect(await history({ includeTasks: true })).toContain("2026-08-20");
+    const trimmed = await history({ includeTasks: true, days: 1 });
+    expect(trimmed).toContain(DAY);
+    expect(trimmed).toContain("1 older day(s) not shown");
+  });
+});

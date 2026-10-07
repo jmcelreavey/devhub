@@ -13,7 +13,7 @@ interface MermaidBlockViewProps {
 export function MermaidBlockView({ code, blockId }: MermaidBlockViewProps) {
   const editor = useBlockNoteEditor();
   const editable = editor.isEditable;
-  const { mode } = useTheme();
+  const { resolvedMode: mode } = useTheme();
   const [editing, setEditing] = useState(!code && editable);
   const [draft, setDraft] = useState(code);
   const [svg, setSvg] = useState<string>("");
@@ -70,7 +70,7 @@ export function MermaidBlockView({ code, blockId }: MermaidBlockViewProps) {
   };
 
   return (
-    <div className="card my-1 overflow-hidden" contentEditable={false}>
+    <div className="card my-1 w-full overflow-hidden" contentEditable={false}>
       <div
         className="flex items-center justify-between px-3 py-2"
         style={{ borderBottom: "1px solid var(--border-muted)" }}

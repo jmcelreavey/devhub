@@ -5,7 +5,7 @@
 import { AgentDispatchError,dispatchAgentRun } from "@/lib/agent-runs/dispatch";
 import { readRunEvents } from "@/lib/agent-runs/run-files";
 import { readAgentRun,toAgentRunSummary,type AgentRun,type AgentRunSummary } from "@/lib/agent-runs/store";
-import { aionCatalog,assistantForProvider } from "@/lib/aionui/catalog";
+import { defaultPaseoProvider, listPaseoProviders } from "@/lib/paseo/providers";
 import { resolveLocalGithubRepos } from "@/lib/repos/resolution";
 import { selectTaskImplementationRepo } from "@/lib/tasks/implement-repo";
 import { reconcileTaskAgentRunSidecar } from "@/lib/tasks/reconcile-task-agent-sidecar";
@@ -54,10 +54,10 @@ export interface ResumeTaskAgentResult {
 }
 
 async function pickInstalledProvider(preferred?: string): Promise<string> {
-  const { assistants, session } = await aionCatalog();
-  const assistant = assistantForProvider(assistants, preferred && preferred !== "default" ? preferred : session.defaultAssistantId);
-  if (!assistant?.enabled || assistant.agent_status !== "online") throw new TaskAgentResumeError("The selected agent needs setup in Agents.", 400);
-  return assistant.id;
+  const providers = await listPaseoProviders();
+  const id = preferred && preferred !== "default" ? (preferred === "chatgpt" ? "codex" : preferred) : defaultPaseoProvider(providers);
+  if (!id || !providers.some((p) => p.id === id && p.ready)) throw new TaskAgentResumeError("The selected agent isn't ready in Paseo. Check Agents → Connection.", 400);
+  return id;
 }
 
 /** Where a fresh run works: explicit cwd, else the prior run's, else the task's linked repo. */
@@ -129,7 +129,7 @@ export async function resumeTaskAgent(input: ResumeTaskAgentInput): Promise<Resu
       priorDispatchProvider: prior.spec.provider,
       selectedUiProvider: provider,
       priorSessionId,
-      priorSupportsResume: prior.spec.runtime === "aionui",
+      priorSupportsResume: prior.spec.runtime === "paseo",
     });
 
   const cwd = followUp ? { cwd: prior.spec.cwd } : await resolveImplementCwd(input.cwd, prior?.spec.cwd, task);

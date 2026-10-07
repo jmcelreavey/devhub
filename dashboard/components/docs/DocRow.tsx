@@ -11,7 +11,6 @@ import {
 } from "@/components/shell/ContextMenu";
 import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
 import { buildVaultFileMenuGroups } from "@/components/vault/vaultRowMenus";
-import { extractTags } from "@/lib/entity-note";
 import { useTagMenuGroup, withTagsGroup } from "@/lib/hooks/use-tag-menu";
 import { useToast } from "@/lib/hooks/use-toast";
 import { getVaultClient } from "@/lib/vault/vault-client";
@@ -134,7 +133,6 @@ export function DocRow({
   const { group: tagsGroup, modal: tagsModal } = useTagMenuGroup({
     kind: null,
     id: doc.slug,
-    extraTags: extractTags(doc.title),
     enabled: menu.target !== null,
   });
 

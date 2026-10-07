@@ -238,6 +238,8 @@ Body fields: `allRepos` (also scan sibling checkouts), `limit` (commits per repo
 
 `GET /api/recall/graph`: `entity=<kind:id>` for a neighbourhood; omit for the full graph (300-node cap). `minWeight` filters weak edges. Used by MCP `recall_graph`, not the `/recall` UI.
 
+[Repo conventions](../guides/repo-conventions.md) join the corpus through their own reader (`lib/conventions/recall.ts`), because they live under `notes/.config/` and the vault walker skips dot-directories. Each repo's active rules index as one `learning` document, and `sourcesNewestMtime` stats that directory explicitly for the same reason it checks the event spine.
+
 Git is the first source because it is the highest signal for the lowest cost —
 commit messages already contain the ticket keys, PR numbers and intent the
 graph needs, and reading them costs one subprocess.

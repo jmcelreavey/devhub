@@ -16,12 +16,15 @@ export default async function NotesLayout({ children }: { children: React.ReactN
     label: area.meta.label,
     secondary: area.meta.secondary,
     deletable: area.meta.id !== ROOT_AREA_ID,
-    items: area.notes.map(({ slug, title, href, summary }) => ({
-      slug,
-      title,
-      href,
-      description: summary,
-    })),
+    items: area.sections.flatMap((section) =>
+      section.notes.map(({ slug, title, href, summary }) => ({
+        slug,
+        title,
+        href,
+        description: summary,
+        section: section.label ?? undefined,
+      })),
+    ),
   }));
 
   return <NotesShell groups={groups}>{children}</NotesShell>;

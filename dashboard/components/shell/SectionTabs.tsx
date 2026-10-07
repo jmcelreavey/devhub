@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { SECTION_TABS, gateAllows, type SetupGateStatus } from "@/lib/nav";
-import { useLive } from "@/lib/hooks/use-fetch";
-import { isDesktop } from "@/lib/desktop/bridge";
+import { SECTION_TABS, gateAllows, matchesNavRoute } from "@/lib/nav";
+import { useIsDesktopPointer } from "@/lib/hooks/use-is-mobile";
+import { useSetupStatus } from "@/lib/hooks/use-setup-status";
 
 /**
  * Top-bar tab strip for merged destinations (2026-06 IA): when the current
@@ -15,13 +15,13 @@ import { isDesktop } from "@/lib/desktop/bridge";
  */
 export function SectionTabs() {
   const pathname = usePathname();
-  const desktop = isDesktop();
-  const { data: setup } = useLive<SetupGateStatus>("/api/setup/status", {
-    refreshInterval: 0,
-  });
+  // Same `desktopOnly` test as the sidebar. This used to ask "is this the
+  // Tauri shell?", so a browser tab on /logs showed a strip without Logs in it.
+  const desktop = useIsDesktopPointer();
+  const setup = useSetupStatus();
 
   const section = Object.values(SECTION_TABS).find((tabs) =>
-    tabs.some((t) => pathname === t.href || pathname.startsWith(`${t.href}/`)),
+    tabs.some((t) => matchesNavRoute(pathname, t.href)),
   );
   if (!section) return null;
 
@@ -33,7 +33,7 @@ export function SectionTabs() {
   // Longest matching href wins, so /status does not steal active from /status/….
   // (Sibling tabs like /logs are exact matches and win over a shorter prefix.)
   const activeHref = visible
-    .filter((t) => pathname === t.href || pathname.startsWith(`${t.href}/`))
+    .filter((t) => matchesNavRoute(pathname, t.href))
     .sort((a, b) => b.href.length - a.href.length)[0]?.href;
 
   return (
@@ -41,7 +41,7 @@ export function SectionTabs() {
       {visible.map((t) => {
         const active = t.href === activeHref;
         return (
-          <Link key={t.href} href={t.href} className="hub-section-tab" data-active={active || undefined}>
+          <Link key={t.href} href={t.href} className="hub-section-tab" data-active={active || undefined} aria-current={active ? "page" : undefined}>
             {t.label}
           </Link>
         );

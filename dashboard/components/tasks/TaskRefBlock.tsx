@@ -23,16 +23,17 @@ interface DayResponse {
 }
 
 /**
- * A checkbox bound to a real task in `tasks/{date}.json`. Reflects the task's
+ * A checkbox bound to the current daily snapshot. Reflects the task's
  * done state (polled) and toggling it flips the task — so completing the task
  * anywhere ticks this checkbox, and vice versa.
  */
 export function TaskRefBlockView({ taskId, date, label }: TaskRefBlockViewProps) {
-  const { data, mutate } = useLive<DayResponse>(`/api/tasks/history?date=${date}`, {
+  const { data, mutate } = useLive<DayResponse>(`/api/tasks?taskId=${encodeURIComponent(taskId)}`, {
     refreshInterval: 15_000,
   });
   const toast = useToast();
-  const task = data?.tasks.find((t) => t.id === taskId);
+  const task = data?.tasks[0];
+  const currentDate = data?.date ?? date;
   const done = task?.done ?? false;
   const missing = !!data && !task;
 
@@ -41,7 +42,7 @@ export function TaskRefBlockView({ taskId, date, label }: TaskRefBlockViewProps)
     await mutate(
       (cur) =>
         cur
-          ? { ...cur, tasks: cur.tasks.map((t) => (t.id === taskId ? { ...t, done: !t.done } : t)) }
+          ? { ...cur, tasks: cur.tasks.map((t) => (t.id === task.id ? { ...t, done: !t.done } : t)) }
           : cur,
       { revalidate: false },
     );
@@ -49,7 +50,7 @@ export function TaskRefBlockView({ taskId, date, label }: TaskRefBlockViewProps)
       const res = await fetch("/api/tasks", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: taskId, date, done: !done }),
+        body: JSON.stringify({ id: task.id, date: currentDate, done: !done }),
       });
       if (!res.ok) throw new Error(await res.text());
       await mutate();
@@ -58,7 +59,7 @@ export function TaskRefBlockView({ taskId, date, label }: TaskRefBlockViewProps)
       await mutate();
       toast.error("Couldn't update task.");
     }
-  }, [task, taskId, date, done, mutate, toast]);
+  }, [task, currentDate, done, mutate, toast]);
 
   return (
     <div
@@ -69,7 +70,7 @@ export function TaskRefBlockView({ taskId, date, label }: TaskRefBlockViewProps)
       <button
         type="button"
         onClick={toggle}
-        disabled={missing}
+        disabled={!task}
         aria-label={done ? "Mark task incomplete" : "Mark task complete"}
         style={{ background: "none", border: "none", cursor: missing ? "default" : "pointer", padding: 0, display: "flex" }}
       >
@@ -89,7 +90,7 @@ export function TaskRefBlockView({ taskId, date, label }: TaskRefBlockViewProps)
         {task?.text ?? label}
       </span>
       <a
-        href="/work?tab=tasks"
+        href={`/work?date=${currentDate}`}
         className="hub-icon-btn reveal-on-hover"
         title="Open in Work"
         aria-label="Open in Work"

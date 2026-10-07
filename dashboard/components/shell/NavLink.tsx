@@ -1,7 +1,6 @@
 "use client";
 
 import { HoverTip } from "@/components/ui/HoverTip";
-import { useLive } from "@/lib/hooks/use-fetch";
 import type { NavItem } from "@/lib/nav";
 import {
 Activity,
@@ -17,12 +16,11 @@ FileText,
 FolderGit2,
 GitPullRequest,
 Globe,
-History,
+House,
 LineChart,
 ListChecks,
 ListTodo,
 MessageSquare,
-Monitor,
 Newspaper,
 PenTool,
 Play,
@@ -37,10 +35,9 @@ Zap,
 type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 
 const ICONS: Record<string, LucideIcon> = {
-  today: CalendarDays,
+  today: House,
   briefing: Newspaper,
   calendar: CalendarDays,
   tickets: Ticket,
@@ -50,14 +47,13 @@ const ICONS: Record<string, LucideIcon> = {
   diagrams: PenTool,
   search: Search,
   learnings: BookOpen,
-  chamber: Monitor,
   opencode: Terminal,
   claude: Bot,
   cursor: Code2,
   chatgpt: MessageSquare,
   antigravity: Sparkles,
   status: Activity,
-  activity: History,
+  agents: Bot,
   skills: Zap,
   repos: FolderGit2,
   database: Database,
@@ -82,17 +78,15 @@ interface Props {
   item: NavItem;
   onClick?: () => void;
   collapsed?: boolean;
+  /** "You are here" — resolved once by the parent via `activeNavHref`. */
+  active: boolean;
   /** Queue depth badge — only shown when > 0 */
   count?: number;
   /** New activity seen on another surface since this route was last visited. */
   unseen?: boolean;
 }
 
-export function NavLink({ item, onClick, collapsed, count = 0, unseen = false }: Props) {
-  const { data: activity } = useLive<{ needsAttention: number }>(item.href === "/agents" ? "/api/agent/runs?summary=1" : null, { refreshInterval: 15_000 });
-  if (item.href === "/agents") count = activity?.needsAttention ?? 0;
-  const pathname = usePathname();
-  const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+export function NavLink({ item, onClick, collapsed, active, count = 0, unseen = false }: Props) {
   const Icon = ICONS[item.icon] ?? FileText;
 
   if (collapsed) {
@@ -102,6 +96,8 @@ export function NavLink({ item, onClick, collapsed, count = 0, unseen = false }:
           href={item.href}
           onClick={onClick}
           data-active={active || undefined}
+          aria-current={active ? "page" : undefined}
+          aria-label={count ? `${item.label}: ${count} need attention` : item.label}
           className="nav-item-collapsed relative flex items-center justify-center mx-1 my-0.5"
         >
           <Icon size={15} strokeWidth={active ? 2 : 1.7} />
@@ -185,6 +181,7 @@ export function NavLink({ item, onClick, collapsed, count = 0, unseen = false }:
       onClick={onClick}
       className="nav-item relative flex items-center gap-2.5 overflow-hidden"
       data-active={active || undefined}
+      aria-current={active ? "page" : undefined}
     >
       {body}
     </Link>

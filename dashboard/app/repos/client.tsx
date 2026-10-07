@@ -4,12 +4,17 @@ import OwnIndex from "@/app/own/client";
 import { usePrompt } from "@/components/shell/ConfirmDialog";
 import { BootScreen,useBootGate } from "@/components/today/TodayBootScreen";
 import { FetchError } from "@/components/ui/FetchError";
+import { ToggleGroup } from "@/components/ui/ToggleGroup";
 import { revalidateRepoOpenPrs } from "@/lib/github/repo-open-pr-swr";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
 import { revalidateOwnedRepos } from "@/lib/ownership/owned-repos-swr";
 import type { ResolvedOwnedRepo } from "@/lib/ownership/types";
+import type { ConventionsSummary } from "@/lib/conventions/types";
+import { escapeRegExp } from "@/lib/entity-note";
 import type { RepoProject } from "@/lib/projects";
+import { taskBelongsToRepo } from "@/lib/repos/work-hub";
+import { isTaskOpen, type Task } from "@/lib/tasks/types";
 import { AlertCircle,Folder,Plus,RefreshCw } from "lucide-react";
 import { usePathname,useRouter,useSearchParams } from "next/navigation";
 import { useEffect,useMemo,useRef,useState } from "react";
@@ -22,7 +27,13 @@ SectionHeader,
 } from "./cards";
 import { EvolutionStrip } from "./EvolutionStrip";
 import { LearnPanel } from "./LearnPanel";
-import type { GithubReposApiPayload,LocalRepoFilter,RepoInfo,ReposApiPayload } from "./types";
+import type {
+GithubReposApiPayload,
+LocalRepoFilter,
+RepoInfo,
+ReposApiPayload,
+RepoTaskPreview,
+} from "./types";
 import { useReposActions } from "./useReposActions";
 
 function parseGithubFetchErrorMessage(error: unknown): string {
@@ -51,6 +62,21 @@ function githubFullName(remote: string | null): string | null {
   return githubUrl(remote)?.replace("https://github.com/", "") ?? null;
 }
 
+/**
+ * One-line card preview. Leftover hashtags are stripped, and the Jira key
+ * gets its own chip — left in, it read "PTF-4897 PTF-4897 Ensure…".
+ */
+function asTaskPreview(task: Task): RepoTaskPreview {
+  const key = task.jiraKey?.trim();
+  let text = task.text.replace(/(^|\s)#[\w./-]+/g, " ");
+  if (key) text = text.replace(new RegExp(`\\b${escapeRegExp(key)}\\b[\\s:–—-]*`, "gi"), " ");
+  text = text.replace(/\s+/g, " ").trim();
+  return { id: task.id, text: text || task.text, jiraKey: key };
+}
+
+const EMPTY_REPOS: RepoInfo[] = [];
+const NO_TASKS: RepoTaskPreview[] = [];
+
 export default function ReposPage() {
   const toast = useToast();
   const prompt = usePrompt();
@@ -59,7 +85,8 @@ export default function ReposPage() {
   const searchParams = useSearchParams();
   const learnParam = searchParams.get("learn");
   const repoParam = searchParams.get("repo");
-  const ownedView = searchParams.get("view") === "owned";
+  const source = searchParams.get("source") === "github" ? "github" : "local";
+  const ownedView = source === "local" && searchParams.get("view") === "owned";
 
   const {
     data,
@@ -69,7 +96,20 @@ export default function ReposPage() {
     isValidating: isLocalValidating,
   } = useLive<ReposApiPayload>("/api/repos");
   const boot = useBootGate(data !== undefined || !!localError);
-  const repos = data?.repos ?? [];
+  const repos = data?.repos ?? EMPTY_REPOS;
+  // Same key Today polls, so this is usually a warm cache hit, not a new fetch.
+  const { data: tasksData } = useLive<{ tasks?: Task[] }>("/api/tasks");
+  const tasksByRepo = useMemo(() => {
+    const byRepo = new Map<string, RepoTaskPreview[]>();
+    const open = (tasksData?.tasks ?? []).filter(isTaskOpen);
+    if (open.length === 0) return byRepo;
+    for (const repo of repos) {
+      const fullName = githubFullName(repo.remote);
+      const linked = open.filter((task) => taskBelongsToRepo(task, repo.name, fullName));
+      if (linked.length > 0) byRepo.set(repo.name, linked.map(asTaskPreview));
+    }
+    return byRepo;
+  }, [repos, tasksData?.tasks]);
   const { data: ownershipData, mutate: mutateOwnership } = useLive<{ repos: ResolvedOwnedRepo[] }>("/api/own", {
     refreshInterval: 0,
   });
@@ -78,17 +118,23 @@ export default function ReposPage() {
     () => new Set((ownershipData?.repos ?? []).map((repo) => repo.fullName.toLowerCase())),
     [ownershipData?.repos],
   );
+  // Active conventions are ready for agents without a review queue.
+  const { data: conventionsData } = useLive<{ repos: ConventionsSummary[] }>("/api/conventions", { refreshInterval: 0 });
+  const conventionsActive = useMemo(
+    () => new Map((conventionsData?.repos ?? []).map((summary) => [summary.repo.toLowerCase(), summary.active])),
+    [conventionsData?.repos],
+  );
   const [query, setQuery] = useState(repoParam ?? "");
   const [debouncedGithubQuery, setDebouncedGithubQuery] = useState("");
   const { data: projectsData, mutate: mutateProjects } = useLive<{ projects: RepoProject[] }>("/api/projects", {
     refreshInterval: 0,
   });
   const projects = projectsData?.projects ?? [];
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(searchParams.get("project"));
+  const activeProjectId = searchParams.get("project");
   const githubSearchQuery = debouncedGithubQuery.trim();
   const githubKey = useMemo(
-    () => (githubSearchQuery ? `/api/repos/github${queryParam(githubSearchQuery)}` : null),
-    [githubSearchQuery],
+    () => (source === "github" && githubSearchQuery ? `/api/repos/github${queryParam(githubSearchQuery)}` : null),
+    [source, githubSearchQuery],
   );
   const {
     data: githubData,
@@ -117,21 +163,33 @@ export default function ReposPage() {
     [activeProject],
   );
   const normalizedLocalQuery = query.trim().toLowerCase();
-  const filteredLocalRepos = repos.filter((repo) => {
-    if (projectRepos && !projectRepos.has(repo.name.toLowerCase())) return false;
-    if (normalizedLocalQuery && !repo.name.toLowerCase().includes(normalizedLocalQuery)) return false;
-    if (localFilter === "changed") return repo.dirtyCount > 0;
-    if (localFilter === "unpushed") return (repo.unpushedCount ?? 0) > 0;
-    if (localFilter === "worktree") return Boolean(repo.worktreeOf);
-    return true;
-  });
+  const matchingLocalRepos = repos.filter((repo) =>
+    (!projectRepos || projectRepos.has(repo.name.toLowerCase())) &&
+    (!normalizedLocalQuery || repo.name.toLowerCase().includes(normalizedLocalQuery)),
+  );
+  const filteredLocalRepos = matchingLocalRepos
+    .filter((repo) => {
+      if (localFilter === "changed") return repo.dirtyCount > 0;
+      if (localFilter === "unpushed") return (repo.unpushedCount ?? 0) > 0;
+      if (localFilter === "worktree") return Boolean(repo.worktreeOf) || (repo.worktreeCount ?? 0) > 0;
+      return true;
+    })
+    // Repos you have open tasks for lead; the stable sort keeps recency order
+    // within each half.
+    .sort((a, b) => Number(tasksByRepo.has(b.name)) - Number(tasksByRepo.has(a.name)));
   const learningRepo = learnParam
     ? repos.find((repo) => repo.name === learnParam) ?? null
     : null;
-  const changedRepos = repos.filter((repo) => repo.dirtyCount > 0).length;
-  const unpushedRepos = repos.filter((repo) => (repo.unpushedCount ?? 0) > 0).length;
-  const worktreeRepos = repos.filter((repo) => Boolean(repo.worktreeOf)).length;
-  const showGithubColumn = !!githubSearchQuery;
+  const changedRepos = matchingLocalRepos.filter((repo) => repo.dirtyCount > 0).length;
+  const unpushedRepos = matchingLocalRepos.filter((repo) => (repo.unpushedCount ?? 0) > 0).length;
+  const worktreesByRoot = new Map<string, number>();
+  for (const repo of matchingLocalRepos) {
+    const root = repo.worktreeOf || repo.path;
+    worktreesByRoot.set(root, Math.max(worktreesByRoot.get(root) ?? 0, repo.worktreeCount ?? 0));
+  }
+  const worktreeRepos = [...worktreesByRoot.values()].reduce((total, count) => total + count, 0);
+  const githubPending = query.trim() !== githubSearchQuery || (!githubData && !githubError);
+  const hasLocalFilters = Boolean(query.trim() || localFilter || activeProjectId);
 
   useEffect(() => {
     learningRepoNameRef.current = learnParam;
@@ -195,6 +253,24 @@ export default function ReposPage() {
   }
 
 
+  function setSource(next: "local" | "github") {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "github") params.set("source", next);
+    else params.delete("source");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
+
+  function clearLocalFilters() {
+    setQuery("");
+    setLocalFilter(null);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("repo");
+    params.delete("project");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
+
   function setRepoView(next: { owned?: boolean; project?: string | null }) {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("view");
@@ -203,7 +279,6 @@ export default function ReposPage() {
     if (next.project) params.set("project", next.project);
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    setActiveProjectId(next.project ?? null);
   }
 
   async function createRepoGroup() {
@@ -268,7 +343,7 @@ export default function ReposPage() {
 
       <EvolutionStrip />
 
-      {localError && (
+      {source === "local" && localError && (
         <div className="card card-body mb-3">
           <div className="flex items-center gap-2 text-sm text-text-muted">
             <AlertCircle size={14} className="text-danger" aria-hidden />
@@ -280,20 +355,25 @@ export default function ReposPage() {
         </div>
       )}
 
-      {isLoading && !data && (
-        <div className="space-y-2 mb-2">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="skeleton" style={{ height: 60, borderRadius: "var(--radius)" }} />
-          ))}
-        </div>
-      )}
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <ToggleGroup
+          aria-label="Repository source"
+          options={[{ value: "local", label: "Local" }, { value: "github", label: "GitHub" }]}
+          value={source}
+          onChange={setSource}
+          size="md"
+        />
+        <span className="text-xs text-text-muted">
+          {source === "local" ? "Your local checkouts" : "Find repositories to clone or open"}
+        </span>
+      </div>
 
-      <div className="hub-tabs mb-3" role="tablist" aria-label="Repo groups (filter this page)">
+      {source === "local" && (
+      <div className="hub-tabs mb-3" role="group" aria-label="Filter by repo group">
         <button
           type="button"
-          role="tab"
           className="hub-tab"
-          aria-selected={!ownedView && !activeProjectId}
+          aria-pressed={!ownedView && !activeProjectId}
           data-active={!ownedView && !activeProjectId ? "true" : undefined}
           onClick={() => setRepoView({})}
         >
@@ -301,9 +381,8 @@ export default function ReposPage() {
         </button>
         <button
           type="button"
-          role="tab"
           className="hub-tab"
-          aria-selected={ownedView}
+          aria-pressed={ownedView}
           data-active={ownedView ? "true" : undefined}
           onClick={() => setRepoView({ owned: true })}
         >
@@ -313,10 +392,9 @@ export default function ReposPage() {
           <button
             key={project.id}
             type="button"
-            role="tab"
             className="hub-tab"
             aria-label={`${project.label} group`}
-            aria-selected={!ownedView && activeProjectId === project.id}
+            aria-pressed={!ownedView && activeProjectId === project.id}
             data-active={!ownedView && activeProjectId === project.id ? "true" : undefined}
             data-repo-group={project.id}
             onClick={() => setRepoView({ project: project.id })}
@@ -329,6 +407,7 @@ export default function ReposPage() {
           <Plus size={12} aria-hidden /> New group
         </button>
       </div>
+      )}
 
       {ownedView ? <OwnIndex embedded /> : (
       <>
@@ -340,26 +419,28 @@ export default function ReposPage() {
         changedCount={changedRepos}
         unpushedCount={unpushedRepos}
         worktreeCount={worktreeRepos}
-        projects={projects}
-        activeProjectId={activeProjectId}
-        onProjectChange={setActiveProjectId}
+        source={source}
+        activeProjectLabel={activeProject?.label}
+        hasFilters={source === "local" ? hasLocalFilters : Boolean(query.trim())}
+        onClearFilters={source === "local" ? clearLocalFilters : () => setQuery("")}
       />
 
-      <div className={showGithubColumn ? "grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_420px]" : undefined}>
-        <section className="space-y-2">
+      <div>
+        {source === "local" && (
+        <section className="space-y-2" aria-label="Local repositories">
           <SectionHeader
             label="Local"
-            count={`${filteredLocalRepos.length}/${repos.length}`}
+            count={hasLocalFilters ? `${filteredLocalRepos.length} of ${repos.length}` : repos.length}
             description={
               localFilter === "changed"
                 ? "Showing repos with local changes."
                 : localFilter === "unpushed"
                   ? "Showing repos with unpushed commits."
                   : localFilter === "worktree"
-                    ? "Showing worktrees — extra checkouts backed by another repo in this folder."
-                    : showGithubColumn
-                      ? "Repos already cloned next to this DevHub checkout."
-                      : "Local clones. Type above to also search GitHub."
+                    ? "Showing repositories with worktrees, including checkouts outside this folder."
+                    : activeProject
+                      ? `Local checkouts in ${activeProject.label}.`
+                      : "Open a repo to see its work, changes, and tools."
             }
             actions={
               <>
@@ -383,13 +464,26 @@ export default function ReposPage() {
             }
           />
 
+          {/* Shaped like the cards it becomes, and in their place — it used to
+              sit above the tabs and shove the whole page down on arrival. */}
+          {isLoading && !data ? (
+            <div className="repos-grid" aria-hidden>
+              {Array.from({ length: 9 }, (_, i) => (
+                <div key={i} className="skeleton" style={{ height: 92, borderRadius: "var(--radius)" }} />
+              ))}
+            </div>
+          ) : null}
+
+          <div className="repos-grid">
           {filteredLocalRepos.map((repo) => (
             <LocalRepoCard
               key={repo.name}
+              openTasks={tasksByRepo.get(repo.name) ?? NO_TASKS}
               repo={repo}
               githubUrl={githubUrl(repo.remote)}
               ownershipFullName={githubFullName(repo.remote)}
               owned={ownedRepos.has(githubFullName(repo.remote)?.toLowerCase() ?? "")}
+              conventionsActive={conventionsActive.get(githubFullName(repo.remote)?.toLowerCase() ?? "") ?? 0}
               ownershipBusy={ownershipBusy}
               onToggleOwned={toggleOwned}
               apps={apps}
@@ -410,6 +504,7 @@ export default function ReposPage() {
               }}
             />
           ))}
+          </div>
 
           {!isLoading && !localError && filteredLocalRepos.length === 0 && (
             <EmptyReposCard>
@@ -420,32 +515,40 @@ export default function ReposPage() {
                 : localFilter === "unpushed"
                 ? "No local repos with unpushed commits."
                 : localFilter === "worktree"
-                ? "No worktrees here — every local repo is its own clone."
+                ? "No registered worktrees found for these repositories."
+                : activeProject
+                ? `No local repos in ${activeProject.label}.`
                 : scanDirDisplay
                 ? `No repos found in ${scanDirDisplay}${scanDirDisplay.endsWith("/") ? "" : "/"}.`
                 : "No repos found."}
             </EmptyReposCard>
           )}
         </section>
+        )}
 
-        {showGithubColumn && (
-          <aside className="space-y-2">
+        {source === "github" && (
+          <section className="space-y-2" aria-label="GitHub repositories">
             <SectionHeader
               label="GitHub"
-              count={isGithubValidating && !githubData ? "..." : githubRepos.length}
+              count={query.trim() && !githubPending ? githubRepos.length : "—"}
               description="Search accessible repos, then clone or open them."
             />
 
-            {githubError && (
+            {query.trim() && !githubPending && githubError && (
               <FetchError message={parseGithubFetchErrorMessage(githubError)} onRetry={() => mutateGithub()} />
             )}
-            {isGithubValidating && !githubData && (
-              <EmptyReposCard>
-                Searching GitHub repos...
-              </EmptyReposCard>
+            {!query.trim() && (
+              <EmptyReposCard>Search GitHub by repository name or owner to find a repo to clone.</EmptyReposCard>
+            )}
+            {query.trim() && githubPending && (
+              <div className="space-y-2" role="status" aria-label="Searching GitHub repositories">
+                {Array.from({ length: 3 }, (_, i) => (
+                  <div key={i} className="skeleton h-24 rounded-lg" aria-hidden />
+                ))}
+              </div>
             )}
 
-            {githubRepos.map((repo) => (
+            {query.trim() && !githubPending && !githubError && githubRepos.map((repo) => (
               <GithubRepoCard
                 key={repo.fullName}
                 repo={repo}
@@ -459,12 +562,12 @@ export default function ReposPage() {
                 onToggleOwned={toggleOwned}
               />
             ))}
-            {!isGithubValidating && !githubError && githubRepos.length === 0 && (
+            {query.trim() && !githubPending && !githubError && githubRepos.length === 0 && (
               <EmptyReposCard>
                 No GitHub repos matching &quot;{githubSearchQuery}&quot;.
               </EmptyReposCard>
             )}
-          </aside>
+          </section>
         )}
       </div>
 

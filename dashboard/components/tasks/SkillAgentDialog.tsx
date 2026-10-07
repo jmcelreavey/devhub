@@ -1,13 +1,12 @@
 "use client";
 
 import { AgentLaunchForm } from "@/components/agents/AgentLaunchSheet";
-import { checkImplementGuardrails } from "@/lib/tasks/implement-guardrails";
 import { TASK_AGENT_RUNS_KEY } from "@/lib/tasks/use-task-agent-runs";
 import { useEffect,useRef,useState,type ReactNode } from "react";
 import { mutate } from "swr";
 
 export type SkillAgentLaunchTarget = string;
-export type AgentStage = "plan" | "implement";
+export type AgentStage = "plan" | "implement" | "create-pr";
 
 interface Props {
   open: boolean; onClose: () => void; title: string; description: string;
@@ -31,7 +30,7 @@ function TaskLaunch(props: Props) {
   const close = () => { active.current = false; props.onClose(); };
   return <AgentLaunchForm
     intent={{
-      requestId, title: props.title, prompt: props.getPrompt(), cwd: props.cwd, repoName: props.repoName,
+      requestId, title: props.title, runTitle: props.summary, prompt: props.getPrompt(), cwd: props.cwd, repoName: props.repoName,
       provider: props.initialProvider === "default" ? undefined : props.initialProvider,
       taskId: props.taskId, taskDate: props.taskDate, stage: props.parentRunId ? "resume" : props.stage ?? "implement",
       parentRunId: props.parentRunId, resumeSessionId: props.resumeSessionId,
@@ -44,10 +43,6 @@ function TaskLaunch(props: Props) {
     disabledReason={props.launchDisabledReason}
     resolveCwd={props.resolveCwd}
     onProviderChange={props.onProviderChange}
-    beforeStart={async () => {
-      const guard = await checkImplementGuardrails();
-      if (guard.blocked) throw new Error(guard.reason || "Too many agent runs are active.");
-    }}
     onStarted={() => { void mutate(TASK_AGENT_RUNS_KEY); props.onLaunched?.(); }}
   />;
 }

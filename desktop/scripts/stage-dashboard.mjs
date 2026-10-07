@@ -304,7 +304,7 @@ function stripForeignNativeBinaries() {
  * `.next/standalone` and `server.js` loads them at boot. That is correct for a
  * server deployment and catastrophic here: in this repo `dashboard/.env.local`
  * holds the developer's real Jira token, Datadog keys, Google refresh token,
- * OpenChamber password, and AI API key. Left alone, they are copied verbatim
+ * Agents (Paseo) password, and AI API key. Left alone, they are copied verbatim
  * into a signed public installer.
  *
  * This was not theoretical — the first bundle built from this pipeline
@@ -422,9 +422,8 @@ async function stageServices() {
   log("bundled agent-run.cjs");
 
   /**
-   * Peer boot — frees leftover OpenCode on 1338/4096. Chamber and OpenCode
-   * lazy-start from the dashboard; this bundle is what Rebuild Dashboard
-   * restages into the installed app.
+   * Peer boot — a no-op note now that Paseo runs under launchd; this bundle is
+   * what Rebuild Dashboard restages into the installed app.
    *
    * Originally omitted, which meant the installed app never ran this script.
    * The dev script runs it through `concurrently`; the packaged app has to

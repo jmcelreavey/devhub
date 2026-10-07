@@ -4,52 +4,9 @@ import type { Context } from "../context.ts";
 import { withDashboardErrors } from "../dashboard-client.ts";
 
 /**
- * Terminal tools for OpenCode / agents.
- *
- * `terminal_propose_run` never injects stdin. It queues a proposal on the
- * dashboard; TerminalDock shows confirm/edit/deny. Desktop tickets alone are
- * not user intent.
+ * Agent-requested commands launch in the visible dock without a second consent
+ * prompt. The dashboard still requires confirmation for destructive commands.
  */
-/**
- * In-band consent for terminal_propose_run. Clients that advertise MCP
- * elicitation get a confirm dialog in their own chat surface; the proposal is
- * then created with autoRunConfirmed so the dock skips the second chip
- * (destructive commands always keep their modal — see terminal-proposals.ts).
- * Clients without elicitation keep today's chip-only flow.
- */
-export interface ConsentDecisionInput {
-  clientSupportsElicitation: boolean;
-  userAccepted: boolean | null; // null = never asked
-}
-
-export function shouldSkipDockChip(input: ConsentDecisionInput): boolean {
-  return input.clientSupportsElicitation && input.userAccepted === true;
-}
-
-export function buildRunConsentRequest(command: string): {
-  message: string;
-  requestedSchema: {
-    type: "object";
-    properties: Record<string, { type: "boolean"; title: string; description: string }>;
-    required: string[];
-  };
-} {
-  return {
-    message: `Run this in the DevHub terminal dock?\n\n${command.slice(0, 400)}${command.length > 400 ? "…" : ""}`,
-    requestedSchema: {
-      type: "object",
-      properties: {
-        confirm: {
-          type: "boolean",
-          title: "Run it",
-          description: "true = start the command in a visible DevHub terminal tab now",
-        },
-      },
-      required: ["confirm"],
-    },
-  };
-}
-
 export function registerTerminalTools(server: McpServer, ctx: Context): void {
   const { dashboard } = ctx;
 
@@ -99,7 +56,7 @@ export function registerTerminalTools(server: McpServer, ctx: Context): void {
           content: [
             {
               type: "text",
-              text: `Terminal tabs (${data.sessions.length}):\n${lines.join("\n")}\n\nTail with terminal_tail(sessionId). Propose a run with terminal_propose_run (UI must confirm).`,
+              text: `Terminal tabs (${data.sessions.length}):\n${lines.join("\n")}\n\nTail with terminal_tail(sessionId). Start a run with terminal_propose_run (destructive commands require confirmation).`,
             },
           ],
         };
@@ -157,6 +114,7 @@ export function registerTerminalTools(server: McpServer, ctx: Context): void {
             command: string;
             finalCommand?: string;
             destructive: boolean;
+            autoRun?: boolean;
             error?: string;
           };
         }>("/api/terminal/propose", { id });
@@ -167,7 +125,11 @@ export function registerTerminalTools(server: McpServer, ctx: Context): void {
           `Proposed: ${p.command}`,
           ran ? `User edited before approving: ${p.finalCommand}` : null,
           p.error ? `Error: ${p.error}` : null,
-          p.status === "pending" ? "Still waiting on the user — do not proceed as if it ran." : null,
+          p.status === "pending"
+            ? p.autoRun
+              ? "Waiting for the dock to launch the command — it has not run yet."
+              : "Waiting for dock confirmation — it has not run yet."
+            : null,
         ].filter(Boolean);
         return { content: [{ type: "text", text: lines.join("\n") }] };
       }),
@@ -177,7 +139,7 @@ export function registerTerminalTools(server: McpServer, ctx: Context): void {
     "terminal_propose_run",
     {
       description:
-        "Propose a command in the DevHub terminal dock (visible logs). Does NOT execute it — the user confirms in the dock. Prefer this over running a command in the agent/Cursor shell: the dock is where the user can see it, keep it, and kill it. Always use it for upstarts, dev servers, Expo, and anything long-running or user-visible. Every approved proposal opens its own tab, so nothing ever waits on another session. Requires the dashboard running.",
+        "Run a command in the DevHub terminal dock (visible logs). Ordinary commands launch automatically; destructive commands require dock confirmation. Prefer this over running a command in the agent/Cursor shell: the dock is where the user can see it, keep it, and kill it. Always use it for upstarts, dev servers, Expo, and anything long-running or user-visible. Every run opens its own tab, so nothing ever waits on another session. Requires the dashboard running.",
       inputSchema: {
         command: z.string().describe("Shell command to propose"),
         cwd: z.string().optional().describe("Absolute cwd under the user home"),
@@ -197,29 +159,6 @@ export function registerTerminalTools(server: McpServer, ctx: Context): void {
     },
     async ({ command, cwd, label, summary, kind, repoName, reason }) =>
       withDashboardErrors(async () => {
-        // Consent first: if the client can elicit, ask in-band and remember the
-        // answer; otherwise the dock chip is the only confirmation (unchanged).
-        let userAccepted: boolean | null = null;
-        const caps = server.server.getClientCapabilities();
-        const canElicit = Boolean((caps as { elicitation?: unknown } | undefined)?.elicitation);
-        if (canElicit) {
-          const request = buildRunConsentRequest(command);
-          const result = await server.server.elicitInput({
-            message: request.message,
-            requestedSchema: request.requestedSchema,
-          });
-          userAccepted = result.action === "accept" && result.content?.confirm === true;
-        }
-        if (userAccepted === false) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "The user declined — nothing was proposed.",
-              },
-            ],
-          };
-        }
         const created = await dashboard.post<{
           proposal: { id: string; destructive: boolean; status: string };
         }>("/api/terminal/propose", {
@@ -231,17 +170,17 @@ export function registerTerminalTools(server: McpServer, ctx: Context): void {
           repoName,
           reason,
           source: "mcp",
-          // Only meaningful when the user just accepted in-band; the API still
-          // refuses it for destructive commands.
-          autoRunConfirmed: shouldSkipDockChip({ clientSupportsElicitation: canElicit, userAccepted }),
+          // The tool invocation requests execution; the dashboard retains its
+          // destructive-command confirmation regardless of this flag.
+          autoRunConfirmed: true,
         });
         const p = created.proposal;
         const lines = [
           `Proposed run ${p.id} (status: ${p.status}${p.destructive ? ", destructive" : ""}).`,
-          userAccepted === true
-            ? "User confirmed in chat — the dock will start it without a second chip."
-            : "Waiting for the user to confirm in the DevHub terminal dock.",
-          "Poll terminal_proposal_status(id) if you need the outcome — do not assume approval.",
+          p.destructive
+            ? "Destructive command — waiting for confirmation in the DevHub terminal dock."
+            : "Queued for automatic launch in the DevHub terminal dock; no confirmation needed.",
+          "Poll terminal_proposal_status(id) to verify injection — queued does not mean running.",
           "There is no unrestricted stdin tool; that is intentional.",
         ];
         return { content: [{ type: "text", text: lines.join("\n") }] };

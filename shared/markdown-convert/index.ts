@@ -5,6 +5,63 @@ import {
   toNoteAssetMarkdownPath,
 } from "../notes-assets/markdown.ts";
 
+/** Mermaid diagram keywords agents sometimes use as the fence language. */
+const MERMAID_DIAGRAM_TYPES = new Set([
+  "sequencediagram",
+  "flowchart",
+  "graph",
+  "classdiagram",
+  "statediagram",
+  "statediagram-v2",
+  "erdiagram",
+  "journey",
+  "gantt",
+  "pie",
+  "gitgraph",
+  "mindmap",
+  "timeline",
+  "quadrantchart",
+  "requirementdiagram",
+  "zenuml",
+  "c4context",
+  "c4container",
+  "c4component",
+  "c4dynamic",
+  "c4deployment",
+  "sankey-beta",
+  "xychart-beta",
+  "block-beta",
+  "packet-beta",
+  "architecture-beta",
+  "kanban",
+  "radar-beta",
+]);
+
+/**
+ * Notes and Cursor only render a ```mermaid fence. A fence whose language is
+ * the diagram type (`sequenceDiagram`, `flowchart TD`) is the same diagram
+ * with the keyword stripped into the info string — put it back.
+ * Returns null when the fence is ordinary code.
+ */
+export function mermaidSourceFromFence(lang: string, body: string): string | null {
+  const trimmed = lang.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === "mermaid") return body;
+  const headerWord = lower.split(/\s+/)[0] ?? "";
+  if (!MERMAID_DIAGRAM_TYPES.has(headerWord)) return null;
+  const firstLine = body.trimStart().split("\n", 1)[0]?.trim().toLowerCase() ?? "";
+  if (firstLine === lower || firstLine === headerWord || firstLine.startsWith(`${headerWord} `)) {
+    return body;
+  }
+  return body.length > 0 ? `${trimmed}\n${body}` : trimmed;
+}
+
+function fenceLines(lang: string, body: string): string[] {
+  const mermaidCode = mermaidSourceFromFence(lang, body);
+  if (mermaidCode !== null) return ["```mermaid", mermaidCode, "```"];
+  return ["```" + lang, body, "```"];
+}
+
 export interface BlocksToTextOptions {
   /**
    * GitHub-friendly markdown for gists / external publish.
@@ -58,9 +115,7 @@ function serializeRoundTripBlocks(blocks: unknown[]): string {
     } else if (b.type === "codeBlock") {
       const lang = (props?.language as string) || "";
       const inline = extractInline(b.content as Record<string, unknown>[] | undefined);
-      lines.push("```" + lang);
-      lines.push(inline);
-      lines.push("```");
+      lines.push(...fenceLines(lang, inline));
     } else if (b.type === "table") {
       lines.push(tableBlockToText(b));
     } else if (b.type === "divider") {
@@ -152,7 +207,7 @@ function serializePortableBlocks(blocks: unknown[]): string {
     if (type === "codeBlock") {
       const lang = (props?.language as string) || "";
       const inline = extractInline(content);
-      push("```" + lang + "\n" + inline + "\n```");
+      push(fenceLines(lang, inline).join("\n"));
       i++;
       continue;
     }
@@ -668,11 +723,12 @@ export function textToBlocks(text: string): unknown[] {
         i++;
       }
       i++;
-      if (lang === "mermaid") {
+      const mermaidCode = mermaidSourceFromFence(lang, codeLines.join("\n"));
+      if (mermaidCode !== null) {
         blocks.push({
           id: crypto.randomUUID(),
           type: "mermaid",
-          props: { code: codeLines.join("\n") },
+          props: { code: mermaidCode },
           children: [],
         });
         continue;

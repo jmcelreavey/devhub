@@ -18,6 +18,6 @@ export default async function NoteAreaPage({ params }: PageProps) {
   if (!area) notFound();
 
   return (
-    <NotesAreaPage meta={area.meta} notes={area.notes} prev={area.prev} next={area.next} />
+    <NotesAreaPage meta={area.meta} sections={area.sections} prev={area.prev} next={area.next} />
   );
 }

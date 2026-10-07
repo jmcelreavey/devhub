@@ -20,7 +20,7 @@ import {
   useContextMenu,
   type ContextMenuGroup,
 } from "@/components/shell/ContextMenu";
-import { useConfirm, useDecision, usePrompt } from "@/components/shell/ConfirmDialog";
+import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
 import { groupBranches } from "@/lib/repos/branch-grouping";
 import { RemotesSection } from "./RemotesSection";
 import { useToast } from "@/lib/hooks/use-toast";
@@ -31,7 +31,8 @@ import {
 } from "./branchMenuGroups";
 import { RangeCompareModal } from "./RangeCompareModal";
 import {
-  chooseCheckoutStrategy,
+  CHECKOUT_AUTOSTASH,
+  switchedToast,
   fetchGitJson,
   postGitAction,
   repoApi,
@@ -55,7 +56,6 @@ export function BranchesPanel({
 }) {
   const toast = useToast();
   const confirm = useConfirm();
-  const decide = useDecision();
   const prompt = usePrompt();
   const [data, setData] = useState<BranchesPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -107,21 +107,14 @@ export function BranchesPanel({
     async (action: string, extra?: Record<string, unknown>) => {
       setActing(action);
       try {
-        let result = await postGitAction<{
+        const switching = action === "checkout" || action === "checkout-remote";
+        const result = await postGitAction<{
           alreadyUpToDate?: boolean;
           message?: string;
           branch?: string;
           backupBranch?: string | null;
-        }>(repoApi(repoName, "/branches"), { action, ...extra });
-        if (!result.ok && result.kind === "checkout-conflict") {
-          const strategy = await chooseCheckoutStrategy(decide, result.conflict);
-          if (!strategy) return false;
-          result = await postGitAction(repoApi(repoName, "/branches"), {
-            action,
-            ...extra,
-            strategy,
-          });
-        }
+          stashed?: boolean;
+        }>(repoApi(repoName, "/branches"), { action, ...extra, ...(switching ? CHECKOUT_AUTOSTASH : {}) });
         if (!result.ok) {
           if (result.kind === "conflict") {
             await onConflict(result.conflict);
@@ -136,7 +129,9 @@ export function BranchesPanel({
           throw new Error(result.message);
         }
         const label = (extra?.newBranch ?? extra?.branch) as unknown;
-        if (result.json.alreadyUpToDate) {
+        if (switching && typeof label === "string") {
+          toast.success(switchedToast(label, Boolean(result.json.stashed)));
+        } else if (result.json.alreadyUpToDate) {
           toast.success(result.json.message || "Already up to date.");
         } else {
           toast.success(
@@ -160,7 +155,7 @@ export function BranchesPanel({
         setActing(null);
       }
     },
-    [decide, repoName, onConflict, onHookFailure, onMutate, refresh, toast],
+    [repoName, onConflict, onHookFailure, onMutate, refresh, toast],
   );
 
   const checkoutBranch = useCallback(

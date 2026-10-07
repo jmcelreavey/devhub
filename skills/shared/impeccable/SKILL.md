@@ -1,8 +1,10 @@
 ---
 name: impeccable
-description: Use when the user wants to design, redesign, shape, critique, audit, polish, clarify, distill, harden, optimize, adapt, animate, colorize, extract, or otherwise improve a frontend interface. Covers websites, landing pages, dashboards, product UI, app shells, components, forms, settings, onboarding, and empty states. Handles UX review, visual hierarchy, information architecture, cognitive load, accessibility, performance, responsive behavior, theming, anti-patterns, typography, fonts, spacing, layout, alignment, color, motion, micro-interactions, UX copy, error states, edge cases, i18n, and reusable design systems or tokens. Also use for bland designs that need to become bolder or more delightful, loud designs that should become quieter, live browser iteration on UI elements, or ambitious visual effects that should feel technically extraordinary. Not for backend-only or non-UI tasks.
+description: Use when designing, redesigning, critiquing, auditing or polishing a frontend interface — landing pages, dashboards, product UI, components, forms, onboarding, empty states. Covers visual hierarchy, layout, typography, color, motion, accessibility, theming and design systems, plus making bland UI bolder or loud UI quieter. Not for backend or non-UI work.
 metadata:
   version: 4.3.1
+  # Description trimmed locally from upstream 4.3.1 (908 -> 341 chars) to cut the
+  # per-session listing cost. Re-apply if this skill is ever re-vendored.
 ---
 
 This skill gives you the tools and permission to create design that earns to be called out-of-distribution craft: Whereas before, your design work would have been safe, timid and measured, you now approach every design task as an award-winning design director with impeccable understanding for what makes exceptional design work: production-grade code, peak creativity, a clear POV, deep understanding of the needs of the client and users, and exceptional craft.

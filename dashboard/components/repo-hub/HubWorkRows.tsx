@@ -24,6 +24,7 @@ export function asHubTask(task: WorkHubTask): Task {
     abandonReason: task.abandonReason,
     jiraKey: task.jiraKey,
     createdAt: task.createdAt ?? "",
+    notePath: task.notePath,
     links: task.links,
   };
 }
@@ -116,6 +117,7 @@ export function HubTaskRow({
   cwd,
   repoName,
   suppressLinks,
+  hideJiraKey = false,
   onWorkMutate,
 }: {
   task: WorkHubTask;
@@ -124,6 +126,7 @@ export function HubTaskRow({
   repoName?: string;
   /** Links the section header already shows once for the whole list. */
   suppressLinks?: readonly EntityRef[];
+  hideJiraKey?: boolean;
   onWorkMutate: () => void;
 }) {
   const toast = useToast();
@@ -154,10 +157,11 @@ export function HubTaskRow({
       <TaskItem
         task={row}
         date={taskDate}
-        denseLinks
         cwd={cwd}
         repoName={repoName}
         suppressLinks={suppressLinks}
+        showUpstart
+        hideJiraKey={hideJiraKey}
         onToggle={() => void patch({ id: task.id, done: true }, "Couldn't update task.")}
         onEdit={(text) => void patch({ id: task.id, text }, "Couldn't update task.")}
         onAbandon={(reason) =>

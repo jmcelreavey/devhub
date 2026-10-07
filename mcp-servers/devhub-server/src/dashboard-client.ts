@@ -46,6 +46,21 @@ export class DashboardUnreachableError extends Error {
   }
 }
 
+/**
+ * Raised when the dashboard accepted the connection but did not answer in time.
+ * Kept distinct from unreachable: the server instructions tell agents that
+ * "unreachable" means start the dashboard, which is wrong advice for a slow one.
+ */
+export class DashboardTimeoutError extends Error {
+  constructor(readonly baseUrl: string, readonly path: string, readonly timeoutMs: number) {
+    super(
+      `The DevHub dashboard at ${baseUrl} is running but ${path} did not answer within ${Math.round(timeoutMs / 1000)}s. ` +
+        "Retry once; if it keeps timing out, call status_exec to see which subprocess is blocking.",
+    );
+    this.name = "DashboardTimeoutError";
+  }
+}
+
 export class DashboardClient {
   private readonly resolveBaseUrl: () => string;
 
@@ -99,6 +114,7 @@ export class DashboardClient {
         body: body !== undefined ? JSON.stringify(body) : undefined,
       });
     } catch (err) {
+      if (controller.signal.aborted) throw new DashboardTimeoutError(baseUrl, path, timeoutMs);
       throw new DashboardUnreachableError(baseUrl, err);
     } finally {
       clearTimeout(timer);
@@ -172,7 +188,11 @@ export async function withDashboardErrors(
   try {
     return await fn();
   } catch (err) {
-    if (err instanceof DashboardUnreachableError || err instanceof DashboardHttpError) {
+    if (
+      err instanceof DashboardUnreachableError ||
+      err instanceof DashboardTimeoutError ||
+      err instanceof DashboardHttpError
+    ) {
       return { content: [{ type: "text", text: err.message }], isError: true };
     }
     const message = err instanceof Error ? err.message : String(err);

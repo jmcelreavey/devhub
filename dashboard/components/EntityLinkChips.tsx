@@ -44,6 +44,7 @@ import { useToast } from "@/lib/hooks/use-toast";
 interface EntityLinksPayload {
   notes: EntityRef[];
   related: EntityRef[];
+  taskAliases?: Record<string, EntityRef>;
 }
 
 export const KIND_ICON: Record<EntityKind, typeof FileText> = {
@@ -126,6 +127,10 @@ function stripKey(text: string, key: string | undefined): string {
   if (!key) return clean;
   const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return clean.replace(new RegExp(`\\b${escaped}\\b`, "gi"), " ").replace(/\s+/g, " ").trim();
+}
+
+function resolveTaskAlias(ref: EntityRef, aliases: EntityLinksPayload["taskAliases"]): EntityRef {
+  return ref.kind === "task" && aliases && Object.hasOwn(aliases, ref.id) ? aliases[ref.id] : ref;
 }
 
 function refKey(ref: EntityRef): string {
@@ -258,15 +263,16 @@ export function EntityLinkChips({
     [suppressKey],
   );
   const seedKey = JSON.stringify(seed ?? []);
-  // Canonical keys: chips are canonicalized by mergeEntityRefs, so a seed stored
-  // under an alias id (e.g. a calendar URL) must still be recognised as removable.
-  const seedKeys = useMemo(
-    () => new Set((JSON.parse(seedKey) as EntityRef[]).map((r) => refKey(canonicalizeEntityRef(r) ?? r))),
-    [seedKey],
-  );
   const [data, setData] = useState<EntityLinksPayload | null>(
     seed?.length ? { notes: [], related: seed } : null,
   );
+  // Display current task refs, but unlink the ID actually stored on the host.
+  const storedSeeds = useMemo(() => new Map(
+    (JSON.parse(seedKey) as EntityRef[]).map((ref) => {
+      const resolved = resolveTaskAlias(ref, data?.taskAliases);
+      return [refKey(canonicalizeEntityRef(resolved) ?? resolved), ref];
+    }),
+  ), [seedKey, data?.taskAliases]);
   const [expanded, setExpanded] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const router = useRouter();
@@ -278,7 +284,6 @@ export function EntityLinkChips({
     kind: chipTarget && chipTarget.kind !== "tag" ? chipTarget.kind : null,
     id: chipTarget?.id ?? "",
     label: chipTarget?.label,
-    extraTags: chipTarget?.kind === "tag" ? [chipTarget.id] : undefined,
     enabled: chipTarget !== null,
   });
 
@@ -298,8 +303,10 @@ export function EntityLinkChips({
         if (cancelled || !json) return;
         setData({
           notes: json.notes ?? [],
+          taskAliases: json.taskAliases,
           related: mergeEntityRefs(
-            (JSON.parse(seedKey) as EntityRef[]) ?? [],
+            (JSON.parse(seedKey) as EntityRef[]).map((ref) =>
+              resolveTaskAlias(ref, json.taskAliases)),
             json.related ?? [],
           ),
         });
@@ -320,6 +327,7 @@ export function EntityLinkChips({
   )) {
     const key = refKey(ref);
     if (seen.has(key)) continue;
+    if (ref.kind === "tag") continue;
     if (ref.kind === kind && ref.id === id) continue;
     if (isRedundantChip(ref, {
       suppressJiraKey,
@@ -348,13 +356,13 @@ export function EntityLinkChips({
     setData((prev) =>
       prev
         ? {
-            notes: prev.notes,
+            ...prev,
             related: prev.related.filter((r) => refKey(r) !== key),
           }
         : prev,
     );
     try {
-      await onRemoveSeed(ref);
+      await onRemoveSeed(storedSeeds.get(key) ?? ref);
     } catch {
       setData(previous);
     } finally {
@@ -390,7 +398,7 @@ export function EntityLinkChips({
         const target = defaultHrefForRef(ref);
         const text = chipDisplayLabel(ref, { suppressJiraKey, hostLabel: label });
         const external = !!target && /^https?:\/\//i.test(target);
-        const removable = !!onRemoveSeed && seedKeys.has(refKey(ref));
+        const removable = !!onRemoveSeed && storedSeeds.has(refKey(ref));
         const inner = (
           <>
             <Icon size={10} aria-hidden />

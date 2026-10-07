@@ -28,7 +28,6 @@ import {
   type DiagramFile,
   type DiagramFolder,
 } from "@/lib/diagram-utils";
-import { extractTags } from "@/lib/entity-note";
 import { useTagMenuGroup, withTagsGroup } from "@/lib/hooks/use-tag-menu";
 import { useToast } from "@/lib/hooks/use-toast";
 import { broadcastNoteAutosaveInvalidation } from "@/lib/notes/autosave-invalidation";
@@ -247,7 +246,6 @@ export function DiagramFileCard({
     kind: "diagram",
     id: file.path,
     label: file.name,
-    extraTags: extractTags(file.name),
     enabled: menu.target !== null,
   });
 
@@ -373,7 +371,6 @@ export function DiagramRecentRow({
     kind: "diagram",
     id: file.path,
     label: file.name,
-    extraTags: extractTags(file.name),
     enabled: menu.target !== null,
   });
 

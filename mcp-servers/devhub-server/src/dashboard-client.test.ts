@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   DashboardClient,
   DashboardHttpError,
+  DashboardTimeoutError,
   DashboardUnreachableError,
   withDashboardErrors,
 } from "./dashboard-client.ts";
@@ -70,6 +71,20 @@ describe("DashboardClient.request", () => {
     mockFetch(() => Promise.reject(new Error("ECONNREFUSED")));
     const client = new DashboardClient("http://localhost:1337");
     await expect(client.get("/api/x")).rejects.toBeInstanceOf(DashboardUnreachableError);
+  });
+
+  it("reports a slow dashboard as a timeout, not as unreachable", async () => {
+    mockFetch(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+        }),
+    );
+    const client = new DashboardClient("http://localhost:1337");
+    await expect(client.get("/api/slow", undefined, 10)).rejects.toBeInstanceOf(DashboardTimeoutError);
+    const result = await withDashboardErrors(() => client.get("/api/slow", undefined, 10).then(() => ({ content: [] })));
+    expect(result.isError).toBe(true);
+    expect(result.content[0]).toMatchObject({ text: expect.stringContaining("status_exec") });
   });
 
   it("sends PATCH and DELETE bodies for Cursor note actions", async () => {

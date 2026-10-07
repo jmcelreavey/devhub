@@ -53,10 +53,7 @@ export function refsFromSourcePath(
   const audit = relPath.match(/^reviews\/dx-audit-(.+)-\d{4}-\d{2}-\d{2}$/);
   if (audit) {
     const repo = exactRepo(audit[1], repos);
-    return [
-      ...(repo ? [repoRef(repo)] : []),
-      { kind: "tag", id: "dx-audit", label: "#dx-audit", href: "/work?tag=dx-audit" },
-    ];
+    return repo ? [repoRef(repo)] : [];
   }
 
   return [];

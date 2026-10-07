@@ -20,7 +20,7 @@ Status: **complete**. Phases 0–5 done; Electron removed 2026-07-26.
 
 Outstanding: Apple Developer ID signing (builds are ad-hoc signed, so other
 machines need right-click → Open), the canary N→N+1 update test on a clean
-machine, and Windows targets.
+machine, and the [Windows (WSL2) app](desktop-windows-wsl.md), which is unverified on real Windows.
 
 ## What Rust owns, and what it doesn't
 

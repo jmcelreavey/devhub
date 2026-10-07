@@ -38,6 +38,7 @@ beforeEach(() => {
   vi.mocked(readAutoPrReviewPrefs).mockReturnValue({
     enabled: false,
     always: false,
+    ownedOnly: false,
     source: "env",
   });
 });

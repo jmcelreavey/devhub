@@ -68,7 +68,8 @@ export function countForItem(
 
 /** Whether a nav item has new activity unseen since its last visit. */
 export function unseenForItem(icon: string, unseen: NavUnseen): boolean {
-  if (icon === "tickets") return unseen.tickets;
+  // Jira tickets live on Work's Jira tab — there is no Tickets row any more.
+  if (icon === "tasks") return unseen.tickets;
   if (icon === "prs") return unseen.prs;
   return false;
 }

@@ -2,7 +2,7 @@ import { AgentDispatchError,dispatchAgentRun } from "@/lib/agent-runs/dispatch";
 import { clip } from "@/lib/agent-runs/events";
 import { isActiveAgentRunState,readRunEvents } from "@/lib/agent-runs/run-files";
 import { cancelAgentRun,readAgentRun,toAgentRunSummary } from "@/lib/agent-runs/store";
-import { cancelManagedRun,reconcileManagedRun } from "@/lib/aionui/lifecycle";
+import { cancelManagedRun,reconcileManagedRun } from "@/lib/paseo/lifecycle";
 import { parseBody,requireDashboardAuth,withErrorHandler } from "@/lib/api-utils";
 import { NextRequest,NextResponse } from "next/server";
 import { z } from "zod";
@@ -46,7 +46,7 @@ export const DELETE = withErrorHandler(async (req: NextRequest, { params }: Rout
   if (isActiveAgentRunState(run.status.state) && run.spec.runtime === "generation") {
     return NextResponse.json({ error: "Stop this generation from the feature that started it." }, { status: 409 });
   }
-  const { run: updated, outcome } = run.spec.runtime === "aionui" ? await cancelManagedRun(run) : cancelAgentRun(run);
+  const { run: updated, outcome } = run.spec.runtime === "aionui" || run.spec.runtime === "paseo" ? await cancelManagedRun(run) : cancelAgentRun(run);
   return NextResponse.json({ run: toAgentRunSummary(updated), outcome });
 }, "agent.runs.id.delete");
 

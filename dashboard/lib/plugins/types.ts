@@ -84,7 +84,7 @@ export interface DashboardContribution {
 /**
  * Tier-3 branding contribution. A plugin can whitelabel DevHub when it's enabled:
  * contribute a theme palette + presets, seed the default theme/mode, swap fonts, the
- * sidebar/boot logo, the OpenChamber theme, and the Electron app icon.
+ * sidebar/boot logo, and the Electron app icon.
  *
  * Core never hard-codes any of this — the branding materialiser (`lib/plugins/branding.ts`)
  * reads these fields from whichever enabled plugin declares them and writes machine-local
@@ -117,13 +117,13 @@ export interface BrandingContribution {
     /** Accessible label shown next to the mark, e.g. "ACME". */
     label?: string;
   };
-  /** OpenChamber whitelabel (applied only when OpenChamber is installed). */
+  /**
+   * Deprecated and ignored: DevHub no longer runs OpenChamber. Still accepted so
+   * existing plugin manifests keep validating under the strict schema.
+   */
   openchamber?: {
-    /** Plugin-root-relative dir of OpenChamber theme JSON files. */
     themes?: string;
-    /** Theme id seeded as OpenChamber's default dark theme. */
     defaultDarkId?: string;
-    /** Theme id seeded as OpenChamber's default light theme. */
     defaultLightId?: string;
   };
   /** Plugin-root-relative PNG (>=512px) used as the desktop app icon. */
@@ -179,7 +179,7 @@ export interface PluginManifest {
   contributes: Partial<Record<ContributeKind, string>>;
   /** Tier-2 dashboard module (pages, API, libs, components, nav). */
   dashboard?: DashboardContribution;
-  /** Tier-3 whitelabel: theme, fonts, logo, OpenChamber theme, Electron icon. */
+  /** Tier-3 whitelabel: theme, fonts, logo, Electron icon. */
   branding?: BrandingContribution;
   /** Machine tooling this plugin needs (verified at install time, not by core). */
   requires?: {

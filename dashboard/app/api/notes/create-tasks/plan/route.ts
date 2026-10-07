@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { parseBody, requireDashboardAuth, withErrorHandler } from "@/lib/api-utils";
+import { suggestWorkItemTitles, WORK_ITEM_TITLES_TIMEOUT_MS } from "@/lib/notes/work-item-titles";
 import { blocksToText } from "@/lib/markdown-convert";
-import { extractTags, parseEntityLinksFromMarkdown } from "@/lib/entity-note";
+import { parseEntityLinksFromMarkdown } from "@/lib/entity-note";
 import { getJiraMeta } from "@/lib/jira/client";
 import {
   parsePlanWorkItems,
@@ -54,7 +57,6 @@ export async function GET(req: NextRequest) {
 
   const title = planTitleFromMarkdown(markdown, notePath);
   const workItems: PlanWorkItem[] = parsePlanWorkItems(markdown);
-  const tags = extractTags(markdown);
   const noteLinks = parseEntityLinksFromMarkdown(markdown);
   const linkedRepos = [
     ...new Set([
@@ -72,7 +74,6 @@ export async function GET(req: NextRequest) {
     notePath,
     title,
     markdown,
-    tags,
     workItems,
     repos: linkedRepos,
     parentKey,
@@ -83,3 +84,37 @@ export async function GET(req: NextRequest) {
     jiraMeta,
   });
 }
+
+const previewSchema = z.object({
+  notePath: z.string().trim().min(1).max(1_000),
+});
+
+export const POST = withErrorHandler(async (req: NextRequest) => {
+  const auth = requireDashboardAuth(req);
+  if (!auth.ok) return auth.response;
+  const parsed = await parseBody(req, previewSchema);
+  if (!parsed.ok) return parsed.response;
+
+  const { notePath } = parsed.data;
+  const markdown = readNoteMarkdown(notePath);
+  if (!markdown) {
+    return NextResponse.json({ error: `Note not found: ${notePath}` }, { status: 404 });
+  }
+
+  const title = planTitleFromMarkdown(markdown, notePath);
+  const sourceItems = parsePlanWorkItems(markdown);
+  let workItems = sourceItems;
+  let warning: string | undefined;
+  const generationSignal = AbortSignal.any([req.signal, AbortSignal.timeout(WORK_ITEM_TITLES_TIMEOUT_MS)]);
+  try {
+    workItems = await suggestWorkItemTitles(title, sourceItems, generationSignal);
+  } catch (error) {
+    if (req.signal.aborted) throw error;
+    const timedOut = generationSignal.reason instanceof DOMException && generationSignal.reason.name === "TimeoutError";
+    console.warn("[create-tasks-preview] Title suggestions failed:", timedOut ? "TimeoutError" : error instanceof Error ? error.name : "Unknown error");
+    warning = `Work items detected, but AI title refinement ${timedOut ? "timed out" : "failed"}. Showing titles taken from the note; you can edit them below.`;
+  }
+
+  // The preview needs no Jira lookup; integration metadata is fetched at launch.
+  return NextResponse.json({ title, workItems, warning });
+}, "notes/create-tasks/preview");

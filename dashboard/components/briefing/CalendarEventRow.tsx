@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { Calendar, Copy, FileText, Video } from "lucide-react";
 import type { CalendarEvent } from "@/lib/google-calendar";
-import { extractTags } from "@/lib/entity-note";
 import { formatTime } from "@/lib/utils";
 import { copyTextAndToast } from "@/lib/pr-slack";
 import { createOrOpenVaultNote } from "@/lib/create-vault-note";
@@ -83,7 +82,6 @@ export function CalendarEventRow({
     id: event.id,
     label: event.title,
     meetingTitle: event.title,
-    extraTags: extractTags(event.title),
     enabled: menu.target !== null,
   });
 

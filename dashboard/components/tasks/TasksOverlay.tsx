@@ -185,7 +185,6 @@ export function TasksOverlay({ open, onClose }: TasksOverlayProps) {
               key={refreshKey}
               inputId="hub-tasks-side-input"
               searchQuery={query}
-              denseLinks
             />
           </div>
         ) : isLoadingHistory ? (

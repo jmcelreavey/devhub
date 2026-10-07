@@ -2,6 +2,21 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Context } from "../context.ts";
 import { withDashboardErrors } from "../dashboard-client.ts";
+import {
+  capText,
+  formatGitBlame,
+  formatGitBranches,
+  formatGitDiff,
+  formatGitLog,
+  formatGitShow,
+  formatGitStatus,
+  type GitBlamePayload,
+  type GitBranchesPayload,
+  type GitDiffPayload,
+  type GitLogPayload,
+  type GitShowPayload,
+  type GitStatusPayload,
+} from "./git-format.ts";
 
 interface RepoInfo {
   name: string;
@@ -19,7 +34,8 @@ function repoPath(name: string, sub: string): string {
 
 function jsonText(data: unknown, fallback = "OK"): string {
   if (typeof data === "string") return data || fallback;
-  return JSON.stringify(data, null, 2);
+  // Compact: indentation alone was ~30% of these payloads.
+  return JSON.stringify(data);
 }
 
 const nameSchema = z.string().describe("Repo name as shown by repos_list");
@@ -146,7 +162,7 @@ export function registerReposTools(server: McpServer, ctx: Context): void {
             ? payload.summary
             : typeof payload.markdown === "string"
               ? payload.markdown
-              : JSON.stringify(payload, null, 2);
+              : JSON.stringify(payload);
         return { content: [{ type: "text", text: summary }] };
       }),
   );
@@ -162,8 +178,8 @@ export function registerReposTools(server: McpServer, ctx: Context): void {
     },
     async ({ name }) =>
       withDashboardErrors(async () => {
-        const data = await dashboard.get<Record<string, unknown>>(repoPath(name, "/git/status"));
-        return { content: [{ type: "text", text: jsonText(data) }] };
+        const data = await dashboard.get<GitStatusPayload>(repoPath(name, "/git/status"));
+        return { content: [{ type: "text", text: formatGitStatus(data) }] };
       }),
   );
 
@@ -278,20 +294,23 @@ export function registerReposTools(server: McpServer, ctx: Context): void {
   server.registerTool(
     "repos_git_diff",
     {
-      description: "Get a file (or whole-repo) diff from the Git workspace API. staged=true for cached diff.",
+      description:
+        "Unified diff of uncommitted changes for one file (or the whole working tree). staged=true for the cached diff. Whole-tree diffs are truncated past 60k chars — call repos_git_status first and pass path for the files you need. For a branch vs main, use repos_git_range.",
       inputSchema: {
         name: nameSchema,
         path: z.string().optional().describe("Repo-relative file path; omit for full diff"),
         staged: z.boolean().optional().describe("true = staged (cached) diff"),
+        context: z.number().int().min(0).max(200).optional().describe("Context lines around each hunk (default 3)"),
       },
     },
-    async ({ name, path: filePath, staged }) =>
+    async ({ name, path: filePath, staged, context }) =>
       withDashboardErrors(async () => {
-        const data = await dashboard.get<Record<string, unknown>>(repoPath(name, "/git/diff"), {
+        const data = await dashboard.get<GitDiffPayload>(repoPath(name, "/git/diff"), {
           path: filePath,
           staged: staged ? "1" : undefined,
+          context,
         });
-        return { content: [{ type: "text", text: jsonText(data) }] };
+        return { content: [{ type: "text", text: formatGitDiff(data, filePath ?? "the working tree") }] };
       }),
   );
 
@@ -338,8 +357,8 @@ export function registerReposTools(server: McpServer, ctx: Context): void {
     },
     async ({ name }) =>
       withDashboardErrors(async () => {
-        const data = await dashboard.get(repoPath(name, "/branches"));
-        return { content: [{ type: "text", text: jsonText(data) }] };
+        const data = await dashboard.get<GitBranchesPayload>(repoPath(name, "/branches"));
+        return { content: [{ type: "text", text: formatGitBranches(data) }] };
       }),
   );
 
@@ -438,27 +457,33 @@ export function registerReposTools(server: McpServer, ctx: Context): void {
   server.registerTool(
     "repos_git_log",
     {
-      description: "Commit history / graph data for a tracked repo (last N commits).",
+      description:
+        "Commit history for a tracked repo, one line per commit (hash, age, author, subject, refs). scope=current follows HEAD only, like `git log`; the default covers every branch, like the History graph. query searches commit messages (or resolves a SHA).",
       inputSchema: {
         name: nameSchema,
         limit: z.number().int().min(5).max(100).optional().describe("Max commits (default 40)"),
         offset: z.number().int().min(0).optional().describe("Commits to skip for pagination"),
+        scope: z.enum(["all", "current"]).optional().describe("all branches (default) or current branch only"),
+        query: z.string().trim().min(1).max(200).optional().describe("Search commit messages, or a SHA"),
       },
     },
-    async ({ name, limit, offset }) =>
+    async ({ name, limit, offset, scope, query }) =>
       withDashboardErrors(async () => {
-        const data = await dashboard.get(repoPath(name, "/git/log"), {
+        const data = await dashboard.get<GitLogPayload>(repoPath(name, "/git/log"), {
           limit: limit ?? 40,
           offset: offset ?? 0,
+          scope,
+          q: query,
         });
-        return { content: [{ type: "text", text: jsonText(data) }] };
+        return { content: [{ type: "text", text: formatGitLog(data) }] };
       }),
   );
 
   server.registerTool(
     "repos_git_show",
     {
-      description: "Show a commit (message + changed files + optional patch) via /git/show.",
+      description:
+        "Show a commit: header, message, changed files, and the patch for one file (path, else the first changed file).",
       inputSchema: {
         name: nameSchema,
         ref: z.string().describe("Commit SHA or HEAD~n"),
@@ -467,31 +492,35 @@ export function registerReposTools(server: McpServer, ctx: Context): void {
     },
     async ({ name, ref, path: filePath }) =>
       withDashboardErrors(async () => {
-        const data = await dashboard.get(repoPath(name, "/git/show"), {
+        const data = await dashboard.get<GitShowPayload>(repoPath(name, "/git/show"), {
           commit: ref,
           path: filePath,
         });
-        return { content: [{ type: "text", text: jsonText(data) }] };
+        return { content: [{ type: "text", text: formatGitShow(data) }] };
       }),
   );
 
   server.registerTool(
     "repos_git_blame",
     {
-      description: "Blame + recent file history for a path via /git/blame.",
+      description:
+        "Blame a file (commit, author, date per line) plus its recent history. Pass startLine/endLine for a range; pass line to scope the history to commits that touched that line.",
       inputSchema: {
         name: nameSchema,
         path: z.string().describe("Repo-relative file path"),
+        startLine: z.number().int().min(1).optional().describe("First line to include (1-based)"),
+        endLine: z.number().int().min(1).optional().describe("Last line to include"),
+        line: z.number().int().min(1).optional().describe("Scope the history to commits touching this line"),
       },
     },
-    async ({ name, path: filePath }) =>
+    async ({ name, path: filePath, startLine, endLine, line }) =>
       withDashboardErrors(async () => {
-        const data = await dashboard.get(
+        const data = await dashboard.get<GitBlamePayload>(
           repoPath(name, "/git/blame"),
-          { path: filePath },
+          { path: filePath, line },
           60_000,
         );
-        return { content: [{ type: "text", text: jsonText(data) }] };
+        return { content: [{ type: "text", text: formatGitBlame(data, { startLine, endLine }) }] };
       }),
   );
 
@@ -529,6 +558,160 @@ export function registerReposTools(server: McpServer, ctx: Context): void {
           content,
         });
         return { content: [{ type: "text", text: jsonText(data, "Resolved") }] };
+      }),
+  );
+
+  server.registerTool(
+    "repos_git_range",
+    {
+      description:
+        "What a branch changes vs its base — the review-shaped diff. Merge-base range (base...head), so it shows what head added, not what it is missing. Returns ahead/behind, the changed files, and the patch (truncated past 60k chars; pass path or filesOnly). Defaults: base = the repo's trunk, head = HEAD.",
+      inputSchema: {
+        name: nameSchema,
+        base: z
+          .string()
+          .optional()
+          .describe("Base branch, tag or SHA — no ~/^ suffixes (default: the repo's trunk, e.g. origin/main)"),
+        head: z.string().optional().describe("Head branch, tag or SHA (default HEAD)"),
+        path: z.string().optional().describe("Limit the patch to one repo-relative path"),
+        filesOnly: z.boolean().optional().describe("Only list changed files and counts, no patch"),
+        context: z.number().int().min(0).max(200).optional().describe("Context lines around each hunk (default 3)"),
+      },
+    },
+    async ({ name, base, head, path: filePath, filesOnly, context }) =>
+      withDashboardErrors(async () => {
+        const data = await dashboard.get<{
+          base: string;
+          head: string;
+          ahead: number;
+          behind: number;
+          files: { path: string; status: string }[];
+          lines: { text: string }[];
+        }>(repoPath(name, "/git/range"), { base, head, path: filePath, context }, 60_000);
+        const header =
+          `${data.base}...${data.head}: ${data.ahead} commit(s) ahead, ${data.behind} behind.\n` +
+          `Files (${data.files.length}):\n${data.files.map((f) => `${f.status} ${f.path}`).join("\n") || "(none)"}`;
+        if (filesOnly || data.files.length === 0) return { content: [{ type: "text", text: header }] };
+        const patch = data.lines.map((l) => l.text).join("\n");
+        const body = capText(patch, "pass path for one file, or filesOnly to list files");
+        return { content: [{ type: "text", text: `${header}\n\n${body}` }] };
+      }),
+  );
+
+  server.registerTool(
+    "repos_git_ci",
+    {
+      description:
+        "CI state without leaving the repo: with no commit, the open PR for the current branch and its check rollup; with commit (hex SHA), that commit's check runs. To diagnose a failing check, follow up with prs_pipeline_investigate. Needs gh.",
+      inputSchema: {
+        name: nameSchema,
+        commit: z
+          .string()
+          .regex(/^[0-9a-f]{7,40}$/, "commit must be a hex SHA")
+          .optional()
+          .describe("Commit SHA to check instead of the branch PR"),
+      },
+    },
+    async ({ name, commit }) =>
+      withDashboardErrors(async () => {
+        type Counts = { passed: number; failed: number; pending: number };
+        const fmt = (c?: Counts) => (c ? ` (${c.passed} passed, ${c.failed} failed, ${c.pending} pending)` : "");
+        if (commit) {
+          const data = await dashboard.get<{ state: string; counts?: Counts; reason?: string }>(
+            repoPath(name, "/git/ci"),
+            { commit },
+            60_000,
+          );
+          const reason = data.reason ? ` — ${data.reason}` : "";
+          return { content: [{ type: "text", text: `CI for ${commit}: ${data.state}${fmt(data.counts)}${reason}` }] };
+        }
+        const data = await dashboard.get<{
+          pr: { number: number; title: string; url: string; checks: string; checkCounts: Counts } | null;
+        }>(repoPath(name, "/git/branch-pr"), undefined, 60_000);
+        if (!data.pr) {
+          return {
+            content: [
+              { type: "text", text: "No open PR for the current branch (or detached HEAD / gh unavailable)." },
+            ],
+          };
+        }
+        const pr = data.pr;
+        return {
+          content: [
+            { type: "text", text: `PR #${pr.number} ${pr.title}\n${pr.url}\nChecks: ${pr.checks}${fmt(pr.checkCounts)}` },
+          ],
+        };
+      }),
+  );
+
+  server.registerTool(
+    "repos_git_worktrees",
+    {
+      description:
+        "List git worktrees, review merged cleanup, or add/remove/prune/lock/unlock. review returns GitHub merge evidence, equivalence to the current remote default branch (including rebased/squashed changes), local changes, ignored files, blockers and HEADs. Cleanup does not rebase or rewrite branches. cleanup removes only verified merged checkouts from reviewed entries (path + head), requires confirm:true, and rechecks safety; never forces. includeIgnored:true acknowledges deletion of the listed ignored local files. Branches and commits remain. prune only forgets missing folders. add creates a branch only with createBranch:true; remove refuses dirty worktrees unless force:true.",
+      inputSchema: {
+        name: nameSchema,
+        action: z.enum(["list", "review", "cleanup", "add", "remove", "prune", "lock", "unlock"]).optional().describe("Default list"),
+        branch: z.string().optional().describe("Branch for add"),
+        path: z.string().optional().describe("Worktree directory (target for add; required for remove/lock/unlock)"),
+        createBranch: z.boolean().optional().describe("add: create branch instead of checking out an existing one"),
+        force: z.boolean().optional().describe("remove: discard the worktree's uncommitted changes"),
+        entries: z.array(z.object({ path: z.string().min(1).max(4096), head: z.string().regex(/^[a-f0-9]{40,64}$/) })).min(1).max(50).optional().describe("cleanup: exact paths and HEADs returned by review"),
+        confirm: z.boolean().optional().describe("cleanup: explicitly approve removing the reviewed checkouts"),
+        includeIgnored: z.boolean().optional().describe("cleanup: approve deletion of the ignored files shown by review"),
+      },
+    },
+    async ({ name, action = "list", branch, path: target, createBranch, force, entries, confirm, includeIgnored }) =>
+      withDashboardErrors(async () => {
+        if (action === "review") {
+          const data = await dashboard.get<{ mergedCleanupSupported?: boolean }>(repoPath(name, "/worktrees"), { details: "1" }, 180_000);
+          if (!data.mergedCleanupSupported) throw new Error("Rebuild the DevHub dashboard to enable verified merged-worktree cleanup.");
+          return { content: [{ type: "text", text: jsonText(data) }] };
+        }
+        if (action === "cleanup") {
+          if (confirm !== true || !entries?.length) return {
+            isError: true,
+            content: [{ type: "text", text: "Run review first, then supply entries (path + head) and confirm:true. No worktrees removed." }],
+          };
+          const capabilities = await dashboard.get<{ mergedCleanupSupported?: boolean }>(repoPath(name, "/worktrees"));
+          if (!capabilities.mergedCleanupSupported) throw new Error("Rebuild the DevHub dashboard to enable verified merged-worktree cleanup.");
+          const data = await dashboard.post<{ removed: string[]; errors: { path: string; error: string }[] }>(
+            repoPath(name, "/worktrees"), { entries, confirmed: true, includeIgnored: includeIgnored ?? false, mergedOnly: true }, 300_000,
+          );
+          return { isError: data.errors.length > 0, content: [{ type: "text", text: jsonText(data) }] };
+        }
+        if (action === "list") {
+          const data = await dashboard.get<{
+            worktrees: {
+              path: string;
+              head: string;
+              branch: string | null;
+              isMain: boolean;
+              detached: boolean;
+              locked: boolean;
+              prunable: boolean;
+            }[];
+          }>(repoPath(name, "/git/worktrees"));
+          const lines = data.worktrees.map((w) => {
+            const flags = [
+              w.isMain ? "main" : null,
+              w.detached ? "detached" : null,
+              w.locked ? "locked" : null,
+              w.prunable ? "prunable" : null,
+            ]
+              .filter(Boolean)
+              .join(", ");
+            return `- ${w.path} — ${w.branch ?? w.head.slice(0, 9)}${flags ? ` [${flags}]` : ""}`;
+          });
+          return { content: [{ type: "text", text: `Worktrees (${lines.length}):\n${lines.join("\n")}` }] };
+        }
+        const data = await dashboard.post<{ ok: boolean; path?: string; message?: string }>(
+          repoPath(name, "/git/worktrees"),
+          { action, branch, path: target, createBranch, force },
+          130_000,
+        );
+        const detail = data.path ? ` → ${data.path}` : data.message ? `\n${data.message}` : "";
+        return { content: [{ type: "text", text: `Worktree ${action} OK${detail}` }] };
       }),
   );
 }

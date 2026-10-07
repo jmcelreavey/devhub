@@ -74,7 +74,7 @@ export function buildPrRowMenuGroups({
   /** Today's unfinished daily rep is this PR — agent review stays locked until findings are saved. */
   repLocked?: boolean;
   openRep?: () => void;
-  /** #tags on this PR (title + linked review note) — see useTagMenuGroup. */
+  /** Linked entities on this PR — see useTagMenuGroup. */
   tagsGroup?: ContextMenuGroup | null;
 }): ContextMenuGroup[] {
   const watchPath = prReviewNotePath(row);
@@ -133,7 +133,7 @@ export function buildPrRowMenuGroups({
   const skipPr = {
     id: "skip-pr",
     label: "Skip until updated",
-    description: "Hides this PR until someone pushes new commits",
+    description: "Hides this PR until something changes on it",
     icon: <CircleSlash size={12} />,
     onSelect: async () => {
       const key = "/api/github/prs";
@@ -141,7 +141,14 @@ export function buildPrRowMenuGroups({
       // now and reconcile with the server in the background.
       await globalMutate<GithubPrsApiPayload>(
         key,
-        (current) => (current ? { ...current, reviews: current.reviews.filter((r) => r.url !== row.url) } : current),
+        (current) =>
+          current
+            ? {
+                ...current,
+                authored: current.authored.filter((r) => r.url !== row.url),
+                reviews: current.reviews.filter((r) => r.url !== row.url),
+              }
+            : current,
         { revalidate: false },
       );
       try {
@@ -154,6 +161,7 @@ export function buildPrRowMenuGroups({
             repo: row.repo,
             number: row.number,
             title: row.title,
+            kind: kind === "authored" ? "authored" : "reviews",
           }),
         });
         if (!res.ok) throw new Error(String(res.status));
@@ -215,6 +223,7 @@ export function buildPrRowMenuGroups({
               onSelect: () => void copyTextAndToast(buildSlackMessage(row, "awaiting"), "Slack message", toast),
             },
             noteItem,
+            skipPr,
           ],
         },
       ],

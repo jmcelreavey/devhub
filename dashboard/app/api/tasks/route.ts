@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { addTask, toggleTask, deleteTask, updateTask, abandonTask, reactivateTask, reorderOpenTasks, rolloverTasks, startTaskTimer, stopTaskTimer } from "@/lib/tasks/storage";
+import { getTasks, addTask, toggleTask, deleteTask, updateTask, abandonTask, reactivateTask, reorderOpenTasks, rolloverTasks, startTaskTimer, stopTaskTimer } from "@/lib/tasks/storage";
 import {
   TaskCreateSchema,
   TaskPatchSchema,
@@ -8,10 +8,21 @@ import {
   formatZodError,
 } from "@/lib/schemas";
 import { withErrorHandler } from "@/lib/api-utils";
+import { currentTaskNode, loadTaskIndex } from "@/lib/tasks/task-index";
 
-export const GET = withErrorHandler(async () => {
+export const GET = withErrorHandler(async (req: Request) => {
+  const taskId = new URL(req.url).searchParams.get("taskId");
+  if (taskId !== null && !/^[a-zA-Z0-9_-]{1,200}$/.test(taskId)) {
+    return NextResponse.json({ error: "Invalid taskId" }, { status: 400 });
+  }
   const tasks = await rolloverTasks();
-  return NextResponse.json({ date: new Date().toISOString().split("T")[0], tasks });
+  const date = new Date().toISOString().split("T")[0];
+  if (taskId) {
+    const node = currentTaskNode(loadTaskIndex(), taskId);
+    const current = node ? getTasks(node.date).filter((task) => task.id === node.task.id) : [];
+    return NextResponse.json({ date: node?.date ?? date, tasks: current });
+  }
+  return NextResponse.json({ date, tasks });
 }, "tasks.get");
 
 export const POST = withErrorHandler(async (req: Request) => {

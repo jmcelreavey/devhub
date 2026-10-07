@@ -20,6 +20,8 @@ export interface GenerateAiTextOptions {
   maxOutputTokens?: number;
   /** Override preference for this call only. */
   prefer?: AiProviderId | null;
+  /** Model for this call only; blank keeps the provider's configured default. */
+  model?: string;
   /** CLI timeout override (ignored for API). */
   timeoutMs?: number;
   /** CLI only — give up after this long with no output at all. */
@@ -53,11 +55,11 @@ export async function generateAiText(
   const provider = resolved.provider;
 
   if (provider === "api") {
-    const model = getNotesAiModel({ ...opts.activity, cwd: opts.cwd ?? opts.activity?.cwd });
+    const model = getNotesAiModel({ ...opts.activity, cwd: opts.cwd ?? opts.activity?.cwd }, opts.model);
     if (!model) {
       throw new Error("AI_API_KEY is not set.");
     }
-    const callOptions = { ...getNotesAiCallOptions(), abortSignal: opts.abortSignal };
+    const callOptions = { ...getNotesAiCallOptions(opts.model), abortSignal: opts.abortSignal };
     const images = (opts.images ?? []).filter((img) => img.dataUrl.startsWith("data:image/"));
     const tokenOpts =
       opts.maxOutputTokens !== undefined ? { maxOutputTokens: opts.maxOutputTokens } : {};
@@ -114,6 +116,7 @@ export async function generateAiText(
       timeoutMs: opts.timeoutMs,
       idleTimeoutMs: opts.idleTimeoutMs,
       maxOutputTokens: opts.maxOutputTokens,
+      model: opts.model,
       cwd: opts.cwd,
       abortSignal: opts.abortSignal,
     });

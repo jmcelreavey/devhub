@@ -16,11 +16,13 @@ PUBLIC_PATHS=(.gitattributes .githooks .github .gitignore .nvmrc AGENTS.md
               CONTRIBUTING.md LICENSE PLAN.md README.md ROADMAP.md package.json
               agents/shared dashboard desktop docs mcp/shared mcp-servers
               opencode/shared persona/shared-persona.md scripts shared skills/shared skills/vendor
-              ':!dashboard/.env.local' ':!scripts/make-public-seed.sh')
+              ':!dashboard/.env.local' ':!scripts/make-public-seed.sh'
+              ':!skills/shared/my-voice/writing-style.md' ':!skills/shared/my-voice/learned-voice.md')
 
 # Personal data that lives happily in this mirror and must never be pushed to
 # public core.
-PERSONAL_PATHS=(notes tasks collections upstarts
+PERSONAL_PATHS=(notes tasks reps collections upstarts
                 dashboard/.env.local persona/identity.txt
+                skills/shared/my-voice/writing-style.md skills/shared/my-voice/learned-voice.md
                 TEMPLATE_AND_PLUGIN_PLAN.md scripts/make-public-seed.sh
                 MCP_PARITY_AUDIT.md ONE_TIME_SHARE_PLAN.md)

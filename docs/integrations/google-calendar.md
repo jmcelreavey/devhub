@@ -19,10 +19,6 @@ The Google Calendar integration shows upcoming events in DevHub and supports cal
 - Week view of events.
 - Better daily planning alongside tasks and notes.
 
-## Walkthrough
-
-[Calendar walkthrough](/api/notes-assets/assets/feature-demos/demo-03-calendar.mp4)
-
 ## Setup Summary
 
 1. Create or select a Google Cloud project.

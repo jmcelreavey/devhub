@@ -119,7 +119,7 @@ const contentNames = [];
  * The distinctive names are the leaf slugs, not the top-level folders.
  * `notes/` contains `garden/`, `reviews/`, `daily/` — generic words that would
  * match ordinary framework output. The thing that actually identifies a leak is
- * `dx-audit-insider-app-2026-07-14`, three levels down. So this recurses.
+ * `dx-audit-example-app-2026-07-14`, three levels down. So this recurses.
  */
 function collectContentNames(dir, depth = 0) {
   if (depth > 4) return;

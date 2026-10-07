@@ -4,29 +4,20 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { isTaskOpen, type Task } from "@/lib/tasks/types";
 import {
   rewriteTaskKey,
-  detectBareUrl,
   clearedLineForToday,
   matchesTaskSearch,
 } from "@/lib/tasks/task-text";
+import { TaskComposer } from "@/components/tasks/TaskComposer";
 import { TaskItem } from "@/components/tasks/TaskItem";
-import { Plus, CheckCircle2, Link as LinkIcon, ChevronRight, ChevronDown, FilePen, FolderGit2, X } from "lucide-react";
+import { ProfileOverlayTasks } from "@/components/tasks/ProfileOverlayTasks";
+import { CheckCircle2, ChevronRight, ChevronDown } from "lucide-react";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { AddToJiraModal } from "@/components/tasks/AddToJiraModal";
 import { JiraTransitionModal } from "@/components/jira/JiraTransitionModal";
-import { EntityLinkDialog } from "@/components/EntityLinkDialog";
-import { KIND_ICON } from "@/components/EntityLinkChips";
-import {
-  MENTION_TAIL,
-  useMentionSuggestions,
-  type MentionSuggestion,
-} from "@/components/tasks/useMentionSuggestions";
 import { SortableList } from "@/components/ui/SortableList";
-import { HoverTip } from "@/components/ui/HoverTip";
 import { useGridSize } from "@/lib/hooks/use-grid-size";
-import { defaultHrefForRef, entityKey, mergeEntityRefs, type EntityRef } from "@/lib/entity-note";
 import { todayISO } from "@/lib/utils";
-import Link from "next/link";
 
 // Task now lives in lib/tasks/types.ts, shared with the server storage layer.
 // It was duplicated here and had drifted (missing rolledFromId/rolledFromDate).
@@ -47,27 +38,15 @@ const EMPTY_TASKS: Task[] = [];
 export interface TaskListProps {
   inputId?: string;
   searchQuery?: string;
-  denseLinks?: boolean;
   /** Hide specific open tasks (e.g. the one already shown in the NOW card). */
   excludeIds?: readonly string[];
 }
 
-export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, denseLinks = false }: TaskListProps) {
+export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }: TaskListProps) {
   const { data, error, isLoading, mutate } = useLive<{ tasks?: Task[] }>("/api/tasks");
   const gridSize = useGridSize("main");
   const tasks = data?.tasks ?? EMPTY_TASKS;
-  const [newText, setNewText] = useState("");
   const [exitingIds, setExitingIds] = useState<Set<string>>(() => new Set());
-  const [detectedUrl, setDetectedUrl] = useState<string | null>(null);
-  const [linkName, setLinkName] = useState("");
-  const [pendingLinks, setPendingLinks] = useState<EntityRef[]>([]);
-  const [linkOpen, setLinkOpen] = useState(false);
-  /** Open while the text ends in `#fragment` — tag autocomplete for the composer. */
-  const [tagSugs, setTagSugs] = useState<{ items: string[]; active: number } | null>(null);
-  /** Open while the text ends in `@fragment` — search anything linkable; a pick becomes a chip. */
-  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
-  const [mentionActive, setMentionActive] = useState(0);
-  const mentionItems = useMentionSuggestions(mentionQuery);
   const [jiraStatuses, setJiraStatuses] = useState<Record<string, JiraStatus>>({});
   const [jiraModalTask, setJiraModalTask] = useState<Task | null>(null);
   const [transitionPrompt, setTransitionPrompt] = useState<{
@@ -75,8 +54,6 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
     action: "complete" | "abandon";
     reason?: string;
   } | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const linkNameRef = useRef<HTMLInputElement>(null);
   const loadErrorToastShown = useRef(false);
   const toast = useToast();
   const today = todayISO();
@@ -137,112 +114,8 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
     });
   }, [tasks, jiraStatuses]);
 
-  const handleInputChange = useCallback((value: string) => {
-    setNewText(value);
-    const url = detectBareUrl(value);
-    if (url) {
-      setDetectedUrl(url);
-    } else {
-      setDetectedUrl(null);
-      setLinkName("");
-    }
-  }, []);
-
-  /**
-   * Tag autocomplete: while the text ends in `#fragment`, offer known tags.
-   * Debounced server lookup so typing `#au` doesn't fire a fetch per character;
-   * results are cached per prefix for the session (tags rarely shrink).
-   */
-  const tagCache = useRef(new Map<string, string[]>());
-  const tagTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handleTextChange = useCallback((value: string) => {
-    handleInputChange(value);
-    setMentionQuery(MENTION_TAIL.exec(value)?.[2] ?? null);
-    setMentionActive(0);
-    if (tagTimer.current) clearTimeout(tagTimer.current);
-    const m = /#([a-z0-9_-]*)$/.exec(value);
-    if (!m) {
-      setTagSugs(null);
-      return;
-    }
-    const frag = m[1] ?? "";
-    const cached = tagCache.current.get(frag);
-    if (cached) {
-      setTagSugs(cached.length ? { items: cached, active: 0 } : null);
-      return;
-    }
-    setTagSugs({ items: [], active: 0 });
-    tagTimer.current = setTimeout(() => {
-      void fetch(`/api/tags?q=${encodeURIComponent(frag)}`)
-        .then((r) => (r.ok ? r.json() : { tags: [] }))
-        .then((json: { tags?: { id: string }[] }) => {
-          const items = (json.tags ?? []).map((t) => t.id).slice(0, 6);
-          tagCache.current.set(frag, items);
-          // Only still-relevant fragments apply the answer.
-          setTagSugs((prev) =>
-            prev && /#([a-z0-9_-]*)$/.test(value) && items.length ? { items, active: 0 } : null,
-          );
-        })
-        .catch(() => setTagSugs(null));
-    }, 150);
-  }, [handleInputChange]);
-
-  /** Complete the trailing `#fragment` with the picked tag. */
-  const applyTagSuggestion = useCallback(
-    (tag: string) => {
-      setNewText((prev) => prev.replace(/#([a-z0-9_-]*)$/, `#${tag} `));
-      setTagSugs(null);
-      inputRef.current?.focus();
-    },
-    [],
-  );
-
-  /** Drop the trailing `@fragment` and link the picked entity instead. */
-  const applyMention = useCallback((pick: MentionSuggestion) => {
-    setNewText((prev) => prev.replace(MENTION_TAIL, "$1"));
-    setPendingLinks((prev) => mergeEntityRefs(prev, [pick.ref]));
-    setMentionQuery(null);
-    inputRef.current?.focus();
-  }, []);
-
-  const confirmLink = useCallback(() => {
-    if (!detectedUrl || !linkName.trim()) return;
-    const mdLink = `[${linkName.trim()}](${detectedUrl})`;
-    setNewText((prev) => prev.replace(detectedUrl, mdLink));
-    setDetectedUrl(null);
-    setLinkName("");
-    inputRef.current?.focus();
-  }, [detectedUrl, linkName]);
-
-  const dismissLinkPrompt = useCallback(() => {
-    setDetectedUrl(null);
-    setLinkName("");
-    inputRef.current?.focus();
-  }, []);
-
-  /** `asDraft` captures an idea: a draft task plus a context snapshot in its note. */
-  const addTask = useCallback(async (asDraft = false) => {
-    const text = newText.trim();
-    if (!text) return;
-    try {
-      const res = await fetch(asDraft ? "/api/tasks/capture" : "/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text,
-          ...(pendingLinks.length > 0 ? { links: pendingLinks } : {}),
-        }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const body = (await res.json()) as Task | { task: Task };
-      const task = "task" in body ? body.task : body;
-      if (asDraft) toast.success("Captured as a draft — related context is in its note");
-      setNewText("");
-      setPendingLinks([]);
-      setDetectedUrl(null);
-      setLinkName("");
-      setTagSugs(null);
-      setMentionQuery(null);
+  const onTaskAdded = useCallback(
+    async (task: Task) => {
       await mutate(
         (cur) => ({
           ...(cur ?? {}),
@@ -250,12 +123,9 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
         }),
         { revalidate: false },
       );
-      inputRef.current?.focus();
-    } catch (e) {
-      console.error("add task:", e);
-      toast.error("Couldn't add task.");
-    }
-  }, [newText, pendingLinks, toast, mutate]);
+    },
+    [mutate],
+  );
 
   const toggleTask = useCallback(
     async (id: string) => {
@@ -696,7 +566,6 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
         return (
           <div className={exiting ? "task-exit" : undefined}>
             <TaskItem
-              denseLinks={denseLinks}
               task={exiting ? { ...task, done: true } : task}
               date={today}
               jiraStatus={task.jiraKey ? jiraStatuses[task.jiraKey] : undefined}
@@ -765,249 +634,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
         <SegmentedProgressBar open={pending.length} done={completed.length} abandoned={abandoned.length} />
       )}
 
-      <div className="task-add-row">
-        <label htmlFor={inputId} className="sr-only">
-          Add a task
-        </label>
-        <input
-          id={inputId}
-          ref={inputRef}
-          className="input task-add-text"
-          placeholder="Add a task… (paste a link or Jira key, @ to link)"
-          value={newText}
-          onChange={(e) => handleTextChange(e.target.value)}
-          onBlur={() => {
-            setTagSugs(null);
-            setMentionQuery(null);
-          }}
-          onKeyDown={(e) => {
-            if (mentionQuery !== null && mentionItems.length > 0) {
-              const active = Math.min(mentionActive, mentionItems.length - 1);
-              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-                e.preventDefault();
-                const step = e.key === "ArrowDown" ? 1 : -1;
-                setMentionActive((active + step + mentionItems.length) % mentionItems.length);
-                return;
-              }
-              if (e.key === "Tab" || e.key === "Enter") {
-                e.preventDefault();
-                applyMention(mentionItems[active]!);
-                return;
-              }
-              if (e.key === "Escape") {
-                e.preventDefault();
-                setMentionQuery(null);
-                return;
-              }
-            }
-            if (tagSugs && tagSugs.items.length > 0) {
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setTagSugs({ ...tagSugs, active: (tagSugs.active + 1) % tagSugs.items.length });
-                return;
-              }
-              if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setTagSugs({
-                  ...tagSugs,
-                  active: (tagSugs.active - 1 + tagSugs.items.length) % tagSugs.items.length,
-                });
-                return;
-              }
-              if (e.key === "Tab" || e.key === "Enter") {
-                e.preventDefault();
-                applyTagSuggestion(tagSugs.items[tagSugs.active] ?? tagSugs.items[0]!);
-                return;
-              }
-              if (e.key === "Escape") {
-                e.preventDefault();
-                setTagSugs(null);
-                return;
-              }
-            }
-            if (e.key !== "Enter") return;
-            const currentText = (e.target as HTMLInputElement).value;
-            const freshUrl = detectedUrl || detectBareUrl(currentText);
-            if (freshUrl && linkName.trim()) {
-              e.preventDefault();
-              confirmLink();
-            } else if (freshUrl) {
-              e.preventDefault();
-              setDetectedUrl(freshUrl);
-              setNewText(currentText);
-            } else {
-              // Shift+Enter captures a draft instead of a ready task.
-              void addTask(e.shiftKey);
-            }
-          }}
-        />
-        {tagSugs && tagSugs.items.length > 0 && (
-          <ul className="task-tag-sugs" role="listbox" aria-label="Tag suggestions">
-            {tagSugs.items.map((tag, i) => (
-              <li key={tag}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={i === tagSugs.active}
-                  data-active={i === tagSugs.active || undefined}
-                  // mousedown, not click — blur would close the list first
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    applyTagSuggestion(tag);
-                  }}
-                  onMouseEnter={() => setTagSugs({ ...tagSugs, active: i })}
-                >
-                  #{tag}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {mentionQuery !== null && mentionItems.length > 0 && (
-          <ul className="task-tag-sugs" role="listbox" aria-label="Link suggestions">
-            {mentionItems.map((item, i) => {
-              const Icon = KIND_ICON[item.kind];
-              const active = i === Math.min(mentionActive, mentionItems.length - 1);
-              return (
-                <li key={entityKey(item.ref)}>
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={active}
-                    data-active={active || undefined}
-                    // mousedown, not click — blur would close the list first
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      applyMention(item);
-                    }}
-                    onMouseEnter={() => setMentionActive(i)}
-                  >
-                    <Icon size={11} className="mr-1.5 inline-block align-[-1px]" aria-hidden />
-                    {item.title}
-                    <span className="ml-2 text-text-muted">{item.meta}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {pendingLinks.length > 0 ? (
-          <ul className="entity-link-chips" aria-label="Links for this task">
-            {pendingLinks.map((ref) => {
-              const text = ref.label || ref.id;
-              const href = defaultHrefForRef(ref);
-              const Icon = KIND_ICON[ref.kind] ?? FolderGit2;
-              return (
-                <li key={entityKey(ref)} className="entity-link-chip-item" data-entity-chip="">
-                  {href ? (
-                    <Link href={href} className="entity-link-chip" data-kind={ref.kind} title={text}>
-                      <Icon size={10} aria-hidden />
-                      <span>{text}</span>
-                    </Link>
-                  ) : (
-                    <span className="entity-link-chip" data-kind={ref.kind} title={text}>
-                      <Icon size={10} aria-hidden />
-                      <span>{text}</span>
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    className="entity-link-chip-remove"
-                    aria-label={`Remove ${text} link`}
-                    onClick={() =>
-                      setPendingLinks((prev) => prev.filter((r) => entityKey(r) !== entityKey(ref)))
-                    }
-                  >
-                    <X size={10} aria-hidden />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        ) : null}
-        <HoverTip label="Associate repo" pos="top-end">
-          <button
-            type="button"
-            className="task-icon-action"
-            aria-label="Associate repo"
-            aria-haspopup="dialog"
-            aria-expanded={linkOpen}
-            data-linked={pendingLinks.some((ref) => ref.kind === "repo") || undefined}
-            onClick={() => setLinkOpen(true)}
-          >
-            <FolderGit2 size={14} aria-hidden />
-          </button>
-        </HoverTip>
-        <HoverTip label="Capture as draft (⇧↵) — saves related notes, PRs and alerts" pos="top-end">
-          <button
-            type="button"
-            className="task-icon-action"
-            onClick={() => void addTask(true)}
-            disabled={!newText.trim()}
-            aria-label="Capture as draft"
-          >
-            <FilePen size={14} aria-hidden />
-          </button>
-        </HoverTip>
-        <HoverTip label="Add task" pos="top-end">
-          <button
-            type="button"
-            className="btn btn-ghost task-add-btn"
-            onClick={() => void addTask()}
-            disabled={!newText.trim()}
-            aria-label="Add task"
-          >
-            <Plus size={14} aria-hidden />
-          </button>
-        </HoverTip>
-      </div>
-
-      <EntityLinkDialog
-        open={linkOpen}
-        onClose={() => setLinkOpen(false)}
-        defaultKind="repo"
-        existing={pendingLinks}
-        title="Link repo"
-        description="Link a local repository. The task shows up on that repo's hub."
-        onSave={async (refs) => {
-          setPendingLinks((prev) => mergeEntityRefs(prev, refs));
-        }}
-      />
-
-      {detectedUrl && (
-        <div
-          className="flex items-center gap-2 px-2 py-1.5 rounded bg-bg-elevated"
-        >
-          <LinkIcon size={12} style={{ color: "var(--accent)", flexShrink: 0 }} aria-hidden />
-          <span className="text-xs shrink-0 text-text-subtle">
-            Link name:
-          </span>
-          <input
-            ref={linkNameRef}
-            className="input task-link-name-input"
-            placeholder="e.g. Notes"
-            value={linkName}
-            onChange={(e) => setLinkName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                if (linkName.trim()) confirmLink();
-              } else if (e.key === "Escape") {
-                dismissLinkPrompt();
-              }
-            }}
-            autoFocus
-          />
-          <button
-            type="button"
-            className="btn btn-ghost"
-            style={{ padding: "2px 6px", fontSize: 12 }}
-            onClick={linkName.trim() ? confirmLink : dismissLinkPrompt}
-          >
-            {linkName.trim() ? "Add" : "Skip"}
-          </button>
-        </div>
-      )}
+      <TaskComposer inputId={inputId} onAdded={onTaskAdded} />
 
       {renderPendingTasks()}
 
@@ -1046,7 +673,6 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
               {completed.map((task) => (
                 <TaskItem
                   key={task.id}
-                  denseLinks={denseLinks}
                   task={task}
                   date={today}
                   jiraStatus={task.jiraKey ? jiraStatuses[task.jiraKey] : undefined}
@@ -1080,7 +706,6 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
           {showAbandoned && abandoned.map((task) => (
             <TaskItem
               key={task.id}
-              denseLinks={denseLinks}
               task={task}
               date={today}
               jiraStatus={undefined}
@@ -1099,6 +724,8 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds, d
           No tasks yet. Add one above.
         </p>
       )}
+
+      <ProfileOverlayTasks />
 
       {jiraModalTask && (
         <AddToJiraModal

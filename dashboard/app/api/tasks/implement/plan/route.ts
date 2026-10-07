@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTasks } from "@/lib/tasks/storage";
-import { extractTags } from "@/lib/entity-note";
-import { taskNotePath } from "@/lib/task-note";
+import { resolveTaskNotePath } from "@/lib/tasks/task-notes";
 import { getTicket } from "@/lib/jira/client";
 import { resolveEntityContext } from "@/lib/entity-links/resolve";
 import { resolveLocalGithubRepos } from "@/lib/repos/resolution";
 import { selectTaskImplementationRepo } from "@/lib/tasks/implement-repo";
 import { buildPlanMarkdown } from "@/lib/tasks/plan-markdown";
+import { readImplementReviewPrefs, reviewerForPlan } from "@/lib/tasks/implement-review-prefs";
 
 export const dynamic = "force-dynamic";
 
@@ -29,17 +29,11 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const tags = extractTags(task.text);
   const links = task.links ?? [];
   // Repo choice must come from the task's OWN links: a back-link from a task in
   // another repo must not silently change which checkout the agent works in.
   const repoIds = links.filter((link) => link.kind === "repo").map((link) => link.id);
-  const notePath = taskNotePath({
-    id: task.id,
-    text: task.text,
-    date,
-    jiraKey: task.jiraKey,
-  });
+  const notePath = resolveTaskNotePath(task, date);
   // The agent used to crawl this itself, one MCP call per hop, and only ever
   // reached depth 1. Resolve it here instead: `related` is the direct
   // neighbourhood (outbound links + whatever links back), `context` is one hop
@@ -61,7 +55,6 @@ export async function GET(req: NextRequest) {
     done: task.done,
     stage: task.stage ?? "ready",
     abandonedAt: task.abandonedAt ?? null,
-    tags,
     jiraKey: task.jiraKey ?? null,
     jira: jira ? { key: jira.key, summary: jira.summary, status: jira.status.name, issuetype: jira.issuetype } : null,
     notePath,
@@ -71,5 +64,7 @@ export async function GET(req: NextRequest) {
     context: graph.expanded,
     repos: repoIds,
     repoPath: localRepo?.repo.path ?? null,
+    // The assistant assigned to review the diff before commit; null means "review your own".
+    reviewer: reviewerForPlan(readImplementReviewPrefs()),
   });
 }

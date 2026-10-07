@@ -10,153 +10,25 @@
  * be encoded with sharp — no ffmpeg. The screencast only emits a frame when the page
  * paints, so frames are resampled onto a fixed clock to get per-frame GIF delays.
  */
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { chromium, expect, type Locator, type Page } from "@playwright/test";
-import sharp from "sharp";
+import { chromium, expect, type Page } from "@playwright/test";
+import {
+  clickOn,
+  encodeGif,
+  GIF_SIZE,
+  hydrated,
+  OVERLAY_SCRIPT,
+  requiredEnv,
+  setCaption,
+  sidebarLink,
+  startScreencast,
+  VIEWPORT,
+} from "./demo-kit";
 
 const BASE_URL = requiredEnv("DEMO_URL");
 const OUT = requiredEnv("DEMO_OUT");
 const FRAMES_DIR = requiredEnv("DEMO_FRAMES_DIR");
-
-const VIEWPORT = { width: 1280, height: 800 };
-/** GitHub renders README images at most ~1000px wide; capturing larger only costs bytes. */
-const GIF_SIZE = { width: 1024, height: 640 };
-const FPS = 10;
-const MAX_HOLD_MS = 3000;
-
-interface Frame {
-  png: Buffer;
-  at: number;
-}
-
-function requiredEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    process.stderr.write(`${name} is not set — run this through npm run demos:record\n`);
-    process.exit(1);
-  }
-  return value;
-}
-
-/** Fake cursor and caption: headless screencasts show neither, and a silent GIF needs both. */
-const OVERLAY_SCRIPT = `
-(() => {
-  const mount = () => {
-    if (document.getElementById("demo-cursor")) return;
-    const style = document.createElement("style");
-    style.textContent = [
-      "nextjs-portal{display:none!important}",
-      "#demo-cursor{position:fixed;z-index:2147483647;left:0;top:0;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;background:rgba(255,255,255,.85);box-shadow:0 0 0 2px rgba(0,0,0,.5);pointer-events:none;transition:transform .12s}",
-      "#demo-cursor.down{transform:scale(.65)}",
-      "#demo-caption{position:fixed;z-index:2147483646;left:256px;bottom:24px;padding:10px 18px;border-radius:999px;background:rgba(10,10,10,.88);color:#fff;font:600 17px/1.3 ui-sans-serif,system-ui,-apple-system,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.35);pointer-events:none;white-space:nowrap}",
-      "#demo-caption:empty{display:none}",
-    ].join("");
-    document.head.appendChild(style);
-    const cursor = document.createElement("div");
-    cursor.id = "demo-cursor";
-    const saved = JSON.parse(sessionStorage.getItem("demo-cursor") || '{"x":640,"y":400}');
-    cursor.style.left = saved.x + "px";
-    cursor.style.top = saved.y + "px";
-    const caption = document.createElement("div");
-    caption.id = "demo-caption";
-    caption.textContent = sessionStorage.getItem("demo-caption") || "";
-    document.body.append(cursor, caption);
-    addEventListener("mousemove", (e) => {
-      cursor.style.left = e.clientX + "px";
-      cursor.style.top = e.clientY + "px";
-      sessionStorage.setItem("demo-cursor", JSON.stringify({ x: e.clientX, y: e.clientY }));
-    }, true);
-    addEventListener("mousedown", () => cursor.classList.add("down"), true);
-    addEventListener("mouseup", () => cursor.classList.remove("down"), true);
-  };
-  if (document.body) mount();
-  else addEventListener("DOMContentLoaded", mount);
-})();
-`;
-
-async function setCaption(page: Page, text: string): Promise<void> {
-  await page.evaluate((value) => {
-    sessionStorage.setItem("demo-caption", value);
-    const el = document.getElementById("demo-caption");
-    if (el) el.textContent = value;
-  }, text);
-}
-
-/** Glide the fake cursor to an element, then click it. */
-async function clickOn(page: Page, target: Locator): Promise<void> {
-  await target.scrollIntoViewIfNeeded();
-  const box = await target.boundingBox();
-  if (!box) throw new Error(`No bounding box for ${target}`);
-  const x = box.x + box.width / 2;
-  const y = box.y + box.height / 2;
-  await page.mouse.move(x, y, { steps: 18 });
-  await page.waitForTimeout(150);
-  await page.mouse.down();
-  await page.waitForTimeout(80);
-  await page.mouse.up();
-}
-
-async function hydrated(page: Page): Promise<void> {
-  await expect(page.getByRole("button", { name: /search everything/i })).toBeEnabled({ timeout: 90_000 });
-  await page.waitForFunction(() => document.readyState === "complete");
-}
-
-function sidebarLink(page: Page, name: string): Locator {
-  return page.locator("aside nav").getByRole("link", { name, exact: true }).first();
-}
-
-async function startScreencast(page: Page): Promise<() => Promise<{ frames: Frame[]; stoppedAt: number }>> {
-  const cdp = await page.context().newCDPSession(page);
-  const frames: Frame[] = [];
-  cdp.on("Page.screencastFrame", (event) => {
-    frames.push({ png: Buffer.from(event.data, "base64"), at: event.metadata.timestamp ?? Date.now() / 1000 });
-    cdp.send("Page.screencastFrameAck", { sessionId: event.sessionId }).catch(() => {});
-  });
-  await cdp.send("Page.startScreencast", {
-    format: "png",
-    maxWidth: GIF_SIZE.width,
-    maxHeight: GIF_SIZE.height,
-    everyNthFrame: 1,
-  });
-  return async () => {
-    await cdp.send("Page.stopScreencast");
-    const stoppedAt = Date.now() / 1000;
-    await cdp.detach();
-    return { frames, stoppedAt };
-  };
-}
-
-async function encodeGif(frames: Frame[], stoppedAt: number): Promise<number> {
-  if (frames.length === 0) throw new Error("Screencast captured no frames");
-  const stepMs = 1000 / FPS;
-  const picked: { png: Buffer; delayMs: number; hash: string }[] = [];
-  let index = 0;
-  for (let t = frames[0].at; t < stoppedAt; t += stepMs / 1000) {
-    while (index + 1 < frames.length && frames[index + 1].at <= t) index++;
-    const hash = createHash("sha1").update(frames[index].png).digest("hex");
-    const last = picked.at(-1);
-    // Cap how long one unchanged frame holds, so waits on the server read as a beat, not dead air.
-    if (last?.hash === hash) last.delayMs = Math.min(last.delayMs + stepMs, MAX_HOLD_MS);
-    else picked.push({ png: frames[index].png, delayMs: stepMs, hash });
-  }
-
-  // Every frame of an animated join must share one size.
-  const sized = await Promise.all(
-    picked.map((p) => sharp(p.png).resize(GIF_SIZE.width, GIF_SIZE.height, { fit: "fill" }).png().toBuffer()),
-  );
-  await sharp(sized, { join: { animated: true }, limitInputPixels: false })
-    .gif({
-      delay: picked.map((p) => Math.round(p.delayMs)),
-      loop: 0,
-      effort: 8,
-      dither: 0,
-      interFrameMaxError: 4,
-    })
-    .toFile(OUT);
-  return picked.length;
-}
 
 async function keyFrame(page: Page, name: string): Promise<void> {
   await page.screenshot({ path: path.join(FRAMES_DIR, `${name}.png`) });
@@ -179,11 +51,10 @@ async function walk(page: Page): Promise<void> {
   // 2. A note
   await setCaption(page, "Notes and learnings are plain files, versioned in git");
   await clickOn(page, sidebarLink(page, "Notes"));
-  const retro = page.getByText("Checkout retro", { exact: true }).first();
-  if (!(await retro.isVisible().catch(() => false))) {
-    await clickOn(page, page.getByText(/^meetings$/i).first());
-  }
-  await clickOn(page, retro);
+  // Wait for the landing's recent list: a production build navigates fast enough that
+  // checking visibility straight away races the render and clicks a detaching node.
+  await expect(page.getByText(/Picking up where you left off/i)).toBeVisible({ timeout: 60_000 });
+  await clickOn(page, page.getByText("Checkout retro", { exact: true }).first());
   await expect(page.getByText("Retry storm on the payments webhook").first()).toBeVisible({ timeout: 60_000 });
   await page.waitForTimeout(2600);
   await keyFrame(page, "2-note");
@@ -246,10 +117,10 @@ async function main(): Promise<void> {
     await setCaption(page, "Today: tasks, notes, calendar and PRs in one place");
     await page.waitForTimeout(2000);
 
-    const stop = await startScreencast(page);
+    const stop = await startScreencast(page, GIF_SIZE);
     await walk(page);
     const { frames, stoppedAt } = await stop();
-    const count = await encodeGif(frames, stoppedAt);
+    const count = await encodeGif(frames, stoppedAt, OUT);
     console.log(`Encoded ${count} frames from ${frames.length} screencast frames`);
   } catch (err) {
     await page.screenshot({ path: path.join(FRAMES_DIR, "failure.png") }).catch(() => {});

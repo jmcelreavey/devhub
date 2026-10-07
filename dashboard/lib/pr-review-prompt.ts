@@ -2,7 +2,7 @@
  * Server-safe PR agent-review prompt (shared by UI launchAgentJob and
  * POST /api/github/prs/auto-review). Keep this free of "use client".
  *
- * Cursor (AionUi's default review harness) auto-names the conversation from the
+ * Cursor (the default review harness) auto-names the conversation from the
  * first user-message line, overwriting create-time `name`. Lead with the
  * session title so the sidebar shows the ticket (or repo#PR), not
  * "PR Explain Review".

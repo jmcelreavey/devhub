@@ -25,3 +25,14 @@ export function isMobileViewport(): boolean {
 export function useIsMobile(): boolean {
   return useMediaQuery(MOBILE_MEDIA_QUERY);
 }
+
+/**
+ * What `NavItem.desktopOnly` means: a real mouse, not a touch screen. Not the
+ * Tauri shell — a browser tab on the checkout gets Repos and Logs too.
+ */
+export const DESKTOP_POINTER_QUERY = "(hover: hover) and (pointer: fine)";
+
+/** SSR assumes desktop so the sidebar doesn't render short and then grow. */
+export function useIsDesktopPointer(): boolean {
+  return useMediaQuery(DESKTOP_POINTER_QUERY, true);
+}

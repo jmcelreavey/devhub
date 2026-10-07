@@ -33,19 +33,19 @@ describe("pr-note", () => {
 
   it("links the local repo from GitHub owner/name", () => {
     const refs = prEntityRefs({
-      repo: "example-org/insider-app",
+      repo: "example-org/example-app",
       number: 12,
       title: "Fix search",
-      url: "https://github.com/example-org/insider-app/pull/12",
+      url: "https://github.com/example-org/example-app/pull/12",
     });
     expect(refs).toEqual([
       {
         kind: "pr",
-        id: "example-org/insider-app#12",
-        label: "example-org/insider-app#12",
-        href: "https://github.com/example-org/insider-app/pull/12",
+        id: "example-org/example-app#12",
+        label: "example-org/example-app#12",
+        href: "https://github.com/example-org/example-app/pull/12",
       },
-      { kind: "repo", id: "insider-app", label: "insider-app" },
+      { kind: "repo", id: "example-app", label: "example-app" },
     ]);
   });
 

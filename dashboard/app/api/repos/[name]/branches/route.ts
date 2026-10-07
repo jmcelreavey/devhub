@@ -12,6 +12,7 @@ import {
 } from "@/lib/git/repo-local";
 import { detectUnmergedFiles } from "@/lib/git/conflicts";
 import { isSafeRemoteName, parseRemotes, remoteOfUpstream } from "@/lib/repos/remote-parsers";
+import { parsePorcelainStatus } from "@/lib/repos/git-parsers";
 import {
   formatIndexLockError,
   looksLikeIndexLockError,
@@ -485,6 +486,10 @@ export async function POST(req: NextRequest, { params }: Params) {
         const prep = prepareGitIndexWrite(rp);
         if (!prep.ok) return indexLockResponse(rp, prep.error);
 
+        // `stash push` on a clean tree exits 0 without creating anything, so
+        // "it succeeded" is not "we stashed". Compare the stash tip instead —
+        // otherwise the pop below would apply someone's older, unrelated stash.
+        const stashTipBefore = await runGitRepoAsync(rp, ["rev-parse", "-q", "--verify", "refs/stash"]);
         const stash = await runGitRepoAsync(rp, [
           "stash",
           "push",
@@ -499,7 +504,8 @@ export async function POST(req: NextRequest, { params }: Params) {
           }
           return NextResponse.json({ error: gitError }, { status: 500 });
         }
-        stashed = true;
+        const stashTipAfter = await runGitRepoAsync(rp, ["rev-parse", "-q", "--verify", "refs/stash"]);
+        stashed = stashTipAfter.status === 0 && stashTipAfter.stdout.trim() !== stashTipBefore.stdout.trim();
       }
 
       if (body.strategy === "merge") {
@@ -518,7 +524,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         // Auto-stash already ran — pop it so a failed checkout doesn't leave
         // a clean tree and a hidden stash the user never asked for.
         if (stashed) {
-          await runGitRepoAsync(rp, ["stash", "pop", "stash@{0}"]);
+          await runGitRepoAsync(rp, ["stash", "pop", "--index", "stash@{0}"]);
         }
         const conflictFiles = detectUnmergedFiles(rp);
         if (body.strategy === "merge" && conflictFiles.length > 0) {
@@ -556,7 +562,13 @@ export async function POST(req: NextRequest, { params }: Params) {
       }
 
       if (stashed) {
-        const pop = await runGitRepoAsync(rp, ["stash", "pop", "stash@{0}"]);
+        // --index brings staged files back staged; plain pop would hand every
+        // change back unstaged. It refuses when the index can't be restored
+        // cleanly (and leaves the stash alone), so fall back to a plain pop then.
+        let pop = await runGitRepoAsync(rp, ["stash", "pop", "--index", "stash@{0}"]);
+        if (pop.status !== 0 && detectUnmergedFiles(rp).length === 0) {
+          pop = await runGitRepoAsync(rp, ["stash", "pop", "stash@{0}"]);
+        }
         if (pop.status !== 0) {
           const gitError =
             pop.stderr.trim() || pop.stdout.trim() || "Switched branch, but stash apply failed";
@@ -648,11 +660,9 @@ export async function POST(req: NextRequest, { params }: Params) {
       if (body.amend) {
         const dirty = await runGitRepoAsync(rp, ["status", "--porcelain"]);
         // Amend only when working tree is clean or we have staged changes — refuse dirty unstaged-only amend.
-        const porcelain = (dirty.stdout || "").trim();
-        const hasUnstaged = porcelain.split("\n").some((line) => {
-          if (!line || line.startsWith("??")) return true;
-          return line.length >= 2 && line[1] !== " ";
-        });
+        // Parse raw stdout — trimming it eats the first line's leading space
+        // and hides an unstaged change on that row.
+        const hasUnstaged = parsePorcelainStatus(dirty.stdout || "").some((f) => f.unstaged);
         const hasStaged = (staged.stdout || "").trim().length > 0;
         if (hasUnstaged && !hasStaged) {
           return NextResponse.json(
@@ -1020,8 +1030,18 @@ export async function POST(req: NextRequest, { params }: Params) {
           { status: 400 },
         );
       }
-      const pull = await runGitRepoAsync(rp, ["pull", "--ff-only"], { timeout: 120_000 });
-      if (pull.status !== 0) {
+      // --autostash: a dirty tree used to fail with "local changes would be
+      // overwritten"; Git now stashes, pulls and re-applies (as GitKraken does).
+      const pull = await runGitRepoAsync(rp, ["pull", "--ff-only", "--autostash"], { timeout: 120_000 });
+      if (pull.status !== 0 || detectUnmergedFiles(rp).length > 0) {
+        // A re-apply that conflicts leaves markers and keeps the stash — the
+        // same situation as any other stash conflict, so route it there.
+        if (detectUnmergedFiles(rp).length || looksLikeStashConflict(pull.stderr, pull.stdout)) {
+          return stashConflictResponse("pull-merge", rp, pullFailureMessage(pull.stderr, pull.stdout), {
+            switched: false,
+            stashed: true,
+          });
+        }
         return NextResponse.json(
           { error: pullFailureMessage(pull.stderr, pull.stdout) },
           { status: 500 },
@@ -1052,10 +1072,12 @@ export async function POST(req: NextRequest, { params }: Params) {
       }
       const pull = await runGitRepoAsync(
         rp,
-        body.action === "pull-rebase" ? ["pull", "--rebase"] : ["pull", "--no-rebase"],
+        body.action === "pull-rebase"
+          ? ["pull", "--rebase", "--autostash"]
+          : ["pull", "--no-rebase", "--autostash"],
         { timeout: 120_000 },
       );
-      if (pull.status !== 0) {
+      if (pull.status !== 0 || detectUnmergedFiles(rp).length > 0) {
         const error = pullFailureMessage(pull.stderr, pull.stdout);
         if (detectUnmergedFiles(rp).length || looksLikeStashConflict(pull.stderr, pull.stdout)) {
           return stashConflictResponse(

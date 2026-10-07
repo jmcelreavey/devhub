@@ -14,7 +14,7 @@ related:
 
 **Own** (`/own`) is a repo-centric workspace for the question "what is happening to code I am accountable for?" It complements **Repos** (clone and edit locally) and **PRs** (your authored and review-requested queue) by focusing on **inbound change** to repositories you mark owned.
 
-The index is folded into **Repos**: `/own` **redirects** to `/repos?view=owned`. Per-repo pages stay at `/own/<owner>/<name>` and remain reachable from ⌘K, radar attention rows, and briefing links. The owned view is gated on GitHub (`gh auth login`); it appears once `GET /api/setup/status` reports `github: true`.
+The index is folded into **Repos**: `/own` **redirects** to `/repos?view=owned`. Per-repo pages stay at `/own/<owner>/<name>` and remain reachable from ⌘P, radar attention rows, and briefing links. The owned view is gated on GitHub (`gh auth login`); it appears once `GET /api/setup/status` reports `github: true`.
 
 ## Marking repos owned
 

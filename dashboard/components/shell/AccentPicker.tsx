@@ -1,21 +1,27 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Palette } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useTheme } from "@/components/shell/ThemeToggle";
+import { Monitor, Moon, Palette, Sun, type LucideIcon } from "lucide-react";
 import {
   THEME_PRESETS,
+  type ThemeModeSetting,
   applyThemeSelection,
-  getThemeSelectionFromDom,
-  getServerThemeSelectionSnapshot,
-  subscribeThemeSelection,
 } from "@/lib/theme-presets";
 
+const MODES: { id: ThemeModeSetting; label: string; Icon: LucideIcon }[] = [
+  { id: "system", label: "System", Icon: Monitor },
+  { id: "light", label: "Light", Icon: Sun },
+  { id: "dark", label: "Dark", Icon: Moon },
+];
+
+/**
+ * The one appearance control: light/dark/system mode plus palette preset.
+ * Mode used to be a separate top-bar button that cycled blind through three
+ * states; side by side with the palettes it needs no guessing.
+ */
 export function AccentPicker() {
-  const selection = useSyncExternalStore(
-    subscribeThemeSelection,
-    getThemeSelectionFromDom,
-    getServerThemeSelectionSnapshot,
-  );
+  const selection = useTheme();
   // Display swatches/labels for the currently-applied mode, but preserve the user's mode
   // *setting* (including "system") when they pick a different palette.
   const activeMode = selection.resolvedMode;
@@ -49,14 +55,31 @@ export function AccentPicker() {
         type="button"
         className="hub-icon-btn"
         onClick={() => setOpen((v) => !v)}
-        title="Change theme preset"
-        aria-label="Change theme preset"
+        title="Appearance"
+        aria-label="Appearance"
+        aria-haspopup="menu"
         aria-expanded={open}
       >
         <Palette size={14} aria-hidden />
       </button>
       {open && (
-        <div className="accent-picker-pop" role="menu">
+        <div className="accent-picker-pop" role="menu" aria-label="Appearance">
+          <div role="group" aria-label="Mode" className="accent-picker-modes">
+            {MODES.map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={selection.mode === id}
+                data-active={selection.mode === id || undefined}
+                className="accent-picker-mode"
+                onClick={() => applyThemeSelection({ mode: id, preset: selection.preset })}
+              >
+                <Icon size={12} aria-hidden />
+                {label}
+              </button>
+            ))}
+          </div>
           {THEME_PRESETS.map((preset) => (
             <button
               key={preset.id}

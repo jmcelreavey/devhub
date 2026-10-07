@@ -6,6 +6,8 @@ section: architecture
 
 # Agents: one workspace for DevHub AI
 
+> Historical plan, superseded by the [Paseo integration](../guides/paseo-agents.md). The AionUi runtime and installer described below have been removed from the current checkout.
+
 Implementation plan · 17 September 2026 · Repository: `devhub-private`
 
 Status: implemented and verified in the checkout. Agents embeds the authenticated, pinned AionUi workspace, routes interactive and background coding work through AionCore, retains generation activity, archives legacy browser chats and removes the custom live chat. Runtime execution was approved and the native compatibility proof passed. The packaged daily-driver application still requires its normal rebuild/restart to pick up the code.

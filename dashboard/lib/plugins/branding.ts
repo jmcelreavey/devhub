@@ -9,7 +9,6 @@
  *   - `dashboard/public/fonts-plugin/*`              — copied font files
  *   - `dashboard/public/plugin-brand-logo.*`         — sidebar/boot logo
  *   - `dashboard/public/plugin-desktop-icon.png`     — desktop app icon
- *   - the user's OpenChamber data dir                — themes + seeded default (if installed)
  *
  * The two generated source files are committed as *empty baselines* so a fresh clone and
  * CI build work without running sync; when a branding plugin is active we rewrite them and
@@ -26,11 +25,6 @@ import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { listEnabledPlugins } from "./registry";
 import type { BrandingContribution, RegisteredPlugin } from "./types";
-import {
-  installOpenChamberThemesFrom,
-  setDefaultOpenChamberThemeIds,
-  isOpenChamberInstalled,
-} from "../openchamber-theme";
 
 const GEN_CSS_REL = "app/plugin-branding.generated.css";
 const GEN_TS_REL = "lib/plugin-branding.generated.ts";
@@ -298,21 +292,6 @@ export const PLUGIN_BRAND_LOGO: PluginBrandLogo | null = ${tsLogo};
   // Hide the local rewrite of the committed baselines from git status.
   setSkipWorktree(repoRoot, GEN_CSS_REL, true);
   setSkipWorktree(repoRoot, GEN_TS_REL, true);
-
-  // --- OpenChamber (only if installed) ---
-  if (b.openchamber?.themes) {
-    if (isOpenChamberInstalled()) {
-      const ocSrc = resolve(b.openchamber.themes);
-      const n = installOpenChamberThemesFrom(ocSrc);
-      setDefaultOpenChamberThemeIds(
-        { darkId: b.openchamber.defaultDarkId, lightId: b.openchamber.defaultLightId, defaultVariant: b.defaultMode === "light" ? "light" : "dark" },
-        emit,
-      );
-      if (n > 0) emit(`branding: OpenChamber themed (${n} theme${n === 1 ? "" : "s"})`);
-    } else {
-      emit("branding: OpenChamber not installed - skipping its theme");
-    }
-  }
 
   emit(`branding: applied "${plugin.name}" - preset "${b.defaultPreset ?? "(none)"}", mode "${b.defaultMode ?? "(core default)"}"`);
   return 0;

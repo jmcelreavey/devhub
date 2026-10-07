@@ -8,6 +8,7 @@
 
 import { listRepos, listAccessibleGithubRepos } from "@/lib/repos";
 import { isGithubCliAuthenticated } from "@/lib/gh-exec";
+import { createCliLimiter } from "@/lib/ai/cli-limit";
 import { buildSnapshot } from "./aggregate";
 import { diffSnapshots } from "./diff";
 import { probeGithubRepo } from "./github-probe";
@@ -33,6 +34,13 @@ export interface ScanOptions {
 
 const DEFAULT_GITHUB_LIMIT = 40;
 
+/**
+ * Cap concurrent repo scans. Each one walks a tree and makes an AI enrichment
+ * call, so an unbounded fan-out across every clone meant a burst of simultaneous
+ * model requests and a filesystem stampede in the same tick.
+ */
+const repoLimiter = createCliLimiter(6);
+
 export interface ScanResult {
   snapshot: CapabilitySnapshot;
   diff: CapabilityDiff;
@@ -49,7 +57,9 @@ export async function runScan(opts: ScanOptions = {}): Promise<ScanResult> {
   const ownedByPath = new Map((await resolveOwnedRepos().catch(() => [])).flatMap((repo) =>
     repo.localPath ? [[repo.localPath, repo] as const] : [],
   ));
-  const localResults = await Promise.allSettled(local.map((r) => scanLocalRepo(r.path)));
+  const localResults = await Promise.allSettled(
+    local.map((r) => repoLimiter.run(() => scanLocalRepo(r.path))),
+  );
   for (let i = 0; i < localResults.length; i += 1) {
     const res = localResults[i]!;
     if (res.status === "fulfilled") {
@@ -89,11 +99,13 @@ export async function runScan(opts: ScanOptions = {}): Promise<ScanResult> {
 
         const probed = await Promise.allSettled(
           remote.map((r) =>
-            probeGithubRepo({
-              fullName: r.fullName,
-              repoName: r.name,
-              defaultBranch: r.defaultBranch ?? "main",
-            }),
+            repoLimiter.run(() =>
+              probeGithubRepo({
+                fullName: r.fullName,
+                repoName: r.name,
+                defaultBranch: r.defaultBranch ?? "main",
+              }),
+            ),
           ),
         );
         probed.forEach((res, i) => {

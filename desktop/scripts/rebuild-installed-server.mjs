@@ -20,9 +20,12 @@
  *   2. Copies the server over DEVHUB_SERVER_DIR
  *   3. Copies peer services over DEVHUB_SERVICES_DIR (or `../services`
  *      next to the server, so an older shell that only passes SERVER_DIR
- *      still restages Chamber/OpenCode)
+ *      still restages the peer starter)
  *
- *   4. Re-signs the bundle, because steps 2 and 3 just broke its seal
+ *   4. Copies bundled resources (scripts, skills, docs) over `../resources`
+ *      next to the server. The dashboard runs `install-paseo.mjs` from there,
+ *      so a stale copy made Paseo updates fail after a "successful" rebuild.
+ *   5. Re-signs the bundle, because steps 2 and 3 just broke its seal
  *
  * That last step is not cosmetic. `Resources/server` and `Resources/services`
  * are sealed by the app's code signature, so rewriting them makes
@@ -37,7 +40,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { stageDashboard } from "./stage-dashboard.mjs";
-import { serverDir as stagedServerDir, servicesDir as stagedServicesDir } from "./staging-paths.mjs";
+import { stageResources } from "./stage-resources.mjs";
+import { serverDir as stagedServerDir, servicesDir as stagedServicesDir, resourcesDir as stagedResourcesDir } from "./staging-paths.mjs";
 import { signBundle, verifyBundle } from "./codesign-bundle.mjs";
 
 function fail(msg) {
@@ -51,6 +55,8 @@ function log(msg) {
 
 /** Replace `to`'s contents with `from` without removing the destination inode. */
 export function replaceDirContents(from, to) {
+  // desktop:dev already runs the staging tree. Deleting it would delete our source.
+  if (fs.realpathSync(from) === fs.realpathSync(to)) return;
   for (const entry of fs.readdirSync(to)) {
     fs.rmSync(path.join(to, entry), { recursive: true, force: true });
   }
@@ -78,7 +84,9 @@ export async function rebuildInstalledServer({
   servicesTarget,
   stagedServer = stagedServerDir,
   stagedServices = stagedServicesDir,
+  stagedResources = stagedResourcesDir,
   stage = stageDashboard,
+  stageRes = stageResources,
 } = {}) {
   if (!serverTarget) {
     throw new Error(
@@ -108,6 +116,13 @@ export async function rebuildInstalledServer({
   if (!fs.existsSync(path.join(stagedServer, "server.js"))) {
     throw new Error(`stage-dashboard produced no server.js at ${stagedServer}`);
   }
+  // Validate both trees before replacing either installed tree.
+  if (!fs.existsSync(path.join(stagedServer, ".next", "static"))) {
+    throw new Error(`stage-dashboard produced no .next/static at ${stagedServer}`);
+  }
+  if (!fs.existsSync(path.join(stagedServices, "supervisor.mjs"))) {
+    throw new Error(`stage-dashboard produced no supervisor.mjs at ${stagedServices}`);
+  }
   if (!fs.existsSync(path.join(stagedServices, "start-peer-services.mjs"))) {
     throw new Error(
       `stage-dashboard produced no start-peer-services.mjs at ${stagedServices}`,
@@ -132,6 +147,14 @@ export async function rebuildInstalledServer({
   }
   if (!fs.existsSync(path.join(resolvedServices, "supervisor.mjs"))) {
     throw new Error(`copy failed — ${resolvedServices}/supervisor.mjs missing after sync`);
+  }
+
+  // Only refresh a resources tree the installed app already has; never invent one.
+  const resourcesTarget = path.resolve(serverTarget, "..", "resources");
+  if (fs.existsSync(path.join(resourcesTarget, "MANIFEST.json"))) {
+    stageRes();
+    log(`replacing ${resourcesTarget}`);
+    replaceDirContents(stagedResources, resourcesTarget);
   }
 
   resealBundle(serverTarget);

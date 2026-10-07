@@ -9,6 +9,10 @@ metadata:
 
 ## Overview
 
+Before drafting ticket titles/descriptions, DevHub tasks, or task-note prose, load
+`my-voice` in `full-voice` mode and its writing style guide. Keep reported facts,
+reproduction details, links, and identifiers exact; do not invent findings.
+
 Materialize an implementation-plan note into trackable work:
 
 1. Publish the plan for a stable gist URL (`share_publish`).
@@ -16,14 +20,14 @@ Materialize an implementation-plan note into trackable work:
 3. Create one DevHub task per work item with links to the note, gist, repo(s), and Jira key.
 4. Link everything back: plan note `## Links`, parent Jira description, task notes.
 
-Default outcome: every PR slice in the plan has a Jira sub-task, a DevHub task, and
+Default outcome: every work item in the note has a Jira sub-task, a DevHub task, and
 bidirectional links — the same graph a human would wire by hand.
 
 ## When To Use
 
 - Dashboard **Create tasks from** on a planning note (curl the plan URL first).
 - User asks to turn a plan note into Jira tickets and DevHub tasks.
-- Multi-repo plans with `PR N — <repo>:` style sections.
+- Issue lists, unchecked checklists, and multi-repo plans with `PR N — <repo>:` sections.
 
 ## Inputs
 
@@ -45,18 +49,27 @@ Payload fields:
 | `parentKey` | Optional parent Jira key (epic/story); omit to create a parent |
 | `projectKey` | Jira project (default `PTF`) |
 | `epicSummary` | Parent ticket summary when creating a new parent |
-| `tags` | `#tags` from the note body |
 | `jiraMeta` | Sprint/team hints when Jira is configured (for parent tickets only) |
 
-If `workItems` is empty, re-read the note (`notes_read`) and derive slices from
-`PR <n> —` headings or level-2 sections that describe deliverable PRs. Ask once if
-ambiguous.
+The launch prompt may include user instructions for the parent title and grouping;
+use those when deciding how to create tickets. List entries are work items too —
+PR headings are not required. Skip empty or completed checklist entries and note links.
+
+If the launch prompt includes **reviewed work items**, use that list instead of
+`workItems` from the plan URL. The user has already edited the titles and removed
+unwanted items. Use each reviewed `summary` exactly as the ticket title; keep its
+source description and repo hint. Do not restore omitted items or rewrite approved
+titles. If the reviewed list is empty, stop without publishing or creating anything.
+
+Only when no reviewed list was supplied and `workItems` is empty, re-read the note
+(`notes_read`) and derive work items from the user instructions, issue bullets,
+checklists, or deliverable sections. Ask once if the scope is still ambiguous.
 
 ## Workflow
 
 ### 0. Confirm scope
 
-- If zero work items after parsing, stop and ask how to slice the plan.
+- If no work items can be derived from the note and user instructions, ask how to slice it.
 - If multiple repos and items lack `repoHint`, ask which repo each item targets.
 - Do not create duplicate Jira keys or tasks for items that already have links in
   the note `## Links` section — read `entity_links_read` first.
@@ -130,8 +143,6 @@ tasks_create {
 }
 ```
 
-- Reuse `tags_list` / canonical tags from the plan (`tags` field); add stable
-  workstream tags (`#bi-job-scout`), not ticket-id tags.
 - After creation, `tasks_update` or `tasks_context_sync` to add the gist URL as a
   link if there is no `gist` EntityKind — append to the task note `## Links` instead:
   `Plan: <gist url>`.
@@ -174,7 +185,6 @@ Include the gist URL and parent key.
 | Create Jira | `createJiraIssue` (Atlassian MCP) or `POST /api/jira/issue` |
 | Update Jira parent | `editJiraIssue` (Atlassian MCP) |
 | Create tasks | `tasks_create`, `tasks_context_sync` |
-| Tags | `tags_list`, `tags_lookup` |
 | Repos | `repos_list` to resolve local folder names |
 
 ## Verification
@@ -182,7 +192,7 @@ Include the gist URL and parent key.
 - `entity_links_read` on the plan note shows new Jira and task refs.
 - Each DevHub task opens with correct links and a task note.
 - Parent Jira ticket lists sub-tasks and the gist.
-- No duplicate tickets for the same PR section.
+- No duplicate tickets for the same work item.
 
 ## Rules
 

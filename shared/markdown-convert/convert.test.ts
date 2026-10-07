@@ -470,6 +470,25 @@ describe("round-trip: text -> blocks -> text", () => {
     expect(blocksToText(blocks)).toBe(md);
   });
 
+  it("treats a diagram-type fence as mermaid and restores the keyword", () => {
+    const md = "```sequenceDiagram\nparticipant A as App\nA->>B: 1 · call (new)\n```";
+    const blocks = textToBlocks(md) as Record<string, unknown>[];
+    expect(blocks[0].type).toBe("mermaid");
+    expect((blocks[0].props as Record<string, unknown>).code).toBe(
+      "sequenceDiagram\nparticipant A as App\nA->>B: 1 · call (new)",
+    );
+    expect(blocksToText(blocks)).toBe(
+      "```mermaid\nsequenceDiagram\nparticipant A as App\nA->>B: 1 · call (new)\n```",
+    );
+  });
+
+  it("serializes a stored sequenceDiagram code block as a mermaid fence", () => {
+    const block = bInline("codeBlock", [{ type: "text", text: "participant A as App", styles: {} }], {
+      language: "sequenceDiagram",
+    });
+    expect(blocksToText([block])).toBe("```mermaid\nsequenceDiagram\nparticipant A as App\n```");
+  });
+
   it("keeps non-mermaid code fences as code blocks", () => {
     const blocks = textToBlocks("```ts\nconst a = 1;\n```") as Record<string, unknown>[];
     expect(blocks[0].type).toBe("codeBlock");

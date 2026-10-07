@@ -2,10 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { listJobs, createJob, getWakeState } from "@/lib/scheduler";
 import { getAllowedScripts, type AllowedScript } from "@/lib/scripts-runner";
 import { listAgentProviders } from "@/lib/agent-runs/providers";
+import { listPaseoProviders } from "@/lib/paseo/providers";
 import { parseBody, requireDashboardAuth, withErrorHandler } from "@/lib/api-utils";
 import { JobCreateSchema, jobApproved } from "./schema";
 
 export const dynamic = "force-dynamic";
+
+/** Agent jobs run in Paseo; the CLI list only stands in while its daemon is down. */
+async function jobProviders(): Promise<{ id: string; label: string; installed: boolean }[]> {
+  try {
+    return (await listPaseoProviders()).map((p) => ({ id: p.id, label: p.label, installed: p.ready }));
+  } catch {
+    return listAgentProviders().providers.map(({ spec, binPath }) => ({ id: spec.id, label: spec.label, installed: binPath !== null }));
+  }
+}
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   // Agent jobs carry prompts and repo paths.
@@ -14,11 +24,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   return NextResponse.json({
     jobs: listJobs(),
     scripts: getAllowedScripts(),
-    providers: listAgentProviders().providers.map(({ spec, binPath }) => ({
-      id: spec.id,
-      label: spec.label,
-      installed: binPath !== null,
-    })),
+    providers: await jobProviders(),
     wake: await getWakeState(),
   });
 }, "jobs.get");

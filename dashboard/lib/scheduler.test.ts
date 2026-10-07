@@ -92,7 +92,7 @@ describe("jobs file", () => {
     );
   });
 
-  it("preserves an AionUi catalog assistant ID while the client is offline", () => {
+  it("preserves a custom provider ID while Paseo is offline", () => {
     const job = created(s.createJob({ name: "Custom assistant", cron: "0 7 * * *", agent: { ...agent, provider: "custom-codex-assistant" } }, { approved: true }));
     expect(job.agent?.provider).toBe("custom-codex-assistant");
   });

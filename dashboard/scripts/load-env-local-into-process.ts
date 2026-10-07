@@ -92,9 +92,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
  * Loads `dashboard/.env.local` then `.env` into `process.env`, only for keys
  * that are not already set in the parent environment.
  *
- * Used by dev/start wrappers so `DEVHUB_BIND_HOST` / `OPENCHAMBER_HOST` from
- * Setup apply before `next dev` / OpenChamber spawn (npm script expansion does
- * not read `.env.local`).
+ * Used by dev/start wrappers so `DEVHUB_BIND_HOST` from Setup applies before
+ * `next dev` starts (npm script expansion does not read `.env.local`).
  */
 export function loadEnvLocalIntoProcessIfUnset(envDir: string): void {
   for (const name of [".env.local", ".env"] as const) {

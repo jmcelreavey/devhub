@@ -166,6 +166,28 @@ describe("task-agent-runs persistence", () => {
     expect(cleared.runs[0]?.branch).toBeUndefined();
   });
 
+  it.each([null, "https://github.com/acme/app/pull/2"])("clears the old PR state when the link becomes %s", async (prUrl) => {
+    const originalUrl = "https://github.com/acme/app/pull/1";
+    await upsertTaskAgentRun({ taskId: TASK_ID, runId: RUN_A, status: "paused", prUrl: originalUrl, notesDir });
+    await patchTaskAgentRun(TASK_ID, RUN_A, {
+      prState: "merged",
+      prCheckedAt: "2026-09-24T08:10:00.000Z",
+      prSeenAt: "2026-09-24T08:00:00.000Z",
+      attention: { kind: "ci-failing", summary: "Old failure", detectedAt: "t", key: "k" },
+      attentionHandled: "old-key",
+    }, notesDir);
+
+    const unchanged = await upsertTaskAgentRun({ taskId: TASK_ID, runId: RUN_A, prUrl: originalUrl, notesDir });
+    expect(unchanged.runs[0]?.prState).toBe("merged");
+
+    const changed = await upsertTaskAgentRun({ taskId: TASK_ID, runId: RUN_A, prUrl, notesDir });
+    expect(changed.runs[0]).toMatchObject({ runId: RUN_A, status: "paused" });
+    expect(changed.runs[0]?.prUrl).toBe(prUrl ?? undefined);
+    for (const field of ["prState", "prCheckedAt", "prSeenAt", "attention", "attentionHandled"]) {
+      expect(changed.runs[0]).not.toHaveProperty(field);
+    }
+  });
+
   it("patches watcher fields without bumping updatedAt, and deletes undefined keys", async () => {
     await upsertTaskAgentRun({ taskId: TASK_ID, runId: RUN_A, status: "done", notesDir });
     const before = listTaskAgentRuns(TASK_ID, notesDir)[0]!.updatedAt;

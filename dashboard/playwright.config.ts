@@ -80,8 +80,7 @@ export default defineConfig({
     ? {}
     : {
         webServer: {
-          // `start:next` only, not `start` — the peer services (OpenChamber,
-          // OpenCode, PTY, LAN proxy) are not needed to render pages and would
+          // `start:next` only, not `start` — the peers (PTY, LAN proxy) are not needed to render pages and would
           // make CI depend on binaries that aren't there.
           command: "npm run start:next",
           url: baseURL,

@@ -317,7 +317,7 @@ export const SetupSaveSchema = z.object({
   network: z
     .object({
       allowLan: z.boolean(),
-      openchamberUiPassword: z.string().max(500).optional(),
+      agentsPassword: z.string().max(500).optional(),
     })
     .optional(),
   bi: z.object({ capiRepoPath: z.string().max(4096).optional() }).optional(),

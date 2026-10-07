@@ -59,7 +59,7 @@ const SHELL_OWNED = new Set([
  * This is the difference between "the config file is supported" and "the config
  * file works". Read/write support in the dashboard is useless if the process
  * tree was already spawned without those values — the LAN bind host, the
- * OpenChamber password, and every integration credential are read at startup by
+ * Agents password, and every integration credential are read at startup by
  * children that would otherwise never see them.
  *
  * **The config file wins over the shell's defaults for everything except
@@ -109,7 +109,7 @@ function loadEnvFile(envFile) {
  *
  * A process launched from Finder inherits a minimal `PATH` — typically just
  * `/usr/bin:/bin:/usr/sbin:/sbin`. It does not include Homebrew, nvm, or the
- * user-local bins where `openchamber`, `opencode`, `gh` and agent CLIs actually
+ * user-local bins where `opencode`, `gh` and agent CLIs actually
  * live. The Electron launcher repaired this explicitly; the first desktop
  * builds did not, and the symptom was peer services exiting with code 1 while
  * the binaries sat installed and working in a normal terminal.
@@ -323,8 +323,8 @@ async function main() {
   });
 
   /**
-   * Peer boot: free leftover OpenCode on 1338/4096. OpenChamber and OpenCode
-   * lazy-start from the dashboard tabs — always-on Chamber raced OpenChamber.app.
+   * Peer boot: now just a note — Paseo runs under launchd and OpenCode only
+   * lazy-starts for session recap.
    *
    * Started here because the packaged app has no `concurrently` to do it.
    * Deliberately not fatal. Both shell out to binaries the user may not have

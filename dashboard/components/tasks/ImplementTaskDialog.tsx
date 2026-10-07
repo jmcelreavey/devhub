@@ -76,6 +76,7 @@ export function ImplementTaskDialog({
   });
 
   const noteSource = {
+    notePath: task.notePath,
     id: task.id,
     text: task.text,
     date,

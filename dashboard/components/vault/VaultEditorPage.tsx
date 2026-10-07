@@ -752,7 +752,7 @@ export function VaultEditorPage({
                         {
                           id: "spawn-tasks-from-plan",
                           label: "Spawn tasks from plan",
-                          description: "Jira sub-tasks and DevHub tasks from PR sections",
+                          description: "Jira tickets and DevHub tasks from issues, checklists, or PR sections",
                           icon: <ListTodo size={14} aria-hidden />,
                           onSelect: () => {
                             window.dispatchEvent(new Event("devhub:dismiss-hovertips"));

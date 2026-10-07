@@ -9,8 +9,8 @@ export interface SetupStatus {
   bi: boolean;
   /** When false, dashboard binds to localhost only. */
   allowLanNetwork: boolean;
-  /** Whether OPENCHAMBER_UI_PASSWORD is already configured (value never echoed). */
-  hasOpenchamberUiPassword?: boolean;
+  /** Whether the Agents (Paseo) daemon password is configured (value never echoed). */
+  hasAgentsPassword?: boolean;
   coreVars: { repoRoot: string; notesDir: string; reposDir: string };
   coreDefaults: { repoRoot: string; notesDir: string; reposDir: string };
   /** Running inside the packaged desktop app rather than a browser. */

@@ -1,0 +1,28 @@
+{
+  "bundle": {
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "../staging/icons/32x32.png",
+      "../staging/icons/128x128.png",
+      "../staging/icons/128x128@2x.png",
+      "../staging/icons/icon.ico"
+    ],
+    "resources": {
+      "../staging/server": null,
+      "../staging/services": null,
+      "../staging/resources": null,
+      "../src-tauri/binaries": null,
+      "../staging/icons/plugin.png": null,
+      "../staging/wsl/devhub-payload.tar.gz": "wsl/devhub-payload.tar.gz",
+      "../staging/wsl/payload-id.txt": "wsl/payload-id.txt"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "createUpdaterArtifacts": false
+  }
+}

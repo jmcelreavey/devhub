@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { getGithubFullNameForLocalRepo } from "@/lib/repos";
+import { getGithubFullNameForLocalRepo, readRepoInfo } from "@/lib/repos";
 import { readOriginRemoteUrl } from "@/lib/git/repo-local";
 
 /**
@@ -44,6 +44,19 @@ function repoWithWorktree(): { repo: string; worktree: string } {
 }
 
 describe("scanning a worktree", () => {
+  it("counts hidden and external worktrees separately from stale registrations", async () => {
+    const { repo, worktree } = repoWithWorktree();
+    const hidden = path.join(repo, ".git", "devhub-worktrees", "hidden");
+    git(repo, ["worktree", "add", "--detach", hidden]);
+    let info = await readRepoInfo("main-repo", repo);
+    expect(info.worktreeCount).toBe(2);
+    expect(info.staleWorktreeCount).toBe(0);
+    fs.rmSync(worktree, { recursive: true, force: true });
+    info = await readRepoInfo("main-repo", repo);
+    expect(info.worktreeCount).toBe(1);
+    expect(info.staleWorktreeCount).toBe(1);
+  });
+
   it("resolves the remote through the shared common dir", () => {
     // The worktree's own gitdir has no config — it shares the main repo's.
     const { repo, worktree } = repoWithWorktree();

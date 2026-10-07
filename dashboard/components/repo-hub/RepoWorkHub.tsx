@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, NotebookPen } from "lucide-react";
+import Link from "next/link";
+import { mutate as globalMutate } from "swr";
+import { AlertTriangle, ChevronDown, ChevronRight, NotebookPen, RefreshCw } from "lucide-react";
 import { FetchError, SkeletonRows } from "@/components";
 import { SharedEntityChips } from "@/components/EntityLinkChips";
 import { CalendarEventRow } from "@/components/briefing/CalendarEventRow";
@@ -20,14 +22,13 @@ import {
   HubTaskRow,
 } from "@/components/repo-hub/HubWorkRows";
 import { HubSection } from "@/components/repo-hub/HubSection";
+import { TaskComposer } from "@/components/tasks/TaskComposer";
+import type { EntityRef } from "@/lib/entity-note";
 import { commonTaskRefs } from "@/lib/repos/hub-chips";
 import { matchesTaskSearch } from "@/lib/tasks/task-text";
-import { partitionRepoOpenPrs } from "@/lib/github/partition-repo-prs";
-import type { GithubPrsApiPayload, GithubPrRow } from "@/lib/github/prs";
-import { useGithubPrSearch } from "@/lib/hooks/use-github-pr-search";
+import type { GithubPrRow } from "@/lib/github/prs";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useStoredState } from "@/lib/hooks/use-stored-state";
-import { useToast } from "@/lib/hooks/use-toast";
 import type { CalendarEvent } from "@/lib/google-calendar";
 import {
   capHubList,
@@ -44,6 +45,9 @@ import type { RepoInfo } from "@/app/repos/types";
 interface RepoWorkPayload {
   date: string;
   fullName: string | null;
+  openPrs?: GithubPrRow[];
+  /** Which of `openPrs` are yours — from an `author:@me` search, not a login match. */
+  myPrUrls?: string[];
   model: WorkHubModel;
   doneTasks?: WorkHubTask[];
   /** Optional integrations that failed; their rows are missing, not absent. */
@@ -105,21 +109,22 @@ export function RepoWorkHub({
   repo: RepoInfo;
   onMutate: () => void;
 }) {
-  const toast = useToast();
   // External edits (MCP, a teammate, another tab) land via poll or refocus;
   // 20s keeps that lag short without hammering the Jira/GitHub fan-out.
   const work = useLive<RepoWorkPayload>(`/api/repos/${encodeURIComponent(repo.name)}/work`, {
     refreshInterval: 20_000,
   });
-  const authored = useLive<GithubPrsApiPayload>("/api/github/prs", { refreshInterval: 0 });
-  const fullName = work.data?.fullName ?? null;
-  const prs = useGithubPrSearch(fullName ? `repo:${fullName} is:open` : "", Boolean(fullName), 0);
-  const partitioned = useMemo(
-    () => partitionRepoOpenPrs(prs.results, authored.data?.authored ?? []),
-    [prs.results, authored.data?.authored],
-  );
-  const mine = useMemo(() => sortPrsNewest(partitioned.mine), [partitioned.mine]);
-  const others = useMemo(() => sortPrsNewest(partitioned.others), [partitioned.others]);
+  // The work route already searched this repo's PRs, yours included. Re-running
+  // that search here, then waiting on the whole authored-PR list (~14s) to tell
+  // yours apart, showed "No open PRs of yours" until it landed.
+  const { mine, others } = useMemo(() => {
+    const myUrls = new Set(work.data?.myPrUrls ?? []);
+    const rows = sortPrsNewest(work.data?.openPrs ?? []);
+    return {
+      mine: rows.filter((row) => myUrls.has(row.url)),
+      others: rows.filter((row) => !myUrls.has(row.url)),
+    };
+  }, [work.data?.openPrs, work.data?.myPrUrls]);
   const [historyOpen, setHistoryOpen] = useStoredState(
     "devhub:repo-hub:history-open",
     false,
@@ -128,8 +133,11 @@ export function RepoWorkHub({
   );
   const [gitOpen, setGitOpen] = useState(false);
   const [gitFocusPath, setGitFocusPath] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
-  const [saving, setSaving] = useState(false);
+  // Every task added here belongs to this repo; the composer pins the link.
+  const repoLinks = useMemo<EntityRef[]>(
+    () => [{ kind: "repo", id: repo.name, label: repo.name }],
+    [repo.name],
+  );
   const model = work.data?.model;
   const calendar = useMemo(
     () => (model ? hubCalendarEvents(model) : []),
@@ -149,6 +157,7 @@ export function RepoWorkHub({
     (value) => (value ? "1" : "0"),
   );
   const [doneOpen, setDoneOpen] = useState(false);
+  const [otherPrsOpen, setOtherPrsOpen] = useState(false);
   const [backlogQuery, setBacklogQuery] = useState("");
   const [doneQuery, setDoneQuery] = useState("");
 
@@ -182,27 +191,10 @@ export function RepoWorkHub({
     setGitOpen(true);
   }
 
-  async function addLinkedTask() {
-    const text = draft.trim();
-    if (!text || saving) return;
-    setSaving(true);
-    try {
-      const res = await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text,
-          links: [{ kind: "repo", id: repo.name, label: repo.name }],
-        }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      setDraft("");
-      await work.mutate();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not add task");
-    } finally {
-      setSaving(false);
-    }
+  async function onTaskAdded() {
+    // Today and the /repos cards read the same task list.
+    void globalMutate("/api/tasks");
+    await work.mutate();
   }
 
   function renderNote(note: WorkHubNote) {
@@ -228,19 +220,30 @@ export function RepoWorkHub({
       <section className="mt-4">
         <h2 className="text-sm font-semibold text-text mb-2">Active work</h2>
         {degraded.length > 0 ? (
-          <div className="tone-panel tone-panel--warning-banner mb-3 py-2" role="status">
-            <div className="flex items-center gap-2 text-sm text-text-muted">
-              <AlertTriangle size={14} className="text-warning" aria-hidden />
-              {degraded.map((entry) => entry.source).join(" and ")}{" "}
-              {degraded.length > 1 ? "are" : "is"} unavailable — some work may be missing.
-              <button
-                type="button"
-                className="btn btn-ghost ml-auto"
-                onClick={() => void work.mutate()}
-              >
-                Retry
+          <div className="mb-3 rounded-lg border border-border p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <AlertTriangle size={14} className="shrink-0 text-warning" aria-hidden />
+              <p className="min-w-0 flex-1 text-sm text-text-muted" role="status">
+                {degraded.map((entry) => entry.source).join(" and ")}{" "}
+                couldn’t be loaded.
+              </p>
+              <button type="button" className="btn btn-ghost text-xs"
+                disabled={work.isValidating} onClick={() => void work.mutate()}>
+                <RefreshCw size={12} aria-hidden />
+                {work.isValidating ? "Refreshing…" : "Retry"}
               </button>
             </div>
+            <details className="mt-2 text-xs text-text-muted">
+              <summary className="cursor-pointer">Some linked items may be missing · Details</summary>
+              <ul className="mt-2 space-y-2">
+                {degraded.map((entry) => (
+                  <li key={entry.source} className="break-words">
+                    <strong className="text-text">{entry.source}:</strong> {entry.message}{" "}
+                    {entry.source === "Calendar" && <Link href="/calendar" className="text-accent hover:underline">Open Calendar</Link>}
+                  </li>
+                ))}
+              </ul>
+            </details>
           </div>
         ) : null}
         {work.isLoading ? (
@@ -261,24 +264,14 @@ export function RepoWorkHub({
         ) : (
           <p className="text-xs text-text-subtle">No in-progress work linked to this repo.</p>
         )}
-        <form
-          className="mt-3 flex gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void addLinkedTask();
-          }}
-        >
-          <input
-            className="input task-add-text flex-1"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder={`Add a task for ${repo.name}`}
-            aria-label={`Add a task linked to ${repo.name}`}
+        <div className="mt-3 space-y-3">
+          <TaskComposer
+            inputId="repo-hub-task-add"
+            placeholder={`Add a task for ${repo.name}… (paste a link or Jira key, @ to link)`}
+            baseLinks={repoLinks}
+            onAdded={onTaskAdded}
           />
-          <button type="submit" className="btn btn-ghost text-xs" disabled={saving || !draft.trim()}>
-            Add
-          </button>
-        </form>
+        </div>
       </section>
 
       {backlogCount > 0 ? (
@@ -368,6 +361,7 @@ export function RepoWorkHub({
               setGitOpen(next);
               if (!next) setGitFocusPath(null);
             }}
+            initialTab={gitFocusPath ? "changes" : undefined}
             focusPath={gitFocusPath}
             onFocusPathConsumed={() => setGitFocusPath(null)}
           />
@@ -390,10 +384,8 @@ export function RepoWorkHub({
       <div className="repo-hub-columns mt-5">
         <section>
           <h2 className="text-sm font-semibold text-text mb-2">My PRs</h2>
-          {prs.loading ? (
+          {work.isLoading ? (
             <SkeletonRows count={3} />
-          ) : prs.error ? (
-            <FetchError message={prs.error} onRetry={prs.retry} />
           ) : mine.length ? (
             <div className="divide-y divide-border">
               <HubCappedList
@@ -403,18 +395,26 @@ export function RepoWorkHub({
               />
             </div>
           ) : (
-            <p className="text-xs text-text-subtle">No open PRs of yours.</p>
+            <p className="text-xs text-text-subtle">{work.error || degraded.some((entry) => entry.source === "GitHub") ? "Pull requests could not be loaded." : "No open PRs of yours."}</p>
           )}
           {others.length > 0 ? (
-            <details className="repo-hub-other-prs">
+            <details
+              className="repo-hub-other-prs"
+              onToggle={(event) => setOtherPrsOpen(event.currentTarget.open)}
+            >
               <summary>Other PRs ({others.length})</summary>
-              <div className="divide-y divide-border mt-2">
-                <HubCappedList
-                  items={others}
-                  limit={HUB_LONG_LIST_PREVIEW}
-                  render={(row) => <PrRow key={row.url} row={row} kind="reviewed" />}
-                />
-              </div>
+              {/* A closed <details> still mounts its children, and every PrRow
+                  checks for a review note — ~20 requests per visit for a list
+                  nobody had opened, queued ahead of the hub's own data. */}
+              {otherPrsOpen ? (
+                <div className="divide-y divide-border mt-2">
+                  <HubCappedList
+                    items={others}
+                    limit={HUB_LONG_LIST_PREVIEW}
+                    render={(row) => <PrRow key={row.url} row={row} kind="reviewed" />}
+                  />
+                </div>
+              ) : null}
             </details>
           ) : null}
         </section>
@@ -434,7 +434,7 @@ export function RepoWorkHub({
               />
             </div>
           ) : (
-            <p className="text-xs text-text-subtle">No leftover notes for this repo.</p>
+            <p className="text-xs text-text-subtle">No notes linked to this repo.</p>
           )}
           {calendar.length > 0 ? (
             <div className="mt-4">

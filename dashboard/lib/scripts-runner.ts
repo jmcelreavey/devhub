@@ -78,6 +78,19 @@ export interface ScriptCatalogEntry {
 }
 
 const ACTIONS: Record<string, ActionDef> = {
+  worktree_cleanup_scan: {
+    label: "Worktree cleanup review",
+    description: "Report unused checkouts and disk usage. Never deletes worktrees.",
+    timeoutMs: 900_000,
+    mutates: true,
+    effects: ["Reads local checkout, task and run state", "Writes the latest worktree review report; never removes files"],
+    cmd: "dashboard: scanWorktrees (TypeScript)",
+    run: async (emit) => {
+      const { scanWorktrees } = await import("./repos/worktree-report");
+      const report = await scanWorktrees(emit);
+      return report.errors.length ? 1 : 0;
+    },
+  },
   ownership_brief: {
     label: "Ownership Brief (morning)",
     description: "Summarize obligations, inbound changes, and knowledge gaps across owned repos.",

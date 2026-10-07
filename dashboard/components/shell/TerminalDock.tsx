@@ -43,11 +43,11 @@ type TerminalCommandBlock,
 import { lastTerminalBlock,saveTerminalCaptureNote } from "@/lib/terminal-capture";
 import { resolveTerminalCopyText } from "@/lib/terminal-clipboard";
 import {
-clampDockHeight,clampPopoutPos,injectKindForPropose,readAlwaysExpandPref,
+AGENT_TAB_CLOSE_DELAY_MS,clampDockHeight,clampPopoutPos,injectKindForPropose,isAgentRunSource,readAlwaysExpandPref,
 readAutoRunPref,readDockHeight,
 readPersistedDockState,
 readPopoutPos,readTerminalPopoutSize,shouldAutoRunProposal,shouldExpandOnTerminalOpen,
-shouldFallBackToRawView,
+shouldAutoCloseAgentTab,shouldFallBackToRawView,
 shouldNotifyCommandFinished,writeAutoRunPref,writeDockHeight,
 writePersistedDockState,
 writePopoutPos,writeTerminalPopoutSize,type DockFrame,type NotificationPermissionState,
@@ -134,9 +134,12 @@ interface DockTab {
   reattached?: boolean;
   /** Last inject mode — interactive agent TUIs are not reused. */
   lastMode?: "oneshot" | "interactive";
+  /** Opened for a command an agent asked for over MCP; closes itself after a clean exit. */
+  agentRun?: boolean;
 }
 
 interface OpenDetail {
+  agentRun?: boolean;
   cwd?: string;
   label?: string;
   command?: string;
@@ -285,6 +288,9 @@ export function TerminalDock() {
   const autoRunRef = useRef(false);
   /** When each tab went busy — duration source for the notification. */
   const busySinceRef = useRef(new Map<number, number>());
+  /** Agent tabs whose command was written and has not reported an exit yet. */
+  const agentCommandSentRef = useRef(new Set<number>());
+  const agentCloseTimersRef = useRef(new Map<number, number>());
   const proposal = proposalQueue[0] ?? null;
 
   const patchServerProposal = useCallback(
@@ -612,6 +618,18 @@ export function TerminalDock() {
     setOpen(true);
   }, []);
 
+  /**
+   * Agent and MCP work raises the dock only if the user has not put it away.
+   * A collapsed dock gets the unread dot instead; opening it clears the flag.
+   */
+  const expandForAgentWork = useCallback(() => {
+    if (shouldExpandOnTerminalOpen({ userCollapsed: userCollapsedRef.current, alwaysExpand: readAlwaysExpandPref() })) {
+      expandDock();
+    } else {
+      setUnread(true);
+    }
+  }, [expandDock]);
+
   const collapseDock = useCallback(() => {
     userCollapsedRef.current = true;
     openRef.current = false;
@@ -753,6 +771,7 @@ export function TerminalDock() {
         pendingInjectRef.current.delete(tabId);
         setInjectQueuedId(null);
         setInjectError(null);
+        if (tabsRef.current.find((t) => t.id === tabId)?.agentRun) agentCommandSentRef.current.add(tabId);
         if (pending.proposalId && pending.serverTracked) {
           void fetch("/api/terminal/propose", {
             method: "PATCH",
@@ -856,6 +875,7 @@ export function TerminalDock() {
           status: "connecting",
           generation: 0,
           lastMode: detail?.mode,
+          ...(detail?.agentRun ? { agentRun: true } : {}),
         },
       ]);
       setActiveId(id);
@@ -878,8 +898,15 @@ export function TerminalDock() {
     addTabRef.current = addTab;
   }, [addTab]);
 
+  const clearAgentTabClose = useCallback((id: number) => {
+    window.clearTimeout(agentCloseTimersRef.current.get(id));
+    agentCloseTimersRef.current.delete(id);
+  }, []);
+
   const closeTab = useCallback((id: number) => {
     const tab = tabsRef.current.find((t) => t.id === id);
+    clearAgentTabClose(id);
+    agentCommandSentRef.current.delete(id);
     pendingInjectRef.current.delete(id);
     tickSeenRef.current.delete(id);
     readersRef.current.get(id)?.dispose();
@@ -896,7 +923,33 @@ export function TerminalDock() {
       setActiveId((curr) => (curr === id ? (next[next.length - 1]?.id ?? null) : curr));
       return next;
     });
-  }, []);
+  }, [clearAgentTabClose]);
+
+  /**
+   * A finished agent command leaves nothing to do in its tab, so it closes
+   * itself (which also ends the shell). Failures stay: that is the part worth
+   * reading. The delay lets a quick command be glimpsed, and anything that
+   * starts running in the tab meanwhile cancels the close.
+   */
+  const closeAgentTabAfterExit = useCallback(
+    (id: number, exitCode: number | null | undefined) => {
+      const tab = tabsRef.current.find((t) => t.id === id);
+      if (!shouldAutoCloseAgentTab({ agentRun: tab?.agentRun, exitCode })) return;
+      clearAgentTabClose(id);
+      agentCloseTimersRef.current.set(
+        id,
+        window.setTimeout(() => {
+          agentCloseTimersRef.current.delete(id);
+          const current = tabsRef.current.find((t) => t.id === id);
+          if (!current) return;
+          if (current.busy && current.status !== "closed") return;
+          if (current.lastExitCode != null && current.lastExitCode !== 0) return;
+          closeTab(id);
+        }, AGENT_TAB_CLOSE_DELAY_MS),
+      );
+    },
+    [clearAgentTabClose, closeTab],
+  );
 
   const toggle = useCallback(() => {
     setOpen((wasOpen) => {
@@ -945,6 +998,7 @@ export function TerminalDock() {
         mode: detail.mode,
         summary: detail.summary,
         providerLabel: detail.providerLabel,
+        agentRun: isAgentRunSource(detail.source),
       });
       pendingInjectRef.current.set(result.id, {
         command: detail.command,
@@ -960,7 +1014,7 @@ export function TerminalDock() {
 
   const handlePropose = useCallback(
     (detail: TerminalProposeDetail) => {
-      expandDock();
+      expandForAgentWork();
       const injectKind = injectKindForPropose({ kind: detail.kind, source: detail.source });
       if (
         detail.skipConfirm ||
@@ -979,12 +1033,13 @@ export function TerminalDock() {
         mode: detail.mode,
         summary: detail.summary,
         providerLabel: detail.providerLabel,
+        agentRun: isAgentRunSource(detail.source),
       });
       if (result.created && !beforeIds.has(result.id)) {
         proposalScaffoldTabsRef.current.set(detail.id, result.id);
       }
     },
-    [addTab, enqueueProposal, expandDock, injectProposalNow],
+    [addTab, enqueueProposal, expandForAgentWork, injectProposalNow],
   );
 
   useEffect(() => {
@@ -1131,8 +1186,7 @@ export function TerminalDock() {
         for (const detail of fresh) handledProposalIdsRef.current.add(detail.id);
 
         const chips: TerminalProposeDetail[] = [];
-        expandDock();
-        if (!openRef.current) setUnread(true);
+        expandForAgentWork();
         for (const detail of fresh) {
           if (
             detail.skipConfirm ||
@@ -1158,6 +1212,7 @@ export function TerminalDock() {
             label: focus.label,
             kind: injectKindForPropose({ kind: focus.kind, source: focus.source }),
             repoName: focus.repoName,
+            agentRun: isAgentRunSource(focus.source),
           });
           if (result.created) {
             proposalScaffoldTabsRef.current.set(focus.id, result.id);
@@ -1201,7 +1256,7 @@ export function TerminalDock() {
       disconnect();
       window.clearInterval(timer);
     };
-  }, [hydrated, addTab, expandDock, injectProposalNow]);
+  }, [hydrated, addTab, expandForAgentWork, injectProposalNow]);
 
   const setStatus = useCallback(
     (id: number, status: Status) => {
@@ -1674,6 +1729,16 @@ export function TerminalDock() {
                 onClick={() => {
                   setActiveId(tab.id);
                 }}
+                // Middle-click closes, like a browser tab. Stopping mousedown also
+                // keeps Windows/Linux from starting autoscroll.
+                onMouseDown={(e) => {
+                  if (e.button === 1) e.preventDefault();
+                }}
+                onAuxClick={(e) => {
+                  if (e.button !== 1) return;
+                  e.preventDefault();
+                  closeTab(tab.id);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
@@ -1987,6 +2052,8 @@ export function TerminalDock() {
                     if (!busy && !readersRef.current.get(tab.id)?.hasShellIntegration?.()) {
                       completeCommandBlocks(tab.id);
                     }
+                    // Something started running again: it is no longer finished.
+                    if (busy) clearAgentTabClose(tab.id);
                     if (busy && !openRef.current) setUnread(true);
                   }}
                   onExitCode={(code) => {
@@ -1994,9 +2061,12 @@ export function TerminalDock() {
                       prev.map((t) => (t.id === tab.id ? { ...t, lastExitCode: code } : t)),
                     );
                     if (!openRef.current) setUnread(true);
+                    closeAgentTabAfterExit(tab.id, code);
                   }}
                   onCommandExit={(code) => {
                     completeCommandBlocks(tab.id, code);
+                    // Only the command the agent sent: later commands typed here are the user's.
+                    if (agentCommandSentRef.current.delete(tab.id)) closeAgentTabAfterExit(tab.id, code);
                     setTabs((prev) =>
                       prev.map((t) => (t.id === tab.id ? { ...t, lastExitCode: code } : t)),
                     );

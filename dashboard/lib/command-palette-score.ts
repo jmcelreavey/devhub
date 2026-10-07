@@ -56,6 +56,8 @@ export function paletteCommandScore(query: string, parts: readonly string[]): nu
   return best;
 }
 
+export type PaletteScope = "all" | "repo" | "note" | "task" | "action" | "content";
+
 export interface PaletteListItem {
   id: string;
   kind: string;
@@ -84,20 +86,28 @@ export function uniqueById<T extends { id: string }>(items: readonly T[]): T[] {
 export function filterVisiblePaletteCommands<T extends PaletteListItem>(
   commands: readonly T[],
   query: string,
-  extras: { contentResults?: readonly T[]; recent?: readonly T[] } = {},
+  extras: { contentResults?: readonly T[]; recent?: readonly T[]; scope?: PaletteScope } = {},
 ): T[] {
-  const unique = uniqueById(commands);
+  const scope = extras.scope ?? "all";
+  const matchesScope = (command: T) => {
+    if (scope === "all") return true;
+    if (scope === "note") {
+      return command.kind === "note" || command.kind === "diagram" || command.id.startsWith("content:notes:");
+    }
+    if (scope === "task") return command.kind === "task" || command.kind === "ticket";
+    return command.kind === scope;
+  };
+  const unique = uniqueById(commands).filter(matchesScope);
   if (!query.trim()) {
-    const recent = uniqueById(extras.recent ?? []);
-    const action = unique.filter((c) => c.kind === "action");
-    const task = unique.filter((c) => c.kind === "task").slice(0, 5);
-    const ticket = unique.filter((c) => c.kind === "ticket").slice(0, 5);
-    const note = unique.filter((c) => c.kind === "note").slice(0, 8);
-    const diagram = unique.filter((c) => c.kind === "diagram").slice(0, 5);
+    if (scope !== "all") return scope === "content" ? [] : unique.slice(0, 20);
+
+    const recent = uniqueById(extras.recent ?? []).slice(0, 5);
+    const commonActionIds = new Set(["action:capture", "action:today-note", "action:ask-agent", "action:shortcuts"]);
+    const action = unique.filter((c) => c.kind === "action" && commonActionIds.has(c.id)).slice(0, 4);
     const repo = unique
       .filter((c) => c.kind === "repo" && Boolean(c.detail?.includes("changed") || c.detail?.includes("unpushed")))
-      .slice(0, 5);
-    return uniqueById([...recent, ...action, ...repo, ...task, ...ticket, ...note, ...diagram]);
+      .slice(0, 3);
+    return uniqueById([...recent, ...repo, ...action]);
   }
 
   const scored = unique
@@ -115,6 +125,8 @@ export function filterVisiblePaletteCommands<T extends PaletteListItem>(
   const matchedPaths = new Set(
     scored.filter((c) => c.kind === "note" || c.kind === "diagram").map((c) => c.detail ?? ""),
   );
-  const dedupedContent = uniqueById(extras.contentResults ?? []).filter((c) => !matchedPaths.has(c.label));
+  const dedupedContent = uniqueById(extras.contentResults ?? [])
+    .filter(matchesScope)
+    .filter((c) => !matchedPaths.has(c.label));
   return uniqueById([...scored, ...dedupedContent]).slice(0, 40);
 }

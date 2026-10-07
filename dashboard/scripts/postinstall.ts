@@ -2,7 +2,7 @@
 /**
  * postinstall — runs automatically after `npm install` / `npm ci`.
  *
- * Minimal bootstrap: .env.local, notes dirs, git hooks, OpenChamber theme.
+ * Minimal bootstrap: .env.local, notes dirs, git hooks, plugin branding.
  * Full sync/MCP/build runs from `bash scripts/install.sh` (TypeScript bootstrap)
  * or Actions in the app.
  */
@@ -11,7 +11,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 import process from "node:process";
-import { applyOpenChamberTheme } from "../lib/openchamber-theme";
 import { materializeBranding } from "../lib/plugins/branding";
 import { materializePluginNav } from "../lib/plugins/nav-materialize";
 
@@ -70,17 +69,14 @@ if (fs.existsSync(hooksDir)) {
   }
 }
 
-// --- 4. OpenChamber theme (core default) ---
-applyOpenChamberTheme(DASHBOARD_DIR, log);
-
-// --- 5. Plugin branding (whitelabel theme/logo/fonts/OpenChamber, if a plugin opts in) ---
+// --- 4. Plugin branding (whitelabel theme/logo/fonts, if a plugin opts in) ---
 try {
   materializeBranding({ repoRoot: REPO_ROOT, emit: log });
 } catch (e) {
   warn(`Plugin branding skipped: ${e instanceof Error ? e.message : String(e)}`);
 }
 
-// --- 6. Plugin nav (materialise dashboard.nav into plugin-nav.generated.ts) ---
+// --- 5. Plugin nav (materialise dashboard.nav into plugin-nav.generated.ts) ---
 try {
   materializePluginNav({ repoRoot: REPO_ROOT, emit: log });
 } catch (e) {

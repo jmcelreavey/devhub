@@ -360,7 +360,7 @@ export function DbWorkspace() {
   );
 
   /**
-   * Apply a provider's remedy — for BI, switching AWS profile.
+   * Apply a provider's remedy, e.g. a plugin provider switching AWS profile.
    *
    * The connection list is derived from access, so once the access changes the
    * list and every pooled socket are stale. Resetting both is what makes the
@@ -603,7 +603,7 @@ export function DbWorkspace() {
           <div className="db-main-empty">
             <EmptyState
               title="Pick a connection"
-              subtitle="Local SQLite files need no setup. BI databases appear once an AWS profile is active in Ops."
+              subtitle="Local SQLite files need no setup. Databases from a plugin appear once that plugin has access."
             />
           </div>
         )}

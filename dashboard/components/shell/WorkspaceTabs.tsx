@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { FileText, FolderGit2, LayoutGrid, Plus, X } from "lucide-react";
+import { FileText, FolderGit2, GitBranch, LayoutGrid, Plus, X } from "lucide-react";
 import { workspaceTabChordFromEvent } from "@/lib/app-shortcuts";
 import { isDesktop } from "@/lib/desktop/bridge";
 import { PanelVisibilityContext } from "@/lib/hooks/panel-visibility";
@@ -395,6 +395,7 @@ export function WorkspaceTabStrip() {
         >
           {tabs.map((tab, i) => {
             const active = tab.id === activeId;
+            const isGit = /^\/repos\/[^/]+\/git(?:\?|$)/.test(tab.href);
             return (
               <div
                 key={tab.id}
@@ -405,6 +406,7 @@ export function WorkspaceTabStrip() {
                 tabIndex={active ? 0 : -1}
                 data-active={active || undefined}
                 className="workspace-tab"
+                title={isGit ? `${tab.title} · Git` : tab.title}
                 onClick={() => activate(tab.id)}
                 onKeyDown={(e) => onKeyDown(e, tab.id, i)}
                 onAuxClick={(e) => {
@@ -415,10 +417,11 @@ export function WorkspaceTabStrip() {
                 }}
               >
                 <span className="workspace-tab-icon">
-                  <TabKindIcon kind={tab.kind} />
+                  {isGit ? <GitBranch size={12} aria-hidden /> : <TabKindIcon kind={tab.kind} />}
                 </span>
                 <span className="workspace-tab-title">
                   {tab.title}
+                  {isGit && <span className="sr-only"> Git</span>}
                   <span className="sr-only">{i < 9 ? ` (⌘${i + 1})` : ""}</span>
                 </span>
                 {canClose ? (

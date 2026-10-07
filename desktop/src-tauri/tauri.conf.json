@@ -12,7 +12,8 @@
     "security": {
       "csp": null,
       "capabilities": [
-        "main"
+        "main",
+        "boot"
       ]
     }
   },

@@ -20,8 +20,9 @@ import { useLive } from "@/lib/hooks/use-fetch";
 import { LiveClock } from "./LiveClock";
 import { TodayRepSignal } from "./TodayRepSignal";
 import { TaskList } from "@/components/tasks/TaskList";
-import { JiraKeyChip } from "@/components/jira/JiraKeyChip";
-import { JiraStatusPill } from "@/components/jira/JiraStatusPill";
+import { JiraTicketQueueRow } from "@/components/jira/JiraTicketRow";
+import type { JiraTicket } from "@/lib/jira/client";
+import ticketStyles from "@/components/jira/JiraTicketRow.module.css";
 import { LayoutPresetsButton } from "@/components/shell/LayoutPresets";
 import { HoverTip } from "@/components/ui/HoverTip";
 import { TodayBootScreen, useTodayBoot } from "@/components/today/TodayBootScreen";
@@ -29,7 +30,6 @@ import { readFocusSession, writeFocusSession } from "@/lib/focus-session-storage
 import { todayISO, yesterdayISO, dailyNotePath, formatDayLabel, formatTime } from "@/lib/utils";
 import type { GithubPrRow, GithubPrsApiPayload } from "@/lib/github/prs";
 import type { CalendarEvent } from "@/lib/google-calendar";
-import { PersonChip } from "@/components/PersonChip";
 import { PrRow } from "@/components/PrRow";
 import { BriefingPlanStatus } from "@/components/briefing/BriefingPlanStatus";
 
@@ -39,16 +39,8 @@ interface BriefingResponse {
   code?: string;
 }
 
-interface JiraTicketRow {
-  key: string;
-  summary?: string;
-  status: string;
-  url?: string;
-  assignee?: { displayName: string; email?: string; avatarUrl?: string };
-}
-
 interface JiraResponse {
-  tickets?: JiraTicketRow[];
+  tickets?: JiraTicket[];
   configured?: boolean;
 }
 
@@ -520,37 +512,9 @@ export function TodayFocusView() {
         {tickets.length > 0 && (
           <div>
             <SectionLabel>Jira</SectionLabel>
-            <div className="space-y-1">
+            <div className={ticketStyles.list} role="list" aria-label="Your Jira tickets">
               {tickets.slice(0, 6).map((t) => (
-                <div key={t.key} className="flex items-center gap-2.5 px-2 py-1">
-                  <JiraKeyChip jiraKey={t.key} />
-                  {t.url ? (
-                    <a
-                      href={t.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="min-w-0 flex-1 truncate text-sm hover:underline text-text"
-                    >
-                      {t.summary ?? t.key}
-                    </a>
-                  ) : (
-                    <span className="min-w-0 flex-1 truncate text-sm text-text">
-                      {t.summary ?? t.key}
-                    </span>
-                  )}
-                  {t.assignee ? (
-                    <PersonChip
-                      name={t.assignee.displayName}
-                      email={t.assignee.email}
-                      avatarUrl={t.assignee.avatarUrl}
-                      size={16}
-                      className="hidden sm:inline-flex max-w-[7rem] shrink-0"
-                    />
-                  ) : null}
-                  <span className="hidden shrink-0 sm:inline-flex">
-                    <JiraStatusPill ticketKey={t.key} status={t.status} />
-                  </span>
-                </div>
+                <JiraTicketQueueRow key={t.key} ticket={t} />
               ))}
             </div>
           </div>

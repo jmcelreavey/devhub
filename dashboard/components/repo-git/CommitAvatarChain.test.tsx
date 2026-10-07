@@ -2,7 +2,7 @@
 
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CommitAvatar } from "./CommitAvatar";
+import { CommitAvatar, resetAvatarCaches } from "./CommitAvatar";
 
 /**
  * Covers the ordering of the avatar chain and its fallbacks. The chain is the
@@ -15,6 +15,8 @@ function avatarImg(): HTMLImageElement | null {
 }
 
 beforeEach(() => {
+  // Sources and dead URLs are cached per session; each case starts cold.
+  resetAvatarCaches();
   // jsdom has no SubtleCrypto. Stub a fixed digest so the Gravatar candidate is
   // built deterministically rather than silently skipped.
   vi.stubGlobal("crypto", {

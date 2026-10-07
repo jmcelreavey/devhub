@@ -360,11 +360,11 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
     "notes_create_task",
     {
       description:
-        "Create a note under task-notes/YYYY-MM-DD-<taskId> with a ## Links section (live ::task-ref + Work href) — same EntityRef contract as the task-row note action. Leaves an existing note alone unless overwrite is true.",
+        "Open or create the task's canonical note, following earlier daily copies when needed. Includes a ## Links section (live ::task-ref + Work href). Leaves an existing note alone unless overwrite is true.",
       inputSchema: {
         id: z.string().describe("Task id"),
         text: z.string().describe("Task text / note title"),
-        date: z.string().describe("Task day date YYYY-MM-DD"),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("Task day date YYYY-MM-DD"),
         jiraKey: z.string().optional(),
         jiraUrl: z.string().optional().describe("Absolute Jira browse URL"),
         overwrite: z
@@ -374,7 +374,10 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
       },
     },
     async ({ id, text, date, jiraKey, jiraUrl, overwrite }) => {
-      const source: TaskNoteSource = { id, text, date, jiraKey, jiraUrl };
+      const task = ctx.tasksStorage.getDay(date).tasks.find((t) => t.id === id)
+        ?? { id, text, done: false, createdAt: date };
+      const notePath = ctx.tasksStorage.resolveNotePath(task, date);
+      const source: TaskNoteSource = { id, text, date, jiraKey, jiraUrl, notePath };
       const path = taskNotePath(source);
       const existing = storage.read(path);
       if (existing && overwrite !== true) {

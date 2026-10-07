@@ -14,6 +14,8 @@ export interface RepoInfo {
   mtimeMs?: number;
   /** Owning repo path when this folder is a git worktree; absent on older payloads. */
   worktreeOf?: string | null;
+  worktreeCount?: number | null;
+  staleWorktreeCount?: number;
   hasUpstart?: boolean;
   /** Absolute path to the DevHub-managed upstart script (may not exist yet). */
   upstartPath?: string;
@@ -152,6 +154,13 @@ export interface RepoLearnApiPayload {
   code?: "not_configured" | "error";
   message?: string;
   ownership?: import("@/lib/ownership/types").RepoOwnershipEvidence;
+}
+
+/** An open task shown on a /repos card, tags stripped for the one-line preview. */
+export interface RepoTaskPreview {
+  id: string;
+  text: string;
+  jiraKey?: string;
 }
 
 /** Which local repos the /repos grid is narrowed to; null shows all of them. */

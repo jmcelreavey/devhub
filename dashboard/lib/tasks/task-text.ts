@@ -44,6 +44,18 @@ export function stripTagToken(text: string, tag: string): string {
     .trim();
 }
 
+/**
+ * Plain text with every `#tag` token removed. A title that is nothing but
+ * tags keeps them — an empty row would be worse than a noisy one.
+ */
+export function stripTagTokens(text: string): string {
+  const parts = splitTagTokens(text);
+  if (!parts.some((p) => p.type === "tag")) return text;
+  const rest = parts.filter((p) => p.type === "text").map((p) => p.text).join("");
+  const collapsed = rest.replace(/[ \t]{2,}/g, " ");
+  return collapsed.trim() ? collapsed : text;
+}
+
 export interface TextPart {
   type: "text" | "link";
   text: string;

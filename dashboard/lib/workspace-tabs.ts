@@ -65,6 +65,16 @@ export function normalizeHref(href: string): string {
 export function describeHref(href: string): { title: string; kind: WorkspaceTabKind } {
   const n = normalizeHref(href);
   const path = n.split("?")[0] ?? n;
+  // Git workspace is a full page now — tab title stays the repo name so it
+  // matches the hub tab beside it (not a bare "git").
+  const repoGit = path.match(/^\/repos\/([^/]+)\/git$/);
+  if (repoGit?.[1]) {
+    try {
+      return { title: decodeURIComponent(repoGit[1]), kind: "repo" };
+    } catch {
+      return { title: repoGit[1], kind: "repo" };
+    }
+  }
   const repo = path.match(/^\/repos\/([^/]+)$/);
   if (repo?.[1]) {
     try {

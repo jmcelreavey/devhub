@@ -30,6 +30,12 @@ function log(msg) {
  */
 const ALLOWLIST = [
   { from: "skills/shared", to: "skills/shared" },
+  // Managed Paseo setup/updates must also work without a linked checkout.
+  { from: "scripts/install-paseo.mjs", to: "scripts/install-paseo.mjs" },
+  { from: "scripts/paseo-config.mjs", to: "scripts/paseo-config.mjs" },
+  { from: "scripts/paseo-service.mjs", to: "scripts/paseo-service.mjs" },
+  { from: "scripts/paseo-web-bootstrap.mjs", to: "scripts/paseo-web-bootstrap.mjs" },
+  { from: "scripts/paseo-release.json", to: "scripts/paseo-release.json" },
   // Vendored upstream skills are read-only catalog entries; without them the
   // Skills page offers "Add to catalog" for skills the repo already owns.
   { from: "skills/vendor", to: "skills/vendor", optional: true },

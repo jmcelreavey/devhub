@@ -5,7 +5,7 @@ LEGACY_NAV_ITEMS,
 NAV_GROUPS,
 NAV_ITEMS,
 SECTION_TABS,
-buildCrumbs,
+activeNavHref,
 filterNavBySetup,
 groupSidebarNav,
 } from "./nav";
@@ -123,15 +123,10 @@ describe("filterNavBySetup", () => {
     expect(hrefs(filterNavBySetup(NAV_ITEMS, {}))).not.toContain("/datadog");
   });
 
-  it("hides Chamber and OpenCode when peer services are unavailable", () => {
-    const hidden = hrefs(filterNavBySetup(NAV_ITEMS, { chamber: false, opencode: false }));
-    expect(hidden).not.toContain("/chamber");
-    expect(hidden).not.toContain("/opencode");
-  });
-
   it("keeps retired launch destinations out even when installed", () => {
-    expect(hrefs(filterNavBySetup(NAV_ITEMS, { chamber: true }))).not.toContain("/chamber");
-    expect(hrefs(filterNavBySetup(NAV_ITEMS, { opencode: true }))).not.toContain("/opencode");
+    const shown = hrefs(filterNavBySetup(NAV_ITEMS, { opencode: true }));
+    expect(shown).not.toContain("/chamber");
+    expect(shown).not.toContain("/opencode");
   });
 
   it("hides Claude unless it is installed", () => {
@@ -180,48 +175,31 @@ describe("SECTION_TABS", () => {
   });
 });
 
-/**
- * The breadcrumb used to keep its own copy of the group labels, and it
- * drifted: the sidebar said "Library" while every destination under it
- * breadcrumbed as "Notes › Repos". One list now feeds both.
- */
-describe("buildCrumbs", () => {
-  it("uses the group labels the sidebar shows", () => {
-    expect(buildCrumbs("/repos")[0]?.label).toBe("Library");
-    expect(buildCrumbs("/skills")[0]?.label).toBe("Library");
-    expect(buildCrumbs("/status")[0]?.label).toBe("System");
-    expect(buildCrumbs("/datadog")[0]?.label).toBe("BI");
+describe("activeNavHref", () => {
+  const sidebar = NAV_ITEMS.map((i) => i.href);
+
+  it("matches a sidebar row and its sub-routes", () => {
+    expect(activeNavHref("/", sidebar)).toBe("/");
+    expect(activeNavHref("/notes/a/b.md", sidebar)).toBe("/notes");
+    expect(activeNavHref("/repos/devhub", sidebar)).toBe("/repos");
   });
 
-  it("never invents a label that isn't a real group or destination", () => {
-    const known = new Set([
-      ...NAV_GROUPS.map((g) => g.label),
-      ...ALL_NAV_DESTINATIONS.map((n) => n.label),
-    ]);
-    for (const nav of ALL_NAV_DESTINATIONS) {
-      for (const crumb of buildCrumbs(nav.href)) {
-        expect(known.has(crumb.label), `${nav.href} -> "${crumb.label}"`).toBe(true);
-      }
-    }
+  it("respects segment boundaries", () => {
+    expect(activeNavHref("/worker", ["/work"])).toBeUndefined();
   });
 
-  it("does not repeat a group on its own landing page", () => {
-    expect(buildCrumbs("/notes").map((c) => c.label)).toEqual(["Notes"]);
-    expect(buildCrumbs("/").map((c) => c.label)).toEqual(["Today"]);
+  it("lights up the family row for a page reached through section tabs", () => {
+    expect(activeNavHref("/docs", sidebar)).toBe("/notes");
+    expect(activeNavHref("/diagrams/x", sidebar)).toBe("/notes");
+    expect(activeNavHref("/logs", sidebar)).toBe("/status");
+    expect(activeNavHref("/setup", sidebar)).toBe("/status");
   });
 
-  it("collapses plugin-contributed group landings when the plugin is present", () => {
-    const ops = ALL_NAV_DESTINATIONS.find((n) => n.href === "/ops");
-    if (!ops) return; // ponytail: /ops comes from the bi plugin, absent in the public core
-    expect(PLUGIN_NAV_ITEMS.some((n) => n.href === "/ops")).toBe(true);
-    expect(buildCrumbs("/ops").map((c) => c.label)).toEqual(["Ops"]);
+  it("prefers a page's own row over its family", () => {
+    expect(activeNavHref("/search", sidebar)).toBe("/search");
   });
 
-  it("links the group crumb back to its landing page", () => {
-    expect(buildCrumbs("/repos")[0]?.href).toBe("/notes");
-  });
-
-  it("falls back to a usable crumb for an unknown path", () => {
-    expect(buildCrumbs("/nope").map((c) => c.label)).toEqual(["Workspace", "/nope"]);
+  it("returns nothing for pages with no sidebar home", () => {
+    expect(activeNavHref("/recall", sidebar)).toBeUndefined();
   });
 });

@@ -1,15 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { FolderTree, Lock, LockOpen, Plus, RefreshCw, Trash2, Unlink } from "lucide-react";
+import { Lock, LockOpen, Plus, RefreshCw, Trash2, Unlink } from "lucide-react";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
+import { FetchError } from "@/components/ui/FetchError";
 import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
 import { useToast } from "@/lib/hooks/use-toast";
-import { defaultWorktreePath, type Worktree } from "@/lib/repos/worktree-parsers";
+import type { Worktree } from "@/lib/repos/worktree-parsers";
 import { fetchGitJson, repoApi } from "./shared";
+import { isWorktreeCleanupReady, type WorktreeInfo } from "@/lib/repos/worktree-info";
+import { WorktreeSchedule } from "./WorktreeSchedule";
+import { WorktreeDetails, WorktreeStatus, formatWorktreeSize } from "./WorktreeDetails";
+import styles from "./WorktreesPanel.module.css";
 
 interface WorktreesPayload {
-  worktrees: Worktree[];
+  worktrees: WorktreeInfo[];
   repoRoot: string;
 }
 
@@ -35,17 +40,23 @@ export function WorktreesPanel({
   const [data, setData] = useState<WorktreesPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [includeIgnored, setIncludeIgnored] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
-      setData(await fetchGitJson<WorktreesPayload>(repoApi(repoName, "/git/worktrees")));
+      setData(await fetchGitJson<WorktreesPayload>(repoApi(repoName, "/worktrees?details=1")));
+      setSelected([]);
+      setIncludeIgnored(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not list worktrees");
+      setLoadError(err instanceof Error ? err.message : "Could not list worktrees");
     } finally {
       setLoading(false);
     }
-  }, [repoName, toast]);
+  }, [repoName]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- load on mount / repo change
@@ -100,44 +111,30 @@ export function WorktreesPanel({
     }
   }, [prompt, data?.worktrees, post, toast, onMutate, refresh]);
 
-  const removeWorktree = useCallback(
-    async (tree: Worktree) => {
-      const ok = await confirm({
-        // The dialog renders its message as a single paragraph, so a newline
-        // between the path and the explanation just ran them together.
-        title: `Remove the worktree at ${tree.path}?`,
-        message: `The branch ${tree.branch ?? "(detached)"} and its commits stay — only this checkout folder is removed.`,
-        confirmLabel: "Remove",
-        variant: "danger",
+  const removeWorktree = useCallback(async () => {
+    const entries = (data?.worktrees ?? []).filter((tree) => selected.includes(tree.path) && isWorktreeCleanupReady(tree));
+    if (!entries.length) return;
+    if (!await confirm({
+      title: `Remove ${entries.length} checkout${entries.length === 1 ? "" : "s"}?`,
+      message: `The selected folders and their ignored local files will be deleted. Branches and commits remain. Stop any terminals and development servers using these folders before continuing. Estimated space: ${formatWorktreeSize(entries.reduce((sum, tree) => sum + (tree.details?.sizeBytes ?? 0), 0))}.`,
+      confirmLabel: "Remove selected checkouts", variant: "danger",
+    })) return;
+    setActing("cleanup");
+    try {
+      const response = await fetch(repoApi(repoName, "/worktrees"), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entries: entries.map(({ path, head }) => ({ path, head })), confirmed: true, includeIgnored, mergedOnly: true }),
       });
-      if (!ok) return;
-      setActing(tree.path);
-      try {
-        let result = await post({ action: "remove", path: tree.path });
-        if (!result.ok && result.code === "worktree_dirty") {
-          // Git refuses a dirty worktree, which is the right default. Offering
-          // force here names what is being discarded rather than retrying blind.
-          const forceOk = await confirm({
-            title: "This worktree has uncommitted changes",
-            message: `${tree.path} has modified or untracked files. Removing it discards them permanently.`,
-            confirmLabel: "Discard and remove",
-            variant: "danger",
-          });
-          if (!forceOk) return;
-          result = await post({ action: "remove", path: tree.path, force: true });
-        }
-        if (!result.ok) throw new Error(result.error ?? "Could not remove the worktree");
-        toast.success("Worktree removed");
-        onMutate();
-        await refresh();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Could not remove the worktree");
-      } finally {
-        setActing(null);
-      }
-    },
-    [confirm, post, toast, onMutate, refresh],
-  );
+      const result = await response.json() as { removed: string[]; errors: { path: string; error: string }[]; error?: string };
+      if (!response.ok) throw new Error(result.error || "Could not remove checkouts");
+      if (result.removed.length) toast.success(`Removed ${result.removed.length} checkout(s)`);
+      for (const error of result.errors) toast.error(`${error.path}: ${error.error}`);
+      onMutate();
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not remove checkouts");
+    } finally { setActing(null); }
+  }, [data, selected, confirm, repoName, includeIgnored, toast, onMutate, refresh]);
 
   const simpleAction = useCallback(
     async (action: "prune" | "lock" | "unlock", tree?: Worktree) => {
@@ -146,6 +143,7 @@ export function WorktreesPanel({
         const result = await post({ action, path: tree?.path });
         if (!result.ok) throw new Error(result.error ?? `Could not ${action}`);
         toast.success(action === "prune" ? "Pruned stale worktrees" : `Worktree ${action}ed`);
+        onMutate();
         await refresh();
       } catch (err) {
         toast.error(err instanceof Error ? err.message : `Could not ${action}`);
@@ -153,116 +151,113 @@ export function WorktreesPanel({
         setActing(null);
       }
     },
-    [post, toast, refresh],
+    [post, toast, refresh, onMutate],
   );
 
-  if (loading && !data) return <SkeletonRows count={4} height={32} />;
+  if (loading && !data) return <SkeletonRows count={3} height={88} />;
 
-  const trees = data?.worktrees ?? [];
-  const hasPrunable = trees.some((t) => t.prunable);
+  const trees = (data?.worktrees ?? []).filter((tree) => !tree.isMain)
+    .sort((left, right) => Number(isWorktreeCleanupReady(right)) - Number(isWorktreeCleanupReady(left)));
+  const main = data?.worktrees.find((tree) => tree.isMain);
+  const merged = trees.filter(isWorktreeCleanupReady);
+  const stale = trees.filter((tree) => tree.prunable);
+  const chosen = trees.filter((tree) => selected.includes(tree.path));
+  const selectedHasIgnored = chosen.some((tree) => tree.details?.ignoredPaths.length);
+  const unavailable = loading || acting !== null || !!loadError;
 
   return (
-    <div className="repo-git-history">
-      <div className="repo-git-changes-toolbar">
-        <button type="button" className="btn btn-ghost" onClick={() => void refresh()}>
-          <RefreshCw size={11} className={loading ? "animate-spin" : undefined} /> Refresh
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          disabled={acting !== null}
-          onClick={() => void addWorktree()}
-        >
-          {acting === "add" ? <RefreshCw size={11} className="animate-spin" /> : <Plus size={11} />}
-          New worktree
-        </button>
-        {hasPrunable && (
-          <button
-            type="button"
-            className="btn btn-ghost"
-            disabled={acting !== null}
-            title="Forget worktrees whose folder no longer exists"
-            onClick={() => void simpleAction("prune")}
-          >
-            <Unlink size={11} /> Prune stale
-          </button>
-        )}
-      </div>
-      <div className="repo-git-branch-hint">
-        A worktree is a second checkout backed by this same repository, so two branches can
-        be open at once without stashing. Handy when an agent is working one branch while
-        you are on another.
-      </div>
-      <div className="repo-git-branch-list">
-        {trees.length === 0 && <div className="repo-git-empty-sm">No worktrees.</div>}
-        {trees.map((tree) => (
-          <div
-            key={tree.path}
-            className="repo-git-branch-row"
-            data-current={tree.isMain || undefined}
-            data-unreachable={tree.prunable || undefined}
-          >
-            <div className="repo-git-branch-main" style={{ cursor: "default" }}>
-              <FolderTree size={12} className={tree.isMain ? "text-accent" : "text-text-subtle"} />
-              <span style={{ fontWeight: tree.isMain ? 600 : 400 }}>
-                {tree.branch ?? "(detached)"}
-              </span>
-              {tree.isMain && <span className="repo-git-ref-chip">this checkout</span>}
-              {tree.locked && (
-                <span className="repo-git-ref-chip" title={tree.lockReason || "Locked"}>
-                  locked
-                </span>
-              )}
-              {tree.prunable && (
-                <span className="repo-git-ref-chip" data-tone="warning">
-                  folder missing
-                </span>
-              )}
-              <span className="truncate text-text-subtle" title={tree.path}>
-                {tree.path}
-              </span>
-            </div>
-            {!tree.isMain && (
-              <>
-                <button
-                  type="button"
-                  className="btn btn-ghost repo-git-icon-btn"
-                  aria-label={tree.locked ? `Unlock ${tree.path}` : `Lock ${tree.path}`}
-                  title={
-                    tree.locked
-                      ? "Unlock so it can be removed or pruned"
-                      : "Lock to stop it being removed or pruned"
-                  }
-                  disabled={acting !== null}
-                  onClick={() => void simpleAction(tree.locked ? "unlock" : "lock", tree)}
-                >
-                  {tree.locked ? <LockOpen size={10} /> : <Lock size={10} />}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost repo-git-icon-btn"
-                  data-danger
-                  aria-label={`Remove worktree ${tree.path}`}
-                  disabled={acting !== null}
-                  onClick={() => void removeWorktree(tree)}
-                >
-                  {acting === tree.path ? (
-                    <RefreshCw size={10} className="animate-spin" />
-                  ) : (
-                    <Trash2 size={10} />
-                  )}
-                </button>
-              </>
-            )}
-          </div>
-        ))}
-      </div>
-      {data?.repoRoot && (
-        <div className="repo-git-branch-hint">
-          New worktrees are created beside the repository, e.g.{" "}
-          <span className="font-mono">{defaultWorktreePath(data.repoRoot, "example")}</span>
+    <section className={styles.panel} aria-label="Worktrees">
+      <div className={styles.toolbar}>
+        <div>
+          <h2 className={styles.heading}>Worktrees</h2>
+          <p className={styles.meta}>{trees.length} extra checkout{trees.length === 1 ? "" : "s"}</p>
         </div>
-      )}
-    </div>
+        <div className={styles.actions}>
+          <button type="button" className="btn btn-ghost" aria-label="Refresh worktrees" title="Refresh worktrees" disabled={loading || acting !== null} onClick={() => void refresh()}>
+            <RefreshCw size={16} className={loading ? "animate-spin" : undefined} />
+          </button>
+          <button type="button" className="btn btn-ghost" disabled={unavailable} onClick={() => void addWorktree()}>
+            {acting === "add" ? <RefreshCw size={14} className="animate-spin" /> : <Plus size={14} />} New worktree
+          </button>
+        </div>
+      </div>
+
+      {loadError ? <FetchError message={loadError} onRetry={() => void refresh()} bare /> : <div className={styles.summary} aria-live="polite">
+        <div>
+          <strong>{loading ? "Checking cleanup status…" : merged.length ? `${merged.length} ready to remove` : "Nothing ready to remove"}</strong>
+          <p>{merged.length ? "Merged changes are verified. Review local files before removing." : trees.length ? "Your remaining checkouts are being kept. See the reason below." : "Only your main checkout remains."}</p>
+        </div>
+        {merged.length > 0 && <button type="button" className="btn btn-ghost" disabled={unavailable} onClick={() => { setSelected(merged.map((tree) => tree.path)); setIncludeIgnored(false); }}>
+          Select ready ({merged.length})
+        </button>}
+      </div>}
+
+      {chosen.length > 0 && <div className={styles.selection}>
+        <div className={styles.toolbar}>
+          <strong>{chosen.length} selected · {formatWorktreeSize(chosen.reduce((sum, tree) => sum + (tree.details?.sizeBytes ?? 0), 0))}</strong>
+          <button type="button" className="btn btn-ghost" disabled={acting !== null} onClick={() => { setSelected([]); setIncludeIgnored(false); }}>Clear</button>
+        </div>
+        {selectedHasIgnored && <>
+          <details className={styles.details}>
+            <summary>Local files included in removal</summary>
+            <div className={styles.detailsBody}>{chosen.filter((tree) => tree.details?.ignoredPaths.length).map((tree) => <div key={tree.path}>
+              <strong>{tree.title}</strong>
+              <ul>{tree.details!.ignoredPaths.map((file) => <li key={file}>{file}</li>)}</ul>
+            </div>)}</div>
+          </details>
+          <label className={styles.selectLabel}><input type="checkbox" disabled={acting !== null} checked={includeIgnored} onChange={(event) => setIncludeIgnored(event.target.checked)} /> I reviewed these local files and agree to delete them</label>
+        </>}
+        <button type="button" className="btn btn-danger-ghost" disabled={unavailable || (!includeIgnored && selectedHasIgnored)} onClick={() => void removeWorktree()}>
+          <Trash2 size={14} /> {acting === "cleanup" ? "Removing…" : `Remove ${chosen.length} checkout${chosen.length === 1 ? "" : "s"}`}
+        </button>
+      </div>}
+
+      <ul className={styles.list} aria-label="Extra checkouts">
+        {trees.map((tree) => <li key={tree.path} className={styles.row}>
+          <div className={styles.rowHeader}>
+            <h3 className={styles.title}>{tree.title}</h3>
+            <WorktreeStatus tree={tree} />
+          </div>
+          <p className={styles.meta}>{formatWorktreeSize(tree.details?.sizeBytes)}{tree.details?.dirtyCount ? ` · ${tree.details.dirtyCount} changed files` : ""}</p>
+          {isWorktreeCleanupReady(tree) && <label className={styles.selectLabel}>
+            <input type="checkbox" aria-label={`Select ${tree.title} for removal`} disabled={unavailable} checked={selected.includes(tree.path)} onChange={(event) => { setSelected(event.target.checked ? [...selected, tree.path] : selected.filter((item) => item !== tree.path)); setIncludeIgnored(false); }} />
+            Select for removal
+          </label>}
+          <WorktreeDetails tree={tree}>
+            <button type="button" className="btn btn-ghost" disabled={unavailable} onClick={() => void simpleAction(tree.locked ? "unlock" : "lock", tree)}>
+              {tree.locked ? <LockOpen size={14} /> : <Lock size={14} />} {tree.locked ? "Unlock checkout" : "Keep this checkout"}
+            </button>
+          </WorktreeDetails>
+        </li>)}
+      </ul>
+
+      {main && <details className={styles.support}>
+        <summary>Main checkout <span className="badge badge-muted">Always kept</span></summary>
+        <div className={styles.detailsBody}>
+          <p>{main.branch || `Detached at ${main.head.slice(0, 7)}`}</p>
+          <p className={styles.path}>{main.path}</p>
+          <p>Cleanup never removes the repository’s main checkout.</p>
+        </div>
+      </details>}
+
+      <details className={styles.support}>
+        <summary>How cleanup works</summary>
+        <div className={styles.detailsBody}>
+          <ol>
+            <li>Finishing a task unpins its Paseo workspace. Its checkout stays on disk.</li>
+            <li>After merge, DevHub checks that the checkout’s changes are included and there is no unfinished local work.</li>
+            <li>Select ready checkouts, review their local files, then confirm removal. Branches and commits stay.</li>
+          </ol>
+          <p>Weekly reviews report candidates. They do not delete files.</p>
+        </div>
+      </details>
+      <WorktreeSchedule />
+      {stale.length > 0 && <div className={styles.summary}>
+        <p>{stale.length} checkout folder{stale.length === 1 ? " is" : "s are"} already missing.</p>
+        <button type="button" className="btn btn-ghost" disabled={unavailable} onClick={() => void simpleAction("prune")}>
+          <Unlink size={14} /> Clear missing entries
+        </button>
+      </div>}
+    </section>
   );
 }

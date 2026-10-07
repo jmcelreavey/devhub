@@ -14,7 +14,7 @@ export function registerStatusTools(server: McpServer, ctx: Context): void {
     "status_services",
     {
       description:
-        "Local dev service status (OpenChamber, OpenCode, etc.) from the DevHub dashboard. Shows whether each peer service is active. Requires the dashboard running.",
+        "Whether the Agents (Paseo) daemon behind the dashboard is answering. Requires the dashboard running.",
     },
     async () =>
       withDashboardErrors(async () => {
@@ -84,6 +84,40 @@ export function registerStatusTools(server: McpServer, ctx: Context): void {
   );
 
   server.registerTool(
+    "status_logs",
+    {
+      description:
+        "Tail the DevHub desktop logs (shell = Tauri, sidecar = the dashboard server, renderer = the webview), merged in time order. Use after status_exec when an error is not a hang: startup failures, crashes, sidecar restarts. filter keeps lines containing the text (case-insensitive). Requires the dashboard running.",
+      inputSchema: {
+        source: z.enum(["all", "shell", "sidecar", "renderer"]).optional().describe("Log to read (default all)"),
+        lines: z.number().int().min(1).max(1000).optional().describe("Most recent lines to return (default 150)"),
+        filter: z.string().trim().min(1).max(200).optional().describe("Only lines containing this text"),
+      },
+    },
+    async ({ source, lines, filter }) =>
+      withDashboardErrors(async () => {
+        const data = await dashboard.get<{ logDir: string; lines: { raw: string }[] }>("/api/status/logs", {
+          source: source ?? "all",
+          // Filtering happens here, so over-fetch to leave something to filter.
+          n: filter ? 1000 : (lines ?? 150),
+        });
+        const needle = filter?.toLowerCase();
+        const matched = needle ? data.lines.filter((l) => l.raw.toLowerCase().includes(needle)) : data.lines;
+        const tail = matched.slice(-(lines ?? 150));
+        if (tail.length === 0) {
+          return {
+            content: [{ type: "text", text: `No log lines${filter ? ` matching "${filter}"` : ""} in ${data.logDir}.` }],
+          };
+        }
+        return {
+          content: [
+            { type: "text", text: `${data.logDir} (${tail.length} line(s)):\n${tail.map((l) => l.raw).join("\n")}` },
+          ],
+        };
+      }),
+  );
+
+  server.registerTool(
     "status_git",
     {
       description:
@@ -92,7 +126,7 @@ export function registerStatusTools(server: McpServer, ctx: Context): void {
     async () =>
       withDashboardErrors(async () => {
         const data = await dashboard.get<unknown>("/api/status/git");
-        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        return { content: [{ type: "text", text: JSON.stringify(data) }] };
       }),
   );
 
@@ -132,29 +166,6 @@ export function registerStatusTools(server: McpServer, ctx: Context): void {
           return `- ${m.name}: ${run}${bin}`;
         });
         return { content: [{ type: "text", text: `MCP servers:\n${self}\n${lines.join("\n")}` }] };
-      }),
-  );
-
-  server.registerTool(
-    "services_restart",
-    {
-      description:
-        "Restart a local dev peer service (openchamber or opencode). Mutates running processes — requires confirm:true. Requires the dashboard running.",
-      inputSchema: {
-        service: z.enum(["openchamber", "opencode"]).describe("Which dev service to restart"),
-        confirm: z.boolean().optional().describe("Required (true) to actually restart"),
-      },
-    },
-    async ({ service, confirm }) =>
-      withDashboardErrors(async () => {
-        if (!confirm) {
-          return {
-            content: [{ type: "text", text: `Restarting ${service} interrupts it. Re-run with confirm: true.` }],
-            isError: true,
-          };
-        }
-        await dashboard.post<{ ok: boolean; restarted: boolean }>("/api/status/services/restart", { service });
-        return { content: [{ type: "text", text: `Restarted ${service}.` }] };
       }),
   );
 }

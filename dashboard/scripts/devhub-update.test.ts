@@ -6,6 +6,12 @@ import path from "node:path";
 
 const REPO_ROOT = path.resolve(__dirname, "../..");
 const CANONICAL_UPDATE_SCRIPT = path.join(REPO_ROOT, "scripts", "devhub-update.sh");
+const PERSONAL_FILES = [
+  "tasks/day.json",
+  "reps/day.json",
+  "skills/shared/my-voice/writing-style.md",
+  "skills/shared/my-voice/learned-voice.md",
+];
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf-8" }).trim();
@@ -66,7 +72,11 @@ describe("devhub-update.sh", () => {
 
     fs.mkdirSync(path.join(mirrorDir, "tasks"), { recursive: true });
     fs.writeFileSync(path.join(mirrorDir, "core.txt"), "base\n", "utf-8");
-    fs.writeFileSync(path.join(mirrorDir, "tasks", "day.json"), "[]\n", "utf-8");
+    for (const file of PERSONAL_FILES) {
+      const target = path.join(mirrorDir, file);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, "[]\n", "utf-8");
+    }
     git(mirrorDir, "add", ".");
     git(mirrorDir, "commit", "-m", "seed");
     const seed = git(mirrorDir, "rev-parse", "HEAD");
@@ -91,16 +101,24 @@ describe("devhub-update.sh", () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("does not discard dirty personal tasks when apply conflicts", () => {
-    const dirtyTasks = '[{"id":"1","text":"unsaved task edit"}]\n';
-    fs.writeFileSync(path.join(mirrorDir, "tasks", "day.json"), dirtyTasks, "utf-8");
+  it.each(PERSONAL_FILES)("preserves dirty personal %s when apply conflicts", (file) => {
+    const dirtyTasks = '[{"id":"1","text":"unsaved private edit"}]\n';
+    fs.writeFileSync(path.join(mirrorDir, file), dirtyTasks, "utf-8");
 
     const { status, output } = runUpdate(mirrorDir, [], { stubPostSync: true });
     expect(status).not.toBe(0);
     expect(output).toMatch(/Could not cleanly apply upstream changes/);
 
-    expect(fs.readFileSync(path.join(mirrorDir, "tasks", "day.json"), "utf-8")).toBe(dirtyTasks);
+    expect(fs.readFileSync(path.join(mirrorDir, file), "utf-8")).toBe(dirtyTasks);
     expect(fs.readFileSync(path.join(mirrorDir, "core.txt"), "utf-8")).toBe("mirror-change\n");
+  });
+
+  it.each(PERSONAL_FILES)("refuses a core update with staged personal %s", (file) => {
+    fs.writeFileSync(path.join(mirrorDir, file), "private change\n", "utf-8");
+    git(mirrorDir, "add", file);
+    const { status, output } = runUpdate(mirrorDir, ["--mark-synced"]);
+    expect(status).not.toBe(0);
+    expect(output).toContain("Staged changes in personal-data paths");
   });
 
   it("runs validate+sync when already up to date (retry after post-commit failure)", () => {

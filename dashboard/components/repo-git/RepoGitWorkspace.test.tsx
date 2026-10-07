@@ -23,6 +23,26 @@ describe("repo Git workspace UI", () => {
     expect(html).toBe('<div class="repo-git-workspace"></div>');
   });
 
+  it("renders a page heading and repository return link without modal controls", () => {
+    const html = renderToStaticMarkup(
+      <RepoGitWorkspace
+        repoName="demo"
+        repoPath="/tmp/demo"
+        dirtyCount={0}
+        unpushedCount={0}
+        onMutate={vi.fn()}
+        variant="page"
+        hideTrigger
+      />,
+    );
+    expect(html).toContain("<h1");
+    expect(html).toContain("demo · Git");
+    expect(html).toContain('href="/repos/demo"');
+    expect(html).not.toContain("<dialog");
+    expect(html).not.toContain('aria-label="Close git workspace"');
+    expect(html).not.toContain('aria-label="Enter fullscreen"');
+  });
+
   it("offers whole-hunk staging and marks the individually stageable lines", () => {
     const lines: DiffLine[] = [
       { type: "hunk", text: "@@ -1 +1 @@" },

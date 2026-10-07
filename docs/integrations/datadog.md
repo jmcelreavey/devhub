@@ -19,7 +19,7 @@ The Datadog integration gives quick access to alert-related views, on-call statu
 - Deep links to useful monitor and event views.
 - On-call roster matching via the Datadog On-Call API.
 - Recent alert events for on-call and team Slack channels.
-- **Investigate** button that spawns an OpenCode session with a structured prompt.
+- **Investigate** button that starts a background agent on [Agents (Paseo)](../guides/paseo-agents.md) with a structured prompt.
 - MCP tools: `datadog_oncall`, `datadog_recent_alerts`, `datadog_investigate` (see [MCP Server](../architecture/mcp-server.md)).
 
 ## Setup
@@ -55,16 +55,17 @@ When `ok: true`, the response includes `onCall` (boolean), `users[]` (roster), a
 
 `GET /api/datadog/recent-alerts` fetches the five most recent alert events for on-call and team Slack queries. Requires API key + application key. Returns `oncall[]` and `teamSlack[]` event lists when successful.
 
-## Investigate (OpenCode Handoff)
+## Investigate (Agent Handoff)
 
-`POST /api/datadog/investigate` creates an OpenCode session and sends a structured investigation prompt. Body fields:
+`POST /api/datadog/investigate` builds a structured investigation prompt and starts a background Paseo agent in the notes directory, using your default agent. Body fields:
 
 | Field | Purpose |
 | ----- | ------- |
 | `scope` | `"oncall"`, `"team"`, or `"general"` (default) |
 | `title`, `status`, `tags`, `timestampMs` | Optional event context for the prompt |
+| `prepare` | `true` returns `{ prompt, title, cwd }` without starting anything, so the UI can show the launch sheet first |
 
-Requires OpenCode; DevHub lazy-starts an ephemeral loopback instance. When `OPENCODE_SERVER_PASSWORD` is set, DevHub sends Basic auth to the OpenCode API. Returns `{ ok: true, sessionId }` or `502` when OpenCode is unreachable.
+Returns `{ ok: true, providerLabel, runId, conversationId }`, or `502` when the agent cannot start. The run shows on Agents → Chats like any other.
 
 ## Links Vs API Data
 
@@ -84,5 +85,5 @@ DevHub can use custom Datadog URLs for common operational views via `DATADOG_LIN
 | On-call always shows "not on call" | Work email matches your Datadog account; schedule ID scopes the right roster |
 | On-call panel is empty / quiet    | Application key and work email are configured; check `/api/datadog/oncall` codes |
 | Recent alerts unavailable         | Application key is configured                                      |
-| Investigate fails with 502        | OpenCode peer is running; `OPENCODE_SERVER_PASSWORD` matches if set |
+| Investigate fails with 502        | Paseo daemon is up and the default agent is ready (**Agents → Connection**) |
 | Datadog page is hidden            | Both API key and application key are saved in setup                |

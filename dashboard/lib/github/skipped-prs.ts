@@ -1,4 +1,4 @@
-// Skipped review-requested PRs. Skipping hides a PR from the "Review requested"
+// Skipped PRs — review-requested ones and your own. Skipping hides a PR from its
 // list until GitHub reports a newer `updated_at` for it (new commit, comment,
 // re-request, etc.) — then it resurfaces on its own and the skip is forgotten.
 //
@@ -9,8 +9,12 @@ import { getNotesDir } from "@/lib/notes/dir";
 import { writeAtomic, safeReadJSON, withMutex } from "@/lib/atomic-write";
 import type { GithubPrRow } from "@/lib/github/prs";
 
+export type SkippedPrKind = "authored" | "reviews";
+
 export interface SkippedPrRecord {
   url: string;
+  /** Which list it was skipped from. Absent on records from before authored PRs could be skipped — those are review requests. */
+  kind?: SkippedPrKind;
   /** updatedAt captured when the PR was skipped; resurface check compares against this */
   updatedAt: string;
   repo: string;
@@ -46,10 +50,13 @@ async function writeSkipped(skipped: Record<string, SkippedPrRecord>): Promise<v
   });
 }
 
-export async function skipPr(row: Pick<GithubPrRow, "url" | "updatedAt" | "repo" | "number" | "title">): Promise<void> {
+export async function skipPr(
+  row: Pick<GithubPrRow, "url" | "updatedAt" | "repo" | "number" | "title"> & { kind?: SkippedPrKind },
+): Promise<void> {
   const skipped = readSkipped();
   skipped[row.url] = {
     url: row.url,
+    ...(row.kind ? { kind: row.kind } : {}),
     updatedAt: row.updatedAt ?? "",
     repo: row.repo,
     number: row.number,
@@ -71,7 +78,7 @@ export function listSkippedPrs(): SkippedPrRecord[] {
 }
 
 /**
- * Drop reviews that were skipped and haven't changed since. A PR that came back
+ * Drop PRs that were skipped and haven't changed since. A PR that came back
  * (updatedAt moved on) is un-skipped for good and its entry is pruned here.
  */
 export async function applySkippedPrs(rows: GithubPrRow[]): Promise<GithubPrRow[]> {

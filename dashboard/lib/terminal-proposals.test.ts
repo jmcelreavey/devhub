@@ -25,3 +25,18 @@ describe("subscribeToTerminalProposals", () => {
     expect(broken).toHaveBeenCalledTimes(1);
   });
 });
+
+
+describe("automatic terminal runs", () => {
+  it("automatically launches ordinary MCP commands", () => {
+    const proposal = createTerminalProposal({ command: "npm run ios", source: "mcp", autoRunConfirmed: true });
+    expect(proposal.autoRun).toBe(true);
+    expect(proposal.status).toBe("pending");
+  });
+
+  it("keeps destructive-command confirmation even when automatic execution is requested", () => {
+    const proposal = createTerminalProposal({ command: "rm -rf /tmp/example", source: "mcp", autoRunConfirmed: true });
+    expect(proposal.destructive).toBe(true);
+    expect(proposal.autoRun).toBe(false);
+  });
+});

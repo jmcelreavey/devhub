@@ -75,7 +75,7 @@ npm run doctor
 npm install
 ```
 
-The root install delegates to the dashboard install. Dashboard `postinstall` (`dashboard/scripts/postinstall.ts`) bootstraps `dashboard/.env.local` from `.env.example`, creates notes archive dirs, wires `.githooks/pre-push`, seeds OpenChamber themes, and materialises plugin branding. Postinstall is skipped in CI or when `DEVHUB_SKIP_POSTINSTALL` is set — use the [full bootstrap](#full-bootstrap) in that case.
+The root install delegates to the dashboard install. Dashboard `postinstall` (`dashboard/scripts/postinstall.ts`) bootstraps `dashboard/.env.local` from `.env.example`, creates notes archive dirs, wires `.githooks/pre-push`, and materialises plugin branding. Postinstall is skipped in CI or when `DEVHUB_SKIP_POSTINSTALL` is set — use the [full bootstrap](#full-bootstrap) in that case.
 
 ## Run The Dashboard
 
@@ -89,7 +89,13 @@ Open the dashboard at:
 http://localhost:1337
 ```
 
-Use development mode for normal day-to-day work. It reloads as files change.
+Use development mode for normal day-to-day work. It reloads as files change. If the desktop app already owns port 1337, keep it running and start the checkout on separate ports:
+
+```bash
+PORT=1400 TERMINAL_PORT=1402 DEVHUB_SCHEDULER=0 npm run dev
+```
+
+Open http://localhost:1400. The scheduler stays with your primary instance.
 
 ## Production Mode
 
@@ -108,7 +114,9 @@ For a new machine, use the bootstrap script:
 bash scripts/install.sh
 ```
 
-The bootstrap process installs dashboard dependencies, wires git hooks, prepares notes directories, syncs shared configuration, and runs validation checks.
+The bootstrap process installs dashboard and MCP dependencies, wires git hooks, prepares notes directories, syncs shared configuration, builds the dashboard, and runs validation checks. A failed step returns a non-zero exit status with the error, so fix it and re-run the command.
+
+A fresh public clone uses the shared engineering standards. Add your personal identity from **Persona** or `persona/identity.txt` in your private mirror when ready; it is optional for startup.
 
 ## MCP Server Dependencies
 
@@ -139,7 +147,7 @@ Then re-run MCP sync from the dashboard Actions page.
 npm run verify
 ```
 
-This runs the dashboard lint, typecheck, and test commands.
+This checks the MCP server types, then runs dashboard lint, typecheck, tests, vendored-skill checks and a production build.
 
 ## Common Problems
 
@@ -147,7 +155,7 @@ This runs the dashboard lint, typecheck, and test commands.
 | ------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `safe-chain not installed`      | Run `npm install -g @aikidosec/safe-chain@1.1.10`, then `safe-chain setup`, and restart your terminal |
 | `This project pins npm 10`      | Run `nvm use` (or install Node 22), then re-run the install                                           |
-| Port 1337 is already in use     | Stop whatever is listening. The desktop app will refuse to start and tell you, rather than killing it |
+| Port 1337 is already in use     | Keep the existing instance running and use the separate-port command above |
 | Optional integration is missing | Open `/setup` and add the relevant credentials                                                        |
 | Skills or MCP configs are stale | Run the sync actions from the dashboard                                                               |
 | MCP client cannot start `devhub` | Run `cd mcp-servers/devhub-server && npm install`, then re-run MCP sync                              |

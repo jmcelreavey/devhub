@@ -7,7 +7,8 @@ import type { JiraTicket } from "@/lib/jira/client";
 import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
 import { onTodayCardHeaderClick, TodayViewAllLink } from "@/components/today/TodayViewAllLink";
 import { type SeverityTone } from "@/components/ui/Severity";
-import { JiraTicketQueueRow, JiraTicketRow } from "@/components/jira/JiraTicketRow";
+import { JiraTicketQueueRow } from "@/components/jira/JiraTicketRow";
+import styles from "./JiraTicketRow.module.css";
 import { useGridSize } from "@/lib/hooks/use-grid-size";
 
 interface JiraResponse {
@@ -115,25 +116,10 @@ export function JiraWidget({ collapsed = false, collapsedSummary, onToggle }: Ji
                 }).filter(Boolean).join(" · ") || "tickets"}
               </div>
             </div>
-          ) : gridSize === "2x1" ? (
-            <div className="min-h-0 overflow-auto" role="list" aria-label="Your Jira tickets">
+          ) : (
+            <div className={`${styles.list} min-h-0 overflow-auto`} role="list" aria-label="Your Jira tickets, newest activity first">
               {sortedTickets.map((t) => (
                 <JiraTicketQueueRow key={t.key} ticket={t} />
-              ))}
-            </div>
-          ) : (
-            <div className="jira-widget-ticket-scroll stagger-children" role="list" aria-label="Your Jira tickets, newest activity first">
-              {sortedTickets.map((t, i) => (
-                <div
-                  key={t.key}
-                  role="listitem"
-                  className="jira-widget-ticket-row"
-                  style={{
-                    borderTop: i === 0 ? "none" : "1px solid var(--border-muted)",
-                  }}
-                >
-                  <JiraTicketRow ticket={t} density="compact" />
-                </div>
               ))}
             </div>
           )}

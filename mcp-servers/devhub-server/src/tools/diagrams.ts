@@ -34,7 +34,7 @@ export function registerDiagramsTools(server: McpServer, ctx: Context): void {
       if (raw) {
         const data = diagramsStorage.read(diagramPath);
         if (!data) return { content: [{ type: "text", text: `Diagram not found: ${diagramPath}` }] };
-        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        return { content: [{ type: "text", text: JSON.stringify(data) }] };
       }
 
       const summary = diagramsStorage.summarize(diagramPath);

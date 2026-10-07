@@ -4,7 +4,7 @@
  */
 import { isActiveAgentRunState } from "@/lib/agent-runs/run-files";
 import { readAgentRun } from "@/lib/agent-runs/store";
-import { reconcileManagedRun } from "@/lib/aionui/lifecycle";
+import { reconcileManagedRun } from "@/lib/paseo/lifecycle";
 import {
 getTaskAgentRuns,
 isActiveTaskAgentRunStatus,

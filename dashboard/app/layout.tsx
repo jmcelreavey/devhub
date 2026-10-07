@@ -12,9 +12,9 @@ import "./globals.css";
 // Machine-local palette + @font-face for the active branding plugin (empty baseline
 // when none is enabled). Imported after globals so a plugin can override core tokens.
 import { AgentLaunchSheet } from "@/components/agents/AgentLaunchSheet";
-import { LegacyChatMigration } from "@/components/agents/LegacyChatMigration";
 import { PackagedCheckoutBanner } from "@/components/desktop/PackagedCheckoutBanner";
 import { UpdateBanner } from "@/components/desktop/UpdateBanner";
+import { PaseoUpdateNotice } from "@/components/persistent/PaseoUpdateNotice";
 import { NotesOverlayProvider } from "@/components/notes/NotesOverlayProvider";
 import { PersistentAgents } from "@/components/persistent/PersistentAgents";
 import { PersistentRepoLearnDock } from "@/components/persistent/PersistentRepoLearnDock";
@@ -174,6 +174,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               {/* Renders nothing outside the packaged desktop app. Placed above
                   <main> rather than inside it so it never scrolls away mid-download. */}
               <UpdateBanner />
+              <PaseoUpdateNotice />
               <PackagedCheckoutBanner />
 
               <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto relative">
@@ -186,7 +187,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <NotesOverlayProvider />
             <TerminalDock />
             <AgentLaunchSheet />
-            <LegacyChatMigration />
             <TerminalTranscriptModal />
             <PWAInstallPrompt />
             <KonamiGate />

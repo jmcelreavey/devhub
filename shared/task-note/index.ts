@@ -22,6 +22,8 @@ export interface TaskNoteSource {
   /** Task day file date (YYYY-MM-DD). */
   date: string;
   jiraKey?: string;
+  /** Canonical companion note, retained when the task moves between days. */
+  notePath?: string;
   /** Absolute Jira browse URL when known. */
   jiraUrl?: string;
   /** Extra hop-around refs (PR, calendar, …) from Task.links. */
@@ -30,8 +32,13 @@ export interface TaskNoteSource {
 
 /** Repo-relative note path (no extension) for a note derived from a task. */
 export function taskNotePath(task: TaskNoteSource): string {
-  const date = (task.date || "").slice(0, 10) || "undated";
+  if (task.notePath) {
+    if (!/^task-notes\/[a-zA-Z0-9_-]+$/.test(task.notePath)) throw new Error("Invalid task note path");
+    return task.notePath;
+  }
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(task.date) ? task.date : "undated";
   const id = task.id.trim() || slugify(task.text, { maxLen: 12, fallback: "task" });
+  if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new Error("Invalid task note id");
   return `task-notes/${date}-${id}`;
 }
 

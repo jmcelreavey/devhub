@@ -276,7 +276,9 @@ export function OwnRepoCard({
         setOpening(true);
         void openRepoInCursor(clonedName, toast).finally(() => setOpening(false));
       },
-      onOpenGitWorkspace: () => setGitOpen(true),
+      onOpenGitWorkspace: () => {
+        if (clonedName && clonedPath) setGitOpen(true);
+      },
       onOpenGithub: () => void openInBrowser(repo.url),
       onOpenRadar: () => router.push(ownedRepoHref(repo.fullName)),
       onOpenCatchUp: () => router.push(ownedRepoCatchUpHref(repo.fullName)),
@@ -443,9 +445,9 @@ export function OwnRepoCard({
           dirtyCount={local?.dirtyCount ?? 0}
           unpushedCount={local?.unpushedCount ?? 0}
           onMutate={onLocalMutate}
+          hideTrigger
           open={gitOpen}
           onOpenChange={setGitOpen}
-          hideTrigger
         />
       ) : null}
     </article>

@@ -199,7 +199,7 @@ describe("clusterRepoWork", () => {
 
   it("does not treat an unlinked task as related", () => {
     expect(taskLinksRepo({ links: [] }, "atlas", null)).toBe(false);
-    expect(taskBelongsToRepo({ text: "chore", links: [] }, "atlas", null)).toBe(false);
+    expect(taskBelongsToRepo({ links: [] }, "atlas", null)).toBe(false);
     expect(isJiraInProgress("In Progress")).toBe(true);
     expect(isJiraInProgress("Done")).toBe(false);
     expect(isJiraDone("Done")).toBe(true);
@@ -209,15 +209,15 @@ describe("clusterRepoWork", () => {
   it("finds a Today task via kind=repo entity-link without a #tag", () => {
     expect(
       taskBelongsToRepo(
-        { text: "Ship footer", links: [{ kind: "repo", id: "app-poc", label: "app-poc" }] },
+        { links: [{ kind: "repo", id: "app-poc", label: "app-poc" }] },
         "app-poc",
         null,
       ),
     ).toBe(true);
   });
 
-  it("finds a task via #repo tag when there is no entity-link", () => {
-    expect(taskBelongsToRepo({ text: "Ship footer #app-poc", links: [] }, "app-poc", null)).toBe(true);
+  it("does not treat a #repo token as a repo link", () => {
+    expect(taskBelongsToRepo({ links: [] }, "app-poc", null)).toBe(false);
   });
 
   it("does not bleed an atlas-only in-progress ticket onto app-poc", () => {
@@ -298,7 +298,7 @@ describe("clusterRepoWork", () => {
     expect(model.leftoverEvents).toEqual([]);
   });
 
-  it("keeps leftover calendar with a repo tag or explicit repo link inside the window", () => {
+  it("keeps leftover calendar with an explicit repo link inside the window", () => {
     const model = clusterRepoWork({
       repoName: "atlas",
       fullName: "example-org/atlas",
@@ -309,27 +309,14 @@ describe("clusterRepoWork", () => {
       prs: [],
       events: [
         {
-          id: "tagged",
-          title: "Atlas planning",
-          start: "2026-08-20T15:00:00Z",
-          tags: ["atlas"],
-        },
-        {
           id: "linked",
           title: "Repo sync",
           start: "2026-09-05T10:00:00Z",
           links: [{ kind: "repo", id: "atlas", label: "atlas" }],
         },
-        {
-          id: "old-tag",
-          title: "Ancient atlas kickoff",
-          start: "2019-03-01T10:00:00Z",
-          end: "2019-03-01T11:00:00Z",
-          tags: ["atlas"],
-        },
       ],
     });
-    expect(model.leftoverEvents.map((event) => event.id)).toEqual(["linked", "tagged"]);
+    expect(model.leftoverEvents.map((event) => event.id)).toEqual(["linked"]);
   });
 
   it("applies the date window to one-hop calendar from a repo-linked task", () => {
@@ -474,9 +461,8 @@ describe("calendar hub window", () => {
     expect(eventOverlapsHubWindow({ start: "2026-12-01T00:00:00Z" }, nowMs)).toBe(false);
   });
 
-  it("requires an explicit repo link or a tag that is this repo", () => {
-    expect(calendarEventBelongsOnHub({ tags: ["standup"] }, "atlas", null)).toBe(false);
-    expect(calendarEventBelongsOnHub({ tags: ["atlas"] }, "atlas", null)).toBe(true);
+  it("requires an explicit repo link", () => {
+    expect(calendarEventBelongsOnHub({ links: [] }, "atlas", null)).toBe(false);
     expect(
       calendarEventBelongsOnHub(
         { links: [{ kind: "repo", id: "example-org/atlas", label: "atlas" }] },

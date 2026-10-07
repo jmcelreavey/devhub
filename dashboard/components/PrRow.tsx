@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { prRowStatus } from "@/lib/github/pr-row-status";
 import type { GithubPrRow } from "@/lib/github/prs";
 import type { PrChecksState } from "@/lib/github/branch-pr";
-import { extractTags } from "@/lib/entity-note";
 import { PersonChip } from "@/components/PersonChip";
 import { PrReviewNoteLink } from "@/components/PrReviewNoteLink";
 import {
@@ -92,7 +91,6 @@ export function PrRow({
     label: target.title,
     prRepo: target.repo,
     prNumber: target.number,
-    extraTags: extractTags(target.title),
     enabled: menu.target !== null,
   });
   const groups = buildPrRowMenuGroups({

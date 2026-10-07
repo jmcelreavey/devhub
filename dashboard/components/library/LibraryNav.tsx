@@ -41,6 +41,8 @@ export interface LibraryNavItem {
   title: string;
   href: string;
   description?: string;
+  /** Collapsible sub-heading inside the group, e.g. the repo a PR review is about. */
+  section?: string;
 }
 
 export interface LibraryNavGroup {
@@ -115,6 +117,30 @@ function folderPathForGroup(kind: VaultRowKind, group: LibraryNavGroup): string 
   return vaultFolderPath(kind, group.id);
 }
 
+/** Sections in first-seen order, then items with no section — folders before files. */
+function splitSections(items: LibraryNavItem[]): {
+  sections: { label: string; items: LibraryNavItem[] }[];
+  loose: LibraryNavItem[];
+} {
+  const sections = new Map<string, LibraryNavItem[]>();
+  const loose: LibraryNavItem[] = [];
+  for (const item of items) {
+    if (!item.section) {
+      loose.push(item);
+      continue;
+    }
+    const list = sections.get(item.section) ?? [];
+    list.push(item);
+    sections.set(item.section, list);
+  }
+  return { sections: [...sections].map(([label, list]) => ({ label, items: list })), loose };
+}
+
+/** Section toggles share the group store; the prefix keeps them off group ids. */
+function sectionStateKey(groupId: string, section: string): string {
+  return `section:${groupId}/${section}`;
+}
+
 type NavTarget = { type: "file"; item: LibraryNavItem } | { type: "folder"; group: LibraryNavGroup };
 
 /**
@@ -127,6 +153,8 @@ type NavTarget = { type: "file"; item: LibraryNavItem } | { type: "folder"; grou
  * Only the group you are reading is expanded. With everything open this was a
  * long scroll — a better-labelled version of the flat file list it replaced.
  * Manual toggles are remembered per library; the active group always opens.
+ * Items with a `section` nest one level deeper under the same rules, so a
+ * 160-note group opens as a list of repos rather than 160 rows.
  */
 export function LibraryNav({
   groups,
@@ -199,7 +227,8 @@ export function LibraryNav({
           (item) =>
             item.title.toLowerCase().includes(query) ||
             item.slug.toLowerCase().includes(query) ||
-            (item.description ?? "").toLowerCase().includes(query),
+            (item.description ?? "").toLowerCase().includes(query) ||
+            (item.section ?? "").toLowerCase().includes(query),
         ),
       }))
       .filter((group) => group.items.length > 0);
@@ -434,6 +463,24 @@ export function LibraryNav({
     );
   }
 
+  const renderItem = (item: LibraryNavItem) => (
+    <li key={item.slug} className="lib-nav-item group" {...menu.bindRow({ type: "file", item })}>
+      <Link
+        href={item.href}
+        className="lib-nav-link"
+        data-active={pathname === item.href}
+        title={item.title}
+        onContextMenu={(event) => event.preventDefault()}
+      >
+        {item.title}
+      </Link>
+      <RowMenuKebab
+        label={`Actions for ${item.title}`}
+        onOpen={(x, y) => menu.openAtPoint(x, y, { type: "file", item })}
+      />
+    </li>
+  );
+
   return (
     <nav className="lib-nav" aria-label={label}>
       {filtered.map((group) => {
@@ -441,6 +488,7 @@ export function LibraryNav({
         const open = query
           ? true
           : (manual[group.id] ?? (group.id === activeGroup && !group.secondary));
+        const { sections, loose } = splitSections(group.items);
         return (
           <div key={group.id} className="lib-nav-group">
             <div className="lib-nav-heading-row group" {...menu.bindRow({ type: "folder", group })}>
@@ -469,22 +517,35 @@ export function LibraryNav({
             </div>
             {open ? (
               <ul className="lib-nav-list">
-                {group.items.map((item) => (
-                  <li key={item.slug} className="lib-nav-item group" {...menu.bindRow({ type: "file", item })}>
-                    <Link
-                      href={item.href}
-                      className="lib-nav-link"
-                      data-active={pathname === item.href}
-                      onContextMenu={(event) => event.preventDefault()}
-                    >
-                      {item.title}
-                    </Link>
-                    <RowMenuKebab
-                      label={`Actions for ${item.title}`}
-                      onOpen={(x, y) => menu.openAtPoint(x, y, { type: "file", item })}
-                    />
-                  </li>
-                ))}
+                {sections.map((section) => {
+                  const stateKey = sectionStateKey(group.id, section.label);
+                  // Collapsed unless it holds the open item: an expanded area should
+                  // read as a short table of contents, not as every note it holds.
+                  const sectionOpen = query
+                    ? true
+                    : (manual[stateKey] ?? section.items.some((item) => item.href === pathname));
+                  return (
+                    <li key={stateKey} className="lib-nav-section">
+                      <button
+                        type="button"
+                        className="lib-nav-section-toggle"
+                        aria-expanded={sectionOpen}
+                        title={section.label}
+                        onClick={() => toggle(stateKey, !sectionOpen)}
+                      >
+                        <ChevronDown size={10} className="lib-nav-chevron" aria-hidden />
+                        <span className="lib-nav-section-label">{section.label}</span>
+                        <span className="lib-nav-count">{section.items.length}</span>
+                      </button>
+                      {sectionOpen ? (
+                        <ul className="lib-nav-list lib-nav-sublist">
+                          {section.items.map(renderItem)}
+                        </ul>
+                      ) : null}
+                    </li>
+                  );
+                })}
+                {loose.map(renderItem)}
               </ul>
             ) : null}
           </div>

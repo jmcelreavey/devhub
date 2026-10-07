@@ -17,7 +17,8 @@ export const DASHBOARD_MANAGED_ENV_KEYS = [
   "DEVHUB_IDENTITY_FILE",
   "DEVHUB_BIND_HOST",
   "DEVHUB_LAN_PROXY_HOST",
-  "OPENCHAMBER_HOST",
+  "DEVHUB_PASEO_PASSWORD",
+  // Legacy name for the Paseo password (it began as OpenChamber's UI password).
   "OPENCHAMBER_UI_PASSWORD",
   "OPENCODE_BIND_HOST",
   "GOOGLE_CLIENT_ID",
@@ -36,6 +37,8 @@ export const DASHBOARD_MANAGED_ENV_KEYS = [
   "AI_API_KEY",
   "AI_BASE_URL",
   "AI_MODEL",
+  // Agents → Usage: org admin key for billed OpenAI spend (project keys lack api.usage.read).
+  "OPENAI_ADMIN_KEY",
   // Last30Days research integration. Secrets can be fetched from the "devhub"
   // 1Password item; local paths stay in .env.local unless DEVHUB_OP_SYNC_LOCAL=1.
   "LAST30DAYS_MEMORY_DIR",
@@ -81,7 +84,7 @@ const DATADOG_PROCESS_KEYS = ["DATADOG_API_KEY", "DATADOG_APPLICATION_KEY", "DAT
 
 const BI_PROCESS_KEYS = ["AWS_PROFILE", "OKTA_PASSWORD", "BI_OPS_USER_EMAIL", "CAPI_REPO_PATH"] as const;
 
-const CHAMBER_PROCESS_KEYS = ["OPENCHAMBER_HOST", "OPENCHAMBER_UI_PASSWORD"] as const;
+const PASEO_PROCESS_KEYS = ["DEVHUB_PASEO_PASSWORD", "OPENCHAMBER_UI_PASSWORD"] as const;
 
 const AGENT_PROCESS_KEYS = [
   "DEVHUB_AI_PROVIDER",
@@ -119,12 +122,11 @@ export function syncBiProcessEnvFromOverrides(overrides: Map<string, string>): v
 }
 
 /**
- * Keeps the OpenChamber bind host + UI password live in this process after a
- * save, so the in-app "Restart" button (which spawns the daemon from
- * process.env) picks up changes without a full relaunch.
+ * Keeps the Paseo password live in this process after a save, so Agents →
+ * Connection setup and pairing use it without a relaunch.
  */
-export function syncChamberProcessEnvFromOverrides(overrides: Map<string, string>): void {
-  syncProcessEnvFromOverrides(CHAMBER_PROCESS_KEYS, overrides);
+export function syncPaseoProcessEnvFromOverrides(overrides: Map<string, string>): void {
+  syncProcessEnvFromOverrides(PASEO_PROCESS_KEYS, overrides);
 }
 
 /** Keeps agent CLI handoff settings live in this process after a save. */
@@ -147,8 +149,8 @@ export function getDashboardEnvLocalPath(): string {
 /**
  * Create the config file's parent at `0700`.
  *
- * This file holds Jira tokens, Datadog keys, Google refresh tokens, and an
- * OpenChamber UI password in plaintext. On a multi-user machine the default
+ * This file holds Jira tokens, Datadog keys, Google refresh tokens, and the
+ * Paseo daemon password in plaintext. On a multi-user machine the default
  * umask would leave both the directory and the file world-readable, which for
  * this content is not an acceptable default — so both are tightened
  * explicitly rather than relying on whatever the user's umask happens to be.

@@ -326,6 +326,8 @@ export function defaultHrefForRef(ref: EntityRef): string | undefined {
 const JIRA_KEY_EXACT_RE = /^[A-Z][A-Z0-9]*-\d+$/;
 /** Key embedded in a browse URL or free text. */
 const JIRA_KEY_EMBEDDED_RE = /\b([A-Z][A-Z0-9]*-\d+)\b/;
+/** `https://github.com/owner/repo/pull/123` → owner/repo, 123. */
+const GITHUB_PR_URL_RE = /^https?:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/pull\/(\d+)(?:[/?#].*)?$/i;
 
 /**
  * Accept a bare key (`PTF-1234`) or a browse URL
@@ -405,6 +407,12 @@ export function canonicalizeEntityRef(ref: EntityRef): EntityRef | null {
     // A `## Links` line parses to id=<event URL>; the task link holds the picker id.
     const id = calendarIdFromEventUrl(ref.id);
     return id ? { ...ref, id, href: ref.href ?? ref.id } : ref;
+  }
+
+  if (ref.kind === "pr") {
+    // A `## Links` line parses to id=<PR URL>; everything else keys PRs by owner/repo#n.
+    const match = ref.id.match(GITHUB_PR_URL_RE);
+    return match ? { ...ref, id: `${match[1]}#${match[2]}`, href: ref.href ?? ref.id } : ref;
   }
 
   if (ref.kind === "task") {

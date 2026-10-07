@@ -34,16 +34,16 @@ export function isStepComplete(step: Step, status: SetupStatus): boolean {
 export function WelcomeStep({
   allowLan,
   onAllowLanChange,
-  chamberUiPassword,
-  onChamberUiPasswordChange,
+  agentsPassword,
+  onAgentsPasswordChange,
   hasExistingPassword,
   goals,
   onGoalsChange,
 }: {
   allowLan: boolean;
   onAllowLanChange: (v: boolean) => void;
-  chamberUiPassword: string;
-  onChamberUiPasswordChange: (v: string) => void;
+  agentsPassword: string;
+  onAgentsPasswordChange: (v: string) => void;
   hasExistingPassword: boolean;
   goals: GoalId[];
   onGoalsChange: (next: GoalId[]) => void;
@@ -98,69 +98,70 @@ export function WelcomeStep({
           </div>
         </div>
       </label>
-      {allowLan && (
-        <div
-          style={{
-            padding: "12px 14px",
-            borderRadius: "8px",
-            border: "1px solid var(--border)",
-            background: "var(--bg-elevated)",
-            marginBottom: "20px",
-          }}
-        >
-          <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text)" }}>
-            OpenChamber UI password
-          </div>
-          <div style={{ fontSize: "12px", color: "var(--text-subtle)", lineHeight: 1.5, marginTop: "4px", marginBottom: "10px" }}>
-            Required before exposing OpenChamber through the LAN proxy. Saved as <code style={{ fontSize: "11px" }}>OPENCHAMBER_UI_PASSWORD</code>.
-            {hasExistingPassword && " A password is already configured; leave blank to keep it."}
-          </div>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <input
-              type="text"
-              value={chamberUiPassword}
-              onChange={(e) => onChamberUiPasswordChange(e.target.value)}
-              placeholder={hasExistingPassword ? "•••••••• (unchanged)" : "Enter or generate a password"}
-              autoComplete="off"
-              spellCheck={false}
-              style={{
-                flex: 1,
-                padding: "8px 10px",
-                borderRadius: "6px",
-                border: "1px solid var(--border)",
-                background: "var(--bg)",
-                color: "var(--text)",
-                fontSize: "13px",
-                fontFamily: "var(--font-mono, monospace)",
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => {
-                const bytes = new Uint8Array(18);
-                crypto.getRandomValues(bytes);
-                const pw = btoa(String.fromCharCode(...bytes))
-                  .replace(/[+/=]/g, "")
-                  .slice(0, 24);
-                onChamberUiPasswordChange(pw);
-              }}
-              style={{
-                padding: "8px 14px",
-                borderRadius: "6px",
-                border: "1px solid var(--border)",
-                background: "var(--bg)",
-                color: "var(--text)",
-                cursor: "pointer",
-                fontSize: "13px",
-                fontWeight: 600,
-                whiteSpace: "nowrap",
-              }}
-            >
-              Generate
-            </button>
-          </div>
+      {/* Not LAN-only: `npm run agents:install` refuses to run without it. */}
+      <div
+        style={{
+          padding: "12px 14px",
+          borderRadius: "8px",
+          border: "1px solid var(--border)",
+          background: "var(--bg-elevated)",
+          marginBottom: "20px",
+        }}
+      >
+        <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text)" }}>
+          Agents password
         </div>
-      )}
+        <div style={{ fontSize: "12px", color: "var(--text-subtle)", lineHeight: 1.5, marginTop: "4px", marginBottom: "10px" }}>
+          Protects the local Paseo daemon behind <strong>Agents</strong>; setting it up needs one. Saved as{" "}
+          <code style={{ fontSize: "11px" }}>DEVHUB_PASEO_PASSWORD</code>. A changed password takes effect after{" "}
+          <strong>Agents → Connection → Reinstall</strong>.
+          {hasExistingPassword && " A password is already configured; leave blank to keep it."}
+        </div>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <input
+            type="text"
+            value={agentsPassword}
+            onChange={(e) => onAgentsPasswordChange(e.target.value)}
+            placeholder={hasExistingPassword ? "•••••••• (unchanged)" : "Enter or generate a password"}
+            autoComplete="off"
+            spellCheck={false}
+            style={{
+              flex: 1,
+              padding: "8px 10px",
+              borderRadius: "6px",
+              border: "1px solid var(--border)",
+              background: "var(--bg)",
+              color: "var(--text)",
+              fontSize: "13px",
+              fontFamily: "var(--font-mono, monospace)",
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const bytes = new Uint8Array(18);
+              crypto.getRandomValues(bytes);
+              const pw = btoa(String.fromCharCode(...bytes))
+                .replace(/[+/=]/g, "")
+                .slice(0, 24);
+              onAgentsPasswordChange(pw);
+            }}
+            style={{
+              padding: "8px 14px",
+              borderRadius: "6px",
+              border: "1px solid var(--border)",
+              background: "var(--bg)",
+              color: "var(--text)",
+              cursor: "pointer",
+              fontSize: "13px",
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Generate
+          </button>
+        </div>
+      </div>
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         <FeatureCard
           title="Core paths"
@@ -1385,10 +1386,7 @@ export function DoneStep({ saveResult }: { saveResult: { ok: boolean; message: s
         <TipCard>
           Use ⌘P for the command palette, ⌘N for notes, ⌘T for tasks, and ⌘D for diagrams from any page.
         </TipCard>
-        <TipCard>
-          Press ? for shortcuts when DevHub has focus. OpenChamber in an iframe won&apos;t receive those keys - use{" "}
-          <strong>Chamber</strong> → &quot;Shortcuts&quot; or open OpenChamber in a new tab.
-        </TipCard>
+        <TipCard>Press ? for the full shortcut list when DevHub has focus.</TipCard>
       </div>
     </div>
   );

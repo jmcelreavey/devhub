@@ -59,11 +59,13 @@ run_post_pull_steps() {
 
 # Personal-data paths: excluded from the pull (never expected from upstream) AND ignored by
 # the dirty-tree guard, so live-dirty notes/tasks/upstarts don't block a pull from the UI.
-EXCLUDES=(':!notes' ':!tasks' ':!collections' ':!upstarts' ':!dashboard/.env.local'
-          ':!persona/identity.txt' ':!TEMPLATE_AND_PLUGIN_PLAN.md' ':!scripts/make-public-seed.sh')
+EXCLUDES=(':!notes' ':!tasks' ':!reps' ':!collections' ':!upstarts' ':!dashboard/.env.local'
+          ':!persona/identity.txt' ':!TEMPLATE_AND_PLUGIN_PLAN.md' ':!scripts/make-public-seed.sh'
+          ':!skills/shared/my-voice/writing-style.md' ':!skills/shared/my-voice/learned-voice.md')
 # Paths that may stay dirty during a pull — never commit them as part of a core update.
-PERSONAL_PATHS=(notes tasks collections upstarts dashboard/.env.local persona/identity.txt
-                TEMPLATE_AND_PLUGIN_PLAN.md scripts/make-public-seed.sh)
+PERSONAL_PATHS=(notes tasks reps collections upstarts dashboard/.env.local persona/identity.txt
+                TEMPLATE_AND_PLUGIN_PLAN.md scripts/make-public-seed.sh
+                skills/shared/my-voice/writing-style.md skills/shared/my-voice/learned-voice.md)
 
 # --- guards ---
 BRANCH="$(git branch --show-current)"

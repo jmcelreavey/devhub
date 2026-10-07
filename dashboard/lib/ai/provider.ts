@@ -21,10 +21,10 @@ interface ProviderConfig {
   modelId: string;
 }
 
-function resolveProviderConfig(): ProviderConfig {
+function resolveProviderConfig(modelOverride?: string): ProviderConfig {
   const apiKey = process.env.AI_API_KEY!.trim();
   const baseURL = (process.env.AI_BASE_URL?.trim() || DEFAULT_BASE_URL).replace(/\/$/, "");
-  const modelId = process.env.AI_MODEL?.trim() || DEFAULT_MODEL;
+  const modelId = modelOverride?.trim() || process.env.AI_MODEL?.trim() || DEFAULT_MODEL;
   return { apiKey, baseURL, modelId };
 }
 
@@ -40,9 +40,9 @@ function isOpenAiEndpoint(baseURL: string): boolean {
  * openai-compatible provider doesn't); everything else (GLM/z.ai, OpenRouter,
  * Together, local Ollama/LM Studio, …) uses the openai-compatible provider.
  */
-export function getNotesAiModel(activity?: AiActivityOptions): LanguageModel | null {
+export function getNotesAiModel(activity?: AiActivityOptions, modelOverride?: string): LanguageModel | null {
   if (!isNotesAiConfigured()) return null;
-  const { apiKey, baseURL, modelId } = resolveProviderConfig();
+  const { apiKey, baseURL, modelId } = resolveProviderConfig(modelOverride);
   const model = isOpenAiEndpoint(baseURL)
     ? createOpenAI({ apiKey, baseURL })(modelId)
     : createOpenAICompatible({ name: PROVIDER_NAME, baseURL, apiKey })(modelId);
@@ -59,8 +59,8 @@ const DISABLE_THINKING = {
  * …) reject unknown body fields, so it's only emitted when pointed at a GLM model
  * on z.ai. For any other provider this returns an empty object.
  */
-export function getNotesAiCallOptions(): typeof DISABLE_THINKING | Record<string, never> {
-  const { baseURL, modelId } = resolveProviderConfig();
+export function getNotesAiCallOptions(modelOverride?: string): typeof DISABLE_THINKING | Record<string, never> {
+  const { baseURL, modelId } = resolveProviderConfig(modelOverride);
   const isGlm = /z\.ai/i.test(baseURL) || /glm/i.test(modelId);
   return isGlm ? DISABLE_THINKING : {};
 }

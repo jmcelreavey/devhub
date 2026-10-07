@@ -17,7 +17,7 @@ import {
  * diagram should still tell you what it was trying to say.
  */
 export function DocMermaid({ code }: { code: string }) {
-  const { mode } = useTheme();
+  const { resolvedMode: mode } = useTheme();
   const [svg, setSvg] = useState("");
   const [error, setError] = useState("");
   const renderId = useId().replace(/[^a-zA-Z0-9]/g, "");

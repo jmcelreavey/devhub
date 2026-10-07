@@ -16,7 +16,6 @@ import { SearchInput } from "@/components/ui/SearchInput";
 import { launchAgentJob } from "@/lib/agent-job";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { useToast } from "@/lib/hooks/use-toast";
-import type { RepoProject } from "@/lib/projects";
 import {
 Archive,
 Bot,
@@ -28,9 +27,11 @@ ExternalLink,
 FolderOpen,
 GitBranch,
 GitFork,
+ListTodo,
 MonitorPlay,
 Rocket,
 ScanSearch,
+ScrollText,
 Shield,
 ShieldCheck,
 TerminalSquare,
@@ -39,7 +40,7 @@ Trash2,
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type CSSProperties,type ReactNode } from "react";
-import type { GithubRepoInfo,LocalRepoFilter,RepoInfo } from "./types";
+import type { GithubRepoInfo,LocalRepoFilter,RepoInfo,RepoTaskPreview } from "./types";
 
 interface RepoApps {
   gitkraken: boolean;
@@ -66,6 +67,10 @@ interface LocalRepoCardProps {
   owned: boolean;
   ownershipBusy: string | null;
   onToggleOwned: (fullName: string, owned: boolean) => void;
+  /** Open tasks linked to this repo, in Today's order. */
+  openTasks?: readonly RepoTaskPreview[];
+  /** Automatically assessed rules already in use. */
+  conventionsActive?: number;
 }
 
 interface GithubRepoCardProps {
@@ -88,6 +93,10 @@ export function SearchCard({
   changedCount,
   unpushedCount,
   worktreeCount,
+  source,
+  activeProjectLabel,
+  hasFilters,
+  onClearFilters,
 }: {
   query: string;
   onQueryChange: (value: string) => void;
@@ -96,59 +105,63 @@ export function SearchCard({
   changedCount: number;
   unpushedCount: number;
   worktreeCount: number;
-  /** Named repo groups (e.g. frontend + its app); chips filter the grid. */
-  projects?: RepoProject[];
-  activeProjectId?: string | null;
-  onProjectChange?: (id: string | null) => void;
+  source: "local" | "github";
+  activeProjectLabel?: string;
+  hasFilters: boolean;
+  onClearFilters: () => void;
 }) {
+  const filterLabels = { changed: "Changed", unpushed: "Unpushed", worktree: "Worktrees" };
+  const activeFilters = source === "local"
+    ? [activeProjectLabel, localFilter ? filterLabels[localFilter] : null, query.trim() ? `“${query.trim()}”` : null].filter(Boolean)
+    : [];
   return (
-    /*
-      One row, not two. The old layout put a "🔍 Search" label on its own line
-      directly above the input — with the magnifier it read as a second, empty
-      search field stacked on the real one. The placeholder already says what
-      the input does, so the label is now screen-reader only and the filter
-      chips share the input's row, which also buys back a row of vertical space
-      on a page that has to show 52 repos.
-    */
-    <div className="card mb-3 repos-toolbar" style={{ padding: 12 }}>
+    <div className="card mb-3 repos-toolbar p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor="repos-filter" className="sr-only">
-          Filter local repositories, or type to search GitHub
-        </label>
         <SearchInput
           id="repos-filter"
-          wrapperClassName="min-w-[14rem] flex-1 mb-0"
-          placeholder="Filter local… type to also search GitHub"
+          wrapperClassName="min-w-0 basis-56 flex-1 mb-0"
+          placeholder={source === "local" ? "Filter local repositories…" : "Search GitHub repositories…"}
           value={query}
           onChange={onQueryChange}
         />
-        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter local repos">
-          <FilterChip
-            label="Changed"
-            count={changedCount}
-            active={localFilter === "changed"}
-            tone="warning"
-            onClick={() => onLocalFilterChange(localFilter === "changed" ? null : "changed")}
-          />
-          <FilterChip
-            label="Unpushed"
-            count={unpushedCount}
-            active={localFilter === "unpushed"}
-            tone="accent"
-            onClick={() => onLocalFilterChange(localFilter === "unpushed" ? null : "unpushed")}
-          />
-          <FilterChip
-            label="Worktrees"
-            count={worktreeCount}
-            active={localFilter === "worktree"}
-            onClick={() => onLocalFilterChange(localFilter === "worktree" ? null : "worktree")}
-          />
-        </div>
+        {source === "local" && (
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter local repos">
+            <FilterChip
+              label="Changed"
+              count={changedCount}
+              active={localFilter === "changed"}
+              tone="warning"
+              onClick={() => onLocalFilterChange(localFilter === "changed" ? null : "changed")}
+            />
+            <FilterChip
+              label="Unpushed"
+              count={unpushedCount}
+              active={localFilter === "unpushed"}
+              tone="accent"
+              onClick={() => onLocalFilterChange(localFilter === "unpushed" ? null : "unpushed")}
+            />
+            <FilterChip
+              label="Worktrees"
+              count={worktreeCount}
+              active={localFilter === "worktree"}
+              onClick={() => onLocalFilterChange(localFilter === "worktree" ? null : "worktree")}
+            />
+          </div>
+        )}
+        {source === "local" && hasFilters && (
+          <button type="button" className="btn btn-ghost text-xs shrink-0" onClick={onClearFilters}>
+            Clear filters
+          </button>
+        )}
       </div>
+      {activeFilters.length > 0 && (
+        <p className="mt-2 mb-0 text-xs text-text-muted break-words">
+          Showing: {activeFilters.join(" · ")}
+        </p>
+      )}
     </div>
   );
 }
-
 function FilterChip({
   label,
   count = 0,
@@ -238,11 +251,14 @@ export function LocalRepoCard({
   owned,
   ownershipBusy,
   onToggleOwned,
+  openTasks = [],
+  conventionsActive = 0,
 }: LocalRepoCardProps) {
   const router = useRouter();
   const prompt = usePrompt();
   const toast = useToast();
   const menu = useContextMenu<RepoInfo>();
+
   const busy = opening !== null || removing !== null;
   const target = menu.target ?? repo;
 
@@ -305,6 +321,20 @@ export function LocalRepoCard({
           icon: <Brain size={12} />,
           onSelect: () => onLearn(target),
         },
+        ...(ownershipFullName
+          ? [
+              {
+                id: "conventions",
+                label: "Conventions",
+                description:
+                  conventionsActive > 0
+                    ? `${conventionsActive} active rule${conventionsActive === 1 ? "" : "s"}`
+                    : "Rules learned and assessed automatically",
+                icon: <ScrollText size={12} />,
+                onSelect: () => router.push(`/conventions?repo=${encodeURIComponent(ownershipFullName)}`),
+              },
+            ]
+          : []),
         {
           id: "dx",
           label: "DX Audit",
@@ -430,8 +460,9 @@ export function LocalRepoCard({
   const rowBind = menu.bindRow(repo);
   return (
     <div
-      className="card group"
+      className="card group repo-card"
       data-repo={repo.name}
+      data-has-work={openTasks.length > 0 || undefined}
       style={{ padding: 0, overflow: "visible", cursor: "pointer" }}
       {...rowBind}
       onClick={(e) => {
@@ -447,8 +478,9 @@ export function LocalRepoCard({
             <div className="flex items-center gap-2 font-semibold text-sm break-words leading-snug text-text">
               <Link
                 href={`/repos/${encodeURIComponent(repo.name)}`}
-                className="hover:text-accent"
+                className="hover:text-accent truncate"
                 aria-label={`Open repo ${repo.name}`}
+                title={repo.path}
                 data-repo-link={repo.name}
                 onClick={(e) => {
                   if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
@@ -464,10 +496,21 @@ export function LocalRepoCard({
                   owned
                 </span>
               ) : null}
+              {conventionsActive > 0 && ownershipFullName ? (
+                <Link
+                  href={`/conventions?repo=${encodeURIComponent(ownershipFullName)}`}
+                  className="badge badge-muted shrink-0 whitespace-nowrap"
+                  style={{ fontSize: 10 }}
+                  title="Active conventions used by agents for this repo"
+                >
+                  {conventionsActive} rules
+                </Link>
+              ) : null}
             </div>
-            {(repo.branch || repo.worktreeOf) && (
-              <div className="mt-0.5 flex flex-wrap items-center gap-2">
+            {(repo.branch || repo.worktreeOf || (repo.worktreeCount ?? 0) > 0) && (
+              <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-2">
                 {repo.branch && <MetaChip icon={<GitBranch size={11} />} label={repo.branch} />}
+                {(repo.worktreeCount ?? 0) > 0 && <Link className="text-xs text-text-muted hover:text-accent" href={`/repos/${encodeURIComponent(repo.name)}/git?tab=worktrees`}>{repo.worktreeCount} worktrees · Review cleanup</Link>}
                 {repo.branch && githubUrl ? (
                   <RepoOpenPrLink repoName={repo.name} branch={repo.branch} />
                 ) : null}
@@ -480,7 +523,13 @@ export function LocalRepoCard({
               </div>
             )}
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
+          {/*
+            Upstart was a primary button on every card — 50-odd identical blue
+            buttons shouting over the repo names. The card itself is the primary
+            action (it opens the hub); upstart is one hover away, and stays in
+            the menu and on the hub (⌘⏎).
+          */}
+          <div className="flex shrink-0 items-center gap-0.5">
             <HoverTip
               label={
                 repo.hasUpstart
@@ -491,10 +540,10 @@ export function LocalRepoCard({
               <button
                 type="button"
                 onClick={() => onUpstart(repo)}
-                className="btn btn-primary"
-                style={{ fontSize: "12px", padding: "4px 10px" }}
+                className="row-menu-kebab reveal-on-hover"
+                aria-label={`Upstart ${repo.name}`}
               >
-                <Rocket size={12} /> Upstart
+                <Rocket size={14} aria-hidden />
               </button>
             </HoverTip>
             <RowMenuKebab
@@ -555,18 +604,22 @@ export function LocalRepoCard({
         })()}
 
         {/*
-          Was a <details> containing only its <summary> — a disclosure triangle
-          with cursor:pointer that expanded to nothing, on all 52 cards. An
-          affordance that does nothing when clicked is worse than no affordance.
-          Now a plain line: same information, no false promise, one less row of
-          chrome per card.
+          What you're doing here, not just what git thinks. The path line this
+          replaced was the scan folder + the name above it on every card; it
+          lives in the name's tooltip now.
         */}
-        <div
-          className="repos-card-path mt-1.5 truncate font-mono"
-          title={repo.path}
-        >
-          {repo.path}
-        </div>
+        {openTasks.length > 0 ? (
+          <div className="repo-card-work" title={openTasks.map((task) => task.text).join("\n")}>
+            <ListTodo size={12} className="shrink-0" aria-hidden />
+            {openTasks[0].jiraKey ? (
+              <span className="repo-card-work-key">{openTasks[0].jiraKey}</span>
+            ) : null}
+            <span className="truncate">{openTasks[0].text}</span>
+            {openTasks.length > 1 ? (
+              <span className="repo-card-work-more">+{openTasks.length - 1}</span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       <ContextMenu
         open={menu.target !== null}
@@ -694,9 +747,9 @@ export function GithubRepoCard({
 
 function MetaChip({ icon, label }: { icon: ReactNode; label: string }) {
   return (
-    <span className="flex items-center gap-1 text-xs text-text-subtle">
+    <span className="flex min-w-0 items-center gap-1 text-xs text-text-subtle">
       {icon}
-      {label}
+      <span className="truncate" title={label}>{label}</span>
     </span>
   );
 }

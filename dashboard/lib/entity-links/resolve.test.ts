@@ -91,7 +91,7 @@ describe("resolveEntityLinks", () => {
     expect(result.related.some((r) => r.kind === "jira" && r.id === "PTF-100")).toBe(true);
   });
 
-  it("surfaces inline #tags from a note body as related refs", () => {
+  it("does not turn inline #tokens in a note body into links", () => {
     fs.mkdirSync(path.join(root, "notes", "learnings"), { recursive: true });
     fs.writeFileSync(
       path.join(root, "notes", "learnings", "tagged.json"),
@@ -106,9 +106,8 @@ describe("resolveEntityLinks", () => {
     );
 
     const result = resolveEntityLinks("note", "learnings/tagged");
-    const tags = result.related.filter((r) => r.kind === "tag");
-    expect(tags.map((t) => t.id)).toEqual(["devhub", "perf"]);
-    expect(tags[0]?.href).toBe("/work?tag=devhub");
+    expect(result.related.some((r) => r.kind === "tag")).toBe(false);
+    expect(result.notes.map((n) => n.id)).toContain("learnings/tagged");
   });
 
   it("reads a note stored as a bare block array (the actual on-disk shape)", () => {
@@ -124,7 +123,8 @@ describe("resolveEntityLinks", () => {
     );
 
     const result = resolveEntityLinks("note", "learnings/bare");
-    expect(result.related.map((r) => r.id)).toContain("devhub");
+    expect(result.notes.map((n) => n.id)).toContain("learnings/bare");
+    expect(result.related.some((r) => r.kind === "tag")).toBe(false);
   });
 
   it("doesn't double up a linking task across a rollover (stale copy left behind + fresh id today)", () => {

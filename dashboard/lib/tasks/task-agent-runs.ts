@@ -42,7 +42,7 @@ export interface TaskAgentRunRecord {
   updatedAt: string;
   prUrl?: string;
   branch?: string;
-  /** Checkout the run worked in — lets the PR watcher find a PR by branch. */
+  /** Checkout the run worked in, retained as handoff context. */
   cwd?: string;
   sessionId?: string;
   terminalSessionId?: string;
@@ -400,6 +400,14 @@ export async function upsertTaskAgentRun(input: UpsertTaskAgentRunInput): Promis
       };
       applyOptionalString(next, "provider", input.provider ?? prev.provider);
       applyOptionalString(next, "prUrl", input.prUrl === undefined ? prev.prUrl : input.prUrl);
+      // Cached findings belong to the old PR, not to the task or its replacement.
+      if (input.prUrl !== undefined && (next.prUrl !== prev.prUrl || !next.prUrl)) {
+        delete next.prState;
+        delete next.prCheckedAt;
+        delete next.prSeenAt;
+        delete next.attention;
+        delete next.attentionHandled;
+      }
       applyOptionalString(next, "branch", input.branch === undefined ? prev.branch : input.branch);
       applyOptionalString(next, "sessionId", input.sessionId === undefined ? prev.sessionId : input.sessionId);
       applyOptionalString(

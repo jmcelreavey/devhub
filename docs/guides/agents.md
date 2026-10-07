@@ -6,19 +6,15 @@ icon: Bot
 tags: [agents]
 related:
   - guides/skills
-  - guides/aionui-agents
+  - guides/paseo-agents
   - architecture/persona-system
 ---
 
 # Shared Agents
 
-For the dashboard **Agents** page that embeds AionUi (coding chats, auto-review, MCP), see [Agents (AionUi)](aionui-agents.md).
+For the dashboard **Agents** page, backed by Paseo (coding chats, auto-review, MCP), see [Agents (Paseo)](paseo-agents.md).
 
-Shared agents are reusable subagent personas synced from `agents/shared/` into local tool directories (Cursor, Codex, OpenCode, Antigravity, and others). The dashboard **Agents → Agents** tab lists the catalog and runs **Sync agents**.
-
-## Walkthrough
-
-[Agents and repos walkthrough](/api/notes-assets/assets/feature-demos/demo-10-agents-and-repos.mp4)
+Shared agents are reusable subagent personas synced from `agents/shared/` into local tool directories (Cursor, Codex, OpenCode, Antigravity, and others). The **Skills** page (`/skills`) → **Agents** tab lists the catalog and runs **Sync agents**.
 
 ## When To Use An Agent Vs A Skill
 

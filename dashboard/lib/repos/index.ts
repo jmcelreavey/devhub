@@ -9,6 +9,8 @@ import { parseRepoFullNameFromRemote } from "@/lib/github/repo-url";
 import { gitUnpushedCount } from "@/lib/standup/git";
 import { isGitNoisePath, parsePorcelainStatus } from "@/lib/repos/git-parsers";
 import { buildContentBuckets, isDevhubRepoRoot, matchContentBucket } from "@/lib/content/sync-dirs";
+import { runGitRepoAsync } from "@/lib/git/repo-local";
+import { parseWorktreeList } from "@/lib/repos/worktree-parsers";
 import { detectRepoUpstart, safeUpstartScriptPath } from "@/lib/repos/upstart";
 
 const execFileAsync = promisify(execFile);
@@ -41,6 +43,8 @@ export interface RepoInfo {
    * Worktrees list as repos of their own, so this is what tells them apart.
    */
   worktreeOf: string | null;
+  worktreeCount?: number | null;
+  staleWorktreeCount?: number;
   /** DevHub private mirror has a reusable upstart script for this repo. */
   hasUpstart: boolean;
   /** Absolute path to the DevHub-managed upstart script (may not exist yet). */
@@ -246,40 +250,46 @@ export function formatPathWithTilde(absolute: string): string {
   return absolute;
 }
 
+/** One scanned repo's card data. `repoPath` must already be resolved and validated. */
+export async function readRepoInfo(name: string, repoPath: string): Promise<RepoInfo> {
+  const [dirtyCount, unpushedCount, worktreeResult] = await Promise.all([
+    getDirtyCount(repoPath),
+    gitUnpushedCount(repoPath),
+    runGitRepoAsync(repoPath, ["worktree", "list", "--porcelain"], { timeout: 5_000 }),
+  ]);
+  const worktrees = worktreeResult.status === 0 ? parseWorktreeList(worktreeResult.stdout) : null;
+  const branch = readHead(repoPath);
+  const remote = readRemote(repoPath);
+  return {
+    name,
+    path: repoPath,
+    branch,
+    remote,
+    worktreeOf: readWorktreeParent(repoPath),
+    worktreeCount: worktrees?.filter((tree) => !tree.isMain && !tree.prunable).length ?? null,
+    staleWorktreeCount: worktrees?.filter((tree) => tree.prunable).length ?? 0,
+    hasUpstart: detectRepoUpstart(name, repoPath),
+    upstartPath: safeUpstartScriptPath(name),
+    dirtyCount,
+    unpushedCount,
+    mtimeMs: repoMtimeMs(repoPath),
+    health: scoreRepoHealth(
+      collectRepoSignals(repoPath, { dirtyCount, unpushedCount, remote, branch }),
+    ),
+  };
+}
+
 export async function listRepos(): Promise<RepoInfo[]> {
   const scanDir = getReposScanDir();
   if (!fs.existsSync(scanDir)) return [];
 
   const entries = fs.readdirSync(scanDir, { withFileTypes: true });
-  const repos: RepoInfo[] = [];
-
-  await Promise.all(
+  // Unbounded on purpose: measured against an 8-wide pool over ~56 repos, the
+  // full fan-out of `git status` finished in ~60% of the time.
+  const repos = await Promise.all(
     entries
       .filter((e) => e.isDirectory() && fs.existsSync(path.join(scanDir, e.name, ".git")))
-      .map(async (e) => {
-        const repoPath = path.join(scanDir, e.name);
-        const [dirtyCount, unpushedCount] = await Promise.all([
-          getDirtyCount(repoPath),
-          gitUnpushedCount(repoPath),
-        ]);
-        const branch = readHead(repoPath);
-        const remote = readRemote(repoPath);
-        repos.push({
-          name: e.name,
-          path: repoPath,
-          branch,
-          remote,
-          worktreeOf: readWorktreeParent(repoPath),
-          hasUpstart: detectRepoUpstart(e.name, repoPath),
-          upstartPath: safeUpstartScriptPath(e.name),
-          dirtyCount,
-          unpushedCount,
-          mtimeMs: repoMtimeMs(repoPath),
-          health: scoreRepoHealth(
-            collectRepoSignals(repoPath, { dirtyCount, unpushedCount, remote, branch }),
-          ),
-        });
-      })
+      .map((e) => readRepoInfo(e.name, path.join(scanDir, e.name))),
   );
 
   return repos.sort(compareReposByMtime);

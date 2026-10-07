@@ -69,7 +69,7 @@ the latest audit as markdown; run new audits from the Repos page **DX Audit** bu
 
 ## Dashboard tools
 
-- **Status** — `status_services`, `status_git`, `status_mcp`; `services_restart` (confirm).
+- **Status** — `status_services` (Agents daemon), `status_git`, `status_mcp`, `status_exec`.
 - **Scripts/sync** — `scripts_list`, then `scripts_run` (mutating scripts need `confirm:true`;
   returns a `runId`), `scripts_run_status`, `scripts_history`. MCP can't stream — poll.
 - **Briefing/calendar** — `briefing_get`, `calendar_week`, `calendar_list`.
@@ -78,7 +78,17 @@ the latest audit as markdown; run new audits from the Repos page **DX Audit** bu
   (lists transitions, then applies with `confirm`), `standup_markdown`, `tasks_weekly`.
 - **On-call** — `datadog_oncall`, `datadog_recent_alerts`, `datadog_investigate`
   (starts an OpenCode investigation session).
-- **Repos** — `repos_list`, `repos_open`, `repos_reveal`, `repos_clone`, `repo_learn`.
+- **Repos** — `repos_list`, `repos_open`, `repos_reveal`, `repos_clone`, `repo_learn`,
+  `repo_conventions` (team conventions mined from PR review comments — call before
+  reviewing a PR in a repo or opening one), and `conventions_list` / `conventions_mine` /
+  `conventions_review` / `conventions_settings` to manage them (accept or reject a rule,
+  refresh, change settings).
+- **My voice** — `voice_list`, `voice_answer`, `voice_train`, `voice_apply` train the
+  `my-voice` skill from the user's own answers to scenarios. Ask the user for each answer
+  and pass their words through verbatim to `voice_answer`; never write one for them.
+  `voice_train action:start` drafts an update in the background (a minute or two), then
+  poll `action:status`. Show the draft to the user, and call `voice_apply` with `confirm:true`
+  only once they've approved it.
 - **Repo ownership** — `owned_repos`, `repo_owner_brief`, `repo_pr_radar`,
   `repo_who_owns`, `repo_changed_since`, `repo_knowledge_gaps`.
 - **Repo git workspace** (proxies `/api/repos/:name/git/*` + branches) —
@@ -86,7 +96,8 @@ the latest audit as markdown; run new audits from the Repos page **DX Audit** bu
   `repos_git_diff`, `repos_git_stash`, `repos_git_branches`, `repos_git_branch`
   (checkout/create/delete/fetch/pull/push/undo-commit), `repos_git_commit`,
   `repos_git_push`, `repos_git_log`, `repos_git_show`, `repos_git_blame`,
-  `repos_git_conflicts`. Mutating tools need `confirm:true`.
+  `repos_git_range` (branch vs main), `repos_git_ci`, `repos_git_worktrees`,
+  `repos_git_conflicts`. Mutating tools need `confirm:true` (except `repos_git_worktrees`).
 - **Inventory/search** — `assets_list` (agents|skills|mcp|persona), `search` (notes|docs).
 - **Agents** — `agent_providers`, `agent_dispatch`, `agent_race`, `agent_runs`, `agent_output`,
   `agent_wait`, `agent_followup`, `agent_cancel`, `agent_diff`, `agent_interactive_note`,

@@ -13,6 +13,7 @@ import {
   pruneMcpHistory,
 } from "./history.ts";
 import { instrumentToolAnnotations } from "./annotations.ts";
+import { instrumentOutputCap } from "./output-cap.ts";
 import { selectToolsets, type ToolsetSelection } from "./toolsets.ts";
 import { registerNotesTools } from "./tools/notes.ts";
 import { registerDocsTools } from "./tools/docs.ts";
@@ -29,14 +30,15 @@ import { registerWorkTools } from "./tools/work.ts";
 import { registerAssetsTools } from "./tools/assets.ts";
 import { registerSearchTools } from "./tools/search.ts";
 import { registerScriptsTools } from "./tools/scripts.ts";
+import { registerConventionsTools } from "./tools/conventions.ts";
 import { registerReposTools } from "./tools/repos.ts";
 import { registerDatadogTools } from "./tools/datadog.ts";
 import { registerCapabilityTools } from "./tools/capability.ts";
 import { registerSessionTools } from "./tools/sessions.ts";
 import { registerRecallTools } from "./tools/recall.ts";
-import { registerTagsTools } from "./tools/tags.ts";
 import { registerShareTools } from "./tools/share.ts";
 import { registerWorkspaceTools } from "./tools/workspace.ts";
+import { registerVoiceTools } from "./tools/voice.ts";
 import { registerOwnershipTools } from "./tools/ownership.ts";
 import { registerTerminalTools } from "./tools/terminal.ts";
 import { registerDbTools } from "./tools/db.ts";
@@ -88,15 +90,24 @@ const TOOLSETS: Record<string, (server: McpServer, ctx: Context) => void> = {
   assets: registerAssetsTools,
   search: registerSearchTools,
   scripts: registerScriptsTools,
-  repos: registerReposTools,
+  // Conventions ride along with repos: Cursor's agents get an allow-listed set of toolsets,
+  // and a toolset of their own would silently drop repo_conventions from auto-reviews.
+  repos: (server, ctx) => {
+    registerReposTools(server, ctx);
+    registerConventionsTools(server, ctx);
+  },
   ownership: registerOwnershipTools,
   datadog: registerDatadogTools,
   capability: registerCapabilityTools,
   sessions: registerSessionTools,
   recall: registerRecallTools,
-  tags: registerTagsTools,
   share: registerShareTools,
-  workspace: registerWorkspaceTools,
+  // My-voice training rides along with the skill reads. Cursor's agents get an allow-listed
+  // set of toolsets that leaves `workspace` out, which is right: they are near their tool budget.
+  workspace: (server, ctx) => {
+    registerWorkspaceTools(server, ctx);
+    registerVoiceTools(server, ctx);
+  },
   terminal: registerTerminalTools,
   db: registerDbTools,
   agents: registerAgentTools,
@@ -132,6 +143,10 @@ export function createDevhubMcpServer(
   // Annotate before registering: every tool gets readOnly/destructive/idempotent/
   // openWorld hints (src/annotations.ts) unless a registrar set its own.
   instrumentToolAnnotations(server);
+
+  // Before history, so history wraps the raw handler and still records the
+  // uncapped size — that is how oversized tools get found and fixed.
+  instrumentOutputCap(server);
 
   // Instrument before registering, so every tool lands in the day's history file.
   let registeringToolset: string | null = null;

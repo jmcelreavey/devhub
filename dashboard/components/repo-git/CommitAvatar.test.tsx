@@ -3,7 +3,7 @@ import { avatarColor, githubAvatarUrl, initialsOf, trustedAvatarUrl } from "./Co
 
 describe("initialsOf", () => {
   it("takes first and last initial of a full name", () => {
-    expect(initialsOf("John McElreavey", "j@example.com")).toBe("JM");
+    expect(initialsOf("Jordan Miller", "j@example.com")).toBe("JM");
     expect(initialsOf("Dana Carla Cortés", "d@example.com")).toBe("DC");
   });
 

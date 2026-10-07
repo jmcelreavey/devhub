@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Layers, Tag } from "lucide-react";
 import { ContextMenu, useContextMenu } from "@/components/shell/ContextMenu";
-import { useConfirm, useDecision, usePrompt } from "@/components/shell/ConfirmDialog";
+import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
 import { useToast } from "@/lib/hooks/use-toast";
 import { openInBrowser } from "@/lib/desktop/bridge";
 import type { GitHookFailurePayload, StashConflictPayload } from "@/app/repos/types";
@@ -12,7 +12,7 @@ import {
   buildBranchMenuGroups,
   type BranchMenuTarget,
 } from "./branchMenuGroups";
-import { chooseCheckoutStrategy, fetchGitJson, postGitAction, repoApi, type RepoGitTabId } from "./shared";
+import { CHECKOUT_AUTOSTASH, fetchGitJson, postGitAction, repoApi, switchedToast, type RepoGitTabId } from "./shared";
 export interface RailSummary {
   currentBranch: string;
   upstream: string | null;
@@ -105,7 +105,6 @@ export function GitRail({
 }) {
   const toast = useToast();
   const confirm = useConfirm();
-  const decide = useDecision();
   const prompt = usePrompt();
   const branchMenu = useContextMenu<BranchMenuTarget>();
   const [busyBranch, setBusyBranch] = useState<string | null>(null);
@@ -185,19 +184,11 @@ export function GitRail({
     if (!canCheckout(branch)) return;
     setBusyBranch(branch);
     try {
-      let result = await postGitAction(repoApi(repoName, "/branches"), {
+      const result = await postGitAction<{ stashed?: boolean }>(repoApi(repoName, "/branches"), {
         action: "checkout",
         branch,
+        ...CHECKOUT_AUTOSTASH,
       });
-      if (!result.ok && result.kind === "checkout-conflict") {
-        const strategy = await chooseCheckoutStrategy(decide, result.conflict);
-        if (!strategy) return;
-        result = await postGitAction(repoApi(repoName, "/branches"), {
-          action: "checkout",
-          branch,
-          strategy,
-        });
-      }
       if (!result.ok) {
         if (result.kind === "conflict") {
           await onConflict(result.conflict);
@@ -205,6 +196,7 @@ export function GitRail({
         }
         throw new Error(result.kind === "error" ? result.message : result.kind);
       }
+      toast.success(switchedToast(branch, Boolean(result.json.stashed)));
       onMutate();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Checkout failed");
@@ -305,21 +297,12 @@ export function GitRail({
     if (!canCheckout(suggested)) return;
     setBusyBranch(remoteRef);
     try {
-      let result = await postGitAction<{ branch?: string }>(repoApi(repoName, "/branches"), {
+      const result = await postGitAction<{ branch?: string; stashed?: boolean }>(repoApi(repoName, "/branches"), {
         action: "checkout-remote",
         branch: remoteRef,
         newBranch: suggested,
+        ...CHECKOUT_AUTOSTASH,
       });
-      if (!result.ok && result.kind === "checkout-conflict") {
-        const strategy = await chooseCheckoutStrategy(decide, result.conflict);
-        if (!strategy) return;
-        result = await postGitAction<{ branch?: string }>(repoApi(repoName, "/branches"), {
-          action: "checkout-remote",
-          branch: remoteRef,
-          newBranch: suggested,
-          strategy,
-        });
-      }
       if (!result.ok) {
         if (result.kind === "conflict") {
           await onConflict(result.conflict);
@@ -327,7 +310,7 @@ export function GitRail({
         }
         throw new Error(result.kind === "error" ? result.message : result.kind);
       }
-      toast.success(`Checked out ${suggested}`);
+      toast.success(switchedToast(suggested, Boolean(result.json.stashed)));
       onMutate();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Checkout failed");

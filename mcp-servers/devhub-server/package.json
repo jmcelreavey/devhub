@@ -7,7 +7,8 @@
     "mcp": "node bin/devhub-mcp.mjs",
     "typecheck": "tsc --noEmit",
     "mcp:http": "tsx src/http.ts",
-    "mcp:token": "tsx src/token.ts"
+    "mcp:token": "tsx src/token.ts",
+    "test": "npm run test --prefix ../../dashboard -- ../mcp-servers/devhub-server/src"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

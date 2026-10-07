@@ -2263,6 +2263,14 @@ body[data-grid-resizing="true"] * {
   font-size: 12px;
   color: var(--text-subtle);
   min-width: 0;
+  /* Yields space before the section tabs do. Entries that don't fit wrap onto
+     a hidden second line, so they drop whole instead of being cut mid-word. */
+  flex: 0 100 auto;
+  flex-wrap: wrap;
+  height: 20px;
+  line-height: 20px;
+  overflow: hidden;
+  white-space: nowrap;
 }
 .hub-crumb {
   display: inline-flex;
@@ -2276,9 +2284,11 @@ body[data-grid-resizing="true"] * {
 .hub-crumb a:hover {
   color: var(--text);
 }
-.hub-crumb:last-child > span:first-child {
-  color: var(--text);
-  font-weight: 500;
+.hub-recent-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-subtle);
+  opacity: 0.7;
 }
 .hub-crumb-sep {
   color: var(--text-subtle);
@@ -2288,7 +2298,181 @@ body[data-grid-resizing="true"] * {
 .hub-topbar-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  flex-shrink: 0;
+  gap: var(--space-3);
+}
+
+.hub-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.hub-preferences {
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--border-muted);
+}
+
+.hub-topbar .hub-cluster {
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.hub-topbar .hub-icon-btn {
+  width: 32px;
+  height: 32px;
+  color: var(--text-muted);
+}
+
+.hub-topbar .hub-icon-btn.text-warning {
+  color: var(--warning);
+}
+
+.hub-topbar .hub-cluster [aria-busy="true"] span {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hub-topbar .hub-icon-btn:disabled {
+  cursor: default;
+}
+
+.hub-profile-trigger:disabled .hub-profile-label {
+  color: var(--text-subtle);
+}
+
+.hub-topbar .focus-pill {
+  height: 32px;
+  padding-inline: var(--space-2);
+  font-family: var(--font-sans);
+  font-size: 12px;
+}
+
+.hub-topbar .focus-pill:not(.running) {
+  background: transparent;
+  border-color: transparent;
+}
+
+.hub-topbar .focus-pill:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-muted);
+}
+
+.hub-topbar .focus-pill:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.hub-topbar .hub-profile-trigger {
+  display: inline-flex;
+  width: auto;
+  gap: var(--space-2);
+  padding-inline: var(--space-2);
+  border-color: var(--border-muted);
+}
+
+.hub-profile-label {
+  max-width: 112px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.accent-picker-pop.hub-profile-pop {
+  width: 280px;
+  max-width: calc(100vw - 32px);
+  padding: var(--space-3);
+  gap: var(--space-3);
+}
+
+.hub-profile-pop h2 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.hub-profile-pop p {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.hub-profile-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 240px;
+  overflow-y: auto;
+  gap: var(--space-1);
+}
+
+.hub-profile-option {
+  justify-content: space-between;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.hub-profile-option[aria-pressed="true"] {
+  background: var(--accent-dim);
+  color: var(--text);
+}
+
+.hub-profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.hub-profile-form label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.hub-profile-form-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.hub-profile-form-row .input {
+  min-width: 0;
+  flex: 1;
+}
+
+@media (min-width: 768px) and (max-width: 1100px) {
+  .hub-topbar {
+    height: auto;
+    min-height: 48px;
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+  }
+  .hub-topbar .hub-crumbs {
+    display: none;
+  }
+  .hub-topbar .hub-section-tabs {
+    flex: 1 0 100%;
+    margin-left: 0;
+  }
+  .hub-topbar .hub-icon-btn {
+    width: 28px;
+  }
+  .hub-topbar .hub-profile-trigger {
+    width: auto;
+  }
+  .hub-topbar-actions {
+    gap: var(--space-2);
+  }
+  .hub-toolbar-group {
+    gap: 0;
+  }
+  .hub-preferences {
+    padding-left: var(--space-2);
+  }
+  .hub-profile-label {
+    max-width: 80px;
+  }
 }
 
 /* Grouped action buttons (sync, quick actions). Single source of truth so
@@ -2309,13 +2493,15 @@ body[data-grid-resizing="true"] * {
   align-items: center;
   gap: 7px;
   margin-left: auto;
-  margin-right: 10px;
+  margin-right: var(--space-4);
   width: 180px;
-  padding: var(--space-1) var(--space-2) var(--space-1) 9px;
+  height: 32px;
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-muted);
   background: var(--bg-elevated);
-  color: var(--text-subtle);
+  color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
   outline: 2px solid transparent;
@@ -2351,9 +2537,10 @@ body[data-grid-resizing="true"] * {
   background: var(--bg);
   color: var(--text-subtle);
 }
-@media (max-width: 980px) {
+@media (max-width: 1100px) {
   .hub-search {
-    width: 34px;
+    margin-right: var(--space-2);
+    width: 32px;
     padding: 4px 0;
     justify-content: center;
     gap: 0;
@@ -2435,10 +2622,46 @@ body[data-grid-resizing="true"] * {
   animation: plus-pop var(--dur-fast) var(--ease-swift) both;
 }
 
+.accent-picker-modes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border-muted);
+}
+.accent-picker-mode {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.accent-picker-mode:hover {
+  color: var(--text);
+}
+.accent-picker-mode[data-active] {
+  background: var(--bg-elevated);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 20%, transparent);
+}
+.accent-picker-mode:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* Brand dot — sidebar/topbar logo. Background follows the live accent. */
 .brand-dot {
-  width: 50px;
-  height: 50px;
+  /* 40px, not 50: the brand row was 82px tall — more than two nav rows. */
+  width: 40px;
+  height: 40px;
   border-radius: 10px;
   background: var(--accent);
   color: var(--accent-fg);
@@ -2500,6 +2723,12 @@ body[data-grid-resizing="true"] * {
   flex: 1;
   height: 1px;
   background: linear-gradient(90deg, var(--border-muted), transparent);
+}
+/* Collapsed rail has no group labels — a hairline keeps the groups readable. */
+.nav-section-collapsed + .nav-section-collapsed {
+  margin-top: 4px;
+  border-top: 1px solid var(--border-muted);
+  padding-top: 8px;
 }
 /* Active-item accent rail grows in */
 @keyframes nav-rail-in {
@@ -2823,12 +3052,54 @@ body[data-motion="off"] .task-timer-dot {
   margin-top: -4px;
 }
 
-/* Match the tags button's hit-area so the icon column reads as a grid. */
+/* Match the links button's hit-area so the icon column reads as a grid. */
 .task-row-actions .row-note-glyph {
   width: 28px;
   height: 28px;
   align-items: center;
   justify-content: center;
+}
+
+/* Linked repo chip(s) sit in the rail — the hop people take most — and never
+   wrap; everything else linked lives behind the links button. */
+.task-row-actions .entity-link-chips {
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+/* Phone widths: the title needs the room more. The rail wraps onto its own
+   line instead of crushing the title, and the repo chip stays one tap away
+   behind the links button. */
+@media (max-width: 640px) {
+  .task-row {
+    flex-wrap: wrap;
+  }
+  .task-row-content {
+    min-width: 60%;
+  }
+  .task-row-actions {
+    margin-left: auto;
+    margin-top: 0;
+  }
+  .task-row-actions .entity-link-chips {
+    display: none;
+  }
+}
+
+/* One button stands for every link on the row; the count sits beside the
+   icon so the pair reads like the "+N" overflow chips elsewhere. */
+.task-links-btn[data-linked="true"] {
+  width: auto;
+  min-width: 28px;
+  padding: 0 7px 0 6px;
+  gap: 3px;
+  color: var(--text-muted);
+}
+.task-links-count {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .task-icon-action {
@@ -2858,6 +3129,7 @@ body[data-motion="off"] .task-timer-dot {
 .portal-tooltip {
   position: fixed;
   z-index: var(--z-tooltip);
+  width: max-content;
   max-width: min(280px, calc(100vw - 16px));
   padding: 4px 8px;
   border: 1px solid var(--border);
@@ -2868,7 +3140,8 @@ body[data-motion="off"] .task-timer-dot {
   font-size: 11px;
   font-weight: 400;
   line-height: 1.3;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   pointer-events: none;
 }
 
@@ -3096,6 +3369,11 @@ body[data-density="compact"] .card {
   align-items: center;
   gap: 2px;
   margin-left: 10px;
+  /* Scroll, don't wrap: "Live links" used to break onto two lines at 1440px. */
+  flex-shrink: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
   padding: 2px;
   background: var(--bg);
   border: 1px solid var(--border-muted);
@@ -3107,6 +3385,8 @@ body[data-density="compact"] .card {
   }
 }
 .hub-section-tab {
+  flex-shrink: 0;
+  white-space: nowrap;
   padding: 3px 10px;
   border-radius: 6px;
   font-size: 12px;
@@ -4044,7 +4324,7 @@ body[data-motion="off"] .briefing-wx-card {
 }
 
 /* ── Route entrance (app/template.tsx) — one pass per navigation ──
-   height: 100% keeps full-height pages (notes, chamber) working; long
+   height: 100% keeps full-height pages (notes, diagrams) working; long
    pages still scroll because `main` counts overflowing descendants. */
 .route-enter {
   height: 100%;
@@ -4151,6 +4431,12 @@ body[data-motion="off"] .briefing-wx-card {
 .btn.is-active {
   opacity: 0.88;
   scale: 0.98;
+}
+/* Fading the whole primary button reduces text contrast, especially in light themes. */
+.btn-primary:not(:disabled):active,
+.btn-primary.is-active {
+  opacity: 1;
+  background: var(--accent-hover);
 }
 
 /* ── Card hover: elevate via lightness, not glow / lift ── */
@@ -5473,83 +5759,166 @@ body[data-motion="off"] .context-menu:not([hidden]) {
   animation: none;
 }
 
-.tags-modal-list {
+.links-modal-list {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
-.tags-modal-item {
+.links-modal-item {
   display: flex;
   width: 100%;
+  min-height: 44px;
   align-items: flex-start;
-  gap: 8px;
-  padding: 8px;
+  gap: 12px;
+  padding: 12px;
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text);
   cursor: pointer;
   text-align: left;
 }
-.tags-modal-item:hover {
+.links-modal-item:hover:not(:disabled) {
   background: var(--bg-overlay);
   color: var(--text);
 }
-.tags-modal-item:focus-visible {
+.links-modal-item:focus-visible {
   outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
   outline-offset: -2px;
   color: var(--text);
 }
-.tags-modal-item-icon {
+.links-modal-item-icon,
+.links-modal-item-arrow {
   margin-top: 2px;
-  color: var(--text-subtle);
+  color: var(--text-muted);
   flex-shrink: 0;
 }
-.tags-modal-item-copy {
+.links-modal-item-arrow {
+  margin-left: auto;
+}
+.links-modal-item:disabled {
+  cursor: default;
+}
+.links-modal-item-copy {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: 1px;
 }
-.tags-modal-item-label {
-  font-size: 13px;
-  line-height: 1.3;
+.links-modal-item-label {
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
-.tags-modal-item-desc {
+.links-modal-item-desc {
   font-size: 11px;
   line-height: 1.35;
   color: var(--text-subtle);
 }
-.tags-modal-empty {
-  font-size: 12.5px;
-  color: var(--text-subtle);
-  padding: 8px 2px;
+.links-modal-empty {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
 }
-.tags-modal-row {
+.links-modal-empty p:first-of-type {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+.links-modal-empty p {
+  max-width: 42ch;
+}
+.links-modal-groups {
+  display: flex;
+  flex-direction: column;
+}
+.links-modal-section {
+  display: grid;
+  grid-template-columns: 136px minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px 0;
+}
+.links-modal-section:first-child {
+  padding-top: 0;
+}
+.links-modal-section:last-child {
+  padding-bottom: 0;
+}
+.links-modal-section + .links-modal-section {
+  border-top: 1px solid var(--border);
+}
+.links-modal-section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 0 12px 8px;
+  font-size: 12px;
+  line-height: 21px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.links-modal-section-count {
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.links-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.links-modal-count {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+@media (max-width: 600px) {
+  .links-modal-section {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .links-modal-section-title {
+    padding: 0 12px;
+  }
+}
+.links-modal-row {
   display: flex;
   align-items: stretch;
   gap: 2px;
 }
-.tags-modal-row .tags-modal-item {
+.links-modal-row .links-modal-item {
   flex: 1;
   min-width: 0;
 }
-.tags-modal-remove {
+.links-modal-remove {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  width: 44px;
+  height: 44px;
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--text-subtle);
+  color: var(--text-muted);
   cursor: pointer;
 }
-.tags-modal-remove:hover {
+.links-modal-remove:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.links-modal-remove:hover {
   background: var(--bg-overlay);
   color: var(--danger);
 }
-.tags-modal-add {
+.links-modal-add {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -5558,11 +5927,11 @@ body[data-motion="off"] .context-menu:not([hidden]) {
   border-top: 1px solid var(--border);
 }
 /* Tag field reuses Notes .search-field chrome; submit sits inside the ring. */
-.tags-modal-add-field {
+.links-modal-add-field {
   width: 100%;
   margin: 0;
 }
-.tags-modal-add-submit {
+.links-modal-add-submit {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -5579,20 +5948,20 @@ body[data-motion="off"] .context-menu:not([hidden]) {
     color var(--dur-fast) var(--ease-swift),
     background-color var(--dur-fast) var(--ease-swift);
 }
-.tags-modal-add-submit:hover:not(:disabled) {
+.links-modal-add-submit:hover:not(:disabled) {
   background: var(--bg-muted);
   color: var(--text);
 }
-.tags-modal-add-submit:disabled {
+.links-modal-add-submit:disabled {
   opacity: 0.35;
   cursor: default;
 }
-.tags-modal-add-submit:focus-visible {
+.links-modal-add-submit:focus-visible {
   outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
   outline-offset: 1px;
 }
 /* Secondary action — same height/radius/border as search-field--boxed. */
-.tags-modal-add-link {
+.links-modal-add-link {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -5612,12 +5981,12 @@ body[data-motion="off"] .context-menu:not([hidden]) {
     border-color var(--dur-fast) var(--ease-swift),
     background-color var(--dur-fast) var(--ease-swift);
 }
-.tags-modal-add-link:hover {
+.links-modal-add-link:hover {
   color: var(--text);
   border-color: color-mix(in oklab, var(--border) 70%, var(--text-muted));
   background: var(--bg-overlay);
 }
-.tags-modal-add-link:focus-visible {
+.links-modal-add-link:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -6127,10 +6496,50 @@ main,
   border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
 }
 
-/* Repos — progressive disclosure on cards + learn panel chrome */
-.repos-card-path {
+/* Repos — card grid + learn panel chrome */
+/* One card per row left ~1,000px of empty width beside each repo and showed
+   four repos per screen; a grid shows the whole folder at a glance. */
+.repos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 8px;
+}
+.repo-card {
+  transition: border-color var(--dur-quick) var(--ease-swift);
+}
+/* Unlike most cards, this one navigates — so it earns a hover state. */
+.repo-card:hover {
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
+}
+.repo-card[data-has-work] {
+  border-left: 2px solid var(--accent);
+}
+.repo-card-work {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-muted);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+.repo-card-work > svg {
+  color: var(--accent);
+}
+.repo-card-work-key {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
   font-size: 11px;
+  color: var(--text);
+}
+.repo-card-work-more {
+  flex-shrink: 0;
+  margin-left: auto;
   color: var(--text-subtle);
+  font-size: 11px;
 }
 .repos-learn-chrome {
   display: flex;
@@ -6670,6 +7079,17 @@ body[data-motion="off"] .evolution-arrow {
     background 150ms var(--ease-swift),
     color 150ms var(--ease-swift);
 }
+/* Occasional tools sit at the far end, a step quieter than the daily tabs. */
+.repo-git-tab[data-tool] {
+  color: var(--text-subtle);
+  font-size: 11.5px;
+}
+.repo-git-tab[data-tool]:not([data-tool] ~ [data-tool]) {
+  margin-left: auto;
+}
+.repo-git-pane-enter[hidden] {
+  display: none;
+}
 .repo-git-tab[data-active] {
   color: var(--text);
   background: color-mix(in oklab, var(--accent) 14%, var(--bg-elevated));
@@ -7018,6 +7438,12 @@ body[data-motion="off"] .evolution-arrow {
   min-width: 0;
   min-height: 0;
   overflow: auto;
+}
+/* The column scrolls; its sections must not. Shrinkable children squashed 15
+   files into 56px (clipped by the section's overflow) whenever the pane was
+   shorter than the list. */
+.repo-git-file-cols > * {
+  flex-shrink: 0;
 }
 .repo-git-file-section {
   border: 1px solid var(--border);
@@ -8028,6 +8454,32 @@ body[data-repo-git-split-dragging] {
   flex-direction: column;
   overflow: hidden;
 }
+/* Previous commit held on screen while the next loads. The dim waits 120ms,
+   so a cached or fast fetch swaps content with no visible intermediate state;
+   clearing is instant. */
+.repo-git-history-detail > *,
+.repo-git-diff-body-static {
+  transition: opacity 100ms var(--ease-swift);
+}
+.repo-git-history-detail[data-stale] > *,
+.repo-git-diff-body-static[data-stale] {
+  opacity: 0.55;
+  transition: opacity 150ms var(--ease-swift) 120ms;
+}
+/* Working tree in the detail pane (WIP row selected). */
+.repo-git-history-wip {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 8px;
+}
+/* Stacked there: file lists on top, diff below, each scrolling on its own
+   rather than the lists pushing the diff out of the pane. */
+.repo-git-history-wip .repo-git-changes-split.repo-git-split-stacked {
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  overflow: hidden;
+}
 .repo-git-history-detail {
   min-width: 0;
   min-height: 0;
@@ -8171,8 +8623,6 @@ body[data-repo-git-split-dragging] {
    Press like shell chrome (`.hub-icon-btn`): opacity settle. Global
    `filter: brightness(0.96)` on `:active` still applies. Scale kill is
    unconditional so `data-motion="off"` (transitions only) still won't bounce. */
-button.repo-git-graph-row:not(:disabled):active,
-.repo-git-graph-row:active,
 button.repo-git-commit-file:not(:disabled):active,
 button.repo-unpushed-badge:not(:disabled):active,
 button.repo-git-file-main:not(:disabled):active,
@@ -8204,41 +8654,83 @@ button.conflict-path-row:not(:disabled):active {
   border: 0;
   border-radius: 0;
 }
+/* Edges only. Sits under the rows so a row's hover/selection fill runs
+   straight through the graph, and never takes a click away from a row. */
 .repo-git-graph-rail {
-  flex-shrink: 0;
-  position: sticky;
-  left: 0;
-  background: var(--bg-surface);
-  z-index: 1;
-  border-right: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+  position: absolute;
+  top: 0;
+  z-index: 0;
+  pointer-events: none;
 }
 .repo-git-graph-rows {
-  flex: 1;
-  min-width: 0;
-  position: relative;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
 }
 /* Virtualized canvas: one full-height spacer; rows and the lane rail position
    absolutely inside it so only the visible window is in the DOM. */
 .repo-git-graph-canvas {
-  display: flex;
-  align-items: stretch;
   position: relative;
-}
-.repo-git-graph-canvas .repo-git-graph-rows {
-  flex: 1;
+  width: 100%;
 }
 .repo-git-graph-canvas .repo-git-graph-row {
   position: absolute;
   left: 0;
   right: 0;
 }
+/* The lane track of a row: holds this row's node and the label connector. */
+.repo-git-graph-lane {
+  position: relative;
+  align-self: stretch;
+}
+.repo-git-graph-node {
+  position: absolute;
+  top: 50%;
+  display: block;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: transform 150ms var(--ease-swift);
+}
+.repo-git-graph-node[data-kind="avatar"] {
+  box-shadow: 0 0 0 2px var(--lane);
+  background: var(--bg-surface);
+}
+.repo-git-graph-node[data-kind="avatar"] .repo-git-avatar {
+  box-shadow: none;
+}
+.repo-git-graph-node[data-kind="merge"] {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--lane);
+  background: var(--bg-surface);
+}
+/* Where you are standing: a second ring, separated by a gap of surface. */
+.repo-git-graph-node[data-head] {
+  box-shadow:
+    0 0 0 2px var(--lane),
+    0 0 0 4px var(--bg-surface),
+    0 0 0 5.5px var(--lane);
+}
+.repo-git-graph-row:hover .repo-git-graph-node,
+.repo-git-graph-row[data-selected] .repo-git-graph-node {
+  transform: translate(-50%, -50%) scale(1.18);
+}
+.repo-git-ref-link {
+  position: absolute;
+  top: 50%;
+  left: -6px;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--lane);
+  opacity: 0.75;
+}
 .repo-git-wip-row {
   cursor: pointer;
 }
 .repo-git-wip-row .repo-git-wip-label {
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--text-subtle);
+  margin-right: 8px;
+  font-style: italic;
+  color: var(--text-muted);
 }
 .repo-git-wip-chip {
   display: inline-flex;
@@ -8254,9 +8746,6 @@ button.conflict-path-row:not(:disabled):active {
 .repo-git-wip-quiet {
   color: var(--text-subtle);
   font-style: italic;
-}
-.repo-git-wip-row:hover {
-  background: var(--bg-elevated);
 }
 /* Interactive-rebase planner */
 .repo-git-rebase-list {
@@ -8588,11 +9077,7 @@ body.col-resizing {
   text-align: right;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-}
-.repo-git-graph-name {
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 /* Conflicted file rows in Changes: red glyph + tinted row; their only action
    is Resolve (stage), so destructive buttons never appear for them. */
@@ -8603,30 +9088,44 @@ body.col-resizing {
   color: var(--danger, #e5484d);
   font-weight: 700;
 }
+/* No row borders: the lane lines already separate rows, and a rule under every
+   commit is most of what made the list feel dense. Fills are translucent so
+   the edges underneath stay visible through a hovered or selected row.
+   `contain` keeps a row's layout/paint from invalidating its neighbours. */
 .repo-git-graph-row {
   display: grid;
-  grid-template-columns:
-    3.8rem minmax(0, 1fr) minmax(0, 32%) minmax(6.5rem, 9.5rem)
-    24px;
+  grid-template-columns: minmax(0, 1fr) 24px;
   align-items: center;
-  gap: 8px;
+  column-gap: 0;
   width: 100%;
-  padding: 0 10px;
+  padding: 0 8px 0 0;
   border: 0;
-  border-bottom: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
   background: transparent;
   color: var(--text);
   font-size: 11px;
   text-align: left;
-  cursor: pointer;
-  transition: background 150ms var(--ease-swift);
-  scale: 1;
+  cursor: default;
+  contain: layout style;
 }
 .repo-git-graph-row:hover {
-  background: var(--bg-elevated);
+  background: color-mix(in oklab, var(--text) 6%, transparent);
+}
+/* Rows are `div[role=button]`, which the global tactile press (scale 0.96 +
+   `transition: scale`) outranks `.repo-git-graph-row` on specificity — every
+   click shrank the row and sprang back. The selection fill is the feedback;
+   pressing does nothing visual. Doubled class to beat `[role][:not()]:active`.
+   user-select: none so double-click-to-switch doesn't highlight a word. */
+.repo-git-graph-row.repo-git-graph-row,
+.repo-git-graph-row.repo-git-graph-row:active {
+  scale: 1;
+  opacity: 1;
+  filter: none;
+  transition: background-color 120ms var(--ease-swift);
+  user-select: none;
 }
 .repo-git-graph-row[data-selected] {
-  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  background: color-mix(in oklab, var(--accent) 18%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 .repo-git-graph-row[data-unpushed]:not([data-selected]) {
   box-shadow: inset 2px 0 0 color-mix(in oklab, var(--warning) 70%, transparent);
@@ -8645,26 +9144,69 @@ body.col-resizing {
   color: var(--accent);
   font-size: 10px;
 }
+.repo-git-graph-row .repo-git-graph-hash {
+  padding-left: 10px;
+  color: var(--text-subtle);
+}
 .repo-git-graph-subject {
-  font-weight: 500;
+  padding: 0 10px 0 4px;
+  font-size: 12px;
+}
+/* Merges carry no work of their own — let the real commits lead. */
+.repo-git-graph-row[data-merge] .repo-git-graph-subject {
+  color: var(--text-muted);
 }
 .repo-git-graph-refs {
   display: flex;
+  align-items: center;
+  justify-content: flex-end;
   gap: 4px;
-  /* Never wrap: these rows are a fixed 32px tall, so wrapped chips bled over
-     the rows below instead of staying in their track. */
+  padding: 0 6px 0 8px;
+  /* Never wrap: rows are a fixed height, so wrapped chips bled over the rows
+     below instead of staying in their track. */
   flex-wrap: nowrap;
   overflow: hidden;
   min-width: 0;
 }
-/* Grid rather than a right-aligned flex row: with flex the avatar's position
-   followed the length of the author's name, so the column read as ragged dots
-   instead of a rail your eye can scan down. */
-.repo-git-graph-author {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
+/* Branch/tag label in the lane's colour, so name → line → node is one hue. */
+.repo-git-lane-chip {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  min-width: 0;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in oklab, var(--lane) 60%, transparent);
+  background: color-mix(in oklab, var(--lane) 20%, var(--bg-surface));
+  color: var(--text);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.repo-git-lane-chip svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+/* The checked-out branch wins against anything else on the row. */
+.repo-git-lane-chip[data-head] {
+  background: color-mix(in oklab, var(--lane) 42%, var(--bg-surface));
+  border-color: var(--lane);
+  font-weight: 600;
+}
+.repo-git-lane-chip[data-head] svg {
+  color: var(--text);
+}
+.repo-git-lane-more {
+  flex-shrink: 0;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--text) 10%, transparent);
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.repo-git-graph-author {
+  padding-left: 10px;
+  color: var(--text-muted);
   min-width: 0;
 }
 .repo-git-graph-meta {
@@ -9129,6 +9671,7 @@ button.repo-git-blame-history-row {
   .repo-git-stash-row,
   .repo-git-branch-row,
   .repo-git-graph-row,
+  .repo-git-graph-node,
   .repo-git-file-actions,
   .repo-git-filter-search {
     transition: none;
@@ -9146,6 +9689,7 @@ body[data-motion="off"] .repo-git-file-row,
 body[data-motion="off"] .repo-git-stash-row,
 body[data-motion="off"] .repo-git-branch-row,
 body[data-motion="off"] .repo-git-graph-row,
+body[data-motion="off"] .repo-git-graph-node,
 body[data-motion="off"] .repo-git-file-actions,
 body[data-motion="off"] .repo-git-filter-search {
   transition: none;
@@ -9805,10 +10349,7 @@ ul.docs-list ul.docs-list {
   padding: 0;
   align-items: center;
 }
-.task-row-links {
-  margin-top: 4px;
-  margin-bottom: 4px;
-}
+
 .side-panel-enter .entity-link-chips,
 .side-panel-enter-mobile .entity-link-chips {
   flex-wrap: nowrap;
@@ -10413,6 +10954,10 @@ button.entity-link-chip-more {
   line-height: 1.45;
   color: var(--text-muted);
   text-decoration: none;
+  /* One line per note: wrapped titles turned a 58-note area into 250 lines. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition:
     color var(--dur-quick) var(--ease-swift),
     border-color var(--dur-quick) var(--ease-swift);
@@ -10437,6 +10982,76 @@ button.entity-link-chip-more {
 .lib-nav-item .lib-nav-link {
   flex: 1;
   min-width: 0;
+}
+
+/* Sections inside a group (repo, ticket, week): one level deep, collapsed by default. */
+.lib-nav-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  padding: 4px var(--space-2) 4px 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.lib-nav-section-toggle:hover {
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+
+.lib-nav-section-toggle[aria-expanded="false"] .lib-nav-chevron {
+  rotate: -90deg;
+}
+
+.lib-nav-section-toggle .lib-nav-chevron {
+  flex-shrink: 0;
+}
+
+.lib-nav-section-label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+/* Guide line sits under the section chevron, not a full indent step in. */
+.lib-nav-sublist {
+  margin: 0 0 var(--space-1) 4px;
+}
+
+/*
+ * With a pointer the row kebab is hover-only, so it floats over the row end
+ * instead of reserving 28px on every line — two levels of nesting left note
+ * titles about 110px otherwise. Touch keeps it in flow, where it is always shown.
+ */
+@media (hover: hover) and (pointer: fine) {
+  .lib-nav-item,
+  .lib-nav-heading-row {
+    position: relative;
+  }
+
+  .lib-nav-item > .row-menu-kebab,
+  .lib-nav-heading-row > .row-menu-kebab {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    translate: 0 -50%;
+    background: var(--bg-surface);
+  }
+
+  .lib-nav-item > .row-menu-kebab:hover,
+  .lib-nav-heading-row > .row-menu-kebab:hover {
+    background: var(--bg-muted);
+  }
 }
 
 .lib-nav-empty {
@@ -10988,6 +11603,69 @@ body[data-motion="off"] .lib-card-icon {
   white-space: nowrap;
 }
 
+/* Notes area page: a contents row of section chips, then one list per section. */
+.lib-jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: var(--space-6);
+}
+
+.lib-jump-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border: 1px solid var(--border-muted);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition:
+    color var(--dur-quick) var(--ease-swift),
+    border-color var(--dur-quick) var(--ease-swift);
+}
+
+.lib-jump-link:hover {
+  color: var(--text);
+  border-color: var(--accent-dim);
+}
+
+.lib-jump-count {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--text-subtle);
+}
+
+/* On a phone, 27 wrapped chips are a screen of contents before the first note. */
+@media (max-width: 640px) {
+  .lib-jump {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .lib-jump-link {
+    flex-shrink: 0;
+  }
+}
+
+.lib-note-section {
+  margin-bottom: var(--space-6);
+  scroll-margin-top: var(--space-4);
+}
+
+/* Not the uppercase eyebrow: section names are repos and tickets, and `APP-POC` stops reading as one. */
+.lib-note-section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 var(--space-2);
+  font-size: 13px;
+  font-weight: 620;
+  color: var(--text);
+}
+
 /* ------------------------------------------------------- sidebar headings */
 
 .lib-nav-heading-row {
@@ -11337,14 +12015,6 @@ body[data-motion="off"] .lib-card-icon {
   color: var(--bg);
   font-weight: 600;
   box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 45%, transparent);
-}
-.repo-git-graph-row[data-on-main]:not([data-selected]):not([data-head]) {
-  box-shadow: inset 2px 0 0 color-mix(in oklab, var(--success) 65%, transparent);
-}
-/* HEAD outranks the on-main and unpushed markers on the same edge. */
-.repo-git-graph-row[data-head]:not([data-selected]) {
-  box-shadow: inset 2px 0 0 var(--accent);
-  background: color-mix(in oklab, var(--accent) 7%, transparent);
 }
 /* Ahead-of-main band: a faint contiguous strip from the fork point up to
    HEAD makes "how far ahead is this branch" scannable without reading counts.
@@ -12362,4 +13032,109 @@ a.repo-git-context-chip[data-kind="pr"][data-checks="pending"] {
   align-items: center;
   gap: 5px;
   font-size: 12px;
+}
+
+
+/* Like /db, pin Git to #main-content: workspace panels have no definite
+   height, so percentage heights otherwise grow with the entire commit log. */
+.repo-git-page {
+  container-type: inline-size;
+  container-name: repo-git-page;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.repo-git-page .repo-git-workspace {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.repo-git-modal.repo-git-page-shell {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  flex: 1;
+  min-height: 0;
+  animation: none;
+  transition: none;
+}
+.repo-git-page .repo-git-tab-body {
+  min-width: 0;
+}
+/* Stacked history still needs usable space for file lists, diff and commit
+   controls; let its own scroller reveal the detail instead of crushing it. */
+.repo-git-page .repo-git-history-split.repo-git-split-stacked {
+  grid-template-rows: 220px minmax(480px, 1fr);
+  overflow-y: auto;
+}
+.repo-git-page .repo-git-diff-head,
+.repo-git-page .repo-git-diff-actions {
+  flex-wrap: wrap;
+}
+.repo-git-page .repo-git-diff-actions {
+  flex-shrink: 1;
+  min-width: 0;
+}
+.repo-git-page .repo-git-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+.repo-git-page .repo-git-tab {
+  flex-shrink: 0;
+}
+.repo-git-page-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.repo-git-page-back:hover {
+  color: var(--text);
+}
+@container repo-git-page (max-width: 1100px) {
+  .repo-git-page .repo-git-rail-wrap,
+  .repo-git-page .repo-git-rail-handle,
+  .repo-git-page .repo-git-rail-collapsed {
+    display: none;
+  }
+}
+@media (max-width: 767px) {
+  .repo-git-page .repo-git-changes-split.repo-git-split-stacked {
+    grid-template-rows: minmax(160px, 1fr) minmax(240px, 1.4fr);
+    overflow-y: auto;
+  }
+  .repo-git-modal-header {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .repo-git-modal-title-block {
+    flex: 1 1 100%;
+  }
+  .repo-git-modal-title {
+    overflow-wrap: anywhere;
+  }
+  .repo-git-modal-badges {
+    justify-content: flex-start;
+  }
+  .repo-git-page .repo-git-modal-path {
+    display: none;
+  }
+  .repo-git-page .repo-git-modal-badges {
+    justify-content: flex-start;
+    flex-shrink: 1;
+  }
+  .repo-git-page .repo-git-tab {
+    min-height: 40px;
+  }
 }

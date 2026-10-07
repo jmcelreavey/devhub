@@ -22,6 +22,8 @@ Most values live in the dashboard's local environment file and can be edited fro
 | `NOTES_DIR`                    | Directory for notes, learnings, and diagrams                                                                                                                                                                                                                                                                                                                                          |
 | `DOCS_DIR`                     | Optional override for repo docs (default: `REPO_ROOT/docs`)                                                                                                                                                                                                                                                                                                                           |
 | `TASKS_DIR`                    | Optional override for daily tasks (default: `REPO_ROOT/tasks`) — point elsewhere to keep personal data out of the tree                                                                                                                                                                                                                                                                |
+| `DEVHUB_PROFILE` | Which task profile (`tasks/<profile>/`) this machine writes to; overrides `~/.config/devhub/profile.json`. See [Task profiles](../guides/task-profiles.md) |
+| `DEVHUB_CONFIG_DIR` | Machine-local config dir (default `~/.config/devhub`) — holds the active task profile |
 | `REPS_DIR`                     | Optional override for daily review reps (default: `REPO_ROOT/reps`) — same personal-data boundary as tasks; **not** included in content-sync paths                                                                                                                                                                                                                                    |
 | `COLLECTIONS_DIR`              | Optional override for checklist collections (default: `REPO_ROOT/collections`)                                                                                                                                                                                                                                                                                                        |
 | `UPSTARTS_DIR`                 | Optional override for per-repo Upstart scripts (default: `REPO_ROOT/upstarts`)                                                                                                                                                                                                                                                                                                        |
@@ -40,12 +42,10 @@ Most values live in the dashboard's local environment file and can be edited fro
 | `DEVHUB_BIND_HOST`             | Dashboard bind address (`0.0.0.0` default). The desktop shell loads the window at `http://127.0.0.1:<PORT>` regardless; LAN clients use the proxy URLs from `/setup`                                                                                                                                                                                                                  |
 | `DEVHUB_BASE_URL`              | Pins the dashboard used by dashboard-backed MCP tools. Leave unset: the MCP server follows the primary dashboard advertised in `~/.config/devhub/dashboard.json` and falls back to `http://localhost:1337`. |
 | `DEVHUB_SCHEDULER`             | `0` stops this dashboard process from running [scheduled jobs](../guides/scheduled-jobs.md). Set it on a dev server running beside the desktop app: both share `~/.local/state/devhub/jobs.json`, and one scheduler should own it. |
-| `DEVHUB_API_SECRET`            | Optional shared secret for mutating dashboard API routes (global `proxy.ts` guard) and sensitive GET routes that call `requireDashboardAuth` (OpenCode recap/listen, OpenChamber listen, every `/api/db` route). When set, callers must send `X-DevHub-Secret`; when unset, those routes require a strict same-origin `Origin` header (browser-only). Set the same value in the MCP server's env when using dashboard-backed MCP tools. Generate with `openssl rand -hex 32`. |
+| `DEVHUB_API_SECRET`            | Optional shared secret for mutating dashboard API routes (global `proxy.ts` guard) and sensitive GET routes that call `requireDashboardAuth` (OpenCode recap, agent usage, Paseo routes, every `/api/db` route). When set, callers must send `X-DevHub-Secret`; when unset, those routes require a strict same-origin `Origin` header (browser-only). Set the same value in the MCP server's env when using dashboard-backed MCP tools. Generate with `openssl rand -hex 32`. |
 | `DEVHUB_GITHUB_OAUTH_CLIENT_ID` | Optional GitHub OAuth app client id for `/setup` device-flow login. Default is the GitHub CLI's public app (`178c6fc778ccc68e1d6a`) so `gh auth login --with-token` accepts the result. Device flow has no client secret. |
 | `DEVHUB_LAN_PROXY_HOST`        | Optional LAN proxy host. Use `auto` to detect a physical LAN IPv4 and exclude Tailscale CGNAT (`100.64.0.0/10`)                                                                                                                                                                                                                                                                       |
 | `DEVHUB_ALLOWED_DEV_ORIGINS`   | Comma-separated extra `allowedDevOrigins` for `npm run dev` (Next.js 16+). Default allowlist covers common private LAN ranges (`192.168.*.*`, `10.*.*.*`, etc.). Add custom host patterns when opening the dashboard from a phone/tablet at `http://<lan-ip>:1337` and the UI never finishes loading — see [Setup — LAN access](../getting-started/setup.md#localhost-vs-lan-access). |
-| `OPENCHAMBER_HOST`             | OpenChamber local bind address. LAN access is proxied when enabled                                                                                                                                                                                                                                                                                                                    |
-| `NEXT_PUBLIC_OPENCHAMBER_PORT` | Browser-visible OpenChamber port                                                                                                                                                                                                                                                                                                                                                      |
 
 ## Google Calendar
 
@@ -165,19 +165,13 @@ Plugins (separate repos contributing skills/agents/MCP) are not configured via e
 They are listed in a machine-local registry at `~/.config/devhub/plugins.json` and merged
 at sync time. See [Plugins](../architecture/plugins.md).
 
-## OpenCode And OpenChamber
+## Terminal, Agent CLI And OpenCode
 
-See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md). Coding chats are on `/agents`; `/chamber` and `/opencode` redirect there. Do not pin companion ports.
+See [Terminal and agent CLI](../guides/terminal-and-agent-cli.md). Coding chats are on `/agents` ([Paseo](../guides/paseo-agents.md)); `/chamber` and `/opencode` redirect there. DevHub no longer starts OpenChamber.
 
 | Variable                                | Default                         | Purpose                                                                                                                                                                        |
 | --------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `OPENCHAMBER_PORT`                      | `1336`                          | Internal default for leftover `GET /api/openchamber/listen`. You do not need to set this.                                                                                      |
-| `OPENCHAMBER_HOST`                      | `0.0.0.0`                       | OpenChamber bind host                                                                                                                                                          |
-| `OPENCHAMBER_UI_PASSWORD`               | —                               | UI password required to bind a LAN host on OpenChamber ≥1.13. Configure from `/setup`. Without it (or the override below) DevHub falls back to binding `127.0.0.1`.            |
-| `OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN` | `false`                         | Set `true` to expose OpenChamber over the LAN without a UI password (not recommended)                                                                                          |
-| `NEXT_PUBLIC_OPENCHAMBER_PORT`          | `1336`                          | Optional. Unset is fine — the Chamber iframe uses 1336.                                                                                                                        |
-| `OPENCODE_PORT`                         | unset                           | Do **not** set. A listener on 1338 makes OpenChamber.app attach as an external server Setup cannot restart.                                                                    |
-| `OPENCODE_SERVER_PASSWORD`              | —                               | When set, DevHub sends Basic auth (`opencode:<password>`) to the local OpenCode API — used by Datadog **Investigate**, PR review handoffs, and other dashboard→OpenCode calls  |
+| `OPENCODE_SERVER_PASSWORD`              | —                               | When set, DevHub sends Basic auth (`opencode:<password>`) to the lazy OpenCode server used by session recap. |
 | `TERMINAL_PORT`                         | `1339`                          | In-app terminal PTY WebSocket peer (`dashboard/scripts/terminal-pty-server.ts`); localhost-only                                                                                |
 | `NEXT_PUBLIC_TERMINAL_PORT`             | `1339`                          | Browser-visible terminal port for the docked terminal iframe                                                                                                                   |
 | `DEVHUB_DEVELOPER_DIR`                  | `~/Developer`                   | Default shell cwd for the in-app terminal when a session does not pass `cwd`                                                                                                   |
@@ -185,38 +179,62 @@ See [OpenCode and OpenChamber](../guides/opencode-and-chamber.md). Coding chats 
 | `DEVHUB_TERMINAL_SHELL`                 | `$SHELL`                        | Override the shell binary for the terminal peer                                                                                                                                |
 | `DEVHUB_TERMINAL_LOG_DIR`               | `<tmpdir>/devhub-terminal-logs` | Per-session PTY output logs for **Copy all output** (`GET /api/terminal/log`)                                                                                                  |
 | `NEXT_PUBLIC_TERMINAL_SCROLLBACK`       | `50000`                         | Max xterm scrollback lines per terminal session in the browser. The on-disk log (`DEVHUB_TERMINAL_LOG_DIR`) is still the source of truth for **Copy all output** on long runs. |
-| `DEVHUB_AGENT_CLI`                      | `cursor`                        | Default assistant for DevHub→AionUi launches (auto-review, schedules, `agent_dispatch`): `cursor`, `opencode`, `chatgpt`, or `antigravity`. Prefer `DEVHUB_AI_PROVIDER`. Saving a provider from `/setup` writes both. |
+| `DEVHUB_TERMINAL_PASTE_DIR`             | `<tmpdir>/devhub-terminal-paste` | Where images pasted or dropped into the dock are written; the absolute path is typed at the prompt. |
+| `DEVHUB_TERMINAL_SHELL_INTEGRATION`     | on                              | Set `0` to stop injecting OSC 133 prompt marks into zsh. Block cards need them. |
+| `DEVHUB_AGENT_CLI`                      | `cursor`                        | Default agent for DevHub launches (auto-review, schedules, `agent_dispatch`) until one is picked on Agents → Connection: a Paseo provider id such as `cursor`, `claude`, `codex` (`chatgpt` works as an alias) or `opencode`. Prefer `DEVHUB_AI_PROVIDER`. Saving a provider from `/setup` writes both. |
 | `DEVHUB_AI_PROVIDER`                    | unset (auto)                    | Shared AI provider for in-app generation **and** agent launches: `cursor-cli`, `chatgpt-cli`, `antigravity-cli`, `opencode`, or `api`. Unset = first available in that order, then `AI_API_KEY`. Configure from `/setup` → AI Provider. |
 | `DEVHUB_AI_MAX_CONCURRENT`              | `3`                             | Process-wide cap on concurrent agent CLI / `generateAiText` runs. Extra jobs queue; wait time is **not** counted against a job's timeout. Set `1` on a small machine. |
-| `DEVHUB_AGENT_OPENCODE_MODEL`           | —                               | Optional `opencode run --model provider/model` override; blank keeps the shared `opencode.json` default                                                                        |
-| `DEVHUB_AGENT_CURSOR_MODEL`             | `cursor-grok-4.6-high-fast`     | CLI model id when Cursor is selected. AionUi launches map this to `grok-4.6[effort=high,fast=true]` unless `DEVHUB_AION_CURSOR_MODEL` is set                                   |
+| `DEVHUB_AGENT_OPENCODE_MODEL`           | —                               | Optional `provider/model` override for OpenCode runs; blank uses the `model` in `opencode.json`                                                                        |
+| `DEVHUB_AGENT_CURSOR_MODEL`             | `cursor-grok-4.5-high`          | CLI model id when Cursor is the one-shot provider. Paseo launches map it to Cursor's ACP form (e.g. `grok-4.6[effort=high,fast=true]`) and use `grok-4.6[effort=high]` when unset. |
 | `DEVHUB_AGENT_ANTIGRAVITY_MODEL`        | —                               | Optional `agy --model` override when Antigravity CLI is selected                                                                                                                |
 | `DEVHUB_OPENCODE_BINARY`                | —                               | Override path to the `opencode` binary                                                                                                                                         |
-| `OPENCHAMBER_BIN`                       | —                               | Override path to the `openchamber` CLI. Otherwise DevHub uses `openchamber` on `PATH`; if neither exists the Chamber tab is hidden.                                            |
-| `OPENCHAMBER_DATA_DIR`                  | `~/.config/openchamber`         | OpenChamber's data dir. DevHub seeds its default theme into `<dir>/settings.json` and copies themes into `<dir>/themes`.                                                       |
 | `DEVHUB_SIGN_IDENTITY`                  | —                               | Code-signing identity for the desktop scripts. Overrides the local certificate; set this to an Apple Developer ID when you have one. See [macOS permissions](../guides/macos-permissions.md). |
 
-Do not set `OPENCODE_HOST` or `OPENCODE_SKIP_START` either — Chamber Setup cannot restart an OpenCode process DevHub pinned.
+Do not set `OPENCODE_PORT`, `OPENCODE_HOST` or `OPENCODE_SKIP_START`; the recap server picks its own loopback port.
+
+## External Commands And Usage
+
+| Variable               | Default          | Purpose |
+| ---------------------- | ---------------- | ------- |
+| `DEVHUB_EXEC_TIMEOUT_MS` | `30000`        | Default timeout for `execExternal` calls. Overdue calls show on Status → External commands. |
+| `DEVHUB_GH_TIMEOUT_MS` | `30000`          | Default timeout for `gh` calls. |
+| `DEVHUB_PROJECTS_FILE` | `~/.config/devhub/projects.json` | Where Repos project groups (`/api/projects`) are stored. |
+| `OPENAI_ADMIN_KEY`     | —                | Organisation admin key. Agents → Usage shows billed Codex spend instead of an estimate from local logs. |
+| `CODEX_HOME`           | `~/.codex`       | Where Usage reads local Codex session logs. |
+
+## Auto PR Review
+
+Poller defaults until the first save from `/prs`; after that `notes/.config/auto-pr-review.json` wins for enable/always. See [Auto PR review](../guides/auto-pr-review.md).
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `DEVHUB_AUTO_PR_REVIEW` | off | `1` enables the weekday poller |
+| `DEVHUB_AUTO_PR_REVIEW_ALWAYS` | off | `1` skips the weekday/hours window |
+| `DEVHUB_AUTO_PR_REVIEW_INTERVAL_MS` | `900000` (15 min, min 60s) | Poll interval |
+| `DEVHUB_AUTO_PR_REVIEW_TZ` | `Europe/London` | Timezone for the hours window |
+| `DEVHUB_AUTO_PR_REVIEW_START_HOUR` / `_END_HOUR` | `9` / `18` | Hours window |
+| `DEVHUB_AUTO_PR_REVIEW_REPOS` | all | Comma-separated `owner/repo` allowlist |
+| `DEVHUB_AUTO_PR_REVIEW_CONCURRENCY` | `2` | Reviews at once (clamped to 1–2) |
 
 ## DevHub MCP: Agents, Toolsets, History
 
-The DevHub MCP's `agent_*` tools hand work to the connected **AionUi** workspace (Agents). Each dispatch creates a conversation with **YOLO** permissions and the defaults in [Agents (AionUi)](../guides/aionui-agents.md) (Cursor + Grok unless overridden). No terminal tab opens. Built-in assistants include Claude Code, Cursor, Codex, Gemini, OpenCode, Antigravity, Copilot, and Aion CLI. GUI agent apps such as AutoClaw still connect to DevHub as MCP clients; `sync` also writes those catalogs into AionUi.
+The DevHub MCP's `agent_*` tools hand work to the managed **Paseo** daemon (Agents). Each dispatch creates a conversation with **YOLO** permissions and the defaults in [Agents (Paseo)](../guides/paseo-agents.md) (Cursor + Grok unless overridden). No terminal tab opens. Providers include Claude Code, Codex, OpenCode and ACP agents such as Cursor and Copilot. Availability comes from the connected daemon. DevHub injects its MCP server at dispatch; harnesses load the user's remaining MCP configuration.
 
 | Variable                      | Default                                 | Purpose                                                                                                                                                           |
 | ----------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DEVHUB_AGENT_PROVIDERS_FILE` | `~/.config/devhub/agent-providers.json` | Custom CLI provider file used by leftover `legacy-cli` / interactive wrap code. Live `agent_providers` lists **AionUi assistants**, not this file. |
-| `DEVHUB_AGENT_RUNS_DIR`       | `<NOTES_DIR>/.config/agent-runs`        | Durable `spec.json`, `status.json` and `events.jsonl` for AionUi conversations, leftover CLI runs, and AI generation. Finished history is retained. |
+| `DEVHUB_AGENT_PROVIDERS_FILE` | `~/.config/devhub/agent-providers.json` | Custom CLI provider file used by leftover `legacy-cli` / interactive wrap code. Live `agent_providers` lists **Paseo providers**, not this file. |
+| `DEVHUB_AGENT_RUNS_DIR`       | `<NOTES_DIR>/.config/agent-runs`        | Durable `spec.json`, `status.json` and `events.jsonl` for Paseo agents, leftover CLI runs, and AI generation. Finished history is retained. |
 | `DEVHUB_AGENT_MAX_RUNS`       | `6`                                     | Active coding runs allowed at once. Small AI generation calls do not consume these slots. |
 | `DEVHUB_AGENT_MAX_COST_USD`   | `25`                                    | Refuse **new** dispatches once finished runs today have recorded this much USD. `0` disables. Mid-run cost is not enforced. |
-| `DEVHUB_AGENT_MAX_TURNS`      | `200`                                   | Default turn cap for leftover CLI runners. Current AionUi dispatch **rejects** `maxTurns` (`400`) — use the assistant's own controls. `0` disables. |
-| `DEVHUB_AGENT_MAX_SECONDS`    | `1800`                                  | Wall-clock kill for leftover CLI runners. AionUi conversations are not killed by this cap. `0` disables. |
-| `DEVHUB_AGENT_MAX_DEPTH`      | `1`                                     | How deep dispatch may nest. `1` means an agent that was itself dispatched cannot dispatch another. |
+| `DEVHUB_AGENT_MAX_TURNS`      | `200`                                   | Default turn cap for leftover CLI runners. Paseo dispatch **rejects** `maxTurns` (`400`) — use the assistant's own controls. `0` disables. |
+| `DEVHUB_AGENT_MAX_SECONDS`    | `1800`                                  | Wall-clock kill for leftover CLI runners. Paseo agents are not killed by this cap. `0` disables. |
+| `DEVHUB_AGENT_MAX_DEPTH`      | `1`                                     | How deep dispatch may nest. `1` means an agent that was itself dispatched cannot dispatch another. The implement flow's assigned reviewer (`tasks_implement_review`) may start one level deeper; nothing can start under it. |
 | `DEVHUB_AGENT_DEFAULT_WORKTREE` | `1`                                   | Isolated git worktree on dispatch unless the caller sets `worktree: false`. `0` restores editing `cwd` by default. |
 | `DEVHUB_AGENT_ALLOWED_ROOTS`  | `$HOME`                                 | Colon-separated directories a dispatch `cwd` must sit under (`~` allowed). Unset keeps the historical home-wide rule. |
-| `DEVHUB_AGENT_TRUST_ALL`      | unset                                   | Leftover CLI dock-consent bypass. AionUi dispatch does not show a first-run dock chip. |
+| `DEVHUB_AGENT_TRUST_ALL`      | unset                                   | Leftover CLI dock-consent bypass. Paseo dispatch does not show a first-run dock chip. |
 | `DEVHUB_AGENT_CONSENT_FILE`   | `<app-data>/agent-consent.json`         | Leftover CLI first-run consent store (`0600`). |
 | `DEVHUB_TASK_PR_WATCH_INTERVAL_MS` | `600000` (10 min, min 60s) | How often the dashboard checks PRs opened by task-linked agent runs (CI failures, review changes, merges) and drafts tasks from new alerts when enabled. Runs only in the process that owns the scheduler (`DEVHUB_SCHEDULER` ≠ `0`). |
-| `DEVHUB_MCP_TOOLSETS`         | all                                     | Comma-separated tool groups the DevHub MCP registers, e.g. `notes,tasks,terminal,agents`. Cursor ACP / AionUi `devhub` get a slimmer overlay at sync time; Claude Code stays full unless you set this yourself.         |
+| `DEVHUB_MCP_TOOLSETS`         | all                                     | Comma-separated tool groups the DevHub MCP registers, e.g. `notes,tasks,terminal,agents`. Cursor ACP and Cursor agents in Paseo get a slimmer overlay at sync time; Claude Code stays full unless you set this yourself.         |
 | `DEVHUB_MCP_HISTORY`          | on                                      | Set `0` to stop recording DevHub MCP tool calls.                                                                                                                  |
 | `DEVHUB_MCP_HISTORY_DIR`      | `~/.local/state/devhub/mcp-history`     | One `YYYY-MM-DD.jsonl` per local day: tool, redacted/clipped args, duration, outcome, client, agent run id. Read with `mcp_history` / `mcp_history_summary`.        |
 | `DEVHUB_MCP_HISTORY_DAYS`     | `30`                                    | Day files older than this are deleted when an MCP server starts. `0` keeps everything.                                                                            |
@@ -226,6 +244,16 @@ The DevHub MCP's `agent_*` tools hand work to the connected **AionUi** workspace
 | `DEVHUB_MCP_HTTP_TOKEN`       | generated                               | Bearer token HTTP MCP clients must send (min 32 chars). Unset: generated once into `DEVHUB_MCP_HTTP_TOKEN_FILE`.                                                   |
 | `DEVHUB_MCP_HTTP_TOKEN_FILE`  | `~/.config/devhub/mcp-http-token`       | Where the generated HTTP MCP token is kept (0600).                                                                                                                |
 | `DEVHUB_MCP_HTTP_ALLOWED_HOSTS` | —                                     | Extra `Host`/`Origin` names the HTTP MCP entry accepts besides loopback, e.g. a Tailscale hostname.                                                               |
+
+## Paseo runtime
+
+DevHub's agent work runs in [Paseo](../guides/paseo-agents.md). The defaults suit the managed install (`npm run agents:install`).
+
+| Variable                 | Default                     | Purpose                                                                                                                                  |
+| ------------------------ | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `DEVHUB_PASEO_URL`       | `ws://127.0.0.1:6767/ws`    | Paseo daemon WebSocket. Loopback only.                                                                                                   |
+| `DEVHUB_PASEO_PASSWORD`  | —                           | Daemon password, set as **Agents password** in `/setup`. Required by `npm run agents:install`, which stores it hashed; re-run it after changing the password. Falls back to the legacy `OPENCHAMBER_UI_PASSWORD`. |
+| `DEVHUB_PASEO_PORT`      | `6767`                      | Port the LAN proxy publishes for the Paseo web UI when LAN mode is on. |
 
 ## 1Password Fallback (Optional)
 
@@ -237,6 +265,7 @@ Used by `dashboard/scripts/op-secrets.ts` at dev/start to fill missing secrets i
 | `DEVHUB_OP_VAULT`      | —        | Vault name when multiple items match the title                                                                                                                                                                              |
 | `DEVHUB_OP_REFRESH`    | —        | Set to `1` to force re-fetch (ignores sync marker)                                                                                                                                                                          |
 | `DEVHUB_OP_CACHE`      | —        | Set to `0` to load secrets without writing `.env.local`                                                                                                                                                                     |
+| `DEVHUB_OP_CACHE_DIR`  | env dir  | Where the `.env.op-synced` marker is written                                                                                                                                                                                |
 | `DEVHUB_OP_SYNC_LOCAL` | —        | Set to `1` to also pull **local-only** keys (paths, ports, bind hosts) from 1Password when unset in env. Off by default so a new machine's existing paths are never overwritten. Useful for identical multi-machine setups. |
 
 Requires the `op` CLI installed and signed in. Non-secret keys (paths, bind hosts, ports, `AWS_PROFILE`, URLs/model names, etc.) are never loaded from 1Password unless `DEVHUB_OP_SYNC_LOCAL=1`.
@@ -264,7 +293,7 @@ Optional overrides for install, verify, and emergency pushes. These are not need
 
 | Variable                     | Default | Purpose                                                                                                                                                                                                                                                                                                                     |
 | ---------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DEVHUB_SKIP_POSTINSTALL`    | —       | Set to any truthy value to skip `dashboard/scripts/postinstall.ts` (also skipped when `CI` is set). Postinstall bootstraps `.env.local`, notes archive dirs, git hooks, OpenChamber theme seeding, and plugin branding materialisation — use `bash scripts/install.sh` for the full bootstrap when postinstall is disabled. |
+| `DEVHUB_SKIP_POSTINSTALL`    | —       | Set to any truthy value to skip `dashboard/scripts/postinstall.ts` (also skipped when `CI` is set). Postinstall bootstraps `.env.local`, notes archive dirs, git hooks, and plugin branding materialisation — use `bash scripts/install.sh` for the full bootstrap when postinstall is disabled. |
 | `DEVHUB_SKIP_NEXT_TYPECHECK` | —       | Set to `true` to skip Next.js's build-time TypeScript check. `npm run verify` sets this automatically because `tsc --noEmit` already ran; standalone `npm run build` still typechecks unless you set it.                                                                                                                    |
 | `DEVHUB_SKIP_VERIFY`         | `0`     | Set to `1` to bypass the `.githooks/pre-push` leak scan and `npm run verify`. Emergency only — fix and re-run verify before merging.                                                                                                                                                                                        |
 

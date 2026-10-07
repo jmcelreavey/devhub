@@ -96,9 +96,7 @@ describe("recall — end to end", () => {
     expect(top.signals.entity).toBeGreaterThan(0);
   });
 
-  it("treats #tags in the query as entity priors too", () => {
-    // The tag token exists only as a ref, never in the chunk text — lexical
-    // and vector signals stay near zero, so only the entity prior can rank it.
+  it("does not treat #tokens as entity priors", () => {
     writeNote("learnings/tagged-only", [
       "Prose about pipelines and queues and nothing else at all.",
       "Mentioning #tagboost here for the entity prior.",
@@ -106,11 +104,7 @@ describe("recall — end to end", () => {
     clearIndex();
     buildIndex();
     const result = recall({ query: "#tagboost" });
-    expect(result.queryRefs.some((r) => r.kind === "tag" && r.id === "tagboost")).toBe(true);
-    expect(result.hits.length).toBeGreaterThan(0);
-    const top = result.hits.find((h) => h.chunk.sourceId === "learnings/tagged-only");
-    expect(top).toBeDefined();
-    expect(top?.signals.entity ?? 0).toBeGreaterThan(0);
+    expect(result.queryRefs.some((r) => r.kind === "tag")).toBe(false);
   });
 
   it("ranks across sources, not just notes", () => {

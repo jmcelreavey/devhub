@@ -13,7 +13,8 @@
  *   without one, so an entry lacking a `.sig` is an entry that is broken for
  *   every user on that platform. That is a build failure, not a warning.
  * - **Only updater artifacts are listed.** A `.dmg` is an installer a human
- *   downloads; the updater consumes `.app.tar.gz` and `.AppImage`. Listing a
+ *   downloads; the updater consumes `.app.tar.gz`, `.AppImage` and the NSIS
+ *   `-setup.exe`. Listing a
  *   DMG here produces an update that downloads and then does nothing.
  *
  * Usage: build-updater-manifest.mjs <dist-dir> <version>
@@ -49,6 +50,12 @@ function platformFor(file) {
     // Tauri's default macOS bundle name carries no arch. Refusing to guess:
     // a mislabelled entry breaks updates for one whole architecture.
     return null;
+  }
+  // Tauri 2 updates Windows from the NSIS installer itself (there is no
+  // separate .zip), which is also what a human downloads.
+  if (file.endsWith("-setup.exe")) {
+    if (file.includes("arm64") || file.includes("aarch64")) return "windows-aarch64";
+    return "windows-x86_64";
   }
   if (file.endsWith(".AppImage")) {
     if (file.includes("aarch64") || file.includes("arm64")) return "linux-aarch64";

@@ -26,7 +26,7 @@ export function TldrawCanvas({ initialData, onChange, onEditorReady, contentSlug
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Bumped on navigation/delete/rename so debounced saves cannot write a prior diagram. */
   const saveGenerationRef = useRef(0);
-  const { mode } = useTheme();
+  const { resolvedMode: mode } = useTheme();
 
   const cancelPendingSave = useCallback(() => {
     if (saveTimer.current) {

@@ -43,15 +43,15 @@ describe("buildPeople", () => {
     // and without this rule he renders as two people on one screen.
     const people = buildPeople(
       sightings(
-        ["John McElreavey", "john@work.example", 4],
-        ["John McElreavey", "john@home.example", 34],
+        ["Jordan Miller", "john@work.example", 4],
+        ["Jordan Miller", "john@home.example", 34],
       ),
       { "john@work.example": account("jmcelreavey", 7) },
     );
     expect(people).toHaveLength(1);
     expect(people[0]).toMatchObject({
       githubLogin: "jmcelreavey",
-      displayName: "John McElreavey",
+      displayName: "Jordan Miller",
       commits: 38,
     });
     expect(people[0]?.emails).toEqual(["john@home.example", "john@work.example"]);
@@ -93,10 +93,10 @@ describe("buildPeople", () => {
 
   it("picks the display name attached to the most commits", () => {
     const people = buildPeople(
-      sightings(["jmc", "a@x.com", 2], ["John McElreavey", "b@x.com", 9]),
+      sightings(["jmc", "a@x.com", 2], ["Jordan Miller", "b@x.com", 9]),
       { "a@x.com": account("j"), "b@x.com": account("j") },
     );
-    expect(people[0]?.displayName).toBe("John McElreavey");
+    expect(people[0]?.displayName).toBe("Jordan Miller");
   });
 
   it("honours an explicit override", () => {
@@ -149,8 +149,8 @@ describe("buildPeople", () => {
     // keep the GitHub avatar on the combined person.
     const people = buildPeople(
       sightings(
-        ["John McElreavey", "john@work.example", 4],
-        ["John McElreavey", "john@home.example", 34],
+        ["Jordan Miller", "john@work.example", 4],
+        ["Jordan Miller", "john@home.example", 34],
       ),
       { "john@work.example": account("jmcelreavey", 7) },
       {},

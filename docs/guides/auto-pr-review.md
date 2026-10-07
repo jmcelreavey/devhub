@@ -9,7 +9,7 @@ related:
   - architecture/mcp-server
   - guides/scheduled-jobs
   - guides/pipeline-investigate
-  - guides/aionui-agents
+  - guides/paseo-agents
 ---
 
 # Auto agent-review (P0)
@@ -20,7 +20,8 @@ DevHub can start the same **Review with agent** job the PR row context menu star
 
 - **Source:** review-requested queue from `GET /api/github/prs` (already applies **Skip until updated**).
 - **Skips:** drafts; optional repo allowlist misses; PRs already auto-reviewed **once** for that PR URL (later pushes, comments, labels and CI do **not** re-queue — failed agent runs may still retry up to 3 attempts); PRs whose `pr-reviews/<slug>` note mtime already covers the PR's `updatedAt`; excess rows past the concurrency cap (1–2).
-- **Starts:** an AionUi conversation (default **Cursor** + **Grok 4.6 high**, fast off; per-harness YOLO / Cursor auto-confirm) with `agentReviewPrompt` + note path under `pr-reviews/` (identical to the UI action). The conversation attaches only **`devhub`** and **`lean-ctx`** MCP servers so Jira stays under Cursor ACP's tool cap. The agent writes the note via notes MCP; **nothing is posted to GitHub as a PR review**. Override with `DEVHUB_AGENT_CLI` / `DEVHUB_AGENT_CURSOR_MODEL` (or `DEVHUB_AION_CURSOR_MODEL`).
+- **Starts:** a Paseo agent (default **Cursor** + **Grok 4.6 high**, fast off; per-harness full-auto mode / Cursor auto-confirm) with `agentReviewPrompt` + note path under `pr-reviews/` (identical to the UI action). The run attaches only **`devhub`** and **`lean-ctx`** so Jira stays under Cursor ACP's tool cap. The agent writes the note via notes MCP; **nothing is posted to GitHub as a PR review**. Override with `DEVHUB_AGENT_CLI` / `DEVHUB_AGENT_CURSOR_MODEL` (or `DEVHUB_AION_CURSOR_MODEL`).
+- **Conventions:** before the agent starts, DevHub refreshes that repo's [conventions](repo-conventions.md) (waiting up to 90s, and only when the repo hasn't been mined recently). The review skill reads them through `repo_conventions` and adds a **Conventions** section to the note.
 - **Dedupe state:** `notes/.config/auto-pr-reviews.json` keyed by PR URL (once reviewed, stay reviewed; `headSha` is stored for diagnostics only).
 
 ## Enable / trigger
@@ -32,7 +33,7 @@ DevHub can start the same **Review with agent** job the PR row context menu star
 | MCP (one-shot) | `prs_auto_review` (dry-run) or `prs_auto_review` with `confirm: true` |
 | GUI / API poller toggle | On `/prs` → **Review requested**, pick **Off**, **Work hours** or **Always** in the **Auto-review** bar. Or `GET`/`PUT /api/github/prs/auto-review/settings` with `{ enabled?, always? }`. Persists to `notes/.config/auto-pr-review.json`; takes effect on the next tick (kicked immediately after save). |
 | MCP (poller prefs) | `prs_auto_review_settings_get` / `prs_auto_review_settings_set` (`enabled` / `always`) |
-| Env bootstrap (until first prefs save) | `DEVHUB_AUTO_PR_REVIEW=1` enables; `DEVHUB_AUTO_PR_REVIEW_ALWAYS=1` skips the weekday window. Once the prefs file exists, prefs win over env for enable/always. Interval / timezone / hours stay env-only: `DEVHUB_AUTO_PR_REVIEW_INTERVAL_MS` (default 15m), `DEVHUB_AUTO_PR_REVIEW_TZ` (default `Europe/London`), hours 9–18. The poller interval always registers at dashboard boot so GUI/MCP can enable without restart. |
+| Env bootstrap (until first prefs save) | `DEVHUB_AUTO_PR_REVIEW=1` enables; `DEVHUB_AUTO_PR_REVIEW_ALWAYS=1` skips the weekday window. Once the prefs file exists, prefs win over env for enable/always. Interval / timezone / hours stay env-only: `DEVHUB_AUTO_PR_REVIEW_INTERVAL_MS` (default 15m), `DEVHUB_AUTO_PR_REVIEW_TZ` (default `Europe/London`), `DEVHUB_AUTO_PR_REVIEW_START_HOUR` / `DEVHUB_AUTO_PR_REVIEW_END_HOUR` (default 9–18). The poller interval always registers at dashboard boot so GUI/MCP can enable without restart. |
 | Allowlist (optional) | `DEVHUB_AUTO_PR_REVIEW_REPOS=owner/repo,owner/other` — empty means all repos |
 | Concurrency | `DEVHUB_AUTO_PR_REVIEW_CONCURRENCY=1` or `2` (clamped) |
 

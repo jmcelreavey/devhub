@@ -113,6 +113,12 @@ describe("resolveDocAssets", () => {
     expect(JSON.stringify(out)).toContain("/api/docs-assets/guides/b.png");
   });
 
+  it("rewrites relative video links the same way", () => {
+    const tree = [{ type: "video", src: "../assets/demos/today.mp4", title: "Today" }];
+    const out = resolveDocAssets(tree, "architecture/dashboard") as typeof tree;
+    expect(out[0].src).toBe("/api/docs-assets/assets/demos/today.mp4");
+  });
+
   it("leaves non-image nodes untouched", () => {
     const tree = [{ type: "link", href: "../other", children: [] }];
     expect(resolveDocAssets(tree, "guides/x")).toEqual(tree);

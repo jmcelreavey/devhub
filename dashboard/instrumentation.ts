@@ -14,9 +14,11 @@ export async function register() {
     const { writeDashboardRuntime } = await import("./lib/dashboard-runtime");
     writeDashboardRuntime();
   }
-  const { startAionReconciliation } = await import("./lib/aionui/lifecycle");
-  startAionReconciliation();
   if (primary) {
+    const { startAgentReconciliation } = await import("./lib/paseo/lifecycle");
+    startAgentReconciliation();
+    const { startAgentCliUpdates } = await import("./lib/paseo/agent-cli-updates");
+    startAgentCliUpdates();
     const { startScheduler } = await import("./lib/scheduler");
     startScheduler();
     // Same single-owner rule: it writes the shared task sidecars.

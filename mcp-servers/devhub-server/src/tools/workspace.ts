@@ -45,7 +45,7 @@ function render(label: string, payload: unknown): string {
     }
   }
 
-  return `${label}:\n\`\`\`json\n${JSON.stringify(payload, null, 2).slice(0, 6_000)}\n\`\`\``;
+  return `${label}:\n\`\`\`json\n${JSON.stringify(payload).slice(0, 6_000)}\n\`\`\``;
 }
 
 function titleCase(key: string): string {
@@ -212,8 +212,7 @@ export function registerWorkspaceTools(server: McpServer, ctx: Context): void {
 /**
  * Deliberately not exposed yet:
  *
- * - `/api/actions/launch-{chamber,claude,opencode}` — spawns processes on the
- *   host. Worth having, but it should be an explicit decision rather than
+ * - `/api/actions/launch-cursor` — spawns a process on the host. Worth having, but it should be an explicit decision rather than
  *   arriving as a side effect of a parity sweep.
  * - `/api/persona` POST, `/api/collections` POST, `/api/briefing/tasks` POST —
  *   writes whose request shapes deserve their own schemas rather than a

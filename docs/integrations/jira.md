@@ -19,10 +19,6 @@ The Jira integration brings assigned tickets into DevHub and improves standup ge
 - Links from Jira keys in tasks.
 - Standup content based on recent ticket activity.
 
-## Walkthrough
-
-[Work, tasks, and Jira walkthrough](/api/notes-assets/assets/feature-demos/demo-04-work-tasks-jira.mp4)
-
 ## Setup
 
 Configure Jira from `/setup`.
@@ -54,6 +50,22 @@ Each task row has an **Add to Jira** action (Jira icon) when Jira is configured.
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /api/jira/meta?project=<KEY>&reference=<parentKey>?` | Board, sprint, Team field ids/values, and assignee for the modal                                                                   |
 | `POST /api/jira/issue`                                    | Body: `{ projectKey, summary, description?, parentKey?, issuetypeName?, assignToMe?, sprintId? }` — returns `{ key, url }` (`201`) |
+
+## Create Tickets From MCP
+
+Agents can use `jira_ticket_create` with `projectKey`, `summary`, and a Markdown
+`description`. Optional fields are `parentKey`, `assignToMe` (defaults to true),
+and `sprintId`. The dashboard chooses the issue type from the parent and inherits
+its Team, just as **Add to Jira** does.
+
+Creation requires `confirm: true` after user approval. Without it, the tool previews
+the request without contacting Jira. A successful call returns `key` and `url`;
+it does not attach the new key to a DevHub task. It uses the existing authenticated
+dashboard client, so agents do not need to read secrets or supply an Origin header.
+
+Each confirmed call creates another issue. If a request times out, check Jira
+before retrying. Restart the MCP connection after updating the server to expose
+the new tool.
 
 ## Workflow Transitions
 

@@ -16,6 +16,7 @@ type PollerMode = "off" | "hours" | "always";
 interface PollerSettings {
   enabled: boolean;
   always: boolean;
+  ownedOnly?: boolean;
   intervalMs?: number;
 }
 
@@ -65,8 +66,7 @@ export function AutoReviewBar({ disabled }: { disabled: boolean }) {
   const [candidate, setCandidate] = useState<GithubPrRow | null>(null);
   const [starting, setStarting] = useState(false);
 
-  const changeMode = async (mode: PollerMode) => {
-    const next = settingsFor(mode);
+  const saveSettings = async (next: Partial<PollerSettings>) => {
     setSaving(true);
     try {
       await settings.mutate(
@@ -77,13 +77,13 @@ export function AutoReviewBar({ disabled }: { disabled: boolean }) {
             body: JSON.stringify(next),
           });
           const json = (await res.json().catch(() => ({}))) as PollerSettings & { error?: string };
-          if (!res.ok) throw new Error(json.error ?? "Couldn't save the auto-review schedule");
+          if (!res.ok) throw new Error(json.error ?? "Couldn't save auto-review settings");
           return json;
         },
-        { optimisticData: { ...settings.data, ...next }, rollbackOnError: true, revalidate: false },
+        { optimisticData: { enabled: false, always: false, ...settings.data, ...next }, rollbackOnError: true, revalidate: false },
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't save the auto-review schedule");
+      toast.error(err instanceof Error ? err.message : "Couldn't save auto-review settings");
     } finally {
       setSaving(false);
     }
@@ -95,7 +95,9 @@ export function AutoReviewBar({ disabled }: { disabled: boolean }) {
       const { candidates = [] } = await postQueue({ dryRun: true, limit: 1 });
       const next = candidates[0]?.row;
       if (next) setCandidate(next);
-      else toast.info("Nothing to review — every request is a draft, skipped, or already reviewed.");
+      else toast.info(settings.data?.ownedOnly
+        ? "Nothing to review in your Owned repositories — mark repositories as Owned to include them."
+        : "Nothing to review — every request is a draft, skipped, or already reviewed.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't check the review queue");
     } finally {
@@ -131,8 +133,17 @@ export function AutoReviewBar({ disabled }: { disabled: boolean }) {
           aria-label="Auto-review schedule"
           options={MODE_OPTIONS.map((o) => ({ ...o, disabled: saving || !settings.data }))}
           value={mode}
-          onChange={(value) => void changeMode(value)}
+          onChange={(value) => void saveSettings(settingsFor(value))}
         />
+        <label className="flex items-center gap-1.5">
+          <input
+            type="checkbox"
+            checked={settings.data?.ownedOnly ?? false}
+            disabled={saving || !settings.data}
+            onChange={(event) => void saveSettings({ ownedOnly: event.target.checked })}
+          />
+          Owned repositories only
+        </label>
         <span className="text-text-subtle">
           {mode === "off"
             ? "Agent reviews run only when you ask."

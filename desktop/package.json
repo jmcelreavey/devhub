@@ -9,6 +9,7 @@
     "stage:dashboard": "node scripts/stage-dashboard.mjs",
     "stage:node": "node scripts/stage-node-runtime.mjs",
     "stage:resources": "node scripts/stage-resources.mjs",
-    "doctor": "node scripts/doctor.mjs"
+    "doctor": "node scripts/doctor.mjs",
+    "stage:wsl": "node scripts/stage-wsl-payload.mjs"
   }
 }

@@ -27,7 +27,7 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 | Skills       | Shared skill viewing, creation, sync, and collection                                                        |
 | Actions      | Safe script runner for maintenance tasks                                                                    |
 | Status       | Health checks for repo, services, MCP, sync health, merge conflicts, and network access                     |
-| Agents       | AionUi workspace: chats, activity, archive, connection (`/agents`)                                          |
+| Agents       | Paseo workspace: chats, usage, connection (`/agents`)                                                       |
 | Setup        | Environment and integration configuration                                                                   |
 | Repos        | Sibling git checkout discovery, per-repo **work hub**, GitHub clone/search, Cursor/GitKraken/CLI launch, compose-up, Repo Learning, and owned-repo radar (`?view=owned`) |
 | Databases    | In-app client for PostgreSQL, MongoDB, and SQLite (`/db`) — see [Database client](database-client.md)       |
@@ -35,31 +35,39 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 
 ## Walkthroughs
 
+Recorded against disposable demo data with `npm run demos:walkthroughs` — see [Recording demos](../contributing/recording-demos.md).
+
 ### Today workspace
 
-[Today tasks and planning walkthrough](/api/notes-assets/assets/feature-demos/demo-01-today.mp4)
+[Today: tasks, plans and progress](../assets/demos/today.mp4)
 
 When allowlisted script runs failed since your last visit, Today shows a dismissible **While you were away** banner (`WhileYouWereAway` → `GET /api/since?ts=<epoch-ms>`). The client stores the last-visit timestamp in `localStorage` (`devhub:last-visit`) and stamps it on unmount so opening the page does not immediately mark failures as seen. Successes are counted in the payload but do not surface a banner — only failures earn the alert. Default lookback is 12 hours when no prior visit is recorded.
 
 Finished agent/PR worktrees get a **non-dismissible** one-line count (`WorktreeCleanupNudge` → `GET /api/repos/worktree-cleanup`) linking to `/prs?tab=cleanup`. It disappears when those folders are gone. See [GitHub — Finished worktrees](../integrations/github.md#finished-worktrees).
 
-### Morning briefing
+### Work, history and weekly review
 
-[Briefing and design controls walkthrough](/api/notes-assets/assets/feature-demos/demo-02-briefing.mp4)
+[Work: filtering tasks, history and the weekly review](../assets/demos/work.mp4)
 
-### Research and diagrams
+### Repos
 
-[Research and diagrams walkthrough](/api/notes-assets/assets/feature-demos/demo-09-research-and-diagrams.mp4)
+[Repos: local clones and the per-repo hub](../assets/demos/repos.mp4)
 
-### Status, actions, and setup
+### Diagrams and docs
 
-[Status, Datadog, actions, and setup walkthrough](/api/notes-assets/assets/feature-demos/demo-11-status-datadog-actions-setup.mp4)
+[Diagrams and the in-app docs](../assets/demos/diagrams-and-docs.mp4)
+
+### System and setup
+
+[System: status tabs and setup](../assets/demos/system.mp4)
+
+Notes, search and the command palette have their own clips in [Notes system](notes-system.md#walkthroughs) and [Command palette](../guides/command-palette.md#walkthrough).
 
 ## Navigation (2026-09 IA)
 
 The sidebar is driven by `dashboard/lib/nav.ts` — **14** core sidebar destinations in `NAV_ITEMS` (plugin items such as Ops merge in separately), grouped into **Workspace**, **Library**, **BI**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`.
 
-Coding chats live on **Agents** (`/agents`). `/chamber` and `/opencode` redirect there; `/agent-activity` redirects to `/agents?view=activity`. There are no sidebar rows that open a Claude / Cursor / ChatGPT / Antigravity terminal tab.
+Coding chats live on **Agents** (`/agents`). `/chamber` and `/opencode` redirect there; `/agent-activity` redirects to `/agents`. There are no sidebar rows that open a Claude / Cursor / ChatGPT / Antigravity terminal tab.
 
 | Sidebar    | Route       | Notes                                                                                         |
 | ---------- | ----------- | --------------------------------------------------------------------------------------------- |
@@ -77,7 +85,7 @@ Coding chats live on **Agents** (`/agents`). `/chamber` and `/opencode` redirect
 | Ops        | `/ops`      | BI group; from BI plugin (`gate: bi`)                                                         |
 | Datadog    | `/datadog`  | BI group; gated on `datadog`                                                                  |
 | System     | `/status`   | Top-bar tabs: Status, Logs (desktop), Actions (desktop), Setup                                |
-| Agents     | `/agents`   | System group. Tabs: Chats / Activity / Archive / Connection. See [Agents (AionUi)](../guides/aionui-agents.md) |
+| Agents     | `/agents`   | System group. Tabs: Chats / Usage / Connection (old `?view=activity` links open Chats). See [Agents (Paseo)](../guides/paseo-agents.md) |
 
 ### Merged destinations
 
@@ -101,7 +109,7 @@ are AND-ed on every tab.
 
 ### Legacy routes
 
-Older URLs still work and remain reachable via **⌘K** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/own`, `/appraisal`, `/one-on-one`, `/recall`, `/radar`, `/research`, `/learnings`, `/diagrams`, `/docs`, `/shared`, `/actions`, `/logs`, `/setup`. They no longer have permanent sidebar slots — Library section tabs cover `/radar`, `/appraisal`, `/research`, `/diagrams`, `/docs`, and `/shared`; `/learnings` stays palette-only. `/own` redirects to `/repos?view=owned`. `/tasks` and `/tickets` redirect to `/work` and are not in `ALL_NAV_DESTINATIONS`. `/ops` (plugin) and `/datadog` live under the **BI** sidebar group. `/chamber` and `/opencode` redirect to `/agents`; `/agent-activity` redirects to `/agents?view=activity`.
+Older URLs still work and remain reachable via **⌘P** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/own`, `/appraisal`, `/one-on-one`, `/recall`, `/radar`, `/research`, `/learnings`, `/diagrams`, `/docs`, `/shared`, `/actions`, `/logs`, `/setup`. They no longer have permanent sidebar slots — Library section tabs cover `/radar`, `/appraisal`, `/research`, `/diagrams`, `/docs`, and `/shared`; `/learnings` stays palette-only. `/own` redirects to `/repos?view=owned`. `/tasks` and `/tickets` redirect to `/work` and are not in `ALL_NAV_DESTINATIONS`. `/ops` (plugin) and `/datadog` live under the **BI** sidebar group. `/chamber` and `/opencode` redirect to `/agents`; `/agent-activity` redirects to `/agents`.
 
 On mobile, the bottom shelf uses **Work** (`/work`) instead of separate Tasks/Tickets entries.
 
@@ -187,7 +195,7 @@ When Jira is configured, each task exposes an **Add to Jira** action. The modal 
 
 ### Implement with agent
 
-Task overflow **Implement with Agent…** (Today, Work, and the repo hub) opens the Agents handoff sheet and starts an AionUi conversation with the `devhub-implement-task` skill. It does not start until you pick an assistant.
+Task overflow **Implement with Agent…** (Today, Work, and the repo hub) opens the Agents handoff sheet and starts a Paseo agent with the `devhub-implement-task` skill. It does not start until you pick an assistant.
 
 The agent curls `GET /api/tasks/implement/plan?taskId=&date=` first — tags, linked notes/repos, Jira ticket, and a depth-2 entity graph. Repo choice comes from the **task's own** `kind: "repo"` links (a back-link from another repo must not steal the checkout). Hub rows pass the hub's `cwd` so the agent stays in that tree.
 
@@ -240,7 +248,7 @@ On `/prs`, if today's unfinished rep is a review-requested PR, that row's **Revi
 
 ## Agent CLI
 
-One shared **AI provider** covers in-app generation (briefings, learn-repo, Agent tab chat). Coding work — Implement, Review with agent, auto-review, schedules, MCP `agent_dispatch` — goes through **AionUi** (`POST /api/agent/runs`). Local CLIs still matter for `/setup → AI Provider` generation and leftover terminal handoffs.
+One shared **AI provider** covers in-app generation (briefings, learn-repo, Agent tab chat). Coding work — Implement, Review with agent, auto-review, schedules, MCP `agent_dispatch` — goes through **Paseo** (`POST /api/agent/runs`). Local CLIs still matter for `/setup → AI Provider` generation and leftover terminal handoffs.
 
 | Surface    | Route / env                           | Behavior                                                                                                           |
 | ---------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -248,19 +256,19 @@ One shared **AI provider** covers in-app generation (briefings, learn-repo, Agen
 | Skills     | **Skills → Agent CLI**                | Same settings                                                                                                      |
 | API        | `GET/PUT /api/agent-cli`              | Read/save `DEVHUB_AI_PROVIDER`, `DEVHUB_AGENT_CLI`, model overrides in `dashboard/.env.local`                      |
 | Setup poll | `GET /api/setup/status` → `agentVars` | Resolved provider plus install flags                                                                               |
-| Dispatch   | `GET/POST /api/agent/runs`            | AionUi conversations. See [Agents (AionUi)](../guides/aionui-agents.md)                                            |
+| Dispatch   | `GET/POST /api/agent/runs`            | Paseo agents. See [Agents (Paseo)](../guides/paseo-agents.md)                                            |
 
 Unset `DEVHUB_AI_PROVIDER` auto-picks the first available of Cursor CLI → ChatGPT/Codex CLI → Antigravity CLI (`agy`) → OpenCode → HTTP API. `PUT` with a provider whose binary/key is missing returns `400`. Legacy `DEVHUB_AGENT_CLI` (`opencode` \| `cursor` \| `chatgpt` \| `antigravity`) still maps in. Aliases `agy` / `antigravity` resolve to `antigravity-cli`.
 
 `launchAgentJob` opens the Agents handoff sheet (`openAgentHandoff`) for agent-like kinds; ordinary `promptCommand` jobs still go through the terminal propose chip. Concurrent CLI generations are capped at `DEVHUB_AI_MAX_CONCURRENT` (default 3); queued wait time is not counted against the job timeout.
 
-Launch wiring lives in `dashboard/lib/agent-job.ts`, `dashboard/lib/agent-runs/dispatch.ts`, and `dashboard/lib/ai/preference.ts`. See [OpenCode and OpenChamber — Agent CLI selection](../guides/opencode-and-chamber.md#agent-cli-selection).
+Launch wiring lives in `dashboard/lib/agent-job.ts`, `dashboard/lib/agent-runs/dispatch.ts`, and `dashboard/lib/ai/preference.ts`. See [Terminal and agent CLI — Agent CLI selection](../guides/terminal-and-agent-cli.md#agent-cli-selection).
 
 ## Pull Request Reviews
 
 **PRs** (`/prs`, gated on `github`) and the Today GitHub panel read `GET /api/github/prs` — authored PRs, review-requested PRs, and recently reviewed PRs (archived repos filtered from active queues; up to 100 rows per active bucket). Tabs: **Mine**, **Review requested**, **Recently reviewed**, **Skipped**, and **Worktrees** (`?tab=cleanup`). The screen search box filters those buckets client-side or pins a pasted PR URL; unmatched phrases fall back to `GET /api/github/prs/search` (**Elsewhere on GitHub**). See [GitHub — Search and pin](../integrations/github.md#search-and-pin) and [Finished worktrees](../integrations/github.md#finished-worktrees).
 
-The **Review with agent** row action does **not** call a GitHub review API. It opens the Agents handoff sheet (`launchAgentJob` → `openAgentHandoff` → `POST /api/agent/runs`) and starts an AionUi conversation with the `pr-explain-review` skill. The skill pulls conversation, inline review threads, and the linked Jira/GitHub ticket, then saves a note at `pr-reviews/<owner-repo-slug>-<pr-number>` via notes MCP. The **Notes** link polls `GET /api/notes/pr-reviews/<slug>` every few seconds until the note exists. There is no dashboard **Request review** action.
+The **Review with agent** row action does **not** call a GitHub review API. It opens the Agents handoff sheet (`launchAgentJob` → `openAgentHandoff` → `POST /api/agent/runs`) and starts a Paseo agent with the `pr-explain-review` skill. The skill pulls conversation, inline review threads, and the linked Jira/GitHub ticket, then saves a note at `pr-reviews/<owner-repo-slug>-<pr-number>` via notes MCP. The **Notes** link polls `GET /api/notes/pr-reviews/<slug>` every few seconds until the note exists. There is no dashboard **Request review** action.
 
 Full workflow, constraints, and troubleshooting: [GitHub integration](../integrations/github.md#row-actions).
 
@@ -371,7 +379,7 @@ AI enrichment (interests, design chat, research fallbacks) is additive: when `AI
 
 ### Shared AI provider
 
-Notes in-editor AI, Repo Learning generation, briefing design chat, and interest snippets all route through `dashboard/lib/ai-provider.ts`. That module reads `AI_API_KEY`, `AI_BASE_URL`, and `AI_MODEL` once and returns an OpenAI-compatible Vercel AI SDK model. GLM-specific `thinking` options are only sent when the configured base URL/model look like z.ai GLM — other providers get an empty options object so unknown fields are not rejected.
+Notes in-editor AI, Repo Learning generation, briefing design chat, and interest snippets all route through `dashboard/lib/ai/provider.ts`. That module reads `AI_API_KEY`, `AI_BASE_URL`, and `AI_MODEL` once and returns an OpenAI-compatible Vercel AI SDK model. GLM-specific `thinking` options are only sent when the configured base URL/model look like z.ai GLM — other providers get an empty options object so unknown fields are not rejected.
 
 ## Repo Status And Content Sync
 
@@ -396,7 +404,7 @@ The Status page (`/status`) aggregates Git, sync, services, and infra into one o
 | Repo                   | Branch, content vs other dirty counts, ahead/behind, last commit                                                                     | **Sync** runs `update_and_sync` on a clean tree; **Commit & sync…** chains `commit_dirty_push` then `update_and_sync` when dirty                                                                                                                                                                                            |
 | Merge conflicts        | Files with conflict markers under scoped content paths                                                                               | Inline edit via `ConflictResolverPanel`                                                                                                                                                                                                                                                                                     |
 | Skill sync             | `GET /api/sync-health` plus preview diffs when unhealthy                                                                             | Links to Agents library; see [Skills guide](../guides/skills.md#sync-preview-before-sync)                                                                                                                                                                                                                                   |
-| Services               | OpenChamber and OpenCode port probes                                                                                                 | Restart via `POST /api/status/services/restart`; cards hidden when setup disables a peer                                                                                                                                                                                                                                    |
+| Services               | **Agents workspace** card: whether the Paseo daemon answers (`GET /api/status/services`)                                              | Connected / not connected; restart from **Agents → Connection**                                                                                                                                                                                                                                                              |
 | MCP                    | Runtime scan of `mcp/shared/` only                                                                                                   | Idle = normal; missing binary = warning                                                                                                                                                                                                                                                                                     |
 | Infra                  | AWS profile/identity and kubectl context via `GET /api/bi` (plugin-backed)                                                           | Polls every 5 minutes; links to `/ops`                                                                                                                                                                                                                                                                                      |
 | External commands      | `GET /api/status/exec` — in-flight `execExternal` calls, slow recent ones, and in-flight DB queries                                  | Hidden when idle. An **overdue** row names the command (or query) holding things up. MCP: `status_exec`. See below.                                                                                                                                                                                                         |
@@ -407,7 +415,7 @@ Failed sync runs surface from `GET /api/scripts/history` with log detail from `G
 
 ### Desktop logs (`/logs`)
 
-On desktop, **System → Logs** (`/logs`, also in ⌘K) tails the rotating log files under the OS app-data directory (`~/Library/Application Support/DevHub/logs/` on macOS). The page polls `GET /api/status/logs` every two seconds while **Live** is on, with filters for `shell`, `sidecar`, and `renderer` sources. **Open folder** calls the Tauri `open_logs` bridge when available. For startup failures before the dashboard loads, see [Desktop recovery](../guides/desktop-recovery.md).
+On desktop, **System → Logs** (`/logs`, also in ⌘P) tails the rotating log files under the OS app-data directory (`~/Library/Application Support/DevHub/logs/` on macOS). The page polls `GET /api/status/logs` every two seconds while **Live** is on, with filters for `shell`, `sidecar`, and `renderer` sources. **Open folder** calls the Tauri `open_logs` bridge when available. For startup failures before the dashboard loads, see [Desktop recovery](../guides/desktop-recovery.md).
 
 The page reloads on manual refresh and polls Git/services/MCP/LAN every 30 seconds in the background.
 
@@ -479,7 +487,7 @@ When the checkout is on a feature branch with an open GitHub PR, the workspace h
 
 API routes are scoped under `/api/repos/<name>/git/…` (and branch push/pull under `/api/repos/<name>/branches`). See [API Routes](../reference/api-routes.md#repo-git-routes).
 
-**DevHub-only:** personal content paths (`notes/`, `tasks/`, `collections/`, `upstarts/`, `docs/`, plus env-resolved content dirs) are classified by `lib/content-sync-dirs.ts` and **hidden from the Changes list** in the DevHub repo. Scoped sync (`sync_notes_tasks_push`) covers `notes/`, `collections/`, `tasks/`, `docs/`, and `upstarts/` — **not** `diagrams/` or `reps/`, which must be committed through the Repo Git workspace, a manual commit, or relocated via `REPS_DIR`. Sibling repos show every file.
+**DevHub-only:** personal content paths (`notes/`, `tasks/`, `collections/`, `upstarts/`, `docs/`, plus env-resolved content dirs) are classified by `lib/content/sync-dirs.ts` and **hidden from the Changes list** in the DevHub repo. Scoped sync (`sync_notes_tasks_push`) covers `notes/`, `collections/`, `tasks/`, `docs/`, and `upstarts/` — **not** `diagrams/` or `reps/`, which must be committed through the Repo Git workspace, a manual commit, or relocated via `REPS_DIR`. Sibling repos show every file.
 
 | Problem                                | What to do                                                                                                                                                                                                                                                                                                                                                                                              |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

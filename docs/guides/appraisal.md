@@ -14,10 +14,6 @@ DevHub captures review evidence through MCP tools on the `devhub` server. Entrie
 
 Use this when you want **dated, reference-backed moments** during the year — not a scramble to reconstruct impact at review time.
 
-## Walkthrough
-
-[Capability Radar and appraisal walkthrough](/api/notes-assets/assets/feature-demos/demo-08-radar-and-appraisal.mp4)
-
 ## Dashboard UI
 
 | Route         | Purpose                                                                                                                     |
@@ -25,7 +21,7 @@ Use this when you want **dated, reference-backed moments** during the year — n
 | `/appraisal`  | Self-review hub — goals, themed entries, coverage bars, evidence suggestions from recent PRs/Jira/tasks, HR markdown export |
 | `/one-on-one` | 1:1 prep template seeded from appraisal themes and open goals                                                               |
 
-Both live under **Library** section tabs (or **⌘K**). The evidence panel on `/appraisal` calls `GET /api/appraisal/evidence?days=`; the main year view uses `GET /api/appraisal/year?year=`. Goal create/revise and evidence **Record** use `POST /api/appraisal/year` and `POST /api/appraisal/evidence` respectively (same write paths as the MCP tools).
+Both live under **Library** section tabs (or **⌘P**). The evidence panel on `/appraisal` calls `GET /api/appraisal/evidence?days=`; the main year view uses `GET /api/appraisal/year?year=`. Goal create/revise and evidence **Record** use `POST /api/appraisal/year` and `POST /api/appraisal/evidence` respectively (same write paths as the MCP tools).
 
 MCP tools remain the primary capture path for agents (`appraisal_record`, etc.); the UI is for review, export, and spotting gaps before review season.
 

@@ -81,10 +81,12 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: process.env.DEVHUB_SKIP_NEXT_TYPECHECK === "true",
   },
   /** @blocknote/xl-ai/server is tagged "use client"; keep it out of the App Route bundle. */
-  serverExternalPackages: ["@blocknote/xl-ai", "@blocknote/core", "adm-zip"],
+  serverExternalPackages: ["@blocknote/xl-ai", "@blocknote/core", "adm-zip", "@getpaseo/client", "@getpaseo/protocol", "@getpaseo/relay"],
   allowedDevOrigins: [...DEFAULT_ALLOWED_DEV_ORIGINS, ...extraAllowedDevOriginsFromEnv()],
   outputFileTracingExcludes: {
-    "/*": ["./next.config.ts"],
+    // Runtime content comes from the linked checkout. Tracing directory scans
+    // otherwise bundles personal files and their names into route manifests.
+    "/*": ["./next.config.ts", "../notes/**/*", "../tasks/**/*", "../reps/**/*", "../collections/**/*", "../upstarts/**/*", "../persona/identity.txt"],
     "/api/skills/\\[name\\]": ["./next.config.ts"],
   },
   outputFileTracingRoot: repoRoot,
@@ -159,7 +161,8 @@ const nextConfig: NextConfig = {
         ...prior,
         ({ request }: { request?: string }, callback: (err?: Error | null, result?: string) => void) => {
           // `adm-zip` uses bare require("path"); webpack then fails compiling instrumentation.
-          if (request?.startsWith("node:") || request === "adm-zip") {
+          // @getpaseo/* map import/default conditions to unshipped .ts sources; Node's own resolver picks the built "node" entry.
+          if (request?.startsWith("node:") || request === "adm-zip" || request?.startsWith("@getpaseo/")) {
             callback(null, `commonjs ${request}`);
             return;
           }

@@ -66,11 +66,11 @@ Gaps come back as an error toast with **Mark anyway**. **Move back to draft** is
 
 ## 4. Implement
 
-**Implement with Agent…** opens the Agents handoff sheet and starts an AionUi conversation linked to the task. The dialog has an optional **Anything else the agent should know?** box, which reaches the agent under `## Extra context from me`, and the prompt makes the agent restate the goal, list its assumptions and ask anything open **before** it writes code. That check-in is posted to Activity (`agent_interactive_note`) so the scoping decisions are auditable next to the run. The chip shows **Running** until the conversation finishes or you cancel it (see [Task agent handoff](task-agent-handoff.md#interactive-leftover)). When it ends, a snapshot (branch, commit, changes, session) is appended to the handoff.
+**Implement with Agent…** opens the Agents handoff sheet and starts a Paseo agent linked to the task. The dialog has an optional **Anything else the agent should know?** box, which reaches the agent under `## Extra context from me`, and the prompt makes the agent restate the goal, list its assumptions and ask anything open **before** it writes code. That check-in is posted to Activity (`agent_interactive_note`) so the scoping decisions are auditable next to the run. The chip shows **Running** until the conversation finishes or you cancel it (see [Task agent handoff](task-agent-handoff.md#interactive-leftover)). When it ends, a snapshot (branch, commit, changes, session) is appended to the handoff.
 
 ## 5. Follow the PR
 
-The dashboard checks the PR of each task's latest finished run every 10 minutes (`DEVHUB_TASK_PR_WATCH_INTERVAL_MS`). It finds the PR from the run's branch if the agent didn't record one.
+The dashboard checks the explicitly linked PR of each task's latest finished run every 10 minutes (`DEVHUB_TASK_PR_WATCH_INTERVAL_MS`). The agent records `prUrl` through `tasks_agent_runs` when it creates or works on that task's PR. A checkout branch or a PR mentioned as research context does not establish that link. Research and note-only runs keep their normal run status.
 
 | What it sees | Task row | Menu |
 | --- | --- | --- |

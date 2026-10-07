@@ -45,7 +45,7 @@ describe("durable agent history", () => {
 
   it("does not apply terminal expiry or dead-PID rules to managed work", () => {
     const run = create();
-    run.spec.runtime = "aionui";
+    run.spec.runtime = "paseo";
     run.spec.createdAt = 1;
     expect(reconcileAgentRun(run).status.state).toBe("queued");
     run.status = { ...run.status, state: "running", pid: 2_000_000_000 };
@@ -65,6 +65,12 @@ describe("durable agent history", () => {
 
   it("does not count small generation calls against the coding-run limit", () => {
     updateAgentRunStatus(create(), { state: "running", ownerPid: process.pid });
+    expect(countActiveAgentRuns()).toBe(0);
+  });
+
+  it("does not let historical AionUI runs consume Paseo capacity", () => {
+    const spec = { ...create().spec, id: newAgentRunId(), runtime: "aionui" as const };
+    updateAgentRunStatus(createAgentRun(spec), { state: "needs-attention" });
     expect(countActiveAgentRuns()).toBe(0);
   });
 

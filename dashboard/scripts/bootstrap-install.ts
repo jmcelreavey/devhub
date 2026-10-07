@@ -6,7 +6,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { execSync } from "node:child_process";
+import { execExternal } from "../lib/exec-external";
+import { augmentedPathEnv } from "../lib/process-env";
 import process from "node:process";
 import { syncSkills } from "@/lib/sync/skills";
 import { syncPersona } from "@/lib/sync/persona";
@@ -62,12 +63,16 @@ function ensureNoteDirs(): void {
   }
 }
 
-function run(cmd: string, opts: { cwd: string; label: string }): void {
-  try {
-    execSync(cmd, { cwd: opts.cwd, stdio: "inherit" });
-  } catch {
-    warn(`${opts.label} failed — see output above`);
-  }
+async function run(args: readonly string[], opts: { cwd: string; label: string; timeoutMs?: number }): Promise<void> {
+  const { stdout, stderr } = await execExternal("npm", args, {
+    cwd: opts.cwd,
+    env: augmentedPathEnv(),
+    timeoutMs: opts.timeoutMs ?? 180_000,
+    maxBuffer: 10 * 1024 * 1024,
+    label: opts.label,
+  });
+  process.stdout.write(stdout);
+  process.stderr.write(stderr);
 }
 
 function emit(line: string): void {
@@ -80,35 +85,35 @@ async function main(): Promise<void> {
 
   log("Syncing skills...");
   const sk = await syncSkills({ emit, repoRoot: REPO_ROOT, prune: false });
-  if (sk !== 0) warn("Skill sync had issues");
+  if (sk !== 0) throw new Error("Skill sync failed — see output above");
 
   log("Syncing persona...");
   const pe = await syncPersona({ emit, repoRoot: REPO_ROOT });
-  if (pe !== 0) warn("Persona sync had issues");
+  if (pe !== 0) throw new Error("Persona sync failed — see output above");
 
   log("Installing MCP configs...");
   const mcp = await syncMcpServers({ emit, repoRoot: REPO_ROOT, prune: true });
-  if (mcp !== 0) warn("MCP sync had issues");
+  if (mcp !== 0) throw new Error("MCP sync failed — see output above");
 
   const devhubServer = path.join(REPO_ROOT, "mcp-servers", "devhub-server");
   if (fs.existsSync(devhubServer)) {
     log("Installing DevHub MCP server dependencies...");
-    run("npm install --silent", { cwd: devhubServer, label: "DevHub MCP server npm install" });
+    await run(["install", "--silent"], { cwd: devhubServer, label: "DevHub MCP server npm install" });
   }
 
   // Plugin-contributed MCP servers (e.g. the BI plugin's devhub-bi-server) need their
   // own deps too.
   for (const { plugin, dir } of pluginMcpServerDirs()) {
     log(`Installing ${plugin} MCP server dependencies (${path.basename(dir)})...`);
-    run("npm install --silent", { cwd: dir, label: `${plugin} MCP server npm install` });
+    await run(["install", "--silent"], { cwd: dir, label: `${plugin} MCP server npm install` });
   }
 
   log("Building dashboard...");
-  run("npm run build --silent", { cwd: DASHBOARD_DIR, label: "Dashboard build" });
+  await run(["run", "build", "--silent"], { cwd: DASHBOARD_DIR, label: "Dashboard build", timeoutMs: 900_000 });
 
   log("Running validation...");
   const v = await validateRepo({ emit, repoRoot: REPO_ROOT });
-  if (v !== 0) warn("Validation found issues");
+  if (v !== 0) throw new Error("Validation failed — see output above");
 }
 
 main().catch((err) => {

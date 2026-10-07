@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { generateText } from "ai";
 import { getNotesAiCallOptions, getNotesAiModel } from "@/lib/ai/provider";
 import { runGitRepoAsync } from "@/lib/git/repo-local";
+import { getWritingVoicePrompt } from "@/lib/ai/writing-voice";
 import { gitFail, withScannedRepo, type RepoParams } from "../_shared";
 
 const MAX_DIFF_CHARS = 12_000;
@@ -49,6 +50,7 @@ export async function POST(_req: NextRequest, { params }: RepoParams) {
       model,
       ...getNotesAiCallOptions(),
       temperature: 0.2,
+      system: getWritingVoicePrompt() || undefined,
       prompt: [
         "Write a short git stash description for these working-tree changes.",
         "Rules: one line ≤72 chars, plain language, no quotes, no markdown fences,",

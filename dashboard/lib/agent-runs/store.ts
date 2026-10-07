@@ -185,7 +185,7 @@ function pidAlive(pid: number): boolean {
 }
 
 export function reconcileAgentRun(run: AgentRun): AgentRun {
-  if (run.spec.runtime === "aionui") return run;
+  if (run.spec.runtime === "aionui" || run.spec.runtime === "paseo") return run;
   if (run.spec.runtime === "generation") {
     if (isActiveAgentRunState(run.status.state) && run.status.ownerPid && !pidAlive(run.status.ownerPid)) {
       return updateAgentRunStatus(run, {
@@ -294,7 +294,7 @@ export function listAgentRuns(limit = 20): AgentRun[] {
 
 export function countActiveAgentRuns(): number {
   return listAgentRuns(Number.MAX_SAFE_INTEGER).filter((run) =>
-    run.spec.runtime !== "generation" && isActiveAgentRunState(run.status.state),
+    run.spec.runtime !== "generation" && run.spec.runtime !== "aionui" && isActiveAgentRunState(run.status.state),
   ).length;
 }
 
@@ -306,7 +306,7 @@ export type AgentRunCancelOutcome = "signalled" | "cancelled" | "already-finishe
  */
 export function cancelAgentRun(run: AgentRun): { run: AgentRun; outcome: AgentRunCancelOutcome } {
   const { status } = run;
-  if ((run.spec.runtime === "generation" || run.spec.runtime === "aionui") && isActiveAgentRunState(status.state)) {
+  if ((run.spec.runtime === "generation" || run.spec.runtime === "aionui" || run.spec.runtime === "paseo") && isActiveAgentRunState(status.state)) {
     throw new Error("Cancel this request through its owning runtime; it has no terminal process to signal.");
   }
   // Interactive runs' pid is the user's shell — never signal it; just close the record.

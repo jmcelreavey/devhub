@@ -10,8 +10,8 @@ import {
   patchEnvFileKeys,
   readDashboardEnvLocalFile,
   syncAgentProcessEnvFromOverrides,
+  syncPaseoProcessEnvFromOverrides,
   syncBiProcessEnvFromOverrides,
-  syncChamberProcessEnvFromOverrides,
   syncDatadogProcessEnvFromOverrides,
   syncGoogleProcessEnvFromOverrides,
   syncJiraProcessEnvFromOverrides,
@@ -167,24 +167,20 @@ export async function POST(req: NextRequest) {
     if (network.allowLan) {
       overrides.set("DEVHUB_BIND_HOST", "127.0.0.1");
       overrides.set("DEVHUB_LAN_PROXY_HOST", "auto");
-      overrides.set("OPENCHAMBER_HOST", "127.0.0.1");
       overrides.set("OPENCODE_BIND_HOST", "127.0.0.1");
       overrides.delete("OPENCODE_HOST");
     } else {
       overrides.set("DEVHUB_BIND_HOST", "127.0.0.1");
       overrides.delete("DEVHUB_LAN_PROXY_HOST");
-      overrides.set("OPENCHAMBER_HOST", "127.0.0.1");
       overrides.set("OPENCODE_BIND_HOST", "127.0.0.1");
       overrides.delete("OPENCODE_HOST");
     }
-    // OpenChamber >=1.13 refuses to bind a LAN address without UI auth, so a
-    // password is required to expose it over the network. Stored regardless of
-    // LAN state so toggling back on doesn't lose it.
-    if (network.openchamberUiPassword !== undefined) {
-      const pw = network.openchamberUiPassword.trim();
-      if (pw) overrides.set("OPENCHAMBER_UI_PASSWORD", pw);
-      else overrides.delete("OPENCHAMBER_UI_PASSWORD");
-    }
+    // Left over from OpenChamber, which DevHub no longer runs.
+    overrides.delete("OPENCHAMBER_HOST");
+    // The Agents (Paseo) daemon password. Blank keeps whatever is saved: clearing it
+    // would lock DevHub out of a daemon still configured with the old one.
+    const agentsPassword = network.agentsPassword?.trim();
+    if (agentsPassword) overrides.set("DEVHUB_PASEO_PASSWORD", agentsPassword);
     needsRestartNotice = true;
   }
 
@@ -242,7 +238,7 @@ export async function POST(req: NextRequest) {
   syncJiraProcessEnvFromOverrides(overrides);
   syncDatadogProcessEnvFromOverrides(overrides);
   syncBiProcessEnvFromOverrides(overrides);
-  syncChamberProcessEnvFromOverrides(overrides);
+  syncPaseoProcessEnvFromOverrides(overrides);
   syncAgentProcessEnvFromOverrides(overrides);
 
   const saved: string[] = [];
@@ -267,8 +263,8 @@ export async function POST(req: NextRequest) {
   if (agent?.opencodeModel?.trim()) saved.push(`DEVHUB_AGENT_OPENCODE_MODEL=${agent.opencodeModel.trim()}`);
   if (agent?.cursorModel?.trim()) saved.push(`DEVHUB_AGENT_CURSOR_MODEL=${agent.cursorModel.trim()}`);
 
-  if (network?.openchamberUiPassword?.trim() && overrides.get("OPENCHAMBER_UI_PASSWORD")) {
-    saved.push(`OPENCHAMBER_UI_PASSWORD=${mask(overrides.get("OPENCHAMBER_UI_PASSWORD")!)}`);
+  if (network?.agentsPassword?.trim() && overrides.get("DEVHUB_PASEO_PASSWORD")) {
+    saved.push(`DEVHUB_PASEO_PASSWORD=${mask(overrides.get("DEVHUB_PASEO_PASSWORD")!)}`);
   }
 
   const message = needsRestartNotice

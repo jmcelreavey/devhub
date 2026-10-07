@@ -96,8 +96,10 @@ notes/.cache/
 # DevHub local app state (machine-local)
 .devhub/
 
-# AionUi conversation index — rewritten every few seconds, so it keeps the tree dirty
-notes/.config/aionui-conversations.json
+# Agent-run transcripts and idempotency keys. One directory per dispatch.
+# The task-agent-runs index is the durable record.
+notes/.config/agent-runs/.requests/
+notes/.config/agent-runs/run-*/
 
 # Ad-hoc review screenshots
 /.review-shots/

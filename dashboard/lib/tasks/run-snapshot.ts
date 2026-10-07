@@ -95,7 +95,7 @@ export function buildRunSnapshotMarkdown(snapshot: RunSnapshot, ctx: RunSnapshot
 
 /**
  * Append the snapshot for a task-linked run (once per run) and remember the
- * branch + checkout so the PR watcher can find its pull request.
+ * branch + checkout as context for resuming work, not as proof of PR ownership.
  */
 export async function recordRunSnapshot(
   cwd: string,

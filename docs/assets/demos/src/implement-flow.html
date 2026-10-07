@@ -1,0 +1,237 @@
+<!doctype html>
+<!--
+  Source for docs/assets/demos/implement-flow.gif — an ILLUSTRATION of the ticket-to-PR flow,
+  not a screen capture. The real flow needs a live agent, real model access and Cursor, none of
+  which belong in a recording fixture. Ticket, file names and numbers are made up.
+  Render it with `npm run demos:illustrations`.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Implement a ticket</title>
+<style>
+  /* DevHub's Graphite Neon preset (dashboard/app/globals.css). */
+  :root {
+    --bg: #111416; --sidebar: #0d1012; --surface: #1b2024; --elevated: #232a30;
+    --border: #37414b; --muted-border: #252d35;
+    --text: #ebeff3; --muted: #a5b0ba; --subtle: #7d8892;
+    --accent: #9ed84a; --accent-dim: rgba(158, 216, 74, .15); --accent-fg: #121710;
+    --ok: #67d690; --bad: #e68a8a; --info: #6eb4eb;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; background: var(--bg); color: var(--text);
+    font: 15px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  header { height: 64px; display: flex; align-items: center; gap: 16px; padding: 0 28px;
+    background: var(--sidebar); border-bottom: 1px solid var(--muted-border); }
+  .ticket { font-weight: 650; font-size: 17px; }
+  .ticket b { color: var(--accent); font-weight: 700; margin-right: 8px; }
+  .illustration { margin-left: auto; font-size: 12px; color: var(--subtle); letter-spacing: .04em; text-transform: uppercase; }
+
+  .steps { display: flex; gap: 8px; padding: 14px 28px; border-bottom: 1px solid var(--muted-border); }
+  .step { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; font-size: 13px;
+    color: var(--subtle); border: 1px solid var(--muted-border); transition: all .3s cubic-bezier(.22, 1, .36, 1); }
+  .step i { font-style: normal; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center;
+    font-size: 11px; background: var(--elevated); color: var(--muted); }
+  .step.active { color: var(--text); border-color: var(--accent); background: var(--accent-dim); }
+  .step.active i { background: var(--accent); color: var(--accent-fg); }
+  .step.done { color: var(--muted); }
+  .step.done i { background: var(--ok); color: #0b1a12; }
+
+  main { position: relative; height: calc(720px - 64px - 55px - 96px); padding: 20px 28px; }
+  .card { position: absolute; top: 20px; bottom: 20px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden; opacity: 0; transform: translateY(14px);
+    transition: opacity .35s cubic-bezier(.22, 1, .36, 1), transform .35s cubic-bezier(.22, 1, .36, 1); }
+  .card.in { opacity: 1; transform: none; }
+  .card h2 { display: flex; align-items: center; gap: 8px; padding: 12px 16px; font-size: 13px; font-weight: 650;
+    background: var(--elevated); border-bottom: 1px solid var(--muted-border); }
+  .card h2 .model { color: var(--accent); }
+  .badge { margin-left: auto; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+    background: var(--accent-dim); color: var(--accent); }
+
+  #implementer { left: 28px; width: 372px; bottom: auto; height: 292px; }
+  #reviewer { left: 416px; width: 372px; bottom: auto; height: 292px; }
+  #devhub { left: 28px; width: 760px; top: 328px; }
+  #cursor { left: 804px; width: 448px; padding-bottom: 0; }
+
+  .log { padding: 12px 16px; display: flex; flex-direction: column; gap: 7px; font-size: 12.5px; }
+  .line { display: grid; grid-template-columns: 70px 1fr; gap: 8px; opacity: 0; transform: translateX(-6px);
+    transition: opacity .25s ease, transform .25s ease; }
+  .line.in { opacity: 1; transform: none; }
+  .line .k { color: var(--subtle); }
+  .line .v { color: var(--text); }
+  .ok { color: var(--ok); } .bad { color: var(--bad); } .info { color: var(--info); } .accent { color: var(--accent); }
+
+  .window-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; background: var(--sidebar);
+    border-bottom: 1px solid var(--muted-border); font-size: 12px; color: var(--muted); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); }
+  .panes { display: grid; grid-template-columns: 1.25fr .75fr; height: calc(100% - 80px); }
+  .pane { padding: 10px 12px; border-right: 1px solid var(--muted-border); font-size: 11px; overflow: hidden; }
+  .pane:last-child { border-right: 0; }
+  .tab { font-size: 11px; color: var(--muted); padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--muted-border); }
+  .tab.md { color: var(--accent); }
+  .code div { white-space: pre; line-height: 1.6; }
+  .code .add { color: var(--ok); background: rgba(103, 214, 144, .09); }
+  .code .del { color: var(--bad); background: rgba(230, 138, 138, .09); }
+  .code .ctx { color: var(--subtle); }
+  .md-body h3 { font-size: 13px; margin-bottom: 6px; }
+  .md-body p, .md-body li { font-size: 11px; color: var(--muted); line-height: 1.55; }
+  .md-body ul { padding-left: 14px; margin: 4px 0 8px; }
+  .verdict { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 650;
+    background: rgba(103, 214, 144, .14); color: var(--ok); }
+
+  footer { position: absolute; left: 0; right: 0; bottom: 0; height: 96px; padding: 0 28px; display: flex; align-items: center;
+    gap: 16px; background: var(--sidebar); border-top: 1px solid var(--muted-border); }
+  #prompt { display: flex; align-items: center; gap: 14px; opacity: 0; transform: translateY(10px); width: 100%;
+    transition: opacity .35s cubic-bezier(.22, 1, .36, 1), transform .35s cubic-bezier(.22, 1, .36, 1); }
+  #prompt.in { opacity: 1; transform: none; }
+  #prompt .who { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--subtle); }
+  #prompt .msg { font-size: 16px; font-weight: 600; }
+  #prompt .msg code { font: 13px ui-monospace, Menlo, monospace; color: var(--accent); margin-left: 6px; }
+  .btn { padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border); font-size: 14px; font-weight: 600;
+    background: var(--elevated); color: var(--text); transition: all .2s ease; }
+  .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  .btn.pressed { transform: scale(.95); filter: brightness(1.2); }
+  .btns { margin-left: auto; display: flex; gap: 10px; }
+  .result { color: var(--ok); }
+  .chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--muted-border); color: var(--muted); }
+  .chip.ok { color: var(--ok); border-color: rgba(103, 214, 144, .4); }
+</style>
+</head>
+<body>
+  <header>
+    <span class="ticket"><b>PAY-482</b>Cap webhook retries with jitter</span>
+    <span class="illustration">Illustration of the flow · names and numbers are examples</span>
+  </header>
+
+  <nav class="steps" id="steps">
+    <span class="step done" data-step="plan"><i>✓</i>Plan</span>
+    <span class="step" data-step="implement"><i>2</i>Implement</span>
+    <span class="step" data-step="verify"><i>3</i>Verify</span>
+    <span class="step" data-step="review"><i>4</i>Review</span>
+    <span class="step" data-step="decide"><i>5</i>You decide</span>
+    <span class="step" data-step="pr"><i>6</i>PR</span>
+  </nav>
+
+  <main>
+    <section class="card" id="implementer">
+      <h2>Implementer <span class="model">Claude</span><span class="badge">worktree</span></h2>
+      <div class="log mono" id="impl-log"></div>
+    </section>
+
+    <section class="card" id="reviewer">
+      <h2>Reviewer <span class="model">Codex · GPT-6-Astra</span><span class="badge">assigned · read-only</span></h2>
+      <div class="log mono" id="rev-log"></div>
+    </section>
+
+    <section class="card" id="devhub">
+      <h2>DevHub<span class="badge">your decision</span></h2>
+      <div class="log mono" id="hub-log"></div>
+    </section>
+
+    <section class="card" id="cursor">
+      <div class="window-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="mono" style="margin-left:8px">payments-api · devhub/agent/PAY-482</span></div>
+      <div class="panes">
+        <div class="pane code mono">
+          <div class="tab">retry.ts</div>
+          <div class="ctx">  function nextDelay(n) {</div>
+          <div class="del">-   return 2 ** n * 1000;</div>
+          <div class="add">+   const d = 2 ** n * 1000;</div>
+          <div class="add">+   return jitter(Math.min(d, MAX));</div>
+          <div class="ctx">  }</div>
+          <div class="ctx"> </div>
+          <div class="add">+ const MAX = 30_000;</div>
+        </div>
+        <div class="pane md-body">
+          <div class="tab md mono">pay-482-review.md</div>
+          <h3>Review · PAY-482</h3>
+          <p>Task fit, control flow, tests run.</p>
+          <ul>
+            <li>Must-fix: backoff uncapped</li>
+            <li>Simplify: −14 test lines</li>
+          </ul>
+          <h3>Resolution</h3>
+          <ul>
+            <li>Capped at 30s, 129 pass</li>
+          </ul>
+          <span class="verdict">Ready for your decision</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div id="prompt">
+      <span class="who">Agent asks</span>
+      <span class="msg" id="prompt-msg">Commit &amp; push?<code>feat(webhooks): cap retries with jitter</code></span>
+      <span class="btns" id="btns"><span class="btn primary" id="yes">Yes</span><span class="btn">Not yet</span></span>
+    </div>
+  </footer>
+
+<script>
+  const $ = (sel) => document.querySelector(sel);
+  const line = (target, key, html) => {
+    const el = document.createElement("div");
+    el.className = "line";
+    el.innerHTML = `<span class="k">${key}</span><span class="v">${html}</span>`;
+    $(target).appendChild(el);
+    requestAnimationFrame(() => el.classList.add("in"));
+  };
+  const setStep = (name) => {
+    const order = ["plan", "implement", "verify", "review", "decide", "pr"];
+    const at = order.indexOf(name);
+    document.querySelectorAll(".step").forEach((el) => {
+      const i = order.indexOf(el.dataset.step);
+      el.classList.toggle("done", i < at);
+      el.classList.toggle("active", i === at);
+      el.querySelector("i").textContent = i < at ? "✓" : String(i + 1);
+    });
+  };
+  const show = (sel) => $(sel).classList.add("in");
+
+  // [ms, action]. One pass, then window.__done flips so the recorder knows when to stop.
+  const timeline = [
+    [300, () => { setStep("implement"); show("#implementer"); }],
+    [900, () => line("#impl-log", "check-in", "2 assumptions · <span class='ok'>no questions</span>")],
+    [1700, () => line("#impl-log", "branch", "devhub/agent/PAY-482 <span class='info'>(worktree)</span>")],
+    [2500, () => line("#impl-log", "edit", "src/webhooks/retry.ts <span class='ok'>+42</span> <span class='bad'>−7</span>")],
+    [3300, () => line("#impl-log", "edit", "src/webhooks/retry.test.ts <span class='ok'>+31</span>")],
+    [4000, () => setStep("verify")],
+    [4200, () => line("#impl-log", "test", "128 passed <span class='ok'>✓</span>")],
+    [4900, () => line("#impl-log", "lint", "lint · typecheck <span class='ok'>✓</span>")],
+    [5800, () => { setStep("review"); show("#reviewer"); line("#impl-log", "review", "asked <span class='accent'>Codex</span> · GPT-6-Astra"); }],
+    [6600, () => line("#rev-log", "scope", "diff vs merge-base · 2 files")],
+    [7300, () => line("#rev-log", "task fit", "matches PAY-482 acceptance <span class='ok'>✓</span>")],
+    [8000, () => line("#rev-log", "must-fix", "<span class='bad'>retry.ts:58 backoff is uncapped</span>")],
+    [8700, () => line("#rev-log", "simplify", "−14 lines possible in tests")],
+    [9400, () => line("#rev-log", "verdict", "<span class='bad'>changes requested</span>")],
+    [10300, () => line("#impl-log", "fix", "cap backoff at 30s · <span class='ok'>129 passed ✓</span>")],
+    [11100, () => line("#impl-log", "note", "## Resolution added to the review")],
+    [12300, () => { show("#devhub"); line("#hub-log", "note", "review + resolution · <span class='info'>pr-reviews/payments-api-pay-482</span>"); }],
+    [13100, () => { setStep("decide"); show("#cursor"); line("#hub-log", "open", "worktree + review.md in <span class='accent'>Cursor</span>, side by side"); }],
+    [14900, () => { show("#prompt"); line("#hub-log", "hold", "nothing is committed or pushed until you say yes"); }],
+    [16900, () => $("#yes").classList.add("pressed")],
+    [17300, () => {
+      $("#yes").classList.remove("pressed");
+      $("#prompt-msg").innerHTML = "✓ Pushed. Create a draft PR?";
+    }],
+    [19500, () => $("#yes").classList.add("pressed")],
+    [19900, () => {
+      setStep("pr");
+      $("#yes").classList.remove("pressed");
+      $("#prompt-msg").innerHTML = "✓ Draft PR #482 opened. Move Jira to In Code Review?";
+      line("#hub-log", "link", "PR, note, task and ticket cross-linked");
+    }],
+    [22100, () => $("#yes").classList.add("pressed")],
+    [22500, () => {
+      $("#prompt-msg").innerHTML = "<span class='result'>✓ Jira → In Code Review</span>";
+      $("#btns").innerHTML = "<span class='chip'>PR watcher: CI running…</span>";
+    }],
+    [24500, () => { window.__done = true; }],
+  ];
+  window.__play = () => timeline.forEach(([ms, fn]) => setTimeout(fn, ms));
+</script>
+</body>
+</html>

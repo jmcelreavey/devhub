@@ -43,6 +43,27 @@ export function shouldExpandOnTerminalOpen(opts: {
   return !opts.userCollapsed;
 }
 
+/** Grace before a finished agent tab closes itself, so a quick command can still be glimpsed. */
+export const AGENT_TAB_CLOSE_DELAY_MS = 4_000;
+
+/** Only commands an agent asked for over MCP count; an agent you launched yourself is yours to close. */
+export function isAgentRunSource(source: string | undefined): boolean {
+  return source === "mcp";
+}
+
+/**
+ * Should a tab opened for an agent's command close itself once it is done?
+ *
+ * Only on success: a failure is the one thing worth coming back to read, and
+ * an unknown exit code is not evidence of success.
+ */
+export function shouldAutoCloseAgentTab(opts: {
+  agentRun: boolean | undefined;
+  exitCode: number | null | undefined;
+}): boolean {
+  return opts.agentRun === true && opts.exitCode === 0;
+}
+
 export function parsePersistedDockState(raw: string | null): PersistedDockState | null {
   if (!raw) return null;
   try {

@@ -12,7 +12,6 @@ import { CornerUpLeft, Link2, Share2 } from "lucide-react";
 import {
   defaultHrefForRef,
   parseEntityLinksFromMarkdown,
-  tagRefs,
   type EntityRef,
 } from "@/lib/entity-note";
 import { blocksToText } from "@/lib/markdown-convert";
@@ -81,11 +80,10 @@ export function EntityRelationsPanel({
   const outbound = useMemo(() => {
     if (!blocks?.length) return [] as EntityRef[];
     try {
-      // Inline #tags count as outbound refs so they're drillable from the
-      // panel, same as ## Links entries.
       const md = blocksToText(blocks);
       const seen = new Set<string>();
-      return [...parseEntityLinksFromMarkdown(md), ...tagRefs(md)].filter((ref) => {
+      return parseEntityLinksFromMarkdown(md).filter((ref) => {
+        if (ref.kind === "tag") return false;
         const key = `${ref.kind}:${ref.id}`;
         if (seen.has(key)) return false;
         seen.add(key);

@@ -1,0 +1,31 @@
+.page { max-width: 1240px; margin-inline: auto; }
+.subtitle { margin-top: 6px; font-size: 14px; line-height: 1.5; color: var(--text-subtle); }
+.summary { margin-block: 24px 28px; padding: 20px 24px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-surface); }
+.summaryHeading { display: flex; gap: 12px; align-items: flex-start; }
+.summaryHeading > svg, .summaryHeading > span { flex-shrink: 0; margin-top: 3px; }
+.summaryHeading h2 { font-size: 17px; font-weight: 600; line-height: 1.4; }
+.summaryHeading p, .healthy { font-size: 12px; line-height: 1.6; color: var(--text-subtle); margin-top: 4px; }
+.healthy { margin-top: 12px; }
+.issues { margin-top: 16px; border-top: 1px solid var(--border-muted); }
+.issues li { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 0; font-size: 13px; border-bottom: 1px solid var(--border-muted); }
+.issues li:last-child { border-bottom: 0; padding-bottom: 0; }
+.issues button { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; color: var(--accent); cursor: pointer; min-height: 32px; }
+.issues button:hover { text-decoration: underline; text-underline-offset: 3px; }
+.unavailable { display: flex; align-items: center; gap: 16px; justify-content: space-between; margin-top: 16px; border-top: 1px solid var(--border-muted); padding-top: 16px; }
+.unavailable p { color: var(--text-subtle); font-size: 13px; line-height: 1.5; }
+.unavailable button { flex-shrink: 0; }
+.tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--border); }
+.tabs button { min-height: 44px; padding: 10px 2px; font-size: 14px; color: var(--text-subtle); border-bottom: 2px solid transparent; cursor: pointer; }
+.tabs button[aria-selected="true"] { color: var(--text); border-color: var(--accent); font-weight: 600; }
+.tabs button:hover { color: var(--text); }
+.tabs button:focus-visible, .issues button:focus-visible, .panel:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.panel { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.sectionHint { font-size: 13px; line-height: 1.5; color: var(--text-subtle); margin-bottom: 4px; }
+@media (max-width: 640px) {
+  .summary { padding: 16px; }
+  .tabs { gap: 16px; }
+  .tabs button { font-size: 13px; }
+  .issues li { align-items: flex-start; gap: 8px; }
+  .issues button { min-height: 44px; }
+  .unavailable { align-items: flex-start; flex-direction: column; gap: 8px; }
+}

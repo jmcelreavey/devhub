@@ -29,4 +29,15 @@ describe("skipped prs", () => {
     expect(listSkippedPrs()).toHaveLength(0);
     expect(await applySkippedPrs([pushed])).toHaveLength(1);
   });
+
+  it("remembers which list a PR was skipped from", async () => {
+    process.env.NOTES_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-skipped-prs-"));
+    const { skipPr, listSkippedPrs } = await import("@/lib/github/skipped-prs");
+
+    await skipPr({ number: 2, title: "mine", url: "https://github.com/a/b/pull/2", repo: "a/b", kind: "authored" });
+    await skipPr({ number: 3, title: "theirs", url: "https://github.com/a/b/pull/3", repo: "a/b" });
+
+    const byNumber = Object.fromEntries(listSkippedPrs().map((r) => [r.number, r.kind]));
+    expect(byNumber).toEqual({ 2: "authored", 3: undefined });
+  });
 });

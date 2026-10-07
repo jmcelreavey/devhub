@@ -4,6 +4,7 @@ export {
   getHome,
   getDocsDir,
   getTasksDir,
+  getActiveTasksDir,
   getCollectionsDir,
   getUpstartsDir,
 } from "@/lib/content/dirs";

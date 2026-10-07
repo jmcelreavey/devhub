@@ -4,7 +4,8 @@ import { randomUUID } from "node:crypto";
 import { NotesStorage } from "./storage.ts";
 import { NOTE_SIZE, geoHeight, indexKeyAt, noteGrowY } from "./diagram-geometry.ts";
 import { buildGraphRecords, type GraphSpec } from "./diagram-graph.ts";
-import { normalizeTaskLinkState } from "../../../shared/task-note/index.ts";
+import { normalizeTaskLinkState, taskNotePath } from "../../../shared/task-note/index.ts";
+import { resolveStoredTaskNotes } from "../../../shared/task-note/resolve.ts";
 // The shared type, not a hand-copied one. The local duplicate was missing the
 // "tag" kind, so refs coming back from `normalizeTaskLinkState` no longer fit
 // the field they were being written into.
@@ -12,24 +13,8 @@ import type { EntityRef } from "../../../shared/entity-note/index.ts";
 
 export type { EntityRef };
 
-export interface Task {
-  id: string;
-  text: string;
-  done: boolean;
-  jiraKey?: string;
-  due?: string;
-  createdAt: string;
-  completedAt?: string;
-  abandonedAt?: string;
-  abandonReason?: string;
-  movedAt?: string;
-  movedToDate?: string;
-  timeSpentMs?: number;
-  timerStartedAt?: string;
-  links?: EntityRef[];
-  /** "draft" = captured idea, not yet a plan an agent can run. Absent = ready. */
-  stage?: "draft";
-}
+import type { Task } from "../../../shared/tasks/types.ts";
+export type { Task } from "../../../shared/tasks/types.ts";
 
 export interface TaskDaySummary {
   date: string;
@@ -46,8 +31,19 @@ export interface TaskDay extends TaskDaySummary {
 export class TasksStorage {
   private dir: string;
 
-  constructor(tasksDir: string) {
+  constructor(tasksDir: string, private notesDir = path.join(path.dirname(tasksDir), "notes")) {
     this.dir = path.resolve(tasksDir);
+  }
+
+  resolveNotePath(task: Task, date: string): string {
+    return resolveStoredTaskNotes(task, date, {
+      readTask: (sourceDate, id) => this.read(sourceDate).find((t) => t.id === id),
+      noteExists: (notePath) => fs.existsSync(path.join(this.notesDir, `${notePath}.json`)),
+    }).notePath;
+  }
+
+  private withNotePath(task: Task, date: string): Task {
+    return { ...task, notePath: this.resolveNotePath(task, date) };
   }
 
   private file(date: string): string {
@@ -103,7 +99,7 @@ export class TasksStorage {
   }
 
   getDay(date: string): TaskDay {
-    const tasks = this.read(date);
+    const tasks = this.read(date).map((task) => this.withNotePath(task, date));
     return {
       date,
       total: tasks.length,
@@ -115,7 +111,7 @@ export class TasksStorage {
   }
 
   getToday(): Task[] {
-    return this.read(this.todayISO());
+    return this.getDay(this.todayISO()).tasks;
   }
 
   add(text: string, date?: string, due?: string, stage?: "draft"): Task {
@@ -131,6 +127,7 @@ export class TasksStorage {
       createdAt: new Date().toISOString(),
       ...(stage ? { stage } : {}),
     };
+    task.notePath = taskNotePath({ ...task, date: target });
     tasks.push(task);
     this.write(target, tasks);
     return task;
@@ -198,6 +195,7 @@ export class TasksStorage {
       task.abandonReason = undefined;
     }
 
+    task.notePath = this.resolveNotePath(task, target);
     this.write(target, tasks);
     return task;
   }

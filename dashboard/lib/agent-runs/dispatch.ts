@@ -1,10 +1,10 @@
 /** Server-owned dispatch. Starting work never opens or targets a user interface. */
 import { agentBudgets,costRefusalMessage,spentToday } from "@/lib/agent-runs/budget";
-import { clip } from "@/lib/agent-runs/events";
 import { createRunWorktree,gitHead,type AgentWorktreeLabel } from "@/lib/agent-runs/git";
+import { agentRunTitle } from "./title";
 import { parseJiraIssueKey } from "@/lib/entity-note";
 import { getTasks } from "@/lib/tasks/storage";
-import { writeRunSpec,type AgentActivityContext,type AgentRunWorktree } from "@/lib/agent-runs/run-files";
+import { isActiveAgentRunState,writeRunSpec,type AgentActivityContext,type AgentRunWorktree } from "@/lib/agent-runs/run-files";
 import {
 agentRunDir,
 countActiveAgentRuns,
@@ -15,11 +15,12 @@ readAgentRun,
 updateAgentRunStatus,
 type AgentRun,
 } from "@/lib/agent-runs/store";
-import { aionCatalog,assistantForProvider } from "@/lib/aionui/catalog";
-import { modelAllowedForAssistant, resolveAionDispatchDefaults } from "@/lib/aionui/dispatch-defaults";
-import { AionRequestError } from "@/lib/aionui/client";
-import { aionConnectionId } from "@/lib/aionui/connection";
 import { upsertTaskAgentRun } from "@/lib/tasks/task-agent-runs";
+import { paseoUrl } from "@/lib/paseo/client";
+import { startPaseoAgent } from "@/lib/paseo/dispatch";
+import { resolvePaseoLaunch } from "@/lib/paseo/launch";
+import { preferredPaseoProvider } from "@/lib/paseo/managed";
+import { listPaseoProviders } from "@/lib/paseo/providers";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -67,6 +68,13 @@ export interface AgentDispatchInput {
    * auto-review poller): the reason stands in for the first-run chip.
    */
   unattendedReason?: string;
+  /**
+   * The implement flow's assigned reviewer, started by an implementing agent.
+   * Allowed one nesting level deeper than other runs, so a review can hang off
+   * an implement run but nothing can hang off the review. Server-internal: the
+   * dispatch API schema cannot set it.
+   */
+  reviewRun?: boolean;
 }
 
 
@@ -124,11 +132,6 @@ export function validateAgentCwd(raw: string, env: NodeJS.ProcessEnv = process.e
   return resolved;
 }
 
-function defaultTitle(prompt: string): string {
-  const firstLine = prompt.trim().split("\n")[0] ?? "";
-  return clip(firstLine, 60);
-}
-
 const REVIEW_MCP_SERVERS = ["devhub", "lean-ctx"] as const;
 
 /** Keep review conversations below Cursor ACP's tool cap so Jira stays visible. */
@@ -136,9 +139,12 @@ export function mcpServersForActivity(action: string | undefined): readonly stri
   return action === "review" || action === "pr-review" ? REVIEW_MCP_SERVERS : undefined;
 }
 
+/** DevHub's own MCP only; harnesses bring the user's MCP config themselves. */
+const PASEO_DEFAULT_MCP = ["devhub"] as const;
+
 export async function dispatchAgentRun(input: AgentDispatchInput): Promise<AgentRun> {
   if (!input.prompt.trim() || input.prompt.length > 32_000) throw new AgentDispatchError("A prompt between 1 and 32,000 characters is required.", 400);
-  const maxDepth = envInt("DEVHUB_AGENT_MAX_DEPTH", 1);
+  const maxDepth = envInt("DEVHUB_AGENT_MAX_DEPTH", 1) + (input.reviewRun ? 1 : 0);
   if (input.depth >= maxDepth) {
     throw new AgentDispatchError(
       `Nested dispatch refused: the caller is already an agent run (depth ${input.depth}, DEVHUB_AGENT_MAX_DEPTH=${maxDepth}).`,
@@ -146,20 +152,16 @@ export async function dispatchAgentRun(input: AgentDispatchInput): Promise<Agent
     );
   }
 
-  let catalog: Awaited<ReturnType<typeof aionCatalog>>;
-  try { catalog = await aionCatalog(); } catch (error) { throw new AgentDispatchError(error instanceof Error ? error.message : "Connect AionUi in Agents.", 503); }
-  const { client, session, assistants } = catalog;
-  const defaults = resolveAionDispatchDefaults({
-    provider: input.provider || session.defaultAssistantId,
-    model: input.model,
-    assistants,
-  });
-  const assistant = assistantForProvider(assistants, defaults.provider);
-  if (!assistant?.enabled || assistant.agent_status !== "online") throw new AgentDispatchError("The selected agent is not ready. Check it in AionUi's Assistants view.", 400);
-  if (!modelAllowedForAssistant(assistant, defaults.model)) throw new AgentDispatchError("The selected model is not advertised by this assistant. Choose its default model or configure it in AionUi.", 400);
-  const model = defaults.model;
-  const permission = defaults.permission;
-  const autoconfirmPermissions = defaults.autoconfirmPermissions;
+  let launch: ReturnType<typeof resolvePaseoLaunch>;
+  try {
+    launch = resolvePaseoLaunch({
+      provider: input.provider?.trim() || preferredPaseoProvider(), model: input.model, depth: input.depth,
+      mcpNames: mcpServersForActivity(input.activity?.action) ?? PASEO_DEFAULT_MCP,
+    });
+  } catch (error) { throw new AgentDispatchError(error instanceof Error ? error.message : String(error), 400); }
+  let connectionId: string;
+  try { connectionId = paseoUrl(); } catch (error) { throw new AgentDispatchError(error instanceof Error ? error.message : String(error), 503); }
+  const model = launch.model;
 
   if (input.requestId) {
     const existingId = readAgentRequest(input.requestId);
@@ -170,12 +172,18 @@ export async function dispatchAgentRun(input: AgentDispatchInput): Promise<Agent
       return existing;
     }
   }
-  if (input.maxTurns !== undefined) throw new AgentDispatchError("This AionUi release does not support DevHub's max-turns override. Use the agent's own controls in AionUi.", 400);
-  const connectionId = aionConnectionId(session);
+  if (input.maxTurns !== undefined) throw new AgentDispatchError("Paseo doesn't support DevHub's max-turns override. Use the agent's own controls in Paseo.", 400);
   const parent = input.parentRunId ? readAgentRun(input.parentRunId) : null;
-  if (input.resumeSessionId && (!parent || parent.spec.runtime !== "aionui" || parent.status.connectionId !== connectionId || parent.status.conversationId !== input.resumeSessionId || parent.spec.provider !== assistant.id)) {
-    throw new AgentDispatchError("This session cannot be continued through AionUi. Start a new conversation with its saved handoff.", 400);
+  if (input.resumeSessionId && (!parent || parent.spec.runtime !== "paseo" || parent.status.connectionId !== connectionId || parent.status.conversationId !== input.resumeSessionId || parent.spec.provider !== launch.provider)) {
+    throw new AgentDispatchError("This session cannot be continued in the current agent runtime. Start a new conversation with its saved handoff.", 400);
   }
+
+  let providers: Awaited<ReturnType<typeof listPaseoProviders>>;
+  try { providers = await listPaseoProviders(); } catch (error) {
+    throw new AgentDispatchError(error instanceof Error ? error.message : "Paseo is unavailable.", 503);
+  }
+  const provider = providers.find((row) => row.id === launch.provider);
+  if (!provider?.ready) throw new AgentDispatchError(provider?.error || "The selected agent is not ready. Check Agents → Connection.", 400);
 
   const budgets = agentBudgets();
   if (budgets.maxCostUsd > 0) {
@@ -199,6 +207,9 @@ export async function dispatchAgentRun(input: AgentDispatchInput): Promise<Agent
     alreadyClaimed = true;
     return prior;
   }
+  if (input.resumeSessionId && listAgentRuns(Number.MAX_SAFE_INTEGER).some((active) => active.spec.runtime === "paseo" && active.status.conversationId === input.resumeSessionId && isActiveAgentRunState(active.status.state))) {
+    throw new AgentDispatchError("This conversation already has an active DevHub run. Wait for it before continuing.", 409);
+  }
   if (countActiveAgentRuns() >= maxActive) throw new AgentDispatchError(`${maxActive} agent runs are already active. Wait for one or cancel it.`, 429);
   if (input.requestId) {
     const claimed = claimAgentRequest(input.requestId, id);
@@ -209,20 +220,20 @@ export async function dispatchAgentRun(input: AgentDispatchInput): Promise<Agent
     }
   }
 
-  return createAgentRun({ id, schemaVersion: 2, runtime: "aionui", requestId: input.requestId,
+  return createAgentRun({ id, schemaVersion: 2, runtime: "paseo", requestId: input.requestId,
     activity: input.activity ?? { source: input.scheduledJobId ? "schedule" : input.unattendedReason ? "investigation" : "interactive", action: "agent", jobId: input.scheduledJobId },
-    provider: assistant.id, providerLabel: assistant.name, bin: "aionui", args: [], format: "text", cwd,
-    title: input.title?.trim() || defaultTitle(input.prompt), prompt: input.prompt, model,
+    provider: launch.provider, providerLabel: launch.provider, bin: "paseo", args: [], format: "text", cwd,
+    title: agentRunTitle(input), prompt: input.prompt, model,
     depth: input.depth, createdAt: Date.now(), parentRunId: input.parentRunId,
   });
   });
   if (alreadyClaimed) return run;
-  run = updateAgentRunStatus(run, { state: "starting", connectionId, connectivity: "connected" });
+  run = updateAgentRunStatus(run, { state: "starting", connectionId, connectivity: "connected", ...(input.resumeSessionId ? { conversationId: input.resumeSessionId, sessionId: input.resumeSessionId } : {}) });
 
   try {
 
   if (input.activity?.taskId && input.activity.action !== "plan") {
-    await upsertTaskAgentRun({ taskId: input.activity.taskId, runId: id, status: "queued", provider: assistant.id });
+    await upsertTaskAgentRun({ taskId: input.activity.taskId, runId: id, status: "queued", provider: launch.provider });
   }
 
   const inherit = input.resumeSessionId && parent ? { worktree: parent.spec.worktree, baseSha: parent.spec.baseSha } : input.inherit;
@@ -249,33 +260,18 @@ export async function dispatchAgentRun(input: AgentDispatchInput): Promise<Agent
 
     run.spec = { ...run.spec, cwd, baseSha, worktree };
     writeRunSpec(run.dir, run.spec);
-    let mcpIds: string[] = [];
-    if (!input.resumeSessionId) {
-      try {
-        mcpIds = await client.listEnabledMcpIds(mcpServersForActivity(input.activity?.action));
-      } catch { /* create without MCP attach */ }
-    }
-    const conversation = input.resumeSessionId
-      ? await client.getConversation(input.resumeSessionId)
-      : await client.createConversation({
-          assistantId: assistant.id,
-          title: run.spec.title,
-          cwd,
-          runId: id,
-          model,
-          permission,
-          autoconfirmPermissions,
-          mcpIds,
-        });
-    run = updateAgentRunStatus(run, { conversationId: conversation.id, sessionId: conversation.id });
-    // Persist intent before the non-idempotent write. A restart must never send it twice.
-    run = updateAgentRunStatus(run, { submissionAttemptedAt: Date.now() });
-    const accepted = await client.sendMessage(conversation.id, input.prompt);
-    if (accepted.delivered_midturn) return updateAgentRunStatus(run, { state: "needs-attention", messageId: accepted.msg_id, turnId: accepted.turn_id, error: "The conversation became busy during submission. Open it to inspect the delivered message." });
-    return updateAgentRunStatus(run, { state: "running", startedAt: Date.now(), messageId: accepted.msg_id, turnId: accepted.turn_id });
+    const started = await startPaseoAgent({
+      run, launch, prompt: input.prompt, resumeAgentId: input.resumeSessionId,
+      // Only the send/create can lose its ack. A failed connection or preflight
+      // must release capacity instead of leaving an ambiguous active run.
+      onSubmission: (messageId) => { run = updateAgentRunStatus(run, { submissionAttemptedAt: Date.now(), messageId }); },
+    });
+    return updateAgentRunStatus(run, { state: "running", startedAt: Date.now(), conversationId: started.agentId, sessionId: started.agentId, messageId: started.messageId, pinnedWorkspaceId: started.pinnedWorkspaceId });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    const ambiguous = err instanceof AionRequestError && err.ambiguous;
+    run = readAgentRun(id) ?? run;
+    // Paseo creates the agent and submits the prompt in one request, so any failure after it went out may have landed.
+    const ambiguous = run.status.submissionAttemptedAt !== undefined;
     run = updateAgentRunStatus(run, { state: ambiguous ? "needs-attention" : "failed", ...(ambiguous ? {} : { finishedAt: Date.now() }), error: message });
     // Return the durable record even when startup failed so the caller can open it.
     return run;

@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 import { useConfirm } from "@/components/shell/ConfirmDialog";
 import { ManagedCatalogList } from "@/components/ManagedCatalogList";
 import { McpPanel } from "@/components/McpPanel";
@@ -542,11 +543,18 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
     <div className="page-wrapper">
       <BootScreen state={boot} />
       <div className="page-header">
-        <h1 className="page-title">Agents</h1>
-        {(tab === "skills" || tab === "agents") && (
-          <span className="badge badge-muted" suppressHydrationWarning>
-            {mounted ? filteredRows.length : "-"}
-          </span>
+        <div className="flex items-center gap-2">
+          <h1 className="page-title">Agents</h1>
+          {(tab === "skills" || tab === "agents") && (
+            <span className="badge badge-muted" suppressHydrationWarning>
+              {mounted ? filteredRows.length : "-"}
+            </span>
+          )}
+        </div>
+        {tab === "skills" && (
+          <Link href="/voice" className="btn btn-ghost text-xs">
+            <Sparkles size={12} aria-hidden /> Train my voice
+          </Link>
         )}
       </div>
 

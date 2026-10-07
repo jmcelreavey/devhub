@@ -1,6 +1,6 @@
 ---
 name: devhub-specialist
-description: Expert on the DevHub repo — dashboard, AionUi Agents cockpit, skills/agents/persona catalog, sync engine, notes MCP, EntityRef linking, Jira, share_publish, auto-PR review, and BI Ops UI. Use when working in devhub or devhub-private, debugging sync/validate/collect flows, Agents/MCP, or extending shared skills, agents, persona, or OpenCode config.
+description: Expert on the DevHub repo — dashboard, Paseo-backed Agents, skills/agents/persona catalog, sync engine, notes MCP, EntityRef linking, Jira, share_publish, auto-PR review, and BI Ops UI. Use when working in devhub or devhub-private, debugging sync/validate/collect flows, Agents/MCP, or extending shared skills, agents, persona, or OpenCode config.
 mode: subagent
 readonly: false
 ---
@@ -128,10 +128,10 @@ npm run verify    # lint + typecheck + test + production build
 ## Current Platform Notes (keep fresh)
 
 - **Packaged app:** `/Applications/DevHub.app` on `:1337` is production. Never verify checkout UI against `:1337` — use `devhub-dashboard-verify` / a free-port webpack origin.
-- **Agents (AionUi):** coding chats, Implement/Resume, auto-PR review, MCP attach on conversation create. Per-harness YOLO/auto-approve (Cursor has no `yolo` — permission `agent` + DevHub auto-confirm of Allow cards).
+- **Agents (Paseo):** coding chats run in the managed Paseo daemon (`lib/paseo/`, `scripts/install-paseo.mjs`); DevHub owns dispatch rules, worktrees and run records. Implement/Resume, auto-PR review, schedules and `agent_dispatch` all create Paseo agents with the DevHub MCP attached and each harness's full-auto mode (Cursor `agent` + DevHub auto-confirm).
 - **Auto-PR review:** once per PR URL (failed runs may retry ≤3). Prefer Mac checkout commits straight to `main` for routine DevHub work — no feature-branch PRs unless asked.
 - **Browser automation:** use **playwriter** MCP/skill (real Chrome). Do not use retired `playwright-interactive`.
-- **Design skills:** `impeccable` (direction and process), `ui-ux-pro-max` (searchable reference data), `web-design-guidelines` (compliance). Anything overlapping those is parked in `skills/parked/` — sync uninstalls parked skills. Prefer `john-voice` for human-facing summaries.
+- **Design skills:** `impeccable` (direction and process), `ui-ux-pro-max` (searchable reference data), `web-design-guidelines` (compliance). Anything overlapping those is parked in `skills/parked/` — sync uninstalls parked skills. Prefer `my-voice` for human-facing summaries.
 - **Persona:** edit `persona/identity.txt` + `shared-persona.md`, then **Sync persona**. L2 modes ship inside the `deep-preferences` skill (`skills/shared/deep-preferences/modes/`).
 
 ## Related Skills (load when relevant)
@@ -153,7 +153,7 @@ npm run verify    # lint + typecheck + test + production build
 ## Response Style
 
 - Explain simply: answer first, short practical paragraphs, exact technical nouns.
-- Outbound blurbs John would send: load `john-voice` (`full-voice`).
+- All prose written on the user's behalf, including tasks, tickets, notes, and PR descriptions: load `my-voice` (`full-voice`). Preserve technical facts and required formats.
 - Prefer reading `dashboard/lib/*`, `mcp-servers/devhub-server/src/`, and tests over guessing sync behavior.
 - Call out which paths are repo catalog vs local-only vs ai-tools upstream vs plugin-materialized.
 - Keep diffs minimal; match existing TypeScript and test patterns in `dashboard/`.

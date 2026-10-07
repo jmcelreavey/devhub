@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { CORE_THEME_PRESETS } from "@/lib/theme-presets";
+import { CORE_THEME_PRESETS, THEME_PRESETS } from "@/lib/theme-presets";
 
 /**
  * The picker renders `darkSwatch` / `lightSwatch` as the preview chip, but the
@@ -11,7 +11,9 @@ import { CORE_THEME_PRESETS } from "@/lib/theme-presets";
  *
  * These tests read the real stylesheet and compare.
  */
-const css = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
+const pluginCss = path.join(process.cwd(), "app/plugin-branding.generated.css");
+const css = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8") +
+  (fs.existsSync(pluginCss) ? fs.readFileSync(pluginCss, "utf8") : "");
 
 /** A named custom property declared in a given preset/mode block. */
 function tokenFor(mode: "dark" | "light", preset: string, token: string): string | null {
@@ -84,6 +86,29 @@ describe("core theme presets", () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(new Set(labels).size).toBe(labels.length);
   });
+});
+
+/** WCAG relative luminance for the opaque palette tokens. */
+function luminance(hex: string): number {
+  const channels = [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16) / 255)
+    .map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+}
+
+describe("primary button contrast", () => {
+  for (const preset of THEME_PRESETS) {
+    it.each(["dark", "light"] as const)(`${preset.id} %s keeps normal and hover text at 4.5:1 or better`, (mode) => {
+      const foreground = tokenFor(mode, preset.id, "--accent-fg");
+      expect(foreground).toMatch(/^#[0-9a-f]{6}$/i);
+      for (const token of ["--accent", "--accent-hover"]) {
+        const background = tokenFor(mode, preset.id, token);
+        expect(background).toMatch(/^#[0-9a-f]{6}$/i);
+        const light = luminance(foreground!);
+        const dark = luminance(background!);
+        expect((Math.max(light, dark) + 0.05) / (Math.min(light, dark) + 0.05), `${preset.id} ${mode} ${token}`).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+  }
 });
 
 /** Hue in degrees, or null for a effectively achromatic colour. */

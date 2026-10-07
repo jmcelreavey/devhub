@@ -14,6 +14,11 @@ on:
         description: "Version to build (no leading v). Produces artifacts, publishes nothing."
         required: true
         type: string
+      windows_only:
+        description: "Skip the macOS/Linux builds; build only the Windows installer."
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -25,6 +30,7 @@ env:
 jobs:
   build:
     name: ${{ matrix.label }}
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.windows_only) }}
     runs-on: ${{ matrix.os }}
     strategy:
       # Not fail-fast: one platform's signing problem should not hide another
@@ -255,9 +261,141 @@ jobs:
             desktop/src-tauri/target/**/release/bundle/appimage/*.AppImage.sig
             desktop/src-tauri/target/**/release/bundle/deb/*.deb
 
+  # Windows is a native window in front of a server that runs inside WSL2
+  # (docs/architecture/desktop-windows-wsl.md). The server half is Linux, so it
+  # is built on Linux and handed to the Windows job as a tarball.
+  wsl-payload:
+    name: Windows app - Linux payload
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan for internal-name / secret leaks
+        run: bash scripts/scan-leaks.sh tree
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Setup safe-chain
+        run: |
+          npm i -g @aikidosec/safe-chain@1.1.10
+          safe-chain setup-ci
+
+      - name: Install dashboard dependencies
+        run: npm ci --prefix dashboard
+
+      # Runs verify-staging internally, so the leak gate applies to this
+      # payload exactly as it does to the other platforms' bundles.
+      - name: Build WSL payload
+        run: node desktop/scripts/stage-wsl-payload.mjs
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wsl-payload
+          path: desktop/staging/wsl/
+          if-no-files-found: error
+
+  windows:
+    name: Windows (x64, WSL2)
+    needs: wsl-payload
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: wsl-payload
+          path: desktop/staging/wsl
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+          key: x86_64-pc-windows-msvc
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Inject version
+        run: node desktop/scripts/inject-version.mjs "${{ steps.version.outputs.version }}"
+
+      # tauri.conf.json names icons and resource dirs the Windows overlay drops
+      # from the bundle; tauri-build still wants the icons on disk.
+      - name: Stage icons
+        shell: bash
+        run: |
+          node -e 'import("./desktop/scripts/stage-icons.mjs").then(m=>m.stageIcons())'
+          mkdir -p desktop/staging/server desktop/staging/services desktop/staging/resources desktop/src-tauri/binaries
+
+      - name: Rust checks
+        working-directory: desktop/src-tauri
+        run: |
+          cargo fmt --check
+          cargo test
+
+      # Updater artifacts need the signing key; a dispatch run on a repo without
+      # it should still yield an installable .exe. So: key present -> signed
+      # updater artifacts on; key absent -> plain unsigned installer. The key is
+      # exported through GITHUB_ENV only when it exists, because Tauri treats a
+      # defined-but-empty TAURI_SIGNING_PRIVATE_KEY as a real (invalid) key.
+      # On a tag, a missing key still fails the release: build-updater-manifest
+      # refuses to publish a platform entry with no signature.
+      - name: Configure updater signing
+        shell: bash
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEY" ]; then
+            printf 'TAURI_SIGNING_PRIVATE_KEY<<__DEVHUB_EOF__\n%s\n__DEVHUB_EOF__\n' "$KEY" >> "$GITHUB_ENV"
+            [ -n "$KEY_PASSWORD" ] && printf 'TAURI_SIGNING_PRIVATE_KEY_PASSWORD<<__DEVHUB_EOF__\n%s\n__DEVHUB_EOF__\n' "$KEY_PASSWORD" >> "$GITHUB_ENV"
+            echo '{"bundle":{"createUpdaterArtifacts":true}}' > desktop/src-tauri/updater-config.json
+            echo "Updater signing enabled."
+          else
+            echo '{}' > desktop/src-tauri/updater-config.json
+            echo "::warning::No TAURI_SIGNING_PRIVATE_KEY - building an installer with no updater artifacts."
+          fi
+
+      - name: Build and bundle
+        uses: tauri-apps/tauri-action@v0
+        with:
+          projectPath: desktop
+          configPath: src-tauri/tauri.conf.json
+          # tauri.windows.conf.json defaults updater artifacts off; the file
+          # written above turns them on when there is a key to sign with.
+          args: --target x86_64-pc-windows-msvc --config src-tauri/updater-config.json
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: devhub-x86_64-pc-windows-msvc
+          if-no-files-found: error
+          path: |
+            desktop/src-tauri/target/**/release/bundle/nsis/*-setup.exe
+            desktop/src-tauri/target/**/release/bundle/nsis/*-setup.exe.sig
+
   publish:
     name: Publish release
-    needs: build
+    needs: [build, windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -268,6 +406,9 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
+          # Only the installers; `wsl-payload` is an intermediate the Windows
+          # job already folded into its installer.
+          pattern: devhub-*
           merge-multiple: true
           path: dist
 
@@ -288,6 +429,7 @@ jobs:
             dist/*.dmg
             dist/*.AppImage
             dist/*.deb
+            dist/*.exe
             dist/*.tar.gz
             dist/*.sig
             dist/latest.json

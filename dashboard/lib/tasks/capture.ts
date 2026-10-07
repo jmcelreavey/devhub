@@ -153,7 +153,7 @@ export async function captureDraftTask(input: CaptureInput): Promise<CaptureResu
   const context = await gatherCaptureContext(`${input.text} ${input.detail ?? ""}`, task.id).catch(
     (): CaptureContext => ({ notes: [], prs: [], tasks: [], alerts: [] }),
   );
-  const source = { id: task.id, text: task.text, date, jiraKey: task.jiraKey };
+  const source = { ...task, date };
   const notePath = taskNotePath(source);
   const file = path.join(getNotesDir(), `${notePath}.json`);
   if (!fs.existsSync(file)) {

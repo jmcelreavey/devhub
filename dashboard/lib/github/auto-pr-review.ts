@@ -5,8 +5,11 @@
  * note path as the UI "Review with agent" action, on the default AI provider
  * (`startBackgroundAgent`) — never posts a GitHub review comment.
  */
+import { readAutoPrReviewPrefs } from "@/lib/github/auto-pr-review-prefs";
+import { listOwnedRepos } from "@/lib/ownership/owned-repos";
 import { startBackgroundAgent } from "@/lib/agent-runs/background";
 import { readAgentRun } from "@/lib/agent-runs/store";
+import { ensureConventionsFresh } from "@/lib/conventions/fresh";
 import {
 getAutoPrReviewRecord,
 wasAlreadyAutoReviewed,
@@ -25,6 +28,7 @@ import { agentReviewPrompt, agentReviewSessionTitle } from "@/lib/pr-review-prom
 export type AutoReviewSkipReason =
   | "draft"
   | "not-allowlisted"
+  | "not-owned"
   | "already-reviewed-head"
   | "note-covers-updatedAt"
   | "concurrency-cap"
@@ -77,6 +81,8 @@ export interface SelectAutoReviewInput {
   draftUrls?: ReadonlySet<string>;
   /** Optional repo allowlist (`owner/repo`). Empty/undefined = all repos. */
   allowlist?: ReadonlySet<string> | null;
+  /** Lowercase owner/repo names; null/undefined = unrestricted, empty = none. */
+  ownedRepos?: ReadonlySet<string> | null;
   /** Note activity (mtime) keyed by vault path including `.json`. */
   noteActivityByPath?: ReadonlyMap<string, number>;
   /** Prior auto-review starts keyed by PR url. */
@@ -119,6 +125,7 @@ export function selectAutoReviewCandidates(input: SelectAutoReviewInput): {
     reviews,
     draftUrls = new Set(),
     allowlist = null,
+    ownedRepos = null,
     noteActivityByPath = new Map(),
     priorByUrl = new Map(),
     concurrency,
@@ -135,6 +142,11 @@ export function selectAutoReviewCandidates(input: SelectAutoReviewInput): {
     }
     if (allowlist && allowlist.size > 0 && !allowlist.has(row.repo)) {
       skipped.push(skipEntry(row, "not-allowlisted"));
+      continue;
+    }
+
+    if (ownedRepos && !ownedRepos.has(row.repo.toLowerCase())) {
+      skipped.push(skipEntry(row, "not-owned"));
       continue;
     }
 
@@ -200,6 +212,10 @@ export async function startPrReviewAgent(opts: {
   const attempt = prior && shouldRetryAutoReview(prior) ? (prior.attempts ?? 1) + 1 : prior ? prior.attempts ?? 1 : 1;
   const title = agentReviewSessionTitle(opts.row);
   const prompt = agentReviewPrompt(opts.row.url, opts.notePath, title);
+  // Nobody is watching an unattended review, so it can afford to wait for this
+  // repo's first conventions run — the review is better for having them. Capped,
+  // and a no-op once the repo has been mined recently.
+  await ensureConventionsFresh(opts.row.repo, { trigger: "review", waitMs: 90_000 }).catch(() => undefined);
   const started = await startBackgroundAgent({
     prompt: `${prompt}\n\n(Write results via notes MCP to path: ${opts.notePath})`,
     title,
@@ -250,6 +266,9 @@ export interface RunAutoPrReviewOptions {
  */
 export async function runAutoPrReview(opts: RunAutoPrReviewOptions): Promise<AutoReviewResult> {
   const dryRun = opts.dryRun === true;
+  const ownedRepos = readAutoPrReviewPrefs().ownedOnly
+    ? new Set(listOwnedRepos().map((repo) => repo.fullName.toLowerCase()))
+    : null;
   const allowlist = opts.allowlist === undefined ? parseAutoReviewAllowlist() : opts.allowlist;
   const concurrency = opts.concurrency ?? autoReviewConcurrency();
 
@@ -274,6 +293,7 @@ export async function runAutoPrReview(opts: RunAutoPrReviewOptions): Promise<Aut
       reviews: opts.reviews,
       draftUrls,
       allowlist,
+      ownedRepos,
       noteActivityByPath: opts.noteActivityByPath,
       priorByUrl,
       concurrency,

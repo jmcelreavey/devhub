@@ -25,7 +25,7 @@ The Figma MCP integration gives AI agents access to design files, components, fr
 ### Prerequisites
 
 - A Figma account with access to the team's design files
-- OpenCode installed and configured (see [OpenCode and OpenChamber](../guides/opencode-and-chamber.md))
+- OpenCode installed and configured (see [Terminal and agent CLI](../guides/terminal-and-agent-cli.md))
 
 ### OAuth Client Registration
 

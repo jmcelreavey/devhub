@@ -94,14 +94,15 @@ export async function GET() {
 
   const bindHost = resolveEnvValue("DEVHUB_BIND_HOST", overrides)?.trim();
   const lanProxyHost = resolveEnvValue("DEVHUB_LAN_PROXY_HOST", overrides)?.trim();
-  const chamberHost = resolveEnvValue("OPENCHAMBER_HOST", overrides)?.trim();
   const opencodeBindHost =
     resolveEnvValue("OPENCODE_BIND_HOST", overrides)?.trim()
     ?? resolveEnvValue("OPENCODE_HOST", overrides)?.trim();
   const allowLanNetwork = !!lanProxyHost || (
-    bindHost !== "127.0.0.1" && chamberHost !== "127.0.0.1" && opencodeBindHost !== "127.0.0.1"
+    bindHost !== "127.0.0.1" && opencodeBindHost !== "127.0.0.1"
   );
-  const hasOpenchamberUiPassword = !!resolveEnvValue("OPENCHAMBER_UI_PASSWORD", overrides);
+  // OPENCHAMBER_UI_PASSWORD is the legacy name; Paseo still falls back to it.
+  const hasAgentsPassword =
+    !!resolveEnvValue("DEVHUB_PASEO_PASSWORD", overrides) || !!resolveEnvValue("OPENCHAMBER_UI_PASSWORD", overrides);
 
   const peerServices = await getPeerServiceGateStatus();
 
@@ -112,14 +113,13 @@ export async function GET() {
     jira,
     datadog,
     bi,
-    chamber: peerServices.chamber,
     opencode: peerServices.opencode,
     claude: peerServices.claude,
     cursor: peerServices.cursor,
     chatgpt: peerServices.chatgpt,
     antigravity: peerServices.antigravity,
     allowLanNetwork,
-    hasOpenchamberUiPassword,
+    hasAgentsPassword,
     envPath: ".env.local",
     /**
      * Desktop mode changes what setup should *ask*, not just how it looks: no

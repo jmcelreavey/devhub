@@ -12,6 +12,7 @@ const SkipBodySchema = z.object({
   repo: z.string().default(""),
   number: z.number().default(0),
   title: z.string().default(""),
+  kind: z.enum(["authored", "reviews"]).optional(),
 });
 
 export async function GET() {

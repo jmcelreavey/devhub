@@ -399,6 +399,8 @@ export async function generateTextViaCli(
     /** Give up only after this long with no output. Defaults to 90s. */
     idleTimeoutMs?: number;
     maxOutputTokens?: number;
+    /** Per-call model; blank falls back to the provider's configured model. */
+    model?: string;
     cwd?: string | null;
     abortSignal?: AbortSignal;
   },
@@ -406,6 +408,7 @@ export async function generateTextViaCli(
   const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const idleTimeoutMs = opts?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
   const settings = readAgentCliSettings();
+  const modelOverride = opts?.model?.trim() ?? "";
   prompt = applyCliTokenBudget(prompt, opts?.maxOutputTokens);
   const cwd = headlessCliCwd(opts?.cwd);
 
@@ -413,7 +416,7 @@ export async function generateTextViaCli(
     const bin = resolveCursorAgentBin() ?? "cursor-agent";
     const text = await execCapture(
       bin,
-      cursorAgentPrintArgs(prompt, settings.cursorModel),
+      cursorAgentPrintArgs(prompt, modelOverride || settings.cursorModel),
       timeoutMs,
       cwd,
       opts?.abortSignal,
@@ -426,8 +429,9 @@ export async function generateTextViaCli(
   if (provider === "opencode") {
     const bin = resolveOpencodeCliBin();
     const args = ["run"];
-    if (settings.opencodeModel.trim()) {
-      args.push("--model", settings.opencodeModel.trim());
+    const opencodeModel = modelOverride || settings.opencodeModel.trim();
+    if (opencodeModel) {
+      args.push("--model", opencodeModel);
     }
     args.push(prompt);
     const text = await execCapture(bin, args, timeoutMs, cwd, opts?.abortSignal, idleTimeoutMs);
@@ -437,8 +441,9 @@ export async function generateTextViaCli(
   if (provider === "antigravity-cli") {
     const bin = resolveAgyCliBin() ?? "agy";
     const args = ["-p", prompt];
-    if (settings.antigravityModel.trim()) {
-      args.push("--model", settings.antigravityModel.trim());
+    const antigravityModel = modelOverride || settings.antigravityModel.trim();
+    if (antigravityModel) {
+      args.push("--model", antigravityModel);
     }
     const text = await execCapture(bin, args, timeoutMs, cwd, opts?.abortSignal, idleTimeoutMs);
     return { text, provider };
@@ -449,6 +454,7 @@ export async function generateTextViaCli(
   if (!bin) {
     throw new Error("ChatGPT / Codex CLI not found.");
   }
-  const text = await execCapture(bin, ["exec", prompt], timeoutMs, cwd, opts?.abortSignal, idleTimeoutMs);
+  const codexArgs = modelOverride ? ["exec", "--model", modelOverride, prompt] : ["exec", prompt];
+  const text = await execCapture(bin, codexArgs, timeoutMs, cwd, opts?.abortSignal, idleTimeoutMs);
   return { text, provider };
 }

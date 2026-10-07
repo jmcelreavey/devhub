@@ -5,16 +5,18 @@ import { SEARCH_QUERY_INPUT_ATTRS } from "@/components/ui/SearchInput";
 import { navigateToAgents,openAgentHandoff } from "@/lib/agent-handoff";
 import { openInteractiveAgentSession } from "@/lib/agent-job";
 import { copyTextToClipboard } from "@/lib/clipboard";
-import { filterVisiblePaletteCommands,uniqueById } from "@/lib/command-palette-score";
+import { filterVisiblePaletteCommands,uniqueById, type PaletteScope } from "@/lib/command-palette-score";
 import { copyContextPackToClipboard } from "@/lib/context-pack-client";
 import { openInBrowser } from "@/lib/desktop/bridge";
 import { isDiagramStoragePath,toDiagramRoutePath } from "@/lib/diagram-utils";
 import type { DocSearchHit } from "@/lib/docs/doc-search-types";
 import { clearFocusSession,readFocusSession,writeFocusSession } from "@/lib/focus-session-storage";
-import { useLive } from "@/lib/hooks/use-fetch";
+import { useSetupStatus } from "@/lib/hooks/use-setup-status";
 import { useIsMobile } from "@/lib/hooks/use-is-mobile";
 import { useToast } from "@/lib/hooks/use-toast";
-import { ALL_NAV_DESTINATIONS,filterNavBySetup,type SetupGateStatus } from "@/lib/nav";
+import { ALL_NAV_DESTINATIONS,filterNavBySetup } from "@/lib/nav";
+import { SkeletonRows } from "@/components/ui/SkeletonRows";
+import styles from "./CommandPalette.module.css";
 import { usePaletteRowPress } from "@/lib/palette-row-press";
 import { clearRouteUsage,summariseRouteUsage } from "@/lib/route-usage";
 import { buildSearchUrl } from "@/lib/search-ui";
@@ -34,6 +36,10 @@ FolderGit2,
 ListTodo,
 PenTool,
 Search,
+X,
+ArrowUpRight,
+CornerDownLeft,
+Clock,
 Ticket as TicketIcon,
 } from "lucide-react";
 import { usePathname,useRouter,useSearchParams } from "next/navigation";
@@ -107,6 +113,14 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [contentResults, setContentResults] = useState<Command[]>([]);
   const [highlightIdx, setHighlightIdx] = useState(0);
+  const [scope, setScope] = useState<PaletteScope>("all");
+  const usesContent = scope === "all" || scope === "content" || scope === "note";
+  const [contentLoading, setContentLoading] = useState(false);
+  const [contentError, setContentError] = useState(false);
+  const [searchAttempt, setSearchAttempt] = useState(0);
+  const [contentQuery, setContentQuery] = useState("");
+  const panelRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const tabs = useWorkspaceTabs();
   const pathname = usePathname();
@@ -118,7 +132,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const previousFocus = useRef<HTMLElement | null>(null);
   const contentSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMobile = useIsMobile();
-  const { data: setup } = useLive<SetupGateStatus>("/api/setup/status", { refreshInterval: 0 });
+  const setup = useSetupStatus();
 
   // Load index data when opened. The `open` change drives a remount via `key`,
   // so we don't need to clear state here — but we do need to load fresh data.
@@ -176,27 +190,39 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   // Debounced content search — fires when query >= 2 chars
   useEffect(() => {
     if (contentSearchTimer.current) clearTimeout(contentSearchTimer.current);
-    if (!open || query.trim().length < 2) {
+    if (!open || !usesContent || query.trim().length < 2) {
       setContentResults([]); // eslint-disable-line react-hooks/set-state-in-effect
+      setContentLoading(false);
+      setContentError(false);
       return;
     }
+    const controller = new AbortController();
+    setContentLoading(true);
+    setContentError(false);
+    const readSource = async (url: string) => {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) throw new Error("Search unavailable");
+      return response.json();
+    };
     contentSearchTimer.current = setTimeout(() => {
       Promise.all([
-        fetch(buildSearchUrl(query, { mode: "auto" })).then((r) => r.json()),
+        readSource(buildSearchUrl(query, { mode: "auto" })).catch(() => {
+          if (!controller.signal.aborted) setContentError(true);
+          return { files: [] };
+        }),
         // Docs use their own index rather than the generic vault grep: it knows
         // titles and headings, so a hit can name the page and jump to the
         // section instead of dropping you at the top of a 300-line reference.
-        fetch(`/api/docs/search?q=${encodeURIComponent(query)}&limit=8`)
-          .then((r) => r.json())
-          .catch(() => ({ results: [] })),
+        readSource(`/api/docs/search?q=${encodeURIComponent(query)}&limit=8`)
+          .catch(() => { if (!controller.signal.aborted) setContentError(true); return { results: [] }; }),
         // Terminal transcripts (R6). Every line is redacted server-side before
         // it gets here — see lib/terminal-search.ts. Failure is non-fatal: a
         // missing log dir shouldn't take notes and docs results down with it.
-        fetch(`/api/terminal/search?q=${encodeURIComponent(query)}&limit=8`)
-          .then((r) => r.json())
-          .catch(() => ({ matches: [] })),
+        readSource(`/api/terminal/search?q=${encodeURIComponent(query)}&limit=8`)
+          .catch(() => { if (!controller.signal.aborted) setContentError(true); return { matches: [] }; }),
       ])
         .then(([notesData, docsData, terminalData]) => {
+          if (controller.signal.aborted) return;
           const noteCmds: Command[] = (notesData.files ?? []).map(
             (f: { path: string; matches: { text: string }[]; tags?: string[] }) => {
               const cleanPath = f.path.replace(/\.json$/, "");
@@ -256,13 +282,24 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             if (!byId.has(cmd.id)) byId.set(cmd.id, cmd);
           }
           setContentResults([...byId.values()]);
+          setContentQuery(query);
         })
-        .catch(() => setContentResults([]));
+        .catch(() => {
+          if (controller.signal.aborted) return;
+          setContentResults([]);
+          setContentError(true);
+        })
+        .finally(() => {
+          if (controller.signal.aborted) return;
+          setContentQuery(query);
+          setContentLoading(false);
+        });
     }, 200);
     return () => {
+      controller.abort();
       if (contentSearchTimer.current) clearTimeout(contentSearchTimer.current);
     };
-  }, [open, query, router, toast]);
+  }, [open, query, router, searchAttempt, usesContent]);
 
   const toggleTaskDone = useCallback(
     async (id: string) => {
@@ -616,14 +653,17 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             href: entry.href,
             perform: () => router.push(entry.href),
           }));
-    return filterVisiblePaletteCommands(commands, query, { contentResults, recent });
-  }, [query, commands, contentResults, currentHref, history, router]);
+    return filterVisiblePaletteCommands(commands, query, {
+      contentResults: contentQuery === query ? contentResults : [], recent, scope,
+    });
+  }, [query, commands, contentResults, contentQuery, currentHref, history, router, scope]);
 
   // Reset highlight when query (and therefore filtered list) changes.
   // React's recommended pattern for "adjust state during render based on prior props/state".
-  const [lastQuery, setLastQuery] = useState(query);
-  if (lastQuery !== query) {
-    setLastQuery(query);
+  const selectionKey = `${scope}:${query}`;
+  const [lastQuery, setLastQuery] = useState(selectionKey);
+  if (lastQuery !== selectionKey) {
+    setLastQuery(selectionKey);
     setHighlightIdx(0);
   }
 
@@ -639,177 +679,158 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     [onClose, tabs],
   );
 
+  const activeIndex = Math.max(0, Math.min(highlightIdx, filtered.length - 1));
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setHighlightIdx((i) => Math.min(filtered.length - 1, i + 1));
+      setHighlightIdx(Math.min(Math.max(0, filtered.length - 1), activeIndex + 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setHighlightIdx((i) => Math.max(0, i - 1));
+      setHighlightIdx(Math.max(0, activeIndex - 1));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const cmd = filtered[highlightIdx];
+      const cmd = filtered[activeIndex];
       if (cmd) void select(cmd, { newTab: e.shiftKey });
     }
   };
 
-  const highlighted = filtered[highlightIdx];
+  const highlighted = filtered[activeIndex];
   const highlightedNavigates = highlighted ? commandNavigates(highlighted) : false;
+
+  const isSearchingContent = usesContent && query.trim().length >= 2 && (contentLoading || contentQuery !== query);
+  const selectionAction = highlighted?.kind === "task" ? "Mark done" : highlightedNavigates ? "Open" : "Run action";
+
+  useEffect(() => {
+    listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+  }, [highlighted?.id]);
+
+  const changeScope = (next: PaletteScope) => {
+    setScope(next);
+    inputRef.current?.focus();
+  };
 
   if (!open) return null;
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Command palette"
-      data-command-palette=""
-      className="palette-overlay"
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: "var(--z-modal)",
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "center",
-        paddingTop: "12vh",
-        background: "var(--scrim)",
-      }}
-      onClick={onClose}
-    >
-      <div
-        className="card palette-panel"
-        style={{
-          width: 560,
-          maxWidth: "calc(100vw - 32px)",
-          maxHeight: "70vh",
-          display: "flex",
-          flexDirection: "column",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "10px 14px",
-            borderBottom: "1px solid var(--border)",
-          }}
-        >
-          <Search size={14} className="text-text-muted" aria-hidden />
-          <label htmlFor="cmd-palette-input" className="sr-only">
-            Search commands
-          </label>
-          <input
-            id="cmd-palette-input"
-            ref={inputRef}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder={
-              isMobile
-                ? "Search notes, tasks, repos…"
-                : "Search notes, tasks, tickets, actions… (Esc to close)"
-            }
-            className="palette-input"
-            {...SEARCH_QUERY_INPUT_ATTRS}
-            aria-controls="cmd-palette-list"
-            aria-activedescendant={highlighted ? `cmd-${highlighted.id}` : undefined}
-            style={{ flex: 1, minWidth: 0 }}
-          />
+    <div role="dialog" aria-modal="true" aria-label="Command palette" data-command-palette=""
+      className={`palette-overlay ${styles.overlay}`} onClick={onClose}>
+      <div ref={panelRef} className={`palette-panel ${styles.panel}`}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key !== "Tab") return;
+          const focusable = panelRef.current?.querySelectorAll<HTMLElement>('input, button:not([tabindex="-1"]):not([disabled])');
+          if (!focusable?.length) return;
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        }}>
+        <div className={styles.search}>
+          <Search size={20} aria-hidden />
+          <label htmlFor="cmd-palette-input" className="sr-only">Search DevHub</label>
+          <input id="cmd-palette-input" ref={inputRef} value={query}
+            onChange={(event) => setQuery(event.target.value)} onKeyDown={onKeyDown}
+            placeholder="Where do you want to go?"
+            className={`palette-input ${styles.input}`} {...SEARCH_QUERY_INPUT_ATTRS}
+            role="combobox" aria-expanded="true" aria-autocomplete="list"
+            aria-controls="cmd-palette-list" aria-describedby="cmd-palette-status"
+            aria-activedescendant={highlighted ? `cmd-${highlighted.id}` : undefined} />
+          {query && <button type="button" className={styles.iconButton} aria-label="Clear search"
+            onClick={() => { setQuery(""); inputRef.current?.focus(); }}><X size={16} aria-hidden /></button>}
+          <button type="button" className={styles.close} aria-label="Close search" onClick={onClose}>
+            {isMobile ? <X size={18} aria-hidden /> : <kbd>esc</kbd>}
+          </button>
         </div>
-
-        <div
-          id="cmd-palette-list"
-          role="listbox"
-          style={{ overflowY: "auto", padding: "4px 0", flex: 1 }}
-        >
-          {filtered.length === 0 && (
-            <div className="px-4 py-6 text-sm text-center text-text-subtle">
-              {query ? `No matches for "${query}"` : "Loading…"}
-            </div>
-          )}
-          {filtered.map((cmd, idx) => (
-            <PaletteResultRow
-              key={cmd.id}
-              cmd={cmd}
-              idx={idx}
-              highlightIdx={highlightIdx}
-              isMobile={isMobile}
-              onHighlight={() => setHighlightIdx(idx)}
-              onSelect={select}
-            />
+        <div className={styles.scopes} role="group" aria-label="Search in">
+          {PALETTE_SCOPES.map((item) => (
+            <button type="button" key={item.id} aria-pressed={scope === item.id}
+              onClick={() => changeScope(item.id)}>{item.label}</button>
           ))}
         </div>
-        {isMobile ? (
-          /*
-            One "new tab" affordance, not three. This footer previously sat
-            alongside a second New tab button next to the search input *and*
-            the long-press gesture, all doing the same thing to the same row.
-            The footer stays because it is the only one that is discoverable;
-            long-press is the shortcut it advertises.
-          */
-          <div
-            className="palette-mobile-footer"
-            style={{ borderTop: "1px solid var(--border-muted)", color: "var(--text-subtle)" }}
-          >
-            {highlighted && highlightedNavigates ? (
-              <div
-                className="flex items-center gap-2 px-3 py-2"
-                style={{ borderBottom: "1px solid var(--border-muted)" }}
-              >
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ flex: 1, fontSize: 13 }}
-                  onClick={() => void select(highlighted, { newTab: false })}
-                >
-                  Open
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  style={{ flex: 1, fontSize: 13 }}
-                  onClick={() => void select(highlighted, { newTab: true })}
-                >
-                  New tab
-                </button>
-              </div>
-            ) : null}
-            <p className="px-4 py-2 text-[11px] text-center m-0" aria-hidden>
-              Tap to open · Hold for new tab
-            </p>
+        <div className={styles.results} ref={listRef}>
+          <div id="cmd-palette-list" role="listbox" aria-label="Search results" aria-busy={isSearchingContent}>
+            {filtered.map((cmd, idx) => {
+              const section = query.trim() ? null : cmd.id.startsWith("recent:") ? "Recent" : cmd.kind === "repo" ? "Working repositories" : scope === "all" ? "Quick actions" : PALETTE_SCOPES.find((item) => item.id === scope)?.label;
+              const previous = filtered[idx - 1];
+              const showSection = section && (idx === 0 || (cmd.id.startsWith("recent:") !== previous?.id.startsWith("recent:")) || (cmd.kind === "repo") !== (previous?.kind === "repo"));
+              return (
+                <div key={cmd.id} role="presentation">
+                  {showSection && <div className={styles.section} role="presentation">{section}</div>}
+                  <PaletteResultRow cmd={cmd} idx={idx} highlightIdx={activeIndex} isMobile={isMobile} query={query}
+                    onHighlight={() => setHighlightIdx(idx)} onSelect={select} />
+                </div>
+              );
+            })}
           </div>
-        ) : (
-          <div
-            aria-hidden
-            className="flex items-center justify-center gap-3 px-4 py-2 text-[11px]"
-            style={{ borderTop: "1px solid var(--border-muted)", color: "var(--text-subtle)" }}
-          >
-            <span>↑↓ navigate</span>
-            <span>↵ open</span>
-            <span>⇧↵ new tab</span>
-            <span>esc close</span>
-          </div>
-        )}
+          {isSearchingContent && (
+            <div className={styles.loading}><SkeletonRows count={filtered.length ? 1 : 3} height={52} variant="list" /></div>
+          )}
+          {!filtered.length && !isSearchingContent && (
+            <div className={styles.empty}>
+              <Search size={24} aria-hidden />
+              <strong>{query.trim() ? `No matches for “${query.trim()}”` : scope === "content" ? "Search inside your content" : "Nothing here yet"}</strong>
+              <p>{scope === "content" ? "Type at least two characters to search notes, docs and terminal history." : "Try a name, a few keywords, or another source."}</p>
+              {scope !== "all" && <button type="button" className="btn btn-ghost" onClick={() => changeScope("all")}>Search all sources</button>}
+            </div>
+          )}
+        </div>
+        {contentError && usesContent && query.trim().length >= 2 && <div className={styles.error} role="status">
+          Some content couldn’t be searched.
+          <button type="button" onClick={() => setSearchAttempt((attempt) => attempt + 1)}>Retry</button>
+        </div>}
+        <div id="cmd-palette-status" className={styles.status} role="status" aria-live="polite" aria-atomic="true">
+          {isSearchingContent ? "Searching content…" : query.trim() ? `${filtered.length}${filtered.length === 40 ? "+" : ""} results` : "Search names, content, or commands"}
+        </div>
+        <div className={styles.footer}>
+          {isMobile ? (
+            <>
+              <span className={styles.mobileHint}>Tap a result{highlighted?.href ? " · Hold for new tab" : ""}</span>
+              {highlighted?.href && <button type="button" className="btn btn-ghost"
+                onClick={() => void select(highlighted, { newTab: true })}><ArrowUpRight size={14} aria-hidden /> New tab</button>}
+            </>
+          ) : (
+            <>
+              <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
+              {highlighted && <span><kbd>↵</kbd> {selectionAction}</span>}
+              {highlighted?.href && <span><kbd>⇧ ↵</kbd> New tab</span>}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
+const PALETTE_SCOPES: { id: PaletteScope; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "repo", label: "Repos" },
+  { id: "note", label: "Notes" },
+  { id: "task", label: "Tasks & tickets" },
+  { id: "action", label: "Actions" },
+  { id: "content", label: "Content" },
+];
+
+const KIND_LABELS: Record<CommandKind, string> = {
+  nav: "Page", note: "Note", task: "Mark done", ticket: "Ticket",
+  action: "Action", diagram: "Diagram", content: "Content", repo: "Repo",
+};
+
+function MatchedLabel({ text, query }: { text: string; query: string }) {
+  const match = query.trim();
+  const index = match ? text.toLowerCase().indexOf(match.toLowerCase()) : -1;
+  if (index < 0) return <>{text}</>;
+  return <>{text.slice(0, index)}<mark className={styles.match}>{text.slice(index, index + match.length)}</mark>{text.slice(index + match.length)}</>;
+}
+
 function PaletteResultRow({
-  cmd,
-  idx,
-  highlightIdx,
-  isMobile,
-  onHighlight,
-  onSelect,
+  cmd, idx, highlightIdx, isMobile, query, onHighlight, onSelect,
 }: {
   cmd: Command;
   idx: number;
   highlightIdx: number;
   isMobile: boolean;
+  query: string;
   onHighlight: () => void;
   onSelect: (cmd: Command, opts?: { newTab?: boolean }) => void | Promise<void>;
 }) {
@@ -817,55 +838,23 @@ function PaletteResultRow({
     () => void onSelect(cmd, { newTab: false }),
     () => void onSelect(cmd, { newTab: true }),
   );
-
   const active = idx === highlightIdx;
+  const recent = cmd.id.startsWith("recent:");
+  const title = cmd.id.startsWith("content:notes:") ? cmd.label.split("/").at(-1) ?? cmd.label : cmd.label;
+  const kindLabel = cmd.id.startsWith("content:docs:") ? "Doc" : cmd.id.startsWith("content:terminal:") ? "Terminal" : cmd.id.startsWith("content:notes:") ? "Note" : KIND_LABELS[cmd.kind];
 
-  // Mobile spreads `touchBind` whole: it is already exactly the handler set the
-  // row needs, and re-listing its five keys only gave them room to drift.
   return (
-    <button
-      id={`cmd-${cmd.id}`}
-      type="button"
-      role="option"
-      aria-selected={active}
+    <button id={`cmd-${cmd.id}`} type="button" role="option" aria-selected={active} tabIndex={-1}
       onMouseEnter={onHighlight}
-      {...(isMobile
-        ? touchBind
-        : { onClick: (e: MouseEvent) => void onSelect(cmd, { newTab: e.shiftKey }) })}
-      style={{
-        width: "100%",
-        textAlign: "left",
-        padding: "8px 14px",
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        background: active ? "var(--bg-elevated)" : "transparent",
-        border: "none",
-        color: "var(--text)",
-        fontSize: 13,
-        cursor: "pointer",
-        touchAction: isMobile ? "manipulation" : undefined,
-      }}
-    >
-      <CommandIcon kind={cmd.kind} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {cmd.label}
-        </div>
-        {cmd.detail && (
-          <div style={{ fontSize: 12, color: "var(--text-subtle)", marginTop: 2 }}>{cmd.detail}</div>
-        )}
-      </div>
-      {cmd.hint && <span style={{ fontSize: 11, color: "var(--text-subtle)" }}>{cmd.hint}</span>}
-      {commandNavigates(cmd) && (
-        <ChevronRight size={12} className="text-text-subtle" aria-hidden />
-      )}
+      {...(isMobile ? touchBind : { onClick: (event: MouseEvent) => void onSelect(cmd, { newTab: event.shiftKey }) })}
+      className={styles.row}>
+      <span className={styles.rowIcon}>{recent ? <Clock size={16} aria-hidden /> : <CommandIcon kind={cmd.kind} />}</span>
+      <span className={styles.rowBody}>
+        <span className={styles.title}><MatchedLabel text={title} query={query} /></span>
+        {cmd.detail && !recent && <span className={`${styles.detail} ${cmd.kind === "content" ? styles.excerpt : ""}`}>{cmd.detail}</span>}
+      </span>
+      <span className={styles.kind}>{kindLabel}</span>
+      <span className={styles.rowAction} aria-hidden>{active ? <CornerDownLeft size={14} /> : commandNavigates(cmd) ? <ChevronRight size={14} /> : null}</span>
     </button>
   );
 }

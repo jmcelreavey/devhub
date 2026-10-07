@@ -13,14 +13,14 @@ related:
 # Database client
 
 `/db` is a database workspace in the same sense `/repos` is a Git workspace: browse,
-query, inspect structure, edit rows. It covers the three engines BI runs — PostgreSQL
-(RDS), MongoDB (Atlas) and SQLite — and it exists because the alternative was a
-credential-vending page (`/ops`) that hands you a `psql` command to paste somewhere else.
+query, inspect structure, edit rows. It covers PostgreSQL, MongoDB and SQLite, and it
+exists because the alternative is a credential-vending page that hands you a `psql`
+command to paste somewhere else.
 
 Two things make it worth building rather than installing TablePlus:
 
 1. **Connections are derived from your access, not from a config file you maintain.**
-   The BI plugin already knows which database services your team can reach and with which
+   A plugin can already know which database services your team can reach and with which
    usernames. `/db` turns that into a list you click.
 2. **Agents use the same path.** The MCP tools go through the same pool, the same
    classifier and the same access gate the UI does, so there is one place where "may this
@@ -74,8 +74,8 @@ instead. It follows the existing codegen precedent rather than inventing a mecha
 - the materialiser refuses a module that `dashboard.paths` would never copy, because the
   generated import would otherwise fail the *whole build* rather than one page.
 
-`devhub-bi` uses this to expose every RDS service your team has IAM for, plus both Atlas
-clusters, per environment.
+A work plugin can use this to expose every RDS service your team has IAM for, plus its
+Atlas clusters, per environment.
 
 ---
 
@@ -197,7 +197,7 @@ identity exists, editing is disabled **with a reason shown**, never approximated
 | Routes | `app/api/db/**` (all authenticated, GET included) |
 | UI | `app/db/`, `components/db/` |
 | MCP tools | `mcp-servers/devhub-server/src/tools/db.ts` |
-| BI provider | `devhub-bi/dashboard/lib/bi-db-provider.ts` |
+| Plugin providers | the plugin's own `dashboard.connections` module (see [Plugins](plugins.md)) |
 
 Unlike `/api/repos/*`, **every `/api/db` route calls `requireDashboardAuth`**. Git routes
 carry local diffs; these carry rows out of production.
@@ -207,8 +207,8 @@ carry local diffs; these carry rows out of production.
 ## Using `/db`
 
 **Databases** is a Library sidebar item (`/db`), desktop-only and **ungated**. SQLite
-files need no integration, so gating on BI or GitHub would hide the one path that works
-on a fresh machine. BI connections simply do not appear unless the plugin is installed.
+files need no integration, so gating on an integration would hide the one path that works
+on a fresh machine. Plugin connections simply do not appear unless the plugin is installed.
 
 | Surface | What it does |
 | --- | --- |
@@ -266,7 +266,7 @@ connection's exact label from `db_connections`.
 | `db_table` | One table/collection plus editability. |
 | `db_query` | Reads only (`readOnly: true` on the HTTP body). Refuses anything else. |
 | `db_explain` | Postgres/SQLite `EXPLAIN` (never `ANALYZE`). One statement. Mongo not exposed. |
-| `db_execute` | Writes/DDL. `confirm: true`. Use `db_connect` with `accessMode: "write"` first when BI needs elevating. |
+| `db_execute` | Writes/DDL. `confirm: true`. Use `db_connect` with `accessMode: "write"` first when the connection needs elevating. |
 | `db_cancel` | Stop in-flight work. `cancelled: false` is a real answer (Mongo has no out-of-band cancel). |
 | `db_diff` | Schema compare. |
 | `db_history` | Recent statements. |
@@ -282,11 +282,11 @@ timeouts, pools, and the write gate. See `skills/shared/devhub-db/SKILL.md`.
 
 | Symptom | Likely cause |
 | --- | --- |
-| Rail empty except local SQLite | BI plugin not installed, or `list()` failed (errors come back in `errors[]`, not as a 500). |
+| Rail empty except local SQLite | No plugin provides connections, or `list()` failed (errors come back in `errors[]`, not as a 500). |
 | Connection dimmed / `unavailable` | Run `db_preflight` or click the rail's remedy. Usually expired AWS creds or Tailscale down. |
-| "Your AWS credentials have expired" | Sign in again from Ops, then reopen. `POST /api/db/connections` drops the pool after a profile switch. |
+| "Your AWS credentials have expired" | Sign in again from your plugin's ops page, then reopen. `POST /api/db/connections` drops the pool after a profile switch. |
 | Connect timeout / host did not resolve | Private RDS/Atlas hosts need the tailnet (and Atlas PrivateLink names need Tailscale DNS). |
-| `403` `read_only` | Connection access mode is read. For BI, switch to a writer profile; for local, edit the saved connection. |
+| `403` `read_only` | Connection access mode is read. For plugin connections, switch to a writer profile; for local, edit the saved connection. |
 | `403` `confirm_required` | Type the connection label (prd + privileged). Agents pass `confirmLabel`. |
 | Grid **Edit** disabled | No usable row identity (no PK, unique-nullable index, or view) — the reason is shown — or the connection is read-only. |
 | AI SQL `503` | No provider (`AI_API_KEY` / Setup → AI Provider). |

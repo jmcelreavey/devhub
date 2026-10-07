@@ -40,7 +40,7 @@ function useConfig(overrides: Partial<AgentCliConfig> = {}) {
 describe("repoUpstartCommand", () => {
   it("changes to the target repository before running the stored script", () => {
     expect(repoUpstartCommand("/repo/devhub/upstarts/app/upstart.sh", "/Users/dev/app repo")).toBe(
-      "cd -- '/Users/dev/app repo' && bash '/repo/devhub/upstarts/app/upstart.sh'",
+      "cd -- '/Users/dev/app repo' && upstart_root=$(git rev-parse --show-toplevel) && cd -- \"$upstart_root\" && bash '/repo/devhub/upstarts/app/upstart.sh'",
     );
   });
 });

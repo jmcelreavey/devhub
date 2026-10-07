@@ -1,5 +1,6 @@
 import path from "node:path";
 import { resolveContentDir as resolveSharedContentDir } from "../../../shared/vault/content-dirs.ts";
+import { resolveActiveTasksDir } from "../../../shared/vault/task-profiles.ts";
 import {
   getAppDataDir,
   getCheckoutRoot,
@@ -79,6 +80,15 @@ export function getDocsDir(): string {
  */
 export function getTasksDir(): string {
   return resolveContentDir("TASKS_DIR", "tasks");
+}
+
+/**
+ * Where THIS machine reads and writes day-files: `<tasks root>/<active profile>`,
+ * or the root itself in the legacy (profile-less) layout. Use this for task
+ * data; `getTasksDir()` is the root that holds every profile.
+ */
+export function getActiveTasksDir(): string {
+  return resolveActiveTasksDir(getTasksDir());
 }
 
 /** Checklist collections; defaults to `REPO_ROOT/collections` when `COLLECTIONS_DIR` is unset. */

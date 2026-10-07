@@ -1,9 +1,11 @@
 import { AgentDispatchError,dispatchAgentRun } from "@/lib/agent-runs/dispatch";
 import { listAgentRuns,toAgentRunSummary } from "@/lib/agent-runs/store";
-import { aionCatalog } from "@/lib/aionui/catalog";
-import { reconcileManagedRun } from "@/lib/aionui/lifecycle";
+import { reconcileManagedRun } from "@/lib/paseo/lifecycle";
+import { ensureConventionsFresh } from "@/lib/conventions/fresh";
+import { parseGithubPrUrl } from "@/lib/entity-links/parse-pr";
 import { parseBody,requireDashboardAuth,withErrorHandler } from "@/lib/api-utils";
 import { getTasks } from "@/lib/tasks/storage";
+import { listPaseoProviders } from "@/lib/paseo/providers";
 import { NextRequest,NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -22,16 +24,15 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const query = search.get("q")?.toLowerCase().slice(0, 200) || "";
   const matching = all.filter(run => {
     if (scope === "mine" && run.spec.activity?.source !== "interactive") return false;
-    if (scope === "background" && (!run.spec.activity || run.spec.activity.source === "interactive" || run.spec.activity.source === "aionui")) return false;
+    if (scope === "background" && (!run.spec.activity || run.spec.activity.source === "interactive" || run.spec.activity.source === "aionui" /* legacy records */)) return false;
     if (scope === "attention" && run.status.state !== "needs-attention") return false;
     return !query || [run.spec.title, run.spec.cwd, run.spec.activity?.repoName, run.spec.activity?.taskId, run.spec.activity?.jobId, run.spec.activity?.groupId].some(value => value?.toLowerCase().includes(query));
   });
   let providers: { id: string; label: string; installed: boolean; models: string[]; supportsResume: boolean; supportsMaxTurns: boolean; custom: boolean; format: string; binPath: null }[] = [];
   let configError: string | null = null;
   try {
-    const catalog = await aionCatalog();
-    providers = catalog.assistants.filter((a) => a.enabled).map((a) => ({ id: a.id, label: a.name, installed: a.agent_status === "online", models: a.models, supportsResume: true, supportsMaxTurns: false, custom: a.agent?.source === "custom", format: "text", binPath: null }));
-  } catch (error) { configError = error instanceof Error ? error.message : "Connect AionUi in Agents."; }
+    providers = (await listPaseoProviders()).map((p) => ({ id: p.id, label: p.label, installed: p.ready, models: p.models, supportsResume: true, supportsMaxTurns: false, custom: false, format: "text", binPath: null }));
+  } catch (error) { configError = error instanceof Error ? error.message : "Start Paseo from Agents → Connection."; }
   const runs = await Promise.all(matching.slice(0, limit).map(reconcileManagedRun));
   return NextResponse.json({
     runs: runs.map(toAgentRunSummary),
@@ -51,7 +52,7 @@ const DispatchSchema = z.object({
   worktree: z.boolean().optional(),
   taskId: z.string().min(1).max(100).optional(),
   taskDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  action: z.enum(["plan", "implement", "resume", "agent", "review"]).optional(),
+  action: z.enum(["plan", "implement", "resume", "agent", "review", "create-pr"]).optional(),
   repoName: z.string().max(200).optional(),
   notePath: z.string().max(1000).optional(),
   prUrl: z.string().url().refine(value => /^https?:\/\//.test(value)).optional(),
@@ -62,7 +63,7 @@ const DispatchSchema = z.object({
   depth: z.number().int().min(0).max(20).default(0),
 });
 
-/** Dispatch directly into AionUi. Navigation belongs to the initiating window. */
+/** Dispatch directly into Paseo. Navigation belongs to the initiating window. */
 export const POST = withErrorHandler(async (req: NextRequest) => {
   const auth = requireDashboardAuth(req);
   if (!auth.ok) return auth.response;
@@ -72,6 +73,13 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     const { taskId, taskDate, action, repoName, notePath, prUrl, headSha, ...input } = parsed.data;
     if (taskId && (!taskDate || !getTasks(taskDate).some((task) => task.id === taskId))) {
       return NextResponse.json({ error: "The linked task could not be found." }, { status: 404 });
+    }
+    // Review and create-PR agents read this repo's conventions through the MCP
+    // tool; make sure there are some by the time they ask. Not awaited — a
+    // person is waiting on the dispatch, and the tool answers with what exists.
+    if (action === "review" || action === "create-pr") {
+      const repoRef = (prUrl && parseGithubPrUrl(prUrl)?.repo) || repoName;
+      if (repoRef) void ensureConventionsFresh(repoRef, { trigger: action }).catch(() => undefined);
     }
     const run = await dispatchAgentRun({ ...input, activity: { source: "interactive", action: action ?? "agent", taskId, taskDate, repoName, notePath, prUrl, headSha } });
     return NextResponse.json({ run: toAgentRunSummary(run) }, { status: 201 });

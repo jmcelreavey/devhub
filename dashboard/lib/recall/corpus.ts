@@ -15,8 +15,9 @@ import {
   extractPlainTextFromTldraw,
 } from "@shared/notes-search/extract.ts";
 import { getReposDir } from "@/lib/desktop/runtime-paths";
-import { getDocsDir, getNotesDir, getTasksDir } from "@/lib/notes/dir";
+import { getDocsDir, getNotesDir, getActiveTasksDir } from "@/lib/notes/dir";
 import { entityKey } from "@/lib/entity-note";
+import { conventionRecallDocs, conventionsNewestMtime } from "@/lib/conventions/recall";
 import { chunkText } from "./chunk";
 import { refsFromSourcePath } from "./path-refs";
 import { extractRefKeys } from "./refs";
@@ -159,7 +160,7 @@ function readDocs(): RawDoc[] {
  * context for it — that's what you were doing at the time.
  */
 function readTasks(): RawDoc[] {
-  const root = getTasksDir();
+  const root = getActiveTasksDir();
   if (!fs.existsSync(root)) return [];
 
   const files = fs
@@ -246,6 +247,7 @@ export function buildCorpus(options: BuildCorpusOptions = {}): RecallChunk[] {
   const include = (kind: RecallSourceKind): boolean => !wanted || wanted.has(kind);
 
   if (include("note") || include("learning") || include("diagram")) raw.push(...readNotes());
+  if (include("learning")) raw.push(...conventionRecallDocs());
   if (include("doc")) raw.push(...readDocs());
   if (include("task")) raw.push(...readTasks());
   if (include("event")) raw.push(...readEventDocs());
@@ -300,7 +302,7 @@ export function sourcesNewestMtime(): number {
   for (const file of walkFiles(getNotesDir(), (name) => name.endsWith(".json"))) consider(file);
   for (const file of walkFiles(getDocsDir(), (name) => name.endsWith(".md"))) consider(file);
 
-  const tasksRoot = getTasksDir();
+  const tasksRoot = getActiveTasksDir();
   if (fs.existsSync(tasksRoot)) {
     for (const name of fs.readdirSync(tasksRoot)) {
       if (/^\d{4}-\d{2}-\d{2}\.json$/.test(name)) consider(path.join(tasksRoot, name));
@@ -316,6 +318,9 @@ export function sourcesNewestMtime(): number {
   // register as a change.
   const newestEvent = readEvents({ limit: 1 })[0];
   if (newestEvent) newest = Math.max(newest, Date.parse(newestEvent.ts) || 0);
+
+  // Same story for conventions: `.config` is a skipped dot-directory.
+  newest = Math.max(newest, conventionsNewestMtime());
 
   return newest;
 }

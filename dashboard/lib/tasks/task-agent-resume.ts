@@ -82,8 +82,9 @@ export function taskAgentChipForLatestRun(
   return null;
 }
 
-export function agentActivityHrefForRun(runId: string): string {
-  return `/agents?view=activity&run=${encodeURIComponent(runId)}`;
+/** Straight to the run's chat; the Chats frame resolves the run to its conversation. */
+export function agentChatHrefForRun(runId: string): string {
+  return `/agents?run=${encodeURIComponent(runId)}`;
 }
 
 export interface BuildTaskAgentResumePromptInput {

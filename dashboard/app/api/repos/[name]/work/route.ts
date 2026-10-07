@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { withErrorHandler } from "@/lib/api-utils";
-import { extractTags, mergeEntityRefs } from "@/lib/entity-note";
+import { mergeEntityRefs } from "@/lib/entity-note";
 import { resolveEntityLinks } from "@/lib/entity-links/resolve";
 import { getEventsInRange } from "@/lib/google-calendar";
 import { getMyTicketsCached } from "@/lib/jira/client";
 import { getNoteIndex } from "@/lib/notes/note-index";
 import { loadIndex } from "@/lib/recall/store";
-import { resolveCanonicalRepoFullName, rowFromSearchItem, searchIssues } from "@/lib/github/prs";
+import { resolveCanonicalRepoFullName, rowFromSearchItem, searchIssues, type GithubPrRow } from "@/lib/github/prs";
 import { getGithubFullNameForLocalRepo } from "@/lib/repos";
 import {
   clusterRepoWork,
@@ -45,20 +45,32 @@ async function settle<T>(promise: Promise<T>): Promise<{ data?: T; error?: strin
 const OPEN_PR_LIMIT = 50;
 
 /**
- * Open PRs for the repo, shaped for `clusterRepoWork`.
+ * Open PRs for the repo, as full rows — the hub lists them and clusters them, so
+ * the client no longer re-runs the search.
  *
+ * Yours are a separate query: a repo with more than 50 open PRs overflows the
+ * general search, and "My PRs" silently lost whichever of yours fell past it.
+ */
+async function openPrsForRepo(
+  fullName: string | null,
+): Promise<{ rows: GithubPrRow[]; mineUrls: string[] }> {
+  if (!fullName) return { rows: [], mineUrls: [] };
+  const [all, mine] = await Promise.all([
+    searchIssues(`repo:${fullName} is:pr is:open`, OPEN_PR_LIMIT),
+    searchIssues(`repo:${fullName} is:pr is:open author:@me`, OPEN_PR_LIMIT),
+  ]);
+  const mineRows = mine.map(rowFromSearchItem);
+  const mineUrls = new Set(mineRows.map((row) => row.url));
+  const rest = all.map(rowFromSearchItem).filter((row) => !mineUrls.has(row.url));
+  return { rows: [...mineRows, ...rest], mineUrls: [...mineUrls] };
+}
+
+/**
  * Clustering matches a task's `pr` ref by URL or by `owner/repo#number`, so both
  * must survive the mapping.
  */
-async function openPrsForRepo(fullName: string | null): Promise<WorkHubPr[]> {
-  if (!fullName) return [];
-  const items = await searchIssues(`repo:${fullName} is:pr is:open`, OPEN_PR_LIMIT);
-  return items.map(rowFromSearchItem).map((row) => ({
-    url: row.url,
-    title: row.title,
-    repo: row.repo,
-    number: row.number,
-  }));
+function asWorkHubPr(row: GithubPrRow): WorkHubPr {
+  return { url: row.url, title: row.title, repo: row.repo, number: row.number };
 }
 
 function finishedTasksForRepo(name: string, fullName: string | null): WorkHubTask[] {
@@ -80,6 +92,7 @@ function asFinishedTask(task: Task, date: string): WorkHubTask {
     text: task.text,
     date,
     createdAt: task.createdAt,
+    notePath: task.notePath,
     jiraKey: task.jiraKey,
     links: task.links,
     finishedAt: task.completedAt ?? task.abandonedAt,
@@ -161,6 +174,7 @@ export const GET = withErrorHandler(
       settle(getEventsInRange(HUB_CALENDAR_WINDOW_DAYS, HUB_CALENDAR_WINDOW_DAYS)),
       settle(openPrsForRepo(fullName)),
     ]);
+    const openPrs = prsResult.data?.rows ?? [];
     const tasks = rolled.filter(isTaskOpen).map((task) => ({
       ...task,
       date,
@@ -201,7 +215,7 @@ export const GET = withErrorHandler(
         updatedAt: ticket.updatedAt,
       })),
       notes,
-      prs: prsResult.data ?? [],
+      prs: openPrs.map(asWorkHubPr),
       events: rawEvents.map((event) => {
         const eventDate = event.start.slice(0, 10) || undefined;
         const related = resolveEntityLinks("calendar", event.id, {
@@ -209,18 +223,13 @@ export const GET = withErrorHandler(
           date: eventDate,
           label: event.title,
         }).related;
-        const tags = new Set(extractTags(event.title));
-        for (const ref of related) {
-          if (ref.kind === "tag") tags.add(ref.id.toLowerCase());
-        }
         return {
           id: event.id,
           title: event.title,
           start: event.start,
           end: event.end,
           htmlLink: event.htmlLink,
-          tags: [...tags],
-          links: related.filter((ref) => ref.kind === "repo" || ref.kind === "tag"),
+          links: related.filter((ref) => ref.kind === "repo"),
         };
       }),
       jiraHops,
@@ -235,6 +244,8 @@ export const GET = withErrorHandler(
     return NextResponse.json({
       date,
       fullName,
+      openPrs,
+      myPrUrls: prsResult.data?.mineUrls ?? [],
       model,
       doneTasks: finishedTasksForRepo(name, fullName),
       ...(degraded.length > 0 ? { degraded } : {}),

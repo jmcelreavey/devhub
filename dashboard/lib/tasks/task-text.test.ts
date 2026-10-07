@@ -3,6 +3,7 @@ import {
   escapeRegExp,
   stripLinkedJiraKeyFromText,
   stripTagToken,
+  stripTagTokens,
   rewriteTaskKey,
   textWithJiraLinkPromotion,
   parseMarkdownLinks,
@@ -263,5 +264,20 @@ describe("stripTagToken", () => {
 
   it("is a no-op when the tag is absent", () => {
     expect(stripTagToken("QA pass #devhub", "qa-walk")).toBe("QA pass #devhub");
+  });
+});
+
+describe("stripTagTokens", () => {
+  it("removes every hashtag and collapses the gap it leaves", () => {
+    expect(stripTagTokens("Track session length #mobile-app #analytics")).toBe("Track session length ");
+    expect(stripTagTokens("Fix #analytics overlay")).toBe("Fix overlay");
+  });
+
+  it("returns the text untouched when there are no tags", () => {
+    expect(stripTagTokens("Chase reviews on app#146")).toBe("Chase reviews on app#146");
+  });
+
+  it("keeps a title that is nothing but tags", () => {
+    expect(stripTagTokens("#analytics #atlas")).toBe("#analytics #atlas");
   });
 });

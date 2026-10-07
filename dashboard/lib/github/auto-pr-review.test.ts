@@ -12,6 +12,7 @@ import {
   autoReviewConcurrency,
   shouldRetryAutoReview,
 } from "@/lib/github/auto-pr-review";
+import { saveAutoPrReviewPrefs } from "@/lib/github/auto-pr-review-prefs";
 import { getAutoPrReviewRecord } from "@/lib/github/auto-pr-review-state";
 
 function pr(partial: Partial<GithubPrRow> & Pick<GithubPrRow, "number" | "repo" | "url">): GithubPrRow {
@@ -46,6 +47,26 @@ describe("selectAutoReviewCandidates", () => {
     expect(toStart).toHaveLength(1);
     expect(toStart[0]?.row.repo).toBe("acme/app");
     expect(skipped.some((s) => s.reason === "not-allowlisted" && s.url === c.url)).toBe(true);
+  });
+
+  it("filters by ownership before applying the concurrency budget, ignoring case", () => {
+    const result = selectAutoReviewCandidates({
+      reviews: [c, { ...a, repo: "ACME/App" }, b],
+      ownedRepos: new Set(["acme/app"]),
+      concurrency: 1,
+    });
+    expect(result.toStart.map((candidate) => candidate.row.url)).toEqual([a.url]);
+    expect(result.skipped.map((row) => row.reason)).toEqual(["not-owned", "not-owned"]);
+  });
+
+  it("starts nothing when Owned is empty and intersects ownership with the allowlist", () => {
+    expect(selectAutoReviewCandidates({
+      reviews: [a], ownedRepos: new Set(), concurrency: 2,
+    }).toStart).toEqual([]);
+    expect(selectAutoReviewCandidates({
+      reviews: [a, b], ownedRepos: new Set(["acme/app"]),
+      allowlist: new Set(["acme/api"]), concurrency: 2,
+    }).toStart).toEqual([]);
   });
 
   it("dedupes on PR URL even after head SHA or updatedAt moves (pushes, comments)", () => {
@@ -129,6 +150,46 @@ describe("parseAutoReviewAllowlist / concurrency", () => {
 });
 
 describe("runAutoPrReview", () => {
+  it("enforces saved ownership settings for previews and starts", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-owned-review-"));
+    const previousNotes = process.env.NOTES_DIR;
+    const previousRoot = process.env.REPO_ROOT;
+    process.env.NOTES_DIR = tmp;
+    process.env.REPO_ROOT = tmp;
+    try {
+      const ownershipDir = path.join(tmp, ".devhub", "ownership");
+      fs.mkdirSync(ownershipDir, { recursive: true });
+      fs.writeFileSync(path.join(ownershipDir, "repos.json"), JSON.stringify({
+        version: 1, repos: [{ fullName: "Acme/App" }],
+      }));
+      await saveAutoPrReviewPrefs({ ownedOnly: true });
+      const reviews = [
+        pr({ repo: "other/api", number: 1, url: "https://github.com/other/api/pull/1" }),
+        pr({ repo: "acme/app", number: 2, url: "https://github.com/acme/app/pull/2" }),
+      ];
+      const preview = await runAutoPrReview({ reviews, dryRun: true, allowlist: null });
+      expect(preview.candidates?.map((candidate) => candidate.row.repo)).toEqual(["acme/app"]);
+      const calls: string[] = [];
+      await runAutoPrReview({ reviews, allowlist: null, startReview: async ({ row }) => {
+        calls.push(row.repo);
+        return { runId: "owned-review" };
+      } });
+      expect(calls).toEqual(["acme/app"]);
+      fs.writeFileSync(path.join(ownershipDir, "repos.json"), JSON.stringify({ version: 1, repos: [] }));
+      const empty = await runAutoPrReview({ reviews, dryRun: true, allowlist: null });
+      expect(empty.candidates).toEqual([]);
+      await saveAutoPrReviewPrefs({ ownedOnly: false });
+      const unrestricted = await runAutoPrReview({ reviews, dryRun: true, allowlist: null });
+      expect(unrestricted.candidates?.map((candidate) => candidate.row.repo)).toEqual(["other/api"]);
+    } finally {
+      if (previousNotes === undefined) delete process.env.NOTES_DIR;
+      else process.env.NOTES_DIR = previousNotes;
+      if (previousRoot === undefined) delete process.env.REPO_ROOT;
+      else process.env.REPO_ROOT = previousRoot;
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   it("dry-run lists candidates without calling start", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-auto-review-"));
     process.env.NOTES_DIR = tmp;

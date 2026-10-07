@@ -5,7 +5,7 @@ import { Ticket, RefreshCw } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import type { JiraTicket } from "@/lib/jira/client";
 import { useMarkTicketsSeen } from "@/lib/hooks/use-sidebar-counts";
-import { priorityIcon } from "@/components/jira/JiraWidget";
+import ticketStyles from "@/components/jira/JiraTicketRow.module.css";
 import { JiraTicketRow } from "@/components/jira/JiraTicketRow";
 import { FetchError, EmptyState, InlineSearch, SkeletonRows } from "@/components";
 import { filterTickets } from "@/lib/jira/ticket-search";
@@ -25,24 +25,6 @@ function ticketMatchesStatusFilter(status: string, filter: string): boolean {
     return s.includes("review");
   }
   return s.includes(f);
-}
-
-function TicketCard({ ticket }: { ticket: JiraTicket }) {
-  return (
-    <div className="card" style={{ padding: "8px 10px" }}>
-      <div className="flex items-start gap-2">
-        <span className="text-xs mt-1.5" aria-hidden>
-          {priorityIcon(ticket.priority)}
-        </span>
-        <div className="min-w-0 flex-1">
-          <JiraTicketRow ticket={ticket} density="comfortable" />
-          <p className="px-1 text-xs text-text-subtle">
-            {ticket.project} ({ticket.projectKey}) · {ticket.priority} · {ticket.issuetype}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 export default function TicketsPage() {
@@ -136,7 +118,7 @@ export default function TicketsPage() {
         ))}
       </div>
 
-      <div className="card mb-4" style={{ padding: "8px 10px" }}>
+      <div className="mb-4">
         <InlineSearch
           id="tickets-search"
           label="Search tickets"
@@ -149,11 +131,13 @@ export default function TicketsPage() {
 
       {isLoading && !data && <SkeletonRows count={5} height={40} variant="list" />}
 
-      <div className="space-y-2">
-        {filtered.map((t) => (
-          <TicketCard key={t.key} ticket={t} />
-        ))}
-      </div>
+      {filtered.length > 0 && (
+        <div className={`card ${ticketStyles.list}`} role="list" aria-label="Jira tickets">
+          {filtered.map((t) => (
+            <JiraTicketRow key={t.key} ticket={t} density="comfortable" showAssignee={false} showDetails />
+          ))}
+        </div>
+      )}
 
       {!isLoading && !error && filtered.length === 0 && configured && (
         <EmptyState

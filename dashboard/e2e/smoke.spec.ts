@@ -2,7 +2,7 @@ import { test, expect, type ConsoleMessage, type Page } from "@playwright/test";
 
 /**
  * Routes that render their own UI. Redirect-only routes (/tasks, /activity,
- * /collections) and layout-hosted ones (/chamber, /opencode) are
+ * /collections, /chamber, /opencode) are
  * excluded — they have no content of their own to assert on.
  */
 const ROUTES = [

@@ -1,6 +1,5 @@
 import { dispatchAgentRun } from "./dispatch";
 import type { AgentActivityContext } from "./run-files";
-import { resolveBackgroundCli, resolveCursorAionModel } from "@/lib/aionui/dispatch-defaults";
 
 export interface BackgroundAgentStart {
   channel: "run";
@@ -22,12 +21,9 @@ export interface BackgroundAgentOptions {
 
 /** No browser, terminal or navigation dependency: the runtime owns execution. */
 export async function startBackgroundAgent(opts: BackgroundAgentOptions): Promise<BackgroundAgentStart> {
-  const cli = resolveBackgroundCli();
-  const provider = opts.provider?.trim() || cli;
-  const model = opts.model?.trim()
-    || (provider === "cursor" || provider.startsWith("bare:a0dfb1ec") ? resolveCursorAionModel() : undefined);
+  // Blank provider/model fall through to the Connection tab default and each harness's configured model.
   const run = await dispatchAgentRun({
-    provider, model, prompt: opts.prompt, cwd: opts.cwd, title: opts.title,
+    provider: opts.provider?.trim() ?? "", model: opts.model?.trim() || undefined, prompt: opts.prompt, cwd: opts.cwd, title: opts.title,
     worktree: false, depth: 0, unattendedReason: opts.unattendedReason,
     activity: opts.activity, requestId: opts.requestId,
   });

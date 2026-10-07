@@ -4,10 +4,12 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { getNotesDir, getTasksDir } from "@/lib/content/dirs";
+import { getNotesDir } from "@/lib/content/dirs";
 import { blocksToText } from "@/lib/markdown-convert";
 import { getResolvedJiraEnv, authHeader, apiBase } from "@/lib/jira/env";
-import { taskNotePath } from "@/lib/task-note";
+import { resolveTaskNotePath } from "./task-notes";
+import { currentTaskNode, loadTaskIndex, taskLineageIds, type TaskNode } from "./task-index";
+export { resolveTaskNotePath } from "./task-notes";
 import { isTaskOpen, type Task } from "@/lib/tasks/types";
 import {
   evaluateImplementReady,
@@ -15,40 +17,6 @@ import {
   type ImplementReadyResult,
   type OpenPrerequisiteBlocker,
 } from "@/lib/tasks/implement-ready";
-
-interface TaskNode {
-  task: Task;
-  date: string;
-}
-
-function loadTaskIndex(): { byId: Map<string, TaskNode>; all: TaskNode[] } {
-  const byId = new Map<string, TaskNode>();
-  const all: TaskNode[] = [];
-  const dir = getTasksDir();
-  let files: string[];
-  try {
-    files = fs.readdirSync(dir).filter((f) => f.endsWith(".json"));
-  } catch {
-    return { byId, all };
-  }
-  for (const file of files) {
-    let tasks: Task[];
-    try {
-      tasks = JSON.parse(fs.readFileSync(path.join(dir, file), "utf8")) as Task[];
-    } catch {
-      continue;
-    }
-    if (!Array.isArray(tasks)) continue;
-    const date = file.replace(/\.json$/, "");
-    for (const task of tasks) {
-      if (!task || typeof task.id !== "string") continue;
-      const node = { task, date };
-      byId.set(task.id, node);
-      all.push(node);
-    }
-  }
-  return { byId, all };
-}
 
 function noteFilePath(relPath: string): string | null {
   const root = path.resolve(getNotesDir());
@@ -113,12 +81,13 @@ export function collectOpenPrerequisiteBlockers(
   taskId: string,
   links: Task["links"] | undefined,
 ): OpenPrerequisiteBlocker[] {
-  const { byId, all } = loadTaskIndex();
+  const index = loadTaskIndex();
+  const aliases = taskLineageIds(index, taskId);
   const out = new Map<string, OpenPrerequisiteBlocker>();
 
   const consider = (node: TaskNode | undefined) => {
     if (!node) return;
-    if (node.task.id === taskId) return;
+    if (aliases.has(node.task.id)) return;
     if (node.task.movedAt) return;
     if (!isTaskOpen(node.task)) return;
     if (!taskTextHasPrerequisiteTag(node.task.text)) return;
@@ -131,26 +100,19 @@ export function collectOpenPrerequisiteBlockers(
 
   for (const link of links ?? []) {
     if (link.kind !== "task") continue;
-    consider(byId.get(link.id));
+    consider(currentTaskNode(index, link.id) ?? undefined);
   }
 
-  for (const node of all) {
+  for (const candidate of index.byId.values()) {
+    const node = currentTaskNode(index, candidate.task.id);
+    if (!node) continue;
     if (node.task.movedAt) continue;
-    const pointsHere = node.task.links?.some((l) => l.kind === "task" && l.id === taskId);
+    const pointsHere = node.task.links?.some((l) => l.kind === "task" && aliases.has(l.id));
     if (!pointsHere) continue;
     consider(node);
   }
 
   return [...out.values()];
-}
-
-export function resolveTaskNotePath(task: Task, date: string): string {
-  return taskNotePath({
-    id: task.id,
-    text: task.text,
-    date,
-    jiraKey: task.jiraKey,
-  });
 }
 
 /** Gather everything the checklist reads for one task and evaluate it. */

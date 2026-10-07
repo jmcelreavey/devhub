@@ -217,7 +217,7 @@ describe("POST /api/repos/[name]/branches", () => {
     await expect(response.json()).resolves.toMatchObject({ ok: true, alreadyUpToDate: true });
     expect(runGitRepoAsync).toHaveBeenCalledWith(
       "/tmp/test-repo",
-      ["pull", "--ff-only"],
+      ["pull", "--ff-only", "--autostash"],
       { timeout: 120_000 },
     );
   });
@@ -466,26 +466,33 @@ describe("POST /api/repos/[name]/branches", () => {
     });
   });
 
-  it("pops the auto-stash if checkout fails after stashing", async () => {
-    const calls: string[] = [];
+  /** Git double for an auto-stash checkout: the stash tip moves only when `dirty`. */
+  function autostashGit(opts: { dirty: boolean; checkoutFails?: boolean; calls: string[] }) {
+    let stashTip = "";
     vi.mocked(runGitRepo).mockReturnValue({ status: 0, stdout: "", stderr: "" });
     vi.mocked(runGitRepoAsync).mockImplementation(async (_repoRoot, args) => {
       const command = args.join(" ");
-      calls.push(command);
-      if (command === "status --porcelain") {
-        return { status: 0, stdout: " M src/a.ts\n", stderr: "" };
+      opts.calls.push(command);
+      if (command === "rev-parse -q --verify refs/stash") {
+        return stashTip ? { status: 0, stdout: `${stashTip}\n`, stderr: "" } : { status: 1, stdout: "", stderr: "" };
       }
       if (args[0] === "stash" && args[1] === "push") {
-        return { status: 0, stdout: "Saved working directory\n", stderr: "" };
+        if (opts.dirty) stashTip = "abc123";
+        return { status: 0, stdout: opts.dirty ? "Saved working directory\n" : "No local changes to save\n", stderr: "" };
       }
       if (args[0] === "checkout") {
-        return { status: 1, stdout: "", stderr: "error: pathspec 'gone' did not match any file(s) known to git\n" };
+        return opts.checkoutFails
+          ? { status: 1, stdout: "", stderr: "error: pathspec 'gone' did not match any file(s) known to git\n" }
+          : { status: 0, stdout: "", stderr: "" };
       }
-      if (command === "stash pop stash@{0}") {
-        return { status: 0, stdout: "", stderr: "" };
-      }
+      if (command === "stash pop --index stash@{0}") return { status: 0, stdout: "", stderr: "" };
       throw new Error(`Unexpected git command: ${command}`);
     });
+  }
+
+  it("pops the auto-stash if checkout fails after stashing", async () => {
+    const calls: string[] = [];
+    autostashGit({ dirty: true, checkoutFails: true, calls });
 
     const response = await POST(
       request({ action: "checkout", branch: "feature/ok", strategy: "stash" }),
@@ -497,7 +504,35 @@ describe("POST /api/repos/[name]/branches", () => {
       error: expect.stringMatching(/pathspec|Checkout/i),
       stashed: true,
     });
-    expect(calls).toContain("stash pop stash@{0}");
+    expect(calls).toContain("stash pop --index stash@{0}");
+  });
+
+  it("stashes, switches and restores staged state when the tree is dirty", async () => {
+    const calls: string[] = [];
+    autostashGit({ dirty: true, calls });
+
+    const response = await POST(
+      request({ action: "checkout", branch: "feature/ok", strategy: "stash" }),
+      params,
+    );
+
+    await expect(response.json()).resolves.toMatchObject({ ok: true, stashed: true, branch: "feature/ok" });
+    expect(calls.indexOf("checkout feature/ok")).toBeLessThan(calls.indexOf("stash pop --index stash@{0}"));
+  });
+
+  // `stash push` on a clean tree exits 0 without stashing; popping afterwards
+  // would apply an older, unrelated stash.
+  it("never pops when the clean tree produced no stash", async () => {
+    const calls: string[] = [];
+    autostashGit({ dirty: false, calls });
+
+    const response = await POST(
+      request({ action: "checkout", branch: "feature/ok", strategy: "stash" }),
+      params,
+    );
+
+    await expect(response.json()).resolves.toMatchObject({ ok: true, stashed: false });
+    expect(calls.some((c) => c.startsWith("stash pop"))).toBe(false);
   });
 
   it("asks for a strategy only when checkout would overwrite local changes", async () => {
@@ -658,7 +693,7 @@ describe("POST /api/repos/[name]/branches", () => {
     const response = await POST(request({ action: "pull-rebase" }), params);
 
     expect(response.status).toBe(200);
-    expect(runGitRepoAsync).toHaveBeenCalledWith("/tmp/test-repo", ["pull", "--rebase"], {
+    expect(runGitRepoAsync).toHaveBeenCalledWith("/tmp/test-repo", ["pull", "--rebase", "--autostash"], {
       timeout: 120_000,
     });
   });

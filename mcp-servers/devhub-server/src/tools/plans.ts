@@ -158,7 +158,7 @@ export function registerPlanTools(server: McpServer, ctx: Context): void {
     async ({ days }) =>
       withDashboardErrors(async () => {
         const res = await dashboard.get<unknown>("/api/tasks/retro", { days: days ?? 7 });
-        return text(JSON.stringify(res, null, 2));
+        return text(JSON.stringify(res));
       }),
   );
 }

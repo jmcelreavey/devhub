@@ -133,7 +133,7 @@ export function registerResourceTools(server: McpServer, ctx: Context): void {
       if (!rel) return { contents: [{ uri: uri.href, mimeType: "text/plain", text: "Invalid doc path." }] };
       const doc = docsStorage.read(rel);
       if (!doc) return { contents: [{ uri: uri.href, mimeType: "text/plain", text: `Doc not found: ${rel}` }] };
-      const body = typeof doc.content === "string" ? doc.content : JSON.stringify(doc.content, null, 2);
+      const body = typeof doc.content === "string" ? doc.content : JSON.stringify(doc.content);
       const header = typeof doc.path === "string" ? doc.path : rel;
       return {
         contents: [{ uri: uri.href, mimeType: "text/markdown", text: `# ${header.replace(/\.md$/i, "")}\n\n${body}` }],

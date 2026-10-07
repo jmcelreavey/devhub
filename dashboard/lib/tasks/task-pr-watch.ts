@@ -1,7 +1,8 @@
 /**
  * Follows the pull request each task's latest agent run produced.
  *
- * - Finds the PR (by the run's branch) when the run didn't record one.
+ * - Only follows a PR explicitly recorded on the run. A checkout's branch
+ *   can belong to unrelated work, especially for research and planning.
  * - Records merged / closed so the task can offer Complete / Abandon — it
  *   asks, it never closes the task itself.
  * - Raises `attention` when CI fails, changes are requested, or someone else
@@ -13,7 +14,6 @@
  * is up; POST /api/tasks/pr-watch runs a pass on demand. The same tick drafts
  * tasks from new on-call alerts when that's switched on (alert-drafts.ts).
  */
-import fs from "node:fs";
 import { execGh, isGithubCliAuthenticated } from "@/lib/gh-exec";
 import { countChecks } from "@/lib/github/pr-state";
 import { draftTasksFromAlerts } from "@/lib/tasks/alert-drafts";
@@ -117,22 +117,6 @@ async function readPrView(url: string): Promise<TaskPrView | null> {
   }
 }
 
-/** Newest PR (any state) whose head is `branch`, from inside the checkout. */
-async function findPrUrlForBranch(cwd: string, branch: string): Promise<string | null> {
-  // Worktrees get cleaned up; gh can't run from a directory that's gone.
-  if (!fs.existsSync(cwd)) return null;
-  try {
-    const { stdout } = await execGh(
-      ["pr", "list", "--head", branch, "--state", "all", "--limit", "1", "--json", "url"],
-      { cwd, timeoutMs: 20_000 },
-    );
-    const rows = JSON.parse(stdout) as Array<{ url?: string }>;
-    return rows[0]?.url ?? null;
-  } catch {
-    return null;
-  }
-}
-
 let selfLogin: string | null | undefined;
 async function githubLogin(): Promise<string | null> {
   if (selfLogin !== undefined) return selfLogin;
@@ -144,14 +128,14 @@ async function githubLogin(): Promise<string | null> {
   return selfLogin;
 }
 
-/** The runs worth checking: each task's latest run, finished, with a PR or a branch to find one. */
+/** The runs worth checking: each task's latest finished run with an explicitly linked PR. */
 export function runsToWatch(): Array<{ taskId: string; run: TaskAgentRunRecord }> {
   const out: Array<{ taskId: string; run: TaskAgentRunRecord }> = [];
   for (const taskId of listTaskAgentRunTaskIds()) {
     const run = listTaskAgentRuns(taskId)[0];
     if (!run || isActiveTaskAgentRunStatus(run.status)) continue;
     if (run.prState === "merged" || run.prState === "closed") continue;
-    if (!run.prUrl && !(run.branch && run.cwd)) continue;
+    if (!run.prUrl) continue;
     out.push({ taskId, run });
   }
   return out;
@@ -170,9 +154,8 @@ export async function watchTaskPrs(now = new Date()): Promise<TaskPrWatchResult>
   if (!(await isGithubCliAuthenticated())) return result;
   const self = await githubLogin();
   for (const { taskId, run } of runsToWatch()) {
-    const ref = run.prUrl ?? (run.cwd && run.branch ? await findPrUrlForBranch(run.cwd, run.branch) : null);
-    if (!ref) continue;
-    const view = await readPrView(ref);
+    if (!run.prUrl) continue;
+    const view = await readPrView(run.prUrl);
     if (!view) continue;
     const patch = assessTaskPr(view, run, { now: now.toISOString(), self });
     await patchTaskAgentRun(taskId, run.runId, patch);

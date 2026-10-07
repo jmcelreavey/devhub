@@ -21,8 +21,8 @@ vi.mock("@/lib/hooks/use-fetch", () => ({
   },
 }));
 
-vi.mock("@/components/shell/TagsModal", () => ({
-  TagsModal: ({
+vi.mock("@/components/shell/LinksModal", () => ({
+  LinksModal: ({
     open,
     refs,
   }: {
@@ -62,43 +62,21 @@ function TagMenuHarness(props: UseTagMenuGroupParams) {
 
 describe("collectTagMenuRefs", () => {
   it("is the source of truth for both the menu count and the modal list", () => {
-    const refs = collectTagMenuRefs(["job-scout"], [
+    const refs = collectTagMenuRefs([
+      { kind: "tag", id: "job-scout", label: "#job-scout" },
       { kind: "note", id: "task-notes/x", label: "Note" },
+      { kind: "note", id: "task-notes/x", label: "Note again" },
     ]);
-    expect(tagMenuCountLabel(refs.length)).toBe("2 linked");
-    expect(refs.map((ref) => `${ref.kind}:${ref.id}`)).toEqual([
-      "tag:job-scout",
-      "note:task-notes/x",
-    ]);
+    expect(tagMenuCountLabel(refs.length)).toBe("1 linked");
+    expect(refs.map((ref) => `${ref.kind}:${ref.id}`)).toEqual(["note:task-notes/x"]);
   });
 
   it("labels an empty list the same way the menu and modal do", () => {
-    expect(tagMenuCountLabel(collectTagMenuRefs(undefined, undefined).length)).toBe("No tags yet");
+    expect(tagMenuCountLabel(collectTagMenuRefs(undefined).length)).toBe("No links yet");
   });
 });
 
 describe("useTagMenuGroup", () => {
-  it("keeps extraTags in the modal after the chip menu target is cleared", () => {
-    const live: UseTagMenuGroupParams = {
-      kind: null,
-      id: "job-scout",
-      label: "#job-scout",
-      extraTags: ["job-scout"],
-      enabled: true,
-    };
-    const { rerender } = render(<TagMenuHarness {...live} />);
-    expect(screen.getByTestId("count")).toHaveTextContent("1 linked");
-
-    fireEvent.click(screen.getByRole("button", { name: "View tags" }));
-    expect(screen.getByTestId("tags-modal")).toHaveTextContent("#job-scout");
-
-    // ContextMenu onClose + chipTarget=null, same click as onSelect.
-    rerender(<TagMenuHarness kind={null} id="" enabled={false} />);
-    expect(screen.getByTestId("count")).toHaveTextContent("1 linked");
-    expect(screen.queryByText("Nothing tagged yet.")).not.toBeInTheDocument();
-    expect(screen.getByTestId("tags-modal")).toHaveTextContent("#job-scout");
-  });
-
   it("keeps the entity-links fetch identity after kind/id drop", () => {
     const { rerender } = render(
       <TagMenuHarness kind="note" id="meetings/standup" label="Standup" enabled />,

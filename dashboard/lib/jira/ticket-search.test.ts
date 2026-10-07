@@ -13,7 +13,7 @@ function ticket(overrides: Partial<JiraTicket> = {}): JiraTicket {
     projectKey: "PTF",
     url: "https://example.atlassian.net/browse/PTF-4382",
     updatedAt: "2026-08-13T19:07:19.000Z",
-    assignee: { displayName: "John McElreavey", email: "john@example.com" },
+    assignee: { displayName: "Jordan Miller", email: "john@example.com" },
     ...overrides,
   };
 }

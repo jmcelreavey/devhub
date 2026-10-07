@@ -155,7 +155,7 @@ export default function SetupPage() {
   const [error, setError] = useState("");
   const [checkOk, setCheckOk] = useState("");
   const [allowLan, setAllowLan] = useState(true);
-  const [chamberUiPassword, setChamberUiPassword] = useState("");
+  const [agentsPassword, setAgentsPassword] = useState("");
   const [githubDevice, setGithubDevice] = useState<GithubDeviceLogin | null>(null);
   const [githubLogin, setGithubLogin] = useState<string | null>(null);
   /** Bumped to abandon an in-flight device-flow poll (restart or unmount). */
@@ -900,9 +900,9 @@ export default function SetupPage() {
             <WelcomeStep
               allowLan={allowLan}
               onAllowLanChange={setAllowLan}
-              chamberUiPassword={chamberUiPassword}
-              onChamberUiPasswordChange={setChamberUiPassword}
-              hasExistingPassword={status?.hasOpenchamberUiPassword === true}
+              agentsPassword={agentsPassword}
+              onAgentsPasswordChange={setAgentsPassword}
+              hasExistingPassword={status?.hasAgentsPassword === true}
               goals={goals}
               onGoalsChange={updateGoals}
             />
@@ -1100,7 +1100,7 @@ export default function SetupPage() {
                             allowLan,
                             // Only send when the user entered/generated one; empty
                             // preserves any existing password.
-                            openchamberUiPassword: chamberUiPassword.trim() || undefined,
+                            agentsPassword: agentsPassword.trim() || undefined,
                           },
                         }),
                       });

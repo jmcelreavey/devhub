@@ -7,6 +7,7 @@
  * Playwriter's MCP resources instead.
  */
 import { spawn } from "node:child_process";
+import { StringDecoder } from "node:string_decoder";
 
 export const PLAYWRITER_EXECUTE_DESCRIPTION = [
   "Run Playwright JS in the connected Chrome tab (Playwriter extension must be green on that tab).",
@@ -39,37 +40,25 @@ export function compactPlaywriterJsonRpc(message: unknown): unknown {
   };
 }
 
-function encodeMessage(message: unknown): Buffer {
-  const json = JSON.stringify(message);
-  const body = Buffer.from(json, "utf8");
-  return Buffer.concat([
-    Buffer.from(`Content-Length: ${body.length}\r\n\r\n`, "ascii"),
-    body,
-  ]);
-}
-
-function createStdoutParser(
+/**
+ * MCP's stdio transport is newline-delimited JSON — one message per line, no
+ * LSP-style Content-Length headers. Waiting for headers here swallowed every
+ * reply, so clients sat until their startup timeout (30–60s) and dropped it.
+ */
+export function createStdoutParser(
   onMessage: (message: unknown) => void,
 ): (chunk: Buffer) => void {
-  let buf = Buffer.alloc(0);
+  let buf = "";
+  const decoder = new StringDecoder("utf8");
   return (chunk: Buffer) => {
-    buf = Buffer.concat([buf, chunk]);
-    while (true) {
-      const sep = buf.indexOf("\r\n\r\n");
-      if (sep < 0) return;
-      const header = buf.subarray(0, sep).toString("ascii");
-      const match = /Content-Length:\s*(\d+)/i.exec(header);
-      if (!match) {
-        buf = buf.subarray(sep + 4);
-        continue;
-      }
-      const length = Number(match[1]);
-      const start = sep + 4;
-      if (buf.length < start + length) return;
-      const json = buf.subarray(start, start + length).toString("utf8");
-      buf = buf.subarray(start + length);
+    buf += decoder.write(chunk);
+    let newline: number;
+    while ((newline = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, newline).trim();
+      buf = buf.slice(newline + 1);
+      if (!line) continue;
       try {
-        onMessage(JSON.parse(json) as unknown);
+        onMessage(JSON.parse(line) as unknown);
       } catch (err) {
         process.stderr.write(
           `playwriter-compact: skipped malformed JSON-RPC (${String(err)})\n`,
@@ -100,7 +89,7 @@ function main(): void {
   });
 
   const parse = createStdoutParser((message) => {
-    process.stdout.write(encodeMessage(compactPlaywriterJsonRpc(message)));
+    process.stdout.write(`${JSON.stringify(compactPlaywriterJsonRpc(message))}\n`);
   });
   child.stdout.on("data", parse);
 

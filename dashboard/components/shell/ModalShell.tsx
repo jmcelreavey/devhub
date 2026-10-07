@@ -7,6 +7,8 @@ export interface ModalShellProps {
   open: boolean;
   onClose: () => void;
   title: string;
+  /** Allow long titles to wrap instead of truncating them. */
+  wrapTitle?: boolean;
   /** Optional type icon shown next to the title. */
   icon?: ReactNode;
   description?: string;
@@ -27,6 +29,7 @@ export function ModalShell({
   open,
   onClose,
   title,
+  wrapTitle = false,
   icon,
   description,
   children,
@@ -106,7 +109,7 @@ export function ModalShell({
           <div className="min-w-0">
             <h2 id={titleId} className="flex items-center gap-2 text-sm font-semibold text-text">
               {icon ? <span className="shrink-0 text-text-muted" aria-hidden>{icon}</span> : null}
-              <span className="min-w-0 truncate">{title}</span>
+              <span className={`min-w-0 ${wrapTitle ? "whitespace-normal break-words" : "truncate"}`}>{title}</span>
             </h2>
             {description ? (
               <p id={descriptionId} className="text-xs mt-1 text-text-muted">

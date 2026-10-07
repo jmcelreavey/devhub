@@ -151,7 +151,7 @@ export function ConnectionRail({
         {!loading && !error && connections.length === 0 && (
           <EmptyState
             title="No connections yet"
-            subtitle="Add a SQLite file or a database server to get started. BI connections appear once an AWS profile is active."
+            subtitle="Add a SQLite file or a database server to get started. Plugin connections appear once the plugin has access."
             bare
           />
         )}

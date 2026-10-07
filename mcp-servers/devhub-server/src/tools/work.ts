@@ -421,6 +421,37 @@ export function registerWorkTools(server: McpServer, ctx: Context): void {
   );
 
   server.registerTool(
+    "jira_ticket_create",
+    {
+      description:
+        "Create a Jira ticket through the authenticated dashboard. Requires confirm:true after user approval. The dashboard chooses Task/Sub-task from the parent and inherits its Team. Each confirmed call creates a new issue; check Jira before retrying an uncertain result.",
+      inputSchema: {
+        projectKey: z.string().trim().regex(/^[A-Z][A-Z0-9]+$/).describe("Jira project key, e.g. PTF"),
+        summary: z.string().trim().min(1).max(255),
+        description: z.string().trim().min(1).max(5000).describe("Issue description in Markdown"),
+        parentKey: z.string().regex(/^[A-Z][A-Z0-9]+-[0-9]+$/).nullable().optional(),
+        assignToMe: z.boolean().optional().describe("Assign to the configured Jira user (default true)"),
+        sprintId: z.number().int().positive().nullable().optional(),
+        confirm: z.boolean().optional().describe("Required true to create the issue after user approval"),
+      },
+    },
+    async ({ confirm, ...input }) =>
+      withDashboardErrors(async () => {
+        if (!confirm) {
+          return {
+            content: [{ type: "text", text: `Create a Jira ticket in ${input.projectKey}: ${input.summary}${input.parentKey ? ` (parent ${input.parentKey})` : ""}. Re-run with confirm: true after user approval.` }],
+            isError: true,
+          };
+        }
+        const created = await dashboard.post<{ key: string; url: string }>("/api/jira/issue", input, 60_000);
+        return {
+          content: [{ type: "text", text: `Created ${created.key}: ${input.summary}\n${created.url}` }],
+          structuredContent: created,
+        };
+      }),
+  );
+
+  server.registerTool(
     "jira_ticket_get",
     {
       description: "Fetch a single Jira ticket (status, summary, issue type) by key, e.g. DAD-1234. Requires the dashboard running.",

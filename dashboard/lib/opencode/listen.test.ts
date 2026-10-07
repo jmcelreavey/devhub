@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 describe("DevHub OpenCode listen", () => {
-  it("never uses Chamber-pinned ports", () => {
+  it("never uses pinned OpenCode ports", () => {
     expect(PINNED_OPENCODE_PORTS).toContain(1338);
     expect(PINNED_OPENCODE_PORTS).toContain(4096);
   });
@@ -30,15 +30,11 @@ describe("DevHub OpenCode listen", () => {
     process.env.OPENCODE_PORT = "1338";
     process.env.OPENCODE_HOST = "http://127.0.0.1:1338";
     process.env.OPENCODE_SKIP_START = "true";
-    process.env.OPENCHAMBER_OPENCODE_PORT = "1338";
-    process.env.OPENCHAMBER_SKIP_OPENCODE_START = "true";
 
     const env = opencodeSpawnEnv();
     expect(env.OPENCODE_PORT).toBeUndefined();
     expect(env.OPENCODE_HOST).toBeUndefined();
     expect(env.OPENCODE_SKIP_START).toBeUndefined();
-    expect(env.OPENCHAMBER_OPENCODE_PORT).toBeUndefined();
-    expect(env.OPENCHAMBER_SKIP_OPENCODE_START).toBeUndefined();
   });
 
   it("strips server basic-auth so the iframe is not 401", () => {

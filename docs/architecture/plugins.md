@@ -47,7 +47,7 @@ graph TD
 | ---- | ----------- | ------ |
 | 1 — file-copy assets | `skills/`, `agents/`, `mcp/`, optional MCP packages | **implemented** |
 | 2 — dashboard module | pages, API routes, libs, components | **implemented** |
-| 3 — branding (whitelabel) | theme, fonts, logo, OpenChamber theme, desktop icon | **implemented** |
+| 3 — branding (whitelabel) | theme, fonts, logo, desktop icon | **implemented** |
 
 Docs and persona-modes are not yet plugin-aware (different delivery mechanisms).
 
@@ -99,7 +99,7 @@ resolve unchanged and Next compiles them as if they were core files. It:
 
 Nav: plugins declare `dashboard.nav` entries in `devhub-plugin.json`. The materialiser
 writes them into `lib/plugin-nav.generated.ts`; core merges them into the sidebar via
-`groupSidebarNav` (and into ⌘K via `ALL_NAV_DESTINATIONS`). Use `group: "bi"` for
+`groupSidebarNav` (and into ⌘P via `ALL_NAV_DESTINATIONS`). Use `group: "bi"` for
 BI-owned destinations — Ops ships that way from `devhub-bi`. The `bi` gate is still
 computed by a dependency-free `lib/bi-presence.ts` detector so core holds no BI feature
 code.
@@ -178,8 +178,8 @@ AGENTS.md → Plugin Architecture.
 ## Tier 3 — branding (whitelabel)
 
 A plugin can **whitelabel** DevHub when it's enabled: contribute a theme palette + presets,
-seed the default theme/mode, swap the UI font, the sidebar/boot logo, the OpenChamber
-theme, and the desktop app icon. Nothing here is plugin-specific in core — any plugin can
+seed the default theme/mode, swap the UI font, the sidebar/boot logo, and the desktop
+app icon. Nothing here is plugin-specific in core — any plugin can
 do it by adding a `branding` block to its manifest:
 
 ```json
@@ -190,7 +190,6 @@ do it by adding a `branding` block to its manifest:
   "defaultMode": "system",
   "fonts": "branding/fonts",
   "logo": { "src": "branding/logo.svg", "label": "ACME" },
-  "openchamber": { "themes": "branding/oc", "defaultDarkId": "acme-dark", "defaultLightId": "acme-light" },
   "desktopIcon": "branding/icon.png"
 }
 ```
@@ -206,20 +205,18 @@ plugin** that declares `branding` and writes machine-local generated files:
 | `public/fonts-plugin/*` | `fonts` dir | `@font-face url("/fonts-plugin/…")` in your `themeCss` |
 | `public/plugin-brand-logo.*` | `logo.src` | sidebar chip, mobile bar, boot screen |
 | `public/plugin-desktop-icon.png` | `desktopIcon` | `desktop/scripts/stage-icons.mjs` during `desktop:stage` / `desktop:build` (OS app icon). Absent → core bottle from `dashboard/public/icon-512.png`. |
-| `~/.config/openchamber/{themes,settings.json}` | `openchamber` | OpenChamber itself (only if installed) |
 
 Key properties:
 
 - **Seeds, never forces.** `defaultPreset` / `defaultMode` / `logo` only set the out-of-box
   default. The theme picker, the dark/light/system toggle, and the IconPicker still let the
-  user override, and their choice (in `localStorage`, or OpenChamber's `settings.json`) is
-  never overwritten.
+  user override, and their choice (in `localStorage`) is never overwritten.
 - **No core clobbering.** The two generated source files are committed as *empty baselines*
   (so a fresh clone and CI build work with no plugin), and the materialiser rewrites them
   locally then `git update-index --skip-worktree` so the whitelabel never shows as repo
   churn. Copied `public/` assets are git-ignored.
-- **OpenChamber is optional.** Its theme is applied only when an OpenChamber data dir
-  exists on the machine; otherwise that step is skipped.
+- **`openchamber` is deprecated.** DevHub no longer runs OpenChamber. The field is still
+  accepted so old manifests validate, but it does nothing; drop it from yours.
 - **One brander at a time.** If several enabled plugins declare `branding`, the first wins
   and a warning is logged. Disabling the brander restores the empty baseline and prunes the
   copied assets.
@@ -316,9 +313,9 @@ invalid manifests are skipped (logged), never fatal — one bad plugin can't bre
 | Types / origin | `dashboard/lib/plugins/types.ts` |
 | Manifest reader (zod) | `dashboard/lib/plugins/manifest.ts` |
 | Registry + asset-dir resolution | `dashboard/lib/plugins/registry.ts` |
-| Agent merge | `dashboard/lib/sync-agents.ts` (`resolveAgentSources`) |
+| Agent merge | `dashboard/lib/sync/agents.ts` (`resolveAgentSources`) |
 | Skill merge | `dashboard/lib/skill-catalog.ts` (`buildMergedSkillCatalog`) |
-| MCP merge | `dashboard/lib/sync-mcp.ts` (`pluginMcpServers`, `readCatalogMcpServer`) |
+| MCP merge | `dashboard/lib/sync/mcp.ts` (`pluginMcpServers`, `readCatalogMcpServer`) |
 
 ## ai-tools
 

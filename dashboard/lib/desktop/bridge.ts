@@ -95,7 +95,7 @@ export async function pickFolder(title?: string): Promise<string | null> {
  * works fine.
  *
  * Relative URLs are resolved against the current origin first, because the
- * shell needs an absolute URL and the call sites naturally write "/chamber".
+ * shell needs an absolute URL and the call sites naturally write "/agents".
  */
 export async function openInBrowser(url: string): Promise<void> {
   let absolute: string;

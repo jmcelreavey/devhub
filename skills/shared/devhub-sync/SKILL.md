@@ -78,10 +78,13 @@ If `devhub-update.sh` blocks on dirty non-personal paths, commit or stash those 
 ```text
 notes/
 tasks/
+reps/
 collections/
 .devhub/
 dashboard/.env.local
 persona/identity.txt
+skills/shared/my-voice/writing-style.md
+skills/shared/my-voice/learned-voice.md
 TEMPLATE_AND_PLUGIN_PLAN.md
 scripts/make-public-seed.sh
 ```
@@ -156,4 +159,4 @@ bash ~/Developer/devhub-private/scripts/devhub-backport-status.sh --set-watermar
 - Never push personal paths to public/core.
 - Do not create a PR if the user chose direct main and direct push succeeds.
 - If direct push fails, stop and report the branch/commit to open as a PR.
-- Run this work on the Mac checkout with Shell `machineId` — box executors cannot see `/Users/jmcelreavey/...` or push with Mac `gh`/SSH.
+- Run this work where the checkouts and Git credentials are available. A remote executor cannot access paths or credentials that only exist on the local machine.

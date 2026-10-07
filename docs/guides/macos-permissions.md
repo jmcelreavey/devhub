@@ -11,7 +11,7 @@ related:
 
 # macOS permissions
 
-Opening DevHub, opening OpenChamber, opening a terminal, or running an agent
+Opening DevHub, opening a terminal, or running an agent
 request can each raise a macOS permission dialog — Files & Folders, Local
 Network, Automation. Granting them should be a one-time thing. If DevHub keeps
 asking, the cause is almost always one of two signature problems, not the
@@ -74,14 +74,15 @@ instead — that is a preference, not a bug.
 
 ## What about the sidecars?
 
-Nothing to grant separately. The Next server, the terminal PTY, OpenCode,
-OpenChamber and the agent CLIs are spawned as child processes of the app, so
-macOS attributes their file and network access to DevHub — the *responsible
+Nothing to grant separately. The Next server, the terminal PTY and the
+OpenCode recap server are spawned as child processes of the app, so macOS
+attributes their file and network access to DevHub — the *responsible
 process* — and they are covered by DevHub's own grants.
 
-The exception is anything launched as a **separate application**, which becomes
-its own responsible process: OpenChamber Desktop, OpenCode Desktop, Claude and
-ChatGPT opened from the launch menu each carry their own permissions.
+The exception is anything that runs as its own process tree. The Paseo daemon
+is started by launchd, not by DevHub, so agent runs (and the CLIs they spawn)
+ask for their own grants the first time they touch a protected folder. Cursor
+opened from the launch menu is a separate application with its own permissions.
 
 ## Verifying
 

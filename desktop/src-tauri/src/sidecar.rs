@@ -22,7 +22,8 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 
 use crate::logging::DesktopLog;
-use crate::paths::{sidecar_env, RuntimePaths};
+use crate::paths::{sidecar_env, sidecar_env_for, RuntimePaths, SidecarDirs};
+use crate::wsl::WslBackend;
 
 /// Startup as an explicit state machine.
 ///
@@ -56,8 +57,16 @@ pub enum BootState {
     Stopping,
 }
 
+/// Set when the sidecar runs inside WSL rather than as a native child.
+#[derive(Clone)]
+struct WslLaunch {
+    backend: WslBackend,
+    payload_dir: String,
+}
+
 pub struct Sidecar {
     child: Arc<Mutex<Option<Child>>>,
+    wsl: Mutex<Option<WslLaunch>>,
     log: DesktopLog,
     pub port: u16,
     pub terminal_port: u16,
@@ -139,11 +148,20 @@ impl Sidecar {
     pub fn new(port: u16, terminal_port: u16, token: String, log: DesktopLog) -> Self {
         Self {
             child: Arc::new(Mutex::new(None)),
+            wsl: Mutex::new(None),
             log,
             port,
             terminal_port,
             token,
         }
+    }
+
+    /// The WSL distro the sidecar runs in, once started there.
+    pub fn wsl_backend(&self) -> Option<WslBackend> {
+        self.wsl
+            .lock()
+            .ok()
+            .and_then(|w| w.as_ref().map(|l| l.backend.clone()))
     }
 
     /// Refuse to start into an occupied port.
@@ -169,7 +187,7 @@ impl Sidecar {
     /// The group is what makes shutdown correct: Next forks workers, the PTY
     /// server spawns shells, and those shells spawn whatever the user runs. A
     /// group leader gives us one handle for that entire tree.
-    pub fn start<F>(&self, paths: &RuntimePaths, mut on_event: F) -> std::io::Result<()>
+    pub fn start<F>(&self, paths: &RuntimePaths, on_event: F) -> std::io::Result<()>
     where
         F: FnMut(BootState) + Send + 'static,
     {
@@ -223,6 +241,50 @@ impl Sidecar {
             }
         }
 
+        self.spawn_and_pump(cmd, on_event)
+    }
+
+    /// Start the supervisor inside a WSL distro (Windows builds).
+    ///
+    /// Same protocol as [`Sidecar::start`] — one JSON state line per event on
+    /// stdout, stdin held open as the orphan guard — with `wsl.exe` as the
+    /// transport. Closing our end of stdin is how `stop` asks it to leave.
+    pub fn start_wsl<F>(
+        &self,
+        backend: &WslBackend,
+        payload: &str,
+        checkout: Option<&str>,
+        on_event: F,
+    ) -> std::io::Result<()>
+    where
+        F: FnMut(BootState) + Send + 'static,
+    {
+        let mut env = sidecar_env_for(
+            &SidecarDirs {
+                app_data: backend.app_data.clone(),
+                resource_root: format!("{payload}/resources"),
+                server_dir: format!("{payload}/server"),
+                checkout: checkout.map(str::to_string),
+            },
+            self.port,
+            self.terminal_port,
+            &self.token,
+        );
+        // Not part of the shared builder: the native path does not set it
+        // either, and the health route reports `null` there. Cheap to have
+        // right here, where the shell and the server are versioned separately.
+        env.insert("DEVHUB_VERSION".into(), env!("CARGO_PKG_VERSION").into());
+        *self.wsl.lock().unwrap() = Some(WslLaunch {
+            backend: backend.clone(),
+            payload_dir: payload.to_string(),
+        });
+        self.spawn_and_pump(backend.sidecar_command(payload, &env), on_event)
+    }
+
+    fn spawn_and_pump<F>(&self, mut cmd: Command, mut on_event: F) -> std::io::Result<()>
+    where
+        F: FnMut(BootState) + Send + 'static,
+    {
         let mut child = cmd.spawn()?;
 
         let stdout = child.stdout.take();
@@ -302,6 +364,29 @@ impl Sidecar {
         self.log
             .write_line("shell", &format!("stopping sidecar group {pid}"));
 
+        // WSL: there is no process group we can signal from Windows. Closing
+        // stdin trips the supervisor's orphan guard, which SIGTERMs its own
+        // tree; only if that does not finish do we reach in and kill it.
+        let wsl = self.wsl.lock().ok().and_then(|mut w| w.take());
+        if let Some(wsl) = wsl {
+            drop(child.stdin.take());
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while Instant::now() < deadline {
+                if matches!(child.try_wait(), Ok(Some(_))) {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            self.log.write_line(
+                "shell",
+                "supervisor did not exit after stdin closed — killing it inside WSL",
+            );
+            wsl.backend.kill_supervisor(&wsl.payload_dir);
+            let _ = child.kill();
+            let _ = child.wait();
+            return;
+        }
+
         #[cfg(unix)]
         unsafe {
             libc_killpg(pid as i32, 15); // SIGTERM
@@ -349,15 +434,34 @@ impl Sidecar {
     /// raw TCP and have no cookies to lose.
     #[allow(dead_code)] // kept for call sites / debugging; handoff uses bootstrap_url()
     pub fn url(&self) -> String {
-        format!("http://localhost:{}", self.port)
+        format!("http://{}:{}", window_host(), self.port)
     }
 
     /// The one-shot bootstrap URL that exchanges the token for a cookie.
     pub fn bootstrap_url(&self) -> String {
         format!(
-            "http://localhost:{}/api/desktop/bootstrap?token={}",
-            self.port, self.token
+            "http://{}:{}/api/desktop/bootstrap?token={}",
+            window_host(),
+            self.port,
+            self.token
         )
+    }
+}
+
+/// The host name the *window* loads the dashboard from.
+///
+/// `localhost` everywhere except Windows, for the WebKit cookie reason above.
+/// On Windows it is the IPv4 literal instead, because WebView2 resolves
+/// `localhost` to `::1` first, and the server lives in WSL: its loopback relay
+/// forwards IPv4 reliably but is not guaranteed to serve `::1`. The health check
+/// (raw IPv4) passed while every WebView2 navigation to `localhost` was
+/// cancelled, leaving a window stuck on the boot page. Chromium, unlike WebKit,
+/// keeps and sends cookies for an IP-literal host.
+fn window_host() -> &'static str {
+    if cfg!(windows) {
+        "127.0.0.1"
+    } else {
+        "localhost"
     }
 }
 
@@ -416,6 +520,23 @@ pub fn free_port() -> std::io::Result<u16> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_window_host_avoids_ipv6_only_on_windows() {
+        let sidecar = Sidecar::new(
+            1337,
+            1339,
+            "tok".into(),
+            DesktopLog::open(&std::env::temp_dir()),
+        );
+        let url = sidecar.bootstrap_url();
+        if cfg!(windows) {
+            assert!(url.starts_with("http://127.0.0.1:1337/"), "{url}");
+        } else {
+            assert!(url.starts_with("http://localhost:1337/"), "{url}");
+        }
+        assert!(url.ends_with("/api/desktop/bootstrap?token=tok"));
+    }
 
     #[test]
     fn free_ports_are_actually_free() {

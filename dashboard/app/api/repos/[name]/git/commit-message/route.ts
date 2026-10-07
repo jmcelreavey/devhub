@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { generateText } from "ai";
 import { getNotesAiCallOptions, getNotesAiModel } from "@/lib/ai/provider";
 import { runGitRepoAsync } from "@/lib/git/repo-local";
+import { getWritingVoicePrompt } from "@/lib/ai/writing-voice";
 import { gitFail, withScannedRepo, type RepoParams } from "../_shared";
 
 const MAX_DIFF_CHARS = 12_000;
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest, { params }: RepoParams) {
       model,
       ...getNotesAiCallOptions(),
       temperature: 0.2,
+      system: getWritingVoicePrompt() || undefined,
       prompt: [
         "Write a conventional commit message for this git diff.",
         "Rules: one subject line ≤72 chars, optional body after a blank line,",

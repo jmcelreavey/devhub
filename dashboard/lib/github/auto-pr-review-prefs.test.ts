@@ -48,7 +48,7 @@ describe("readAutoPrReviewPrefs", () => {
     expect(readAutoPrReviewPrefs()).toEqual({
       enabled: true,
       always: true,
-      source: "env",
+      ownedOnly: false, source: "env",
     });
   });
 
@@ -56,7 +56,7 @@ describe("readAutoPrReviewPrefs", () => {
     expect(readAutoPrReviewPrefs()).toEqual({
       enabled: false,
       always: false,
-      source: "env",
+      ownedOnly: false, source: "env",
     });
   });
 
@@ -67,7 +67,7 @@ describe("readAutoPrReviewPrefs", () => {
     expect(readAutoPrReviewPrefs()).toEqual({
       enabled: false,
       always: false,
-      source: "prefs",
+      ownedOnly: false, source: "prefs",
     });
   });
 
@@ -79,27 +79,42 @@ describe("readAutoPrReviewPrefs", () => {
     expect(readAutoPrReviewPrefs()).toEqual({
       enabled: true,
       always: false,
-      source: "env",
+      ownedOnly: false, source: "env",
     });
   });
 });
 
 describe("saveAutoPrReviewPrefs", () => {
+  it("preserves the Owned restriction when changing the schedule", async () => {
+    await saveAutoPrReviewPrefs({ ownedOnly: true });
+    await saveAutoPrReviewPrefs({ enabled: true, always: true });
+    expect(readAutoPrReviewPrefs()).toMatchObject({ enabled: true, always: true, ownedOnly: true });
+    await saveAutoPrReviewPrefs({ ownedOnly: false });
+    expect(readAutoPrReviewPrefs()).toMatchObject({ enabled: true, always: true, ownedOnly: false });
+  });
+
+  it("keeps legacy preferences unrestricted", () => {
+    const file = autoPrReviewPrefsFilePath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ version: 1, prefs: { enabled: true, always: false } }));
+    expect(readAutoPrReviewPrefs()).toMatchObject({ enabled: true, ownedOnly: false });
+  });
+
   it("merges a partial patch onto env-derived defaults", async () => {
     process.env.DEVHUB_AUTO_PR_REVIEW = "1";
     process.env.DEVHUB_AUTO_PR_REVIEW_ALWAYS = "0";
     const saved = await saveAutoPrReviewPrefs({ always: true });
-    expect(saved).toEqual({ enabled: true, always: true, source: "prefs" });
+    expect(saved).toEqual({ enabled: true, always: true, ownedOnly: false, source: "prefs" });
     const raw = JSON.parse(fs.readFileSync(autoPrReviewPrefsFilePath(), "utf-8"));
     expect(raw).toEqual({
       version: 1,
-      prefs: { enabled: true, always: true },
+      prefs: { enabled: true, always: true, ownedOnly: false },
     });
   });
 
   it("merges onto existing prefs on subsequent saves", async () => {
     await saveAutoPrReviewPrefs({ enabled: true, always: true });
     const saved = await saveAutoPrReviewPrefs({ enabled: false });
-    expect(saved).toEqual({ enabled: false, always: true, source: "prefs" });
+    expect(saved).toEqual({ enabled: false, always: true, ownedOnly: false, source: "prefs" });
   });
 });

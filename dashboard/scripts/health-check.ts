@@ -2,13 +2,10 @@
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { execExternal } from "../lib/exec-external";
 import { loadEnvWithOnePasswordFallback } from "./op-secrets";
 import { augmentedPathEnv } from "../lib/process-env";
 import { pluginMcpServerDirs } from "../lib/plugin-mcp-deps";
-
-const exec = promisify(execFile);
 
 interface Issue {
   level: "fatal" | "warn";
@@ -16,10 +13,10 @@ interface Issue {
 }
 
 function execOut(bin: string, args: string[], opts: { cwd?: string } = {}): Promise<string> {
-  return exec(bin, args, {
+  return execExternal(bin, args, {
     cwd: opts.cwd,
     env: augmentedPathEnv(),
-    timeout: 5_000,
+    timeoutMs: 5_000,
   }).then((r) => r.stdout.trim());
 }
 
@@ -183,11 +180,17 @@ async function main() {
 
   // DevHub MCP server dependencies — stdio server needs its own node_modules.
   {
-    const devhubServer = path.join(path.resolve(repoRoot || process.cwd(), ".."), "mcp-servers", "devhub-server");
+    const resolvedRepoRoot = repoRoot ? path.resolve(repoRoot) : path.resolve(process.cwd(), "..");
+    const devhubServer = path.join(resolvedRepoRoot, "mcp-servers", "devhub-server");
     if (fs.existsSync(devhubServer) && !fs.existsSync(path.join(devhubServer, "node_modules"))) {
       console.log("  · Installing DevHub MCP server dependencies...");
       try {
-        await exec("npm", ["install", "--silent"], { cwd: devhubServer });
+        await execExternal("npm", ["install", "--silent"], {
+          cwd: devhubServer,
+          env: augmentedPathEnv(),
+          timeoutMs: 180_000,
+          label: "bootstrap:devhub-mcp",
+        });
       } catch {
         issues.push({
           level: "warn",
@@ -200,7 +203,12 @@ async function main() {
       if (hasNodeModules) continue;
       console.log(`  · Installing ${plugin} MCP server dependencies...`);
       try {
-        await exec("npm", ["install", "--silent"], { cwd: dir });
+        await execExternal("npm", ["install", "--silent"], {
+          cwd: dir,
+          env: augmentedPathEnv(),
+          timeoutMs: 180_000,
+          label: `bootstrap:${plugin}-mcp`,
+        });
       } catch {
         issues.push({
           level: "warn",

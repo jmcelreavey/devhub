@@ -2,8 +2,6 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { DEV_SERVICES } from "./dev-services";
-import { findOpenChamberBin } from "./openchamber-command";
 import { resolveOpenCodeBinary } from "@/lib/opencode/command";
 import { getDevHubOpenCodePort } from "@/lib/opencode/listen";
 import { findInstalledApp } from "@/lib/launch/desktop";
@@ -12,16 +10,6 @@ import { EXTRA_PATH_SEGMENTS } from "@/lib/process-env";
 function commandOnPath(cmd: string): boolean {
   const which = process.platform === "win32" ? "where" : "which";
   return spawnSync(which, [cmd], { stdio: "ignore" }).status === 0;
-}
-
-/**
- * True when a system OpenChamber is available. Detection (PATH, the node bin
- * dir, and a login shell) lives in `findOpenChamberBin` so it's robust to a GUI
- * launch where the server's PATH omits the install dir. DevHub no longer vendors
- * OpenChamber, so when none is found the Chamber nav/iframe is simply hidden.
- */
-export function isOpenChamberConfigured(): boolean {
-  return findOpenChamberBin() !== null;
 }
 
 export function isOpenCodeConfigured(): boolean {
@@ -93,39 +81,25 @@ export function checkServicePort(port: number, host: string): Promise<boolean> {
   });
 }
 
-export async function isPeerServiceActive(serviceId: "openchamber" | "opencode"): Promise<boolean> {
-  const svc = DEV_SERVICES.find((s) => s.id === serviceId);
-  if (!svc) return false;
-  if (serviceId === "opencode") {
-    const lazy = getDevHubOpenCodePort();
-    if (lazy == null) return false;
-    return checkServicePort(lazy, "127.0.0.1");
-  }
-  const port = Number.parseInt(process.env[svc.portEnvKey] ?? String(svc.defaultPort), 10);
-  const bind = process.env[svc.hostEnvKey] ?? "0.0.0.0";
-  const probeHost = bind === "0.0.0.0" ? "127.0.0.1" : bind;
-  return checkServicePort(port, probeHost);
+/** True when DevHub's lazy OpenCode (session recap) is up and answering. */
+async function isRecapOpenCodeActive(): Promise<boolean> {
+  const lazy = getDevHubOpenCodePort();
+  if (lazy == null) return false;
+  return checkServicePort(lazy, "127.0.0.1");
 }
 
-/** True when the companion binary exists or the dev peer is already listening. */
+/** Which local agent tools are available, for setup gates and provider pickers. */
 export async function getPeerServiceGateStatus(): Promise<{
-  chamber: boolean;
   opencode: boolean;
   claude: boolean;
   cursor: boolean;
   chatgpt: boolean;
   antigravity: boolean;
 }> {
-  const [chamberActive, opencodeActive] = await Promise.all([
-    isPeerServiceActive("openchamber"),
-    isPeerServiceActive("opencode"),
-  ]);
-  const opencode = isOpenCodeConfigured() || opencodeActive;
-  // Chamber starts its own OpenCode, but still needs the binary installed.
-  const chamber = chamberActive || (isOpenChamberConfigured() && opencode);
+  const opencode = isOpenCodeConfigured() || (await isRecapOpenCodeActive());
   const claude = isClaudeConfigured();
   const cursor = isCursorConfigured();
   const chatgpt = isChatGPTConfigured();
   const antigravity = isAntigravityConfigured();
-  return { chamber, opencode, claude, cursor, chatgpt, antigravity };
+  return { opencode, claude, cursor, chatgpt, antigravity };
 }

@@ -21,11 +21,13 @@ mod selftest;
 mod sidecar;
 mod tray;
 mod updater;
+mod wsl;
 
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -38,6 +40,10 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use logging::DesktopLog;
 use paths::{default_app_data, RuntimePaths};
 use sidecar::{BootState, Sidecar};
+
+/// Set once the webview has begun receiving the dashboard, so the handoff
+/// watcher knows a slow navigation is progressing and must not be restarted.
+static DASHBOARD_LOADING: AtomicBool = AtomicBool::new(false);
 
 const DEFAULT_PORT: u16 = 1337;
 const DEFAULT_TERMINAL_PORT: u16 = 1339;
@@ -212,14 +218,37 @@ fn quit_app(window: tauri::Window) -> Result<(), String> {
 /// the webview cannot name a directory and have it selected.
 #[tauri::command]
 async fn pick_folder(app: tauri::AppHandle, title: Option<String>) -> Option<String> {
+    // On Windows the server that will use this path runs in WSL, so the dialog
+    // starts in the distro's home and the answer is translated to the path WSL
+    // sees. A `C:\…` string would be meaningless to the dashboard.
+    let backend = app
+        .try_state::<AppState>()
+        .and_then(|state| state.sidecar.wsl_backend());
     let (tx, rx) = std::sync::mpsc::channel();
-    app.dialog()
+    let mut dialog = app
+        .dialog()
         .file()
-        .set_title(title.as_deref().unwrap_or("Choose your code folder"))
-        .pick_folder(move |path| {
-            let _ = tx.send(path.map(|p| p.to_string()));
-        });
-    rx.recv().ok().flatten()
+        .set_title(title.as_deref().unwrap_or("Choose your code folder"));
+    if let Some(backend) = &backend {
+        dialog = dialog.set_directory(wsl::to_windows_path(&backend.distro, &backend.home));
+    }
+    dialog.pick_folder(move |path| {
+        let _ = tx.send(path.map(|p| p.to_string()));
+    });
+    let picked = rx.recv().ok().flatten()?;
+    if backend.is_none() {
+        return Some(picked);
+    }
+    let mapped = wsl::to_wsl_path(&picked);
+    if mapped.is_none() {
+        if let Some(state) = app.try_state::<AppState>() {
+            state.log.write_line(
+                "shell:wsl",
+                &format!("[wsl] cannot map {picked} into WSL; ignoring the selection"),
+            );
+        }
+    }
+    mapped
 }
 
 /// What the dashboard needs to know about its shell.
@@ -699,9 +728,20 @@ fn command_output(command: &str, args: &[String]) -> Result<String, String> {
         })
 }
 
+/// Where `lsof` lives. macOS ships it in `/usr/sbin`; Debian/Ubuntu (and so WSL)
+/// install it in `/usr/bin`. Absolute candidates rather than a PATH lookup,
+/// because a Finder/Dock launch gets a minimal PATH. Falls back to the bare name
+/// so an unusual layout still gets a PATH lookup and a readable error.
+fn lsof_path() -> &'static str {
+    ["/usr/sbin/lsof", "/usr/bin/lsof"]
+        .into_iter()
+        .find(|candidate| std::path::Path::new(candidate).is_file())
+        .unwrap_or("lsof")
+}
+
 fn listener_pids(port: u16) -> Result<Vec<u32>, String> {
     let output = command_output(
-        "/usr/sbin/lsof",
+        lsof_path(),
         &[
             "-nP".into(),
             format!("-iTCP:{port}"),
@@ -717,7 +757,7 @@ fn listener_pids(port: u16) -> Result<Vec<u32>, String> {
 
 fn process_cwd(pid: u32) -> Option<PathBuf> {
     let output = command_output(
-        "/usr/sbin/lsof",
+        lsof_path(),
         &[
             "-a".into(),
             "-p".into(),
@@ -1263,6 +1303,13 @@ fn start_sidecar(app: &tauri::AppHandle) -> Result<(), String> {
         },
     );
 
+    // Windows never runs the server natively: it lives in WSL2, and the dev
+    // attach flow below spawns a native `npm`, which is the wrong machine.
+    if cfg!(windows) {
+        start_wsl_sidecar(app);
+        return Ok(());
+    }
+
     if let Some(url) = dev_server_url_for(Some(app)) {
         if let Err(err) = attach_dev_server(app, url) {
             fail(app, &err);
@@ -1309,31 +1356,169 @@ fn start_sidecar(app: &tauri::AppHandle) -> Result<(), String> {
         return Err(message);
     }
 
+    open_when_healthy(app, sidecar, Duration::from_secs(90));
+    Ok(())
+}
+
+/// Wait for the sidecar's authenticated health check, then hand the window to
+/// the dashboard. Shared by the native and WSL start paths.
+fn open_when_healthy(app: &tauri::AppHandle, sidecar: Arc<Sidecar>, timeout: Duration) {
     let handle = app.clone();
-    let sidecar = sidecar.clone();
-    std::thread::spawn(
-        move || match sidecar.wait_until_healthy(Duration::from_secs(90)) {
-            Ok(()) => {
-                // Bootstrap URL, not the bare origin: the boot page also
-                // navigates itself on Ready, and without the token it would
-                // land on / with no session cookie.
-                let handoff = sidecar.bootstrap_url();
-                set_boot(
-                    &handle,
-                    BootState::Ready {
-                        url: handoff.clone(),
-                    },
-                );
-                load_dashboard(&handle, &sidecar);
-                // Only once the app is healthy and on screen. Checking during
-                // startup competes with the thing the user is waiting for.
-                updater::check_in_background(&handle);
-            }
-            Err(err) => fail(&handle, &err),
+    std::thread::spawn(move || match sidecar.wait_until_healthy(timeout) {
+        Ok(()) => {
+            // Bootstrap URL, not the bare origin: the boot page also
+            // navigates itself on Ready, and without the token it would
+            // land on / with no session cookie.
+            let handoff = sidecar.bootstrap_url();
+            set_boot(
+                &handle,
+                BootState::Ready {
+                    url: handoff.clone(),
+                },
+            );
+            load_dashboard(&handle, &sidecar);
+            // Only once the app is healthy and on screen. Checking during
+            // startup competes with the thing the user is waiting for.
+            updater::check_in_background(&handle);
+        }
+        Err(err) => fail(&handle, &err),
+    });
+}
+
+/// Windows start path: boot WSL, install the Linux payload if this build's is
+/// not there yet, then run the supervisor inside the distro.
+///
+/// All on a worker thread. Booting a cold WSL VM and unpacking the payload are
+/// each long enough to freeze the window if done from `setup`.
+fn start_wsl_sidecar(app: &tauri::AppHandle) {
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        if let Err(err) = run_wsl_startup(&handle) {
+            fail(&handle, &err);
+        }
+    });
+}
+
+fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let sidecar = state.sidecar.clone();
+    let log = state.log.clone();
+
+    let preferred = std::env::var("DEVHUB_WSL_DISTRO").ok().or_else(|| {
+        std::fs::read_to_string(state.paths.app_data.join("config").join("wsl-distro.txt")).ok()
+    });
+
+    set_boot(
+        app,
+        BootState::Starting {
+            service: "wsl".into(),
+        },
+    );
+    let backend = wsl::resolve_backend(preferred.as_deref())?;
+    log.write_line(
+        "shell:wsl",
+        &format!("[wsl] distro={} home={}", backend.distro, backend.home),
+    );
+    backend.ensure_app_data()?;
+
+    // Run against the user's checkout when there is one, so their tasks, notes
+    // and integration credentials are what the window shows.
+    let repo_pref = std::env::var("DEVHUB_WSL_REPO").ok().or_else(|| {
+        std::fs::read_to_string(state.paths.app_data.join("config").join("wsl-repo.txt")).ok()
+    });
+    let checkout = backend.find_checkout(repo_pref.as_deref());
+    log.write_line(
+        "shell:wsl",
+        &match &checkout {
+            Some(repo) => format!("[wsl] linked checkout {repo}"),
+            None => "[wsl] no checkout linked — using fresh app data".to_string(),
         },
     );
 
+    // A checkout's already-unpacked payload, for iterating on the shell without
+    // rebuilding and re-extracting the whole bundle.
+    let payload = match std::env::var("DEVHUB_WSL_PAYLOAD_DIR") {
+        Ok(dir) if !dir.trim().is_empty() => dir.trim().to_string(),
+        _ => {
+            let resource_dir = app
+                .path()
+                .resource_dir()
+                .map_err(|e| format!("No resource directory: {e}"))?;
+            let bundled = resource_dir.join("wsl");
+            let id = std::fs::read_to_string(bundled.join("payload-id.txt"))
+                .map_err(|_| {
+                    "This build has no Linux payload (wsl/payload-id.txt). Rebuild with `npm run stage:wsl` first."
+                        .to_string()
+                })?
+                .trim()
+                .to_string();
+            let dir = backend.payload_dir(&id);
+            if !backend.payload_installed(&id) {
+                set_boot(
+                    app,
+                    BootState::Starting {
+                        service: "wsl-install".into(),
+                    },
+                );
+                log.write_line("shell:wsl", &format!("[wsl] installing payload {id}"));
+                backend.install_payload(&bundled.join("devhub-payload.tar.gz"), &id)?;
+            }
+            dir
+        }
+    };
+
+    if let Some(port) = sidecar.check_ports() {
+        let message = wsl_port_conflict_message(&backend, port);
+        fail_with_recovery(app, &message, false);
+        return Err(message);
+    }
+
+    set_boot(
+        app,
+        BootState::Starting {
+            service: "packaged-server".into(),
+        },
+    );
+    let events = app.clone();
+    sidecar
+        .start_wsl(&backend, &payload, checkout.as_deref(), move |event| {
+            set_boot(&events, event)
+        })
+        .map_err(|err| format!("Could not start DevHub inside WSL: {err}"))?;
+    open_when_healthy(app, sidecar, Duration::from_secs(120));
     Ok(())
+}
+
+/// Say what is holding the port *inside WSL*. The generic message tells the
+/// user to run `lsof`, which is a Windows-side dead end here. The usual culprit
+/// is a DevHub already running in the same distro (a checkout dev server, or
+/// the Linux app), so the answer names the process and the way out.
+fn wsl_port_conflict_message(backend: &wsl::WslBackend, port: u16) -> String {
+    let holder = backend
+        .exec(
+            &[
+                "/bin/sh",
+                "-c",
+                "ss -H -ltnp \"sport = :$1\" 2>/dev/null | head -n 3",
+                "devhub-port",
+                &port.to_string(),
+            ],
+            Duration::from_secs(10),
+        )
+        .unwrap_or_default();
+    let holder = holder.trim();
+    if holder.is_empty() {
+        format!(
+            "Port {port} is already in use (on Windows or in WSL). Free it, or set DEVHUB_PORT to another port, then Retry."
+        )
+    } else {
+        format!(
+            "Port {port} is already in use inside WSL (\"{}\"): most likely another DevHub in {}. \
+             Stop it (for example `pkill -f next-server`, or quit the Linux app), then Retry.",
+            holder.replace('\n', "; "),
+            backend.distro
+        )
+    }
 }
 
 fn fail(app: &tauri::AppHandle, message: &str) {
@@ -1403,57 +1588,122 @@ fn load_dashboard(app: &tauri::AppHandle, sidecar: &Sidecar) {
     }
     show_main_window(app);
 
-    // Confirm the webview actually left the boot page. navigate() is async on
-    // WKWebView; returning Ok here only means the request was queued. If it
-    // never commits, the user used to sit on "Ready — opening…" forever.
+    // Confirm the webview actually left the boot page. navigate() is async;
+    // returning Ok here only means the request was queued.
+    //
+    // Patient on purpose. The first request through WSL's localhost relay can
+    // stall for several seconds (connect retries), and starting another
+    // navigation *cancels* the one in flight — so the earlier "retry every 5s"
+    // kept killing a navigation that was about to succeed, which is why a
+    // window worked on the second launch and not the first. Retry only after a
+    // long quiet period, and never once the dashboard has started to arrive.
+    DASHBOARD_LOADING.store(false, Ordering::SeqCst);
     let watch = app.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_secs(4));
-        let Some(window) = watch.get_webview_window("main") else {
-            return;
-        };
-        let Ok(current) = window.url() else {
-            return;
-        };
-        if matches!(current.scheme(), "http" | "https") {
+        const FIRST_RETRY_AFTER: u64 = 25;
+        const RETRY_EVERY: u64 = 20;
+        const ATTEMPTS: u32 = 4;
+        let started = Instant::now();
+        let mut next_check = FIRST_RETRY_AFTER;
+        for attempt in 1..=ATTEMPTS {
+            // Poll, so a navigation that completes is noticed within a second
+            // instead of at the next long boundary.
+            while started.elapsed().as_secs() < next_check {
+                std::thread::sleep(Duration::from_millis(500));
+                let Some(window) = watch.get_webview_window("main") else {
+                    return;
+                };
+                if let Ok(current) = window.url() {
+                    if left_boot_page(&current) {
+                        if let Some(state) = watch.try_state::<AppState>() {
+                            state.log.write_line(
+                                "shell:handoff",
+                                &format!(
+                                    "[handoff] webview is on {} after {:.1}s",
+                                    current.origin().ascii_serialization(),
+                                    started.elapsed().as_secs_f32()
+                                ),
+                            );
+                        }
+                        return;
+                    }
+                }
+            }
+            let Some(window) = watch.get_webview_window("main") else {
+                return;
+            };
+            if DASHBOARD_LOADING.load(Ordering::SeqCst) {
+                // Content is arriving; restarting would cancel it.
+                next_check += RETRY_EVERY;
+                continue;
+            }
             if let Some(state) = watch.try_state::<AppState>() {
                 state.log.write_line(
                     "shell:handoff",
                     &format!(
-                        "[handoff] webview is on {}",
-                        current.origin().ascii_serialization()
+                        "[handoff] no response after {}s (attempt {attempt}/{ATTEMPTS}) — navigating again",
+                        started.elapsed().as_secs()
                     ),
                 );
+                if attempt == 1 {
+                    state.log.write_line(
+                        "shell:handoff",
+                        &format!("[handoff] {}", probe_localhost(state.sidecar.port)),
+                    );
+                }
             }
-            return;
-        }
-        if let Some(state) = watch.try_state::<AppState>() {
-            state.log.write_line(
-                "shell:handoff",
-                &format!(
-                    "[handoff] still on {} after navigate — retrying once",
-                    current.scheme()
-                ),
-            );
-        }
-        if let Some(sidecar) = watch.try_state::<AppState>().map(|s| s.sidecar.clone()) {
-            let retry = sidecar.bootstrap_url();
-            if let Ok(parsed) = retry.parse::<tauri::Url>() {
-                let _ = window.navigate(parsed);
+            if let Some(sidecar) = watch.try_state::<AppState>().map(|s| s.sidecar.clone()) {
+                if let Ok(parsed) = sidecar.bootstrap_url().parse::<tauri::Url>() {
+                    let _ = window.navigate(parsed);
+                }
             }
+            next_check += RETRY_EVERY;
         }
-        std::thread::sleep(Duration::from_secs(4));
-        let Ok(current) = window.url() else {
-            return;
-        };
-        if matches!(current.scheme(), "http" | "https") {
-            return;
+        // One last grace period for the final navigation.
+        std::thread::sleep(Duration::from_secs(RETRY_EVERY));
+        if let Some(window) = watch.get_webview_window("main") {
+            if window.url().map(|u| left_boot_page(&u)).unwrap_or(false)
+                || DASHBOARD_LOADING.load(Ordering::SeqCst)
+            {
+                return;
+            }
         }
         fail(
             &watch,
-            "DevHub's server is ready, but the window could not leave the startup screen. Try again, or use View → Attach to Dev Server…",
+            "DevHub's server is ready, but the window could not reach it through WSL. Try again, or View → Open Logs Folder.",
         );
     });
+}
+
+/// How `localhost` resolves here and whether each address accepts a connection.
+///
+/// Logged when a handoff sticks, because "the server is up" and "the webview can
+/// reach it" are different claims and only the second one matters to the user.
+fn probe_localhost(port: u16) -> String {
+    let addresses = match ("localhost", port).to_socket_addrs() {
+        Ok(addresses) => addresses.collect::<Vec<_>>(),
+        Err(err) => return format!("localhost:{port} does not resolve: {err}"),
+    };
+    let results = addresses
+        .iter()
+        .map(
+            |address| match TcpStream::connect_timeout(address, Duration::from_millis(800)) {
+                Ok(_) => format!("{address} ok"),
+                Err(err) => format!("{address} {err}"),
+            },
+        )
+        .collect::<Vec<_>>();
+    format!("localhost:{port} -> {}", results.join(", "))
+}
+
+/// Has the webview moved off the bundled boot page?
+///
+/// The boot page is `tauri://localhost` on macOS and Linux but
+/// `http://tauri.localhost` on Windows, so "is it http?" cannot tell the boot
+/// page from the dashboard there — which is how a stuck window read as "webview
+/// is on http://tauri.localhost" and was never retried.
+fn left_boot_page(url: &tauri::Url) -> bool {
+    matches!(url.scheme(), "http" | "https") && !is_bundled_page_host(url)
 }
 
 /// Show the window only once there is something worth looking at.
@@ -1491,7 +1741,7 @@ fn current_dashboard_origin(app: &tauri::AppHandle) -> Option<String> {
 ///
 /// `npm run build` alone only refreshes `dashboard/.next` in the checkout.
 /// Packaged mode keeps serving `Resources/server` from the last install, and
-/// keeps spawning OpenChamber/OpenCode from `Resources/services`, so Rebuild
+/// keeps spawning the peer starter from `Resources/services`, so Rebuild
 /// looked successful while the UI *and* the peer starter stayed on the
 /// previous bundle.
 fn run_dashboard_build(app: &tauri::AppHandle, repo_root: &Path) -> Result<(), String> {
@@ -1586,7 +1836,7 @@ fn run_dashboard_build(app: &tauri::AppHandle, repo_root: &Path) -> Result<(), S
 /// means a rebuild cannot invent a third way for the shell to reach a running
 /// dashboard. The build step copies into Resources/server *and*
 /// Resources/services so packaged mode actually picks up the new UI and the
-/// current OpenChamber/OpenCode starter.
+/// current peer starter.
 fn rebuild_dashboard(app: &tauri::AppHandle) {
     let repo_root = match dev_server_repo_root(app) {
         Ok(root) => root,
@@ -1749,18 +1999,24 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     // Service restart controls deliberately live in the dashboard's own
     // Status page, not here. A desktop-only menu that grows a parallel set of
     // product actions is how two divergent UIs happen.
-    let view_menu = Submenu::with_items(
-        app,
-        "View",
-        true,
-        &[
-            &reload,
-            &rebuild,
-            &show_logs,
-            &open_logs_folder,
-            &dev_server,
-        ],
-    )?;
+    // Rebuild and Attach both run a native `npm` from a checkout, which on
+    // Windows would be the wrong machine — the server lives in WSL.
+    let view_menu = if cfg!(windows) {
+        Submenu::with_items(app, "View", true, &[&reload, &show_logs, &open_logs_folder])?
+    } else {
+        Submenu::with_items(
+            app,
+            "View",
+            true,
+            &[
+                &reload,
+                &rebuild,
+                &show_logs,
+                &open_logs_folder,
+                &dev_server,
+            ],
+        )?
+    };
 
     let window_menu = Submenu::with_items(
         app,
@@ -1786,6 +2042,19 @@ fn is_loopback_host(url: &tauri::Url) -> bool {
     )
 }
 
+/// The host WebView2 (Windows) serves the bundled boot page from.
+///
+/// Tauri's `tauri://localhost` custom scheme is `http://tauri.localhost` on
+/// Windows, and `on_navigation` fires for the window's very first load. Without
+/// this the guard treated the app's own page as foreign, sent it to the system
+/// browser, and left a window with a menu bar and nothing in it.
+///
+/// Exactly this host, not `*.localhost`: subdomains of `localhost` resolve to
+/// loopback in browsers, so a wildcard would admit anything a local page names.
+fn is_bundled_page_host(url: &tauri::Url) -> bool {
+    url.host_str() == Some("tauri.localhost")
+}
+
 /// May this URL load inside the app window?
 ///
 /// The guard's job is to stop the *window* being navigated somewhere hostile —
@@ -1795,15 +2064,15 @@ fn is_loopback_host(url: &tauri::Url) -> bool {
 /// so allowing only port 1337 blocked the OpenChamber and OpenCode iframes and
 /// the browser view. All three rendered as blank white panes.
 ///
-/// Every loopback port here belongs to DevHub — the dashboard, OpenChamber,
-/// OpenCode, the PTY. Widening to loopback rather than enumerating ports keeps
+/// Every loopback port here belongs to DevHub — the dashboard, the Paseo web
+/// UI behind Agents → Chats, OpenCode, the PTY. Widening to loopback rather than enumerating ports keeps
 /// this correct if a service moves, and gives up nothing that matters: a remote
 /// page cannot make the webview navigate to loopback, and anything not on
 /// loopback still goes to the system browser.
 fn may_load_in_window(url: &tauri::Url, dashboard_port: u16) -> bool {
     let _ = dashboard_port; // kept for call-site clarity; loopback is the rule
     match url.scheme() {
-        "http" | "https" => is_loopback_host(url),
+        "http" | "https" => is_loopback_host(url) || is_bundled_page_host(url),
         // Tauri's own schemes, plus the boot page and in-page documents.
         "tauri" | "asset" | "ipc" | "about" | "blob" | "data" => true,
         _ => false,
@@ -1962,9 +2231,12 @@ pub fn run() {
                 .and_then(|u| u.parse::<tauri::Url>().ok())
                 .and_then(|u| u.port())
                 .unwrap_or(port);
+            let nav_handle = handle.clone();
             let _window =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                     .title("DevHub")
+                    // Let HTML file inputs and drop zones receive images, including Paseo inside its iframe.
+                    .disable_drag_drop_handler()
                     .inner_size(1280.0, 820.0)
                     .min_inner_size(900.0, 640.0)
                     .visible(false)
@@ -1973,8 +2245,42 @@ pub fn run() {
                     // flashes white before first paint, which on a dark theme
                     // reads as a glitch rather than a launch.
                     .background_color(tauri::window::Color(0x0d, 0x11, 0x17, 0xff))
+                    // What the webview actually loaded, without the query string:
+                    // the bootstrap URL carries the per-launch token.
+                    .on_page_load(|window, payload| {
+                        if matches!(payload.event(), tauri::webview::PageLoadEvent::Started)
+                            && left_boot_page(payload.url())
+                        {
+                            DASHBOARD_LOADING.store(true, Ordering::SeqCst);
+                        }
+                        if let Some(state) = window.app_handle().try_state::<AppState>() {
+                            let url = payload.url();
+                            state.log.write_line(
+                                "shell:page",
+                                &format!(
+                                    "[page] {:?} {}{}",
+                                    payload.event(),
+                                    url.origin().ascii_serialization(),
+                                    url.path()
+                                ),
+                            );
+                        }
+                    })
                     .on_navigation(move |url| {
-                        if may_load_in_window(url, nav_port) {
+                        let allowed = may_load_in_window(url, nav_port);
+                        // Origin + path only: the bootstrap URL carries a token.
+                        if let Some(state) = nav_handle.try_state::<AppState>() {
+                            state.log.write_line(
+                                "shell:nav",
+                                &format!(
+                                    "[nav] {} {}{}",
+                                    if allowed { "allow" } else { "block" },
+                                    url.origin().ascii_serialization(),
+                                    url.path()
+                                ),
+                            );
+                        }
+                        if allowed {
                             return true;
                         }
                         // Anything else is off-machine: hand it to the system
@@ -2127,7 +2433,7 @@ pub fn run() {
             // The Mac convention, and what keeps scheduled jobs running: closing
             // the window hides it and the server stays up until ⌘Q. Clicking the
             // Dock icon brings it back (RunEvent::Reopen below).
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", windows))]
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 if window.is_fullscreen().unwrap_or(false) {
@@ -2139,7 +2445,7 @@ pub fn run() {
                 if let Some(state) = window.app_handle().try_state::<AppState>() {
                     state.log.write_line(
                         "shell:window",
-                        "[window] closed — hidden; DevHub and scheduled jobs keep running until ⌘Q (menu bar tray when hidden)",
+                        "[window] closed — hidden; DevHub and scheduled jobs keep running until you quit (⌘Q, or the tray icon)",
                     );
                 }
                 return;
@@ -2201,6 +2507,32 @@ mod tests {
     }
 
     #[test]
+    fn the_boot_page_is_told_apart_from_the_dashboard_on_every_platform() {
+        // macOS/Linux boot page.
+        assert!(!left_boot_page(&url("tauri://localhost/index.html")));
+        // Windows boot page: http, so the scheme alone proves nothing.
+        assert!(!left_boot_page(&url("http://tauri.localhost/index.html")));
+        assert!(!left_boot_page(&url("about:blank")));
+        assert!(left_boot_page(&url("http://localhost:1337/")));
+        assert!(left_boot_page(&url("http://127.0.0.1:1337/agents")));
+    }
+
+    #[test]
+    fn the_bundled_boot_page_may_load_on_windows() {
+        assert!(may_load_in_window(
+            &url("http://tauri.localhost/index.html"),
+            1337
+        ));
+        assert!(may_load_in_window(&url("http://tauri.localhost/"), 1337));
+        // Exact host only: other *.localhost names are not the app.
+        assert!(!may_load_in_window(&url("http://evil.localhost/"), 1337));
+        assert!(!may_load_in_window(
+            &url("http://tauri.localhost.evil.com/"),
+            1337
+        ));
+    }
+
+    #[test]
     fn only_the_exact_dashboard_origin_is_allowed_in_the_window() {
         assert!(is_dashboard_url(&url("http://127.0.0.1:1337/"), 1337));
         assert!(is_dashboard_url(&url("http://localhost:1337/notes"), 1337));
@@ -2219,10 +2551,10 @@ mod tests {
 
     #[test]
     fn our_own_loopback_services_may_load_in_the_window() {
-        // The regression this exists for: iframes to OpenChamber (1336),
-        // OpenCode (1338) and the browser view were blocked, so all three
-        // rendered as blank white panes.
-        for port in [1336, 1337, 1338, 1339, 62537] {
+        // The regression this exists for: embedded loopback services (then
+        // OpenChamber and OpenCode, now the Paseo web UI) rendered as blank
+        // white panes because only the dashboard port was allowed.
+        for port in [1337, 1338, 1339, 6767, 62537] {
             assert!(
                 may_load_in_window(&url(&format!("http://localhost:{port}/")), 1337),
                 "loopback:{port} should be allowed in the window"

@@ -47,7 +47,7 @@ describe("selectListedRepo", () => {
 
   it("falls through to the assigned repo when cwd is not a listed checkout", () => {
     expect(selectListedRepo(repos, {
-      cwd: "/Users/jmcelreavey/Library/Application Support/DevHub",
+      cwd: "/Users/example/Library/Application Support/DevHub",
       repoName: "app",
     })?.path).toBe("/Users/dev/app");
   });

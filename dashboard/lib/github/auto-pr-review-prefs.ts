@@ -4,7 +4,8 @@
  * keep working without a prefs file.
  *
  * Once `notes/.config/auto-pr-review.json` exists, prefs win over env for
- * `enabled` / `always`. Interval / timezone / hours stay env-only.
+ * `enabled` / `always`. Ownership filtering defaults off for existing setups.
+ * Interval / timezone / hours stay env-only.
  */
 import path from "node:path";
 import { getNotesDir } from "@/lib/notes/dir";
@@ -15,6 +16,7 @@ const PREFS_VERSION = 1;
 export interface AutoPrReviewPrefs {
   enabled: boolean;
   always: boolean;
+  ownedOnly: boolean;
 }
 
 export interface AutoPrReviewPrefsResolved extends AutoPrReviewPrefs {
@@ -35,6 +37,7 @@ function prefsFromEnv(): AutoPrReviewPrefs {
   return {
     enabled: envFlagOn(process.env.DEVHUB_AUTO_PR_REVIEW),
     always: envFlagOn(process.env.DEVHUB_AUTO_PR_REVIEW_ALWAYS),
+    ownedOnly: false,
   };
 }
 
@@ -51,6 +54,7 @@ export function readAutoPrReviewPrefs(): AutoPrReviewPrefsResolved {
   return {
     enabled: Boolean(stored.prefs.enabled),
     always: Boolean(stored.prefs.always),
+    ownedOnly: stored.prefs.ownedOnly === true,
     source: "prefs",
   };
 }
@@ -66,6 +70,7 @@ export async function saveAutoPrReviewPrefs(
   const prefs: AutoPrReviewPrefs = {
     enabled: typeof patch.enabled === "boolean" ? patch.enabled : current.enabled,
     always: typeof patch.always === "boolean" ? patch.always : current.always,
+    ownedOnly: typeof patch.ownedOnly === "boolean" ? patch.ownedOnly : current.ownedOnly,
   };
   const payload: StoredPrefs = { version: PREFS_VERSION, prefs };
   const file = autoPrReviewPrefsFilePath();

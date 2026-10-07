@@ -39,28 +39,38 @@ graph TD
 
 ## Walkthroughs
 
-### Notes library
-
-[Notes library walkthrough](/api/notes-assets/assets/feature-demos/demo-06-notes-library.mp4)
-
-### Notes AI
-
-[Notes AI summarize and accept walkthrough](/api/notes-assets/assets/feature-demos/demo-14-notes-ai.mp4)
+[Notes: browsing, editing and following links](../assets/demos/notes.mp4)
 
 ## Main Note Areas
 
-Top-level folders under `notes/` are **areas** with curated labels and landing cards (`dashboard/lib/notes/note-areas.ts`). The **Library → Notes** landing page (`/notes`) groups recent files by area; `/notes/area/<id>` shows one area's index. Unknown folders still appear — they get a title-cased label and sort after known areas.
+Top-level folders under `notes/` are **areas** with curated labels and landing cards (`dashboard/lib/notes/note-areas.ts`). The **Library → Notes** landing page (`/notes`) groups recent files by area; `/notes/area/<id>` shows one area's index. Areas sort busiest first (secondary areas such as Archive last), so the ones you write to lead. Unknown folders still appear with a title-cased label.
 
-| Area       | Purpose                                            |
-| ---------- | -------------------------------------------------- |
-| Daily      | Day-by-day work notes and standups                 |
-| Learnings  | Reusable knowledge distilled from work             |
-| Sessions   | Longer records of significant AI-assisted sessions |
-| Meetings   | Meeting notes and follow-ups                       |
-| Task notes | Notes linked to a specific task (`task-notes/…`)   |
-| PR reviews | Generated review notes, one per pull request       |
-| Diagrams   | tldraw files for visual notes                      |
-| Appraisal  | Structured review evidence and goals               |
+| Area       | Purpose                                                        |
+| ---------- | -------------------------------------------------------------- |
+| Daily      | Day-by-day work notes and standups                             |
+| Learnings  | Reusable knowledge distilled from work                         |
+| Sessions   | Longer records of significant AI-assisted sessions             |
+| Meetings   | Meeting notes and follow-ups                                   |
+| Task notes | Notes linked to a specific task (`task-notes/…`)               |
+| Discovery  | Contract probes and evidence, one per ticket (`discovery/…`)   |
+| PR reviews | Generated review notes, one per pull request                   |
+| Diagrams   | tldraw files for visual notes                                  |
+| Appraisal  | Structured review evidence and goals                           |
+
+### Sections inside an area
+
+Generated areas pile up hundreds of flat files, so the sidebar and the area page split each area into **sections** (`lib/notes/note-index.ts`). Nothing moves on disk — paths other features depend on (`pr-reviews/<repo>-<n>`, `task-notes/<date>-<id>`) stay flat.
+
+| Source | Areas | Section |
+| ------ | ----- | ------- |
+| Real subfolder | any | The first folder under the area (`learnings/devhub/…` → `devhub`) |
+| `groupBy: "repo"` | PR reviews | Repo from the `repo#123` / `repo@branch` line under the title, else the PR link, else a filename prefix naming a repo another note already named |
+| `groupBy: "period"` | Daily, Task notes | This week, Last week, then month — from the `YYYY-MM-DD` filename |
+| `groupBy: "ticket"` | Discovery | Tracker id from the filename (`PTF-4897-…`), else the title |
+
+Sections start collapsed in the sidebar, except the one holding the open note; search opens everything it matches. One-note ticket and folder sections fold into an unlabelled "Other" section (repos and periods do not — a PR title never names its repo). Inside a section notes sort by filename date, then PR number, then mtime: a sync that rewrites the vault gives every untouched note the same mtime, so mtime alone is not an order.
+
+List titles drop trailing `#tag` runs, and summaries come from the first descriptive paragraph — `Date:`/`Jira:`-style lines, the review ref line and the `## Links` section are skipped.
 
 ## Two-Tier Memory
 
@@ -88,7 +98,7 @@ They live at `notes/daily/YYYY-MM-DD` (`dailyNotePath()`). Open today's from:
 
 | Surface | Action |
 | ------- | ------ |
-| ⌘K | **Open today's note** — fires `devhub:notes-open-today`, opens the notes panel, and loads the daily path even if the panel was already open |
+| ⌘P → **Open today's note** | Fires `devhub:notes-open-today`, opens the notes panel, and loads the daily path even if the panel was already open |
 | Notes panel | **Today's note** at the top of the file tree (date label on the right) |
 | Today | The daily editor on the Today page is the same file |
 
@@ -163,22 +173,6 @@ Notes carry outbound refs in a `## Links` markdown section. Each line is either:
 - A task marker: `::task-ref <taskId> <YYYY-MM-DD> <label>`
 
 `parseEntityLinksFromMarkdown` and `buildEntityLinksSection` in `shared/entity-note/` are the canonical parse/write helpers. Do not invent per-feature link formats.
-
-### Tags
-
-Tags are the ninth entity kind, and the only one that is **derived, never stored**: typing `#auth` in a task, note body, commit message or event makes the tag exist. There is no tag list to maintain and nothing to migrate.
-
-| Operation  | Where                                            | Source                                                                                                |
-| ---------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| Extraction | `extractTags` / `tagRefs` (`shared/entity-note`) | Inline `#token` — lowercase, letter-or-`_` first, ≤32 chars, so issue numbers like `#525` never match |
-| Graph      | Recall index v2+ extracts tags at chunk time     | Tags join the derived graph like any other entity                                                     |
-| List       | `GET /api/tags?q=`                               | Live task scan ∪ index nodes                                                                          |
-| Lookup     | `GET /api/tags/[id]`                             | Tasks (live) + notes/docs (index) + PR/Jira neighbours                                                |
-| Rename     | `POST /api/tags/rename {from,to}`                | Boundary-safe rewrite across task texts + note bodies                                                 |
-
-Surfaces: task rows and the note relations panel show tag chips (via `entity-links`); clicking one opens `/work?tag=id`, which filters the queue and renders a context card with everything else carrying that tag plus an inline rename control. The task composer autocompletes `#` fragments from `/api/tags`. In recall queries, a `#tag` acts as an entity prior — `cache #devhub` boosts tagged chunks without needing the word in the text. MCP agents get the same reach through `tags_list` / `tags_lookup` / `tags_rename` (see [MCP Server](mcp-server.md)); for them, writing `#tag` into `tasks_create` text or a note body is the whole create API.
-
-Because tags are free text, precision comes from convention: prefer short lowercase tokens, and fix drift early with rename before two spellings split the corpus.
 
 ### Dashboard surfaces
 
@@ -353,7 +347,7 @@ Notes and docs editors show a **history** chip (`VaultFileHistory`) with the fil
 
 ### Content sync workflow
 
-Content sync is the low-friction path for personal content that changes while using the dashboard. It is intentionally scoped: `dashboard/lib/content-sync-paths.ts` defines `notes/`, `collections/`, `tasks/`, `docs/`, and `upstarts/` as the paths staged by the `sync_notes_tasks_push` action.
+Content sync is the low-friction path for personal content that changes while using the dashboard. It is intentionally scoped: `dashboard/lib/content/sync-paths.ts` defines `notes/`, `collections/`, `tasks/`, `docs/`, and `upstarts/` as the paths staged by the `sync_notes_tasks_push` action.
 
 | Surface                  | Behavior                                                                                                                                                                                                                                                                                                               |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -362,7 +356,7 @@ Content sync is the low-friction path for personal content that changes while us
 | Status page              | Shows repo branch, ahead/behind counts, dirty content vs other dirty files, recent sync failures, merge conflicts, and sync-health checks. Use it when the top bar blocks sync or a scripted action fails.                                                                                                             |
 | Actions page             | Exposes the same allowlisted script IDs for manual runs and log inspection. `dry_run_scoped_sync` previews the scoped content commit without staging anything.                                                                                                                                                         |
 
-`/api/status/git` classifies content via `lib/content-sync-dirs.ts`. Each bucket always includes its **conventional in-repo folder** (`notes/`, `tasks/`, …) even when `NOTES_DIR` / `TASKS_DIR` env vars point elsewhere — relocated env values must not turn repo content into "other dirty files". A configured dir that resolves inside the repo adds its prefix on top. Root `diagrams/` counts as content-adjacent in dirty badges but is **not** staged by `sync_notes_tasks_push`; commit diagrams through the Repo Git workspace or a manual commit. Daily review reps (`reps/`, `REPS_DIR`) are personal data and are **not** in either the content-sync path list or the dirty-file content buckets — they show as other dirty files until you commit them through Repo Git or relocate `REPS_DIR`.
+`/api/status/git` classifies content via `lib/content/sync-dirs.ts`. Each bucket always includes its **conventional in-repo folder** (`notes/`, `tasks/`, …) even when `NOTES_DIR` / `TASKS_DIR` env vars point elsewhere — relocated env values must not turn repo content into "other dirty files". A configured dir that resolves inside the repo adds its prefix on top. Root `diagrams/` counts as content-adjacent in dirty badges but is **not** staged by `sync_notes_tasks_push`; commit diagrams through the Repo Git workspace or a manual commit. Daily review reps (`reps/`, `REPS_DIR`) are personal data and are **not** in either the content-sync path list or the dirty-file content buckets — they show as other dirty files until you commit them through Repo Git or relocate `REPS_DIR`.
 
 In the DevHub checkout, the Repo Git workspace **hides** classified content paths from the Changes tab (`contentSyncCount` on `GET /api/repos/<devhub>/git/status`) so notes/tasks edits do not clutter the code-commit UI. Sibling repos on `/repos` show all files.
 

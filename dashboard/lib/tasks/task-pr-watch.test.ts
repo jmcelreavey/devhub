@@ -1,6 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { assessTaskPr, type TaskPrView } from "@/lib/tasks/task-pr-watch";
-import type { TaskAgentRunRecord } from "@/lib/tasks/task-agent-runs";
+import { describe, expect, it, vi } from "vitest";
+import { assessTaskPr, runsToWatch, type TaskPrView } from "@/lib/tasks/task-pr-watch";
+import { listTaskAgentRuns, type TaskAgentRunRecord } from "@/lib/tasks/task-agent-runs";
+
+vi.mock("@/lib/tasks/task-agent-runs", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/tasks/task-agent-runs")>(),
+  listTaskAgentRunTaskIds: vi.fn(() => ["research-task"]),
+  listTaskAgentRuns: vi.fn(),
+}));
 
 const NOW = "2026-09-17T10:00:00.000Z";
 const run = (extra: Partial<TaskAgentRunRecord> = {}): TaskAgentRunRecord => ({
@@ -16,6 +22,29 @@ const failingCi: TaskPrView = {
   headRefOid: "abc",
   statusCheckRollup: [{ name: "lint", status: "COMPLETED", conclusion: "FAILURE" }],
 };
+
+describe("runsToWatch", () => {
+  it.each(["paused", "done"] as const)("does not infer a PR from a %s research run's checkout branch", (status) => {
+    vi.mocked(listTaskAgentRuns).mockReturnValue([run({
+      status,
+      prUrl: undefined,
+      cwd: "/repos/app",
+      branch: "unrelated-already-merged-work",
+    })]);
+    expect(runsToWatch()).toEqual([]);
+  });
+
+  it("watches an explicitly linked PR, including an existing PR from earlier work", () => {
+    const linked = run({ status: "paused" });
+    vi.mocked(listTaskAgentRuns).mockReturnValue([linked]);
+    expect(runsToWatch()).toEqual([{ taskId: "research-task", run: linked }]);
+  });
+
+  it.each(["merged", "closed"] as const)("does not keep polling a %s PR", (prState) => {
+    vi.mocked(listTaskAgentRuns).mockReturnValue([run({ prState })]);
+    expect(runsToWatch()).toEqual([]);
+  });
+});
 
 describe("assessTaskPr", () => {
   it("records merged and closed without raising attention", () => {

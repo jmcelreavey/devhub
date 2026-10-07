@@ -93,8 +93,8 @@ New features can incubate as a plugin (own repo or a folder under
 ## Personal-data boundary
 
 These paths hold **per-developer** data. They live committed in your private mirror and
-must **not** be contributed to the public core (the public repo ships them empty — just a
-`.gitkeep` and, where useful, an `EXAMPLE`):
+must **not** be contributed to the public core. The public repo ships placeholders or
+generic defaults for these paths:
 
 | Path                   | What                                           | Relocate via      |
 | ---------------------- | ---------------------------------------------- | ----------------- |
@@ -104,21 +104,20 @@ must **not** be contributed to the public core (the public repo ships them empty
 | `collections/`         | Checklist collections                          | `COLLECTIONS_DIR` |
 | `upstarts/`            | Per-repo Upstart scripts (`<repo>/upstart.sh`) | `UPSTARTS_DIR`    |
 | `persona/identity.txt` | Your voice/tone                                | —                 |
+| `skills/shared/my-voice/{writing-style,learned-voice}.md` | Your writing samples and learned voice rules | — |
 | `dashboard/.env.local` | Secrets/config                                 | — (git-ignored)   |
 
 Set the env vars to point these at a separate (e.g. private) location to keep personal
 data out of the repo tree entirely. Defaults stay `REPO_ROOT/<dir>` for back-compat.
 
-The `devhub-backport` flow (M4) branches off `upstream/main` and cherry-picks feature
-files only, so personal data can never ride along into a public PR.
+The backport workflow branches off `upstream/main` and applies only public code and
+catalogue changes as content patches. Public and private histories stay separate.
+Review the patch and run the leak scan before publishing; path exclusions cannot
+recognise personal content copied into a code file.
 
-## M6 — deferred forever
-
-Publishing a scrubbed public template (`TEMPLATE_AND_PLUGIN_PLAN.md` M6) is **not on the
-active roadmap**. This private mirror _is_ the working model. Dual-repo cognitive load
-(keeping a leak-free public tree + scanner + flip ceremony) is not worth the payoff right
-now. If a public template is needed later, start a new project — do not treat M6 as
-"almost done."
+Company workflows belong in a separate plugin repo. See the
+[fork workflow](docs/contributing/fork-workflow.md) and
+[plugin guide](docs/contributing/creating-plugins.md).
 
 ## Code standards
 
@@ -150,13 +149,17 @@ typecheck proves nothing — it's checking generated output.
 After any change that touches shared components or imports, update each affected
 plugin, run `sync_plugins`, and **build again**.
 
-### A stale `next start` will lie to you
+### Verify the checkout you're running
 
-If a change doesn't appear, check for an old server before debugging the code:
+The packaged desktop app usually owns port 1337. Checkout edits won't appear there.
+Check the listening process before debugging the code:
 
 ```sh
-lsof -t -iTCP:1337 | xargs kill -9      # pkill -f often fails to match
+lsof -nP -iTCP:1337 -sTCP:LISTEN
 ```
+
+Run checkout verification on a free port with `DEVHUB_SCHEDULER=0`; keep the packaged
+app running. See the [dashboard verification skill](skills/shared/devhub-dashboard-verify/SKILL.md).
 
 ### React 19.2.4 has no `ViewTransition`
 

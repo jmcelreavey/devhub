@@ -39,6 +39,7 @@ export default defineConfig({
       "lib/**/*.test.ts",
       "lib/**/*.test.tsx",
       "app/**/*.test.ts",
+      "app/**/*.test.tsx",
       "components/**/*.test.tsx",
       // `.ts` too: a hook or a pure helper beside its component needs no JSX,
       // and without this its tests are silently never collected — which is the
@@ -52,6 +53,7 @@ export default defineConfig({
       "../shared/meeting-note/**/*.test.ts",
       "../shared/pr-note/**/*.test.ts",
       "../shared/entity-note/**/*.test.ts",
+      "../shared/task-note/**/*.test.ts",
       "../shared/mcp-history/**/*.test.ts",
       "../mcp-servers/devhub-server/src/**/*.test.ts",
     ],

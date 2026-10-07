@@ -12,15 +12,11 @@ related:
 
 The command palette is the fastest way to move around DevHub and trigger common actions.
 
-Open it with:
-
-```text
-Cmd+K
-```
+Open it with **⌘P** (Ctrl+P on Linux/Windows), or click the **Search…** box in the top bar.
 
 ## Walkthrough
 
-[Command palette, search, and one-on-one walkthrough](/api/notes-assets/assets/feature-demos/demo-12-command-palette-search-one-on-one.mp4)
+[Command palette and search walkthrough](../assets/demos/command-palette.mp4)
 
 ## What It Searches
 
@@ -64,28 +60,35 @@ Press `?` while focused on DevHub to view **global** app shortcuts (navigation, 
 
 Common shortcuts include:
 
-| Shortcut      | Action                                                      |
-| ------------- | ----------------------------------------------------------- |
-| `g h`         | Go to Today                                                 |
-| `g w`         | Go to Work                                                  |
-| `g p`         | Go to PRs                                                   |
-| `g n`         | Go to Notes                                                 |
-| `g s`         | Go to Status                                                |
-| `g a`         | Go to Actions                                               |
-| `g r`         | Go to Repos                                                 |
-| `g k`         | Go to Skills                                                |
-| `g c`         | Go to Chamber                                               |
-| `g l`         | Go to Calendar                                              |
-| `g j`         | Go to Tickets (legacy; Work → Jira tab is the sidebar path) |
-| `g t`         | Go to Tasks history (legacy; Work → History tab)            |
-| `g d`         | Go to Datadog                                               |
-| `g /`         | Go to Search page                                           |
-| `g f`         | Go to Diagrams                                              |
-| `Cmd+Shift+O` | Toggle notes panel                                          |
-| `Cmd+Shift+T` | Toggle tasks panel                                          |
+| Shortcut      | Action                                          |
+| ------------- | ----------------------------------------------- |
+| `⌘P`          | Command palette (`⇧↵` opens a result in a new tab) |
+| `⌘N`          | Toggle notes panel (`⌘⇧O` still works)          |
+| `⌘T`          | Toggle tasks panel (`⌘⇧T` still works)          |
+| `⌘D`          | Toggle diagrams panel                           |
+| `⌘⇧C`         | Quick capture (task, note, or learning)         |
+| `⌘\`          | Toggle sidebar                                  |
+| `⌘1`–`⌘9`     | Jump to workspace tab                           |
+| `g h`         | Go to Today                                     |
+| `g w`         | Go to Work                                      |
+| `g t` / `g j` | Go to Work → Tasks / Jira                       |
+| `g p`         | Go to PRs                                       |
+| `g n`         | Go to Notes                                     |
+| `g /`         | Go to Search                                    |
+| `g f`         | Go to Diagrams                                  |
+| `g r`         | Go to Repos                                     |
+| `g k`         | Go to Skills                                    |
+| `g c`         | Go to Agents                                    |
+| `g l`         | Go to Calendar                                  |
+| `g d`         | Go to Datadog                                   |
+| `g o`         | Go to Ops (plugin)                              |
+| `g s`         | Go to Status                                    |
+| `g a`         | Go to Actions                                   |
+
+The `g` chords are defined in `components/shell/KeyboardShortcuts.tsx`; `⌘` chords in `lib/app-shortcuts.ts`.
 
 ## Tips
 
 - Use page shortcuts for navigation.
-- Use `Cmd+K` when you know what you want but not where it lives.
+- Use `⌘P` when you know what you want but not where it lives.
 - On mobile, use the visible navigation and panel buttons instead of keyboard shortcuts.

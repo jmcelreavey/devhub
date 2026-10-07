@@ -22,7 +22,7 @@ export interface AgentRunSummary {
   title: string;
   model: string | null;
   state: AgentRunState;
-  runtime?: "legacy-cli" | "aionui" | "generation";
+  runtime?: "legacy-cli" | "aionui" | "paseo" | "generation";
   conversationId?: string | null;
   cwd: string;
   worktree: { path: string; branch: string; repoRoot: string } | null;
@@ -73,10 +73,10 @@ function isActive(state: AgentRunState): boolean {
   return state === "queued" || state === "starting" || state === "running" || state === "needs-attention";
 }
 
-/** Nesting level of this server's caller — the agent runner sets it for dispatched runs. */
+/** Nesting level of this server's caller — DevHub sets it on every agent it dispatches through Paseo. */
 export function callerDepth(env: NodeJS.ProcessEnv = process.env): number {
   const n = Number.parseInt(env.DEVHUB_AGENT_DEPTH ?? "", 10);
-  return Math.max(Number.isFinite(n) && n > 0 ? n : 0, env.AIONUI_CONVERSATION_ID ? 1 : 0);
+  return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
 export function formatAgentEvent(event: AgentRunEvent): string {
@@ -148,7 +148,7 @@ export function registerAgentTools(server: McpServer, ctx: Context): void {
     "agent_providers",
     {
       description:
-        "List enabled AionUi assistants, their readiness and supported controls. Configure native harnesses and custom assistants in Agents. Requires DevHub and its connected AionUi workspace (MCP servers must be enabled — reconnect Agents after Sync MCP).",
+        "List the agents Paseo can run (Claude, Cursor, Codex, OpenCode, Copilot…), their readiness and models. Requires DevHub and its Paseo daemon (Agents → Connection).",
     },
     async () =>
       withDashboardErrors(async () => {
@@ -167,7 +167,7 @@ export function registerAgentTools(server: McpServer, ctx: Context): void {
             "Agent providers:",
             ...lines,
             data.providersConfigError ? `\nCustom provider config error: ${data.providersConfigError}` : null,
-            "\nConfigure agents in AionUi's Assistants view. Use only advertised models and controls.",
+            "\nCheck agents in Agents → Connection. Use only advertised models.",
           ]
             .filter(Boolean)
             .join("\n"),
@@ -179,7 +179,7 @@ export function registerAgentTools(server: McpServer, ctx: Context): void {
     "agent_dispatch",
     {
       description:
-        "Start a task in a new AionUi conversation. Defaults to Cursor + Grok with YOLO (auto-approve) unless you pass provider/model. No terminal or window opens. An isolated git worktree is the default; worktree:false uses cwd directly. Returns a durable run and conversation ID. Follow with agent_wait or agent_output; approvals remain in Agents. Reuse requestId when retrying the same submission to avoid duplicate work. Native turn/time/usage limits are available only when the runtime advertises them.",
+        "Start a task in a new Paseo agent. Defaults to the Connection tab's agent (Cursor + Grok unless changed) in its full-auto mode unless you pass provider/model. No terminal or window opens. An isolated git worktree is the default; worktree:false uses cwd directly. Returns a durable run and conversation ID. Follow with agent_wait or agent_output; approvals remain in Agents. Reuse requestId when retrying the same submission to avoid duplicate work. Native turn/time/usage limits are available only when the runtime advertises them.",
       inputSchema: {
         requestId: z.string().min(1).max(200).optional().describe("Stable key for retries of this same submission"),
         provider: z.string().min(1).describe("Provider id from agent_providers, e.g. claude, cursor, codex"),
@@ -212,7 +212,7 @@ export function registerAgentTools(server: McpServer, ctx: Context): void {
     "agent_race",
     {
       description:
-        "Send the same task to 2–4 AionUi assistants, each in its own worktree and conversation. Each conversation uses YOLO permissions. Compare results with agent_diff; no terminal or window opens.",
+        "Send the same task to 2–4 Paseo agents, each in its own worktree and chat. Each runs in its harness's full-auto mode. Compare results with agent_diff; no terminal or window opens.",
       inputSchema: {
         providers: z.array(z.string().min(1)).min(2).max(4).describe("Distinct provider ids"),
         prompt: z.string().min(1).max(32_000),
@@ -396,7 +396,7 @@ export function registerAgentTools(server: McpServer, ctx: Context): void {
     "agent_interactive_note",
     {
       description:
-        "Append a short progress note to an interactive Agent Activity run (bin=interactive — Claude/etc opened in the dock, not agent_dispatch). Call after your first meaningful update so the Activity panel shows live progress. Requires the dashboard running.",
+        "Append a short progress note to an interactive Agent Activity run (bin=interactive — Claude/etc opened in the dock, not agent_dispatch). Call after your first meaningful update so the Activity panel shows live progress. Only use a run id the prompt gave you as an Activity run: Paseo-dispatched runs (agent_dispatch, Implement with Agent) record their own conversation and reject notes with a 400. Requires the dashboard running.",
       inputSchema: {
         runId: runIdSchema,
         text: z.string().trim().min(1).max(8_000).describe("Short status for Agent Activity"),

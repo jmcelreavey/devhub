@@ -42,7 +42,7 @@ export function registerDatadogTools(server: McpServer, ctx: Context): void {
         if (d.ok === false) {
           return { content: [{ type: "text", text: `Datadog alerts unavailable: ${JSON.stringify(d)}` }], isError: true };
         }
-        return { content: [{ type: "text", text: JSON.stringify(d, null, 2) }] };
+        return { content: [{ type: "text", text: JSON.stringify(d) }] };
       }),
   );
 

@@ -20,4 +20,5 @@ export {
   type TextSearchResult,
 } from "./vault-storage.ts";
 export { resolveContentDir } from "./content-dirs.ts";
+export { resolveActiveTasksDir } from "./task-profiles.ts";
 export { VAULT_PATHS, type VaultId } from "./vault-routes.ts";

@@ -90,7 +90,42 @@ describe("syncMcpServers", () => {
     expect(opencode.mcp.notes.type).toBe("local");
     expect(opencode.mcp.notes.enabled).toBe(true);
     expect(opencode.mcp.notes.command).toEqual([`${repo}/bin/notes`, "--port", "9"]);
-    expect(opencode.mcp.notes.env).toEqual({ NOTES_DIR: `${repo}/notes` });
+    // OpenCode's schema field is `environment`; `env` makes it reject the config.
+    expect(opencode.mcp.notes.environment).toEqual({ NOTES_DIR: `${repo}/notes` });
+    expect(opencode.mcp.notes).not.toHaveProperty("env");
+  });
+
+  it("migrates a legacy `env` already in opencode.json to `environment`", async () => {
+    const { repo, home, lines } = makeTempRepo();
+    writeJson(path.join(repo, "mcp", "shared", "notes.json"), {
+      command: "REPO_ROOT/bin/notes",
+      env: { NOTES_DIR: "REPO_ROOT/notes" },
+    });
+    // What earlier DevHub versions wrote, plus a hand-added variable to keep.
+    writeJson(path.join(home, ".config/opencode/opencode.json"), {
+      mcp: { notes: { type: "local", command: ["/old/notes"], enabled: true, env: { KEEP_ME: "1", NOTES_DIR: "/stale" } } },
+    });
+
+    expect(await syncMcpServers({ emit: (l) => lines.push(l), repoRoot: repo, prune: false })).toBe(0);
+
+    const notes = JSON.parse(
+      fs.readFileSync(path.join(home, ".config/opencode/opencode.json"), "utf-8"),
+    ).mcp.notes;
+    expect(notes).not.toHaveProperty("env");
+    expect(notes.environment).toEqual({ KEEP_ME: "1", NOTES_DIR: `${repo}/notes` });
+    expect(notes.command).toEqual([`${repo}/bin/notes`]);
+  });
+
+  it("leaves other tools' `env` field alone", async () => {
+    const { repo, home, lines } = makeTempRepo();
+    writeJson(path.join(repo, "mcp", "shared", "notes.json"), {
+      command: "REPO_ROOT/bin/notes",
+      env: { A: "1" },
+    });
+    await syncMcpServers({ emit: (l) => lines.push(l), repoRoot: repo, prune: false });
+    const claude = JSON.parse(fs.readFileSync(path.join(home, ".claude.json"), "utf-8"));
+    expect(claude.mcpServers.notes.env).toEqual({ A: "1" });
+    expect(claude.mcpServers.notes).not.toHaveProperty("environment");
   });
 
   it("writes AutoClaw's mcporter.json only when AutoClaw is installed, keeping its imports", async () => {

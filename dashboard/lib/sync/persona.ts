@@ -9,6 +9,7 @@
  * would load the same blocks twice.
  */
 import fs from "node:fs";
+import { syncPaseoContext } from "@/lib/paseo/context";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -215,7 +216,7 @@ export async function syncPersona(opts: SyncPersonaOptions): Promise<number> {
   let targets = buildTargets(repoRoot);
   if (opts.tool) {
     targets = targets.filter((t) => t.id === opts.tool);
-    if (targets.length === 0 && opts.tool !== "cursor-rules") {
+    if (targets.length === 0 && opts.tool !== "cursor-rules" && opts.tool !== "paseo") {
       emit(`ERROR: Unknown tool '${opts.tool}'.`);
       return 1;
     }
@@ -269,6 +270,7 @@ export async function syncPersona(opts: SyncPersonaOptions): Promise<number> {
     );
   }
 
+  if (!opts.tool || opts.tool === "paseo") await syncPaseoContext(repoRoot, opts.dryRun ?? false, emit);
   emit(`Done. ${updated} file(s) updated.`);
   return 0;
 }

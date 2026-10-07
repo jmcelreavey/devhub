@@ -12,19 +12,19 @@ Cursor: L1 is always-on via `~/.cursor/rules/devhub-persona-shared.mdc`. Cloud: 
 
 This file does **not** inline L0/L1 — Cursor already has them via `~/.cursor/rules/devhub-persona-*.mdc`. If those rules are missing from the system prompt, read `persona/identity.txt` then `persona/shared-persona.md` before the first substantial reply. Paths are repo-root `persona/` only — never `notes/persona/`.
 
-### Repo nature — personal mirror, NOT the public template
+### Public core and private mirrors
 
-- This checkout is the **private mirror**. It holds **everything**: your personal data — notes, diagrams, daily tasks, checklist collections, `persona/identity.txt` — committed alongside the code. This is where day-to-day work lives, and committing personal data here is expected.
-- The separate **public / template core** repo is the code-only one: generic, reusable features. It ships personal-data paths empty (`.gitkeep`/`EXAMPLE`), and personal data must **not** be pushed there. See `CONTRIBUTING.md` → "Personal-data boundary" for the exact path list.
-- Running the app locally writes personal data into tracked paths (e.g. creating a task writes `tasks/YYYY-MM-DD.json`) — that's fine to commit here. The only place to keep personal data out is when **back-porting a generic feature to the public template**.
+- The **public core** ships generic code and empty personal-data paths (`.gitkeep`/`EXAMPLE`). Never publish notes, tasks, identity, voice samples or local credentials there. See `CONTRIBUTING.md` → "Personal-data boundary" for the exact path list.
+- A **private mirror** keeps personal data alongside the code. Committing that data to the private remote is expected. Check the remotes before choosing where to publish.
+- Running the app writes local data (e.g. `tasks/YYYY-MM-DD.json`). Keep it in your private mirror and move generic changes between the unrelated histories as content patches.
 
 ### Services
 
 | Service | Command | Port | Notes |
 |---------|---------|------|-------|
 | Next.js Dashboard | `npm run dev` (repo root) | 1337 default | File-based storage, no DB. **On this machine 1337 is almost always packaged DevHub.app (`next start`), not webpack — do not use it to test checkout changes.** |
-| OpenChamber | Lazy on `/chamber` tab | 1336 | Optional companion; requires `openchamber` binary |
-| OpenCode | Lazy on `/opencode` tab | ephemeral | Optional companion; never pin 1338 |
+| Agents (Paseo) | Separate launchd daemon (`npm run agents:install`) | 6767 | Backs `/agents`; DevHub never starts or stops it |
+| Terminal peer | Started by `npm run dev` | 1339 | Docked PTY; localhost only |
 
 ### Running the app
 
@@ -32,14 +32,14 @@ This file does **not** inline L0/L1 — Cursor already has them via `~/.cursor/r
 - Core env vars (`NOTES_DIR`, `REPO_ROOT`, `PORT`) are auto-configured by `postinstall`.
 - Optional integrations (Google Calendar, Jira, Datadog) are configured via the `/setup` page; they are not required for the app to function.
 - Optional **notes in-editor AI** uses `AI_API_KEY` (any OpenAI-compatible provider; `AI_BASE_URL`/`AI_MODEL` default to z.ai) in `dashboard/.env.local` (see `dashboard/.env.example`); not configured via `/setup`.
-- OpenChamber and OpenCode start when you open those tabs. Missing binaries just hide the tab — the dashboard still works.
+- `/chamber` and `/opencode` redirect to `/agents`. Without Paseo, Agents shows a connection error and the rest of the dashboard still works. OpenCode is only lazy-started (ephemeral port) for session recap.
 
 ### Lint / Typecheck / Test
 
 All from the repo root:
 - `npm run lint` — ESLint
 - `npm run typecheck` — TypeScript (`tsc --noEmit`)
-- `npm run test` — Vitest (dashboard unit tests; ~3.7k, about 15 s)
+- `npm run test` — Vitest (dashboard unit tests)
 - `npm run verify` — runs lint, typecheck, tests, and production build sequentially
 
 ### UI / UX Review
@@ -82,9 +82,8 @@ DevHub uses a **tier-2 plugin system**. Private modules (BI ops, CAPI scripts, e
 - **Safe-Chain is required** for `npm install` (dashboard `preinstall` and `scripts/install.sh`). Install globally: `npm install -g @aikidosec/safe-chain@1.1.10`, run `safe-chain setup`, restart the terminal. See README.md.
 - **Cloud VMs without sudo:** install Safe-Chain to a user prefix and put it on `PATH` before `npm install`: `npm install -g @aikidosec/safe-chain@1.1.10 --prefix "$HOME/.npm-global"` then `export PATH="$HOME/.npm-global/bin:$PATH"`. The VM update script does this automatically.
 - **Tasks vs notes paths:** daily tasks live under repo-root `tasks/YYYY-MM-DD.json` (not under `notes/`). Notes vault files are under `notes/`.
-- The `postinstall` script patches OpenChamber's HTML for theming. If `node_modules` is deleted, re-run `npm install --prefix ./dashboard` to restore these.
 - The 1Password CLI integration (`op`) is optional and logs warnings if absent — not a real error.
 - Git hooks are in `.githooks/` (configured via `core.hooksPath`); `pre-push` runs `npm run verify`.
 - **`npm run dev` uses webpack**, not Turbopack — required so `../shared/` vault imports resolve without widening Turbopack's project root (which watches the whole repo and can exhaust RAM).
-- **Cold start:** first request after `npm run dev` can take ~30s while webpack compiles; subsequent navigations are fast. Peer startup may also pull/update OpenChamber on first run.
+- **Cold start:** first request after `npm run dev` can take ~30s while webpack compiles; subsequent navigations are fast.
 - **Port 1337 is production.** Packaged DevHub.app holds it (`cwd` under `/Applications/DevHub.app/Contents/Resources/server`). Checkout edits are invisible there — no webpack HMR. Verify UI on a free-port `npm run dev` (see `devhub-dashboard-verify`). Do not kill 1337 unless asked; that is the daily driver.

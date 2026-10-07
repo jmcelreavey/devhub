@@ -345,7 +345,10 @@ export async function fetchMyGithubPrs(): Promise<{ authored: GithubPrRow[]; rev
     };
   };
 
-  const authoredRaw = dedupeBy(authoredItems.map(withMeta), "url").slice(0, MAX_LIST);
+  // Sequential, not Promise.all: each call may prune and rewrite the same file.
+  const authoredRaw = await applySkippedPrs(
+    dedupeBy(authoredItems.map(withMeta), "url").slice(0, MAX_LIST),
+  );
   const reviewsRaw = await applySkippedPrs(
     dedupeBy(reviewItems.map(withMeta), "url").slice(0, MAX_LIST),
   );

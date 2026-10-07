@@ -75,6 +75,9 @@ export const TOOL_ANNOTATIONS: Readonly<Record<string, ToolHints>> = {
   tasks_agent_handoff_set: { ...wr, idempotentHint: true },
   tasks_agent_resume: wrx, // starts follow-up or new implement run; confirm in clients
   tasks_implement_ready: rox, // may fetch Jira description; warn-only checklist
+  tasks_implement_review_settings_get: ro,
+  tasks_implement_review_settings_set: { ...wr, idempotentHint: true }, // upsert prefs
+  tasks_implement_review: wrx, // spawns the assigned reviewer agent run
   // ── plans ──────────────────────────────────────────────────────────────
   tasks_capture: wrx, // creates a draft task + note; reads alerts
   tasks_set_stage: { ...wrx, idempotentHint: true }, // readiness check may read Jira
@@ -115,9 +118,9 @@ export const TOOL_ANNOTATIONS: Readonly<Record<string, ToolHints>> = {
   // ── status / services ──────────────────────────────────────────────────
   status_services: ro,
   status_exec: ro,
+  status_logs: ro,
   status_git: ro,
   status_mcp: ro,
-  services_restart: { ...wr, idempotentHint: true }, // restart again → still running
   // ── briefing / calendar ────────────────────────────────────────────────
   briefing_get: rox, // news + weather come from the open web
   briefing_tasks: ro,
@@ -132,6 +135,7 @@ export const TOOL_ANNOTATIONS: Readonly<Record<string, ToolHints>> = {
   prs_pipeline_investigate: wrx, // dry-run/listing safe; confirm:true starts OpenCode + optional rerun
   jira_tickets: rox,
   jira_ticket_get: rox,
+  jira_ticket_create: wrx, // confirm-gated; each call creates another issue
   jira_ticket_transition: wrx, // no transitionId lists options; with one it moves state
   standup_markdown: rox,
   // ── assets / search / scripts ──────────────────────────────────────────
@@ -147,6 +151,11 @@ export const TOOL_ANNOTATIONS: Readonly<Record<string, ToolHints>> = {
   repos_reveal: wrx, // opens Finder
   repos_clone: wrx, // network + writes a directory
   repo_learn: rox, // cached summary; refresh cost only
+  repo_conventions: { ...wrx, idempotentHint: true }, // reads rules; may start a throttled background mine
+  conventions_list: ro,
+  conventions_mine: { ...wrx, idempotentHint: true }, // GitHub + a model call; joins a run already in flight
+  conventions_review: wr, // accept/reject/restore/edit are reversible; delete is confirm-gated and manual rules only
+  conventions_settings: { ...wr, idempotentHint: true }, // reads with no fields, upserts prefs with some
   repos_git_status: ro,
   repos_git_stage: wr, // stage/unstage is fully reversible
   repos_git_stage_hunk: wr,
@@ -161,6 +170,9 @@ export const TOOL_ANNOTATIONS: Readonly<Record<string, ToolHints>> = {
   repos_git_blame: ro,
   repos_git_conflicts: { ...wr, idempotentHint: true }, // list is a read; resolve writes stated content
   repos_git_discard: dx, // throws away working-tree changes
+  repos_git_range: ro,
+  repos_git_ci: rox, // gh / GitHub API
+  repos_git_worktrees: wr, // list is a read; remove refuses dirty worktrees unless force
   // ── datadog ────────────────────────────────────────────────────────────
   datadog_oncall: rox,
   datadog_recent_alerts: rox,
@@ -171,15 +183,12 @@ export const TOOL_ANNOTATIONS: Readonly<Record<string, ToolHints>> = {
   capability_digest: ro,
   capability_get_lab: ro,
   capability_complete_lab: { ...wr, idempotentHint: true },
-  // ── sessions / recall / tags ───────────────────────────────────────────
+  // ── sessions / recall ──────────────────────────────────────────────────
   sessions_recap: ro,
   recall: ro,
   recall_graph: ro,
   recall_remember: wr, // appends an event
   recall_index: { ...wr, idempotentHint: true }, // rebuilds deterministically
-  tags_list: ro,
-  tags_lookup: ro,
-  tags_rename: { ...wr, idempotentHint: true }, // #from → #to; second run is a no-op
   // ── share ──────────────────────────────────────────────────────────────
   share_list: ro,
   share_publish: { ...wrx, idempotentHint: true }, // re-push updates the same gist URL
@@ -189,6 +198,10 @@ export const TOOL_ANNOTATIONS: Readonly<Record<string, ToolHints>> = {
   // ── skills / context / collections / jobs / research / radar / persona ─
   skills_list: ro,
   skills_read: ro,
+  voice_list: ro,
+  voice_answer: { ...wr, idempotentHint: true }, // upserts one answer; blank clears it
+  voice_train: { ...wrx, idempotentHint: true }, // starts a model call; joins one already running; status is a read
+  voice_apply: wr, // rewrites learned-voice.md (in git) and syncs the skill; confirm-gated, a repeat is refused
   context_pack: ro,
   collections_list: ro,
   jobs_list: ro,

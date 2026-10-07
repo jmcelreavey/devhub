@@ -27,7 +27,7 @@ function HubJiraHeader({
   const jira = asHubJiraTicket(ticket);
   const { menu, menuUi } = useJiraTicketMenu(jira);
   return (
-    <div className="flex items-start justify-between gap-2" {...menu.bindRow(jira)}>
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between" {...menu.bindRow(jira)}>
       <div className="min-w-0">
         <a
           href={ticket.url}
@@ -43,7 +43,7 @@ function HubJiraHeader({
           {ticket.status} · {ticket.summary}
         </p>
       </div>
-      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+      <div className="flex shrink-0 flex-wrap items-center gap-1 sm:justify-end">
         {actions}
         <RowMenuKebab
           label={`Actions for ${ticket.key}`}
@@ -78,13 +78,16 @@ export function HubWorkCluster({
   const task = cluster.tasks[0];
 
   function renderNote(note: WorkHubNote) {
+    const isGeneratedTitle = /^\d{4}-\d{2}-\d{2}-[a-f0-9-]{36}$/i.test(note.title);
+    const linkedTask = cluster.tasks.find((item) => item.notePath === note.slug || note.slug.endsWith(`-${item.id}`));
+    const noteTitle = isGeneratedTitle ? `${linkedTask?.text ?? cluster.jira?.summary ?? "Task"} — notes` : note.title;
     const age =
       note.ts && note.ts > 0 ? new Date(note.ts).toISOString().slice(0, 10) : undefined;
     return (
-      <NoteListRow key={note.slug} note={note} className="repo-hub-row">
+      <NoteListRow key={note.slug} note={{ ...note, title: noteTitle }} className="repo-hub-row">
         <NotebookPen size={14} className="lib-card-icon" />
         <span className="repo-hub-row-main">
-          <span className="repo-hub-row-title">{note.title}</span>
+          <span className="repo-hub-row-meta">{noteTitle}</span>
           {age ? <span className="repo-hub-row-meta">{age}</span> : null}
         </span>
       </NoteListRow>
@@ -113,9 +116,9 @@ export function HubWorkCluster({
       {cluster.jira ? (
         <HubJiraHeader ticket={cluster.jira} actions={actions} />
       ) : (
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <p className="repo-hub-row-title truncate">{title}</p>
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">{actions}</div>
+          <div className="flex shrink-0 flex-wrap items-center gap-1 sm:justify-end">{actions}</div>
         </div>
       )}
       {cluster.tasks.length > 0 ? (
@@ -127,6 +130,7 @@ export function HubWorkCluster({
                 date={date}
                 cwd={repoPath}
                 repoName={repoName}
+                hideJiraKey={Boolean(cluster.jira && item.jiraKey === cluster.jira.key)}
                 onWorkMutate={onWorkMutate}
               />
             </li>
@@ -157,6 +161,7 @@ export function HubWorkCluster({
         <SkillAgentDialog
           open
           title="Create PR with agent"
+          stage="create-pr"
           description="Choose the CLI. The create-pr skill will ask before mutating git or GitHub."
           getPrompt={() =>
             buildCreatePrPrompt({
@@ -168,7 +173,7 @@ export function HubWorkCluster({
           }
           cwd={repoPath}
           repoName={repoName}
-          summary={`Create PR for ${repoName}`}
+          summary={`Create PR · ${cluster.jira ? `${cluster.jira.key} · ${cluster.jira.summary}` : task?.text || repoName}`}
           reason={`Create PR via create-pr skill in ${repoName}`}
           onClose={() => setCreatePr(false)}
         />

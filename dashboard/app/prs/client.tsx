@@ -81,7 +81,7 @@ export default function PrsPage() {
     try {
       const res = await fetch(`/api/github/prs/skip?url=${encodeURIComponent(row.url)}`, { method: "DELETE" });
       if (!res.ok) throw new Error(String(res.status));
-      toast.info(`${row.repo}#${row.number} is back in Review requested.`);
+      toast.info(`${row.repo}#${row.number} is back in ${row.kind === "authored" ? "Mine" : "Review requested"}.`);
     } catch {
       toast.error("Couldn't unskip PR.");
       await skippedState.mutate();
@@ -304,7 +304,7 @@ export default function PrsPage() {
                 return (
                   <div key={row.url} className="flex items-start gap-1">
                     <div className="min-w-0 flex-1">
-                      <PrCard row={row} mode="reviews" />
+                      <PrCard row={row} mode={record?.kind ?? "reviews"} />
                     </div>
                     <button
                       type="button"
@@ -312,7 +312,7 @@ export default function PrsPage() {
                       onClick={() => record && void unskip(record)}
                       style={{ color: "var(--text-subtle)" }}
                       aria-label={`Unskip ${row.repo}#${row.number}`}
-                      title="Show in Review requested again"
+                      title={`Show in ${record?.kind === "authored" ? "Mine" : "Review requested"} again`}
                     >
                       <RotateCcw size={14} aria-hidden />
                     </button>
@@ -345,7 +345,7 @@ export default function PrsPage() {
                   ? "No PRs awaiting your review."
                   : prTab === "recent"
                     ? "No recently reviewed PRs in the last 7 days."
-                    : "No skipped PRs. Right-click a review request to skip it."
+                    : "No skipped PRs. Right-click a PR to skip it."
           }
           quips={
             !isFiltering && prTab === "reviews"

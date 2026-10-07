@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { StashConflictPayload } from "@/app/repos/types";
 import { useConfirm } from "@/components/shell/ConfirmDialog";
 import { launchAgentJob } from "@/lib/agent-job";
@@ -7,12 +8,14 @@ import type { GitHookFailurePayload } from "@/lib/git/hook-failure";
 import { peekUndo,popUndo,type UndoEntry } from "@/lib/git/undo-stack";
 import { useStoredChoice,useStoredState } from "@/lib/hooks/use-stored-state";
 import { useToast } from "@/lib/hooks/use-toast";
+import { useIsMobile } from "@/lib/hooks/use-is-mobile";
 import {
 agentGitSyncConflictPrompt,
 agentStashConflictPrompt
 } from "@/lib/terminal-launch";
 import {
 AlertTriangle,
+ArrowLeft,
 Download,
 FileWarning,
 FolderTree,
@@ -31,7 +34,7 @@ Upload,
 X,
 type LucideIcon,
 } from "lucide-react";
-import { useCallback,useEffect,useId,useRef,useState,type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback,useEffect,useId,useMemo,useRef,useState,type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { BlamePanel } from "./BlamePanel";
 import { BranchesPanel } from "./BranchesPanel";
@@ -57,11 +60,15 @@ type StatusPayload,
 
 export type { RepoGitTabId } from "./shared";
 
+// History leads: its WIP row stages and commits beside the graph, so it is
+// the one view that shows the whole picture (as GitKraken's graph does).
+// Conflicts only appears while there are conflicts; the tools (Blame onwards)
+// sit apart at the end — occasional lookups, not the daily loop.
 const TABS: readonly [RepoGitTabId, string, LucideIcon][] = [
+  ["history", "History", History],
   ["changes", "Changes", Layers],
   ["branches", "Branches", GitBranch],
   ["stash", "Stash", Download],
-  ["history", "History", History],
   ["conflicts", "Conflicts", FileWarning],
   ["blame", "Blame", GitCommit],
   ["worktrees", "Worktrees", FolderTree],
@@ -69,6 +76,8 @@ const TABS: readonly [RepoGitTabId, string, LucideIcon][] = [
   // rather than part of the daily loop.
   ["reflog", "Reflog", Undo2],
 ];
+
+const TOOL_TABS: ReadonlySet<RepoGitTabId> = new Set(["blame", "worktrees", "reflog"]);
 
 /** Module-level so the stored-choice validator keeps a stable identity. */
 const TAB_IDS: readonly RepoGitTabId[] = TABS.map(([id]) => id);
@@ -84,11 +93,18 @@ interface RepoGitWorkspaceProps {
   onOpenChange?: (open: boolean) => void;
   /** Hide the inline badge / Open Git trigger (e.g. top-bar entry). */
   hideTrigger?: boolean;
+  /**
+   * `page` = full-route workspace (no dialog). `dialog` (default) is a
+   * viewport-sized overlay so Open Git keeps the whole screen.
+   */
+  variant?: "dialog" | "page";
   /** Tab selected when the modal opens (controlled or uncontrolled). */
   initialTab?: RepoGitTabId;
   /** Select this working-tree path on the Changes tab (hub file click). */
   focusPath?: string | null;
   onFocusPathConsumed?: () => void;
+  /** History opens focused on unpushed commits (e.g. ?unpushed=1 on the page). */
+  initialFocusUnpushed?: boolean;
 }
 
 export function RepoGitWorkspace({
@@ -100,18 +116,22 @@ export function RepoGitWorkspace({
   open: openControlled,
   onOpenChange,
   hideTrigger = false,
+  variant = "dialog",
   initialTab,
   focusPath = null,
   onFocusPathConsumed,
+  initialFocusUnpushed = false,
 }: RepoGitWorkspaceProps) {
+  const page = variant === "page";
+  const isMobile = useIsMobile();
   const [openUncontrolled, setOpenUncontrolled] = useState(false);
   const controlled = openControlled !== undefined;
-  const open = controlled ? openControlled : openUncontrolled;
+  const open = page ? true : controlled ? openControlled : openUncontrolled;
   // Reopening lands on the tab you left, unless the caller asked for a specific
   // one (e.g. the conflicts banner).
-  const [tab, setTab] = useStoredChoice<RepoGitTabId>("devhub:repo-git:tab", "changes", TAB_IDS);
+  const [tab, setTab] = useStoredChoice<RepoGitTabId>("devhub:repo-git:tab", "history", TAB_IDS);
   /** When true, History opens focused on unpushed commits (from badge click). */
-  const [historyFocusUnpushed, setHistoryFocusUnpushed] = useState(false);
+  const [historyFocusUnpushed, setHistoryFocusUnpushed] = useState(initialFocusUnpushed);
   /** Commit to select when Blame hands off to History. */
   const [historyFocusCommit, setHistoryFocusCommit] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -200,7 +220,7 @@ export function RepoGitWorkspace({
     },
     [railWidth, setRailWidth],
   );
-  const [fullscreen, setFullscreen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(true);
   const toast = useToast();
   const confirm = useConfirm();
   const titleId = useId();
@@ -306,12 +326,27 @@ export function RepoGitWorkspace({
   const hasDirty = displayDirty > 0;
   const hasUnpushed = unpushedCount > 0;
 
+  /**
+   * Bumped on every mutation. History stays mounted across tab switches, so a
+   * branch switched from the sidebar (or a commit made on Changes) has to tell
+   * it to reload — before, the graph kept showing the old HEAD.
+   */
+  const [mutationToken, setMutationToken] = useState(0);
   /** Panels' mutate fan-out also refreshes the workspace summary (WIP row, badges, rail). */
   const handleMutate = useCallback(() => {
     onMutate();
     void refreshSummary();
     setUndoEntry(peekUndo(repoName));
+    setMutationToken((n) => n + 1);
   }, [onMutate, refreshSummary, repoName]);
+  /**
+   * History is the heavy tab (log, lanes, avatars, scroll position, selection).
+   * Once visited it stays mounted and is hidden rather than torn down, so
+   * coming back is instant and you land where you left off.
+   */
+  const [historyMounted, setHistoryMounted] = useState(false);
+  if (open && tab === "history" && !historyMounted) setHistoryMounted(true);
+  if (!open && historyMounted) setHistoryMounted(false);
 
   /**
    * One-click undo of the last DevHub-performed action.
@@ -361,7 +396,13 @@ export function RepoGitWorkspace({
     writeFullscreenPref(next);
   }, []);
 
-  const openWorkspace = useCallback(() => setOpen(true), [setOpen]);
+  const openWorkspace = useCallback(() => {
+    setOpen(true);
+  }, [setOpen]);
+  const openChanges = useCallback(() => {
+    setTab("changes");
+    setOpen(true);
+  }, [setOpen, setTab]);
   const openHistoryUnpushed = useCallback(() => {
     setHistoryFocusUnpushed(true);
     setTab("history");
@@ -447,33 +488,40 @@ export function RepoGitWorkspace({
   useEffect(() => {
     if (open && !wasOpen.current) {
       if (initialTab) setTab(initialTab);
-      setHistoryFocusUnpushed(false);
-      setFullscreen(readFullscreenPref());
+      setHistoryFocusUnpushed(initialFocusUnpushed);
+      setFullscreen(page ? true : readFullscreenPref());
     }
     wasOpen.current = open;
-  }, [open, initialTab, setTab]);
+  }, [open, initialTab, initialFocusUnpushed, setTab, page]);
 
   useEffect(() => {
     if (focusPath) setTab("changes");
   }, [focusPath, setTab]);
 
   useEffect(() => {
-    if (!open) return;
+    if (page || !open) return;
     const dialog = dialogRef.current;
     if (!dialog?.open) dialog?.showModal();
     return () => {
       if (dialog?.open) dialog.close();
     };
-  }, [open]);
+  }, [open, page]);
 
   useEffect(() => {
-    if (!open) return;
+    if (page || !open) return;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prevOverflow;
     };
-  }, [open]);
+  }, [open, page]);
+
+  // An empty Conflicts tab is noise; it appears the moment a conflict exists.
+  const hasConflicts = (summary?.conflicts ?? 0) > 0;
+  const visibleTabs = useMemo(
+    () => TABS.filter(([id]) => id !== "conflicts" || hasConflicts || tab === "conflicts"),
+    [hasConflicts, tab],
+  );
 
   /** Roving arrow-key navigation for the tablist (WAI-ARIA tabs pattern). */
   const onTablistKeyDown = useCallback(
@@ -482,18 +530,18 @@ export function RepoGitWorkspace({
         return;
       }
       e.preventDefault();
-      const index = TABS.findIndex(([id]) => id === tab);
+      const index = visibleTabs.findIndex(([id]) => id === tab);
       const nextIndex =
         e.key === "Home"
           ? 0
           : e.key === "End"
-            ? TABS.length - 1
-            : (index + (e.key === "ArrowRight" ? 1 : -1) + TABS.length) % TABS.length;
-      const nextId = TABS[nextIndex]![0];
+            ? visibleTabs.length - 1
+            : (index + (e.key === "ArrowRight" ? 1 : -1) + visibleTabs.length) % visibleTabs.length;
+      const nextId = visibleTabs[nextIndex]![0];
       setTab(nextId);
       tabRefs.current.get(nextId)?.focus();
     },
-    [tab, setTab],
+    [tab, setTab, visibleTabs],
   );
 
   async function offerAiConflict(conflict: StashConflictPayload) {
@@ -558,32 +606,13 @@ export function RepoGitWorkspace({
     toast.info("Resolving conflicts in the terminal.");
   }
 
-  const modal =
-    open && typeof document !== "undefined"
-      ? createPortal(
-          <dialog
-            ref={dialogRef}
-            className="repo-git-modal-backdrop"
-            data-fullscreen={fullscreen || undefined}
-            aria-labelledby={titleId}
-            onCancel={(e) => {
-              e.preventDefault();
-              if (hookFailure) return;
-              if (fullscreen) {
-                setFullscreenPref(false);
-                return;
-              }
-              closeWorkspace();
-            }}
-            onClick={(e) => {
-              if (e.target === e.currentTarget) closeWorkspace();
-            }}
-          >
+  const Title = page ? "h1" : "h2";
+  const workspaceShell = (
             <div
-              className="repo-git-modal"
-              data-fullscreen={fullscreen || undefined}
-              onClick={(e) => e.stopPropagation()}
-              onContextMenu={(e) => {
+              className={page ? "repo-git-modal repo-git-page-shell" : "repo-git-modal"}
+              data-fullscreen={(page || fullscreen) || undefined}
+              onClick={page ? undefined : (e) => e.stopPropagation()}
+              onContextMenu={page ? undefined : (e) => {
                 // React portals bubble through the React tree, not the DOM —
                 // without this, a right-click anywhere in the modal also opened
                 // the repo card's context menu behind it.
@@ -592,12 +621,16 @@ export function RepoGitWorkspace({
             >
               <header className="repo-git-modal-header">
                 <div className="repo-git-modal-title-block">
-                  <h2 id={titleId} className="repo-git-modal-title">
+                  <Title id={titleId} className="repo-git-modal-title">
                     <GitBranch size={14} aria-hidden />
-                    Git workspace
-                  </h2>
+                    {page ? `${repoName} · Git` : "Git workspace"}
+                  </Title>
                   <p className="repo-git-modal-sub">
-                    <span className="font-mono">{repoName}</span>
+                    {page ? (
+                      <Link href={`/repos/${encodeURIComponent(repoName)}`} className="repo-git-page-back">
+                        <ArrowLeft size={12} aria-hidden /> Repository
+                      </Link>
+                    ) : <span className="font-mono">{repoName}</span>}
                     <span className="repo-git-modal-path" title={repoPath}>
                       {repoPath}
                     </span>
@@ -668,24 +701,28 @@ export function RepoGitWorkspace({
                     >
                       <Keyboard size={14} />
                     </button>
-                    <button
-                      type="button"
-                      className="btn btn-ghost repo-git-close"
-                      onClick={() => setFullscreenPref(!fullscreen)}
-                      aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                      aria-pressed={fullscreen}
-                      title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
-                    >
-                      {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-ghost repo-git-close"
-                      onClick={closeWorkspace}
-                      aria-label="Close git workspace"
-                    >
-                      <X size={14} />
-                    </button>
+                    {!page && (
+                      <>
+                        <button
+                          type="button"
+                          className="btn btn-ghost repo-git-close"
+                          onClick={() => setFullscreenPref(!fullscreen)}
+                          aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                          aria-pressed={fullscreen}
+                          title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+                        >
+                          {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost repo-git-close"
+                          onClick={closeWorkspace}
+                          aria-label="Close git workspace"
+                        >
+                          <X size={14} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </header>
@@ -696,7 +733,7 @@ export function RepoGitWorkspace({
                 aria-label="Git workspace"
                 onKeyDown={onTablistKeyDown}
               >
-                {TABS.map(([id, label, Icon]) => {
+                {visibleTabs.map(([id, label, Icon]) => {
                   const badgeCount =
                     id === "conflicts"
                       ? summary?.conflicts ?? 0
@@ -717,6 +754,7 @@ export function RepoGitWorkspace({
                       aria-controls={`${titleId}-panel`}
                       tabIndex={tab === id ? 0 : -1}
                       className="repo-git-tab"
+                      data-tool={TOOL_TABS.has(id) || undefined}
                       data-active={tab === id || undefined}
                       data-alert={(id === "conflicts" && badgeCount > 0) || undefined}
                       onClick={() => setTab(id)}
@@ -806,6 +844,30 @@ export function RepoGitWorkspace({
                   id={`${titleId}-panel`}
                   aria-labelledby={`${titleId}-tab-${tab}`}
                 >
+                {historyMounted && (
+                  <div className="repo-git-pane-enter" hidden={tab !== "history"}>
+                    <HistoryPanel
+                      repoName={repoName}
+                      repoPath={repoPath}
+                      onMutate={handleMutate}
+                      onConflict={offerAiConflict}
+                      onHookFailure={showHookFailure}
+                      pushing={pushing}
+                      onPush={() => void pushRepo()}
+                      wip={
+                        summary
+                          ? { staged: summary.staged, unstaged: summary.unstaged }
+                          : null
+                      }
+                      focusUnpushed={historyFocusUnpushed}
+                      onFocusUnpushedConsumed={() => setHistoryFocusUnpushed(false)}
+                      focusCommit={historyFocusCommit}
+                      onFocusCommitConsumed={() => setHistoryFocusCommit(null)}
+                      refreshToken={mutationToken}
+                    />
+                  </div>
+                )}
+                {tab !== "history" && (
                 <div key={tab} className="repo-git-pane-enter">
                   {tab === "changes" && (
                     <ChangesPanel
@@ -815,6 +877,7 @@ export function RepoGitWorkspace({
                       onConflict={offerAiConflict}
                       onHookFailure={showHookFailure}
                       onVisibleDirtyChange={setLiveVisibleDirty}
+                      stacked={page && isMobile}
                       pushing={pushing}
                       onPush={pushRepo}
                       focusPath={focusPath}
@@ -837,27 +900,6 @@ export function RepoGitWorkspace({
                       repoPath={repoPath}
                       onMutate={handleMutate}
                       onConflict={offerAiConflict}
-                    />
-                  )}
-                  {tab === "history" && (
-                    <HistoryPanel
-                      repoName={repoName}
-                      repoPath={repoPath}
-                      onMutate={handleMutate}
-                      onConflict={offerAiConflict}
-                      onHookFailure={showHookFailure}
-                      pushing={pushing}
-                      onPush={() => void pushRepo()}
-                      wip={
-                        summary
-                          ? { staged: summary.staged, unstaged: summary.unstaged }
-                          : null
-                      }
-                      onOpenWip={() => setTab("changes")}
-                      focusUnpushed={historyFocusUnpushed}
-                      onFocusUnpushedConsumed={() => setHistoryFocusUnpushed(false)}
-                      focusCommit={historyFocusCommit}
-                      onFocusCommitConsumed={() => setHistoryFocusCommit(null)}
                     />
                   )}
                   {tab === "conflicts" && (
@@ -886,13 +928,36 @@ export function RepoGitWorkspace({
                     />
                   )}
                 </div>
+                )}
                 </div>
               </div>
             </div>
-          </dialog>,
-          document.body,
-        )
-      : null;
+  );
+
+  const modal =
+    page
+      ? (open ? workspaceShell : null)
+      : open && typeof document !== "undefined"
+        ? createPortal(
+            <dialog
+              ref={dialogRef}
+              className="repo-git-modal-backdrop"
+              data-fullscreen={fullscreen || undefined}
+              aria-labelledby={titleId}
+              onCancel={(e) => {
+                e.preventDefault();
+                if (hookFailure) return;
+                closeWorkspace();
+              }}
+              onClick={(e) => {
+                if (e.target === e.currentTarget) closeWorkspace();
+              }}
+            >
+              {workspaceShell}
+            </dialog>,
+            document.body,
+          )
+        : null;
 
   return (
     <div className="repo-git-workspace">
@@ -900,9 +965,10 @@ export function RepoGitWorkspace({
         <div className="repo-git-workspace-trigger">
           <button
             type="button"
-            onClick={openWorkspace}
+            onClick={openChanges}
             className={hasDirty ? "badge badge-warning" : "badge badge-success"}
             style={{ cursor: "pointer" }}
+            title="Open Changes"
             aria-expanded={open}
           >
             {hasDirty ? (
@@ -943,6 +1009,7 @@ export function RepoGitWorkspace({
             onClick={openWorkspace}
             aria-expanded={open}
             aria-haspopup="dialog"
+            title="Open Git"
           >
             <GitBranch size={12} /> Open Git
           </button>

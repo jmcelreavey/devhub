@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { NotesStorage } from "./storage.ts";
 import { TasksStorage, DiagramsStorage } from "./task-diagram-storage.ts";
-import { VaultStorage, markdownVaultCodec, resolveContentDir } from "./shared.ts";
+import { VaultStorage, markdownVaultCodec, resolveActiveTasksDir, resolveContentDir } from "./shared.ts";
 import { DashboardClient } from "./dashboard-client.ts";
 import { resolveDashboard, type ResolvedDashboard } from "./discover-dashboard.ts";
 
@@ -30,7 +30,7 @@ export function createContext(): Context {
   const sourceDir = path.dirname(fileURLToPath(import.meta.url));
   const repoRoot = process.env.REPO_ROOT || path.resolve(sourceDir, "../../..");
   const notesDir = resolveContentDir("NOTES_DIR", repoRoot, "notes");
-  const tasksDir = resolveContentDir("TASKS_DIR", repoRoot, "tasks");
+  const tasksDir = resolveActiveTasksDir(resolveContentDir("TASKS_DIR", repoRoot, "tasks"));
   const docsDir = resolveContentDir("DOCS_DIR", repoRoot, "docs");
   const storage = new NotesStorage(notesDir);
   return {
@@ -40,7 +40,7 @@ export function createContext(): Context {
     tasksDir,
     storage,
     docsStorage: new VaultStorage(docsDir, markdownVaultCodec),
-    tasksStorage: new TasksStorage(tasksDir),
+    tasksStorage: new TasksStorage(tasksDir, notesDir),
     diagramsStorage: new DiagramsStorage(storage),
     // Discovered rather than assumed, and per request: the dashboard advertises
     // its port, so a checkout on a free port is reachable, a stale packaged

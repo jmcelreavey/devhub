@@ -274,6 +274,8 @@
         "dev-server": "Starting development server…",
         "stopping-dev-server": "Stopping development server…",
         "packaged-server": "Starting packaged server…",
+        wsl: "Starting WSL…",
+        "wsl-install": "Installing DevHub into WSL (first run only)…",
         rebuild: "Rebuilding the dashboard…",
         next: "Starting the dashboard…",
         terminal: "Starting the terminal…",
@@ -365,6 +367,10 @@
               });
               return;
             }
+            // No re-navigation from here. A second location.replace cancels the
+            // navigation already in flight, and on WSL the first request can
+            // stall for several seconds before it completes; the shell owns
+            // retries and only makes them after a long quiet period.
             setTimeout(() => {
               if (card.dataset.state !== "ready") return;
               render({
@@ -373,7 +379,7 @@
                   "DevHub's server is ready, but this window could not open it. " +
                   "Try again, or View → Open Logs Folder.",
               });
-            }, 8000);
+            }, 100000);
           }
         } else if (state.state === "stopping") {
           title.textContent = "Shutting down";

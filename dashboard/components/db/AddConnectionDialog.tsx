@@ -164,7 +164,7 @@ export function AddConnectionDialog({ onClose, onSaved, initial }: AddConnection
               className="input"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder="insider-app cache"
+              placeholder="app cache"
               autoFocus
             />
           </label>

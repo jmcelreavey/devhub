@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   compactPlaywriterJsonRpc,
+  createStdoutParser,
   PLAYWRITER_EXECUTE_DESCRIPTION,
 } from "./playwriter-compact";
 
@@ -43,5 +44,26 @@ describe("compactPlaywriterJsonRpc", () => {
   it("passes through messages that are not tools/list results", () => {
     const ping = { jsonrpc: "2.0", id: 2, result: { ok: true } };
     expect(compactPlaywriterJsonRpc(ping)).toEqual(ping);
+  });
+});
+
+describe("createStdoutParser", () => {
+  it("preserves Unicode when a byte sequence straddles chunks", () => {
+    const seen: unknown[] = [];
+    const parse = createStdoutParser((message) => seen.push(message));
+    const message = { jsonrpc: "2.0", id: 1, result: { text: "Café → done ✅" } };
+    for (const byte of Buffer.from(JSON.stringify(message) + "\n")) parse(Buffer.from([byte]));
+    expect(seen).toEqual([message]);
+  });
+
+  it("reads newline-delimited JSON-RPC, including messages split across chunks", () => {
+    const seen: unknown[] = [];
+    const parse = createStdoutParser((message) => seen.push(message));
+    parse(Buffer.from('{"jsonrpc":"2.0","id":1,"result":{}}\n{"jsonrpc":"2.0",'));
+    parse(Buffer.from('"id":2,"result":{}}\n\n'));
+    expect(seen).toEqual([
+      { jsonrpc: "2.0", id: 1, result: {} },
+      { jsonrpc: "2.0", id: 2, result: {} },
+    ]);
   });
 });

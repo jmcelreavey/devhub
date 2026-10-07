@@ -211,7 +211,9 @@ describe("tasks-storage", () => {
     const rolled = await m.rolloverTasks();
     expect(rolled).toHaveLength(1);
     expect(rolled[0].text).toBe("carry over");
-    expect(rolled[0].id).not.toBe(source.id);
+    expect(rolled[0].id).toBe(source.id);
+    expect(rolled[0].createdAt).toBe(source.createdAt);
+    expect(rolled[0].notePath).toBe(source.notePath);
     expect(rolled[0].movedAt).toBeUndefined();
     expect(rolled[0].movedToDate).toBeUndefined();
 

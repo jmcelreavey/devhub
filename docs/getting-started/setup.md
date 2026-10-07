@@ -73,7 +73,7 @@ Use LAN mode when:
 - You trust the network.
 - You understand that DevHub has no built-in authentication.
 
-LAN mode exposes dashboard `1337` and OpenChamber `1336` through the proxy. OpenCode is ephemeral loopback (not proxied). Terminal `1339` is never proxied.
+LAN mode exposes the dashboard (`1337`) and the Paseo web UI (`6767`, password-protected) on your non-Tailscale LAN IP. Terminal `1339` is never proxied. For agents away from home, use **Agents → Connection → Pair a phone**, which goes through Paseo's encrypted relay instead.
 
 When opening DevHub from another device at `http://<lan-ip>:1337` during **`npm run dev`**, Next.js 16+ blocks `/_next/*` chunk requests unless the browser `Origin` matches an allowlisted host pattern. DevHub ships defaults for common private ranges (`192.168.*.*`, `10.*.*.*`, `172.*.*.*`, `*.local`). If the UI stays on loading skeletons from a phone or tablet, add your host pattern to `DEVHUB_ALLOWED_DEV_ORIGINS` in `dashboard/.env.local` (comma-separated) and restart. Production `npm run start` does not use this dev-only gate.
 
@@ -95,7 +95,7 @@ The shared configuration files should use environment variable placeholders inst
 
 Notes AI, Repo Learning generated artifacts, and morning-briefing AI use `AI_API_KEY` in `dashboard/.env.local` (any OpenAI-compatible provider — z.ai by default, or OpenAI, OpenRouter, etc. via `AI_BASE_URL`/`AI_MODEL`). Copy the example lines from `dashboard/.env.example`, restart after changes, and see [Environment Variables](../reference/environment-variables.md#notes-repo-learning-and-briefing-ai-optional).
 
-Agent launches and in-app generation that prefer a local CLI use **/setup → AI Provider** (`DEVHUB_AI_PROVIDER`). Antigravity is the `agy` CLI — install it, then pick **Antigravity CLI**. There is no Antigravity desktop app in DevHub. See [Agent CLI selection](../guides/opencode-and-chamber.md#agent-cli-selection).
+Agent launches and in-app generation that prefer a local CLI use **/setup → AI Provider** (`DEVHUB_AI_PROVIDER`). Antigravity is the `agy` CLI — install it, then pick **Antigravity CLI**. There is no Antigravity desktop app in DevHub. See [Agent CLI selection](../guides/terminal-and-agent-cli.md#agent-cli-selection).
 
 ## After Changing Setup
 
@@ -113,7 +113,7 @@ The `/setup` wizard reads and writes configuration through local API routes (sam
 | `POST /api/setup/check/datadog` | Tests Datadog API + application keys against the Events API. |
 | `POST /api/setup/github/device` | Starts or polls GitHub device-flow login (`action: "start"` \| `"poll"`). Token goes to `gh`, never to the browser. |
 
-The Status page service cards (`chamber`, `opencode`) also read `chamber` / `opencode` from `GET /api/setup/status` — they render only when the corresponding peer is enabled.
+The Status page **Agents workspace** card reads `GET /api/status/services`, not setup status.
 
 See [API Routes](../reference/api-routes.md) for response field details.
 

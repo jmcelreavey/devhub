@@ -124,14 +124,14 @@ import {
 } from "lucide-react";
 
 /** Sidebar brand: Lucide icon inside the accent chip */
-const BRAND_LUCIDE_PX = 24;
+const BRAND_LUCIDE_PX = 20;
 const BRAND_LUCIDE_COLLAPSED_PX = 17;
 /** Transparent bottle mark: needs larger on-screen size or fizz bubbles disappear when downscaled */
-const BRAND_BOTTLE_MARK_EXPANDED_PX = 48;
+const BRAND_BOTTLE_MARK_EXPANDED_PX = 38;
 const BRAND_BOTTLE_MARK_COLLAPSED_PX = 28;
 /** Sidebar brand: full-color seasonal mark (SVG or emoji) — fits inside `.brand-dot[data-full-icon]` */
-const BRAND_GLYPH_MARK_PX = 40;
-const BRAND_GLYPH_EMOJI_PX = 34;
+const BRAND_GLYPH_MARK_PX = 32;
+const BRAND_GLYPH_EMOJI_PX = 28;
 /** Narrow sidebar rail — keep glyph legible without clipping */
 const BRAND_GLYPH_MARK_COLLAPSED_PX = 26;
 const BRAND_GLYPH_EMOJI_COLLAPSED_PX = 22;

@@ -9,6 +9,19 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+/// Directories created under app data. Shared with the WSL backend, which has
+/// to create the same tree on the Linux side of the boundary.
+pub const APP_DATA_SUBDIRS: [&str; 8] = [
+    "config",
+    "notes",
+    "tasks",
+    "collections",
+    "upstarts",
+    "docs",
+    "persona",
+    "logs",
+];
+
 /// Read-only packaged assets, writable user data, and where the server lives.
 #[derive(Debug, Clone)]
 pub struct RuntimePaths {
@@ -25,10 +38,6 @@ pub struct RuntimePaths {
 }
 
 impl RuntimePaths {
-    pub fn env_file(&self) -> PathBuf {
-        self.app_data.join("config").join(".env.local")
-    }
-
     pub fn log_dir(&self) -> PathBuf {
         self.app_data.join("logs")
     }
@@ -44,16 +53,7 @@ impl RuntimePaths {
     /// account, and this is the one place that can enforce it before anything
     /// writes.
     pub fn ensure_app_data(&self) -> std::io::Result<()> {
-        for sub in [
-            "config",
-            "notes",
-            "tasks",
-            "collections",
-            "upstarts",
-            "docs",
-            "persona",
-            "logs",
-        ] {
+        for sub in APP_DATA_SUBDIRS {
             std::fs::create_dir_all(self.app_data.join(sub))?;
         }
         restrict_permissions(&self.app_data)?;
@@ -99,37 +99,83 @@ pub fn sidecar_env(
     terminal_port: u16,
     bootstrap_token: &str,
 ) -> BTreeMap<String, String> {
+    sidecar_env_for(
+        &SidecarDirs {
+            app_data: path_string(&paths.app_data),
+            resource_root: path_string(&paths.resource_root),
+            server_dir: path_string(&paths.server_dir),
+            checkout: None,
+        },
+        port,
+        terminal_port,
+        bootstrap_token,
+    )
+}
+
+/// The three roots the sidecar environment derives from, as plain strings.
+///
+/// Strings rather than `PathBuf`s because the WSL backend hands the sidecar
+/// *Linux* paths from a Windows process. `PathBuf::join` on Windows would build
+/// `/home/me/.local/share/devhub\notes`; joining with `/` here is correct for
+/// every target that runs a sidecar, since none of them run one natively on
+/// Windows.
+pub struct SidecarDirs {
+    pub app_data: String,
+    pub resource_root: String,
+    pub server_dir: String,
+    /// A real git checkout to run *against*: its notes, tasks and `.env.local`
+    /// become the live data, exactly as `npm run dev` in that checkout would
+    /// see them. `None` is a fresh, self-contained install.
+    pub checkout: Option<String>,
+}
+
+pub fn sidecar_env_for(
+    dirs: &SidecarDirs,
+    port: u16,
+    terminal_port: u16,
+    bootstrap_token: &str,
+) -> BTreeMap<String, String> {
     let mut env = BTreeMap::new();
     let mut set = |k: &str, v: String| {
         env.insert(k.to_string(), v);
     };
+    let under_app_data = |sub: &str| format!("{}/{sub}", dirs.app_data);
 
     set("DEVHUB_DESKTOP", "1".into());
-    set("DEVHUB_APP_DATA", path_string(&paths.app_data));
-    set("DEVHUB_RESOURCE_ROOT", path_string(&paths.resource_root));
-    set("DEVHUB_SERVER_DIR", path_string(&paths.server_dir));
-    set("DEVHUB_ENV_FILE", path_string(&paths.env_file()));
-    set(
-        "DEVHUB_OP_CACHE_DIR",
-        path_string(&paths.app_data.join("config")),
-    );
+    set("DEVHUB_APP_DATA", dirs.app_data.clone());
+    set("DEVHUB_RESOURCE_ROOT", dirs.resource_root.clone());
+    set("DEVHUB_SERVER_DIR", dirs.server_dir.clone());
+    set("DEVHUB_ENV_FILE", under_app_data("config/.env.local"));
+    set("DEVHUB_OP_CACHE_DIR", under_app_data("config"));
 
     // Defaults only — see the note above. DEVHUB_ENV_FILE overrides these.
-    set("NOTES_DIR", path_string(&paths.app_data.join("notes")));
-    set("TASKS_DIR", path_string(&paths.app_data.join("tasks")));
-    set(
-        "COLLECTIONS_DIR",
-        path_string(&paths.app_data.join("collections")),
-    );
-    set(
-        "UPSTARTS_DIR",
-        path_string(&paths.app_data.join("upstarts")),
-    );
-    set("DOCS_DIR", path_string(&paths.app_data.join("docs")));
+    set("NOTES_DIR", under_app_data("notes"));
+    set("TASKS_DIR", under_app_data("tasks"));
+    set("COLLECTIONS_DIR", under_app_data("collections"));
+    set("UPSTARTS_DIR", under_app_data("upstarts"));
+    set("DOCS_DIR", under_app_data("docs"));
     set(
         "DEVHUB_IDENTITY_FILE",
-        path_string(&paths.app_data.join("persona").join("identity.txt")),
+        under_app_data("persona/identity.txt"),
     );
+
+    // Linked checkout: the user's existing data and integration credentials
+    // live there, and a server that ignores them looks like data loss (empty
+    // Tasks, Paseo asking for a password it was never given).
+    if let Some(repo) = dirs.checkout.as_deref().map(|r| r.trim_end_matches('/')) {
+        let under_repo = |sub: &str| format!("{repo}/{sub}");
+        set("REPO_ROOT", repo.to_string());
+        if let Some((parent, _)) = repo.rsplit_once('/') {
+            set("DEVHUB_REPOS_DIR", parent.to_string());
+        }
+        set("DEVHUB_ENV_FILE", under_repo("dashboard/.env.local"));
+        set("NOTES_DIR", under_repo("notes"));
+        set("TASKS_DIR", under_repo("tasks"));
+        set("COLLECTIONS_DIR", under_repo("collections"));
+        set("UPSTARTS_DIR", under_repo("upstarts"));
+        set("DOCS_DIR", under_repo("docs"));
+        set("DEVHUB_IDENTITY_FILE", under_repo("persona/identity.txt"));
+    }
 
     set("PORT", port.to_string());
     set("TERMINAL_PORT", terminal_port.to_string());
@@ -222,6 +268,41 @@ mod tests {
                 "{key} must not resolve inside the read-only resource root"
             );
         }
+    }
+
+    fn dirs(checkout: Option<&str>) -> SidecarDirs {
+        SidecarDirs {
+            app_data: "/home/me/.local/share/devhub".into(),
+            resource_root: "/rt/resources".into(),
+            server_dir: "/rt/server".into(),
+            checkout: checkout.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn a_linked_checkout_supplies_the_data_and_the_env_file() {
+        let env = sidecar_env_for(&dirs(Some("/home/me/dev/devhub/")), 1337, 1339, "t");
+        assert_eq!(env["REPO_ROOT"], "/home/me/dev/devhub");
+        assert_eq!(env["DEVHUB_REPOS_DIR"], "/home/me/dev");
+        assert_eq!(env["TASKS_DIR"], "/home/me/dev/devhub/tasks");
+        assert_eq!(env["NOTES_DIR"], "/home/me/dev/devhub/notes");
+        assert_eq!(
+            env["DEVHUB_ENV_FILE"],
+            "/home/me/dev/devhub/dashboard/.env.local"
+        );
+        // Logs and other app-owned state still live in app data.
+        assert_eq!(env["DEVHUB_APP_DATA"], "/home/me/.local/share/devhub");
+    }
+
+    #[test]
+    fn without_a_checkout_nothing_points_at_one() {
+        let env = sidecar_env_for(&dirs(None), 1337, 1339, "t");
+        assert!(!env.contains_key("REPO_ROOT"));
+        assert_eq!(env["TASKS_DIR"], "/home/me/.local/share/devhub/tasks");
+        assert_eq!(
+            env["DEVHUB_ENV_FILE"],
+            "/home/me/.local/share/devhub/config/.env.local"
+        );
     }
 
     #[test]

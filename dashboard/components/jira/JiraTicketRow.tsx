@@ -3,9 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { mutate } from "swr";
-import { Copy, ExternalLink, FileText, Link2, RefreshCw } from "lucide-react";
+import { Bot, Copy, ExternalLink, FilePen, FileText, Link2, ListPlus, RefreshCw } from "lucide-react";
 import type { JiraTicket } from "@/lib/jira/client";
-import { extractTags } from "@/lib/entity-note";
 import { copyTextAndToast } from "@/lib/pr-slack";
 import { createOrOpenVaultNote } from "@/lib/create-vault-note";
 import { openInBrowser } from "@/lib/desktop/bridge";
@@ -19,9 +18,13 @@ import {
   useContextMenu,
   type ContextMenuGroup,
 } from "@/components/shell/ContextMenu";
-import { QueueRow } from "@/components/ui/QueueRow";
+import styles from "./JiraTicketRow.module.css";
 import { useTagMenuGroup, withTagsGroup } from "@/lib/hooks/use-tag-menu";
 import { useToast } from "@/lib/hooks/use-toast";
+import { ImplementTaskDialog } from "@/components/tasks/ImplementTaskDialog";
+import { PlanTaskDialog } from "@/components/tasks/PlanTaskDialog";
+import type { Task } from "@/lib/tasks/types";
+import { todayISO } from "@/lib/utils";
 
 function ticketNotePath(key: string): string {
   return `tickets/${key}`;
@@ -46,6 +49,43 @@ export function useJiraTicketMenu(ticket: JiraTicket, onTransitioned?: () => voi
   const menu = useContextMenu<JiraTicket>();
   const notePath = ticketNotePath(ticket.key);
   const noteExists = useVaultNoteExists(notePath);
+  const [creatingTask, setCreatingTask] = useState(false);
+  const [taskAction, setTaskAction] = useState<{
+    task: Task;
+    date: string;
+    action: "plan" | "implement";
+  } | null>(null);
+
+  const createTask = async (action: "create" | "plan" | "implement") => {
+    if (creatingTask) return;
+    setCreatingTask(true);
+    try {
+      const date = todayISO();
+      const res = await fetch(action === "plan" ? "/api/tasks/capture" : "/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: `${ticket.key} ${ticket.summary}`,
+          date,
+          links: [{ kind: "jira", id: ticket.key, label: ticket.key, href: ticket.url }],
+        }),
+      });
+      if (!res.ok) throw new Error("Task creation failed");
+      const body = (await res.json()) as Task | { task: Task; date: string };
+      const task = "task" in body ? body.task : body;
+      const taskDate = "task" in body ? body.date : date;
+      void mutate((key) => typeof key === "string" && key.startsWith("/api/tasks"));
+      void mutate("/api/sidebar/counts");
+      toast.success(`Task created from ${ticket.key}`, {
+        action: { label: "View tasks", onClick: () => router.push("/tasks") },
+      });
+      if (action !== "create") setTaskAction({ task, date: taskDate, action });
+    } catch {
+      toast.error(`Couldn't create a task from ${ticket.key}.`);
+    } finally {
+      setCreatingTask(false);
+    }
+  };
 
   const openNote = async () => {
     try {
@@ -63,7 +103,6 @@ export function useJiraTicketMenu(ticket: JiraTicket, onTransitioned?: () => voi
     kind: "jira",
     id: ticket.key,
     label: ticket.summary,
-    extraTags: extractTags(ticket.summary),
     enabled: menu.target !== null,
   });
 
@@ -104,6 +143,35 @@ export function useJiraTicketMenu(ticket: JiraTicket, onTransitioned?: () => voi
           },
         ],
       },
+      {
+        id: "task",
+        label: "Task",
+        items: [
+          {
+            id: "create-task",
+            label: creatingTask ? "Creating task…" : "Create task",
+            icon: <ListPlus size={12} aria-hidden />,
+            disabled: creatingTask,
+            onSelect: () => void createTask("create"),
+          },
+          {
+            id: "plan-task",
+            label: "Write plan with Agent…",
+            description: "Create a task and open planning",
+            icon: <FilePen size={12} aria-hidden />,
+            disabled: creatingTask,
+            onSelect: () => void createTask("plan"),
+          },
+          {
+            id: "implement-task",
+            label: "Implement with Agent…",
+            description: "Create a task and open implementation",
+            icon: <Bot size={12} aria-hidden />,
+            disabled: creatingTask,
+            onSelect: () => void createTask("implement"),
+          },
+        ],
+      },
     ],
     tagsGroup,
   );
@@ -118,6 +186,22 @@ export function useJiraTicketMenu(ticket: JiraTicket, onTransitioned?: () => voi
         label={`${ticket.key} actions`}
       />
       {tagsModal}
+      {taskAction?.action === "plan" && (
+        <PlanTaskDialog
+          open
+          task={taskAction.task}
+          date={taskAction.date}
+          onClose={() => setTaskAction(null)}
+        />
+      )}
+      {taskAction?.action === "implement" && (
+        <ImplementTaskDialog
+          open
+          task={taskAction.task}
+          date={taskAction.date}
+          onClose={() => setTaskAction(null)}
+        />
+      )}
       <JiraTransitionModal
         open={transitionOpen}
         jiraKey={ticket.key}
@@ -150,7 +234,7 @@ export function useJiraTicketMenu(ticket: JiraTicket, onTransitioned?: () => voi
   return { menu, groups, noteExists, menuUi };
 }
 
-/** Single-line compact row for small Today tiles — same menu as {@link JiraTicketRow}. */
+/** Dashboard rows share the full ticket list's layout and actions. */
 export function JiraTicketQueueRow({
   ticket,
   onTransitioned,
@@ -158,103 +242,40 @@ export function JiraTicketQueueRow({
   ticket: JiraTicket;
   onTransitioned?: () => void;
 }) {
-  const { menu, menuUi } = useJiraTicketMenu(ticket, onTransitioned);
-  return (
-    <div className="flex items-center gap-1.5 pr-2" role="listitem" {...menu.bindRow(ticket)}>
-      {ticket.assignee ? (
-        <PersonChip
-          name={ticket.assignee.displayName}
-          email={ticket.assignee.email}
-          avatarUrl={ticket.assignee.avatarUrl}
-          size={16}
-          nameClassName="sr-only"
-          className="pl-2"
-        />
-      ) : null}
-      <QueueRow
-        className="min-w-0 flex-1"
-        monoKey={ticket.key}
-        title={ticket.summary}
-        size="compact"
-        href={ticket.url}
-        statusPill={
-          <JiraStatusPill ticketKey={ticket.key} status={ticket.status} onChanged={onTransitioned} />
-        }
-      />
-      <RowMenuKebab
-        label={`Actions for ${ticket.key}`}
-        onOpen={(x, y) => menu.openAtPoint(x, y, ticket)}
-      />
-      {menuUi}
-    </div>
-  );
+  return <JiraTicketRow ticket={ticket} showAssignee={false} onTransitioned={onTransitioned} />;
 }
 
 export function JiraTicketRow({
   ticket,
   density = "compact",
   showUpdated = true,
+  showAssignee = true,
+  showDetails = false,
+  onTransitioned,
 }: {
   ticket: JiraTicket;
   density?: "compact" | "comfortable";
   showUpdated?: boolean;
+  showAssignee?: boolean;
+  showDetails?: boolean;
+  onTransitioned?: () => void;
 }) {
-  const { menu, noteExists, menuUi } = useJiraTicketMenu(ticket);
-  const compact = density === "compact";
+  const { menu, noteExists, menuUi } = useJiraTicketMenu(ticket, onTransitioned);
 
   return (
-    <div
-      className={`group relative flex min-w-0 items-start gap-2 ${compact ? "px-4 py-2.5" : "px-1 py-2"}`}
-      {...menu.bindRow(ticket)}
-    >
-      <div className="min-w-0 flex-1">
-        <a
-          href={ticket.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block min-w-0 no-underline"
-          onClick={(e) => e.stopPropagation()}
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          <span className={`pr-row-title ${compact ? "text-sm" : "text-[15px]"}`}>{ticket.summary}</span>
-        </a>
-        <div className="pr-row-meta mt-0.5">
-          <a
-            href={ticket.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="pr-row-id no-underline hover:underline"
-            onClick={(e) => e.stopPropagation()}
-            onContextMenu={(e) => e.preventDefault()}
-          >
-            {ticket.key}
-          </a>
-          {ticket.assignee ? (
-            <>
-              <span className="text-text-subtle" aria-hidden>
-                ·
-              </span>
-              <PersonChip
-                name={ticket.assignee.displayName}
-                email={ticket.assignee.email}
-                avatarUrl={ticket.assignee.avatarUrl}
-                size={16}
-                className="hidden max-w-[9rem] sm:inline-flex"
-              />
-            </>
-          ) : null}
-          <JiraStatusPill ticketKey={ticket.key} status={ticket.status} />
-          {showUpdated ? (
-            <span
-              className="text-[11px] tabular-nums text-text-subtle"
-              title={ticket.updatedAt ? `Updated ${new Date(ticket.updatedAt).toLocaleString()}` : undefined}
-            >
-              {formatUpdatedShort(ticket.updatedAt)}
-            </span>
-          ) : null}
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-0.5">
+    <div className={styles.row} data-density={density} role="listitem" {...menu.bindRow(ticket)}>
+      <a
+        href={ticket.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={styles.title}
+        title={ticket.summary}
+        onClick={(e) => e.stopPropagation()}
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        {ticket.summary}
+      </a>
+      <div className={styles.actions}>
         {noteExists ? (
           <span className="row-note-glyph" title="Note exists" aria-hidden>
             <FileText size={12} />
@@ -264,6 +285,44 @@ export function JiraTicketRow({
           label={`Actions for ${ticket.key}`}
           onOpen={(x, y) => menu.openAtPoint(x, y, ticket)}
         />
+      </div>
+      <div className={styles.meta}>
+        <a
+          href={ticket.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={styles.key}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          {ticket.key}
+        </a>
+        {showDetails ? (
+          <span className={styles.details} title={`${ticket.project} (${ticket.projectKey}) · ${ticket.issuetype} · ${ticket.priority} priority`}>
+            {ticket.issuetype} · {ticket.priority} priority
+          </span>
+        ) : null}
+        {showAssignee && ticket.assignee ? (
+          <PersonChip
+            name={ticket.assignee.displayName}
+            email={ticket.assignee.email}
+            avatarUrl={ticket.assignee.avatarUrl}
+            size={16}
+            className={styles.assignee}
+          />
+        ) : null}
+        {showUpdated && ticket.updatedAt ? (
+          <time
+            className={styles.updated}
+            dateTime={ticket.updatedAt}
+            title={`Updated ${new Date(ticket.updatedAt).toLocaleString()}`}
+          >
+            {formatUpdatedShort(ticket.updatedAt)}
+          </time>
+        ) : null}
+        <span className={styles.status}>
+          <JiraStatusPill ticketKey={ticket.key} status={ticket.status} onChanged={onTransitioned} />
+        </span>
       </div>
       {menuUi}
     </div>

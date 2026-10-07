@@ -43,13 +43,13 @@ const ProposalCreateSchema = z.object({
   reason: z.string().optional(),
   source: z.enum(["mcp", "api"]).default("api"),
   /**
-   * True only when the caller already asked the user in-band (MCP elicitation)
-   * and they accepted. Still refused for destructive commands server-side.
+   * Request automatic dock execution without a second confirmation.
+   * Still refused for destructive commands server-side.
    */
   autoRunConfirmed: z.boolean().optional(),
 });
 
-/** MCP / API creates a proposal — dock must confirm before inject. */
+/** MCP / API queues a run; destructive commands retain dock confirmation. */
 export const POST = withErrorHandler(async (req: NextRequest) => {
   const parsed = await parseBody(req, ProposalCreateSchema);
   if (!parsed.ok) return parsed.response;

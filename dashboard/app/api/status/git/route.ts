@@ -4,7 +4,7 @@ import { detectGitConflicts } from "@/lib/git/conflicts";
 import { buildContentBuckets, matchContentBucket } from "@/lib/content/sync-dirs";
 import { getCheckoutRoot } from "@/lib/desktop/runtime-paths";
 import { runGitRepo, runGitRepoAsync } from "@/lib/git/repo-local";
-import { isGitNoisePath } from "@/lib/repos/git-parsers";
+import { isGitNoisePath, parsePorcelainStatus } from "@/lib/repos/git-parsers";
 
 /** Throttle the network fetch — local counting stays per-request. */
 const FETCH_TTL_MS = 4 * 60 * 1000;
@@ -24,26 +24,18 @@ export async function GET() {
       return NextResponse.json({ error: "Unexpected git output" }, { status: 500 });
     }
 
-    const dirtyLines = status.stdout
-      .trim()
-      .split("\n")
-      .filter(Boolean)
-      // Match Git workspace badges: .DS_Store / __pycache__ don't count as dirty.
-      .filter((line) => {
-        let fp = line.slice(3);
-        if (fp.includes(" -> ")) fp = fp.split(" -> ").pop()!.trim();
-        return !isGitNoisePath(fp);
-      });
-    const dirtyCount = dirtyLines.length;
+    // Parse raw stdout: trimming it first would eat the leading space of the
+    // first porcelain line and shift that row's path by one character.
+    // Match Git workspace badges: .DS_Store / __pycache__ don't count as dirty.
+    const dirtyFiles = parsePorcelainStatus(status.stdout).filter((f) => !isGitNoisePath(f.path));
+    const dirtyCount = dirtyFiles.length;
     const contentBuckets = buildContentBuckets(root);
     let notesCount = 0;
     let tasksCount = 0;
     let diagramsCount = 0;
     let docsCount = 0;
-    for (const line of dirtyLines) {
-      let fp = line.slice(3);
-      if (fp.includes(" -> ")) fp = fp.split(" -> ").pop()!.trim();
-      const bucket = matchContentBucket(contentBuckets, fp);
+    for (const file of dirtyFiles) {
+      const bucket = matchContentBucket(contentBuckets, file.path);
       if (bucket === "diagrams") diagramsCount++;
       else if (bucket === "notes") notesCount++;
       else if (bucket === "tasks") tasksCount++;

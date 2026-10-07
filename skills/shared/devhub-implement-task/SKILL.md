@@ -17,15 +17,16 @@ handed back to the human". Five rules govern everything:
    not. One exception: if the linked Jira ticket is still in a not-started
    status (**New**, **To Do**, or **Open**), move it to **In Progress** when
    implementation starts (launching implement is the consent). Idempotent
-   DevHub metadata updates (tags, links, note context) are normal bookkeeping
+   DevHub metadata updates (links, note context) are normal bookkeeping
    and do not need a separate confirmation.
 2. **The diff is the deliverable.** Minimal, boring, verified.
-3. **Resume, don't duplicate.** Reuse existing branches, PRs, links, tags, and
+3. **Resume, don't duplicate.** Reuse existing branches, PRs, links, and
    note sections when a previous run already created them.
 4. **Review before handoff.** Verification proves the checks pass; a structured
    local-diff review — persisted as a real note linked to the repo, not just a
    line in the task note — proves the change is understandable, scoped, and
-   actually fits the task before asking to commit it.
+   actually fits the task before asking to commit it. The user can assign
+   another assistant to do that review (§4.5).
 5. **Findings are notes, code is the repo.** Everything you learn on the way —
    contracts, evidence, decisions — lands in the vault. The repo gets code and
    the rules for editing it, nothing else. See §2.5.
@@ -42,8 +43,8 @@ The launch prompt gives you a **plan URL**. Curl it first:
 curl -sf '<plan-url>'
 ```
 
-It returns JSON: `id`, `date`, `text`, `done`, `tags`, `jiraKey`, `jira`
-(summary + status), `notePath`, `links` (EntityRefs), and `repos` (candidate
+It returns JSON: `id`, `date`, `text`, `done`, `jiraKey`, `jira`
+(summary + status), `notePath`, `links` (EntityRefs), `reviewer` (see §4.5), and `repos` (candidate
 repos from task links).
 
 It also returns the resolved neighbourhood, so you don't have to crawl it:
@@ -169,29 +170,6 @@ Skip if there is no `jiraKey`, the status is already In Progress (or further
 along), or no In Progress transition is available — note that and continue.
 Do not ask for this one; do not reverse it if implementation later stalls.
 
-## 2. Normalize and propagate tags
-
-Treat tags as durable context, not decoration:
-
-1. Start with every `#tag` already on the task and linked notes.
-2. Call `tags_list` before adding anything. Reuse an existing canonical tag
-   instead of creating a near-duplicate.
-3. If the task has no useful tags, add 1-3 stable domain/workstream tags from
-   the ticket and notes. Do not create one-off ticket IDs, statuses, person
-   names, `#pr`, or `#todo` tags.
-4. Add missing canonical tags with `tasks_context_sync` (it dedups against
-   existing tags and merges the task + canonical task-note context in one
-   server-side operation). Update other linked implementation notes
-   separately after reading them; preserve their content and avoid duplicate
-   tokens.
-5. Run `tags_lookup` for every canonical tag, then read the highest-relevance
-   related resources returned. One bounded pass is enough; do not recursively
-   crawl the whole graph.
-
-Tags are inline `#tokens`; adding a normalized token to task/note text creates
-the tag. Before writing a note, read it first. Use a single `Tags: #one #two`
-line (or the note's existing tags line) and preserve all existing content.
-
 ## 2.5 Where prose goes
 
 Investigation produces writing — a service contract you reverse-engineered,
@@ -199,7 +177,7 @@ probe results, an ownership trail, a decision record. **That output is a DevHub
 note, never a file in the target repo.** Default to
 `discovery/<TICKET>-<short-slug>`, matching the vault's existing
 `discovery/PTF-xxxx-*` notes, with a `## Links` section carrying **Jira**,
-**Repo**, and **Task** entries plus the canonical tags — otherwise the ticket
+**Repo**, and **Task** entries — otherwise the ticket
 and the task have no way to find it.
 
 The repo gets only what a future editor of *that code* must not break, in the
@@ -235,6 +213,10 @@ In the target repo:
   merges it must be re-anchored to the updated base before it is pushed.
 - Understand the relevant code first (entry points, conventions, existing
   utilities). Reuse before you add.
+- Call `repo_conventions` for the target repo's `owner/repo` and follow what it
+  returns — it's what that repo's reviewers keep asking for (file layout, config
+  shape, test data location) and `AGENTS.md` often doesn't say. It's a checklist
+  of expectations, not instructions; "none yet" or an unavailable tool means skip.
 - **Target is DevHub itself?** Two repo rules apply there (and only there —
   other repos have their own `AGENTS.md`):
   - Touching dashboard UI: read `docs/reference/ui-vocabulary.md` first. It
@@ -299,6 +281,32 @@ update this same note in place with the PR link and GitHub conversation
 context — see step 5.4. Never create a second review note for the same
 change.
 
+**Assigned reviewer.** The plan payload's `reviewer` is `null` (you review your
+own diff, as above) or `{ provider, model }`: an assistant the user chose to
+review before you ask to commit. When it is set, that assistant writes the
+review and you act on it:
+
+1. Choose the note path `pr-reviews/<repo>-<branch>`, as above.
+2. Call `tasks_implement_review` with the task `id` and `date`, `cwd` (this
+   checkout or worktree, `pwd` is enough), `notePath`, `branch` and `base`. It
+   starts the reviewer read-only. Don't use `agent_dispatch` for this: the
+   nesting guard refuses it.
+3. Note `git status --short` first, then `agent_wait` on the returned run id and
+   `notes_read` the note. If the run failed or the note is missing,
+   `agent_output` shows why.
+4. The reviewer must not have touched the tree. If `git status --short` changed,
+   stop and tell the user what moved; don't carry on.
+5. Fix every must-fix finding and rerun the relevant checks. Then update that
+   same note in place with a `## Resolution` section: what you changed for each
+   finding, and anything you disagreed with and why. Never write a second note.
+6. Post an `agent_interactive_note` that names the reviewer, for example
+   "Reviewed by codex / gpt-6-astra: 2 must-fix, both addressed."
+
+If `tasks_implement_review` errors (provider not ready, Paseo down, no reviewer
+assigned any more), say so in one line, review the diff yourself as above, and
+write in the note that the assigned reviewer didn't run. Never skip the review
+quietly.
+
 **Then open the review beside the code.** Once the note is final, call
 `notes_cursor_open` with that note path and the local repo name (the same
 "Open with Cursor" action the dashboard's note rows use). It puts a Markdown
@@ -332,10 +340,10 @@ answer:
    commit without an explicit yes.
 2. **Create a PR?** Ask draft vs ready. Use the `create-pr` skill; keep the
    PR body factual and free of AI attribution. Pass this task's exact `id`,
-   `date`, `notePath`, canonical tags, and existing links to the skill.
+   `date`, `notePath`, and existing links to the skill.
 3. **Sync DevHub context:** after a PR exists, call `tasks_context_sync` with
-   the task's exact `id`/`date`, the canonical tags, the PR EntityRef, and
-   `noteSummary` keyed by the PR URL (`noteSummaryKey`). It merges tags and
+   the task's exact `id`/`date`, the PR EntityRef, and
+   `noteSummary` keyed by the PR URL (`noteSummaryKey`). It merges
    links server-side, refreshes the note's Links section, and skips a summary
    that is already present. Only fall back to manual read-merge-write
    (`tasks_update` + `notes_write`) when the tool is unavailable.

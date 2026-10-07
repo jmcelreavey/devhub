@@ -9,8 +9,10 @@ import {
   UNPROVEN_SHELL_GRACE_MS,
   clampDockHeight,
   clampPopoutPos,
+  isAgentRunSource,
   parseDockFrame,
   parsePersistedDockState,
+  shouldAutoCloseAgentTab,
   shouldExpandOnTerminalOpen,
   shouldFallBackToRawView,
   shouldNotifyCommandFinished,
@@ -27,6 +29,31 @@ describe("shouldExpandOnTerminalOpen", () => {
 
   it("honours the always-expand preference over collapse", () => {
     expect(shouldExpandOnTerminalOpen({ userCollapsed: true, alwaysExpand: true })).toBe(true);
+  });
+});
+
+describe("agent-run tabs", () => {
+  it("counts only MCP proposals as agent work, not an agent the user launched", () => {
+    expect(isAgentRunSource("mcp")).toBe(true);
+    expect(isAgentRunSource("agent-job")).toBe(false);
+    expect(isAgentRunSource("ui")).toBe(false);
+    expect(isAgentRunSource(undefined)).toBe(false);
+  });
+
+  it("closes an agent tab only after a clean exit", () => {
+    expect(shouldAutoCloseAgentTab({ agentRun: true, exitCode: 0 })).toBe(true);
+    expect(shouldAutoCloseAgentTab({ agentRun: true, exitCode: 1 })).toBe(false);
+    expect(shouldAutoCloseAgentTab({ agentRun: true, exitCode: 130 })).toBe(false);
+  });
+
+  it("treats an unknown exit as not done", () => {
+    expect(shouldAutoCloseAgentTab({ agentRun: true, exitCode: null })).toBe(false);
+    expect(shouldAutoCloseAgentTab({ agentRun: true, exitCode: undefined })).toBe(false);
+  });
+
+  it("never closes a tab the user opened", () => {
+    expect(shouldAutoCloseAgentTab({ agentRun: false, exitCode: 0 })).toBe(false);
+    expect(shouldAutoCloseAgentTab({ agentRun: undefined, exitCode: 0 })).toBe(false);
   });
 });
 

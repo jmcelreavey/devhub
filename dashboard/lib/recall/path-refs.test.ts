@@ -17,12 +17,12 @@ describe("refsFromSourcePath", () => {
   });
 
   it("derives repo refs from repo-scoped learnings", () => {
-    expect(refsFromSourcePath("learnings/insider-app/push-notifications", ["insider-app"]))
-      .toEqual([{ kind: "repo", id: "insider-app", label: "insider-app" }]);
+    expect(refsFromSourcePath("learnings/example-app/push-notifications", ["example-app"]))
+      .toEqual([{ kind: "repo", id: "example-app", label: "example-app" }]);
   });
 
   it("requires an exact repo match for learnings", () => {
-    expect(refsFromSourcePath("learnings/app/notes", ["insider-app"])).toEqual([]);
+    expect(refsFromSourcePath("learnings/app/notes", ["example-app"])).toEqual([]);
   });
 
   it("derives the task id and date destination from task-note paths", () => {
@@ -31,12 +31,10 @@ describe("refsFromSourcePath", () => {
     ]);
   });
 
-  it("derives repo and audit-kind refs from DX audit paths", () => {
+  it("derives the repo from DX audit paths", () => {
     expect(
-      refsFromSourcePath("reviews/dx-audit-insider-app-2026-07-14", ["insider-app"]),
-    ).toEqual([
-      { kind: "repo", id: "insider-app", label: "insider-app" },
-      { kind: "tag", id: "dx-audit", label: "#dx-audit", href: "/work?tag=dx-audit" },
-    ]);
+      refsFromSourcePath("reviews/dx-audit-example-app-2026-07-14", ["example-app"]),
+    ).toEqual([{ kind: "repo", id: "example-app", label: "example-app" }]);
+    expect(refsFromSourcePath("reviews/dx-audit-unknown-2026-07-14", ["example-app"])).toEqual([]);
   });
 });

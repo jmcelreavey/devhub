@@ -32,7 +32,8 @@ case "$mode" in
     # Generated plugin files are skip-worktree and hold the local plugin's output on disk;
     # their committed content is covered by the backport's added-line scan instead.
     hits="$(cd "$ROOT" && git ls-files -- \
-              ':!notes' ':!tasks' ':!collections' ':!upstarts' ':!TEMPLATE_AND_PLUGIN_PLAN.md' \
+              ':!notes' ':!tasks' ':!reps' ':!collections' ':!upstarts' ':!TEMPLATE_AND_PLUGIN_PLAN.md' \
+              ':!skills/shared/my-voice/writing-style.md' ':!skills/shared/my-voice/learned-voice.md' \
               ':!scripts/scan-leaks.sh' ':!scripts/devhub-backport.sh' ':!scripts/make-public-seed.sh' \
               ':(exclude,glob)dashboard/**/*.generated.*' \
               ':(exclude,glob)docs/codebase-review-*.md' \

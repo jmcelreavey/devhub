@@ -15,7 +15,7 @@ describe("buildTaskImplementPrompt", () => {
     expect(prompt).toContain(
       "http://localhost:1337/api/tasks/implement/plan?taskId=task%20%2F%201&date=2026-08-25",
     );
-    expect(prompt).toContain("tags_lookup");
+    expect(prompt).not.toContain("tags_lookup");
     expect(prompt).toContain("Do not create a clone or worktree by default");
     expect(prompt).toContain("ask before using a worktree");
     expect(prompt).toContain("Never commit without asking");

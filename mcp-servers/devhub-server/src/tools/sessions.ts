@@ -23,7 +23,7 @@ export function registerSessionTools(server: McpServer, ctx: Context): void {
             children: includeChildren === true,
             directory,
           });
-          return { content: [{ type: "text", text: JSON.stringify(recap, null, 2) }] };
+          return { content: [{ type: "text", text: JSON.stringify(recap) }] };
         } catch (error) {
           if (error instanceof DashboardHttpError && (error.status === 409 || error.status === 503)) {
             const message =

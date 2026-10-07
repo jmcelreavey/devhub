@@ -28,7 +28,6 @@ import { pluginAssetDirs } from "@/lib/plugins/registry";
 import type { AssetOrigin } from "@/lib/plugins/types";
 import { readJsonObjectFile, writeJsonObjectFile, type Json } from "@/lib/json-file";
 import { applyCursorAcpServerOverlay, orderCursorMcpServers } from "@/lib/mcp/cursor-acp-surface";
-import { syncAionMcpServers } from "@/lib/sync/aionui-mcp";
 
 export type { Json };
 
@@ -63,6 +62,12 @@ export interface McpToolTarget {
   topKey: "mcpServers" | "mcp";
   /** Whether forward-sync should preserve other top-level keys in the file. */
   mergeRest: boolean;
+  /**
+   * The field this tool reads a server's environment from. Defaults to `env`.
+   * OpenCode's local MCP schema calls it `environment` and rejects the whole
+   * config ("Invalid input mcp.<name>") when it finds `env` instead.
+   */
+  envKey?: "env" | "environment";
   /** Canonical -> tool-specific entry transform. */
   toTool: (server: SharedMcpServer) => Json;
   /** Tool-specific entry -> canonical transform (null if shape is unknown). */
@@ -117,6 +122,20 @@ function asMcpRecord(value: Json | undefined): Record<string, Json> | null {
 
 /** Transport fields every target's `toTool` derives from the catalog entry. */
 const CATALOG_LAUNCH_KEYS = new Set(["command", "args", "url", "serverUrl", "type"]);
+
+/**
+ * Rename a server entry's environment field, folding both into one object if
+ * the entry somehow has both (the renamed field's own values win).
+ */
+export function renameEnvKey(entry: Json | undefined, from: string, to: string): Json | undefined {
+  const record = asMcpRecord(entry);
+  if (!record || from === to || !(from in record)) return entry;
+  const { [from]: source, ...rest } = record;
+  const moved = asMcpRecord(source);
+  if (!moved) return rest as Json;
+  const existing = asMcpRecord(rest[to]);
+  return { ...rest, [to]: { ...(existing ?? {}), ...moved } } as Json;
+}
 
 /**
  * Catalog wins overlapping keys; wrap extras (autoApprove, instructions) and
@@ -286,7 +305,7 @@ function opencodeToTool(server: SharedMcpServer): Json {
     command: cmd,
     enabled: true,
   };
-  if (server.env && Object.keys(server.env).length > 0) out.env = server.env;
+  if (server.env && Object.keys(server.env).length > 0) out.environment = server.env;
   return out;
 }
 
@@ -311,7 +330,10 @@ function opencodeFromTool(entry: Json): SharedMcpServer | null {
   if (!Array.isArray(cmdArr) || cmdArr.length === 0) return null;
   const [cmd, ...rest] = cmdArr.filter((x): x is string => typeof x === "string");
   if (!cmd) return null;
-  const env = (entry as { env?: unknown }).env;
+  // `environment` is the real field; `env` is what older DevHub versions wrote,
+  // so files already on disk still read back correctly.
+  const env = (entry as { environment?: unknown; env?: unknown }).environment
+    ?? (entry as { env?: unknown }).env;
   return {
     command: cmd,
     args: rest.length > 0 ? rest : undefined,
@@ -381,6 +403,7 @@ export const MCP_TOOL_TARGETS: McpToolTarget[] = [
     configPath: (home) => path.join(home, ".config", "opencode", "opencode.json"),
     topKey: "mcp",
     mergeRest: true,
+    envKey: "environment",
     toTool: opencodeToTool,
     fromTool: opencodeFromTool,
   },
@@ -711,7 +734,17 @@ export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<numbe
         writes++;
         continue;
       }
-      let mergedEntry = dropRetiredCatalogEnv(name, mergeMcpEntry(existingServers[name], entry), entry);
+      // Merge in canonical `env`, then write back in the tool's own field. This
+      // also migrates a legacy `env` already on disk (which OpenCode rejects)
+      // instead of leaving it beside the new `environment`.
+      const envKey = tool.envKey ?? "env";
+      const canonicalEntry = renameEnvKey(entry, envKey, "env") as Json;
+      const canonicalExisting = renameEnvKey(existingServers[name], envKey, "env");
+      let mergedEntry = renameEnvKey(
+        dropRetiredCatalogEnv(name, mergeMcpEntry(canonicalExisting, canonicalEntry), canonicalEntry),
+        "env",
+        envKey,
+      ) as Json;
       if (tool.id === "cursor") mergedEntry = applyCursorAcpServerOverlay(name, mergedEntry);
       nextServers[name] = mergedEntry;
       upserts[name] = mergedEntry;
@@ -772,20 +805,6 @@ export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<numbe
       writeJsonObjectFile(legacyPath, cleared);
       emit(`  MIGRATED: cleared mcpServers from ${legacyPath} (now using ${configPath})`);
     }
-  }
-
-  if (!opts.tool) {
-    const aionServers = new Map<string, SharedMcpServer>();
-    for (const name of selected) {
-      const resolved = readCatalogMcpServer(repoRoot, home, name, pluginServerMap);
-      if (!resolved) continue;
-      let substituted = substituteRepoRoot(resolved.server as unknown as Json, repoRoot) as SharedMcpServer;
-      if (resolved.source === "plugin" && resolved.pluginPath) {
-        substituted = substitutePlaceholder(substituted as unknown as Json, "PLUGIN_ROOT", resolved.pluginPath) as SharedMcpServer;
-      }
-      aionServers.set(name, substituted);
-    }
-    await syncAionMcpServers(aionServers, { emit, dryRun: opts.dryRun, prune: opts.prune });
   }
 
   emit(`Done. ${writes} write(s)${opts.prune ? `, ${prunes} prune(s)` : ""}.`);

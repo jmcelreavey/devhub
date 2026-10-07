@@ -2,6 +2,7 @@
 
 import { getAgentCliConfig, type AgentCli, type AgentCliConfig } from "@/lib/agent/cli-config";
 import { shellQuote } from "@/lib/shell-quote";
+import { UPSTART_WORKTREE_INSTRUCTIONS } from "@/lib/repos/upstart-command";
 import type { TerminalSessionKind } from "@/lib/terminal-meta";
 import { agentReviewPrompt, agentReviewSessionTitle } from "@/lib/pr-review-prompt";
 import { agentPipelineInvestigatePrompt } from "@/lib/pr-pipeline-prompt";
@@ -112,10 +113,7 @@ export function opencodeCliCommand(): string {
   );
 }
 
-/** Run a DevHub-managed upstart script from the target repository. */
-export function repoUpstartCommand(upstartPath: string, repoPath: string): string {
-  return `cd -- ${shellQuote(repoPath)} && bash ${shellQuote(upstartPath)}`;
-}
+export { repoUpstartCommand } from "@/lib/repos/upstart-command";
 
 function upstartContextSuffix(context?: string): string {
   const trimmed = context?.trim();
@@ -141,7 +139,7 @@ export async function agentRepoUpstartCommand(
   context?: string,
 ): Promise<string> {
   const cli = await activeAgentCliSpec();
-  const prompt = `Use devhub-repo-upstart. Create ${upstartPath} for ${repoName} in the DevHub private store (not .devhub/ in the target repo). Must run nvm use if .nvmrc, refresh deps, and start dev env. Do not just print instructions. Exit; terminal runs the script with cwd=${repoName}.${upstartContextSuffix(context)}`;
+  const prompt = `Use devhub-repo-upstart. Create ${upstartPath} for ${repoName} in the DevHub private store (not .devhub/ in the target repo). Must run nvm use if .nvmrc, refresh deps, and start dev env. Do not just print instructions. ${UPSTART_WORKTREE_INSTRUCTIONS} Exit after writing the script; execution is a separate step.${upstartContextSuffix(context)}`;
   // Generation only. The `&& bash <script>` that used to be chained here meant
   // an agent wrote a shell script and the terminal executed it in the same
   // breath, in the user's repo, with their full environment — there was no
@@ -161,7 +159,7 @@ export async function agentRepoUpstartUpdateCommand(
   context: string,
 ): Promise<string> {
   const cli = await activeAgentCliSpec();
-  const prompt = `Use devhub-repo-upstart. Update ${upstartPath} for ${repoName} in the DevHub private store (not .devhub/ in the target repo). Must refresh deps, prefer nvm use, start dev env, and preserve correct bits. Exit; terminal runs the script.${upstartContextSuffix(context)}`;
+  const prompt = `Use devhub-repo-upstart. Update ${upstartPath} for ${repoName} in the DevHub private store (not .devhub/ in the target repo). Must refresh deps, prefer nvm use, start dev env, and preserve correct bits. ${UPSTART_WORKTREE_INSTRUCTIONS} Exit after writing the script; execution is a separate step.${upstartContextSuffix(context)}`;
   // Update only — see agentRepoUpstartCommand. A regenerated script is a
   // different script, so it goes back through review before it can run.
   return guardedCliCommand(
@@ -177,7 +175,7 @@ export async function agentRepoUpstartDebugCommand(
   context?: string,
 ): Promise<string> {
   const cli = await activeAgentCliSpec();
-  const prompt = `Use devhub-repo-upstart. Debug/update ${repoName} upstart at ${upstartPath} (DevHub private store, not .devhub/ in the target repo). Ask what failed, keep one-command startup.${upstartContextSuffix(context)}`;
+  const prompt = `Use devhub-repo-upstart. Debug/update ${repoName} upstart at ${upstartPath} (DevHub private store, not .devhub/ in the target repo). Ask what failed, keep one-command startup. ${UPSTART_WORKTREE_INSTRUCTIONS}${upstartContextSuffix(context)}`;
   return guardedCliCommand(
     cli.binary,
     cli.interactive(prompt),

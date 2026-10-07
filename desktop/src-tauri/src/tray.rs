@@ -51,12 +51,47 @@ pub(crate) fn set_visible(app: &tauri::AppHandle, visible: bool) {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+/// Windows: a permanent notification-area icon, because closing the window
+/// hides it and the server keeps running (scheduled jobs, agents). Unlike the
+/// macOS status item it never hides — an app that is running with no window and
+/// no icon is one the user cannot find to quit.
+#[cfg(windows)]
+pub(crate) fn install(app: &tauri::AppHandle) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
+
+    let show = MenuItem::with_id(app, "tray-show-devhub", "Show DevHub", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "tray-quit-devhub", "Quit DevHub", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &PredefinedMenuItem::separator(app)?, &quit])?;
+
+    let mut builder = tauri::tray::TrayIconBuilder::with_id("devhub-status")
+        .tooltip("DevHub")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                crate::show_main_window(tray.app_handle());
+            }
+        });
+    if let Some(icon) = app.default_window_icon() {
+        builder = builder.icon(icon.clone());
+    }
+    builder.build(app)?;
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
 pub(crate) fn install(_app: &tauri::AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
 #[cfg(not(target_os = "macos"))]
+#[allow(dead_code)] // called from macOS-only sites; kept so callers need no cfg
 pub(crate) fn set_visible(_app: &tauri::AppHandle, _visible: bool) {}
 
 #[cfg(test)]

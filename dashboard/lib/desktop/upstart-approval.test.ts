@@ -105,7 +105,8 @@ describe("approval lifecycle", () => {
 
     const { command, cwd } = upstartRunCommand("my-app");
     expect(cwd).toBe(path.join(tmp, "code", "my-app"));
-    expect(command).toMatch(/^bash /);
+    expect(command).toContain(`cd -- '${cwd}' && upstart_root=$(git rev-parse --show-toplevel)`);
+    expect(command).toContain(`&& bash '${upstartScriptPath("my-app")}'`);
     expect(command).not.toMatch(/sudo/);
   });
 

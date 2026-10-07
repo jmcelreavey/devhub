@@ -104,7 +104,39 @@ function px(size: number): number {
  * 3. Gravatar
  * 4. initials (rendered underneath)
  */
+/**
+ * Session caches. The graph is virtualized, so a row scrolling back into view
+ * is a fresh mount: without these it re-hashed the email, rendered initials,
+ * then swapped the photo in a frame later — and re-requested URLs already
+ * known to 404 — which read as avatars flickering on every scroll.
+ */
+const sourcesCache = new Map<string, string[]>();
+const deadAvatarUrls = new Set<string>();
+
+function sourcesKey(email: string, size: number, resolved?: string): string {
+  return `${email}\0${size}\0${resolved ?? ""}`;
+}
+
+/** Test hook: module caches outlive a single render. */
+export function resetAvatarCaches(): void {
+  sourcesCache.clear();
+  deadAvatarUrls.clear();
+}
+
 async function avatarSources(
+  email: string,
+  size: number,
+  resolved?: string,
+): Promise<string[]> {
+  const key = sourcesKey(email, size, resolved);
+  const cached = sourcesCache.get(key);
+  if (cached) return cached;
+  const urls = await computeAvatarSources(email, size, resolved);
+  sourcesCache.set(key, urls);
+  return urls;
+}
+
+async function computeAvatarSources(
   email: string,
   size: number,
   resolved?: string,
@@ -172,7 +204,13 @@ export function CommitAvatar({
     };
   }, [email, size, resolvedUrl]);
 
-  const urls = resolved?.email === email ? resolved.urls : [];
+  // A cache hit renders the photo on the first frame; the effect's answer
+  // (same list) then changes nothing.
+  const urls = (
+    resolved?.email === email
+      ? resolved.urls
+      : (sourcesCache.get(sourcesKey(email, size, resolvedUrl)) ?? [])
+  ).filter((url) => !deadAvatarUrls.has(url));
   const srcKey = urls.join("\0");
   const failures = failed?.email === email && failed.srcKey === srcKey ? failed.count : 0;
   const src = urls[failures] ?? null;
@@ -213,7 +251,11 @@ export function CommitAvatar({
           decoding="async"
           referrerPolicy="no-referrer"
           className="repo-git-avatar-img"
-          onError={() => setFailed({ email, srcKey, count: failures + 1 })}
+          onError={() => {
+            // Remembered for the session so the next mount skips straight past it.
+            deadAvatarUrls.add(src);
+            setFailed({ email, srcKey, count: failures + 1 });
+          }}
         />
       )}
     </>

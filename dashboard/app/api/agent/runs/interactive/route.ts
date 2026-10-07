@@ -27,7 +27,7 @@ const Schema = z.object({
 });
 
 /**
- * Register an interactive CLI session in Agent Activity. The response's `wrap`
+ * Register an interactive CLI session in the run history. The response's `wrap`
  * fragments go around the CLI command so the tab reports start and exit.
  */
 export const POST = withErrorHandler(async (req: NextRequest) => {

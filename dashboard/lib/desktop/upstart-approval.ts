@@ -21,6 +21,7 @@ import path from "node:path";
 
 import { getUpstartsDir } from "@/lib/content/dirs";
 import { getReposDir } from "@/lib/desktop/runtime-paths";
+import { repoUpstartCommand } from "@/lib/repos/upstart-command";
 
 export interface UpstartApproval {
   repo: string;
@@ -178,7 +179,7 @@ export function upstartRunCommand(repoName: string): { command: string; cwd: str
   const cwd = resolveRepoPath(repoName);
   const scriptPath = upstartScriptPath(repoName);
   // Plain bash, no elevation, working directory is the repo the user picked.
-  return { command: `bash ${shellQuote(scriptPath)}`, cwd };
+  return { command: repoUpstartCommand(scriptPath, cwd), cwd };
 }
 
 export function shellQuote(value: string): string {

@@ -9,6 +9,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { parseBody } from "@/lib/api-utils";
 import { resolveScannedRepo } from "@/lib/scanned-repo";
+import { sweepPaseoWorkspacesQuietly } from "@/lib/paseo/workspaces";
 import { listWorktreeCleanup, removeWorktreeAt } from "@/lib/repos/worktree-cleanup";
 
 export async function GET() {
@@ -38,7 +39,10 @@ export async function POST(req: NextRequest) {
   if (!repoPath) return NextResponse.json({ error: "Repo not found" }, { status: 404 });
 
   const outcome = await removeWorktreeAt(repoPath, target, force);
-  if (outcome.ok) return NextResponse.json({ ok: true });
+  if (outcome.ok) {
+    await sweepPaseoWorkspacesQuietly();
+    return NextResponse.json({ ok: true });
+  }
 
   // Dirty is a distinct case: the UI can offer force rather than just failing.
   return NextResponse.json(

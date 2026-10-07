@@ -38,11 +38,15 @@ Upload,
 } from "lucide-react";
 import { useCallback,useEffect,useMemo,useRef,useState } from "react";
 import { createPortal } from "react-dom";
+import { ChangesPanel } from "./ChangesPanel";
 import { CommitAvatar } from "./CommitAvatar";
 import { CommitContextChips } from "./CommitContextChips";
 import {
 CommitGraph,
+groupRefLabels,
+pickSwitchTarget,
 type GraphColumnsPartial,
+type SwitchTarget,
 } from "./CommitGraph";
 import { DiffMaximizeModal } from "./DiffMaximizeModal";
 import { DIFF_CONTEXT_LINES,DiffToolbar,useDiffViewMode,type DiffContextMode } from "./DiffToolbar";
@@ -55,9 +59,11 @@ import { WhyExistsAction } from "./WhyExistsAction";
 import { buildCommitMenuGroups } from "./commitMenuGroups";
 import { shareGitShowPatch } from "./shareGitPatch";
 import {
+CHECKOUT_AUTOSTASH,
 fetchGitJson,
 postGitAction,
 repoApi,
+switchedToast,
 type BranchesPayload,
 } from "./shared";
 import { usePointerDrag } from "./usePointerDrag";
@@ -150,13 +156,13 @@ export function HistoryPanel({
   pushing = false,
   onPush,
   wip = null,
-  onOpenWip,
   focusUnpushed = false,
   onFocusUnpushedConsumed,
   focusCommit = null,
   onFocusCommitConsumed,
   collapsed = false,
   defaultScope = "all",
+  refreshToken = 0,
 }: {
   repoName: string;
   repoPath: string;
@@ -167,10 +173,11 @@ export function HistoryPanel({
   /** Workspace-level push so History shows the same spinner as the header. */
   pushing?: boolean;
   onPush?: () => void;
-  /** Working-tree counts for the pinned WIP row; null hides it. */
+  /**
+   * Working-tree counts for the pinned WIP row; null hides it. Selecting the
+   * row shows staged/unstaged files and the commit box beside the graph.
+   */
   wip?: { staged: number; unstaged: number } | null;
-  /** Click on the WIP row — the workspace switches to the Changes tab. */
-  onOpenWip?: () => void;
   focusUnpushed?: boolean;
   onFocusUnpushedConsumed?: () => void;
   /** Select this commit on arrival — used by Blame's "Open in History". */
@@ -180,6 +187,8 @@ export function HistoryPanel({
   collapsed?: boolean;
   /** Hub defaults to the current branch; the Git modal still walks every ref. */
   defaultScope?: "all" | "current";
+  /** Changes when something outside this panel mutated the repo — reload quietly. */
+  refreshToken?: number;
 }) {
   const toast = useToast();
   const confirm = useConfirm();
@@ -209,6 +218,10 @@ export function HistoryPanel({
   const [search, setSearch] = useState("");
   const [unpushedOnly, setUnpushedOnly] = useState(false);
   const [unpushedHashes, setUnpushedHashes] = useState<Set<string>>(() => new Set());
+  /** Configured remotes — tells the graph `upstream/main` is remote, not a local branch. */
+  const [remoteNames, setRemoteNames] = useState<string[]>([]);
+  /** Local branch names, so double-clicking `origin/x` reuses an existing local `x`. */
+  const [localBranchNames, setLocalBranchNames] = useState<ReadonlySet<string>>(() => new Set());
   /** Local commits not on main yet — the tinted band from fork point to HEAD. */
   const [aheadOfMain, setAheadOfMain] = useState<Set<string>>(() => new Set());
   /** merge-base(HEAD, main) — the row the band starts below. */
@@ -218,11 +231,38 @@ export function HistoryPanel({
   const [relation, setRelation] = useState<BranchRelation | null>(null);
   const [people, setPeople] = useState<RepoPerson[]>([]);
   const [detail, setDetail] = useState<CommitShowPayload | null>(null);
+  /** Hash whose detail failed to load — distinguishes "failed" from "not fetched yet". */
+  const [detailError, setDetailError] = useState<string | null>(null);
+  /**
+   * Commit detail by hash + file + context. A commit's content never changes,
+   * so revisiting one is instant; `aheadCount`/`isHead` do move with HEAD, which
+   * is why refresh() (every mutation) clears it.
+   */
+  const detailCache = useRef(new Map<string, CommitShowPayload>());
+  const rememberDetail = useCallback((key: string, value: CommitShowPayload) => {
+    const cache = detailCache.current;
+    cache.set(key, value);
+    if (cache.size > 150) cache.delete(cache.keys().next().value!);
+  }, []);
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [contextMode, setContextMode] = useState<DiffContextMode>("default");
   const [diffView, setDiffView] = useDiffViewMode();
-  const [historyListFr, setHistoryListFr] = useStoredFraction("devhub:repo-git:history-list-fr", 0.46);
+  /**
+   * WIP row is the selection: the detail pane shows the working tree instead of
+   * a commit, so the graph never has to leave the screen to stage or commit.
+   */
+  const [wipOpen, setWipOpen] = useState(false);
+  /** Open on WIP once, the first time the tree is seen dirty; after that the user drives. */
+  const wipDefaulted = useRef(false);
+  useEffect(() => {
+    if (wipDefaulted.current || !wip) return;
+    wipDefaulted.current = true;
+    if (wip.staged + wip.unstaged > 0) setWipOpen(true); // eslint-disable-line react-hooks/set-state-in-effect -- one-time default once the working-tree summary arrives
+  }, [wip]);
+  /** The working-tree pane needs the workspace's conflict and hook handlers to act. */
+  const showWip = Boolean(wipOpen && wip && onConflict && onHookFailure);
+  const [historyListFr, setHistoryListFr] = useStoredFraction("devhub:repo-git:history-list-fr", 0.56);
   const [filesFr, setFilesFr] = useStoredFraction("devhub:repo-git:history-files-fr", 0.34);
   const [diffMaximized, setDiffMaximized] = useState(false);
   const closeMaximized = useCallback(() => setDiffMaximized(false), []);
@@ -312,6 +352,7 @@ export function HistoryPanel({
 
   const refresh = useCallback(async () => {
     const generation = ++historyGeneration.current;
+    detailCache.current.clear();
     setLoading(true);
     setLoadingMore(false);
     try {
@@ -378,6 +419,8 @@ export function HistoryPanel({
           if (c.shortHash) next.add(c.shortHash);
         }
         setUnpushedHashes(next);
+        setRemoteNames((branchJson.remotes ?? []).map((r) => r.name));
+        setLocalBranchNames(new Set((branchJson.branches ?? []).map((b) => b.name)));
       }
     } catch (err) {
       if (generation === historyGeneration.current) {
@@ -484,6 +527,15 @@ export function HistoryPanel({
     void refresh();
   }, [refresh]);
 
+  // Rows stay on screen while this reloads, so an external change (sidebar
+  // switch, commit on another tab) updates the graph in place.
+  const seenRefreshToken = useRef(refreshToken);
+  useEffect(() => {
+    if (seenRefreshToken.current === refreshToken) return;
+    seenRefreshToken.current = refreshToken;
+    void refresh();
+  }, [refreshToken, refresh]);
+
   /**
    * Debounce the text box before it reaches `refresh`.
    *
@@ -558,8 +610,11 @@ export function HistoryPanel({
       if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
       const el = e.target as HTMLElement | null;
       if (el?.isContentEditable || el?.tagName === "INPUT" || el?.tagName === "TEXTAREA" || el?.tagName === "SELECT") return;
+      // Kept mounted while another tab is showing — don't steal its keys.
+      const input = searchInputRef.current;
+      if (!input || input.offsetParent === null) return;
       e.preventDefault();
-      searchInputRef.current?.focus();
+      input.focus();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -622,9 +677,18 @@ export function HistoryPanel({
       setSelectedFile(null);
       return;
     }
+    const cacheKey = `${selected}\0${selectedFile ?? ""}\0${contextMode}`;
+    const cached = detailCache.current.get(cacheKey);
+    if (cached) {
+      setDetailError(null);
+      setDetail(cached);
+      setDetailLoading(false);
+      return;
+    }
     let cancelled = false;
     setDetailLoading(true);
-    void (async () => {
+    // A short settle so holding j/k fetches where you stop, not every row passed.
+    const timer = setTimeout(() => void (async () => {
       try {
         const params = new URLSearchParams({ commit: selected });
         if (selectedFile) params.set("path", selectedFile);
@@ -636,20 +700,26 @@ export function HistoryPanel({
         const json = await fetchGitJson<CommitShowPayload>(
           repoApi(repoName, `/git/show?${params.toString()}`),
         );
-        if (!cancelled) setDetail(json);
+        rememberDetail(cacheKey, json);
+        if (!cancelled) {
+          setDetail(json);
+          setDetailError(null);
+        }
       } catch (err) {
         if (!cancelled) {
           setDetail(null);
+          setDetailError(selected);
           toast.error(err instanceof Error ? err.message : "Commit detail failed");
         }
       } finally {
         if (!cancelled) setDetailLoading(false);
       }
-    })();
+    })(), 60);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
-  }, [repoName, selected, selectedFile, contextMode, toast]);
+  }, [repoName, selected, selectedFile, contextMode, toast, rememberDetail]);
 
   /** POST a branches action with confirm + toasts (undo-commit / reset-stash-ahead). */
   async function confirmedBranchesAction(opts: {
@@ -913,15 +983,59 @@ export function HistoryPanel({
     [confirm, runCommitAction],
   );
 
-  /** Switch branches (server auto-stashes), surfacing conflicts to the shared dialog. */
-  async function checkoutBranch(branch: string): Promise<boolean> {
-    const result = await postGitAction(repoApi(repoName, "/branches"), { action: "checkout", branch });
+  /**
+   * Switch branches with auto-stash, surfacing conflicts to the shared dialog.
+   * Without the strategy this used to fail outright ("Checkout failed") on any
+   * dirty tree Git refused to carry over.
+   */
+  async function checkoutBranch(
+    target: SwitchTarget,
+  ): Promise<{ ok: true; branch: string; stashed: boolean } | { ok: false }> {
+    const body =
+      target.kind === "local"
+        ? { action: "checkout", branch: target.branch, ...CHECKOUT_AUTOSTASH }
+        : {
+            action: "checkout-remote",
+            branch: target.remoteRef,
+            newBranch: target.localName,
+            ...CHECKOUT_AUTOSTASH,
+          };
+    const result = await postGitAction<{ stashed?: boolean }>(repoApi(repoName, "/branches"), body);
     if (!result.ok) {
-      if (result.kind === "conflict") await onConflict?.(result.conflict);
-      else toast.error(result.kind === "error" ? result.message : "Checkout failed");
-      return false;
+      if (result.kind === "conflict") {
+        await onConflict?.(result.conflict);
+        onMutate();
+        await refresh();
+      } else toast.error(result.kind === "error" ? result.message : "Checkout failed");
+      return { ok: false };
     }
-    return true;
+    const branch = target.kind === "local" ? target.branch : target.localName;
+    return { ok: true, branch, stashed: Boolean(result.json.stashed) };
+  }
+
+  /** Double-click a row: switch to the branch on it, GitKraken-style. */
+  async function switchFromGraph(commit: GraphLaneCommit) {
+    if (acting !== null) return;
+    const target = pickSwitchTarget(
+      groupRefLabels(commit.refs, commit.headBranch, remoteNames),
+      localBranchNames,
+    );
+    if (!target) {
+      if (!commit.isHead) {
+        toast.info("No branch on this commit — right-click it to branch from here or check it out.");
+      }
+      return;
+    }
+    setActing("switch");
+    try {
+      const switched = await checkoutBranch(target);
+      if (!switched.ok) return;
+      toast.success(switchedToast(switched.branch, switched.stashed));
+      onMutate();
+      await refresh();
+    } finally {
+      setActing(null);
+    }
   }
 
   async function switchToDefault() {
@@ -934,7 +1048,7 @@ export function HistoryPanel({
         toast.error(fetched.kind === "error" ? fetched.message : "Fetch failed");
         return;
       }
-      if (!(await checkoutBranch(main))) return;
+      if (!(await checkoutBranch({ kind: "local", branch: main })).ok) return;
       const pulled = await postGitAction(repoApi(repoName, "/branches"), { action: "pull" });
       if (!pulled.ok) {
         if (pulled.kind === "conflict") await onConflict?.(pulled.conflict);
@@ -1054,7 +1168,7 @@ export function HistoryPanel({
             disabled: acting !== null,
             onSelect: () =>
               void (async () => {
-                if (!(await checkoutBranch(branch))) return;
+                if (!(await checkoutBranch({ kind: "local", branch })).ok) return;
                 await runCommitAction("cherry-pick", commit);
               })(),
           },
@@ -1129,7 +1243,11 @@ export function HistoryPanel({
 
   const selectedCommit = commits.find((c) => c.hash === selected) ?? null;
   const hasFilters = Boolean(authorFilter || search.trim() || unpushedOnly);
-  const detailForSelection = detail && selected && detail.hash === selected ? detail : null;
+  const detailIsCurrent = Boolean(detail && selected && detail.hash === selected);
+  // While the next commit loads, the previous one stays on screen (dimmed and
+  // inert) instead of the pane flashing to a skeleton on every click or j/k.
+  const detailForSelection = selected ? detail : null;
+  const detailStale = Boolean(detailForSelection) && !detailIsCurrent;
   const detailIdentity = detailForSelection
     ? lookupByEmail(identityByEmail, detailForSelection.authorEmail)
     : undefined;
@@ -1317,22 +1435,25 @@ export function HistoryPanel({
         primaryFr={historyListFr}
         onPrimaryFrChange={setHistoryListFr}
         minPrimaryFr={0.28}
-        maxPrimaryFr={0.62}
+        maxPrimaryFr={0.72}
         stacked={stackHistory}
         handleLabel="Resize history list and detail"
         primary={
           <div className="repo-git-history-list">
             <CommitGraph
               commits={graphRows}
-              selectedHash={selected}
+              selectedHash={showWip ? null : selected}
               wip={wip}
-              onOpenWip={onOpenWip}
+              wipSelected={showWip}
+              onOpenWip={() => setWipOpen(true)}
+              onRowDoubleClick={(commit) => void switchFromGraph(commit)}
               aheadOfMain={aheadOfMain}
               forkBase={forkBase}
               forkLabel={relation?.mainShort ?? null}
               aheadMain={relation?.aheadMain ?? 0}
               columns={graphCols}
               onSelect={(hash) => {
+                setWipOpen(false);
                 setSelectedFile(null);
                 setSelected(hash);
                 // Any deliberate click hands the selection back to the filters.
@@ -1341,11 +1462,13 @@ export function HistoryPanel({
               rowBind={(commit) => commitMenu.bindRow(commit)}
               onKebabOpen={(x, y, commit) => commitMenu.openAtPoint(x, y, commit)}
               onContextMenu={(_event, commit) => {
+                setWipOpen(false);
                 setSelectedFile(null);
                 setSelected(commit.hash);
                 setPinnedHash(null);
               }}
               unpushedHashes={unpushedHashes}
+              remoteNames={remoteNames}
               identityByEmail={identityByEmail}
               onRowDragStart={(event, commit) => {
                 if (event.pointerType !== "mouse") return;
@@ -1375,10 +1498,31 @@ export function HistoryPanel({
           </div>
         }
         secondary={
-          <div className="repo-git-history-detail">
-            {!selected ? (
+          <div
+            className="repo-git-history-detail"
+            data-stale={(!showWip && detailStale) || undefined}
+            inert={!showWip && detailStale}
+          >
+            {wipOpen && wip && onConflict && onHookFailure ? (
+              <div className="repo-git-history-wip">
+                <ChangesPanel
+                  repoName={repoName}
+                  repoPath={repoPath}
+                  onMutate={() => {
+                    onMutate();
+                    // A commit made here has to appear in the graph beside it.
+                    void refresh();
+                  }}
+                  onConflict={onConflict}
+                  onHookFailure={onHookFailure}
+                  pushing={pushing}
+                  onPush={async () => onPush?.()}
+                  stacked
+                />
+              </div>
+            ) : !selected ? (
               <div className="repo-git-empty">Select a commit to inspect its changes.</div>
-            ) : !detailForSelection && detailLoading ? (
+            ) : !detailForSelection && detailError !== selected ? (
               <SkeletonRows count={10} height={14} />
             ) : detailForSelection ? (
               <>
@@ -1557,8 +1701,11 @@ export function HistoryPanel({
                           }
                         />
                       </div>
-                      <div className="repo-git-diff-body repo-git-diff-body-static">
-                        {detailLoading ? (
+                      <div
+                        className="repo-git-diff-body repo-git-diff-body-static"
+                        data-stale={detailLoading || undefined}
+                      >
+                        {detailLoading && detailForSelection.lines.length === 0 ? (
                           <SkeletonRows count={8} height={14} />
                         ) : (
                           <GitDiffView

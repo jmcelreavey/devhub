@@ -2,7 +2,7 @@ import { PLUGIN_NAV_ITEMS,PLUGIN_SECTION_TABS } from "./plugin-nav.generated";
 
 export type NavGroup = "workspace" | "library" | "bi" | "system";
 
-export type NavGate = "always" | "calendar" | "github" | "jira" | "datadog" | "bi" | "chamber" | "opencode" | "claude" | "cursor" | "chatgpt" | "antigravity";
+export type NavGate = "always" | "calendar" | "github" | "jira" | "datadog" | "bi" | "opencode" | "claude" | "cursor" | "chatgpt" | "antigravity";
 
 export interface NavItem {
   href: string;
@@ -13,10 +13,6 @@ export interface NavItem {
   desktopOnly?: boolean;
   /** Keyboard shortcut hint displayed in the sidebar (mono, 9.5px, opacity .6) */
   shortcut?: string;
-  /**
-   * Not a route — clicking opens this CLI as a terminal-dock tab (see NavLink).
-   * Excluded from ALL_NAV_DESTINATIONS; `href` only keys the sidebar row.
-   */
 }
 
 export const NAV_GROUPS: { id: NavGroup; label: string }[] = [
@@ -100,7 +96,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/datadog", label: "Datadog", icon: "datadog", group: "bi", gate: "datadog" },
 
   { href: "/status", label: "System", icon: "status", group: "system" },
-  { href: "/agents", label: "Agents", icon: "activity", group: "system" },
+  { href: "/agents", label: "Agents", icon: "agents", group: "system" },
 ];
 
 /**
@@ -120,7 +116,9 @@ export const LEGACY_NAV_ITEMS: NavItem[] = [
   { href: "/one-on-one", label: "1:1", icon: "review", group: "library" },
   { href: "/research", label: "Research", icon: "learnings", group: "library" },
   { href: "/learnings", label: "Learnings", icon: "learnings", group: "library" },
+  { href: "/voice", label: "My voice", icon: "learnings", group: "library" },
   { href: "/recall", label: "Recall", icon: "recall", group: "library" },
+  { href: "/conventions", label: "Conventions", icon: "learnings", group: "library", gate: "github" },
   { href: "/radar", label: "Radar", icon: "radar", group: "library" },
   { href: "/diagrams", label: "Diagrams", icon: "diagrams", group: "library" },
   { href: "/docs", label: "Docs", icon: "docs", group: "library" },
@@ -130,8 +128,7 @@ export const LEGACY_NAV_ITEMS: NavItem[] = [
   { href: "/setup", label: "Setup", icon: "setup", group: "system" },
 ];
 
-/** Every routable destination — sidebar items first, then legacy + plugin pages.
- *  Terminal-launch rows (Claude/Cursor/ChatGPT) have no page behind them. */
+/** Every routable destination — sidebar items first, then legacy + plugin pages. */
 export const ALL_NAV_DESTINATIONS: NavItem[] = [
   ...NAV_ITEMS,
   ...LEGACY_NAV_ITEMS,
@@ -159,20 +156,20 @@ function mergeSectionTabs(core: SectionTab[], plugin: SectionTab[] | undefined):
 export const SECTION_TABS: Record<string, SectionTab[]> = {
   library: mergeSectionTabs(
     [
+      // Ordered by measured use (route-usage, 2026-09). Search has its own
+      // sidebar slot; Appraisal and Research were ~5 visits each, so they live
+      // in ⌘P rather than taking a tab on every Library page.
       { href: "/notes", label: "Notes" },
-      { href: "/search", label: "Search" },
       { href: "/docs", label: "Docs" },
-      { href: "/radar", label: "Radar" },
-      { href: "/appraisal", label: "Appraisal" },
-      { href: "/research", label: "Research" },
       { href: "/diagrams", label: "Diagrams" },
       { href: "/shared", label: "Live links", gate: "github" },
+      { href: "/radar", label: "Radar" },
     ],
     PLUGIN_SECTION_TABS.library,
   ),
   system: mergeSectionTabs(
     [
-      { href: "/status", label: "Status" },
+      { href: "/status", label: "System" },
       { href: "/logs", label: "Logs", desktopOnly: true },
       { href: "/actions", label: "Actions", desktopOnly: true },
       { href: "/setup", label: "Setup" },
@@ -187,7 +184,6 @@ export interface SetupGateStatus {
   calendar?: boolean;
   jira?: boolean;
   bi?: boolean;
-  chamber?: boolean;
   opencode?: boolean;
   claude?: boolean;
   cursor?: boolean;
@@ -205,40 +201,24 @@ export function filterNavBySetup(items: NavItem[], setup: SetupGateStatus | null
   return items.filter((i) => gateAllows(i.gate, setup));
 }
 
-export interface Crumb {
-  label: string;
-  href?: string;
+export function matchesNavRoute(pathname: string, href: string): boolean {
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 /**
- * Group crumbs come from NAV_GROUPS — the same list the sidebar renders — so
- * the two can't disagree. They did: the top bar used to hold its own copy that
- * labelled the Library group "Notes", so all fourteen Library destinations
- * breadcrumbed as "Notes › Repos", "Notes › Skills", "Notes › Own"…
- *
- * This lives in lib rather than in the top bar because it is pure routing
- * data: importing the component to test it drags in xterm's stylesheet.
+ * Which sidebar row is "you are here". The longest matching href wins; failing
+ * that, a page reached through a section tab (/docs, /logs, …) lights up its
+ * family's sidebar entry (Notes, System) — otherwise the sidebar shows no
+ * position at all on half the Library and System pages.
  */
-const ROOT_LABEL = Object.fromEntries(
-  NAV_GROUPS.map((g) => [g.id, g.label]),
-) as Record<NavGroup, string>;
-
-/** Landing page for each nav family — makes the group crumb clickable. */
-const ROOT_HREF: Record<NavGroup, string> = {
-  workspace: "/",
-  library: "/notes",
-  bi: "/ops",
-  system: "/status",
-};
-
-export function buildCrumbs(pathname: string): Crumb[] {
-  const item = ALL_NAV_DESTINATIONS.find((n) =>
-    n.href === "/" ? pathname === "/" : pathname.startsWith(n.href),
+export function activeNavHref(pathname: string, sidebarHrefs: string[]): string | undefined {
+  const direct = sidebarHrefs
+    .filter((href) => matchesNavRoute(pathname, href))
+    .sort((a, b) => b.length - a.length)[0];
+  if (direct) return direct;
+  const family = Object.values(SECTION_TABS).find((tabs) =>
+    tabs.some((t) => matchesNavRoute(pathname, t.href)),
   );
-  if (!item) return [{ label: "Workspace" }, { label: pathname }];
-  const groupLabel = ROOT_LABEL[item.group] ?? "Workspace";
-  const rootHref = ROOT_HREF[item.group];
-  // On a group's own landing page, don't repeat it ("Notes › Notes").
-  if (item.href === rootHref) return [{ label: item.label }];
-  return [{ label: groupLabel, href: rootHref }, { label: item.label }];
+  return family?.find((t) => sidebarHrefs.includes(t.href))?.href;
 }

@@ -39,7 +39,7 @@ Avoid adding project facts that change often. Those belong in docs, notes, or co
 
 ## Persona Tab (Dashboard)
 
-**Agents → Persona** is the editor for L0–L2 sources and a read-only view of synced targets.
+**Skills → Persona** is the editor for L0–L2 sources and a read-only view of synced targets.
 
 | Card | Editable | Notes |
 | ---- | -------- | ----- |
@@ -70,7 +70,7 @@ See [Token Budget](token-budget.md) for why L2 stays off the sync path.
 
 ## Syncing Persona
 
-After editing persona files, run **Sync to all tools** on the Agents → Persona tab (or `sync_native_persona`).
+After editing persona files, run **Sync to all tools** on the Skills → Persona tab (or `sync_native_persona`).
 
 Sync writes:
 

@@ -137,12 +137,14 @@ export async function validateRepo(opts: ValidateOptions): Promise<number> {
   emit("[5] Persona layer files...");
   for (const f of [
     "persona/shared-persona.md",
-    "persona/identity.txt",
     "skills/shared/deep-preferences/SKILL.md",
   ]) {
     if (exists(f)) ok(f);
     else err(`${f} missing`);
   }
+
+  if (exists("persona/identity.txt")) ok("persona/identity.txt");
+  else warn("No personal identity yet — add persona/identity.txt in your private mirror when ready.");
 
   // [6] MCP configs (mcp/shared/<name>.json — one file per server)
   emit("[6] MCP server configs...");

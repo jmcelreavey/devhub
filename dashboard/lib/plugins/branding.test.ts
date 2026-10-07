@@ -23,6 +23,7 @@ function mkBrandingPlugin(rootDir: string): RegisteredPlugin {
         defaultMode: "system",
         fonts: "branding/fonts",
         logo: { src: "branding/logo.svg", label: "ACME" },
+        // Deprecated and ignored, but old manifests carry it and must still validate.
         openchamber: { themes: "branding/oc", defaultDarkId: "acme-dark", defaultLightId: "acme-light" },
         desktopIcon: "branding/icon.png",
       },
@@ -53,16 +54,11 @@ describe("materializeBranding", () => {
   let home: string;
   let repoRoot: string;
   let pluginRoot: string;
-  let ocDir: string;
-  let prevOc: string | undefined;
 
   beforeEach(() => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-home-"));
     repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-repo-"));
     pluginRoot = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-brand-plugin-"));
-    ocDir = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-oc-"));
-    prevOc = process.env.OPENCHAMBER_DATA_DIR;
-    process.env.OPENCHAMBER_DATA_DIR = ocDir;
 
     // Core dashboard skeleton + committed empty baselines.
     for (const d of ["app", "lib", "public"]) fs.mkdirSync(path.join(repoRoot, "dashboard", d), { recursive: true });
@@ -72,14 +68,11 @@ describe("materializeBranding", () => {
     // Plugin branding fixtures.
     const bdir = path.join(pluginRoot, "branding");
     fs.mkdirSync(path.join(bdir, "fonts"), { recursive: true });
-    fs.mkdirSync(path.join(bdir, "oc"), { recursive: true });
     fs.writeFileSync(path.join(bdir, "theme.css"), ':root[data-theme-preset="acme"]{--accent:#f00;}');
     fs.writeFileSync(path.join(bdir, "presets.json"), JSON.stringify([{ id: "acme", label: "ACME", description: "d", darkSwatch: "#000", lightSwatch: "#fff" }]));
     fs.writeFileSync(path.join(bdir, "logo.svg"), "<svg/>");
     fs.writeFileSync(path.join(bdir, "icon.png"), "PNGDATA");
     fs.writeFileSync(path.join(bdir, "fonts", "Acme.woff2"), "FONT");
-    fs.writeFileSync(path.join(bdir, "oc", "acme-dark.json"), JSON.stringify({ metadata: { id: "acme-dark", variant: "dark" } }));
-    fs.writeFileSync(path.join(bdir, "oc", "acme-light.json"), JSON.stringify({ metadata: { id: "acme-light", variant: "light" } }));
 
     // A real manifest on disk — listEnabledPlugins reads this, not the in-memory object.
     fs.writeFileSync(
@@ -93,14 +86,12 @@ describe("materializeBranding", () => {
   });
 
   afterEach(() => {
-    if (prevOc === undefined) delete process.env.OPENCHAMBER_DATA_DIR;
-    else process.env.OPENCHAMBER_DATA_DIR = prevOc;
-    for (const d of [home, repoRoot, pluginRoot, ocDir]) fs.rmSync(d, { recursive: true, force: true });
+    for (const d of [home, repoRoot, pluginRoot]) fs.rmSync(d, { recursive: true, force: true });
   });
 
   const dashFile = (rel: string) => path.join(repoRoot, "dashboard", rel);
 
-  it("generates theme/css/logo/fonts/electron + seeds OpenChamber when a plugin opts in", () => {
+  it("generates theme/css/logo/fonts/electron when a plugin opts in", () => {
     const code = materializeBranding({ repoRoot, home, emit: () => {} });
     expect(code).toBe(0);
 
@@ -115,22 +106,6 @@ describe("materializeBranding", () => {
     expect(fs.existsSync(dashFile("public/plugin-brand-logo.svg"))).toBe(true);
     expect(fs.existsSync(dashFile("public/plugin-desktop-icon.png"))).toBe(true);
     expect(fs.existsSync(dashFile("public/fonts-plugin/Acme.woff2"))).toBe(true);
-
-    // OpenChamber themes copied + default seeded.
-    expect(fs.existsSync(path.join(ocDir, "themes", "acme-dark.json"))).toBe(true);
-    const settings = JSON.parse(fs.readFileSync(path.join(ocDir, "settings.json"), "utf8"));
-    expect(settings.darkThemeId).toBe("acme-dark");
-    expect(settings.lightThemeId).toBe("acme-light");
-  });
-
-  it("never overrides an existing OpenChamber theme choice", () => {
-    fs.writeFileSync(path.join(ocDir, "settings.json"), JSON.stringify({ themeId: "mine", darkThemeId: "mine-dark", themeVariant: "light" }));
-    materializeBranding({ repoRoot, home, emit: () => {} });
-    const settings = JSON.parse(fs.readFileSync(path.join(ocDir, "settings.json"), "utf8"));
-    expect(settings.themeId).toBe("mine");
-    expect(settings.darkThemeId).toBe("mine-dark");
-    expect(settings.themeVariant).toBe("light");
-    expect(settings.lightThemeId).toBe("acme-light"); // absent key still filled
   });
 
   it("restores the empty baseline and prunes assets when no plugin declares branding", () => {

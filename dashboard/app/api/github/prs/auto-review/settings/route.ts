@@ -3,8 +3,8 @@
  * agent-review poller without editing .env.local.
  *
  * Auth: requireDashboardAuth (same-origin / secret).
- * GET returns `{ enabled, always, source, intervalMs }`.
- * PUT body `{ enabled?: boolean, always?: boolean }` persists prefs and kicks
+ * GET returns `{ enabled, always, ownedOnly, source, intervalMs }`.
+ * PUT body `{ enabled?: boolean, always?: boolean, ownedOnly?: boolean }` persists prefs and kicks
  * a poller tick so enable takes effect immediately.
  */
 import { NextRequest, NextResponse } from "next/server";
@@ -24,6 +24,7 @@ export const dynamic = "force-dynamic";
 const BodySchema = z.object({
   enabled: z.boolean().optional(),
   always: z.boolean().optional(),
+  ownedOnly: z.boolean().optional(),
 });
 
 function settingsPayload() {
@@ -31,6 +32,7 @@ function settingsPayload() {
   return {
     enabled: prefs.enabled,
     always: prefs.always,
+    ownedOnly: prefs.ownedOnly,
     source: prefs.source,
     intervalMs: autoPrReviewIntervalMs(),
   };
@@ -49,9 +51,9 @@ export const PUT = withErrorHandler(async (req: NextRequest) => {
   const parsed = await parseBody(req, BodySchema);
   if (!parsed.ok) return parsed.response;
 
-  if (parsed.data.enabled === undefined && parsed.data.always === undefined) {
+  if (parsed.data.enabled === undefined && parsed.data.always === undefined && parsed.data.ownedOnly === undefined) {
     return NextResponse.json(
-      { error: "Provide at least one of enabled or always." },
+      { error: "Provide at least one of enabled, always, or ownedOnly." },
       { status: 400 },
     );
   }
@@ -59,6 +61,7 @@ export const PUT = withErrorHandler(async (req: NextRequest) => {
   const saved = await saveAutoPrReviewPrefs({
     ...(parsed.data.enabled !== undefined ? { enabled: parsed.data.enabled } : {}),
     ...(parsed.data.always !== undefined ? { always: parsed.data.always } : {}),
+    ...(parsed.data.ownedOnly !== undefined ? { ownedOnly: parsed.data.ownedOnly } : {}),
   });
 
   kickAutoPrReviewPoller();
@@ -66,6 +69,7 @@ export const PUT = withErrorHandler(async (req: NextRequest) => {
   return NextResponse.json({
     enabled: saved.enabled,
     always: saved.always,
+    ownedOnly: saved.ownedOnly,
     source: saved.source,
     intervalMs: autoPrReviewIntervalMs(),
   });
