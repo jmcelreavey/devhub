@@ -46,6 +46,8 @@ export default defineConfig({
       // same failure mode the comment above describes, one glob along.
       "components/**/*.test.ts",
       "scripts/**/*.test.ts",
+      // Private project scripts keep their tests beside the source; public clones have none.
+      "../upstarts/**/*.test.ts",
       "../shared/notes-search/**/*.test.ts",
       "../shared/notes-assets/**/*.test.ts",
       "../shared/markdown-convert/**/*.test.ts",

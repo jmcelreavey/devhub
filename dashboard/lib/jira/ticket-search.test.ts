@@ -36,7 +36,7 @@ describe("matchesTicketSearch", () => {
   });
 
   it("matches on assignee name", () => {
-    expect(matchesTicketSearch(ticket(), "mcelreavey")).toBe(true);
+    expect(matchesTicketSearch(ticket(), "miller")).toBe(true);
   });
 
   it("matches on project", () => {
