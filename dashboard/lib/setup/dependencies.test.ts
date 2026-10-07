@@ -4,6 +4,8 @@ import {
   firstVersionLine,
   probeDependency,
   summariseDependencies,
+  withInstallHints,
+  applyRuntimeRequirements,
   type DependencyStatus,
   type DependencySpec,
 } from "@/lib/setup/dependencies";
@@ -117,6 +119,53 @@ describe("summariseDependencies", () => {
     ]);
     expect(r.availableCount).toBe(2);
     expect(r.totalCount).toBe(3);
+  });
+});
+
+describe("installed-app setup", () => {
+  it("needs neither system Node nor Git for notes-only use", () => {
+    const tools = [
+      status({ id: "node", required: true, present: false }),
+      status({ id: "git", required: true, present: false }),
+    ];
+    expect(summariseDependencies(applyRuntimeRequirements(tools, {
+      desktop: true, codeGoals: false,
+    })).ready).toBe(true);
+    expect(summariseDependencies(applyRuntimeRequirements(tools, {
+      desktop: true, codeGoals: true,
+    })).ready).toBe(false);
+  });
+
+  it("never offers macOS commands to Linux or Windows users", () => {
+    for (const platform of ["linux", "win32"] as const) {
+      for (const spec of DEPENDENCIES) {
+        const hint = withInstallHints(spec, { platform, wsl: platform === "linux", apt: true, homebrew: false });
+        expect(hint.installCommand ?? "").not.toMatch(/brew|xcode-select/);
+        expect(hint.installUrl).toMatch(/^https:/);
+      }
+    }
+  });
+
+  it("uses Ubuntu's package manager for Git and Windows download help for WSL Docker", () => {
+    const ctx = { platform: "linux" as const, wsl: true, apt: true, homebrew: false };
+    expect(withInstallHints(DEPENDENCIES.find((t) => t.id === "git")!, ctx).installCommand).toContain("apt-get install -y git");
+    expect(withInstallHints(DEPENDENCIES.find((t) => t.id === "docker")!, ctx).installUrl).toContain("windows-install");
+  });
+
+  it("offers optional Agents prerequisites without requiring a system-wide npm prefix", () => {
+    const spec = DEPENDENCIES.find((t) => t.id === "safe-chain")!;
+    const hint = withInstallHints(spec, { platform: "linux", wsl: true, apt: true, homebrew: false });
+    expect(hint.installCommand).toContain('--prefix "$HOME/.local"');
+    expect(hint.installCommand).toContain('"$HOME/.local/bin/safe-chain" setup');
+    expect(spec.required).toBe(false);
+    expect(DEPENDENCIES.find((t) => t.id === "npm")?.required).toBe(false);
+  });
+
+  it("provides download help when Homebrew is absent", () => {
+    const spec = DEPENDENCIES.find((t) => t.id === "gh")!;
+    const hint = withInstallHints(spec, { platform: "darwin", wsl: false, apt: false, homebrew: false });
+    expect(hint.installCommand).toBeUndefined();
+    expect(hint.installUrl).toBe("https://cli.github.com/");
   });
 });
 

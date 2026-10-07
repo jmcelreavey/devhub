@@ -4,12 +4,14 @@ import { stageDashboard } from "./stage-dashboard.mjs";
 import { stageIcons } from "./stage-icons.mjs";
 import { stageResources } from "./stage-resources.mjs";
 import { stageNodeRuntime } from "./stage-node-runtime.mjs";
+import { stageGithubCli } from "./stage-github-cli.mjs";
 import { stageWakeHelper } from "./stage-wake-helper.mjs";
 
 const noBuild = process.argv.includes("--no-build");
 
 try {
   await stageNodeRuntime();
+  await stageGithubCli();
   stageResources();
   stageIcons();
   stageWakeHelper();

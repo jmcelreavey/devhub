@@ -12,6 +12,7 @@ fn main() {
             "renderer_log",
             "retry_start",
             "stop_conflicting_dev_server",
+            "install_wsl",
             "quit_app",
             "set_desktop_icon",
             "wake_helper_install",

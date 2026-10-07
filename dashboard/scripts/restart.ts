@@ -18,14 +18,14 @@ import { spawn, spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { envTrimOrDefault, loadEnvLocalIntoProcessIfUnset, resolveBindHost } from "./load-env-local-into-process";
+import { envTrimOrDefault, loadEnvLocalIntoProcessIfUnset, resolveDashboardBindHost } from "./load-env-local-into-process";
 
 const dashboardRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 loadEnvLocalIntoProcessIfUnset(dashboardRoot);
 
 const port = envTrimOrDefault("PORT", "1337");
-const host = resolveBindHost(envTrimOrDefault("DEVHUB_BIND_HOST", "0.0.0.0"));
+const host = resolveDashboardBindHost();
 
 function log(msg: string): void {
   process.stdout.write(`[restart] ${msg}\n`);

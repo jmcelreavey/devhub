@@ -8,6 +8,12 @@ export function envTrimOrDefault(key: string, fallback: string): string {
   return (process.env[key] ?? "").trim() || fallback;
 }
 
+/** Next stays on loopback when the separate LAN proxy is enabled. */
+export function resolveDashboardBindHost(raw = envTrimOrDefault("DEVHUB_BIND_HOST", "127.0.0.1")): string {
+  const host = raw.trim() || "127.0.0.1";
+  return ["auto", "lan"].includes(host.toLowerCase()) ? "127.0.0.1" : resolveBindHost(host);
+}
+
 /**
  * Tailscale (and other VPNs) squat in the CGNAT range 100.64.0.0/10.
  * `os.networkInterfaces()` lists tailscale0/utun alongside physical NICs, so

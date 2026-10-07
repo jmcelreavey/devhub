@@ -51,7 +51,7 @@ async function download(url, dest) {
  *
  * npm, npx, corepack, and the bundled headers are all things the app never
  * runs and would otherwise have to be signed, notarised, and shipped. The
- * sidecar executes exactly one program.
+ * sidecar uses this binary directly; project tooling is installed separately.
  */
 function extractNodeBinary(archive, key, into) {
   fs.mkdirSync(into, { recursive: true });

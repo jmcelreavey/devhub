@@ -1,6 +1,7 @@
 "use client";
 
 import { DependencyChecklist } from "@/components/setup/DependencyChecklist";
+import { PrivateRepoSetup } from "@/components/setup/PrivateRepoSetup";
 import { filterStepsByGoals, parseGoals, SETUP_GOALS_KEY, type GoalId } from "@/lib/setup/goals";
 import { useState, useEffect, useCallback, useRef, startTransition } from "react";
 import Link from "next/link";
@@ -154,7 +155,7 @@ export default function SetupPage() {
   const [saveResult, setSaveResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [error, setError] = useState("");
   const [checkOk, setCheckOk] = useState("");
-  const [allowLan, setAllowLan] = useState(true);
+  const [allowLan, setAllowLan] = useState(false);
   const [agentsPassword, setAgentsPassword] = useState("");
   const [githubDevice, setGithubDevice] = useState<GithubDeviceLogin | null>(null);
   const [githubLogin, setGithubLogin] = useState<string | null>(null);
@@ -193,7 +194,7 @@ export default function SetupPage() {
       const data = (await r.json()) as SetupStatus;
       setStatus(data);
       void mutateSWR("/api/setup/status", data, { revalidate: false });
-      setAllowLan(data.allowLanNetwork !== false);
+      setAllowLan(data.allowLanNetwork === true);
       setPathsForm({
         repoRoot: data.coreVars.repoRoot || data.coreDefaults.repoRoot,
         notesDir: data.coreVars.notesDir || data.coreDefaults.notesDir,
@@ -918,7 +919,7 @@ export default function SetupPage() {
                   means that feature stays off - nothing breaks.
                 </p>
               </div>
-              <DependencyChecklist />
+              <DependencyChecklist goals={goals} />
             </div>
           )}
           {step.id === "paths" && (
@@ -934,15 +935,18 @@ export default function SetupPage() {
             />
           )}
           {step.id === "github" && (
-            <GitHubStep
-              configured={status.github}
-              checking={checkConnectionBusy === "github"}
-              onCheckConnection={() => void checkConnection("github")}
-              onStartDeviceLogin={() => void startGithubDeviceLogin()}
-              device={githubDevice}
-              login={githubLogin}
-              error={error}
-            />
+            <div>
+              <GitHubStep
+                configured={status.github}
+                checking={checkConnectionBusy === "github"}
+                onCheckConnection={() => void checkConnection("github")}
+                onStartDeviceLogin={() => void startGithubDeviceLogin()}
+                device={githubDevice}
+                login={githubLogin}
+                error={error}
+              />
+              {status.desktop && <PrivateRepoSetup connected={status.github} onLinked={() => void loadSetupStatus()} />}
+            </div>
           )}
           {step.id === "datadog" && (
             <DatadogStep

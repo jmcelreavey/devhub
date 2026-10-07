@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "This release or one of its dependencies is not available through Safe-Chain yet. Your installed Paseo is unchanged. Try again later." }, { status: 409 });
       }
       // Child output can include the pairing secret; never echo it.
-      const hint = input.action === "setup" ? " Run npm run agents:install in the DevHub checkout for diagnostics." : "";
+      const hint = input.action === "setup" ? " Check npm and Safe-Chain in Setup → Tools, then retry from Agents → Connection. Setup diagnostics are in the server log." : "";
       return NextResponse.json({ error: `Could not ${input.action === "default-provider" ? "save the default agent" : input.action} Paseo.${hint}` }, { status: 503 });
     }
   });

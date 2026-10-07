@@ -80,7 +80,22 @@ artifacts. It is **unsigned**, so Windows SmartScreen shows "Windows protected
 your PC" — click *More info → Run anyway*. That is expected for dev builds; a
 release needs an Authenticode certificate to avoid it.
 
-## Installing (one file)
+## Installing a release
+
+Run the downloaded `DevHub_*-setup.exe`. It installs the app for the current
+Windows user and installs WebView2 if needed. DevHub includes the server and
+Node runtime; Rust, MSVC, npm and a checkout are not needed.
+
+On first launch, if WSL or a user distro is missing, choose **Set up Windows
+support**. Windows asks for administrator permission, then installs WSL and
+Ubuntu. Finish the Linux account setup in Ubuntu, restart if Windows asks, and
+open DevHub again. DevHub then installs its bundled payload in the distro and
+opens the setup wizard. An existing user WSL2 distro is reused.
+
+WSL1 or an explicitly configured missing distro needs to be repaired separately;
+DevHub does not convert or replace existing distros.
+
+## Local developer build helper
 
 Double-click `desktop/windows/Install-DevHub.cmd` (copy it anywhere on Windows).
 It checks WSL, refreshes `C:\devhub-desktop` from the WSL checkout (path baked

@@ -40,13 +40,21 @@ const report: DependencyReport = {
   totalCount: 3,
 };
 
+const { useLiveMock } = vi.hoisted(() => ({ useLiveMock: vi.fn() }));
 vi.mock("@/lib/hooks/use-fetch", () => ({
-  useLive: () => ({ data: report, error: undefined, isLoading: false, mutate: vi.fn() }),
+  useLive: (...args: unknown[]) => {
+    useLiveMock(...args);
+    return { data: report, error: undefined, isLoading: false, mutate: vi.fn() };
+  },
 }));
 
 afterEach(cleanup);
 
 describe("DependencyChecklist install actions", () => {
+  it("checks tools against the selected goals", () => {
+    render(<DependencyChecklist goals={["notes"]} />);
+    expect(useLiveMock).toHaveBeenLastCalledWith("/api/setup/dependencies?goals=notes", { refreshInterval: 0 });
+  });
   it("offers Install only for tools that have a command to run", () => {
     render(<DependencyChecklist />);
     // Cursor is missing too, but it's a GUI download — an Install button there

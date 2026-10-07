@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CONTENT_SYNC_PATHS, isContentSyncPath } from "@/lib/content/sync-paths";
 import { matchContentBucket, type ContentPrefix } from "@/lib/content/sync-dirs";
 
 const buckets: ContentPrefix[] = [
@@ -11,6 +12,12 @@ const buckets: ContentPrefix[] = [
 ];
 
 describe("matchContentBucket", () => {
+  it("includes every conventional hidden content folder in scoped sync", () => {
+    for (const { prefix } of buckets) {
+      expect(CONTENT_SYNC_PATHS).toContain(prefix.slice(0, -1));
+      expect(isContentSyncPath(`${prefix}example.json`)).toBe(true);
+    }
+  });
   it("classifies content files by prefix", () => {
     expect(matchContentBucket(buckets, "tasks/2026-07-17.json")).toBe("tasks");
     expect(matchContentBucket(buckets, "notes/today.json")).toBe("notes");

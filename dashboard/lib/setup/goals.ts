@@ -23,8 +23,8 @@ export interface Goal {
   steps: string[];
 }
 
-/** Shown to everyone regardless of goal — orientation, tools, paths, finish. */
-export const ALWAYS_STEPS = ["welcome", "tools", "paths", "done"];
+/** GitHub is offered to notes users too, so they can connect a private content repo. */
+export const ALWAYS_STEPS = ["welcome", "tools", "paths", "github", "done"];
 
 export const GOALS: Goal[] = [
   {

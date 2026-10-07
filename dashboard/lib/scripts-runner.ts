@@ -174,11 +174,11 @@ const ACTIONS: Record<string, ActionDef> = {
   sync_notes_tasks_push: {
     label: "Sync content (Commit + Push)",
     description:
-      "Commit and push changes under notes/, collections/ (checklists), tasks/, docs/, and upstarts/ only.",
+      "Commit and push changes under notes/, collections/ (checklists), tasks/, docs/, diagrams/, and upstarts/ only.",
     timeoutMs: 600_000,
     mutates: true,
     effects: [
-      "Stages only changes under notes/, collections/, tasks/, docs/, and upstarts/",
+      "Stages only changes under notes/, collections/, tasks/, docs/, diagrams/, and upstarts/",
       "Creates a content sync commit with an auto-generated message",
       "Pushes to origin on the current branch (main/master only)",
     ],
@@ -188,7 +188,7 @@ const ACTIONS: Record<string, ActionDef> = {
         emit,
         repoRoot,
         paths: [...CONTENT_SYNC_PATHS],
-        commitMessage: `chore(content): sync notes, checklists, tasks, docs, and upstarts ${new Date().toISOString().slice(0, 10)}`,
+        commitMessage: `chore(content): sync notes, checklists, tasks, docs, diagrams, and upstarts ${new Date().toISOString().slice(0, 10)}`,
       }),
   },
   dry_run_scoped_sync: {
@@ -197,7 +197,7 @@ const ACTIONS: Record<string, ActionDef> = {
     timeoutMs: 30_000,
     mutates: false,
     effects: [
-      "Lists changed files under notes/, collections/, tasks/, docs/, and upstarts/",
+      "Lists changed files under notes/, collections/, tasks/, docs/, diagrams/, and upstarts/",
       "Shows the commit message and git commands that would run",
       "Does not stage, commit, or push",
     ],
@@ -207,7 +207,7 @@ const ACTIONS: Record<string, ActionDef> = {
         emit,
         repoRoot,
         paths: [...CONTENT_SYNC_PATHS],
-        commitMessage: `chore(content): sync notes, checklists, tasks, docs, and upstarts ${new Date().toISOString().slice(0, 10)}`,
+        commitMessage: `chore(content): sync notes, checklists, tasks, docs, diagrams, and upstarts ${new Date().toISOString().slice(0, 10)}`,
       }),
   },
   push_unpushed_commits: {

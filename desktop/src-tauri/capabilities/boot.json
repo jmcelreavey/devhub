@@ -8,6 +8,7 @@
     "allow-recent-logs",
     "allow-retry-start",
     "allow-stop-conflicting-dev-server",
+    "allow-install-wsl",
     "allow-quit-app"
   ]
 }

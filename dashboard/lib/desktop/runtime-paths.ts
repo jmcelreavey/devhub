@@ -73,7 +73,8 @@ export function getResourceRoot(): string {
  */
 function linkedCheckoutFromAppData(): string | null {
   try {
-    const file = path.join(getAppDataDir(), "repo-path.txt");
+    const contentLink = path.join(getAppDataDir(), "content-repo-path.txt");
+    const file = fs.existsSync(contentLink) ? contentLink : path.join(getAppDataDir(), "repo-path.txt");
     const raw = fs.readFileSync(file, "utf8").trim();
     if (!raw) return null;
     return path.resolve(expandHome(raw));

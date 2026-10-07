@@ -40,7 +40,7 @@ describe("stepsForGoals", () => {
     const notes = stepsForGoals(["notes"]);
     expect(notes.has("calendar")).toBe(true);
     expect(notes.has("datadog")).toBe(false);
-    expect(notes.has("github")).toBe(false);
+    expect(notes.has("github")).toBe(true);
   });
 
   it("unions multiple goals", () => {

@@ -14,7 +14,8 @@ import {
  * Kept because ~60 call sites use it, but its meaning is now narrowed: it is
  * the *content* base, i.e. the thing `NOTES_DIR` and friends default under. In
  * a checkout that is the checkout, unchanged. In the installed app it is the
- * writable app-data directory — never the read-only bundle, because callers
+ * writable app-data directory or the private content checkout selected in setup —
+ * never the read-only bundle, because callers
  * that reach `path.join(getRepoRoot(), "notes")` are trying to write.
  *
  * For packaged assets use `getResourceRoot()`; for "do I have a real git
@@ -22,7 +23,10 @@ import {
  * either of those questions is the bug this split exists to prevent.
  */
 export function getRepoRoot(): string {
-  if (isDesktopRuntime()) return getAppDataDir();
+  if (isDesktopRuntime()) {
+    const contentRoot = process.env.DEVHUB_CONTENT_ROOT?.trim();
+    return contentRoot ? path.resolve(contentRoot) : getAppDataDir();
+  }
   const root = process.env.REPO_ROOT;
   if (!root) {
     // dashboard/lib/content/dirs.ts -> ../../.. -> repo root.

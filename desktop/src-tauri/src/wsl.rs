@@ -109,6 +109,20 @@ impl WslBackend {
         self.exec(&refs, QUICK_TIMEOUT).map(|_| ())
     }
 
+    /// Content-only Git linking keeps configuration in app data. Auto-detecting
+    /// that clone as a legacy checkout would switch to an absent .env.local.
+    pub fn has_content_checkout(&self) -> bool {
+        self.exec(
+            &[
+                "/bin/test",
+                "-s",
+                &format!("{}/content-repo-path.txt", self.app_data),
+            ],
+            QUICK_TIMEOUT,
+        )
+        .is_ok()
+    }
+
     /// The DevHub git checkout to run against, if there is one.
     ///
     /// `preferred` is an explicit path (`DEVHUB_WSL_REPO` / `wsl-repo.txt`);
@@ -269,6 +283,27 @@ fn wslenv<'a>(names: impl Iterator<Item = &'a str>) -> String {
     parts.join(":")
 }
 
+/// Leave provisioning visible: Windows may ask for a restart and Ubuntu for a
+/// username. Those prompts cannot be completed by a hidden background process.
+#[cfg(target_os = "windows")]
+pub fn launch_installer() -> Result<(), String> {
+    let system_root =
+        std::env::var_os("SystemRoot").ok_or("Windows system directory is unavailable.")?;
+    let powershell = std::path::PathBuf::from(system_root)
+        .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+    let mut command = Command::new(powershell);
+    command.creation_flags(CREATE_NO_WINDOW);
+    command.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "$ErrorActionPreference = 'Stop'; Start-Process -FilePath (Join-Path $env:SystemRoot 'System32/wsl.exe') -ArgumentList '--install','-d','Ubuntu' -Verb RunAs",
+    ]);
+    run_captured(command, Duration::from_secs(90))
+        .map(|_| ())
+        .map_err(|err| format!("Could not open Windows setup: {err}"))
+}
+
 /// Run to completion with a deadline. `wsl.exe` can hang on a wedged VM, and a
 /// launcher that hangs silently is indistinguishable from a crash.
 fn run_captured(mut command: Command, timeout: Duration) -> Result<String, String> {
@@ -385,13 +420,17 @@ fn is_internal_distro(name: &str) -> bool {
 /// first usable WSL2 distro.
 pub fn choose_distro(distros: &[Distro], preferred: Option<&str>) -> Result<String, String> {
     if let Some(wanted) = preferred.map(str::trim).filter(|w| !w.is_empty()) {
-        return distros
-            .iter()
-            .find(|d| d.name.eq_ignore_ascii_case(wanted))
-            .map(|d| d.name.clone())
+        let distro = distros.iter().find(|d| d.name.eq_ignore_ascii_case(wanted))
             .ok_or_else(|| {
                 format!("The WSL distro \"{wanted}\" (DEVHUB_WSL_DISTRO or wsl-distro.txt) is not installed.")
-            });
+            })?;
+        if distro.version != 2 || is_internal_distro(&distro.name) {
+            return Err(format!(
+                "DevHub needs a user WSL 2 distro; \"{}\" cannot be used.",
+                distro.name
+            ));
+        }
+        return Ok(distro.name.clone());
     }
     let usable = |d: &&Distro| d.version == 2 && !is_internal_distro(&d.name);
     distros
@@ -422,16 +461,41 @@ pub fn list_distros() -> Result<Vec<Distro>, String> {
             "WSL is not installed. Open PowerShell as administrator, run `wsl --install`, restart, then Retry."
                 .to_string(),
         ),
-        // `wsl -l` exits non-zero with "no installed distributions" text.
-        Err(_) => Ok(Vec::new()),
+        // An unsuccessful query may also mean a broken WSL installation.
+        // Preserve its diagnostic rather than treating every failure as empty.
+        Err(err) => Err(err),
     }
 }
 
 /// Resolve the distro and its `$HOME`. Boots the distro as a side effect of
 /// asking it for the home directory.
-pub fn resolve_backend(preferred: Option<&str>) -> Result<WslBackend, String> {
-    let distros = list_distros()?;
-    let name = choose_distro(&distros, preferred)?;
+#[derive(Debug)]
+pub struct ResolveError {
+    pub message: String,
+    pub install_available: bool,
+}
+
+impl From<String> for ResolveError {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            install_available: false,
+        }
+    }
+}
+
+pub fn resolve_backend(preferred: Option<&str>) -> Result<WslBackend, ResolveError> {
+    let distros = list_distros().map_err(|message| ResolveError {
+        message,
+        install_available: preferred.is_none(),
+    })?;
+    let name = choose_distro(&distros, preferred).map_err(|message| ResolveError {
+        message,
+        // Offer a new Ubuntu install only when there is no user distro to
+        // convert or explicit choice to repair. Never alter an existing distro.
+        install_available: preferred.is_none()
+            && !distros.iter().any(|d| !is_internal_distro(&d.name)),
+    })?;
     let probe = WslBackend::new(name.clone(), String::new());
     probe.ensure_running()?;
     let home = probe
@@ -439,9 +503,7 @@ pub fn resolve_backend(preferred: Option<&str>) -> Result<WslBackend, String> {
         .map_err(|err| format!("Could not read $HOME in \"{name}\": {err}"))?;
     let home = home.trim().to_string();
     if !home.starts_with('/') {
-        return Err(format!(
-            "\"{name}\" reported an unusable home directory: {home:?}"
-        ));
+        return Err(format!("\"{name}\" reported an unusable home directory: {home:?}").into());
     }
     Ok(WslBackend::new(name, home))
 }
@@ -563,10 +625,11 @@ mod tests {
     fn an_explicit_choice_wins_and_must_exist() {
         let distros = parse_distro_list(LIST);
         assert_eq!(
-            choose_distro(&distros, Some("legacy")).unwrap(),
-            "Legacy",
-            "explicit choice is honoured even for WSL1, and case-insensitively"
+            choose_distro(&distros, Some("ubuntu-24.04")).unwrap(),
+            "Ubuntu-24.04"
         );
+        assert!(choose_distro(&distros, Some("legacy")).is_err());
+        assert!(choose_distro(&distros, Some("docker-desktop")).is_err());
         assert!(choose_distro(&distros, Some("Nope")).is_err());
     }
 

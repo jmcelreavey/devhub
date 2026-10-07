@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import path from "node:path";
-import { getTasksDir, getCollectionsDir, getDocsDir, getUpstartsDir } from "@/lib/content/dirs";
+import { getRepoRoot, getTasksDir, getCollectionsDir, getDocsDir, getUpstartsDir } from "@/lib/content/dirs";
 
 const SAVE = {
   REPO_ROOT: process.env.REPO_ROOT,
@@ -21,6 +21,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const [k, v] of Object.entries(SAVE)) {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
@@ -28,6 +29,15 @@ afterEach(() => {
 });
 
 describe("personal content dir resolution", () => {
+  it("uses the private mirror as desktop content root only when explicitly selected", () => {
+    vi.stubEnv("DEVHUB_DESKTOP", "1");
+    vi.stubEnv("DEVHUB_APP_DATA", "/app-data");
+    vi.stubEnv("DEVHUB_CONTENT_ROOT", "");
+    expect(getRepoRoot()).toBe("/app-data");
+    vi.stubEnv("DEVHUB_CONTENT_ROOT", "/private-mirror");
+    expect(getRepoRoot()).toBe("/private-mirror");
+    expect(getTasksDir()).toBe("/private-mirror/tasks");
+  });
   it("defaults tasks/collections/upstarts under REPO_ROOT (back-compat)", () => {
     expect(getTasksDir()).toBe(path.join("/repo", "tasks"));
     expect(getCollectionsDir()).toBe(path.join("/repo", "collections"));

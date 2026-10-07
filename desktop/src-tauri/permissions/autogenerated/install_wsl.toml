@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-install-wsl"
+description = "Enables the install_wsl command without any pre-configured scope."
+commands.allow = ["install_wsl"]
+
+[[permission]]
+identifier = "deny-install-wsl"
+description = "Denies the install_wsl command without any pre-configured scope."
+commands.deny = ["install_wsl"]

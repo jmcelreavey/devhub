@@ -3,7 +3,8 @@
 import { Check, AlertTriangle, Minus, ExternalLink, RotateCcw, TerminalSquare } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { CopyButton } from "@/components/ui/CopyButton";
-import { LoadingLine } from "@/components/ui/LoadingLine";
+import { SkeletonRows } from "@/components/ui/SkeletonRows";
+import type { GoalId } from "@/lib/setup/goals";
 import { proposeTerminalRun } from "@/lib/terminal-inject";
 import type { DependencyReport } from "@/lib/setup/dependencies";
 
@@ -18,17 +19,23 @@ import type { DependencyReport } from "@/lib/setup/dependencies";
  *
  * Nobody should have to guess why DevHub wants Docker.
  */
-export function DependencyChecklist() {
-  const { data, error, isLoading, mutate } = useLive<DependencyReport>("/api/setup/dependencies", {
+export function DependencyChecklist({ goals = [] }: { goals?: readonly GoalId[] }) {
+  const url = goals.length
+    ? `/api/setup/dependencies?goals=${encodeURIComponent(goals.join(","))}`
+    : "/api/setup/dependencies";
+  const { data, error, isLoading, mutate } = useLive<DependencyReport>(url, {
     refreshInterval: 0,
   });
 
-  if (isLoading) return <LoadingLine />;
+  if (isLoading) return <SkeletonRows count={4} />;
   if (error || !data) {
     return (
-      <p className="text-sm" style={{ color: "var(--text-subtle)" }}>
+      <div className="flex items-center gap-2 text-sm" style={{ color: "var(--text-subtle)" }}>
         Could not check installed tools.
-      </p>
+        <button type="button" onClick={() => void mutate()} className="btn btn-ghost">
+          <RotateCcw size={12} /> Re-check
+        </button>
+      </div>
     );
   }
 

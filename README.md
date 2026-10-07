@@ -341,7 +341,7 @@ A correction becomes a learning note. One that keeps coming back becomes a perso
 
 ## Security
 
-DevHub is built for a single trusted machine. Packaged services bind to `127.0.0.1`; the checkout dashboard defaults to `0.0.0.0`, so set `DEVHUB_BIND_HOST=127.0.0.1` for local-only use. Mutating API routes accept a desktop session token, a strict same-origin request or a matching `DEVHUB_API_SECRET` header, and the in-app terminal is never exposed to the network. Don't put it on the public internet. LAN access is opt-in, see [Setup](docs/getting-started/setup.md#localhost-vs-lan-access).
+DevHub is built for a single trusted machine. Packaged services and the checkout dashboard bind to `127.0.0.1` by default. Mutating API routes accept a desktop session token, a strict same-origin request or a matching `DEVHUB_API_SECRET` header, and the in-app terminal is never exposed to the network. Don't put it on the public internet. LAN access is opt-in, see [Setup](docs/getting-started/setup.md#localhost-vs-lan-access).
 
 ## Documentation
 

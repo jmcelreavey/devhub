@@ -1,6 +1,6 @@
 ---
 title: The desktop app
-description: Install and run DevHub as a native macOS app — no terminal, no checkout required.
+description: Install DevHub on macOS or Windows and connect your own private Git repo.
 order: 3
 icon: Monitor
 tags: [setup, desktop]
@@ -12,15 +12,27 @@ related:
 
 # The DevHub desktop app
 
-DevHub ships as a macOS application. You do not need a terminal, a copy of this
-repository, or Node.js installed — the app brings its own.
+The release pipeline builds a macOS `.dmg` and a Windows `-setup.exe`.
+Both include DevHub's server, Node.js and GitHub CLI. Running the installed app
+needs no development checkout, npm, Rust or compiler.
 
 ## Installing
 
-1. Download the latest `DevHub_*.dmg` from
-   [Releases](https://github.com/jmcelreavey/devhub/releases/latest).
-2. Open it and drag DevHub to Applications.
-3. Launch it.
+Public installer releases have not been published yet. Build artifacts are
+available from successful **Release desktop** workflow runs; tagged releases
+will appear under [Releases](https://github.com/jmcelreavey/devhub/releases).
+
+**macOS:** choose the `.dmg` for Apple Silicon or Intel, open it, drag DevHub
+to Applications, then launch it.
+
+**Windows:** run the `-setup.exe`. It installs DevHub for your Windows user
+and installs WebView2 if needed. On first launch, choose **Set up Windows
+support** if asked. Windows installs WSL 2 and Ubuntu through its own
+administrator prompt. Finish Ubuntu's account setup, restart if asked, then
+open DevHub again. DevHub uses an existing user WSL2 distro when available.
+
+Windows installs remain unverified on a clean Windows machine. See
+[Windows app](../architecture/desktop-windows-wsl.md) for the current limits.
 
 ### "DevHub can't be opened because Apple cannot check it"
 
@@ -47,7 +59,7 @@ Two to five seconds is normal on first launch. If it takes longer or fails,
 you will get a real error, the last few log lines, and buttons to retry, open
 the logs, or quit — not a blank window.
 
-Then setup asks for three things:
+Then the setup wizard covers your goals, tools, folders and private Git repo:
 
 **What do you want DevHub for.** This only decides which of the later steps you
 are shown. Every feature stays available regardless; a wrong answer costs
@@ -61,7 +73,27 @@ there.** Leaving it empty is fine if you are here for notes and tasks.
 **Which tools you have.** Git, GitHub CLI, Docker, cloud CLIs, agent CLIs. Only
 Git is required, and only if you picked a code-related goal — everything else
 unlocks a specific feature and is described by what it unlocks. DevHub shows
-you install commands; it never runs a package manager for you.
+you install actions and download links for your platform, including Cursor.
+Install actions show the command and ask for confirmation in the terminal.
+The optional Agents daemon needs npm and Safe-Chain; both are listed here.
+Install npm through Node.js first, then Safe-Chain, set an Agents password in
+setup, and choose **Agents → Connection → Set up**.
+
+**Your private DevHub repo.** Sign in to GitHub, then create a private copy,
+clone your existing private repo onto a new machine, or link a local checkout. Creating a copy keeps the public repo
+as `upstream` and your private repo as `origin`, copies current notes, tasks,
+collections, Upstarts, reps and root diagrams, and pushes them to the private
+repo. Original files remain in place. Linking an existing checkout uses its
+existing content without importing the current local content.
+
+GitHub does not let a fork of a public repo become private, so this creates an
+independent private copy. GitHub CLI is bundled. If Git is missing, use its
+install action in **Tools** first. You can skip Git setup and work locally.
+
+Quit and reopen DevHub after connecting. The content sync button commits and
+pushes to your private repo; app updates still come from public releases.
+Integration credentials stay in the app's local config and are not copied
+into the repo by this flow.
 
 Progress is saved after every step, so quitting halfway and coming back does not
 start you over.
@@ -111,7 +143,8 @@ wherever they already were and DevHub simply points at them.
 Notes, tasks, and other content in app-data work without a git checkout. **Pushing
 content to git**, pulling updates, syncing `skills/shared/` from the tree, or
 porting public-core changes requires a linked DevHub git checkout — attach one
-via **View → Attach to Dev Server…** (or record it during migration). Without
+through **Setup → GitHub → Your private DevHub repo**, during migration, or
+via **View → Attach to Dev Server…** for development. Without
 that link, the top-bar cloud sync button and **Sync skills** fail with "No
 linked git checkout". See [Scripts — Linked checkout requirement](../reference/scripts.md#linked-checkout-requirement).
 

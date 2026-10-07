@@ -19,6 +19,7 @@
       "../staging/wsl/payload-id.txt": "wsl/payload-id.txt"
     },
     "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true },
       "nsis": {
         "installMode": "currentUser"
       }

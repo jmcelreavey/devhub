@@ -53,6 +53,8 @@ pub enum BootState {
         /// somebody to reword the sentence.
         #[serde(default)]
         stoppable_dev_server: bool,
+        #[serde(default)]
+        install_wsl: bool,
     },
     Stopping,
 }
@@ -494,6 +496,7 @@ fn parse_state(value: &serde_json::Value) -> Option<BootState> {
             // The supervisor reports its own failures; port ownership is the
             // shell's business, so it never sets this.
             stoppable_dev_server: false,
+            install_wsl: false,
         }),
         "stopping" => Some(BootState::Stopping),
         _ => None,

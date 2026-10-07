@@ -21,7 +21,7 @@ PUBLIC_PATHS=(.gitattributes .githooks .github .gitignore .nvmrc AGENTS.md
 
 # Personal data that lives happily in this mirror and must never be pushed to
 # public core.
-PERSONAL_PATHS=(notes tasks reps collections upstarts
+PERSONAL_PATHS=(notes tasks reps collections upstarts diagrams
                 dashboard/.env.local persona/identity.txt
                 skills/shared/my-voice/writing-style.md skills/shared/my-voice/learned-voice.md
                 TEMPLATE_AND_PLUGIN_PLAN.md scripts/make-public-seed.sh

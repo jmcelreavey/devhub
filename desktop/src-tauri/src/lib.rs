@@ -356,6 +356,39 @@ async fn stop_conflicting_dev_server(app: tauri::AppHandle) -> Result<(), String
     start_sidecar(&app)
 }
 
+/// Open Windows' installer with its own administrator prompt. Only the bundled
+/// boot page has this permission, and the caller cannot supply a command.
+#[tauri::command]
+async fn install_wsl(app: tauri::AppHandle) -> Result<(), String> {
+    let offered = app
+        .state::<AppState>()
+        .boot
+        .lock()
+        .map_err(|_| "Could not read startup state".to_string())
+        .map(|state| {
+            matches!(
+                *state,
+                BootState::Failed {
+                    install_wsl: true,
+                    ..
+                }
+            )
+        })?;
+    if !offered {
+        return Err("Windows setup is not needed for this startup failure.".into());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        tauri::async_runtime::spawn_blocking(wsl::launch_installer)
+            .await
+            .map_err(|err| err.to_string())?
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Windows setup is only available on Windows.".into())
+    }
+}
+
 fn set_boot(app: &tauri::AppHandle, next: BootState) {
     if let Some(state) = app.try_state::<AppState>() {
         if let Ok(mut guard) = state.boot.lock() {
@@ -1414,7 +1447,13 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
             service: "wsl".into(),
         },
     );
-    let backend = wsl::resolve_backend(preferred.as_deref())?;
+    let backend = match wsl::resolve_backend(preferred.as_deref()) {
+        Ok(backend) => backend,
+        Err(err) => {
+            fail_with_options(app, &err.message, false, err.install_available);
+            return Ok(());
+        }
+    };
     log.write_line(
         "shell:wsl",
         &format!("[wsl] distro={} home={}", backend.distro, backend.home),
@@ -1426,7 +1465,11 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
     let repo_pref = std::env::var("DEVHUB_WSL_REPO").ok().or_else(|| {
         std::fs::read_to_string(state.paths.app_data.join("config").join("wsl-repo.txt")).ok()
     });
-    let checkout = backend.find_checkout(repo_pref.as_deref());
+    let checkout = if backend.has_content_checkout() {
+        None
+    } else {
+        backend.find_checkout(repo_pref.as_deref())
+    };
     log.write_line(
         "shell:wsl",
         &match &checkout {
@@ -1527,6 +1570,15 @@ fn fail(app: &tauri::AppHandle, message: &str) {
 
 /// Fail, and say whether the boot screen may offer to stop a leftover of ours.
 fn fail_with_recovery(app: &tauri::AppHandle, message: &str, stoppable_dev_server: bool) {
+    fail_with_options(app, message, stoppable_dev_server, false);
+}
+
+fn fail_with_options(
+    app: &tauri::AppHandle,
+    message: &str,
+    stoppable_dev_server: bool,
+    install_wsl: bool,
+) {
     let logs = app
         .try_state::<AppState>()
         .map(|s| s.log.tail(20))
@@ -1540,6 +1592,7 @@ fn fail_with_recovery(app: &tauri::AppHandle, message: &str, stoppable_dev_serve
             error: message.to_string(),
             logs,
             stoppable_dev_server,
+            install_wsl,
         },
     );
     show_main_window(app);
@@ -2135,6 +2188,7 @@ pub fn run() {
             renderer_log,
             retry_start,
             stop_conflicting_dev_server,
+            install_wsl,
             quit_app,
             icon::set_desktop_icon,
             background::wake_helper_install,
@@ -2926,11 +2980,13 @@ mod tests {
             error: "port held".into(),
             logs: vec![],
             stoppable_dev_server: true,
+            install_wsl: false,
         };
         let refused = BootState::Failed {
             error: "port held".into(),
             logs: vec![],
             stoppable_dev_server: false,
+            install_wsl: false,
         };
         let json = |state: &BootState| serde_json::to_value(state).unwrap();
         assert_eq!(json(&offered)["stoppable_dev_server"], true);

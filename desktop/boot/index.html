@@ -176,6 +176,7 @@
             so it takes primary, and Try again steps down to a plain button.
           -->
           <div class="actions">
+            <button id="install-wsl" type="button" hidden>Set up Windows support</button>
             <button id="stop-dev" type="button" hidden>Stop it and continue</button>
             <button class="primary" id="retry" type="button">Try again</button>
             <button id="logs" type="button">Open logs</button>
@@ -264,6 +265,7 @@
       const errorLogs = document.getElementById("error-logs");
       const retryButton = document.getElementById("retry");
       const stopDevButton = document.getElementById("stop-dev");
+      const installWslButton = document.getElementById("install-wsl");
 
       /**
        * Plain language for each phase. "Starting service: next" is a status
@@ -319,8 +321,15 @@
           const stoppable = state.stoppable_dev_server === true;
           stopDevButton.hidden = !stoppable;
           stopDevButton.classList.toggle("primary", stoppable);
-          retryButton.classList.toggle("primary", !stoppable);
-          (stoppable ? stopDevButton : retryButton).focus();
+          const needsWindowsSetup = state.install_wsl === true;
+          installWslButton.hidden = !needsWindowsSetup;
+          installWslButton.classList.toggle("primary", needsWindowsSetup);
+          if (needsWindowsSetup) {
+            title.textContent = "Set up DevHub on Windows";
+            detail.textContent = "DevHub needs Windows Subsystem for Linux (WSL 2) and Ubuntu. Setup opens a Windows permission prompt. Finish the Ubuntu account setup, restart if asked, then open DevHub again.";
+          }
+          retryButton.classList.toggle("primary", !stoppable && !needsWindowsSetup);
+          (needsWindowsSetup ? installWslButton : stoppable ? stopDevButton : retryButton).focus();
           return;
         }
 
@@ -331,6 +340,7 @@
         errorBox.hidden = true;
         errorLogs.hidden = true;
         stopDevButton.hidden = true;
+        installWslButton.hidden = true;
         title.textContent = "Starting DevHub";
 
         if (state.state === "preparing") {
@@ -590,6 +600,24 @@
           retryButton.disabled = false;
         }
       }
+
+      installWslButton.addEventListener("click", async () => {
+        installWslButton.disabled = true;
+        retryButton.disabled = true;
+        detail.textContent = "Approve the Windows permission prompt to start setup…";
+        try {
+          await invoke("install_wsl");
+          detail.textContent = "Finish setup in the Windows window. Restart if asked, open Ubuntu to create your Linux account, then open DevHub again or choose Try again.";
+          installWslButton.hidden = true;
+          retryButton.classList.add("primary");
+        } catch (err) {
+          detail.textContent = "Setup did not open. You can try again.";
+          errorMessage.textContent = String(err);
+        } finally {
+          installWslButton.disabled = false;
+          retryButton.disabled = false;
+        }
+      });
 
       retryButton.addEventListener("click", () => void runRecovery("retry_start"));
       stopDevButton.addEventListener("click", () => void runRecovery("stop_conflicting_dev_server"));

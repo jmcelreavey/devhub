@@ -25,6 +25,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { binariesDir, desktopDir, resourcesDir, serverDir, servicesDir, stagingDir } from "./staging-paths.mjs";
 import { stageDashboard } from "./stage-dashboard.mjs";
 import { stageNodeRuntime } from "./stage-node-runtime.mjs";
+import { stageGithubCli } from "./stage-github-cli.mjs";
 import { stageResources } from "./stage-resources.mjs";
 
 const wslDir = path.join(stagingDir, "wsl");
@@ -54,6 +55,7 @@ export async function stageWslPayload({ build = true } = {}) {
   }
 
   await stageNodeRuntime();
+  await stageGithubCli();
   stageResources();
   await stageDashboard({ build });
 
@@ -71,6 +73,8 @@ export async function stageWslPayload({ build = true } = {}) {
   fs.mkdirSync(payloadDir, { recursive: true });
 
   copyTree(path.join(binariesDir, nodeBinary), path.join(payloadDir, "runtime", "node"));
+  copyTree(path.join(binariesDir, "gh"), path.join(payloadDir, "runtime", "gh"));
+  copyTree(path.join(binariesDir, "gh-LICENSE"), path.join(payloadDir, "runtime", "gh-LICENSE"));
   copyTree(serverDir, path.join(payloadDir, "server"));
   copyTree(servicesDir, path.join(payloadDir, "services"));
   copyTree(resourcesDir, path.join(payloadDir, "resources"));

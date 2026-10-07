@@ -14,6 +14,8 @@
  */
 import { execFileSync } from "node:child_process";
 import os from "node:os";
+import fs from "node:fs";
+import { findInstalledApp } from "@/lib/launch/desktop";
 import path from "node:path";
 
 /**
@@ -46,6 +48,8 @@ export type DependencyId =
   | "git"
   | "gh"
   | "node"
+  | "npm"
+  | "safe-chain"
   | "docker"
   | "aws"
   | "kubectl"
@@ -64,7 +68,7 @@ export interface DependencySpec {
   bin: string;
   /** Args that make the tool print a version cheaply and exit non-interactively. */
   versionArgs: string[];
-  /** Copyable install command, macOS-first since that's the supported platform. */
+  /** Copyable install command, adjusted for the host before returning a report. */
   installCommand?: string;
   /** Where to read more, when a one-liner won't do it. */
   installUrl?: string;
@@ -102,6 +106,25 @@ export const DEPENDENCIES: DependencySpec[] = [
     bin: "node",
     versionArgs: ["--version"],
     installCommand: "brew install node",
+  },
+  {
+    id: "npm",
+    label: "npm",
+    required: false,
+    unlocks: "Installing the optional Agents daemon — included with a separate Node.js install",
+    bin: "npm",
+    versionArgs: ["--version"],
+    installCommand: "brew install node",
+    installUrl: "https://nodejs.org/en/download",
+  },
+  {
+    id: "safe-chain",
+    label: "Safe-Chain",
+    required: false,
+    unlocks: "Checking packages when installing Agents and other npm tools — needs npm first",
+    bin: "safe-chain",
+    versionArgs: ["--version"],
+    installUrl: "https://github.com/AikidoSec/safe-chain",
   },
   {
     id: "gh",
@@ -148,7 +171,7 @@ export const DEPENDENCIES: DependencySpec[] = [
     unlocks: "Opening a repository straight into the editor",
     bin: "cursor",
     versionArgs: ["--version"],
-    installUrl: "https://cursor.com",
+    installUrl: "https://cursor.com/downloads",
   },
   {
     id: "claude",
@@ -157,7 +180,8 @@ export const DEPENDENCIES: DependencySpec[] = [
     unlocks: "Agent handoffs and code review from DevHub",
     bin: "claude",
     versionArgs: ["--version"],
-    installCommand: "npm install -g @anthropic-ai/claude-code",
+    installCommand: "curl -fsSL https://claude.ai/install.sh | bash",
+    installUrl: "https://code.claude.com/docs/en/setup",
   },
 ];
 
@@ -195,6 +219,9 @@ export function probeDependency(spec: DependencySpec, timeoutMs = 2500): Depende
   } catch {
     // ENOENT (not installed), non-zero exit, or timeout all mean "can't use it".
     present = false;
+  }
+  if (!present && spec.id === "cursor" && findInstalledApp("Cursor", "cursor")) {
+    present = true;
   }
   return {
     id: spec.id,
@@ -272,10 +299,59 @@ export function applyRuntimeRequirements(
   });
 }
 
+interface InstallContext {
+  platform: NodeJS.Platform;
+  wsl: boolean;
+  apt: boolean;
+  homebrew: boolean;
+}
+
+/** An install action must run where the dashboard runs, including inside WSL. */
+export function withInstallHints(spec: DependencySpec, ctx: InstallContext): DependencySpec {
+  const urls: Record<DependencyId, string> = {
+    git: "https://git-scm.com/downloads",
+    node: "https://nodejs.org/en/download",
+    npm: "https://nodejs.org/en/download",
+    "safe-chain": "https://github.com/AikidoSec/safe-chain",
+    gh: "https://cli.github.com/",
+    docker: ctx.platform === "darwin"
+      ? "https://docs.docker.com/desktop/setup/install/mac-install/"
+      : ctx.platform === "win32" || ctx.wsl
+        ? "https://docs.docker.com/desktop/setup/install/windows-install/"
+        : "https://docs.docker.com/desktop/setup/install/linux/",
+    aws: "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html",
+    kubectl: "https://kubernetes.io/docs/tasks/tools/",
+    cursor: "https://cursor.com/downloads",
+    claude: "https://code.claude.com/docs/en/setup",
+  };
+  let installCommand = spec.installCommand;
+  if (ctx.platform !== "darwin" || (!ctx.homebrew && installCommand?.startsWith("brew "))) {
+    installCommand = undefined;
+  }
+  if (spec.id === "git" && ctx.platform === "linux" && ctx.apt) {
+    installCommand = "sudo apt-get update && sudo apt-get install -y git";
+  }
+  if (spec.id === "safe-chain" && (ctx.platform === "darwin" || ctx.platform === "linux")) {
+    installCommand = 'npm install -g @aikidosec/safe-chain@1.1.10 --prefix "$HOME/.local" && "$HOME/.local/bin/safe-chain" setup';
+  }
+  if (spec.id === "claude") {
+    installCommand = ctx.platform === "win32"
+      ? "irm https://claude.ai/install.ps1 | iex"
+      : "curl -fsSL https://claude.ai/install.sh | bash";
+  }
+  return { ...spec, installCommand, installUrl: urls[spec.id] };
+}
+
 export function checkDependencies(
   specs: DependencySpec[] = DEPENDENCIES,
   ctx?: RuntimeRequirementContext,
 ): DependencyReport {
-  const probed = specs.map((s) => probeDependency(s));
+  const installContext: InstallContext = {
+    platform: process.platform,
+    wsl: Boolean(process.env.WSL_DISTRO_NAME),
+    apt: fs.existsSync("/usr/bin/apt-get"),
+    homebrew: fs.existsSync("/opt/homebrew/bin/brew") || fs.existsSync("/usr/local/bin/brew"),
+  };
+  const probed = specs.map((spec) => probeDependency(withInstallHints(spec, installContext)));
   return summariseDependencies(ctx ? applyRuntimeRequirements(probed, ctx) : probed);
 }

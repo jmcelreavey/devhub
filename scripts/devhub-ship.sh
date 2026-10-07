@@ -92,7 +92,7 @@ if [[ "$DRY" == "1" ]]; then
 fi
 
 # 1. Personal data commit (private only; backport drops these paths anyway).
-git add notes tasks collections upstarts 2>/dev/null || true
+git add notes tasks collections upstarts diagrams 2>/dev/null || true
 if ! git diff --cached --quiet; then
   git commit --quiet -m "chore: sync personal data"
   log "Committed personal data (notes/tasks/collections/upstarts)."

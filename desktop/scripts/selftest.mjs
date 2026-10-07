@@ -87,6 +87,16 @@ if (!bundle) {
 
 process.stdout.write(`[selftest] ${bundle.bin}\n`);
 
+const githubCli = spawnSync(path.join(path.dirname(bundle.node), "gh"), ["--version"], {
+  encoding: "utf8",
+  timeout: 10_000,
+});
+if (githubCli.status !== 0 || !githubCli.stdout?.startsWith("gh version ")) {
+  process.stderr.write(`FAIL  bundled GitHub CLI — ${githubCli.error?.message ?? githubCli.stderr ?? "could not run"}\n`);
+  process.exit(1);
+}
+process.stdout.write(`PASS  bundled GitHub CLI — ${githubCli.stdout.split("\n")[0]}\n`);
+
 const result = spawnSync(bundle.bin, ["--self-test"], {
   stdio: "inherit",
   env: {

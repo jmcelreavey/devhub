@@ -57,7 +57,7 @@ Most core settings are created automatically during install.
 
 ## Localhost Vs LAN Access
 
-The packaged app binds its services to `127.0.0.1`. In a checkout, set `DEVHUB_BIND_HOST=127.0.0.1` for local-only use: the launcher otherwise defaults to `0.0.0.0` (all interfaces). LAN mode keeps localhost working and starts a proxy on the detected physical LAN IPv4.
+The packaged app and checkout dashboard bind to `127.0.0.1` by default. Enable LAN access in setup, or set `DEVHUB_BIND_HOST=auto`, to reach the dashboard from other devices. LAN mode keeps localhost working and starts a proxy on the detected physical LAN IPv4.
 
 The `auto` LAN detector excludes Tailscale/VPN CGNAT addresses (`100.64.0.0/10`) by default. In normal use, enabling LAN access exposes DevHub on Wi‑Fi/Ethernet, not Tailscale.
 

@@ -5,6 +5,9 @@
  * tree git operations and collect skip; skill+persona sync still run since
  * they don't touch tracked files.
  */
+import path from "node:path";
+import { assertPrivateRepo } from "@/lib/setup/private-repo";
+import { isDesktopRuntime } from "@/lib/desktop/runtime-paths";
 import { githubCliErrorInfo } from "@/lib/gh-exec";
 import { detectGitHookFailure, type GitHookPhase } from "@/lib/git/hook-failure";
 import { withPersistedLog } from "@/lib/git/hook-failure-persist";
@@ -98,6 +101,13 @@ function emitGitFailure(
 }
 
 /** Push current HEAD to origin/<branch>; retry with --set-upstream on failure. */
+async function checkPrivateContentOrigin(repoRoot: string): Promise<void> {
+  const contentRoot = process.env.DEVHUB_CONTENT_ROOT?.trim();
+  if (isDesktopRuntime() && contentRoot && path.resolve(repoRoot) === path.resolve(contentRoot)) {
+    await assertPrivateRepo(repoRoot);
+  }
+}
+
 function pushOriginBranch(
   emit: (line: string) => void,
   repoRoot: string,
@@ -142,6 +152,7 @@ function listChangedFilesForPaths(repoRoot: string, paths: string[]): string[] {
 
 export async function commitAndPushDirty(opts: CommitAndPushDirtyOptions): Promise<number> {
   const { emit, repoRoot } = opts;
+  await checkPrivateContentOrigin(repoRoot);
   const branch = runGit(repoRoot, ["branch", "--show-current"]).stdout.trim();
   if (branch !== "main" && branch !== "master") {
     emit(`ERROR: Commit & Push expects branch main/master (current: ${branch}).`);
@@ -184,6 +195,7 @@ export async function commitAndPushDirty(opts: CommitAndPushDirtyOptions): Promi
 
 export async function commitAndPushPaths(opts: CommitAndPushPathsOptions): Promise<number> {
   const { emit, repoRoot } = opts;
+  await checkPrivateContentOrigin(repoRoot);
   const branch = runGit(repoRoot, ["branch", "--show-current"]).stdout.trim();
   if (branch !== "main" && branch !== "master") {
     emit(`ERROR: Commit & Push expects branch main/master (current: ${branch}).`);
@@ -278,6 +290,7 @@ export async function dryRunScopedSync(opts: DryRunScopedSyncOptions): Promise<n
 
 export async function pushUnpushedCommits(opts: PushUnpushedCommitsOptions): Promise<number> {
   const { emit, repoRoot } = opts;
+  await checkPrivateContentOrigin(repoRoot);
   const branch = runGit(repoRoot, ["branch", "--show-current"]).stdout.trim();
   if (branch !== "main" && branch !== "master") {
     emit(`ERROR: Push unpushed commits expects branch main/master (current: ${branch}).`);
@@ -310,6 +323,7 @@ export async function pushUnpushedCommits(opts: PushUnpushedCommitsOptions): Pro
 
 export async function updateAndSync(opts: OrchestratorOptions): Promise<number> {
   const { emit, repoRoot } = opts;
+  if (opts.push && !opts.dryRun) await checkPrivateContentOrigin(repoRoot);
 
   const branch = runGit(repoRoot, ["branch", "--show-current"]).stdout.trim();
   if (branch !== "main" && branch !== "master") {

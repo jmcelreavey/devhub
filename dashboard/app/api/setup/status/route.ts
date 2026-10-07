@@ -98,7 +98,7 @@ export async function GET() {
     resolveEnvValue("OPENCODE_BIND_HOST", overrides)?.trim()
     ?? resolveEnvValue("OPENCODE_HOST", overrides)?.trim();
   const allowLanNetwork = !!lanProxyHost || (
-    bindHost !== "127.0.0.1" && opencodeBindHost !== "127.0.0.1"
+    !!bindHost && !["127.0.0.1", "localhost", "::1"].includes(bindHost) && opencodeBindHost !== "127.0.0.1"
   );
   // OPENCHAMBER_UI_PASSWORD is the legacy name; Paseo still falls back to it.
   const hasAgentsPassword =

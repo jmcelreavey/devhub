@@ -10,6 +10,8 @@ export const DASHBOARD_MANAGED_ENV_KEYS = [
   // than passthrough so migration can write a user's existing content
   // locations into the new config file instead of relocating their data.
   "DEVHUB_REPOS_DIR",
+  "DEVHUB_CONTENT_ROOT",
+  "REPS_DIR",
   "TASKS_DIR",
   "COLLECTIONS_DIR",
   "UPSTARTS_DIR",

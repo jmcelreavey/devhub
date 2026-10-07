@@ -113,6 +113,15 @@ describe("fresh desktop mode", () => {
     expect(getCheckoutRoot()).toBeNull();
   });
 
+  it("picks up a content-only checkout without changing the app config path", () => {
+    const checkout = makeCheckout();
+    const appData = path.join(tmp, "app-data");
+    fs.mkdirSync(appData, { recursive: true });
+    fs.writeFileSync(path.join(appData, "content-repo-path.txt"), checkout);
+    expect(getCheckoutRoot()).toBe(checkout);
+    expect(getEnvFilePath()).toBe(path.join(appData, "config", ".env.local"));
+  });
+
   it("picks up a linked checkout from repo-path.txt under app data", () => {
     const checkout = makeCheckout();
     const appData = path.join(tmp, "app-data");
