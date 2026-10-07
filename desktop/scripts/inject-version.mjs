@@ -38,15 +38,16 @@ if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) {
 const confPath = path.join(tauriDir, "tauri.conf.json");
 const conf = JSON.parse(fs.readFileSync(confPath, "utf8"));
 conf.version = version;
-fs.writeFileSync(confPath, `${JSON.stringify(conf, null, 2)}\n`);
 
 const cargoPath = path.join(tauriDir, "Cargo.toml");
 const cargo = fs.readFileSync(cargoPath, "utf8");
-const patched = cargo.replace(/^version = ".*"$/m, `version = "${version}"`);
-if (patched === cargo) {
+const versionLine = /^version = ".*"$/m;
+if (!versionLine.test(cargo)) {
   process.stderr.write(`Could not find a version line to replace in ${cargoPath}\n`);
   process.exit(1);
 }
+const patched = cargo.replace(versionLine, `version = "${version}"`);
+fs.writeFileSync(confPath, `${JSON.stringify(conf, null, 2)}\n`);
 fs.writeFileSync(cargoPath, patched);
 
 process.stdout.write(`[version] set tauri.conf.json and Cargo.toml to ${version}\n`);
