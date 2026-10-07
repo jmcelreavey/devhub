@@ -22,6 +22,7 @@
     "skills:verify-vendor": "tsx scripts/verify-vendor-skills.ts",
     "clean": "rm -rf .next .next-* output",
     "lint": "eslint --max-warnings 0 --cache --cache-location .eslintcache",
+    "pretypecheck": "next typegen",
     "typecheck": "NODE_OPTIONS='--max-old-space-size=4096' tsc --noEmit",
     "test": "env -u DEVHUB_DESKTOP -u DEVHUB_APP_DATA -u DEVHUB_RESOURCE_ROOT -u DEVHUB_SERVER_DIR -u NOTES_DIR -u TASKS_DIR -u COLLECTIONS_DIR -u UPSTARTS_DIR -u DOCS_DIR -u DEVHUB_OP_CACHE_DIR -u DEVHUB_OP_CACHE -u DEVHUB_OP_REFRESH -u DEVHUB_OP_SYNC_LOCAL -u DEVHUB_OP_ITEM -u DEVHUB_OP_VAULT -u JIRA_API_TOKEN -u GOOGLE_CLIENT_SECRET NODE_ENV=test NODE_OPTIONS='--no-deprecation --disable-warning=ExperimentalWarning' vitest run",
     "test:e2e:skills": "node scripts/e2e-skills-catalog.mjs",
@@ -37,6 +38,7 @@
     "check:dynamic-routes": "tsx scripts/check-no-prerendered-content-routes.mts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "preverify:checks": "tsx scripts/run-action.ts sync_plugins",
     "verify:checks": "concurrently --group --kill-others-on-fail --names lint,types,tests --prefix-colors blue,magenta,green \"npm:lint\" \"npm:typecheck\" \"npm:test\"",
     "verify:build": "node scripts/clean-verify-dist.mjs && DEVHUB_SKIP_NEXT_TYPECHECK=true DEVHUB_VERIFY_BUILD=1 npm run build"
   },

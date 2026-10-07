@@ -250,6 +250,14 @@ export function materializePlugins(opts: MaterializeOptions): number {
     return 0;
   }
 
+  // Route guards can outlive removed plugin routes in either Next build tree.
+  // Only clear generated types; keep runnable builds and dev caches intact.
+  for (const dist of [".next", ".next-verify"]) {
+    for (const types of ["types", "dev/types"]) {
+      fs.rmSync(path.join(coreDash, dist, types), { recursive: true, force: true });
+    }
+  }
+
   // Prune stale materialised paths first.
   for (const pat of stale) {
     fs.rmSync(path.join(repoRoot, pat), { recursive: true, force: true });

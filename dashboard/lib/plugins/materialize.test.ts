@@ -128,10 +128,35 @@ describe("materializePlugins (executor)", () => {
   it("prunes stale materialised paths on the next run", () => {
     materializePlugins({ repoRoot, emit: () => {} });
     expect(fs.existsSync(path.join(repoRoot, "dashboard", "app", "ops"))).toBe(true);
+    const nextDirs = [".next", ".next-verify"];
+    for (const dir of nextDirs) {
+      for (const typeDir of ["types", "dev/types"]) {
+        const types = path.join(repoRoot, "dashboard", dir, typeDir);
+        fs.mkdirSync(types, { recursive: true });
+        fs.writeFileSync(path.join(types, "validator.ts"), "import '../../../app/ops/page.js';");
+      }
+      fs.writeFileSync(path.join(repoRoot, "dashboard", dir, "BUILD_ID"), "keep-build");
+    }
     // disable the plugin -> next run prunes
     const reg = pluginRegistryPath(home);
     fs.writeFileSync(reg, JSON.stringify({ plugins: [{ name: "bi", path: pluginRoot, enabled: false }] }));
     materializePlugins({ repoRoot, emit: () => {} });
     expect(fs.existsSync(path.join(repoRoot, "dashboard", "app", "ops"))).toBe(false);
+    for (const dir of nextDirs) {
+      for (const typeDir of ["types", "dev/types"]) {
+        expect(fs.existsSync(path.join(repoRoot, "dashboard", dir, typeDir))).toBe(false);
+      }
+      expect(fs.readFileSync(path.join(repoRoot, "dashboard", dir, "BUILD_ID"), "utf-8")).toBe("keep-build");
+    }
+  });
+
+  it("leaves generated route types intact during a dry run", () => {
+    const types = path.join(repoRoot, "dashboard", ".next", "types");
+    fs.mkdirSync(types, { recursive: true });
+    fs.writeFileSync(path.join(types, "validator.ts"), "existing-types");
+
+    materializePlugins({ repoRoot, emit: () => {}, dryRun: true });
+
+    expect(fs.readFileSync(path.join(types, "validator.ts"), "utf-8")).toBe("existing-types");
   });
 });
