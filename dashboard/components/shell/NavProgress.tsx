@@ -1,27 +1,29 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { isDesktop, logDesktopEvent, openInBrowser } from "@/lib/desktop/bridge";
 
 /**
  * Thin top-of-page bar that crawls to ~70% on link click and snaps to 100%
- * when the pathname changes, then fades out. Pure CSS transitions — no
+ * when the pathname or query changes, then fades out. Pure CSS transitions — no
  * external dep, no JS animation loop.
  */
 export function NavProgress() {
   const pathname = usePathname();
+  const query = useSearchParams().toString();
+  const route = query ? `${pathname}?${query}` : pathname;
   const [phase, setPhase] = useState<"idle" | "loading" | "done">("idle");
-  const prevPath = useRef(pathname);
+  const prevRoute = useRef(route);
   const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (prevPath.current === pathname) return;
-    prevPath.current = pathname;
+    if (prevRoute.current === route) return;
+    prevRoute.current = route;
     setPhase("done");
     if (fadeTimer.current) clearTimeout(fadeTimer.current);
     fadeTimer.current = setTimeout(() => setPhase("idle"), 320);
-  }, [pathname]);
+  }, [route]);
 
   useEffect(() => {
     return () => {
@@ -53,12 +55,14 @@ export function NavProgress() {
         return;
       }
       if (href.startsWith("http") || href.startsWith("#") || href.startsWith("mailto:")) return;
-      if (href === pathname) return;
+      const destinationQuery = destination.searchParams.toString();
+      const destinationRoute = destinationQuery ? `${destination.pathname}?${destinationQuery}` : destination.pathname;
+      if (destinationRoute === route) return;
       setPhase("loading");
     };
     document.addEventListener("click", handler, true);
     return () => document.removeEventListener("click", handler, true);
-  }, [pathname]);
+  }, [route]);
 
   return <div className={`nav-progress nav-progress-${phase}`} aria-hidden />;
 }

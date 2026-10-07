@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveSkillForRead } from "@/lib/skill-catalog";
 import { getWritingVoicePrompt } from "./writing-voice";
 
-vi.mock("@/lib/content/dirs", () => ({ getRepoRoot: () => "/test-repo" }));
+vi.mock("@/lib/desktop/runtime-paths", () => ({ getResourceRoot: () => "/test-repo" }));
 vi.mock("@/lib/skill-catalog", () => ({ resolveSkillForRead: vi.fn() }));
 
 let skillDir: string;

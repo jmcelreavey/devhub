@@ -1,12 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getRepoRoot } from "@/lib/content/dirs";
+import { getResourceRoot } from "@/lib/desktop/runtime-paths";
 import { resolveSkillForRead } from "@/lib/skill-catalog";
 import { LEARNED_VOICE_FILE, STYLE_GUIDE_FILE, VOICE_SKILL } from "@/lib/voice/skill";
 
 /** API models cannot open skills themselves, so provide the installed guidance. */
 export function getWritingVoicePrompt(): string {
-  const skill = resolveSkillForRead(getRepoRoot(), VOICE_SKILL);
+  const skill = resolveSkillForRead(getResourceRoot(), VOICE_SKILL);
   if (!skill) return "";
 
   // Absent until the first /voice training round, so unlike the style guide it isn't an error.

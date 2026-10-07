@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { Fragment, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { isTaskOpen, type Task } from "@/lib/tasks/types";
+import { groupTasksByParent } from "@/lib/tasks/group-by-parent";
 import {
   rewriteTaskKey,
   clearedLineForToday,
@@ -9,14 +10,17 @@ import {
 } from "@/lib/tasks/task-text";
 import { TaskComposer } from "@/components/tasks/TaskComposer";
 import { TaskItem } from "@/components/tasks/TaskItem";
+import { TaskParentGroup } from "@/components/tasks/TaskParentGroup";
 import { ProfileOverlayTasks } from "@/components/tasks/ProfileOverlayTasks";
-import { CheckCircle2, ChevronRight, ChevronDown } from "lucide-react";
+import { CheckCircle2, ChevronRight, ChevronDown, ListTree } from "lucide-react";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useLive } from "@/lib/hooks/use-fetch";
+import { useStoredChoice } from "@/lib/hooks/use-stored-state";
+import { HoverTip } from "@/components/ui/HoverTip";
 import { AddToJiraModal } from "@/components/tasks/AddToJiraModal";
 import type { JiraTicketRef } from "@/lib/jira/client";
 import { JiraTransitionModal } from "@/components/jira/JiraTransitionModal";
-import { SortableList } from "@/components/ui/SortableList";
+import { SortableList, type SortableRenderState } from "@/components/ui/SortableList";
 import { useGridSize } from "@/lib/hooks/use-grid-size";
 import { todayISO } from "@/lib/utils";
 
@@ -36,6 +40,8 @@ interface JiraStatus {
 
 const EMPTY_TASKS: Task[] = [];
 
+type GroupMode = "flat" | "parent";
+const GROUP_MODES: readonly GroupMode[] = ["flat", "parent"];
 
 export interface TaskListProps {
   inputId?: string;
@@ -50,6 +56,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
   const tasks = data?.tasks ?? EMPTY_TASKS;
   const [exitingIds, setExitingIds] = useState<Set<string>>(() => new Set());
   const [jiraStatuses, setJiraStatuses] = useState<Record<string, JiraStatus>>({});
+  const [groupMode, setGroupMode] = useStoredChoice<GroupMode>("devhub.tasks.group", "flat", GROUP_MODES);
   const [jiraModalTask, setJiraModalTask] = useState<Task | null>(null);
   const [transitionPrompt, setTransitionPrompt] = useState<{
     task: Task;
@@ -471,6 +478,13 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
   const completed = tasks.filter((t) => t.done && matchesTaskSearch(t, q));
   const abandoned = tasks.filter((t) => !!t.abandonedAt && matchesTaskSearch(t, q));
 
+  // Grouping is a view, not a reorder: it never touches the stored ranking, so
+  // dragging is off while it is on and "flat" brings the user's own order back.
+  const parentOf = (task: Task) => (task.jiraKey ? jiraStatuses[task.jiraKey]?.parent : null);
+  const hasParents = pending.some((task) => parentOf(task));
+  const parentGroups =
+    groupMode === "parent" && gridSize !== "2x1" && hasParents ? groupTasksByParent(pending, parentOf) : null;
+
   // Completion reads as departure, not teleport: the row holds briefly so
   // the check animation lands, then height-collapses out before the data
   // update moves it into Done.
@@ -557,38 +571,53 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
     [updateTaskText],
   );
 
-  const renderPendingTasks = () => (
-    <SortableList
-      items={pending}
-      getId={(task) => task.id}
-      disabled={!!q}
-      onReorder={reorderTasks}
-      renderItem={(task, { dragHandleProps, isDragging, isDropTarget }) => {
-        const exiting = exitingIds.has(task.id);
-        return (
-          <div className={exiting ? "task-exit" : undefined}>
-            <TaskItem
-              task={exiting ? { ...task, done: true } : task}
-              date={today}
-              jiraStatus={task.jiraKey ? jiraStatuses[task.jiraKey] : undefined}
-              dragHandleProps={q || exiting ? undefined : dragHandleProps}
-              isDragging={isDragging}
-              isDropTarget={isDropTarget}
-              onToggle={() => {
-                if (!exiting) requestComplete(task);
-              }}
-              onDelete={() => deleteTask(task.id)}
-              onEdit={(text) => updateTaskText(task.id, text)}
-              onAbandon={(reason) => requestAbandon(task, reason)}
-              onAddToJira={() => setJiraModalTask(task)}
-              onStatusClick={task.jiraKey ? () => refreshJiraStatus(task.jiraKey!) : undefined}
-              onTimer={() => toggleTimer(task.id)}
-            />
-          </div>
-        );
-      }}
-    />
-  );
+  /** `sortable` is absent in the grouped view, which has no drag handles. */
+  const renderPendingRow = (task: Task, sortable?: SortableRenderState) => {
+    const exiting = exitingIds.has(task.id);
+    return (
+      <div className={exiting ? "task-exit" : undefined}>
+        <TaskItem
+          task={exiting ? { ...task, done: true } : task}
+          date={today}
+          jiraStatus={task.jiraKey ? jiraStatuses[task.jiraKey] : undefined}
+          hideParent={!!parentGroups}
+          dragHandleProps={q || exiting ? undefined : sortable?.dragHandleProps}
+          isDragging={sortable?.isDragging}
+          isDropTarget={sortable?.isDropTarget}
+          onToggle={() => {
+            if (!exiting) requestComplete(task);
+          }}
+          onDelete={() => deleteTask(task.id)}
+          onEdit={(text) => updateTaskText(task.id, text)}
+          onAbandon={(reason) => requestAbandon(task, reason)}
+          onAddToJira={() => setJiraModalTask(task)}
+          onStatusClick={task.jiraKey ? () => refreshJiraStatus(task.jiraKey!) : undefined}
+          onTimer={() => toggleTimer(task.id)}
+        />
+      </div>
+    );
+  };
+
+  const renderPendingTasks = () =>
+    parentGroups ? (
+      <div className="space-y-2">
+        {parentGroups.map((group) => (
+          <TaskParentGroup key={group.parent?.key ?? "no-parent"} parent={group.parent} count={group.tasks.length}>
+            {group.tasks.map((task) => (
+              <Fragment key={task.id}>{renderPendingRow(task)}</Fragment>
+            ))}
+          </TaskParentGroup>
+        ))}
+      </div>
+    ) : (
+      <SortableList
+        items={pending}
+        getId={(task) => task.id}
+        disabled={!!q}
+        onReorder={reorderTasks}
+        renderItem={renderPendingRow}
+      />
+    );
 
   if (isLoading && !data) {
     return (
@@ -633,7 +662,22 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
   return (
     <div className="space-y-3">
       {(pending.length + completed.length + abandoned.length) > 0 && (
-        <SegmentedProgressBar open={pending.length} done={completed.length} abandoned={abandoned.length} />
+        <SegmentedProgressBar open={pending.length} done={completed.length} abandoned={abandoned.length}>
+          {(hasParents || groupMode === "parent") && (
+            <HoverTip label={groupMode === "parent" ? "Grouped by parent. Click for your own order." : "Group by parent ticket"}>
+              <button
+                type="button"
+                className="task-icon-action shrink-0"
+                data-linked={groupMode === "parent" ? "true" : undefined}
+                aria-label="Group by parent ticket"
+                aria-pressed={groupMode === "parent"}
+                onClick={() => setGroupMode(groupMode === "parent" ? "flat" : "parent")}
+              >
+                <ListTree size={14} aria-hidden />
+              </button>
+            </HoverTip>
+          )}
+        </SegmentedProgressBar>
       )}
 
       <TaskComposer inputId={inputId} onAdded={onTaskAdded} />
@@ -753,7 +797,17 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
   );
 }
 
-function SegmentedProgressBar({ open, done, abandoned }: { open: number; done: number; abandoned: number }) {
+function SegmentedProgressBar({
+  open,
+  done,
+  abandoned,
+  children,
+}: {
+  open: number;
+  done: number;
+  abandoned: number;
+  children?: ReactNode;
+}) {
   const activeTotal = open + done;
   if (activeTotal === 0) return null;
 
@@ -779,6 +833,7 @@ function SegmentedProgressBar({ open, done, abandoned }: { open: number; done: n
       >
         <span key={done} className="count-tick">{done}</span>/{activeTotal} done{abandoned > 0 ? ` · ${abandoned} abandoned` : ""}
       </span>
+      {children}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   cursorAgentPrintArgs,
   describeCliTimeout,
   extractCursorStreamText,
+  execCapture,
   isPackagedAppResourcePath,
   looksComplete,
   resolveHeadlessCliCwd,
@@ -39,8 +40,15 @@ describe("cursorAgentPrintArgs", () => {
 
   it("passes the prompt and model through", () => {
     const args = cursorAgentPrintArgs("write a haiku", "sonnet-4");
-    expect(args[args.indexOf("-p") + 1]).toBe("write a haiku");
+    expect(args.at(-1)).toBe("write a haiku");
     expect(args[args.indexOf("--model") + 1]).toBe("sonnet-4");
+  });
+
+  it("places a prompt starting with YAML frontmatter after the end-of-options separator", () => {
+    const prompt = "---\nname: devhub-draft-jira-ticket\n---\nDraft one ticket.";
+    const args = cursorAgentPrintArgs(prompt, "grok-4.7-xhigh");
+    expect(args.indexOf("--")).toBe(args.length - 2);
+    expect(args.at(-1)).toBe(prompt);
   });
 
   it("never smuggles in an auto-approve flag", () => {
@@ -82,6 +90,27 @@ describe("extractCursorStreamText", () => {
   it("skips non-text blocks in a message", () => {
     const raw = '{"type":"assistant","message":{"content":[{"type":"tool_use"},{"type":"text","text":"ok"}]}}';
     expect(extractCursorStreamText(raw)).toBe("ok");
+  });
+});
+
+describe("execCapture failures", () => {
+  it("reports a CLI argument error even when the echoed prompt contains JSON", async () => {
+    const error = 'error: unknown option ---\n{"summary":"Ticket title","description":"Description"}';
+    const script = `process.stderr.write(${JSON.stringify(error)}); process.exitCode = 1;`;
+    await expect(execCapture(process.execPath, ["-e", script], 5_000, tmp, undefined, 1_000, extractCursorStreamText))
+      .rejects.toThrow(`failed (exit 1): ${error}`);
+  });
+
+  it("keeps stderr when stdout only contains stream metadata", async () => {
+    const metadata = JSON.stringify({ type: "system", subtype: "init" }) + "\n";
+    const script = `process.stdout.write(${JSON.stringify(metadata)}); process.stderr.write("Cursor request failed."); process.exitCode = 1;`;
+    await expect(execCapture(process.execPath, ["-e", script], 5_000, tmp, undefined, 1_000, extractCursorStreamText))
+      .rejects.toThrow("failed (exit 1): Cursor request failed.");
+  });
+
+  it("reports a failed exit when the CLI emits no diagnostics", async () => {
+    await expect(execCapture(process.execPath, ["-e", "process.exitCode = 2;"], 5_000, tmp, undefined, 1_000, extractCursorStreamText))
+      .rejects.toThrow("failed (exit 2)");
   });
 });
 

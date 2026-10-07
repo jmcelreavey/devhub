@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { z } from "zod";
 import { generateAiText } from "@/lib/ai/generate";
 import { getWritingVoicePrompt } from "@/lib/ai/writing-voice";
-import { getRepoRoot } from "@/lib/content/dirs";
+import { getResourceRoot } from "@/lib/desktop/runtime-paths";
 import { mergeEntityRefs } from "@/lib/entity-note";
 import { resolveEntityContext } from "@/lib/entity-links/resolve";
 import { resolveSkillForRead } from "@/lib/skill-catalog";
@@ -33,7 +33,7 @@ const draftSchema = z.object({
 
 export async function draftJiraTicket(task: Task, date: string, signal?: AbortSignal): Promise<JiraTicketDraftResult> {
   signal?.throwIfAborted();
-  const skill = resolveSkillForRead(getRepoRoot(), "devhub-draft-jira-ticket");
+  const skill = resolveSkillForRead(getResourceRoot(), "devhub-draft-jira-ticket");
   if (!skill) throw new Error("The Jira drafting skill is missing. Restore devhub-draft-jira-ticket and try again.");
 
   const graph = resolveEntityContext("task", task.id, { date, label: task.text, depth: 2 });

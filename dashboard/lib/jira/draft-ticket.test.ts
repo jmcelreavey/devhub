@@ -10,7 +10,7 @@ import { draftJiraTicket } from "./draft-ticket";
 
 vi.mock("@/lib/ai/generate", () => ({ generateAiText: vi.fn() }));
 vi.mock("@/lib/ai/writing-voice", () => ({ getWritingVoicePrompt: () => "British technical voice in full-voice mode" }));
-vi.mock("@/lib/content/dirs", () => ({ getRepoRoot: () => "/repo" }));
+vi.mock("@/lib/desktop/runtime-paths", () => ({ getResourceRoot: () => "/repo" }));
 vi.mock("@/lib/entity-links/resolve", () => ({ resolveEntityContext: vi.fn() }));
 vi.mock("@/lib/skill-catalog", () => ({ resolveSkillForRead: vi.fn() }));
 vi.mock("@/lib/tasks/implement-ready-gather", () => ({

@@ -2971,6 +2971,19 @@ body[data-grid-resizing="true"] * {
   margin-right: 4px;
 }
 
+/* Muted Jira key for references (a task's parent) that should not compete with
+   the row's own key chip; the accent only appears on hover/focus. */
+.jira-key-chip--quiet {
+  background: transparent;
+  border: 0;
+  color: var(--text-subtle);
+}
+.jira-key-chip--quiet:hover,
+.jira-key-chip--quiet:focus-visible {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
 /* Inline #tag chips grouped so a wrapping title carries them as one block —
    never split mid-wrap — with the "+N" overflow chip inside the cluster. */
 .task-title-tags {
@@ -3115,6 +3128,12 @@ body[data-motion="off"] .task-timer-dot {
 .task-icon-action:hover,
 .task-icon-action:focus-visible {
   color: var(--text);
+}
+
+/* A pressed toggle keeps its accent under the pointer instead of looking switched off. */
+.task-icon-action[data-linked="true"]:hover,
+.task-icon-action[data-linked="true"]:focus-visible {
+  color: var(--accent);
 }
 
 @media (max-width: 520px) {

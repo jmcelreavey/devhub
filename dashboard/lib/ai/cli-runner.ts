@@ -110,13 +110,15 @@ export function headlessCliCwd(requestedCwd?: string | null): string {
 export function cursorAgentPrintArgs(prompt: string, model: string): string[] {
   return [
     "-p",
-    prompt,
     "--model",
     model,
     "--trust",
     "--output-format",
     "stream-json",
     "--stream-partial-output",
+    // Skill frontmatter starts with "---", so the prompt must be positional.
+    "--",
+    prompt,
   ];
 }
 
@@ -246,7 +248,7 @@ async function captureOnce(
 ): Promise<string> {
   const startedAt = Date.now();
   const outcome = await new Promise<
-    CaptureOutcome & { code: number | null; err?: Error; timeoutReason: TimeoutReason }
+    CaptureOutcome & { code: number | null; stderr: string; err?: Error; timeoutReason: TimeoutReason }
   >(
     (resolve) => {
       // detached gives the CLI its own process group so the whole tree can be
@@ -270,6 +272,7 @@ async function captureOnce(
         signal?.removeEventListener("abort", onAbort);
         resolve({
           text: (out.trim() || errText.trim()),
+          stderr: errText,
           timedOut,
           timeoutReason,
           elapsedMs: Date.now() - startedAt,
@@ -321,6 +324,7 @@ async function captureOnce(
         }
         resolve({
           text: "",
+          stderr: "",
           timedOut: false,
           timeoutReason,
           elapsedMs: Date.now() - startedAt,
@@ -368,10 +372,11 @@ async function captureOnce(
     );
   }
 
-  if (!decoded) throw new Error(`${bin} returned empty output.`);
   if (outcome.code !== 0 && !looksComplete(decoded)) {
-    throw new Error(`${bin} failed (exit ${String(outcome.code ?? "?")}): ${decoded.slice(0, 400)}`);
+    const details = outcome.stderr.trim() || decoded || outcome.text.trim() || "No diagnostic output.";
+    throw new Error(`${bin} failed (exit ${String(outcome.code ?? "?")}): ${details.slice(0, 400)}`);
   }
+  if (!decoded) throw new Error(`${bin} returned empty output.`);
   return decoded;
 }
 

@@ -83,6 +83,7 @@ export function TaskItem({
   suppressLinks,
   showUpstart = false,
   hideJiraKey = false,
+  hideParent = false,
 }: {
   task: Task;
   /** Day file this task lives in (YYYY-MM-DD). Defaults to today. */
@@ -109,6 +110,8 @@ export function TaskItem({
   showUpstart?: boolean;
   /** The surrounding ticket group already identifies this task. */
   hideJiraKey?: boolean;
+  /** The surrounding group already names the parent. */
+  hideParent?: boolean;
 }) {
   const toast = useToast();
   const router = useRouter();
@@ -233,6 +236,8 @@ export function TaskItem({
   // `task.due` is deliberately not shown: nothing in the UI sets it, so a
   // "due" label here was an MCP-only field leaking into every row.
   const showJiraStatus = !!jiraStatus && !task.done && !isAbandoned;
+  const parentRef =
+    task.jiraKey && !isAbandoned && !editing && !hideJiraKey && !hideParent ? jiraStatus?.parent : null;
   const showTimerReadout = !isInactive && (!!task.timerStartedAt || (task.timeSpentMs ?? 0) > 0);
 
   const notePath = taskNotePath(noteSource);
@@ -458,7 +463,6 @@ export function TaskItem({
 
         <div className="task-row-content flex-1 min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-1">
           {task.jiraKey && !isAbandoned && !hideJiraKey && <JiraKeyChip jiraKey={task.jiraKey} done={task.done} />}
-          {task.jiraKey && !isAbandoned && !hideJiraKey && jiraStatus?.parent && <JiraParentChip parent={jiraStatus.parent} />}
 
           {editing ? (
             <input
@@ -482,6 +486,9 @@ export function TaskItem({
               <TaskTextContent text={task.jiraKey && !isAbandoned ? displayText : task.text} />
             </span>
           )}
+
+          {/* Trails the title: the parent is context, so the row leads with its own key. */}
+          {parentRef && <JiraParentChip parent={parentRef} done={task.done} />}
 
           {isAbandoned && task.abandonReason && (
             <span
