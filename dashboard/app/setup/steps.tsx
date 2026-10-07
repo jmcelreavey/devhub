@@ -1,6 +1,7 @@
 "use client";
 
 import { GoalPicker } from "@/components/setup/GoalPicker";
+import { useModifierKey } from "@/lib/hooks/use-modifier-key";
 import type { GoalId } from "@/lib/setup/goals";
 import { GoogleSetupSteps } from "@/components/setup/GoogleSetupSteps";
 import { useState, useEffect } from "react";
@@ -98,7 +99,7 @@ export function WelcomeStep({
           </div>
         </div>
       </label>
-      {/* Not LAN-only: `npm run agents:install` refuses to run without it. */}
+      {/* An existing daemon needs its current password; new installs can generate one. */}
       <div
         style={{
           padding: "12px 14px",
@@ -112,9 +113,7 @@ export function WelcomeStep({
           Agents password
         </div>
         <div style={{ fontSize: "12px", color: "var(--text-subtle)", lineHeight: 1.5, marginTop: "4px", marginBottom: "10px" }}>
-          Protects the local Paseo daemon behind <strong>Agents</strong>; setting it up needs one. Saved as{" "}
-          <code style={{ fontSize: "11px" }}>DEVHUB_PASEO_PASSWORD</code>. A changed password takes effect after{" "}
-          <strong>Agents → Connection → Reinstall</strong>.
+          Already use Paseo? Enter its existing password to connect. For a new install, leave this blank to generate and save one automatically. To change an existing daemon&apos;s password, enter a new one and use <strong>Agents → Connection → Reinstall</strong>.
           {hasExistingPassword && " A password is already configured; leave blank to keep it."}
         </div>
         <div style={{ display: "flex", gap: "8px" }}>
@@ -530,7 +529,7 @@ export function PathsStep({
           placeholder={defaults.reposDir}
           check={reposCheck}
           onUseDefault={() => setForm({ ...form, reposDir: defaults.reposDir })}
-          hint="For example ~/Developer or ~/code. Leave it empty if you're only here for notes and tasks."
+          hint="Choose a folder with Browse, or enter its path. Windows drive paths and WSL folders are supported. Leave it empty if you're only here for notes and tasks."
           onBrowse={onBrowse}
         />
 
@@ -1326,6 +1325,8 @@ export function AgentCliStep({
 
 
 export function DoneStep({ saveResult }: { saveResult: { ok: boolean; message: string } | null }) {
+  const [desktop, setDesktop] = useState(false);
+  useEffect(() => { void desktopInfo().then((info) => setDesktop(Boolean(info))); }, []);
   return (
     <div>
       <div style={{ textAlign: "center", marginBottom: "20px" }}>
@@ -1369,9 +1370,9 @@ export function DoneStep({ saveResult }: { saveResult: { ok: boolean; message: s
             {saveResult.message}
             <br />
             <span className="text-text-muted">
-              In your terminal: stop the dashboard (Ctrl+C) and re-run{" "}
+              {desktop ? "Quit and reopen DevHub, or use Restart Backend in the tray menu." : <>In your terminal: stop the dashboard (Ctrl+C) and re-run{" "}
               <code style={{ color: "var(--accent)", fontSize: "11px" }}>npm run dev</code> or{" "}
-              <code style={{ color: "var(--accent)", fontSize: "11px" }}>npm run start</code>.
+              <code style={{ color: "var(--accent)", fontSize: "11px" }}>npm run start</code>.</>}
             </span>
           </p>
         </div>
@@ -1384,7 +1385,7 @@ export function DoneStep({ saveResult }: { saveResult: { ok: boolean; message: s
       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
         <TipCard>You can revisit this setup anytime from the sidebar Settings link.</TipCard>
         <TipCard>
-          Use ⌘P for the command palette, ⌘N for notes, ⌘T for tasks, and ⌘D for diagrams from any page.
+          <SetupShortcutTip />
         </TipCard>
         <TipCard>Press ? for the full shortcut list when DevHub has focus.</TipCard>
       </div>
@@ -1392,6 +1393,11 @@ export function DoneStep({ saveResult }: { saveResult: { ok: boolean; message: s
   );
 }
 
+
+function SetupShortcutTip() {
+  const modifier = useModifierKey();
+  return <>Use {modifier}P for the command palette, {modifier}N for notes, {modifier}T for tasks, and {modifier}D for diagrams from any page.</>;
+}
 
 export function InstallAppCard() {
   const [info, setInfo] = useState<{ version: string; appData: string } | null>(null);

@@ -28,7 +28,7 @@ const PLUGIN_SIDECAR = path.join(iconsStagingDir, "plugin.png");
 const MARKER = path.join(iconsStagingDir, ".source.sha256");
 
 /** Required by tauri.conf.json `bundle.icon`. */
-const REQUIRED = ["32x32.png", "128x128.png", "128x128@2x.png", "icon.icns"];
+const REQUIRED = ["32x32.png", "128x128.png", "128x128@2x.png", "icon.icns", "icon.ico"];
 
 /** Platform leftovers `cargo tauri icon` emits that we do not ship. */
 const PRUNE_DIRS = ["android", "ios"];

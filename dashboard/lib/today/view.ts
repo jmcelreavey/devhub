@@ -4,8 +4,8 @@ import { useCallback, useSyncExternalStore } from "react";
 
 /**
  * Today page view mode (2026-06 UX pass):
- * - "focus"     — design B · Calm Focus: one thing now, the rest whispers (default)
- * - "dashboard" — design A+B combo: draggable grid with NOW card
+ * - "focus"     — Calm Focus: one thing now, the rest whispers
+ * - "dashboard" — draggable grid with NOW card (default)
  *
  * Persisted in localStorage; switchable from the Layout popover.
  */
@@ -15,8 +15,12 @@ const KEY = "devhub:today-view";
 const EVENT = "devhub:today-view-change";
 
 export function readTodayView(): TodayView {
-  if (typeof window === "undefined") return "focus";
-  return window.localStorage.getItem(KEY) === "dashboard" ? "dashboard" : "focus";
+  if (typeof window === "undefined") return "dashboard";
+  try {
+    return window.localStorage.getItem(KEY) === "focus" ? "focus" : "dashboard";
+  } catch {
+    return "dashboard";
+  }
 }
 
 export function writeTodayView(view: TodayView): void {
@@ -38,7 +42,7 @@ function subscribe(cb: () => void): () => void {
 }
 
 export function useTodayView(): [TodayView, (view: TodayView) => void] {
-  const view = useSyncExternalStore(subscribe, readTodayView, () => "focus" as TodayView);
+  const view = useSyncExternalStore(subscribe, readTodayView, () => "dashboard" as TodayView);
   const setView = useCallback((v: TodayView) => writeTodayView(v), []);
   return [view, setView];
 }

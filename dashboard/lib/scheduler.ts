@@ -569,7 +569,7 @@ export function startScheduler(): void {
   const jobs = readJobs();
   const runnable = jobs.filter(isRunnable);
   log(
-    `started: ${jobs.length} job(s), ${runnable.length} runnable, ${runnable.filter((j) => j.wake === true).length} waking the Mac, ${jobs.filter((j) => j.approval === "pending").length} waiting for approval`,
+    `started: ${jobs.length} job(s), ${runnable.length} runnable${process.platform === "darwin" ? `, ${runnable.filter((j) => j.wake === true).length} with scheduled wake` : ""}, ${jobs.filter((j) => j.approval === "pending").length} waiting for approval`,
   );
   void runSchedulerTick();
 }

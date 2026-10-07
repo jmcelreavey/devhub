@@ -70,8 +70,8 @@ pub struct Sidecar {
     child: Arc<Mutex<Option<Child>>>,
     wsl: Mutex<Option<WslLaunch>>,
     log: DesktopLog,
-    pub port: u16,
-    pub terminal_port: u16,
+    ports: Mutex<[u16; 2]>,
+    pub preferred_ports: [u16; 2],
     pub token: String,
 }
 
@@ -152,10 +152,22 @@ impl Sidecar {
             child: Arc::new(Mutex::new(None)),
             wsl: Mutex::new(None),
             log,
-            port,
-            terminal_port,
+            ports: Mutex::new([port, terminal_port]),
+            preferred_ports: [port, terminal_port],
             token,
         }
+    }
+
+    pub fn ports(&self) -> [u16; 2] {
+        *self.ports.lock().unwrap()
+    }
+
+    pub fn port(&self) -> u16 {
+        self.ports()[0]
+    }
+
+    pub fn configure_ports(&self, ports: [u16; 2]) {
+        *self.ports.lock().unwrap() = ports;
     }
 
     /// The WSL distro the sidecar runs in, once started there.
@@ -179,9 +191,7 @@ impl Sidecar {
     /// enough that the shell reported a second app, sent the user off to quit a
     /// window that did not exist, and hid its own offer to clear the leftover.
     pub fn check_ports(&self) -> Option<u16> {
-        [self.port, self.terminal_port]
-            .into_iter()
-            .find(|port| port_in_use(*port))
+        self.ports().into_iter().find(|port| port_in_use(*port))
     }
 
     /// Spawn the supervisor in its own process group.
@@ -193,7 +203,8 @@ impl Sidecar {
     where
         F: FnMut(BootState) + Send + 'static,
     {
-        let env = sidecar_env(paths, self.port, self.terminal_port, &self.token);
+        let [port, terminal_port] = self.ports();
+        let env = sidecar_env(paths, port, terminal_port, &self.token);
         let supervisor = paths.supervisor();
 
         let mut cmd = Command::new(&paths.node_bin);
@@ -256,11 +267,13 @@ impl Sidecar {
         backend: &WslBackend,
         payload: &str,
         checkout: Option<&str>,
+        secondary: bool,
         on_event: F,
     ) -> std::io::Result<()>
     where
         F: FnMut(BootState) + Send + 'static,
     {
+        let [port, terminal_port] = self.ports();
         let mut env = sidecar_env_for(
             &SidecarDirs {
                 app_data: backend.app_data.clone(),
@@ -268,14 +281,18 @@ impl Sidecar {
                 server_dir: format!("{payload}/server"),
                 checkout: checkout.map(str::to_string),
             },
-            self.port,
-            self.terminal_port,
+            port,
+            terminal_port,
             &self.token,
         );
         // Not part of the shared builder: the native path does not set it
         // either, and the health route reports `null` there. Cheap to have
         // right here, where the shell and the server are versioned separately.
         env.insert("DEVHUB_VERSION".into(), env!("CARGO_PKG_VERSION").into());
+        if secondary {
+            // The existing dev service may already own the same scheduled jobs.
+            env.insert("DEVHUB_SCHEDULER".into(), "0".into());
+        }
         *self.wsl.lock().unwrap() = Some(WslLaunch {
             backend: backend.clone(),
             payload_dir: payload.to_string(),
@@ -338,7 +355,7 @@ impl Sidecar {
                     }
                 }
             }
-            if health_check(self.port, &self.token) {
+            if health_check(self.port(), &self.token) {
                 return Ok(());
             }
             std::thread::sleep(Duration::from_millis(200));
@@ -436,7 +453,7 @@ impl Sidecar {
     /// raw TCP and have no cookies to lose.
     #[allow(dead_code)] // kept for call sites / debugging; handoff uses bootstrap_url()
     pub fn url(&self) -> String {
-        format!("http://{}:{}", window_host(), self.port)
+        format!("http://{}:{}", window_host(), self.port())
     }
 
     /// The one-shot bootstrap URL that exchanges the token for a cookie.
@@ -444,7 +461,7 @@ impl Sidecar {
         format!(
             "http://{}:{}/api/desktop/bootstrap?token={}",
             window_host(),
-            self.port,
+            self.port(),
             self.token
         )
     }

@@ -1,4 +1,4 @@
-import { ttlCache } from "@/lib/ttl-cache";
+import { ttlCache, type TtlCached } from "@/lib/ttl-cache";
 import { loadClaudeUsage } from "./claude";
 import { loadCodexUsage } from "./codex";
 import { loadCopilotUsage } from "./copilot";
@@ -9,7 +9,7 @@ import type { ProviderUsage, UsageProviderId } from "./types";
 
 const CACHE_MS = 5 * 60_000;
 
-const sources: { id: UsageProviderId; name: string; load: () => Promise<ProviderUsage | null> }[] = [
+const sources: { id: UsageProviderId; name: string; load: TtlCached<ProviderUsage | null> }[] = [
   { id: "claude", name: "Claude", load: ttlCache(loadClaudeUsage, CACHE_MS) },
   { id: "codex", name: "Codex", load: ttlCache(() => loadCodexUsage(), CACHE_MS) },
   { id: "cursor", name: "Cursor", load: ttlCache(loadCursorUsage, CACHE_MS) },
@@ -22,13 +22,14 @@ const sources: { id: UsageProviderId; name: string; load: () => Promise<Provider
  * One provider failing (expired token, endpoint moved) must not blank the others.
  * A loader returning null means the provider isn't installed or signed in, so it is left out.
  */
-export async function loadAgentUsage(): Promise<ProviderUsage[]> {
+export async function loadAgentUsage(refresh?: string): Promise<ProviderUsage[]> {
   const results = await Promise.all(sources.map(async ({ id, name, load }) => {
     try {
+      if (id === refresh) load.invalidate();
       return await load();
     } catch (err) {
       console.error(`[agent-usage:${id}]`, err);
-      return { id, name, status: "error", message: err instanceof Error ? err.message : "Could not load usage.", meters: [], spend: [] } satisfies ProviderUsage;
+      return { id, name, status: "error", message: `Couldn't load ${name} usage. Try again.`, meters: [], spend: [] } satisfies ProviderUsage;
     }
   }));
   return results.filter((usage): usage is ProviderUsage => usage !== null);

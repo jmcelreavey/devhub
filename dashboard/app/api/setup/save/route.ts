@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import { normalizeAgentCli } from "@/lib/agent/cli-env";
 import { normalizeAiProvider, toAgentLaunchCli } from "@/lib/ai/preference";
 
@@ -20,6 +19,7 @@ import {
 import { parseBody } from "@/lib/api-utils";
 import { invalidateJiraTicketsCache } from "@/lib/jira/tickets-cache";
 import { SetupSaveSchema } from "@/lib/schemas";
+import { resolveSetupPath } from "@/lib/setup/input-path";
 
 export const dynamic = "force-dynamic";
 
@@ -28,15 +28,8 @@ function mask(val: string): string {
   return val.slice(0, 4) + "****" + val.slice(-4);
 }
 
-function expandHome(p: string): string {
-  if (!p) return p;
-  if (p === "~") return os.homedir();
-  if (p.startsWith("~/")) return path.join(os.homedir(), p.slice(2));
-  return p;
-}
-
 function validateDirectory(p: string): string | null {
-  const resolved = path.resolve(expandHome(p));
+  const resolved = resolveSetupPath(p);
   if (!path.isAbsolute(resolved)) return "Path must be absolute";
   let stat;
   try {
@@ -102,19 +95,19 @@ export async function POST(req: NextRequest) {
   if (core) {
     if (core.repoRoot !== undefined) {
       const v = core.repoRoot.trim();
-      if (v) overrides.set("REPO_ROOT", path.resolve(expandHome(v)));
+      if (v) overrides.set("REPO_ROOT", resolveSetupPath(v));
       else overrides.delete("REPO_ROOT");
       needsRestartNotice = true;
     }
     if (core.notesDir !== undefined) {
       const v = core.notesDir.trim();
-      if (v) overrides.set("NOTES_DIR", path.resolve(expandHome(v)));
+      if (v) overrides.set("NOTES_DIR", resolveSetupPath(v));
       else overrides.delete("NOTES_DIR");
       needsRestartNotice = true;
     }
     if (core.reposDir !== undefined) {
       const v = core.reposDir.trim();
-      if (v) overrides.set("DEVHUB_REPOS_DIR", path.resolve(expandHome(v)));
+      if (v) overrides.set("DEVHUB_REPOS_DIR", resolveSetupPath(v));
       else overrides.delete("DEVHUB_REPOS_DIR");
       // Repo discovery reads this per request, so it takes effect immediately —
       // but Next's server env snapshot does not, hence the restart notice.
@@ -187,7 +180,7 @@ export async function POST(req: NextRequest) {
   if (bi) {
     if (bi.capiRepoPath !== undefined) {
       const v = bi.capiRepoPath.trim();
-      if (v) overrides.set("CAPI_REPO_PATH", path.resolve(expandHome(v)));
+      if (v) overrides.set("CAPI_REPO_PATH", resolveSetupPath(v));
       else overrides.delete("CAPI_REPO_PATH");
     }
   }

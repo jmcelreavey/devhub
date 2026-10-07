@@ -50,7 +50,7 @@ function writeBundleSourceMarker() {
   if (!commit) return;
   fs.writeFileSync(
     path.join(serverDir, "bundle-source.json"),
-    `${JSON.stringify({ commit, builtAt: new Date().toISOString() }, null, 2)}\n`,
+    `${JSON.stringify({ commit, builtAt: new Date().toISOString(), release: process.env.GITHUB_ACTIONS === "true" }, null, 2)}\n`,
   );
   log(`recorded bundle source ${commit.slice(0, 7)}`);
 }

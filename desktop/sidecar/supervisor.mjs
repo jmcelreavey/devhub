@@ -16,10 +16,11 @@
  * installed app can fail on a machine that is not this developer's.
  */
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import net from "node:net";
 import { fork, spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -74,7 +75,7 @@ const SHELL_OWNED = new Set([
  * Content directories are the user's decision. The shell provides a default for
  * a fresh install and gets out of the way when the user has said otherwise.
  */
-function loadEnvFile(envFile) {
+export function loadEnvFile(envFile) {
   if (!envFile || !fs.existsSync(envFile)) return {};
   const loaded = {};
   const raw = fs.readFileSync(envFile, "utf8");
@@ -98,6 +99,8 @@ function loadEnvFile(envFile) {
       }
       continue;
     }
+    // A fallback-port instance must not start a second scheduler for the same data.
+    if (key === "DEVHUB_SCHEDULER" && process.env.DEVHUB_SCHEDULER === "0") continue;
     process.env[key] = value;
     loaded[key] = value;
   }
@@ -169,8 +172,13 @@ function repairedPath() {
 }
 
 /** Resolve once, hand to every child. No child re-reads the config file. */
-function managedEnv() {
-  return { ...process.env, PATH: repairedPath() };
+export function managedEnv() {
+  // npm infers its prefix from the bundled Node binary, inside an immutable
+  // payload. Agent-installed tools must survive app updates.
+  const prefix = path.join(os.homedir(), ".local", "share", "devhub", "tools");
+  fs.mkdirSync(prefix, { recursive: true, mode: 0o700 });
+  return { ...process.env, NPM_CONFIG_PREFIX: prefix, npm_config_prefix: prefix,
+    PATH: `${path.join(prefix, "bin")}${path.delimiter}${repairedPath()}` };
 }
 
 function waitForPort(port, host, timeoutMs) {
@@ -371,6 +379,7 @@ async function main() {
 }
 
 let stopping = false;
+function run() {
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
   process.on(signal, () => {
     if (stopping) return;
@@ -415,3 +424,7 @@ main().catch(async (err) => {
   emit({ state: "failed", error: err instanceof Error ? err.message : String(err) });
   await shutdown(1);
 });
+}
+
+// Importing the environment helpers in tests must not start services.
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) run();

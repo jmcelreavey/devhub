@@ -8,8 +8,8 @@ import { TodayBootScreen } from "@/components/today/TodayBootScreen";
 import { WhileYouWereAway } from "@/components/briefing/WhileYouWereAway";
 
 /**
- * Picks the Today view: Calm Focus (design B, default) or the dashboard
- * grid (A+B combo). Mount-gated so SSR and the first client render agree
+ * Picks the Today view: the dashboard grid (default) or Calm Focus.
+ * Mount-gated so SSR and the first client render agree
  * before localStorage is consulted. The pre-mount frame shows the boot
  * screen, which the chosen view then continues seamlessly — one loading
  * moment, no skeleton flash before it.

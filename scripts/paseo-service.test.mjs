@@ -39,6 +39,12 @@ test("never backgrounds the daemon", () => {
   assert.doesNotMatch(renderSystemdUnit(sample), /Type=forking/);
 });
 
+test("agent installs use a persistent npm prefix, including paths with spaces", () => {
+  const unit = renderSystemdUnit({ ...sample, npmPrefix: "/home/me/My Tools" });
+  assert.match(unit, /Environment="NPM_CONFIG_PREFIX=\/home\/me\/My Tools"/);
+  assert.match(unit, /Environment="npm_config_prefix=\/home\/me\/My Tools"/);
+});
+
 test("refuses to render without a command line", () => {
   assert.throws(() => renderSystemdUnit({ ...sample, args: [] }));
 });

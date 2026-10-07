@@ -3,6 +3,9 @@
  * the Paseo daemon owns the harness processes, sessions and chat UI.
  */
 import { randomUUID } from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { createPaseoApi, type PaseoApi } from "@getpaseo/client";
 import { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 
@@ -26,7 +29,10 @@ export function paseoWebOrigin(env: NodeJS.ProcessEnv = process.env): string {
 
 /** OPENCHAMBER_UI_PASSWORD is the legacy name, from when OpenChamber owned this password. */
 export function paseoPassword(env: NodeJS.ProcessEnv = process.env): string | undefined {
-  return env.DEVHUB_PASEO_PASSWORD?.trim() || env.OPENCHAMBER_UI_PASSWORD?.trim() || undefined;
+  const configured = env.DEVHUB_PASEO_PASSWORD?.trim() || env.OPENCHAMBER_UI_PASSWORD?.trim();
+  if (configured) return configured;
+  try { return fs.readFileSync(path.join(os.homedir(), ".config", "devhub", "paseo-password"), "utf8").trim() || undefined; }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; }
 }
 
 export interface PaseoSession {
@@ -53,6 +59,8 @@ export async function withPaseo<T>(fn: (session: PaseoSession) => Promise<T>, en
     await daemon.connect();
   } catch {
     await daemon.close().catch(() => undefined);
+    const running = await fetch(`${paseoWebOrigin(env)}/api/health`, { signal: AbortSignal.timeout(2_000) }).then((response) => response.ok).catch(() => false);
+    if (running) throw new Error("Paseo is running, but DevHub could not connect. Enter its existing Agents password in Setup, then retry. You do not need to reinstall it.");
     throw new Error("Paseo is unavailable. Start its daemon or check DEVHUB_PASEO_URL.");
   }
   try {

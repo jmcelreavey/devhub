@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 import { readDashboardEnvLocalFile, resolveEnvValue } from "@/lib/dashboard-env-local";
-import { getReposDir, hasCheckout, isDesktopRuntime } from "@/lib/desktop/runtime-paths";
+import { getAppDataDir, getCheckoutRoot, getReposDir, hasCheckout, isDesktopRuntime } from "@/lib/desktop/runtime-paths";
+import { setupCoreDefaults } from "@/lib/setup/core-defaults";
 import { resolveDatadogApplicationKey } from "@/lib/datadog/application-key";
 import { datadogAppOrigin } from "@/lib/datadog/links";
 import { getResolvedGoogleCalendarEnv } from "@/lib/google-calendar";
@@ -43,13 +44,16 @@ function countGitRepos(dir: string): number {
 export async function GET() {
   const { overrides } = readDashboardEnvLocalFile();
 
-  // Detect the current devhub repo root. The dashboard is run from inside
-  // devhub/dashboard, so cwd's parent is the repo. Falls back to that if
-  // REPO_ROOT isn't set.
-  const resolvedRepoRoot = resolveEnvValue("REPO_ROOT", overrides);
-  const detectedRepo = resolvedRepoRoot ?? path.resolve(process.cwd(), "..");
-  const defaultRepoRoot = path.dirname(detectedRepo);
-  const defaultNotesDir = path.join(detectedRepo, "notes");
+  // Suggested paths. In a checkout the dashboard runs from devhub/dashboard, so
+  // cwd's parent is the repo; the installed app runs from inside its bundle and
+  // must not suggest storing anything there (see setupCoreDefaults).
+  const { repoRoot: defaultRepoRoot, notesDir: defaultNotesDir } = setupCoreDefaults({
+    desktop: isDesktopRuntime(),
+    checkoutRoot: getCheckoutRoot(),
+    configuredRepoRoot: resolveEnvValue("REPO_ROOT", overrides),
+    cwd: process.cwd(),
+    appDataDir: getAppDataDir(),
+  });
 
   const google = getResolvedGoogleCalendarEnv();
   const calendar = !!(google.clientId && google.clientSecret && google.refreshToken);

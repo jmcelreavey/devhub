@@ -23,7 +23,9 @@ export async function loadZaiUsage(): Promise<ProviderUsage | null> {
   if (!key) return null;
   const response = await fetch(QUOTA_URL, { headers: { Authorization: key, "Accept-Language": "en-US,en" }, signal: AbortSignal.timeout(15_000) });
   if (!response.ok) throw new Error(`z.ai usage failed (HTTP ${response.status}).`);
-  const { level, limits } = quotaSchema.parse(await response.json()).data;
+  const parsed = quotaSchema.safeParse(await response.json().catch(() => null));
+  if (!parsed.success) throw new Error("Couldn't load z.ai usage: the service returned no usable quota data.");
+  const { level, limits } = parsed.data.data;
   return {
     id: "zai",
     name: "z.ai",

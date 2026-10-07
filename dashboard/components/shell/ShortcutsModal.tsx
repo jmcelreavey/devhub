@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { X } from "lucide-react";
+import { useModifierKey } from "@/lib/hooks/use-modifier-key";
 
 interface ShortcutEntry {
   keys: string[];
@@ -81,6 +82,7 @@ const SHORTCUT_SECTIONS: { title: string; items: ShortcutEntry[] }[] = [
 ];
 
 export function ShortcutsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const modifier = useModifierKey();
   const previousFocus = useRef<HTMLElement | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -168,7 +170,7 @@ export function ShortcutsModal({ open, onClose }: { open: boolean; onClose: () =
                             display: "inline-block",
                           }}
                         >
-                          {k}
+                          {k === "⌘" ? modifier.replace("+", "") : k === "⇧" ? "Shift" : k === "⌃" ? "Ctrl" : k}
                         </kbd>
                       </span>
                     ))}

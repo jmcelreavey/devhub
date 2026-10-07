@@ -1397,24 +1397,27 @@ fn start_sidecar(app: &tauri::AppHandle) -> Result<(), String> {
 /// the dashboard. Shared by the native and WSL start paths.
 fn open_when_healthy(app: &tauri::AppHandle, sidecar: Arc<Sidecar>, timeout: Duration) {
     let handle = app.clone();
-    std::thread::spawn(move || match sidecar.wait_until_healthy(timeout) {
-        Ok(()) => {
-            // Bootstrap URL, not the bare origin: the boot page also
-            // navigates itself on Ready, and without the token it would
-            // land on / with no session cookie.
-            let handoff = sidecar.bootstrap_url();
-            set_boot(
-                &handle,
-                BootState::Ready {
-                    url: handoff.clone(),
-                },
-            );
-            load_dashboard(&handle, &sidecar);
-            // Only once the app is healthy and on screen. Checking during
-            // startup competes with the thing the user is waiting for.
-            updater::check_in_background(&handle);
+    let log = app.state::<AppState>().log.clone();
+    std::thread::spawn(move || {
+        match startup_phase(&log, "health", || sidecar.wait_until_healthy(timeout)) {
+            Ok(()) => {
+                // Bootstrap URL, not the bare origin: the boot page also
+                // navigates itself on Ready, and without the token it would
+                // land on / with no session cookie.
+                let handoff = sidecar.bootstrap_url();
+                set_boot(
+                    &handle,
+                    BootState::Ready {
+                        url: handoff.clone(),
+                    },
+                );
+                load_dashboard(&handle, &sidecar);
+                // Only once the app is healthy and on screen. Checking during
+                // startup competes with the thing the user is waiting for.
+                updater::check_in_background(&handle);
+            }
+            Err(err) => fail(&handle, &err),
         }
-        Err(err) => fail(&handle, &err),
     });
 }
 
@@ -1432,6 +1435,24 @@ fn start_wsl_sidecar(app: &tauri::AppHandle) {
     });
 }
 
+fn startup_phase<T, E>(
+    log: &DesktopLog,
+    phase: &str,
+    work: impl FnOnce() -> Result<T, E>,
+) -> Result<T, E> {
+    let started = Instant::now();
+    let result = work();
+    log.write_line(
+        "shell:startup",
+        &format!(
+            "[startup] phase={phase} duration_ms={} result={}",
+            started.elapsed().as_millis(),
+            if result.is_ok() { "ok" } else { "error" }
+        ),
+    );
+    result
+}
+
 fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     let sidecar = state.sidecar.clone();
@@ -1447,7 +1468,9 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
             service: "wsl".into(),
         },
     );
-    let backend = match wsl::resolve_backend(preferred.as_deref()) {
+    let backend = match startup_phase(&log, "wsl-discovery", || {
+        wsl::resolve_backend(preferred.as_deref())
+    }) {
         Ok(backend) => backend,
         Err(err) => {
             fail_with_options(app, &err.message, false, err.install_available);
@@ -1458,7 +1481,7 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
         "shell:wsl",
         &format!("[wsl] distro={} home={}", backend.distro, backend.home),
     );
-    backend.ensure_app_data()?;
+    startup_phase(&log, "app-data", || backend.ensure_app_data())?;
 
     // Run against the user's checkout when there is one, so their tasks, notes
     // and integration credentials are what the window shows.
@@ -1480,6 +1503,7 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
 
     // A checkout's already-unpacked payload, for iterating on the shell without
     // rebuilding and re-extracting the whole bundle.
+    let payload_started = Instant::now();
     let payload = match std::env::var("DEVHUB_WSL_PAYLOAD_DIR") {
         Ok(dir) if !dir.trim().is_empty() => dir.trim().to_string(),
         _ => {
@@ -1504,16 +1528,64 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
                     },
                 );
                 log.write_line("shell:wsl", &format!("[wsl] installing payload {id}"));
-                backend.install_payload(&bundled.join("devhub-payload.tar.gz"), &id)?;
+                startup_phase(&log, "payload-unpack", || {
+                    backend.install_payload(&bundled.join("devhub-payload.tar.gz"), &id)
+                })?;
+            } else {
+                log.write_line("shell:wsl", &format!("[wsl] reusing cached payload {id}"));
             }
             dir
         }
     };
+    log.write_line(
+        "shell:startup",
+        &format!(
+            "[startup] phase=payload-ready duration_ms={}",
+            payload_started.elapsed().as_millis()
+        ),
+    );
 
-    if let Some(port) = sidecar.check_ports() {
-        let message = wsl_port_conflict_message(&backend, port);
-        fail_with_recovery(app, &message, false);
-        return Err(message);
+    let ports = startup_phase(&log, "ports", || {
+        let occupied = backend.listening_ports()?;
+        wsl::select_ports(
+            sidecar.preferred_ports,
+            [
+                std::env::var_os("DEVHUB_PORT").is_none(),
+                std::env::var_os("DEVHUB_TERMINAL_PORT").is_none(),
+            ],
+            |port| {
+                !occupied.contains(&port)
+                    && std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()
+            },
+        )
+    })?;
+    let secondary = ports != sidecar.preferred_ports
+        && (backend
+            .exec(
+                &[
+                    "/bin/systemctl",
+                    "--user",
+                    "is-active",
+                    "--quiet",
+                    "devhub.service",
+                ],
+                Duration::from_secs(3),
+            )
+            .is_ok()
+            || dev_server_responds(&format!("http://127.0.0.1:{}", sidecar.preferred_ports[0]))
+                .is_ok());
+    if ports != sidecar.preferred_ports {
+        log.write_line("shell:startup", &format!(
+            "[startup] requested ports {:?} unavailable; using dashboard={} terminal={}; secondary={secondary}. Existing services keep running.",
+            sidecar.preferred_ports, ports[0], ports[1]
+        ));
+    }
+    sidecar.configure_ports(ports);
+    // Native folder picking and updates need the same ACL at a fallback port.
+    // Grant this exact origin, never every loopback service.
+    if ports[0] != DEFAULT_PORT {
+        app.add_capability(dashboard_capability(ports[0]).to_string())
+            .map_err(|err| format!("Could not configure the dashboard connection: {err}"))?;
     }
 
     set_boot(
@@ -1523,45 +1595,31 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
         },
     );
     let events = app.clone();
-    sidecar
-        .start_wsl(&backend, &payload, checkout.as_deref(), move |event| {
-            set_boot(&events, event)
-        })
-        .map_err(|err| format!("Could not start DevHub inside WSL: {err}"))?;
+    startup_phase(&log, "supervisor-launch", || {
+        sidecar.start_wsl(
+            &backend,
+            &payload,
+            checkout.as_deref(),
+            secondary,
+            move |event| set_boot(&events, event),
+        )
+    })
+    .map_err(|err| format!("Could not start DevHub inside WSL: {err}"))?;
     open_when_healthy(app, sidecar, Duration::from_secs(120));
     Ok(())
 }
 
-/// Say what is holding the port *inside WSL*. The generic message tells the
-/// user to run `lsof`, which is a Windows-side dead end here. The usual culprit
-/// is a DevHub already running in the same distro (a checkout dev server, or
-/// the Linux app), so the answer names the process and the way out.
-fn wsl_port_conflict_message(backend: &wsl::WslBackend, port: u16) -> String {
-    let holder = backend
-        .exec(
-            &[
-                "/bin/sh",
-                "-c",
-                "ss -H -ltnp \"sport = :$1\" 2>/dev/null | head -n 3",
-                "devhub-port",
-                &port.to_string(),
-            ],
-            Duration::from_secs(10),
-        )
-        .unwrap_or_default();
-    let holder = holder.trim();
-    if holder.is_empty() {
-        format!(
-            "Port {port} is already in use (on Windows or in WSL). Free it, or set DEVHUB_PORT to another port, then Retry."
-        )
-    } else {
-        format!(
-            "Port {port} is already in use inside WSL (\"{}\"): most likely another DevHub in {}. \
-             Stop it (for example `pkill -f next-server`, or quit the Linux app), then Retry.",
-            holder.replace('\n', "; "),
-            backend.distro
-        )
-    }
+fn dashboard_capability(port: u16) -> serde_json::Value {
+    let mut capability: serde_json::Value =
+        serde_json::from_str(include_str!("../capabilities/main.json"))
+            .expect("main capability is valid JSON");
+    capability["identifier"] = serde_json::json!(format!("dashboard-{port}"));
+    capability["local"] = serde_json::json!(false);
+    capability["remote"]["urls"] = serde_json::json!([
+        format!("http://localhost:{port}/*"),
+        format!("http://127.0.0.1:{port}/*")
+    ]);
+    capability
 }
 
 fn fail(app: &tauri::AppHandle, message: &str) {
@@ -1701,7 +1759,7 @@ fn load_dashboard(app: &tauri::AppHandle, sidecar: &Sidecar) {
                 if attempt == 1 {
                     state.log.write_line(
                         "shell:handoff",
-                        &format!("[handoff] {}", probe_localhost(state.sidecar.port)),
+                        &format!("[handoff] {}", probe_localhost(state.sidecar.port())),
                     );
                 }
             }
@@ -2281,10 +2339,9 @@ pub fn run() {
             // window with a race in it.
             // In attach mode the dashboard is on whatever port the dev server
             // uses, so the guard has to allow that instead of the packaged one.
-            let nav_port = dev_server_url()
+            let attached_port = dev_server_url()
                 .and_then(|u| u.parse::<tauri::Url>().ok())
-                .and_then(|u| u.port())
-                .unwrap_or(port);
+                .and_then(|u| u.port());
             let nav_handle = handle.clone();
             let _window =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
@@ -2321,6 +2378,7 @@ pub fn run() {
                         }
                     })
                     .on_navigation(move |url| {
+                        let nav_port = attached_port.unwrap_or_else(|| nav_handle.state::<AppState>().sidecar.port());
                         let allowed = may_load_in_window(url, nav_port);
                         // Origin + path only: the bootstrap URL carries a token.
                         if let Some(state) = nav_handle.try_state::<AppState>() {
@@ -2382,6 +2440,16 @@ pub fn run() {
                 stop_dev_server(app);
                 app.exit(0);
             }
+            "tray-hide-devhub" => {
+                if let Some(window) = app.get_webview_window("main") { let _ = window.hide(); }
+                tray::set_visible(app, true);
+            }
+            "tray-restart-backend" => {
+                if dev_server_url_for(Some(app)).is_none() {
+                    if let Some(state) = app.try_state::<AppState>() { state.sidecar.stop(); }
+                    app.restart();
+                }
+            }
             "show-logs" => {
                 // Prefer the live dashboard so the in-app terminal view is
                 // what opens. Fall back to the folder only when nothing is
@@ -2419,6 +2487,7 @@ pub fn run() {
             }
             "rebuild-dashboard" => rebuild_dashboard(app),
             "check-updates" => {
+                show_main_window(app);
                 let _ = app.emit("devhub://check-updates", ());
             }
             /*
@@ -2499,7 +2568,7 @@ pub fn run() {
                 if let Some(state) = window.app_handle().try_state::<AppState>() {
                     state.log.write_line(
                         "shell:window",
-                        "[window] closed — hidden; DevHub and scheduled jobs keep running until you quit (⌘Q, or the tray icon)",
+                        "[window] hidden; DevHub and scheduled jobs keep running. Use Quit DevHub in the tray menu to stop it.",
                     );
                 }
                 return;
@@ -2546,6 +2615,19 @@ extern "C" {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn fallback_port_gets_native_commands_only_at_its_exact_origin() {
+        let capability = super::dashboard_capability(1457);
+        assert_eq!(
+            capability["remote"]["urls"],
+            serde_json::json!(["http://localhost:1457/*", "http://127.0.0.1:1457/*"])
+        );
+        assert_eq!(capability["local"], false);
+        let original: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/main.json")).unwrap();
+        assert_eq!(capability["permissions"], original["permissions"]);
+    }
+
     use super::*;
     use std::net::Ipv4Addr;
 

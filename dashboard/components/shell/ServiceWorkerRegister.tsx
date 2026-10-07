@@ -1,40 +1,43 @@
 "use client";
 
 import { useEffect } from "react";
+import { isDesktop } from "@/lib/desktop/bridge";
+import { removeDevhubServiceWorkers, serviceWorkerPlan } from "@/lib/desktop/service-worker";
 
 /**
- * Registers a minimal pass-through service worker so Chromium can treat the
- * site as installable (manifest + SW + secure context). Safe no-op when SW
- * unsupported or context is insecure.
+ * Registers the offline service worker in a normal browser, and removes it
+ * where it does harm: development servers and the desktop shell. See
+ * `serviceWorkerPlan` for why each case is what it is.
  */
 export function ServiceWorkerRegister() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!("serviceWorker" in navigator)) return;
 
-    // Packaged and Attach mode deliberately share localhost:1337. That also
-    // shares the WebKit service-worker scope. Dev webpack assets have stable
-    // URLs, so the production worker's cache-first `/_next/static` rule turns
-    // hot reload into "whatever CSS happened to be cached first".
-    //
-    // A development server must never keep a worker (or its DevHub caches).
-    // Unregistering makes the following reload fetch webpack assets directly.
-    if (process.env.NODE_ENV === "development") {
+    const development = process.env.NODE_ENV === "development";
+    const plan = serviceWorkerPlan({
+      development,
+      desktop: isDesktop(),
+      secureContext: window.isSecureContext,
+    });
+
+    if (plan === "remove") {
       void (async () => {
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        const removed = await Promise.all(registrations.map((registration) => registration.unregister()));
-        const cacheNames = await caches.keys();
-        await Promise.all(
-          cacheNames
-            .filter((name) => name.startsWith("devhub-"))
-            .map((name) => caches.delete(name)),
+        const removed = await removeDevhubServiceWorkers(
+          navigator.serviceWorker,
+          typeof caches === "undefined" ? undefined : caches,
         );
-        if (removed.some(Boolean)) window.location.reload();
-      })();
+        // Development reloads so webpack assets are fetched directly. The
+        // desktop shell does not need to: this page already loaded, and the
+        // next launch's bootstrap navigation is no longer intercepted.
+        if (removed && development) window.location.reload();
+      })().catch(() => {
+        /* non-fatal — the worst case is the old worker lingering */
+      });
       return;
     }
 
-    if (!window.isSecureContext) return;
+    if (plan !== "register") return;
     void navigator.serviceWorker
       .register("/sw.js", { type: "classic", scope: "/" })
       .catch(() => {

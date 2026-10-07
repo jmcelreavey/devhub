@@ -1,6 +1,7 @@
 "use client";
 
 import { WorkingFolderField } from "@/components/agents/WorkingFolderField";
+import { ProviderError } from "@/components/agents/ProviderError";
 import { useWorkspaceTabs } from "@/components/shell/WorkspaceTabs";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { AGENT_HANDOFF_EVENT,agentsHref,handoffPrompt,requestAgentConversation,type AgentHandoff } from "@/lib/agent-handoff";
@@ -178,7 +179,7 @@ export function AgentLaunchForm({ intent, current, close, banner, disabled, disa
       <label className="block text-sm">{intent.context ? "What would you like the agent to do?" : "Task"}<textarea className="input w-full mt-1" rows={5} maxLength={32000} value={prompt} onChange={(e) => setPrompt(e.target.value)} required /></label>
       {intent.context && <details open><summary className="text-sm cursor-pointer">Captured terminal context · {intent.context.length.toLocaleString()} characters</summary><pre className="text-xs whitespace-pre-wrap break-words max-h-48 overflow-auto bg-bg-surface p-3 mt-2 rounded">{intent.context}</pre></details>}
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={worktree} onChange={(e) => setWorktree(e.target.checked)} />Use an isolated worktree</label>
-      {error && <div role="alert" className="tone-panel tone-panel--warning text-sm"><p>{error}</p>{!assistants && <Link href="/agents?view=connection" className="underline" onClick={close}>Check Agents → Connection</Link>}</div>}
+      {error && <div className="tone-panel tone-panel--warning text-sm"><ProviderError provider={selected?.name} error={error} />{!assistants && <Link href="/agents?view=connection" className="underline" onClick={close}>Check Agents → Connection</Link>}</div>}
       {disabled && disabledReason && <p className="text-sm text-text-muted">{disabledReason}</p>}
       <div className="flex items-center justify-end gap-3"><button type="button" className="btn btn-ghost" onClick={close}>{busy ? "Continue in background" : "Cancel"}</button><button type="submit" className="btn btn-primary gap-2" disabled={disabled || busy || !selected?.ready}>{busy && <RotateCw size={14} className="animate-spin" />}{busy ? "Starting…" : "Start chat"}</button></div>
     </form>

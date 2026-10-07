@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="400" viewBox="0 0 660 400">
+  <rect width="660" height="400" fill="#f6f8f5"/>
+  <rect x="0" y="0" width="660" height="5" fill="#718c25"/>
+  <text x="330" y="69" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="28" font-weight="700" fill="#1e2921">Install DevHub</text>
+  <text x="330" y="101" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="15" fill="#536057">Your workspace stays on your machine.</text>
+  <path d="M295 210 H362 M350 198 L362 210 L350 222" fill="none" stroke="#718c25" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="330" y="337" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#1e2921">Drag DevHub into Applications.</text>
+  <text x="330" y="365" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="13" fill="#536057">Open it from Applications to finish setup.</text>
+</svg>

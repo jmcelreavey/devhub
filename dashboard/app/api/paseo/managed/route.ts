@@ -10,6 +10,7 @@ import { disablePaseoRelay, PASEO_DAEMON_LABEL, PASEO_SYSTEMD_UNIT, paseoCli, pa
 import { defaultPaseoProvider, listPaseoProviders } from "@/lib/paseo/providers";
 
 import { checkPaseoUpdate, hasActivePaseoWork } from "@/lib/paseo/update";
+import { repairOpenCodeDevhubMcp } from "@/lib/sync/mcp";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,7 @@ export async function GET(req: NextRequest) {
 }
 
 const inputSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("repair-opencode-mcp") }),
   z.object({ action: z.literal("setup") }),
   z.object({ action: z.literal("update") }),
   z.object({ action: z.literal("check-update") }),
@@ -84,6 +86,7 @@ export async function POST(req: NextRequest) {
   const input = parsed.data;
   return withMutex("paseo:managed", async () => {
     try {
+      if (input.action === "repair-opencode-mcp") { repairOpenCodeDevhubMcp(); return NextResponse.json({ ok: true }); }
       if (input.action === "check-update") return NextResponse.json(await checkPaseoUpdate(true));
       if (input.action === "setup" || input.action === "update") {
         if (await healthy() && await hasActivePaseoWork()) return NextResponse.json({ error: "Finish or stop active chats before updating or reinstalling Paseo." }, { status: 409 });
@@ -113,6 +116,7 @@ export async function POST(req: NextRequest) {
       const pairing = z.object({ relayEnabled: z.boolean(), url: z.string().url() }).parse(JSON.parse(stdout));
       return NextResponse.json({ url: pairing.url }, { headers: { "Cache-Control": "no-store" } });
     } catch (error) {
+      if (input.action === "repair-opencode-mcp") return NextResponse.json({ error: "Could not repair DevHub's MCP entry. Check ~/.config/opencode/opencode.json: command must be a non-empty string array, environment values must be strings, and enabled must be true or false." }, { status: 400 });
       // Setup output is diagnostics only; pairing output can hold the device secret, so it's never logged.
       if (input.action === "setup" || input.action === "update") console.error("[paseo] install failed", error instanceof Error ? error.message : error);
       const stderr = (error as { stderr?: unknown }).stderr;

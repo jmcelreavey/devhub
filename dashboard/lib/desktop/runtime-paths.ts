@@ -174,7 +174,7 @@ export function getReposDir(): string {
   if (explicit) return path.resolve(expandHome(explicit));
   const checkout = getCheckoutRoot();
   if (checkout) return path.dirname(checkout);
-  return path.join(os.homedir(), "Developer");
+  return path.join(os.homedir(), process.platform === "darwin" ? "Developer" : "code");
 }
 
 /** Writable identity file, falling back to the packaged generic persona. */

@@ -1,10 +1,14 @@
 "use client";
 
 import { DependencyChecklist } from "@/components/setup/DependencyChecklist";
+import { PaseoConnection } from "@/app/agents/paseo-connection";
 import { PrivateRepoSetup } from "@/components/setup/PrivateRepoSetup";
-import { filterStepsByGoals, parseGoals, SETUP_GOALS_KEY, type GoalId } from "@/lib/setup/goals";
+import { filterStepsByGoals } from "@/lib/setup/goals";
+import { useSetupProgress } from "@/lib/setup/use-setup-progress";
+import type { SetupStepId } from "@/lib/setup/progress";
+import { FetchError } from "@/components/ui/FetchError";
+import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback, useRef, startTransition } from "react";
-import Link from "next/link";
 import { mutate as mutateSWR } from "swr";
 import { isDesktop, openInBrowser, pickFolder } from "@/lib/desktop/bridge";
 import {
@@ -45,7 +49,7 @@ import {
   Wrench,
 } from "lucide-react";
 
-type Step = SetupStepMeta;
+type Step = Omit<SetupStepMeta, "id"> & { id: SetupStepId };
 
 const STEPS: Step[] = [
   {
@@ -66,9 +70,9 @@ const STEPS: Step[] = [
   },
   {
     id: "paths",
-    title: "Core paths",
+    title: "Your folders",
     icon: <FolderOpen size={18} />,
-    description: "Where DevHub stores notes and finds the repo",
+    description: "Choose your code folder and where to keep your notes",
     configured: false,
     optional: true,
   },
@@ -132,8 +136,10 @@ const STEPS: Step[] = [
 ];
 
 export default function SetupPage() {
+  const router = useRouter();
+  const progressState = useSetupProgress();
+  const { currentStep: currentStepId, goals, updateGoals, setCurrentStepId } = progressState;
   const [status, setStatus] = useState<SetupStatus | null>(null);
-  const [currentStep, setCurrentStep] = useState(0);
   const [pathsForm, setPathsForm] = useState<PathsForm>({ repoRoot: "", notesDir: "", reposDir: "" });
   const [pathChecks, setPathChecks] = useState<{
     repoRoot: PathCheck | null;
@@ -368,25 +374,6 @@ export default function SetupPage() {
     return () => clearTimeout(id);
   }, [pathsForm]);
 
-  /*
-    Goals narrow which integration steps get offered. Read once on mount (the
-    page is client-side already) and only ever used to filter - the step rail
-    below still reaches everything, so a wrong answer costs nothing.
-  */
-  const [goals, setGoals] = useState<GoalId[]>(() => {
-    if (typeof window === "undefined") return [];
-    return parseGoals(window.localStorage.getItem(SETUP_GOALS_KEY));
-  });
-
-  const updateGoals = useCallback((next: GoalId[]) => {
-    setGoals(next);
-    try {
-      window.localStorage.setItem(SETUP_GOALS_KEY, JSON.stringify(next));
-    } catch {
-      /* private browsing - goals just won't persist */
-    }
-  }, []);
-
   const steps: Step[] = filterStepsByGoals(STEPS, goals).map((s) => {
     if (s.id === "paths" && status) return { ...s, configured: status.core };
     if (s.id === "github" && status) return { ...s, configured: status.github };
@@ -396,19 +383,20 @@ export default function SetupPage() {
     if (s.id === "bi" && status) return { ...s, configured: status.bi };
     return s;
   });
+  const currentStep = Math.max(0, steps.findIndex((step) => step.id === currentStepId));
 
   const goNext = useCallback(() => {
     setSaveResult(null);
     setError("");
     setCheckOk("");
-    setCurrentStep((i) => Math.min(i + 1, steps.length - 1));
-  }, [steps.length]);
+    setCurrentStepId(steps[Math.min(currentStep + 1, steps.length - 1)].id);
+  }, [currentStep, steps, setCurrentStepId]);
 
   const goBack = () => {
     setSaveResult(null);
     setError("");
     setCheckOk("");
-    setCurrentStep((i) => Math.max(i - 1, 0));
+    setCurrentStepId(steps[Math.max(currentStep - 1, 0)].id);
   };
 
   const checkConnection = useCallback(
@@ -773,17 +761,41 @@ export default function SetupPage() {
     setSaveResult(null);
     setError("");
     setCheckOk("");
-    setCurrentStep(i);
+    setCurrentStepId(steps[i].id);
   };
 
   const toggleSecret = (key: string) => {
     setShowSecrets((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  if (!status) {
+  const finishSetup = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      await progressState.finish();
+      router.replace("/");
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Couldn't finish setup. Please retry.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!status || !progressState.ready) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-sm text-text-subtle">Loading...</div>
+      <div className="page-wrapper">
+        {error || progressState.error ? (
+          <FetchError message={error || progressState.error} onRetry={() => {
+            void loadSetupStatus();
+            progressState.retry();
+          }} />
+        ) : (
+          <div role="status" aria-label="Loading setup" className="space-y-4">
+            <div className="skeleton h-8 w-48" />
+            <div className="skeleton h-40 w-full" />
+          </div>
+        )}
       </div>
     );
   }
@@ -809,6 +821,13 @@ export default function SetupPage() {
   return (
     <div className="page-wrapper h-full min-h-0 overflow-y-auto">
       <div className="w-full min-w-0 max-w-full">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <h1 className="text-2xl font-semibold">Set up DevHub</h1>
+          <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => void finishSetup()}>
+            Set up later
+          </button>
+        </div>
+        {progressState.error && <FetchError message={progressState.error} onRetry={progressState.retry} />}
         {/* Progress bar */}
         <div
           style={{
@@ -1012,6 +1031,8 @@ export default function SetupPage() {
             />
           )}
           {step.id === "agent" && (
+            <div>
+            <PaseoConnection setup />
             <AgentCliStep
               provider={agentForm.provider}
               onProviderChange={(v) => setAgentForm((prev) => ({ ...prev, provider: v }))}
@@ -1027,7 +1048,7 @@ export default function SetupPage() {
                 apiConfigured: status.agentVars?.apiConfigured === true,
               }}
             />
-
+            </div>
           )}
           {step.id === "done" && <DoneStep saveResult={saveResult} />}
 
@@ -1065,7 +1086,7 @@ export default function SetupPage() {
             <div style={{ display: "flex", gap: "8px" }}>
               {step.optional && !isStepComplete(step, status) && (
                 <button
-                  onClick={goNext}
+                  onClick={() => { progressState.skipStep(step.id); goNext(); }}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -1084,12 +1105,14 @@ export default function SetupPage() {
               )}
 
               {step.id === "done" ? (
-                <Link
-                  href="/"
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void finishSetup()}
                   className="btn btn-primary"
                 >
-                  Go to Dashboard
-                </Link>
+                  {saving ? "Finishing…" : "Go to Dashboard"}
+                </button>
               ) : step.id === "welcome" ? (
                 <button
                   onClick={async () => {

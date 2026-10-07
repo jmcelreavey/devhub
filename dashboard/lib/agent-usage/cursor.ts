@@ -11,8 +11,19 @@ import type { ProviderUsage } from "./types";
 // decrypt. These endpoints are what cursor.com/dashboard calls; undocumented.
 const CURSOR_ORIGIN = "https://cursor.com";
 
-function stateDbPath(): string {
+export async function stateDbPath(): Promise<string | null> {
   const home = os.homedir();
+  if (process.env.WSL_DISTRO_NAME) {
+    // The editor runs on Windows; signing in to the WSL agent CLI does not
+    // populate its separate subscription database.
+    try {
+      const appData = (await execExternal("cmd.exe", ["/d", "/c", "echo", "%APPDATA%"], { timeoutMs: 3_000, label: "usage:cursor-windows-profile" })).stdout.trim();
+      if (!/^[A-Za-z]:\\/.test(appData)) return null;
+      const converted = (await execExternal("wslpath", ["-u", appData], { timeoutMs: 3_000, label: "usage:cursor-windows-path" })).stdout.trim();
+      return converted.startsWith("/") ? path.join(converted, "Cursor", "User", "globalStorage", "state.vscdb") : null;
+    } catch { return null; }
+  }
+  if (process.platform === "win32") return process.env.APPDATA ? path.join(process.env.APPDATA, "Cursor", "User", "globalStorage", "state.vscdb") : null;
   return process.platform === "darwin"
     ? path.join(home, "Library", "Application Support", "Cursor", "User", "globalStorage", "state.vscdb")
     : path.join(process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "Cursor", "User", "globalStorage", "state.vscdb");
@@ -32,8 +43,8 @@ const periodUsageSchema = z.object({
 const planInfoSchema = z.object({ planInfo: z.object({ planName: z.string() }).optional() });
 
 async function readAccessToken(): Promise<string | null> {
-  const db = stateDbPath();
-  if (!fs.existsSync(db)) return null;
+  const db = await stateDbPath();
+  if (!db || !fs.existsSync(db)) return null;
   // sqlite3 in a subprocess rather than node:sqlite: the file is multi-GB and a
   // synchronous read on the main thread would stall every route while it runs.
   const query = "select value from ItemTable where key = 'cursorAuth/accessToken'";
@@ -63,7 +74,9 @@ async function cursorPost(endpoint: string, cookie: string): Promise<unknown> {
 export async function loadCursorUsage(): Promise<ProviderUsage> {
   const base = { id: "cursor", name: "Cursor", meters: [], spend: [] } satisfies Partial<ProviderUsage>;
   const token = await readAccessToken();
-  if (!token) return { ...base, status: "unavailable", message: "Sign in to the Cursor app to see plan usage." };
+  if (!token) return { ...base, status: "unavailable", message: process.env.WSL_DISTRO_NAME
+    ? "Sign in to the Windows Cursor desktop app to see plan usage. The WSL agent CLI has a separate sign-in: `agent login`. If the Windows profile is unavailable from WSL, check usage at cursor.com/dashboard."
+    : "Sign in to the Cursor desktop app to see plan usage. The agent CLI has a separate sign-in: `agent login`." };
 
   let claims: z.infer<typeof claimsSchema>;
   try {
@@ -71,7 +84,7 @@ export async function loadCursorUsage(): Promise<ProviderUsage> {
   } catch {
     return { ...base, status: "error", message: "Cursor's stored sign-in is in an unexpected format." };
   }
-  if (claims.exp && claims.exp * 1000 < Date.now()) return { ...base, status: "unavailable", message: "Cursor's sign-in has expired. Open Cursor to refresh it." };
+  if (claims.exp && claims.exp * 1000 < Date.now()) return { ...base, status: "unavailable", message: `Cursor's sign-in has expired. Open the ${process.env.WSL_DISTRO_NAME ? "Windows " : ""}Cursor desktop app to sign in again, then retry.` };
 
   // `sub` looks like "google-oauth2|user_01…"; the cookie wants the user id part.
   const userId = claims.sub.split("|").pop();

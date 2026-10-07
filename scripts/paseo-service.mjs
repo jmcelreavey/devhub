@@ -42,7 +42,7 @@ export function systemdPath(value) {
  * after a crash, stay down after a clean stop. `UMask=0077` mirrors the
  * plist's Umask 63, since the daemon holds a password hash and session data.
  */
-export function renderSystemdUnit({ root, home, args, path, log }) {
+export function renderSystemdUnit({ root, home, args, path, log, npmPrefix }) {
   if (!Array.isArray(args) || args.length === 0) throw new Error("renderSystemdUnit needs the daemon command line.");
   return [
     "[Unit]",
@@ -55,6 +55,7 @@ export function renderSystemdUnit({ root, home, args, path, log }) {
     // The daemon finds claude, cursor-agent, opencode and codex on PATH.
     `Environment=${systemdQuote(`PATH=${path}`)}`,
     `Environment=${systemdQuote(`PASEO_HOME=${home}`)}`,
+    ...(npmPrefix ? [`Environment=${systemdQuote(`NPM_CONFIG_PREFIX=${npmPrefix}`)}`, `Environment=${systemdQuote(`npm_config_prefix=${npmPrefix}`)}`] : []),
     `ExecStart=${args.map(systemdQuote).join(" ")}`,
     "Restart=on-failure",
     "RestartSec=10",

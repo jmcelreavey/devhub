@@ -40,6 +40,12 @@
     },
     "macOS": {
       "minimumSystemVersion": "13.0",
+      "dmg": {
+        "background": "../assets/dmg-background.png",
+        "windowSize": { "width": 660, "height": 400 },
+        "appPosition": { "x": 180, "y": 210 },
+        "applicationFolderPosition": { "x": 480, "y": 210 }
+      },
       "files": {
         "Resources/wake-helper/devhub-wake-helper": "../staging/wake-helper/devhub-wake-helper",
         "Resources/wake-helper/com.devhub.wake-helper.plist": "../staging/wake-helper/com.devhub.wake-helper.plist"

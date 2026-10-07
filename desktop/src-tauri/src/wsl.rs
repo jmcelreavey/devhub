@@ -109,6 +109,19 @@ impl WslBackend {
         self.exec(&refs, QUICK_TIMEOUT).map(|_| ())
     }
 
+    /// Read both IPv4 and IPv6 listeners in one call, without requiring lsof.
+    pub fn listening_ports(&self) -> Result<Vec<u16>, String> {
+        self.exec(
+            &[
+                "/bin/sh",
+                "-c",
+                "set -e; cat /proc/net/tcp; if [ -f /proc/net/tcp6 ]; then cat /proc/net/tcp6; fi",
+            ],
+            QUICK_TIMEOUT,
+        )
+        .map(|table| parse_listening_ports(&table))
+    }
+
     /// Content-only Git linking keeps configuration in app data. Auto-detecting
     /// that clone as a legacy checkout would switch to an absent .env.local.
     pub fn has_content_checkout(&self) -> bool {
@@ -249,6 +262,62 @@ done
         let pattern = format!("{payload}/services/supervisor.mjs");
         let _ = self.exec(&["/usr/bin/pkill", "-f", &pattern], QUICK_TIMEOUT);
     }
+}
+
+pub fn parse_listening_ports(table: &str) -> Vec<u16> {
+    table
+        .lines()
+        .filter_map(|line| {
+            let fields: Vec<_> = line.split_whitespace().collect();
+            if fields.get(3) != Some(&"0A") {
+                return None;
+            }
+            let (_, port) = fields.get(1)?.rsplit_once(':')?;
+            u16::from_str_radix(port, 16).ok()
+        })
+        .collect()
+}
+
+/// Probe both requested ports before choosing alternatives, so a pinned-port
+/// failure reports every conflict in one pass.
+pub fn select_ports(
+    preferred: [u16; 2],
+    automatic: [bool; 2],
+    mut available: impl FnMut(u16) -> bool,
+) -> Result<[u16; 2], String> {
+    if preferred.contains(&0) || preferred[0] == preferred[1] {
+        return Err("Dashboard and terminal ports must be different, between 1 and 65535.".into());
+    }
+    let occupied = preferred.map(|port| !available(port));
+    let conflicts = preferred
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| occupied[*index])
+        .map(|(index, port)| {
+            format!(
+                "{} {port}",
+                if index == 0 { "dashboard" } else { "terminal" }
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    if occupied
+        .iter()
+        .enumerate()
+        .any(|(index, busy)| *busy && !automatic[index])
+    {
+        return Err(format!("Requested ports are in use: {conflicts}. Change DEVHUB_PORT / DEVHUB_TERMINAL_PORT, or stop the service using those ports, then Retry."));
+    }
+    let mut selected = preferred;
+    for index in 0..2 {
+        if !occupied[index] && (index == 0 || selected[0] != selected[1]) {
+            continue;
+        }
+        selected[index] = (1..=128).filter_map(|offset| preferred[index].checked_add(offset))
+            .find(|port| *port != selected[1 - index] && available(*port))
+            .ok_or_else(|| format!("Could not find free dashboard and terminal ports. Occupied: {conflicts}. Close an unused service and Retry."))?;
+    }
+    Ok(selected)
 }
 
 fn wsl_command() -> Command {
@@ -578,6 +647,42 @@ mod tests {
         assert_eq!(decode_wsl_output(b"/home/me"), "/home/me");
         assert_eq!(decode_wsl_output(b""), "");
         assert_eq!(decode_wsl_output(b"a"), "a");
+    }
+
+    #[test]
+    fn reads_only_listening_ports_from_both_tcp_tables() {
+        let table = "sl local_address rem_address st\n0: 0100007F:0539 00000000:0000 0A\n1: 0100007F:053B 0100007F:9999 01\n2: 00000000000000000000000000000000:053B 00000000:0000 0A\n";
+        assert_eq!(parse_listening_ports(table), vec![1337, 1339]);
+    }
+
+    #[test]
+    fn chooses_distinct_free_ports_without_stopping_existing_services() {
+        assert_eq!(
+            select_ports([1337, 1339], [true, true], |p| ![1337, 1339].contains(&p)).unwrap(),
+            [1338, 1340]
+        );
+        assert_eq!(
+            select_ports([1337, 1338], [true, true], |p| p != 1337).unwrap(),
+            [1339, 1338]
+        );
+        assert_eq!(
+            select_ports([1337, 1339], [true, true], |_| true).unwrap(),
+            [1337, 1339]
+        );
+    }
+
+    #[test]
+    fn reports_all_conflicts_when_a_port_is_pinned() {
+        let error = select_ports([1337, 1339], [false, true], |_| false).unwrap_err();
+        assert!(error.contains("dashboard 1337"), "{error}");
+        assert!(error.contains("terminal 1339"), "{error}");
+    }
+
+    #[test]
+    fn rejects_invalid_ports_and_bounds_the_search() {
+        assert!(select_ports([0, 1339], [true, true], |_| true).is_err());
+        assert!(select_ports([1337, 1337], [false, false], |_| true).is_err());
+        assert!(select_ports([65535, 1339], [true, true], |_| false).is_err());
     }
 
     const LIST: &str = "  NAME              STATE           VERSION\r\n\

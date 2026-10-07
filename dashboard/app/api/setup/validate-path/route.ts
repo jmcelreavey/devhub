@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import { z } from "zod";
 import { parseBody } from "@/lib/api-utils";
+import { resolveSetupPath } from "@/lib/setup/input-path";
 
 export const dynamic = "force-dynamic";
 
@@ -28,22 +28,15 @@ function countGitRepos(dir: string): number {
   }
 }
 
-function expandHome(p: string): string {
-  if (!p) return p;
-  if (p === "~") return os.homedir();
-  if (p.startsWith("~/")) return path.join(os.homedir(), p.slice(2));
-  return p;
-}
-
 function check(rawPath: string, kind: "repoRoot" | "notesDir" | "reposDir"): CheckResult {
   if (!rawPath || !rawPath.trim()) {
     return { ok: false, resolved: "", message: "Path is required" };
   }
-  const expanded = expandHome(rawPath.trim());
-  if (!path.isAbsolute(expanded)) {
-    return { ok: false, resolved: expanded, message: "Path must be absolute" };
+  // Accepts ~ and, on the Windows app, C:\… or \\wsl.localhost\… notation.
+  const resolved = resolveSetupPath(rawPath);
+  if (!path.isAbsolute(resolved)) {
+    return { ok: false, resolved, message: "Path must be absolute" };
   }
-  const resolved = path.resolve(expanded);
 
   let stat;
   try {

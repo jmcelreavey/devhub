@@ -65,6 +65,21 @@ describe("readBundleSourceCommit", () => {
 });
 
 describe("getPackagedCheckoutStatus", () => {
+  it.each(["release", "content-link"])("keeps %s builds free of developer rebuild advice", (kind) => {
+    const checkout = makeCheckout();
+    const server = path.join(tmp, "server");
+    const appData = path.join(tmp, "app-data");
+    fs.mkdirSync(server);
+    fs.mkdirSync(appData);
+    fs.writeFileSync(path.join(server, "bundle-source.json"), JSON.stringify({ commit: "older", release: kind === "release" }));
+    fs.writeFileSync(path.join(appData, kind === "content-link" ? "content-repo-path.txt" : "repo-path.txt"), checkout);
+    process.env.DEVHUB_PACKAGED_RUNTIME = "1";
+    process.env.DEVHUB_DESKTOP = "1";
+    process.env.DEVHUB_SERVER_DIR = server;
+    process.env.DEVHUB_APP_DATA = appData;
+    expect(getPackagedCheckoutStatus()).toMatchObject({ hasCheckout: true, stale: false });
+  });
+
   it("is inactive outside packaged runtime", () => {
     const checkout = makeCheckout();
     process.env.REPO_ROOT = checkout;

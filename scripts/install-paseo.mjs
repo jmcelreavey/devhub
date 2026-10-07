@@ -10,6 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import net from "node:net";
+import { randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import { parseEnv } from "node:util";
 import { execFileSync } from "node:child_process";
@@ -23,6 +24,9 @@ const root = path.join(os.homedir(), ".local", "share", "devhub", "paseo");
 const home = path.join(root, "home");
 const config = path.join(os.homedir(), ".config", "devhub");
 const manifest = path.join(config, "paseo-managed.json");
+const passwordFile = path.join(config, "paseo-password");
+const npmPrefix = path.join(os.homedir(), ".local", "share", "devhub", "tools");
+let daemonNode = process.execPath;
 const label = "devhub.paseo.daemon";
 const port = 6767;
 const uid = process.getuid?.();
@@ -47,10 +51,12 @@ function xml(s) { return String(s).replaceAll("&", "&amp;").replaceAll("<", "&lt
 
 /** OPENCHAMBER_UI_PASSWORD is the legacy name, from when OpenChamber owned this password. */
 function configuredPassword() {
-  const file = path.join(import.meta.dirname, "..", "dashboard", ".env.local");
+  const file = process.env.DEVHUB_ENV_FILE || path.join(import.meta.dirname, "..", "dashboard", ".env.local");
   const env = { ...(fs.existsSync(file) ? parseEnv(fs.readFileSync(file, "utf8")) : {}), ...process.env };
-  const password = env.DEVHUB_PASEO_PASSWORD?.trim() || env.OPENCHAMBER_UI_PASSWORD?.trim();
-  if (!password) throw new Error("Set an Agents password in DevHub Setup (DEVHUB_PASEO_PASSWORD in dashboard/.env.local) before setting up Paseo.");
+  const password = env.DEVHUB_PASEO_PASSWORD?.trim() || env.OPENCHAMBER_UI_PASSWORD?.trim()
+    || (fs.existsSync(passwordFile) ? fs.readFileSync(passwordFile, "utf8").trim() : "");
+  if (!password && fs.existsSync(manifest)) throw new Error("Paseo is already installed. Enter its existing Agents password in DevHub Setup before reinstalling.");
+  if (!password) return randomBytes(32).toString("base64url");
   return password;
 }
 
@@ -126,7 +132,7 @@ function writeConfig(passwordHash, version) {
 
 /** The daemon finds claude, cursor-agent, opencode and codex on PATH, so it needs the user's. */
 function daemonPath() {
-  return [...new Set([path.dirname(process.execPath), ...(process.env.PATH || "/usr/bin:/bin").split(path.delimiter)]
+  return [...new Set([path.join(npmPrefix, "bin"), path.dirname(daemonNode), ...(process.env.PATH || "/usr/bin:/bin").split(path.delimiter)]
     .filter(dir => dir && !dir.includes("node_modules") && fs.existsSync(dir)))].join(path.delimiter);
 }
 
@@ -134,7 +140,7 @@ function registerSystemd(args) {
   const dir = path.join(os.homedir(), ".config", "systemd", "user");
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, PASEO_SYSTEMD_UNIT);
-  const unit = renderSystemdUnit({ root, home, args, path: daemonPath(), log: path.join(root, label + ".log") });
+  const unit = renderSystemdUnit({ root, home, args, path: daemonPath(), npmPrefix, log: path.join(root, label + ".log") });
   fs.writeFileSync(`${file}.next`, unit, { mode: 0o600 });
   fs.renameSync(`${file}.next`, file);
   try {
@@ -157,7 +163,7 @@ function register(args) {
     '<key>Label</key><string>' + label + '</string><key>ProgramArguments</key><array>' + args.map((a) => '<string>' + xml(a) + '</string>').join("") + '</array>' +
     '<key>WorkingDirectory</key><string>' + xml(root) + '</string>' +
     // The daemon finds claude, cursor-agent, opencode and codex on PATH, so it needs the user's.
-    '<key>EnvironmentVariables</key><dict><key>PATH</key><string>' + xml([...new Set([path.dirname(process.execPath), ...(process.env.PATH || "/usr/bin:/bin").split(path.delimiter)].filter(dir => dir && !dir.includes("node_modules") && fs.existsSync(dir)))].join(path.delimiter)) + '</string><key>PASEO_HOME</key><string>' + xml(home) + '</string></dict>' +
+    '<key>EnvironmentVariables</key><dict><key>PATH</key><string>' + xml(daemonPath()) + '</string><key>PASEO_HOME</key><string>' + xml(home) + '</string><key>NPM_CONFIG_PREFIX</key><string>' + xml(npmPrefix) + '</string><key>npm_config_prefix</key><string>' + xml(npmPrefix) + '</string></dict>' +
     '<key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>ThrottleInterval</key><integer>10</integer><key>Umask</key><integer>63</integer>' +
     '<key>StandardOutPath</key><string>' + xml(log) + '</string><key>StandardErrorPath</key><string>' + xml(log) + '</string></dict></plist>';
   const existing = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
@@ -172,6 +178,17 @@ function register(args) {
 async function main() {
   if (process.platform !== "darwin" && process.platform !== "linux") throw new Error("Managed Paseo supports macOS and Linux (including WSL2). Run `paseo daemon start --foreground` yourself and set DEVHUB_PASEO_URL.");
   const saved = fs.existsSync(manifest) ? JSON.parse(fs.readFileSync(manifest, "utf8")) : undefined;
+  const password = configuredPassword();
+  fs.mkdirSync(path.join(npmPrefix, "bin"), { recursive: true, mode: 0o700 });
+  if (process.env.DEVHUB_DESKTOP === "1") {
+    // The app replaces versioned payloads on update; the independent daemon
+    // must retain its own executable until its next managed update.
+    daemonNode = path.join(root, "runtime", "node");
+    fs.mkdirSync(path.dirname(daemonNode), { recursive: true, mode: 0o700 });
+    fs.copyFileSync(process.execPath, `${daemonNode}.next`);
+    fs.chmodSync(`${daemonNode}.next`, 0o755);
+    fs.renameSync(`${daemonNode}.next`, daemonNode);
+  }
   if (!saved) await assertPortFree();
   const installed = installedVersion();
   let version = installed || pinned.cli;
@@ -192,13 +209,14 @@ async function main() {
   try {
   const require = createRequire(path.join(root, "node_modules", "@getpaseo", "server", "package.json"));
   const { hashSync } = require("bcryptjs");
-  const password = configuredPassword();
   installDevHubBootstrap(root);
   writeConfig(hashSync(password, 12), version);
   const cli = path.join(root, "node_modules", "@getpaseo", "cli", "bin", "paseo");
-  register([process.execPath, "--disable-warning=DEP0040", ...paseoDaemonArgs(cli, home, version)]);
+  register([daemonNode, "--disable-warning=DEP0040", ...paseoDaemonArgs(cli, home, version)]);
   await waitForHealth();
   fs.mkdirSync(config, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(`${passwordFile}.next`, password, { mode: 0o600 });
+  fs.renameSync(`${passwordFile}.next`, passwordFile);
   fs.writeFileSync(`${manifest}.next`, JSON.stringify({ ...saved, root, home, version, url: `ws://127.0.0.1:${port}/ws`, web: `http://127.0.0.1:${port}` }), { mode: 0o600 });
   fs.renameSync(`${manifest}.next`, manifest);
   } catch (error) {
@@ -207,7 +225,7 @@ async function main() {
       if (previousConfig) fs.writeFileSync(configFile, previousConfig, { mode: 0o600 });
       if (installed) {
         const cli = path.join(root, "node_modules", "@getpaseo", "cli", "bin", "paseo");
-        register([process.execPath, "--disable-warning=DEP0040", ...paseoDaemonArgs(cli, home, installed)]);
+        register([daemonNode, "--disable-warning=DEP0040", ...paseoDaemonArgs(cli, home, installed)]);
         await waitForHealth();
       }
     }

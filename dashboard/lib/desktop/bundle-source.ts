@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { getCheckoutRoot } from "@/lib/desktop/runtime-paths";
+import { getAppDataDir, getCheckoutRoot } from "@/lib/desktop/runtime-paths";
 import { PACKAGED_STALE_REASON } from "@/lib/desktop/packaged-checkout-copy";
 
 export interface PackagedCheckoutStatus {
@@ -41,6 +41,17 @@ export function readBundleSourceCommit(serverDir: string = resolveServerDir() ??
   }
 }
 
+function isReleaseBundle(): boolean {
+  const server = resolveServerDir();
+  if (!server) return false;
+  try {
+    const marker: unknown = JSON.parse(fs.readFileSync(path.join(server, "bundle-source.json"), "utf8"));
+    return typeof marker === "object" && marker !== null && "release" in marker && marker.release === true;
+  } catch {
+    return false;
+  }
+}
+
 export function readCheckoutHeadCommit(checkout: string): string | null {
   const res = spawnSync("git", ["rev-parse", "HEAD"], {
     cwd: checkout,
@@ -69,6 +80,10 @@ export function getPackagedCheckoutStatus(): PackagedCheckoutStatus {
   };
 
   if (!base.packagedRuntime || !checkout) return base;
+
+  // Content commits are independent of app releases. Developer rebuild advice
+  // is only useful for a locally built app linked to its source checkout.
+  if (isReleaseBundle() || fs.existsSync(path.join(getAppDataDir(), "content-repo-path.txt"))) return base;
 
   const bundleCommit = readBundleSourceCommit();
   const checkoutCommit = readCheckoutHeadCommit(checkout);

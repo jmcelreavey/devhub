@@ -85,7 +85,7 @@ restore() {
 
 log "Fetching upstream..."
 git fetch --quiet upstream
-UPSTREAM_BRANCH="$(git rev-parse --abbrev-ref upstream/HEAD 2>/dev/null | sed 's@^upstream/@@' || true)"
+UPSTREAM_BRANCH="$(git symbolic-ref --quiet --short refs/remotes/upstream/HEAD 2>/dev/null | sed 's@^upstream/@@' || true)"
 [[ -n "$UPSTREAM_BRANCH" ]] || UPSTREAM_BRANCH="main"
 UPSTREAM_REF="upstream/${UPSTREAM_BRANCH}"
 UPSTREAM_URL="$(git remote get-url upstream)"

@@ -8,6 +8,8 @@ import { useLive } from "@/lib/hooks/use-fetch";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { FetchError } from "@/components/ui/FetchError";
 import { copyTextToClipboard } from "@/lib/clipboard";
+import { ProviderError } from "@/components/agents/ProviderError";
+import Link from "next/link";
 
 interface ProviderRow { id: string; label: string; ready: boolean; error?: string }
 interface PaseoStatus {
@@ -22,7 +24,7 @@ async function post(body: Record<string, string>): Promise<Record<string, unknow
 }
 
 /** Daemon health, default agent and phone access. */
-export function PaseoConnection() {
+export function PaseoConnection({ setup = false }: { setup?: boolean }) {
   const { data, error: loadError, mutate } = useLive<PaseoStatus>("/api/paseo/managed", { refreshInterval: 15_000 });
   const { data: update, mutate: refreshUpdate } = useLive<PaseoUpdate>("/api/paseo/update", { refreshInterval: 60 * 60 * 1000 });
   const [busy, setBusy] = useState<string>();
@@ -47,10 +49,10 @@ export function PaseoConnection() {
   if (!data && loadError) return <div className="max-w-xl p-6 mx-auto"><FetchError message={loadError.message} onRetry={() => void mutate()} /></div>;
   if (!data) return <div className="max-w-xl p-6 mx-auto"><SkeletonRows count={4} height={48} /></div>;
 
-  return <div className="max-w-xl p-6 mx-auto space-y-5">
+  return <div className={setup ? "space-y-4 mb-6" : "max-w-xl p-6 mx-auto space-y-5"}>
     <div>
       <h2 className="text-xl font-semibold">Paseo</h2>
-      <p className="text-sm text-text-muted mt-2">Paseo runs your coding agents on this machine. DevHub starts tasks in it and follows them to a result; the chats live in Paseo.</p>
+      <p className="text-sm text-text-muted mt-2">Paseo runs your coding agents on this machine. {setup ? "Set it up here if you want agent chats, or skip it for now. An existing daemon is detected automatically." : "DevHub starts tasks in it and follows them to a result; the chats live in Paseo."}</p>
     </div>
 
     {loadError && <FetchError message={loadError.message} onRetry={() => void mutate()} />}
@@ -61,7 +63,7 @@ export function PaseoConnection() {
         {data.version && <span className="badge badge-muted">v{data.version}</span>}
         <span className="text-xs text-text-subtle ml-auto">{data.web}</span>
       </div>
-      {data.authFailed && <p className="tone-panel tone-panel--warning text-sm">Paseo rejected DevHub&apos;s password. Check DEVHUB_PASEO_PASSWORD (or OPENCHAMBER_UI_PASSWORD when unset) in dashboard/.env.local, then run setup again.</p>}
+      {data.authFailed && <p className="tone-panel tone-panel--warning text-sm">Paseo is already running, but DevHub could not connect. Enter its existing Agents password in <Link href="/setup" className="underline">Setup</Link>, then restart DevHub and retry. Reinstalling is not required.</p>}
       {update?.available && <p className="text-sm">Paseo {update.latest} has been published. {updateReady ? "Updating restarts Paseo; finish active chats first." : "It is waiting for Safe-Chain’s package safety window. DevHub will keep checking."}</p>}
       {update?.error && <p className="text-sm text-text-muted">{update.error}</p>}
       <div className="flex gap-3 flex-wrap">
@@ -79,7 +81,7 @@ export function PaseoConnection() {
       <h3 className="font-medium">Agents</h3>
       <ul className="space-y-1.5 text-sm">{data.providers.map((p) => <li key={p.id} className="flex items-start gap-2">
         <span className={`tone-dot tone-dot--sm mt-1.5 ${p.ready ? "tone-dot--success" : "tone-dot--warning"}`} aria-hidden />
-        <span className="flex-1">{p.label}{p.error && <span className="block text-xs text-text-muted">{p.error}</span>}</span>
+        <div className="flex-1 min-w-0">{p.error ? <ProviderError provider={p.label} error={p.error} onRepair={busy ? undefined : () => void act("repair-opencode-mcp")} /> : p.label}</div>
       </li>)}</ul>
       <label className="block text-sm">Default agent for background work
         <select className="input w-full mt-1" disabled={Boolean(busy)} value={data.defaultProvider ?? ""} onChange={(e) => void act("default-provider", { provider: e.target.value })}>
@@ -90,7 +92,7 @@ export function PaseoConnection() {
       <p className="text-xs text-text-subtle">Scheduled jobs with their own agent choice keep that choice.</p>
     </div>}
 
-    {data.installed && <div className="card p-5 space-y-3">
+    {data.installed && !setup && <div className="card p-5 space-y-3">
       <div className="flex items-center gap-2"><Smartphone size={16} /><h3 className="font-medium">Phone access</h3>{data.relayEnabled && <span className="badge badge-success">On</span>}</div>
       <p className="text-sm text-text-muted">Pairs the Paseo phone app through Paseo&apos;s relay. Traffic is end-to-end encrypted; the relay can&apos;t read it. Your code stays on this machine.</p>
       {pairing && <div className="flex gap-4 items-start">

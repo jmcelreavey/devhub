@@ -171,11 +171,11 @@ describe("fresh desktop mode", () => {
     }
   });
 
-  it("falls back to ~/Developer rather than the parent of nothing", () => {
+  it("suggests a code folder in the user's home without a checkout", () => {
     // Without a checkout there is no parent to take. Taking the parent of the
     // app bundle would scan /Applications for git repositories.
     delete process.env.DEVHUB_REPOS_DIR;
-    expect(getReposDir()).toBe(path.join(os.homedir(), "Developer"));
+    expect(getReposDir()).toBe(path.join(os.homedir(), process.platform === "darwin" ? "Developer" : "code"));
   });
 
   it("uses an explicit code folder when one is set", () => {

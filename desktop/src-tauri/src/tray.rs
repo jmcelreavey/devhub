@@ -6,15 +6,54 @@
 #[cfg(target_os = "macos")]
 pub(crate) const TRAY_ID: &str = "devhub-status";
 
+#[cfg(any(target_os = "macos", windows))]
+fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+    let show = MenuItem::with_id(app, "tray-show-devhub", "Open DevHub", true, None::<&str>)?;
+    let hide = MenuItem::with_id(app, "tray-hide-devhub", "Hide DevHub", true, None::<&str>)?;
+    let restart = MenuItem::with_id(
+        app,
+        "tray-restart-backend",
+        "Restart Backend",
+        crate::dev_server_url_for(Some(app)).is_none(),
+        None::<&str>,
+    )?;
+    let logs = MenuItem::with_id(
+        app,
+        "open-logs-folder",
+        "Open Logs Folder",
+        true,
+        None::<&str>,
+    )?;
+    let updates = MenuItem::with_id(
+        app,
+        "check-updates",
+        "Check for Updates…",
+        true,
+        None::<&str>,
+    )?;
+    let quit = MenuItem::with_id(app, "tray-quit-devhub", "Quit DevHub", true, None::<&str>)?;
+    Menu::with_items(
+        app,
+        &[
+            &show,
+            &hide,
+            &PredefinedMenuItem::separator(app)?,
+            &restart,
+            &logs,
+            &updates,
+            &PredefinedMenuItem::separator(app)?,
+            &quit,
+        ],
+    )
+}
+
 #[cfg(target_os = "macos")]
 pub(crate) fn install(app: &tauri::AppHandle) -> tauri::Result<()> {
     use tauri::image::Image;
-    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
-    let show = MenuItem::with_id(app, "tray-show-devhub", "Show DevHub", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "tray-quit-devhub", "Quit DevHub", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &PredefinedMenuItem::separator(app)?, &quit])?;
+    let menu = menu(app)?;
 
     // Black-on-transparent silhouette (@2x). Full-colour Dock icons flatten to a
     // muddy square when marked as template — menu-bar needs a real glyph.
@@ -57,12 +96,9 @@ pub(crate) fn set_visible(app: &tauri::AppHandle, visible: bool) {
 /// no icon is one the user cannot find to quit.
 #[cfg(windows)]
 pub(crate) fn install(app: &tauri::AppHandle) -> tauri::Result<()> {
-    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
 
-    let show = MenuItem::with_id(app, "tray-show-devhub", "Show DevHub", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "tray-quit-devhub", "Quit DevHub", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &PredefinedMenuItem::separator(app)?, &quit])?;
+    let menu = menu(app)?;
 
     let mut builder = tauri::tray::TrayIconBuilder::with_id("devhub-status")
         .tooltip("DevHub")

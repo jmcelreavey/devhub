@@ -20,6 +20,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { z } from "zod";
 import { claudeDesktopMcpConfigPath } from "@/lib/mcp/claude-desktop-paths";
 import { readCodexMcpServers, writeCodexMcpServers } from "@/lib/mcp/codex-config";
 import { cursorMcpConfigPath, cursorMcpLegacyConfigPath } from "@/lib/mcp/cursor-paths";
@@ -342,6 +343,43 @@ function opencodeFromTool(entry: Json): SharedMcpServer | null {
         ? (env as Record<string, string>)
         : undefined,
   };
+}
+
+/** OpenCode rejects unknown MCP keys instead of ignoring wrapper metadata. */
+export function normaliseOpenCodeMcpEntry(entry: Json): Json {
+  const record = asMcpRecord(renameEnvKey(entry, "env", "environment"));
+  if (!record) throw new Error("The DevHub MCP entry must be an object.");
+  const local = record.type === "local" || typeof record.command === "string" || Array.isArray(record.command);
+  const command = typeof record.command === "string" ? [record.command, ...(Array.isArray(record.args) ? record.args : [])] : record.command;
+  if (local && (!Array.isArray(command) || !command.length || command.some((part) => typeof part !== "string" || !part.trim()))) {
+    throw new Error("The DevHub MCP entry needs a command and arguments. Re-sync DevHub from Tools → MCP.");
+  }
+  if (!local && (typeof record.url !== "string" || !URL.canParse(record.url))) throw new Error("The DevHub MCP entry needs a valid URL.");
+  const allowed = new Set(local ? ["enabled", "environment", "timeout", "cwd"] : ["enabled", "headers", "oauth", "timeout"]);
+  const next = { ...Object.fromEntries(Object.entries(record).filter(([key]) => allowed.has(key))),
+    ...(local ? { type: "local", command } : { type: "remote", url: record.url }) } as Json;
+  const metadata = z.object({
+    enabled: z.boolean().optional(), timeout: z.number().positive().optional(), cwd: z.string().optional(),
+    environment: z.record(z.string(), z.string()).optional(), headers: z.record(z.string(), z.string()).optional(),
+    oauth: z.union([z.literal(false), z.record(z.string(), z.unknown())]).optional(),
+  }).safeParse(next);
+  if (!metadata.success) throw new Error("The DevHub MCP entry has invalid settings. Environment values must be strings; enabled must be true or false; timeout must be positive. Check ~/.config/opencode/opencode.json.");
+  return next;
+}
+
+/** Repair only our existing entry; keep every other server and top-level setting. */
+export function repairOpenCodeDevhubMcp(home = os.homedir()): void {
+  const file = path.join(home, ".config", "opencode", "opencode.json");
+  const config = readJsonObjectFile(file);
+  const servers = asMcpRecord(config?.mcp);
+  if (!config || !servers?.devhub) throw new Error("No DevHub MCP entry found in ~/.config/opencode/opencode.json. Re-sync it from Tools → MCP.");
+  const next = normaliseOpenCodeMcpEntry(servers.devhub);
+  // Preserve the original for inspection or recovery, including wrapper metadata.
+  if (!fs.existsSync(`${file}.devhub-backup`)) fs.copyFileSync(file, `${file}.devhub-backup`);
+  fs.chmodSync(`${file}.devhub-backup`, 0o600);
+  const temporary = `${file}.devhub-next`;
+  fs.writeFileSync(temporary, JSON.stringify({ ...config, mcp: { ...servers, devhub: next } }, null, 2) + "\n", { mode: 0o600 });
+  fs.renameSync(temporary, file);
 }
 
 export const MCP_TOOL_TARGETS: McpToolTarget[] = [
@@ -746,6 +784,7 @@ export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<numbe
         envKey,
       ) as Json;
       if (tool.id === "cursor") mergedEntry = applyCursorAcpServerOverlay(name, mergedEntry);
+      if (tool.id === "opencode") mergedEntry = normaliseOpenCodeMcpEntry(mergedEntry);
       nextServers[name] = mergedEntry;
       upserts[name] = mergedEntry;
       emit(`  SYNCED: ${name} (${source})`);

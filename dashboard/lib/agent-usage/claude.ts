@@ -65,7 +65,7 @@ function titleCase(value: string): string {
 export async function loadClaudeUsage(): Promise<ProviderUsage> {
   const base = { id: "claude", name: "Claude", meters: [], spend: [] } satisfies Partial<ProviderUsage>;
   const raw = await readCredentials();
-  if (!raw) return { ...base, status: "unavailable", message: "Sign in to Claude Code to see plan usage." };
+  if (!raw) return { ...base, status: "unavailable", message: "To see plan usage, run `claude auth login` in DevHub's terminal (inside WSL on Windows)." };
   // JSON.parse errors quote the input, which here is a token — never let one surface.
   let parsed: unknown;
   try { parsed = JSON.parse(raw); } catch { parsed = null; }
@@ -73,7 +73,7 @@ export async function loadClaudeUsage(): Promise<ProviderUsage> {
   if (!creds.success) return { ...base, status: "error", message: "Claude Code's stored credentials are in an unexpected format." };
   const { accessToken, expiresAt, subscriptionType } = creds.data.claudeAiOauth;
   const plan = subscriptionType ? titleCase(subscriptionType) : undefined;
-  if (expiresAt && expiresAt < Date.now()) return { ...base, plan, status: "unavailable", message: "Claude Code's sign-in has expired. Run any Claude Code command to refresh it." };
+  if (expiresAt && expiresAt < Date.now()) return { ...base, plan, status: "unavailable", message: "Claude Code's sign-in has expired. Run `claude auth login` in DevHub's terminal (inside WSL on Windows), then retry." };
 
   const response = await fetch(USAGE_URL, {
     headers: { Authorization: `Bearer ${accessToken}`, "anthropic-beta": "oauth-2025-04-20" },

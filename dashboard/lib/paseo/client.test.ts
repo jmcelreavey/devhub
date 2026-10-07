@@ -12,7 +12,7 @@ vi.mock("@getpaseo/client/internal/daemon-client", () => ({
 }));
 import { paseoAgentWebUrl, paseoUrl, withPaseo } from "./client";
 
-beforeEach(() => { vi.clearAllMocks(); mocks.configs.length = 0; });
+beforeEach(() => { vi.clearAllMocks(); mocks.configs.length = 0; vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 }))); });
 afterEach(() => vi.unstubAllGlobals());
 describe("Paseo connections", () => {
   it("opens the specific chat when its workspace contains multiple agents", async () => {
@@ -35,5 +35,10 @@ describe("Paseo connections", () => {
   it("refuses non-loopback daemons and invalid transports", () => {
     expect(() => paseoUrl({ NODE_ENV: "test", DEVHUB_PASEO_URL: "ws://example.com/ws" })).toThrow("loopback");
     expect(() => paseoUrl({ NODE_ENV: "test", DEVHUB_PASEO_URL: "https://127.0.0.1" })).toThrow("ws://");
+  });
+  it("detects an existing daemon instead of telling the user to install another", async () => {
+    mocks.connect.mockRejectedValueOnce(new Error("authentication"));
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ status: "ok" })));
+    await expect(withPaseo(async () => 1)).rejects.toThrow("Paseo is running");
   });
 });

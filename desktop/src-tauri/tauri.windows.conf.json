@@ -21,6 +21,7 @@
     "windows": {
       "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true },
       "nsis": {
+        "installerIcon": "../staging/icons/icon.ico",
         "installMode": "currentUser"
       }
     },

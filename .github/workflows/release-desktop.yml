@@ -212,6 +212,9 @@ jobs:
           # a remote code execution channel, not a convenience.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # GitHub's macOS runners have Finder. Keep the configured DMG background
+          # and icon positions instead of Tauri's default CI styling bypass.
+          TAURI_BUNDLER_DMG_IGNORE_CI: "true"
           # AppImage packaging on a GitHub runner, both of which are required:
           #
           # linuxdeploy ships as an AppImage and mounts itself with FUSE, which

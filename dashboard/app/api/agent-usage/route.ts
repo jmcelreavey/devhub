@@ -7,5 +7,5 @@ export const dynamic = "force-dynamic";
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const auth = requireDashboardAuth(req);
   if (!auth.ok) return auth.response;
-  return NextResponse.json({ providers: await loadAgentUsage() }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ providers: await loadAgentUsage(req.nextUrl.searchParams.get("refresh") ?? undefined) }, { headers: { "Cache-Control": "no-store" } });
 }, "agent-usage");
