@@ -194,9 +194,10 @@ jobs:
           done
           echo "Apple signing credentials exported."
 
-      - name: Note that this build is unsigned
+      - name: Configure ad-hoc macOS signing
         if: runner.os == 'macOS' && env.HAS_APPLE_SIGNING != 'true'
         run: |
+          echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
           echo "::warning::No Apple Developer ID secrets on this repository — \
           building a macOS bundle without a verified publisher or notarisation. \
           Users must approve first launch in Privacy & Security; managed-device \
@@ -241,11 +242,10 @@ jobs:
         shell: bash
         run: node desktop/scripts/selftest.mjs --target "${{ matrix.target }}"
 
-      # Skips cleanly without a Developer ID, so an unsigned development build
-      # is not a red X. See the job-level env above for why this is not
-      # `secrets.APPLE_SIGNING_IDENTITY` directly.
-      - name: Verify macOS signature and notarisation
-        if: runner.os == 'macOS' && env.HAS_APPLE_SIGNING == 'true'
+      # Ad-hoc builds need an intact bundle seal too. Gatekeeper acceptance
+      # additionally needs a verified publisher and notarisation.
+      - name: Verify macOS signature
+        if: runner.os == 'macOS'
         shell: bash
         run: |
           APP=$(find desktop/src-tauri/target -name "DevHub.app" -maxdepth 5 | head -1)
@@ -254,7 +254,9 @@ jobs:
           # binding; an unsigned nested binary is a Gatekeeper failure that only
           # appears on the user's machine.
           codesign --verify --deep --strict --verbose=2 "$APP"
-          spctl -a -vv -t exec "$APP"
+          if [ "$HAS_APPLE_SIGNING" = "true" ]; then
+            spctl -a -vv -t exec "$APP"
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

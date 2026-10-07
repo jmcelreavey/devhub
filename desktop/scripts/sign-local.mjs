@@ -4,9 +4,9 @@
  *
  * This is **not** a substitute for Developer ID signing. Gatekeeper still
  * refuses to launch a locally signed build by double-click on a machine that
- * did not produce it, and notarisation is not possible at all. Real
- * distribution needs an Apple Developer ID — see
- * `docs/guides/desktop-release.md`.
+ * did not produce it, and notarisation is not possible with this signature.
+ * Ad-hoc bundles can be distributed, but users must approve first launch in
+ * Privacy & Security — see `docs/getting-started/desktop-app.md`.
  *
  * What it *does* buy on this Mac: `codesign --verify --deep --strict` passes,
  * so the bundle has an intact seal, and macOS has something stable to hang TCC
@@ -85,5 +85,5 @@ try {
   log("spctl accepted the bundle (unexpected without a Developer ID)");
 } catch {
   log("spctl rejects it, as expected — local signatures are not notarised.");
-  log("      On this Mac: right-click → Open, once. Other machines need a Developer ID.");
+  log("      First launch: System Settings → Privacy & Security → Open Anyway.");
 }
