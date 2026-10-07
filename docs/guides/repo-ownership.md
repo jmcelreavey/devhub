@@ -1,7 +1,7 @@
 ---
 title: Repo ownership
 description: Track repositories you are accountable for — inbound PRs, obligations, knowledge gaps, and catch-up digests.
-order: 12
+order: 13
 icon: GitPullRequest
 tags: [guides, github, repos]
 related:

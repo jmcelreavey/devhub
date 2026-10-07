@@ -36,8 +36,8 @@ git remote add upstream https://github.com/<owner>/devhub.git
 
 ## Pulling core updates
 
-The public core has an **unrelated history** (it's seeded from a clean tree so private
-history never leaks), so you can't rebase/merge onto it. `devhub-update.sh` instead ports
+Existing private mirrors may have an **unrelated history** to the public core, which
+was seeded from a clean tree to keep private history out. `devhub-update.sh` ports
 the _content diff_ of new upstream commits onto your mirror via `git apply --3way`, and
 tracks the last-pulled commit in the git ref `refs/devhub/upstream-sync`.
 
@@ -71,9 +71,10 @@ mirror or a private plugin.
 scripts/devhub-backport.sh <feature-branch>
 ```
 
-The backport flow **branches off `upstream/main` and cherry-picks feature files only** —
-it must never include your notes, tasks, `.env.local`, or plugin content. Then it opens a
-PR against the public core:
+The backport flow **branches off the upstream default branch and applies a content patch**.
+It excludes personal data and plugin content, scans added lines, and creates a local preview
+commit. Add `--execute` to push the branch and open a PR against the public core, or use
+`--patch-only` to inspect the patch without switching branches. To open a PR manually:
 
 ```bash
 gh pr create --repo <owner>/devhub --base main
@@ -81,14 +82,14 @@ gh pr create --repo <owner>/devhub --base main
 
 Before opening a PR:
 
-- `cd dashboard && npm run verify` (lint + typecheck + test + build) must pass.
+- `npm run verify` from the repo root must pass (MCP types, dashboard checks and build).
 - Confirm the diff contains no personal data, secrets, or private-plugin content.
 
 ## Developing a feature as a plugin
 
 New features can incubate as a plugin (own repo or a folder under
-`~/dev/devhub-plugins/<name>`) and graduate into core once proven and generic. See the
-"Feature-as-plugin workflow" section of the plan.
+`~/dev/devhub-plugins/<name>`) and graduate into core once proven and generic. See
+[Creating a plugin](docs/contributing/creating-plugins.md).
 
 ## Personal-data boundary
 
@@ -158,8 +159,8 @@ Check the listening process before debugging the code:
 lsof -nP -iTCP:1337 -sTCP:LISTEN
 ```
 
-Run checkout verification on a free port with `DEVHUB_SCHEDULER=0`; keep the packaged
-app running. See the [dashboard verification skill](skills/shared/devhub-dashboard-verify/SKILL.md).
+Run checkout verification on a free port with `DEVHUB_SCHEDULER=0` and a separate
+`DEVHUB_DIST_DIR`; keep the packaged app running. See the [dashboard verification skill](skills/shared/devhub-dashboard-verify/SKILL.md).
 
 ### React 19.2.4 has no `ViewTransition`
 
@@ -187,7 +188,7 @@ docblock instead:
 
 ### Notifications that always fire get ignored
 
-Repo health first rendered a warning on 38 of 52 repos, mostly "no activity in N
-days". On a machine with 52 checkouts, dormant is normal. If a signal appears on
+Repo health first warned on most repos, mostly for "no activity in N days".
+Dormant checkouts are normal. If a signal appears on
 most rows it is decoration, not triage — split what's genuinely actionable from
 what's merely true, and let silence mean "fine".

@@ -1,7 +1,7 @@
 ---
 title: Motion and loading states
 description: "The motion policy: shimmer for arriving content, spin only for user-triggered actions, and the reduced-motion kill switch."
-order: 4
+order: 5
 icon: Zap
 tags: [ui]
 related:
@@ -10,7 +10,7 @@ related:
 
 # Motion, Loaders & Delight — Improvement Plan
 
-Date: 2026-06-10. Follow-up to `docs/codebase-review-2026-06-09.md` and the UX Explorations handoff. Focus: transitions, loading states, and tasteful fun.
+Date: 2026-06-10. Follow-up to the June 2026 codebase review and the UX Explorations handoff. Focus: transitions, loading states, and tasteful fun.
 
 **Ground rules (carried from the design handoff):** motion is information — healthy systems hold still. 150–350ms, one easing curve (`cubic-bezier(.22,1,.36,1)`), transform/opacity only, no infinite loops on healthy state, everything behind `prefers-reduced-motion` + the `data-motion="off"` kill-switch. And the design's own words: **no confetti.**
 

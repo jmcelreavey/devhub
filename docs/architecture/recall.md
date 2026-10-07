@@ -13,17 +13,9 @@ related:
 
 # Recall
 
-DevHub ingests a great deal and recalls almost none of it.
-
-Commits, PRs, ticket transitions, alerts, script runs and session failures all
-flow through the dashboard, get rendered once, and are dropped. Meanwhile the
-one tier explicitly built for reuse — `notes/learnings/` — holds roughly 23
-entries against 295 notes, because writing one is a ten-step manual workflow
-that depends on someone remembering to do it.
-
-Recall closes that loop. It is the difference between a system whose value
-scales with how disciplined you are about writing things down, and one whose
-value scales with how much you work.
+Recall retrieves cited passages from your notes, docs, learnings, diagrams,
+task history and event spine. Git commits are the first automatic event source;
+agents can append decisions with `recall_remember`.
 
 ## The shape
 
@@ -174,7 +166,7 @@ So `lib/context-pack.ts` now splits by what each half is actually good at:
 
 Jira keys enter the synthesised query twice, bare and via the task text that
 mentions them, because `recall` scores on extracted entity refs; the bare key is
-what makes a day of `PTF-3774` work surface the `PTF-3774` note.
+what makes a day of `PROJ-1234` work surface the `PROJ-1234` note.
 
 Falling back to recency is a **normal path, not an error**: a fresh machine has
 no index, and a day with no open tasks has nothing to be relevant to. Both cases
@@ -246,8 +238,8 @@ graph needs, and reading them costs one subprocess.
 
 ## Performance
 
-Measured against the real vault — 443 note, 160 learning, 764 doc, 79 task, diagram, and
-532 event chunks, 1,980 total:
+An earlier local benchmark with roughly 2,000 chunks measured the times below.
+They are examples, not latency guarantees:
 
 | Operation | Time |
 | --------- | ---- |
@@ -255,7 +247,5 @@ Measured against the real vault — 443 note, 160 learning, 764 doc, 79 task, di
 | Query (warm) | 5–20 ms |
 | Git ingest, 400 commits | ~1 s |
 
-Rebuilds are always full. Incremental indexing was considered and dropped: a
-partially-stale index returns confidently wrong results with no signal that
-anything is off, which is a far worse failure mode than a rebuild that takes a
-sixth of a second.
+Rebuilds are full. This keeps index invalidation simple; larger vaults take longer
+than the benchmark above.

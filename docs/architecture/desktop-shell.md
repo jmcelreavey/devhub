@@ -1,7 +1,7 @@
 ---
 title: Desktop shell
 description: "The Tauri 2 wrapper: window lifecycle, the bundled Node server, and the updater."
-order: 8
+order: 12
 icon: AppWindow
 tags: [architecture, desktop]
 related:
@@ -11,8 +11,7 @@ related:
 
 # Desktop shell (Tauri 2)
 
-Status: **complete**. Phases 0–5 done; Electron removed 2026-07-26.
-`/Applications/DevHub.app` is the Tauri build, migrated and verified.
+The desktop app uses Tauri 2. Electron was removed on 2026-07-26; the original phases are recorded in the [archived roadmap](../archive/onboarding-and-tauri-roadmap.md).
 
 - Users: [Desktop App](../getting-started/desktop-app.md)
 - Developers: [Desktop Development](../contributing/desktop-development.md)
@@ -90,15 +89,11 @@ does any web page that can be made to fetch it.
   `npm run dev` returns `desktop: false`, and must not be mistaken for a running
   packaged app. Port-conflict messages use the listener's **process ancestry**
   (`lsof`), not the port's HTTP reply.
-- **The PTY requires cookie *and* exact origin.** `SameSite` is not reliably
-  applied to WebSocket handshakes, so the origin is checked too — exactly, not
-  by prefix (`http://127.0.0.1.evil.com` starts with `http://127.0.0.1`).
+- **The PTY requires a short-lived ticket and an exact loopback origin.** The dashboard exchanges its desktop session for a terminal ticket before opening the WebSocket. The peer checks the origin exactly, not by prefix (`http://127.0.0.1.evil.com` starts with `http://127.0.0.1`).
 - **Port 1339 is no longer LAN-proxied.** It hands out an interactive login
   shell. LAN mode exists so you can read your dashboard from a phone; it was
   never worth a remote shell.
-- **No generic shell command is exposed.** The webview gets: boot state, recent
-  logs, open-logs, a folder picker, desktop info, retry, and four updater
-  commands. Nothing that takes an arbitrary path or command.
+- **The native bridge exposes specific desktop commands.** Boot state, logs, folder selection, lifecycle and updates have dedicated handlers; there isn't a generic shell-command handler.
 - **Never kill by port.** The sidecar and every descendant run in one process
   group. Shutdown signals that group. Port 1337 belongs to somebody's own dev
   server at least as often as it belongs to us.
@@ -175,61 +170,19 @@ dependency graph.
 
 ## Verification status
 
-Passing on this machine:
+Run the checkout checks with `npm run verify`, then use the [desktop development checks](../contributing/desktop-development.md) for Rust, browser journeys and the packaged `--self-test`.
 
-- 1239 Vitest tests, including 35 new path-contract and bootstrap-auth tests.
-- 13 Rust tests; `clippy -D warnings` and `cargo fmt` clean.
-- Playwright: 67 passing across Chromium and WebKit.
-- Engine journeys in **WebKit**: BlockNote typing and `Selection.modify`,
-  tldraw canvas geometry and pointer events, xterm mount/measure/input,
-  detached-SVG text measurement, command palette, blob downloads.
-- Packaged `--self-test` twice consecutively: staged resources, bundled runtime,
-  authenticated health, unauthenticated request rejected, storage round-trip,
-  PTY listening, no listener left behind, writes confined to temporary app data.
+The packaged self-test uses temporary app data. It checks staged resources, the bundled runtime, authenticated health, storage round-trips, the PTY listener and process cleanup. A live launch on alternate ports is still needed to check window creation, single-instance handoff and shutdown.
 
-Live launch of the built `.app` (isolated app data, alternate ports):
-
-- Starts its sidecar and serves the dashboard with no terminal interaction.
-- A second launch exits immediately and hands off; one process remains.
-- Quitting leaves zero shell processes, zero sidecar processes, and both ports
-  released.
-
-Found by the WebKit project and fixed: the skip link was unreachable by
-keyboard, because WebKit omits links from the tab order unless macOS Full
-Keyboard Access is on. Chromium never showed it.
-
-Found by actually launching the app rather than only building it: the main
-window was declared both in `tauri.conf.json` and in `setup()`, which panicked
-with "a webview with label `main` already exists". The config's `app.windows` is
-now empty on purpose — the window must be built in `setup()` so the navigation
-guard is attached to the builder rather than to an already-navigable window.
+The main window is built in Rust `setup()`, so `app.windows` in `tauri.conf.json` is deliberately empty. This attaches the navigation guard before the window can navigate and avoids creating two windows with the same label.
 
 ## Migration and cutover, as performed
 
-Verified on this machine on 2026-07-26:
+The Electron migration detects the recorded checkout and content locations, including implicit defaults. **Keep in place** preserves the existing paths and git history; unrecognised environment entries go to `config/imported-unrecognised.env` rather than being loaded.
 
-- Migration detected the Electron install, its recorded checkout, and all six
-  content locations — including the four that were only ever at an implicit
-  default and which a config-only migration would have missed entirely.
-- It correctly defaulted to **keep in place** (the checkout has a git remote,
-  so copying would have forked the data away from its history) and copied only
-  the personal identity file.
-- Unrecognised `.env.local` lines were quarantined to
-  `config/imported-unrecognised.env` rather than loaded.
-- `install-local.mjs` fingerprinted six content locations before and after and
-  confirmed all six byte-identical.
-- Electron-only updater caches removed;
-  `~/Library/Application Support/DevHub` and the shared
-  `com.devhub.launcher` cache deliberately kept.
+The sidecar separates infrastructure owned by the shell (app data, resources, ports and bootstrap token) from content-directory defaults that user configuration can override. `desktop/sidecar/supervisor.test.mjs` covers that boundary, including rejection of a bootstrap token from the config file. The local installer fingerprints content locations before and after replacing the app.
 
-A third real bug surfaced here, and only because the migration was actually
-run: the shell set `NOTES_DIR` unconditionally, so a user who chose "keep my
-notes where they are" had that choice recorded and then ignored — opening the
-app to an empty vault with their data untouched on disk. The fix splits the
-sidecar environment into **infrastructure the shell owns** (app data, resource
-root, ports, bootstrap token) and **defaults the user's config overrides**
-(content directories). `desktop/sidecar/supervisor.test.mjs` covers both halves,
-including that the config file cannot mint itself a bootstrap token.
+See [Migrating](../getting-started/migrating.md) for the user-facing flow.
 
 ## Still outstanding
 
@@ -244,5 +197,4 @@ including that the config file cannot mint itself a bootstrap token.
   `.deb`) with self-test on the runner. Staging strips foreign native binaries
   (wrong OS or musl-linked ELF on glibc) so `linuxdeploy` does not fail
   opaquely. End-user Linux install docs are still macOS-first.
-- **Windows.** Deferred until Upstart execution has a native contract — the
-  product runs `upstart.sh` through Bash today.
+- **Windows.** The [WSL2-backed app](desktop-windows-wsl.md) is implemented, but still needs verification on real Windows. Upstarts run through Bash inside WSL.

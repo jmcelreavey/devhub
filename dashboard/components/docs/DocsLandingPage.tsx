@@ -135,11 +135,14 @@ export function DocsLandingPage({
       section.meta.id !== ROOT_SECTION_ID && section.docs.some((doc) => !doc.draft),
   );
 
+  const primaryAreas = areas.filter((section) => !section.meta.secondary);
+  const secondaryAreas = areas.filter((section) => section.meta.secondary);
+
   return (
     <div className="lib-shell" data-layout="wide">
       <div className="lib-main">
         <header className="lib-hero">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col items-start justify-between gap-4 md:flex-row">
             <div className="min-w-0">
               <h1 className="lib-hero-title">Documentation</h1>
               <p className="lib-hero-sub">
@@ -162,11 +165,22 @@ export function DocsLandingPage({
         <section className="lib-section">
           <h2 className="lib-areas-title">Browse by area</h2>
           <div className="lib-area-grid">
-            {areas.map((section) => (
+            {primaryAreas.map((section) => (
               <SectionCard key={section.meta.id} section={section} />
             ))}
           </div>
         </section>
+
+        {secondaryAreas.length > 0 ? (
+          <section className="lib-section">
+            <h2 className="lib-areas-title">Plans and history</h2>
+            <div className="lib-area-grid">
+              {secondaryAreas.map((section) => (
+                <SectionCard key={section.meta.id} section={section} />
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {recent.length > 0 ? (
           <section className="lib-section">

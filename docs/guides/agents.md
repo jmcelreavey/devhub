@@ -1,7 +1,7 @@
 ---
 title: Shared agents
 description: Subagent personas synced from `agents/shared/` into Cursor, Codex, OpenCode and friends.
-order: 3
+order: 17
 icon: Bot
 tags: [agents]
 related:

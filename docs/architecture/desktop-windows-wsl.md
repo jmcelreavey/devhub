@@ -1,7 +1,7 @@
 ---
 title: Windows app (WSL2)
 description: "The Windows build is a native Tauri window in front of a DevHub server running in WSL2."
-order: 9
+order: 13
 icon: AppWindow
 tags: [architecture, desktop, windows]
 related:

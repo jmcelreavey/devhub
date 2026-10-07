@@ -1,7 +1,7 @@
 ---
 title: macOS permissions
 description: Why DevHub re-asks for macOS permissions, and how to grant them once and have it stick.
-order: 12
+order: 24
 icon: KeyRound
 tags: [desktop, setup]
 related:

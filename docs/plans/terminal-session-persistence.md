@@ -1,6 +1,9 @@
 ---
 title: Terminal sessions that survive a rebuild
-description: Design sketch for decoupling PTY lifetime from the dashboard dev process.
+description: Proposed design for decoupling PTY lifetime from the dashboard dev process. Not implemented.
+order: 2
+icon: SquareTerminal
+tags: [plans, terminal]
 ---
 
 # Terminal sessions that survive a rebuild
@@ -12,7 +15,7 @@ Status: proposal. Nothing here is implemented.
 
 ## The problem, precisely
 
-`scripts/terminal-pty-server.ts` already has a reattach mechanism, and it works —
+`dashboard/scripts/terminal-pty-server.ts` already has a reattach mechanism, and it works —
 but it only covers the _client_ going away:
 
 ```

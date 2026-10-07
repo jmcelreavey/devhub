@@ -1,7 +1,7 @@
 ---
 title: Persona system
 description: Layered instruction files that keep assistant behaviour consistent across every tool.
-order: 7
+order: 5
 icon: UserRound
 tags: [architecture, persona]
 related:

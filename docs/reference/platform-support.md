@@ -1,6 +1,6 @@
 ---
 title: Platform support
-description: Which platforms run DevHub fully, partially, or read-only.
+description: Which platforms run DevHub locally and which use the dashboard over LAN.
 order: 4
 icon: MonitorSmartphone
 tags: [reference]
@@ -19,7 +19,7 @@ DevHub is designed for local developer machines.
 | macOS             | Primary                | Best-supported local development path                |
 | Windows with WSL2 | Supported              | Use WSL for the repo and Node environment            |
 | Linux             | Supported              | Works best with standard Node and Git tooling        |
-| iOS and iPadOS    | Read-only or light use | Useful through LAN/PWA access, not for local scripts |
+| iOS and iPadOS    | Dashboard over LAN | Notes and tasks work; local terminals and scripts run on the host |
 
 ## Required Tools
 
@@ -66,4 +66,4 @@ You may need Microsoft's [Hyper-V firewall rules](https://learn.microsoft.com/en
 powershell.exe -ExecutionPolicy Bypass -File "\\wsl$\YOUR_DISTRO_NAME\home\YOU\dev\devhub\scripts\wsl\forward-devhub.ps1"
 ```
 
-That sets a `netsh` portproxy for ports `1337` and `1336` plus a firewall rule. Re-run it after a reboot if devices can't connect.
+That sets a `netsh` portproxy for dashboard port `1337` and Agents port `6767`, plus firewall rules. The terminal port stays local. Re-run it after a reboot if devices can't connect.

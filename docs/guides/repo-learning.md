@@ -1,7 +1,7 @@
 ---
 title: Repo learning
 description: Get oriented in an unfamiliar checkout using deterministic repo facts plus optional AI summaries.
-order: 4
+order: 11
 icon: GitBranch
 tags: [workflow]
 related:
@@ -10,7 +10,7 @@ related:
 
 # Repo Learning
 
-Repo Learning helps you get oriented in a local checkout from the **Repos** page. It combines deterministic repo facts with optional AI-generated learning artifacts from any OpenAI-compatible provider.
+Repo Learning helps you get oriented in a local checkout from the **Repos** page. It combines deterministic repo facts with optional AI-generated learning artifacts from your configured CLI or HTTP provider.
 
 Use it when you want a quick architecture brief, a handoff prompt for OpenCode, a NotebookLM source pack, or a tutor that quizzes you through a codebase.
 
@@ -18,21 +18,23 @@ Use it when you want a quick architecture brief, a handoff prompt for OpenCode, 
 
 | Requirement | Why it matters |
 | ----------- | -------------- |
-| The repo is a direct child of the repos scan directory | DevHub only resolves repo names under the directory returned by `REPO_ROOT`'s parent. |
-| The repo has a `.git` directory | Non-git folders are not listed or resolved for learning. |
-| `AI_API_KEY` is set in `dashboard/.env.local` | Generated briefs, NotebookLM packs, and the tutor use your configured OpenAI-compatible provider. |
+| The repo is a direct child of the repos scan directory | DevHub resolves names under `DEVHUB_REPOS_DIR`, or the checkout's parent when that isn't set. |
+| The repo has a `.git` entry | Clones and worktrees are supported; non-git folders aren't resolved for learning. |
+| An AI provider is configured under Setup → AI Provider | Generated briefs, source packs and the tutor can use a local CLI or HTTP API. |
 
-The scan directory is the parent of the DevHub checkout. For example, if DevHub lives at `~/Developer/devhub`, Repo Learning can use sibling clones like `~/Developer/my-service`.
+The scan directory defaults to the parent of the DevHub checkout; `DEVHUB_REPOS_DIR` overrides it. For example, if DevHub lives at `~/Developer/devhub`, Repo Learning can use sibling clones like `~/Developer/my-service`.
 
-Without `AI_API_KEY`, the panel still shows deterministic detected facts. AI-generated artifacts are disabled and the API reports `not_configured`.
+Without an available AI provider, the panel still shows deterministic detected facts. AI-generated artifacts are disabled and the API reports `not_configured`.
 
 ## AI Provider Setup
 
-Repo Learning shares the same provider configuration as Notes AI and daily briefing enrichment:
+Choose a local CLI or **HTTP API** under **Setup → AI Provider**. See [Agent CLI selection](terminal-and-agent-cli.md#agent-cli-selection) for provider detection and CLI model settings.
+
+HTTP API mode shares these settings with BlockNote's in-editor AI:
 
 | Variable | Default | Notes |
 | -------- | ------- | ----- |
-| `AI_API_KEY` | - | Required for generated briefs, NotebookLM packs, and tutor chat. |
+| `AI_API_KEY` | - | Required when using the HTTP API provider. |
 | `AI_BASE_URL` | `https://api.z.ai/api/coding/paas/v4` | OpenAI-compatible chat-completions base URL, with no trailing slash. |
 | `AI_MODEL` | `glm-5-turbo` | Model id passed to the provider. |
 
@@ -64,8 +66,7 @@ Set `AI_API_KEY` in `dashboard/.env.local` or a matching 1Password `devhub` item
 
 ## DX Audit (same page)
 
-**DX Audit** on a repo card launches the `dx-audit` skill through the resolved AI provider
-(Cursor CLI, ChatGPT/Codex, Antigravity, OpenCode, or HTTP API — see [Agent CLI selection](terminal-and-agent-cli.md#agent-cli-selection)).
+**DX Audit** on a repo card opens the Agents handoff sheet for the `dx-audit` skill. Choose a Paseo assistant to run it — see [Agents (Paseo)](paseo-agents.md).
 The agent inspects the checkout (dev loop, CI, dependencies, release path), optionally
 researches current ecosystem guidance, and writes a prioritised report to DevHub notes:
 
@@ -77,7 +78,7 @@ Reports are BlockNote JSON like other notes. Read them in the notes tree, or via
 `dx_audit_list` / `dx_audit_read` without the dashboard running. Re-run audits over time
 to diff against prior reports — the skill reads the latest note for the repo when present.
 
-Requires a usable AI provider (`DEVHUB_AI_PROVIDER` / `DEVHUB_AGENT_*`) and a synced `dx-audit` skill.
+Requires a connected Paseo daemon, an available coding assistant and a synced `dx-audit` skill.
 No separate API route — the Repos button starts an agent job with the skill prompt.
 
 ## How It Works
@@ -106,10 +107,10 @@ The generated brief is instructed to use only detected facts and snippets. Unkno
 | ----- | ------- | ---------------- |
 | `GET /api/repos/:name/learn` | Returns deterministic context plus cached or newly generated artifacts. Add `?refresh=1` to bypass the cache for the current `HEAD`. | `404` when the repo name is invalid or not a sibling git checkout; `ok: false` only for generation errors. |
 | `GET /api/repos/:name/learn/status` | Lightweight readiness check for the current `HEAD` cache. | `404` when the repo cannot be resolved. |
-| `GET /api/repos/:name/learn/pack.zip` | Downloads the NotebookLM pack, generating it first if no cache exists. | `503` when `AI_API_KEY` is missing; `404` when generation produced no pack. |
+| `GET /api/repos/:name/learn/pack.zip` | Downloads the NotebookLM pack, generating it first if no cache exists. | `503` when no AI provider is available; `404` when generation produced no pack. |
 | `POST /api/repos/:name/learn/tutor` | Streams Socratic tutor responses with Vercel AI SDK UI messages. | `503` when AI is unconfigured; `404` when the repo cannot be resolved. |
 
-All repo names are constrained to letters, numbers, `_`, `.`, and `-`, and must resolve to a direct child of the scan directory with a `.git` directory.
+All repo names are constrained to letters, numbers, `_`, `.`, and `-`, and must resolve to a direct child of the scan directory with a `.git` entry. Names containing `..` are rejected.
 
 ## Scanning Constraints
 
@@ -139,7 +140,7 @@ Current caps:
 | NotebookLM source pack | Downloaded ZIP | Contains `README-import.md`, generated Markdown sections, and curated source excerpts under `05-source-excerpts/`. |
 | Tutor | Learn panel chat | Asks one question at a time, evaluates answers, escalates hints, and cites only scanned paths. |
 
-NotebookLM does not accept ZIP files natively. Use the NotebookLM Tools extension for ZIP import, or unzip the archive and upload Markdown files manually. NotebookLM free plans may cap source count, so split or select files if needed.
+The ZIP is an export bundle. Unzip it before selecting Markdown files for import.
 
 ## Cache Behavior
 
@@ -172,10 +173,10 @@ The saved note contains the tutor explanation, with the internal marker stripped
 | Symptom | Check |
 | ------- | ----- |
 | Repo is missing from the Repos page | The clone must be a direct child of the repos scan directory and contain `.git`. |
-| Learn panel says AI is not configured | Set `AI_API_KEY` in `dashboard/.env.local` and restart DevHub. |
+| Learn panel says AI is not configured | Choose an available provider under **Setup → AI Provider**. HTTP API mode also needs `AI_API_KEY`. |
 | Brief, tutor, or ZIP are unavailable | The AI provider may be unconfigured, unreachable, using the wrong base URL/model, or returning a generation error. Deterministic facts should still load. |
 | Output looks stale | Confirm the repo `HEAD` changed, or click **Refresh** to bypass the cache. |
-| NotebookLM cannot import the ZIP | NotebookLM itself does not support ZIP upload; unzip manually or use the NotebookLM Tools extension. |
+| NotebookLM cannot import the ZIP | Unzip the archive and select files using the current import options. |
 | Generated content omits parts of a large repo | The scanner and prompts are intentionally capped. Add or improve README/docs files so the preferred snippets contain the important context. |
 
 ## Related Docs

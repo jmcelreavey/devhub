@@ -606,10 +606,10 @@ export function getDocSearchCorpus(): Map<string, DocSearchEntry> {
   return entry.corpus;
 }
 
-/** Docs sorted by recency, for the landing page. */
+/** Current guidance sorted by recency; proposals and archives stay in their sections. */
 export function getRecentDocs(limit = 5): DocSummary[] {
   return [...getDocIndex().docs]
-    .filter((doc) => !doc.draft)
+    .filter((doc) => !doc.draft && !getSectionMeta(doc.section).secondary)
     .sort((a, b) => b.modified - a.modified)
     .slice(0, limit);
 }

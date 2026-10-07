@@ -30,8 +30,11 @@ export async function register() {
     const { appendSchedulerLog } = await import("./lib/scheduler-log");
     appendSchedulerLog("info", "scheduler", "disabled by DEVHUB_SCHEDULER=0 — another DevHub process owns scheduled jobs");
   }
-  const { startShareExpiry } = await import("./lib/share/share-expiry");
-  startShareExpiry();
+  // A verification server must not expire the user's live links.
+  if (primary) {
+    const { startShareExpiry } = await import("./lib/share/share-expiry");
+    startShareExpiry();
+  }
   // URL-based MCP clients need a listener; off with DEVHUB_MCP_HTTP=0.
   const { startMcpHttpPeer } = await import("./lib/mcp-http-peer");
   void startMcpHttpPeer().catch((err: unknown) => {

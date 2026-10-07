@@ -1,7 +1,7 @@
 ---
 title: MCP server
 description: The local `devhub` Model Context Protocol server that exposes notes, tasks and dashboard workflows to AI tools.
-order: 5
+order: 6
 icon: Server
 tags: [architecture, mcp]
 related:
@@ -41,7 +41,7 @@ sequenceDiagram
 
 ## Architecture
 
-The server has two tool tiers:
+The server has three tool tiers:
 
 | Tier              | Source Of Truth                           | Dashboard Required | Tool Groups                                                                                                                                                                          |
 | ----------------- | ----------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -69,12 +69,13 @@ running.
 
 ## Package Layout
 
-`mcp-servers/devhub-server/src/mcp.ts` is a thin registrar (v4.0.0). It wires tool
-groups and does not hold business logic.
+`src/mcp.ts` is the stdio entry. `src/server.ts` builds the server and registers
+tool groups for both stdio and HTTP.
 
 | Path                                            | Role                                                                              |
 | ----------------------------------------------- | --------------------------------------------------------------------------------- |
-| `src/mcp.ts`                                    | Entry point — creates `McpServer`, calls each `register*Tools`                    |
+| `src/mcp.ts`                                    | Stdio entry — creates context and connects the server                    |
+| `src/server.ts` | Server factory, toolset selection and registrars |
 | `src/context.ts`                                | `createContext()` — reads `NOTES_DIR`, `TASKS_DIR`, `DOCS_DIR`; resolves the dashboard per request (`discover-dashboard.ts`) |
 | `src/tools/*.ts`                                | One registrar per tool group (`notes.ts`, `status.ts`, …)                         |
 | `src/storage.ts`, `src/task-diagram-storage.ts` | Filesystem-backed vault access                                                    |
@@ -86,7 +87,7 @@ Filesystem tools import from `shared/vault/` via relative paths. Dashboard tools
 matching routes on `DEVHUB_BASE_URL` through `DashboardClient`.
 
 To add a tool group: create `src/tools/<group>.ts` with a `register*Tools(server, ctx)`
-function, import it in `mcp.ts`, and add a dashboard API route when the tool is
+function, register it in `server.ts`, and add a dashboard API route when the tool is
 dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 
 Call a tool without an AI client (same stdio server, so `NOTES_DIR` / `REPO_ROOT` match):
@@ -100,68 +101,26 @@ Requires `tsx` in `mcp-servers/devhub-server/node_modules`. Used by `npm run dem
 
 ## Connect any MCP client over HTTP
 
-Besides the synced stdio launch, the same server listens on Streamable HTTP for
-clients that connect to a URL:
-
-```bash
-npm run mcp:http        # → http://127.0.0.1:1340/mcp
-```
-
-The dashboard starts this peer automatically, so if DevHub is running, the
-endpoint usually already exists. To onboard any MCP client:
-
-```bash
-npm run mcp:token       # prints ready-to-paste configs
-```
-
-That prints a generic client config (`{ "type": "http", "url": ..., "headers": { "Authorization": "Bearer ..." } }`),
-the Claude Code CLI command, and a Cursor `mcp.json` entry — same tools, same
-toolsets, same history as stdio.
-
-Security model: every request needs a bearer token (auto-generated once, stored
-`0600` at `~/.config/devhub/mcp-http-token`, override with `DEVHUB_MCP_HTTP_TOKEN`);
-Host/Origin must be loopback unless `DEVHUB_MCP_HTTP_ALLOWED_HOSTS` extends it
-(a tunnelled remote client needs both the tunnel and that variable). The token
-grants every DevHub tool, including agent dispatch — narrow the exposed surface
-with `DEVHUB_MCP_TOOLSETS` before exposing it beyond this machine.
+The dashboard normally starts a Streamable HTTP peer at `http://127.0.0.1:1340/mcp`. It exposes the same toolsets as stdio and requires a bearer token. See [Connect over HTTP](#connect-over-http) for commands, client configuration and access controls.
 
 ## Tool Inventory
 
-| Group      | Tools                                                                                                                                                                                                                                                                                                                                                         |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Notes      | `notes_list`, `notes_read`, `notes_write`, `notes_write_asset`, `notes_append`, `notes_search`, `notes_delete`, `notes_create_meeting`, `notes_create_task`, `notes_create_pr`, `notes_devhub_open`, `entity_links_read`, `entity_links_resolve`, `notes_cursor_open`, `notes_cursor_apply`, `notes_cursor_delete` |
-| Docs       | `docs_list`, `docs_read`, `docs_write`, `docs_append`, `docs_search`, `docs_delete`                                                                                                                                                                                                                                                                           |
-| Tasks      | `tasks_list`, `tasks_create`, `tasks_update`, `tasks_delete`, `tasks_history`, `tasks_agent_runs`, `tasks_agent_handoff_get`, `tasks_agent_handoff_set`, `tasks_agent_resume`, `tasks_implement_ready`, `tasks_implement_review_settings_get`, `tasks_implement_review_settings_set`, `tasks_implement_review`, `tasks_context_sync` (merge tags, links and an idempotent implementation summary into a task and its note in one call)                                                                                                                                                                                                                                                                                 |
-| Diagrams   | `diagrams_list`, `diagrams_read`, `diagrams_create`, `diagrams_update`, `diagrams_add_note`, `diagrams_add_shape`, `diagrams_add_arrow`, `diagrams_set_graph` (nodes + edges, auto-laid-out — prefer this for architecture/flow diagrams), `diagrams_repair`, `diagrams_delete`, `diagrams_rename`                                                                                                                                                                                                                             |
-| Appraisal  | `appraisal_record`, `appraisal_set_goal`, `appraisal_list_goals`, `appraisal_read`, `appraisal_list`, `appraisal_people`, `appraisal_summarize`, `appraisal_delete`                                                                                                                                                                                           |
-| DX audit   | `dx_audit_list`, `dx_audit_read` — reads `reviews/dx-audit-<repo>-<date>` notes written by the `dx-audit` skill                                                                                                                                                                                                                                               |
-| Capability | `capability_radar`, `capability_scan`, `capability_digest`, `capability_get_lab`, `capability_complete_lab`                                                                                                                                                                                                                                                   |
-| Ship       | `repo_ship`, `repo_ship_status` — wraps `scripts/devhub-ship.sh` (detached; poll status while pre-push verify runs)                                                                                                                                                                                                                                           |
-| Status     | `status_services`, `status_git`, `status_mcp`, `status_exec`, `status_logs`                                                                                                                                                                                                                                                                            |
-| Briefing   | `briefing_get`                                                                                                                                                                                                                                                                                                                                                |
-| Calendar   | `calendar_week`, `calendar_list`                                                                                                                                                                                                                                                                                                                              |
-| Work       | `prs_list`, `prs_open_in_cursor`, `prs_auto_review`, `prs_auto_review_settings_get`, `prs_auto_review_settings_set`, `prs_pipeline_investigate`, `jira_tickets`, `jira_ticket_get`, `standup_markdown`, `tasks_weekly`, `jira_ticket_transition`                                                                                                                                                                                                                             |
-| Assets     | `assets_list`                                                                                                                                                                                                                                                                                                                                                 |
-| Search     | `search`                                                                                                                                                                                                                                                                                                                                                      |
-| Scripts    | `scripts_list`, `scripts_run`, `scripts_run_status`, `scripts_history`                                                                                                                                                                                                                                                                                        |
-| Repos      | `repos_list`, `repos_open`, `repos_reveal`, `repos_clone`, `repo_learn`, `repo_conventions`, `conventions_list`, `conventions_mine`, `conventions_review`, `conventions_settings` (the repo's team conventions, mined from PR review comments, and everything you can do to them on `/conventions` — see [Repo conventions](../guides/repo-conventions.md)), `repos_git_status`, `repos_git_stage`, `repos_git_discard`, `repos_git_stage_hunk`, `repos_git_diff`, `repos_git_stash`, `repos_git_branches`, `repos_git_branch`, `repos_git_commit`, `repos_git_push`, `repos_git_log`, `repos_git_show`, `repos_git_blame`, `repos_git_conflicts`, `repos_git_range`, `repos_git_ci`, `repos_git_worktrees` |
-| Jobs       | `jobs_list`, `jobs_get`, `jobs_create`, `jobs_update`, `jobs_delete`, `jobs_run`, `jobs_log` — DevHub scheduled jobs (cron scripts or agent prompts) that persist, catch up after sleep and can wake the Mac; preferred over a harness's own cron. See [Scheduled jobs](../guides/scheduled-jobs.md) |
-| Sessions   | `sessions_recap`                                                                                                                                                                                                                                                                                                                                              |
-| Share      | `share_list`, `share_publish`, `share_one_time`, `share_revoke`, `share_recover` (restore a deleted note/doc from its live gist) — parity with the editor **Share** / **One-time** buttons; registry stays in the dashboard process                                                                                                                                                                                            |
-| Workspace  | `skills_list`, `skills_read`, `context_pack`, `collections_list`, `research_list`, `radar_personal`, `persona_list`, `learnings_list`, `agents_list`, `briefing_tasks` — read-only GET proxies for dashboard areas that had no MCP coverage                                                                                          |
-| Voice      | `voice_list`, `voice_answer`, `voice_train`, `voice_apply` — train the `my-voice` skill from the user's own answers, the same loop as the `/voice` page. `voice_train` starts a draft and returns at once (a model call, a minute or two); poll it with `action:status`. `voice_apply` needs `confirm:true` and saves the draft the dashboard is holding. Registered in the `workspace` toolset. See [Training my-voice](../guides/skills.md#training-my-voice). |
-| Datadog    | `datadog_oncall`, `datadog_recent_alerts`, `datadog_investigate`                                                                                                                                                                                                                                                                                              |
-| Recall     | `recall`, `recall_graph`, `recall_remember`, `recall_index`                                                                                                                                                                                                                                                                                                   |
-| Ownership  | `owned_repos`, `repo_owner_brief`, `repo_pr_radar`, `repo_who_owns`, `repo_knowledge_gaps`, `repo_changed_since` (commits and cached digest since a SHA) — dashboard-backed proxies for `/api/own/*`                                                                                                                                                                                                                        |
-| Terminal   | `terminal_list`, `terminal_tail`, `terminal_propose_run`, `terminal_proposal_status`, `terminal_wait_for` — dock tabs, propose-then-confirm command runs, and blocking until output matches a pattern. The MCP process never injects stdin; the dock must confirm, unless the user has **Auto-run** on for a non-destructive command. Agent dispatch does **not** use the dock — it creates a Paseo conversation. |
-| Database   | `db_connections`, `db_preflight`, `db_connect`, `db_schema`, `db_table`, `db_query`, `db_explain`, `db_execute`, `db_cancel`, `db_diff`, `db_history` — proxy `/api/db/*`. Reads via `db_query`; writes via `db_execute` (`confirm: true`, plus `confirmLabel` on dangerous connections). The MCP process never opens a database. See [Database client](database-client.md). |
-| Agents | `agent_providers`, `agent_dispatch`, `agent_race`, `agent_runs`, `agent_output`, `agent_wait`, `agent_followup`, `agent_cancel`, `agent_diff`, `agent_interactive_note`, `agent_interactive_finish` — start work in Paseo (Claude, Cursor, Codex, OpenCode, Copilot). Each dispatch creates a conversation with automatic permission approval; no terminal tab opens. Isolated git worktrees are the default. Proxies `/api/agent/runs`. See [Dispatch work to another agent](#dispatch-work-to-another-agent) and [Agents (Paseo)](../guides/paseo-agents.md). |
-| Plans | `tasks_capture`, `tasks_set_stage`, `tasks_plan_status`, `tasks_plan_markdown`, `tasks_pr_watch`, `tasks_alert_drafts`, `tasks_retro_inputs` — the plan loop: capture drafts with context, mark them ready through the checklist, see where every task stands, follow agent PRs (fix / merged / closed), and feed the retro (`skillUsage` is Claude Code invocations over 30 days). Dashboard-backed (`plans` toolset). See [Plan loop](../guides/plan-loop.md). |
-| Resources  | `devhub://notes/{path}`, `devhub://docs/{path}`, `devhub://agent-runs/{runId}/events`, `devhub://jobs`, `devhub://jobs/log` — cacheable reads of vault content, run event streams and scheduled jobs, with best-effort update notifications. Selected with the `resources` toolset. |
-| History    | `mcp_history`, `mcp_history_summary` — filesystem-backed trace of every DevHub MCP tool call (redacted args, duration, outcome, client, dispatching run) and a per-day rollup. See [Trace what agents did](#trace-what-agents-did). |
-| Events     | `events_wait` — block until a PR's checks finish / it is reviewed / merged (`/api/github/pr-state`), a script or agent run ends, a new Datadog alert fires, or a new recall-spine event lands. Polls dashboard routes; max 300s per call. |
-| UI         | `ui_open` — open any internal DevHub page (`/notes/<path>`, `/repos/<name>`, `/work`, `/briefing`, …) as a workspace tab in the running DevHub app (desktop or browser); the generalized form of `notes_devhub_open` |
-| Prompts    | Not tools: every skill under the checkout's `skills/` (shared, vendor, root installs) is registered as an MCP **prompt** named after the skill, with an optional `task` argument. Clients show them as slash commands. Toolset name `prompts`; plugin skills are not included. |
+Run `npm run mcp:inventory` from the repo root for the registered tool names.
+Client toolsets can narrow that list with `DEVHUB_MCP_TOOLSETS`; the registrars in
+`src/server.ts` define the available groups.
+
+| Toolsets | Purpose |
+| --- | --- |
+| `notes`, `docs`, `tasks`, `diagrams`, `appraisal` | Read and write file-backed content |
+| `plans`, `agents`, `terminal` | Plan tasks, hand work to agents and propose terminal commands |
+| `repos`, `ownership` | Repo actions, Git workspace, conventions and owned-repo triage |
+| `db` | Database reads and confirmed writes through the dashboard |
+| `scripts`, `status`, `jobs`, `events` | Maintenance actions, diagnostics, scheduling and waits |
+| `work`, `calendar`, `datadog`, `briefing` | Integration and daily-work views |
+| `recall`, `search`, `capability`, `sessions`, `dx-audit` | Retrieval, learning and saved reports |
+| `share`, `workspace`, `assets`, `ui` | Sharing, catalogue reads, voice training and opening pages |
+| `ship`, `history` | Shipping scripts and the MCP call trace |
+| `resources`, `prompts` | MCP resources and skill prompts, rather than ordinary action tools |
 
 `recall` is the one an agent should reach for first. `search` answers "which
 files contain these words"; `recall` answers "what do I already know about
@@ -170,15 +129,15 @@ history and the event spine together. See [Recall](recall.md).
 
 BI-specific MCP tools are contributed by the private BI plugin as a separate server; they are not part of the core DevHub server.
 
-**Scope notes:** `notes_list` and `notes_search` cover the workspace slice only — `daily/` journals plus root-level `.json` scratch notes. Structured areas like `learnings/` need explicit paths via `notes_read`. `calendar_list` returns Google Calendar **accounts and selection state**, not events (use `calendar_week` for the week grid).
+**Scope notes:** `notes_list` and `notes_search` cover the workspace slice only — `daily/` journals plus root-level `.json` scratch notes. Structured areas like `learnings/` need explicit paths via `notes_read`. `calendar_list` returns Google Calendar **calendars and selection state**, not events (use `calendar_week` for the week grid).
 
-Dashboard-backed tools that mutate runtime or external state require `confirm: true` (for example mutating `scripts_run` entries, `repos_git_stage`, `repos_git_commit`, `repos_git_push`, `repos_git_branch`, `prs_open_in_cursor`, `prs_auto_review`, `jira_ticket_transition`, and `db_execute`). Long-running actions return a `runId`; poll the matching status tool, such as `scripts_run_status`, until the run exits. MCP cannot stream the dashboard's live run log.
+Some dashboard-backed mutations require `confirm: true` (for example mutating `scripts_run` entries, `repos_git_stage`, `repos_git_commit`, `repos_git_push`, `repos_git_branch`, `prs_open_in_cursor`, `prs_auto_review`, `jira_ticket_transition`, and `db_execute`). Long-running actions return a `runId`; poll the matching status tool, such as `scripts_run_status`, until the run exits. MCP cannot stream the dashboard's live run log.
 
 All `repos_git_*` tools proxy the Repo Git workspace HTTP routes (`/api/repos/<name>/git/*` and `/branches`) — they do not shell out to `git` directly from the MCP process. Start the dashboard before using them.
 
 All `db_*` tools proxy `/api/db/*` the same way. Start the dashboard before using them. Prefer `db_query` / `db_execute` over a shell `psql`/`mongosh` so the classifier, engine read-only mode, timeouts, and history stay in one place.
 
-Sensitive dashboard routes use `requireDashboardAuth` (mutating routes via global `proxy.ts`; GET `/api/opencode/recap`, GET listen routes, and every `/api/db` route in-handler). Set `DEVHUB_API_SECRET` in `dashboard/.env.local` and in the synced MCP env when LAN exposure or non-browser callers need access; `DashboardClient` sends `Origin` and `X-DevHub-Secret` automatically.
+Sensitive dashboard routes use `requireDashboardAuth` (mutating routes via global `proxy.ts`; GET `/api/opencode/recap`, GET listen routes, and every `/api/db` route in-handler). `DashboardClient` sends a matching `Origin` automatically and adds `X-DevHub-Secret` when `DEVHUB_API_SECRET` is configured in its environment. A secret is an alternative access credential; it doesn't disable same-origin requests or add a user login.
 
 ## Storage Model
 
@@ -224,7 +183,10 @@ exactly as they did for the `tsx` binary it replaces:
 MCP sync removes the `http://localhost:1337` value earlier catalogs wrote into
 client configs, and leaves any other value alone.
 
-When `DEVHUB_API_SECRET` is set in `dashboard/.env.local`, add the same value to the `env` block in `mcp/shared/devhub.json` (or your personal MCP overlay), then re-run MCP sync so client configs pick it up. `DashboardClient` sends `Origin` and `X-DevHub-Secret` on every dashboard request when the secret is present in the MCP process env.
+`DashboardClient` sends a matching `Origin` on dashboard requests. It also sends
+`X-DevHub-Secret` when `DEVHUB_API_SECRET` is in the MCP process environment. Supply
+real secrets through a client-local config or environment, never the committed
+`mcp/shared/` catalogue.
 
 `REPO_ROOT` is replaced during MCP sync. The dashboard health check and bootstrap
 install the `devhub-server` package dependencies if `node_modules` is missing.
@@ -353,7 +315,7 @@ Clients that support MCP elicitation get the confirmation in their own chat firs
 Terminal tools proxy `/api/terminal/sessions` and `/api/terminal/propose`. Start the dashboard and open the dock at least once so tabs register.
 
 1. `terminal_list` — visible dock tabs (label, cwd, kind, busy, session id). Empty until the dock has opened this process.
-2. `terminal_propose_run` with `command` (and optional `cwd`, `kind`, `label`). Returns a proposal id. **Does not execute.** Prefer it over running a command in the agent shell — the dock is where the user can see it, keep it, and kill it. Always use it for upstarts and other user-visible long-running commands. Every approved proposal opens its own tab, so a run never waits on another session.
+2. `terminal_propose_run` with `command` (and optional `cwd`, `kind`, `label`). Returns a proposal id. Approval through elicitation or configured auto-run may start the command immediately; otherwise it waits for approval in the dock. Prefer it over running a command in the agent shell — the dock is where the user can see it, keep it, and kill it. Always use it for upstarts and other user-visible long-running commands. Every approved proposal opens its own tab, so a run never waits on another session.
 3. `terminal_proposal_status` with that id — poll until `approved` / `injected` / `denied` / `expired` / `failed`. Pending means the human has not confirmed yet (or Auto-run has not injected); do not proceed as if it ran.
 4. `terminal_tail` with a `sessionId` from `terminal_list` to read the cleaned log tail after inject.
 
@@ -364,7 +326,7 @@ Proposals live in the dashboard process (15 min TTL, max 20 pending). Desktop WS
 Agent tools proxy `/api/agent/runs`. Start the dashboard and set up Paseo from **Agents → Connection** (`/agents?view=connection`) — dispatch creates a Paseo agent. No terminal tab opens.
 
 1. `agent_providers` — the agents Paseo can run, readiness, and advertised models. Empty with an error while Paseo is down.
-2. `agent_dispatch` with `provider`, a self-contained `prompt`, and `cwd`. Permissions are the harness full-auto mode (Claude `bypassPermissions`, Codex `full-access`, Cursor `agent` + DevHub auto-confirm, …). Isolated worktrees are the default (`devhub/agent/<repo>-<ticket-or-task>-<runId>` under the repo's `.git/devhub-worktrees/`); `worktree: false` edits `cwd` directly. Pass `requestId` when retrying the same submission so a duplicate POST returns the existing run. Caps: `DEVHUB_AGENT_MAX_RUNS` (6), `DEVHUB_AGENT_MAX_COST_USD` per local day (25), `DEVHUB_AGENT_MAX_DEPTH` (1 — a dispatched agent cannot dispatch another; the one exception is the implement flow's assigned reviewer, started through `tasks_implement_review`), optional `DEVHUB_AGENT_ALLOWED_ROOTS` (colon-separated cwd allowlist). `DEVHUB_AGENT_DEFAULT_WORKTREE=0` restores shared-checkout-by-default. Paseo **refuses** `maxTurns` (`400`) — use the agent's own controls. Review / auto-review runs attach only `devhub` and `lean-ctx`; other dispatches attach every enabled non-builtin server. Finished leftover worktrees are listed on [PRs → Worktrees](../integrations/github.md#finished-worktrees).
+2. `agent_dispatch` with `provider`, a self-contained `prompt`, and `cwd`. Permissions are the harness full-auto mode (Claude `bypassPermissions`, Codex `full-access`, Cursor `agent` + DevHub auto-confirm, …). Isolated worktrees are the default (`devhub/agent/<repo>-<ticket-or-task>-<runId>` under `<repos-dir>/.devhub-worktrees/<repo>/`); `worktree: false` edits `cwd` directly. Pass `requestId` when retrying the same submission so a duplicate POST returns the existing run. Caps: `DEVHUB_AGENT_MAX_RUNS` (6), `DEVHUB_AGENT_MAX_COST_USD` per local day (25), `DEVHUB_AGENT_MAX_DEPTH` (1 — a dispatched agent cannot dispatch another; the one exception is the implement flow's assigned reviewer, started through `tasks_implement_review`), optional `DEVHUB_AGENT_ALLOWED_ROOTS` (colon-separated cwd allowlist). `DEVHUB_AGENT_DEFAULT_WORKTREE=0` restores shared-checkout-by-default. Paseo **refuses** `maxTurns` (`400`) — use the agent's own controls. Review / auto-review runs attach only `devhub` and `lean-ctx`; other dispatches attach every enabled non-builtin server. Finished leftover worktrees are listed on [PRs → Worktrees](../integrations/github.md#finished-worktrees).
 3. `agent_wait` (blocks up to 300s and sends progress notifications) or `agent_output` with the returned `since` cursor. `needs-attention` means open the conversation in Agents.
 4. `agent_diff` shows what changed against HEAD at dispatch. `agent_followup` continues the same Paseo agent; `agent_cancel` stops the managed run.
 5. `agent_race` sends one prompt to 2–4 assistants, each in its own worktree and conversation.
@@ -409,12 +371,15 @@ These proxy the same GitHub PR routes as the `/prs` row actions. Start the dashb
 
 1. `prs_list` — authored + review-requested queues (includes CI `checks` glance when available).
 2. `prs_open_in_cursor` with `repo` + `number` and `confirm: true` — stashes dirty work in the local clone, `gh pr checkout`, then launches Cursor. Optional `notePath` opens a notes working copy alongside. `repos_open` only opens the current branch.
-3. `prs_auto_review` — dry-run lists candidates from the review-requested queue; `confirm: true` starts OpenCode agent reviews (same prompt/note path as the UI **Review with agent**). Skips drafts, skip-until-updated, and PRs already reviewed for the current `updatedAt`. **Does not** post GitHub review comments. Cap with optional `limit` (1–2).
+3. `prs_auto_review` — previews the review-requested queue; `confirm: true` starts Paseo reviews. Successful auto-reviews are deduplicated by PR URL, so later pushes don't re-queue them. See [Auto agent-review](../guides/auto-pr-review.md) for skips, retries and limits.
 3b. `prs_auto_review_settings_get` / `prs_auto_review_settings_set` — read or write the in-process poller prefs (`enabled` / `always`) without editing `.env.local`. Persists to `notes/.config/auto-pr-review.json`.
 4. `prs_pipeline_investigate` — dig into CI for one PR (`confirm: true` to start; optional `rerunFailed`). Same prompt/note path as UI **Investigate pipeline**. See [Pipeline investigate](../guides/pipeline-investigate.md).
 5. Live waits: `events_wait` (`kind: "pr"`, `until: "checks_done"`) against `/api/github/pr-state`.
 
-**Not exposed as MCP tools** (dashboard UI / direct HTTP only): `GET /api/repos/<name>/git/commit-context`, `.../git/coupling`, `.../git/range`, `.../git/reflog`, `.../git/remotes`, `.../git/worktrees`, `.../git/ci`, `POST .../git/commit-action`, `POST .../git/rebase-interactive`. Agents can call these via `DEVHUB_BASE_URL` when needed; there is no matching `repos_git_*` registrar yet.
+Range comparison, CI and worktrees have `repos_git_range`, `repos_git_ci` and
+`repos_git_worktrees` tools. Commit context, coupling, reflog, remotes, commit actions
+and interactive rebase remain UI/direct-HTTP operations. Use
+`npm run mcp:inventory` to check the current surface.
 
 Structured errors from the underlying routes: `409 index_lock` (another git process holds `.git/index.lock`), `409 stash_conflict` (unmerged paths after stash apply/pop), `422 hook_failed` (pre-commit/pre-push). Hook failures persist full output under `.git/devhub-hook-failure.log` in the target repo. The UI offers a terminal handoff via the `git-hook-fix` skill.
 
@@ -543,7 +508,7 @@ plugin MCP packages. See [Plugin System](plugins.md) and
 The server is scoped to configured local directories plus documented dashboard
 routes. It is not a general filesystem API.
 
-Keep secrets out of notes and docs unless you intentionally want them committed in this private mirror. Public/template backports must still respect the personal-data boundary in `CONTRIBUTING.md`. Dashboard integrations may use local secrets from `.env.local` or configured credential stores, but MCP responses should still be treated as local developer data.
+Keep secrets in local environment files or a secret manager. Notes and docs can be committed, shared and read by MCP clients. Public backports must respect the [personal-data boundary](../../CONTRIBUTING.md#personal-data-boundary); review MCP responses as local developer data.
 
 ## Rendered results (MCP-UI seam)
 

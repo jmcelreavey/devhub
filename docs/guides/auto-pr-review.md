@@ -1,7 +1,7 @@
 ---
 title: Auto agent-review
 description: Poll or trigger Review-with-agent jobs for your review-requested PR queue without posting GitHub review comments.
-order: 8
+order: 6
 icon: GitPullRequest
 tags: [workflow, github, agents]
 related:

@@ -1,7 +1,7 @@
 ---
 title: UI vocabulary
 description: The components, hooks and CSS classes that already exist, so a change reuses them instead of reinventing them.
-order: 60
+order: 6
 icon: Blocks
 tags: [reference, ui]
 related:

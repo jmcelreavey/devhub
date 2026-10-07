@@ -2,7 +2,7 @@
 title: Radar acknowledgements and dependency divergence
 description: Why the drift list stopped repeating itself, and how the Release Radar panel decides what is worth showing.
 section: guides
-order: 14
+order: 15
 icon: Activity
 tags: [guides, radar, dependencies]
 related:

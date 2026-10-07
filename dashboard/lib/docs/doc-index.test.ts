@@ -1,5 +1,45 @@
-import { describe, expect, it } from "vitest";
-import { resolveDocSlug } from "@/lib/docs/doc-index";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getDocsDir } from "@/lib/content/dirs";
+import { getDocIndex, getRecentDocs, invalidateDocIndex, resolveDocSlug } from "@/lib/docs/doc-index";
+
+vi.mock("@/lib/content/dirs", () => ({ getDocsDir: vi.fn() }));
+
+describe("recent docs", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "docs-recency-"));
+    vi.mocked(getDocsDir).mockReturnValue(root);
+    invalidateDocIndex();
+    for (const [slug, modified, draft] of [
+      ["guides/current", 1000, false],
+      ["plans/proposed", 2000, false],
+      ["archive/finished", 3000, false],
+      ["guides/draft", 4000, true],
+    ] as const) {
+      const file = path.join(root, `${slug}.md`);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, `---\ntitle: ${slug}\ndescription: Test page\ndraft: ${draft}\n---\n# Test page\n`);
+      fs.utimesSync(file, modified, modified);
+    }
+  });
+
+  afterEach(() => {
+    invalidateDocIndex();
+    fs.rmSync(root, { recursive: true, force: true });
+    vi.resetAllMocks();
+  });
+
+  it("fills the recent list with current guidance while retaining plans in the index", () => {
+    expect(getRecentDocs(1).map((doc) => doc.slug)).toEqual(["guides/current"]);
+    expect(getDocIndex().sections.map((section) => section.meta.id)).toEqual([
+      "guides", "plans", "archive",
+    ]);
+  });
+});
 
 const known = new Set([
   "README",

@@ -1,7 +1,7 @@
 ---
 title: Install as a PWA
 description: Install the dashboard as a Progressive Web App from a supported browser.
-order: 10
+order: 22
 icon: Smartphone
 tags: [ui]
 related:
@@ -28,7 +28,9 @@ The exact menu name varies by browser.
 
 DevHub can work well on mobile when it is reachable from your local network.
 
-Only use LAN access on networks you trust. DevHub does not include built-in authentication.
+Only use LAN access on networks you trust. The installed desktop app uses local
+bootstrap authentication; checkout mode uses same-origin checks and an optional API
+secret, without a user login. See [Setup](../getting-started/setup.md#localhost-vs-lan-access).
 
 ## Service Worker
 

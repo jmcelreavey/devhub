@@ -1,7 +1,7 @@
 ---
 title: Plugin system
 description: "Tier-1 to tier-3 plugins: how a separate repo contributes skills, agents, MCP servers and dashboard modules."
-order: 6
+order: 7
 icon: Blocks
 tags: [architecture, plugins]
 related:

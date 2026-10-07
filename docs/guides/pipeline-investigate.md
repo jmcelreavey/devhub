@@ -1,7 +1,7 @@
 ---
 title: Pipeline investigate
 description: Glance CI on PR rows and launch Investigate pipeline (skill + MCP) without posting GitHub reviews.
-order: 9
+order: 7
 icon: GitPullRequest
 tags: [workflow, github, agents, ci]
 related:

@@ -1,5 +1,24 @@
-import { describe, expect, it } from "vitest";
-import { parseRepoLinkHref } from "@/lib/repos/link";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { openRepoLinkHref, parseRepoLinkHref } from "@/lib/repos/link";
+
+describe("openRepoLinkHref", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends the file path accepted by the repo-open route", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await openRepoLinkHref("repo://my-service/src/auth.ts#L42");
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/repos/my-service/open", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filePath: "src/auth.ts" }),
+    });
+  });
+});
 
 describe("parseRepoLinkHref", () => {
   it("parses repo-only links", () => {

@@ -2,7 +2,7 @@
 title: Recording feature demos
 description: Capture sanitised feature walkthroughs with the existing Playwright journeys and repo-controlled output.
 section: contributing
-order: 5
+order: 6
 icon: Monitor
 tags: [contributing, testing]
 related:

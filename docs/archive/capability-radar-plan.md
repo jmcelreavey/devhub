@@ -9,7 +9,6 @@ tags: [archive]
 # Capability Radar — implementation plan
 
 > Status: Phases 0–4 + lab-experience enhancements BUILT & VERIFIED · a few stretch items remain
-> Author: John (with Claude)
 > Scope: DevHub dashboard (`dashboard/`)
 
 ---

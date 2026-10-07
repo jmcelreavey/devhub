@@ -1,7 +1,7 @@
 ---
 title: Database client
 description: "How /db reaches PostgreSQL, MongoDB and SQLite — connection providers, the read-only guarantee, and why SQLite runs in a child process."
-order: 7
+order: 8
 icon: Database
 tags: [architecture, database]
 related:
@@ -62,9 +62,7 @@ in the pool.
 
 ### The plugin seam
 
-This is the **first runtime extension point** in the plugin system;
-`TEMPLATE_AND_PLUGIN_PLAN.md` costed one previously and shipped a thin core detector
-instead. It follows the existing codegen precedent rather than inventing a mechanism:
+Providers use the plugin system's generated-import pattern:
 
 - a plugin declares `dashboard.connections` in `devhub-plugin.json`, pointing at a module
   under its `lib/` that default-exports a `DbConnectionProvider`;
@@ -91,10 +89,8 @@ It tokenises rather than pattern-matching a prefix, because the interesting case
 - `SELECT … INTO` creates a table, `SELECT … FOR UPDATE` takes locks,
 - a column named `"delete"` is not the keyword.
 
-`unknown` fails closed. This layer produces the *error message*; treat a bug in it as a UX
-bug, never as a breach.
+`unknown` fails closed. The adapters also enforce read-only access:
 
-**The engine is the guarantee:**
 
 | Engine | Mechanism |
 |---|---|
@@ -102,8 +98,9 @@ bug, never as a breach.
 | MongoDB | an operation **allowlist** — there is no generic `runCommand`, and `$out`/`$merge` are rejected even nested inside `$facet` |
 | SQLite | the handle is opened `readOnly: true` |
 
-The classifier can be wrong and the data is still safe. Never let an adapter skip its own
-transaction mode because the classifier said "read".
+PostgreSQL and SQLite enforce reads at engine level. MongoDB has no equivalent
+read-only transaction mode: its safety depends on the adapter's operation allowlist and
+aggregation-stage checks. Never skip an adapter's guard because the classifier said "read".
 
 Writes against a connection flagged `dangerous` (prd + a privileged profile) additionally
 require the user to type the connection's label — the same shape as the `confirmDangerous`

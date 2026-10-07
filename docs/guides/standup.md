@@ -1,7 +1,7 @@
 ---
 title: Standup
 description: Generate a Markdown standup from local git, Jira and calendar signals.
-order: 5
+order: 8
 icon: Users
 tags: [workflow]
 related:

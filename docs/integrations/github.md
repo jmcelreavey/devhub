@@ -20,7 +20,7 @@ DevHub uses GitHub data for pull request tracking, repo awareness, and standup g
 - Pull requests waiting for your review.
 - Recently merged PRs for standup notes.
 - Repo discovery and quick actions.
-- OpenCode-powered PR explanation/review notes from the dashboard.
+- PR explanation and review notes written by Paseo agents.
 
 ## Recommended Setup
 
@@ -50,7 +50,7 @@ See [Sharing](../guides/sharing.md) for the full workflow, security model, and t
 
 ## Repos Page
 
-`/repos` is the local workspace for sibling git checkouts. DevHub scans `dirname(REPO_ROOT)` — typically `~/Developer` when DevHub lives at `~/Developer/devhub` — for direct-child folders containing `.git`.
+`/repos` is the local workspace for sibling git checkouts. DevHub scans `DEVHUB_REPOS_DIR` when set, otherwise the parent of the checkout — typically `~/Developer` when DevHub lives at `~/Developer/devhub` — for direct-child folders containing `.git`.
 
 | Section       | API                                     | Behavior                                                                                                                                               |
 | ------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |

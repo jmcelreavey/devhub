@@ -2,7 +2,7 @@
 title: Vendored skills
 description: Third-party skills under skills/vendor — what they do, how to run them, and the licence and security rules that keep them safe to sync.
 section: guides
-order: 13
+order: 18
 icon: PackagePlus
 tags: [guides, skills, security]
 related:
@@ -118,9 +118,7 @@ itself.
 *Authorship share* — even with every identity claimed, shared work repos still
 skip. The scanner also drops repos where you wrote under ~20% of commits, on
 the reasoning that a checkout you contribute to isn't a side project you
-abandoned. Here `capi` is 256 of 1428 commits — 18%, just under the line. That
-default is right for the question this skill asks, so the wrapper leaves it
-alone. Pass `--include-foreign` when you want them; they mostly return
+abandoned. The wrapper leaves that threshold alone. Pass `--include-foreign` when you want them; they mostly return
 classified as *finished* rather than dead, which is the honest answer for a
 shipped, stable service.
 
@@ -188,7 +186,7 @@ a change to code that runs with your credentials.
 
 ## Evals — proving they still work
 
-`skills:verify-vendor` proves the scripts *can't* reach the network. It says
+`skills:verify-vendor` checks for known networking imports and commands. It says
 nothing about whether they still **work**. A re-vendor that quietly breaks
 rename-following in the archaeologist, or drops the payments-wall cause from the
 graveyard, passes every other check in this repo.
@@ -282,8 +280,8 @@ grep -nE "^\s*(import|from) " agent_skills/<skill>/scripts/*.py
 grep -nE "urllib|requests|socket|urlopen|curl|wget" agent_skills/<skill>/scripts/*.py
 
 # Copy in, then gate
-cp -r agent_skills/<skill> ~/Developer/devhub-private/skills/vendor/
-cd ~/Developer/devhub-private && npm run skills:verify-vendor
+cp -r agent_skills/<skill> ~/Developer/devhub/skills/vendor/
+cd ~/Developer/devhub && npm run skills:verify-vendor
 ```
 
 Then update the provenance table and pinned commit in

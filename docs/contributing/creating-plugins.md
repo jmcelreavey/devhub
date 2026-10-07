@@ -1,7 +1,7 @@
 ---
 title: Creating a plugin
 description: "Build a plugin repo from scratch: manifest, assets, dashboard modules, and registration."
-order: 2
+order: 3
 icon: PackagePlus
 tags: [plugins]
 related:

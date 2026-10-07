@@ -1,7 +1,7 @@
 ---
 title: Task agent handoff
 description: Durable task↔agent-run records and markdown handoffs for Implement and Resume with Agent.
-order: 9
+order: 3
 icon: Bot
 tags: [workflow, agents, tasks]
 related:

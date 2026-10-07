@@ -1,7 +1,7 @@
 ---
 title: Agents (Paseo)
 description: Run DevHub's coding agents in the managed Paseo daemon — setup, ownership, phone access, and limitations.
-order: 5
+order: 4
 icon: Bot
 tags: [agents, paseo, mcp]
 related:
@@ -17,6 +17,8 @@ Paseo is DevHub's agent runtime. Older run records remain on disk; continue old 
 [Paseo](https://github.com/getpaseo/paseo) is a local daemon that runs Claude Code, Codex and OpenCode natively and other agents (Cursor, Copilot) over ACP, with its own web UI, mobile app and TypeScript SDK.
 
 ## Setup
+
+Set **Agents password** in DevHub Setup (`DEVHUB_PASEO_PASSWORD`) before running the installer:
 
 ```bash
 npm run agents:install

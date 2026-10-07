@@ -99,7 +99,7 @@ Assigned tickets appear on **Work → Jira** (`/work`) and the legacy **`/ticket
 | `/tickets` | Status tabs: All, To Do, In Progress, In Review, Done — plus an `InlineSearch` row |
 | Work → Jira | Same status grouping inside the Work shell; shares the Work search row |
 
-Search matches key, summary, status, priority, type, project, and assignee. Whitespace-separated terms are AND-ed (`PTF auth` narrows). The search hint shows `{filtered} of {total}` while typing.
+Search matches key, summary, status, priority, type, project, and assignee. Whitespace-separated terms are AND-ed (`PROJ auth` narrows). The search hint shows `{filtered} of {total}` while typing.
 
 ## Usage Tips
 

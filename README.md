@@ -206,7 +206,7 @@ graph LR
   priv -->|"back-port a generic feature"| pub
 ```
 
-Create a separate private mirror using the fork workflow, and keep notes, tasks, persona, upstart scripts and learned conventions there. The public core has an unrelated history; updates and contributions move as content patches. The backport tooling excludes personal-data paths and scans the patch, but you still need to review what you're publishing.
+Create a separate private mirror using the fork workflow, and keep notes, tasks, persona, upstart scripts and learned conventions there. Existing mirrors can have unrelated histories; updates and contributions move as content patches. The backport tooling excludes personal-data paths and scans the patch, but you still need to review what you're publishing.
 
 Docs: [Fork workflow](docs/contributing/fork-workflow.md)
 
@@ -280,7 +280,7 @@ The bits that didn't get their own section but earn their keep.
 | --- | --- | --- |
 | **Desktop app** | A native Tauri shell for macOS, and Windows through WSL2. A menu-bar icon keeps scheduled jobs running with the window closed. There's a recovery guide for when it won't start. | [Desktop app](docs/getting-started/desktop-app.md) · [Recovery](docs/guides/desktop-recovery.md) |
 | **One-shot ship** | `repo_ship` commits local work, reconciles public-core changes, pushes your private mirror, ports a leak-scanned patch to public, and pushes your plugins. It previews unless you confirm; a confirmed public push goes straight to `main`, without a PR. | [Fork workflow](docs/contributing/fork-workflow.md) |
-| **Safer installs** | Installs go through Aikido Safe-Chain, and secrets can come from 1Password instead of `.env` files. | [Installation](docs/getting-started/installation.md) |
+| **Safer installs** | The full bootstrap requires Aikido Safe-Chain, and secrets can come from 1Password instead of `.env` files. | [Installation](docs/getting-started/installation.md) |
 | **Calm motion** | Shimmer for content that's arriving, a spinner only for something you just clicked, and one switch (⌘P, *Toggle animations*) that turns it all off. | [Motion](docs/contributing/motion.md) |
 | **Tests** | Unit tests, Playwright journeys and evals for the vendored skills. | [Contributing](CONTRIBUTING.md) |
 | **A Konami code** | The Konami code loads a hidden Pong game. | |
@@ -293,21 +293,21 @@ The bits that didn't get their own section but earn their keep.
 
 ## Quick start
 
-Requires Node 22 (npm 10) and Git on macOS, Linux, or WSL2. Install and activate [Aikido Safe-Chain](docs/getting-started/installation.md#safe-chain) before `npm install`; the preinstall check requires it.
+Requires Node 22 (npm 10) and Git on macOS, Linux, or WSL2. The full bootstrap and plugins that declare it also require [Aikido Safe-Chain](docs/getting-started/installation.md#safe-chain). A core-only `npm install` doesn't require it.
 
 ```bash
 git clone https://github.com/jmcelreavey/devhub.git
 cd devhub
 nvm install && nvm use
 npm install
-npm run dev
+DEVHUB_BIND_HOST=127.0.0.1 npm run dev
 ```
 
 Open http://localhost:1337, configure integrations from **Setup**, then click **Sync** on the **Skills** page. Start a session in any supported tool and it picks up your persona.
 
 The [installation guide](docs/getting-started/installation.md) covers optional 1Password-managed secrets and the full bootstrap script. For the native app, see [the desktop app guide](docs/getting-started/desktop-app.md).
 
-Agents run through [Paseo](https://github.com/getpaseo/paseo). Set it up with `npm run agents:install`, or **Agents → Connection → Set up Paseo**. Without it, the rest of the dashboard still works.
+Agents run through [Paseo](https://github.com/getpaseo/paseo). Use **Agents → Connection → Set up Paseo**, or set **Agents password** in Setup (`DEVHUB_PASEO_PASSWORD`) before `npm run agents:install` (see the [connection guide](docs/guides/paseo-agents.md#setup)). Without it, the rest of the dashboard still works.
 
 ## How it fits together
 
@@ -341,7 +341,7 @@ A correction becomes a learning note. One that keeps coming back becomes a perso
 
 ## Security
 
-DevHub is built for a single trusted machine. Services bind to `127.0.0.1`, every mutating API route needs a same-origin request or `DEVHUB_API_SECRET`, and the in-app terminal is never exposed to the network. Don't put it on the public internet. LAN access is opt-in, see [Setup](docs/getting-started/setup.md#localhost-vs-lan-access).
+DevHub is built for a single trusted machine. Packaged services bind to `127.0.0.1`; the checkout dashboard defaults to `0.0.0.0`, so set `DEVHUB_BIND_HOST=127.0.0.1` for local-only use. Mutating API routes accept a desktop session token, a strict same-origin request or a matching `DEVHUB_API_SECRET` header, and the in-app terminal is never exposed to the network. Don't put it on the public internet. LAN access is opt-in, see [Setup](docs/getting-started/setup.md#localhost-vs-lan-access).
 
 ## Documentation
 

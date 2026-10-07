@@ -1,7 +1,7 @@
 ---
 title: Working on the desktop app
 description: "Everything under `desktop/`: staging, building, signing, and local installs."
-order: 3
+order: 4
 icon: Hammer
 tags: [desktop]
 related:
@@ -273,7 +273,7 @@ Practical consequences when adding a feature:
   dashboard fetches a short-lived ticket over same-origin HTTP (where the cookie
   works) and passes it on the WebSocket URL. Origin checks must compare exactly:
   `http://127.0.0.1.evil.com` starts with `http://127.0.0.1`.
-- **Never LAN-proxy port 1339.** It is an unauthenticated PTY.
+- **Never LAN-proxy port 1339.** It exposes an interactive shell; exact loopback-origin checks and desktop tickets keep it local.
 - **Never kill a process merely because it owns a port.** Mode switching may
   stop only a listener verified as this checkout's DevHub development server.
   Startup classifies holders via `lsof` + ancestor command lines (packaged app

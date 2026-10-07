@@ -12,7 +12,7 @@ let skillDir: string;
 
 beforeEach(() => {
   skillDir = fs.mkdtempSync(path.join(os.tmpdir(), "writing-voice-"));
-  fs.writeFileSync(path.join(skillDir, "SKILL.md"), "# John voice\nUse British spelling.");
+  fs.writeFileSync(path.join(skillDir, "SKILL.md"), "# My voice\nUse British spelling.");
   fs.writeFileSync(path.join(skillDir, "writing-style.md"), "Lead with the point.");
   vi.mocked(resolveSkillForRead).mockReturnValue({
     file: path.join(skillDir, "SKILL.md"),
@@ -32,6 +32,7 @@ describe("getWritingVoicePrompt", () => {
     const prompt = getWritingVoicePrompt();
     expect(resolveSkillForRead).toHaveBeenCalledWith("/test-repo", "my-voice");
     expect(prompt).toContain("full-voice");
+    expect(prompt).toContain("on the user's behalf");
     expect(prompt).toContain("Use British spelling.");
     expect(prompt).toContain("Lead with the point.");
     expect(prompt).toContain("requested output format exact");

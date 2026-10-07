@@ -1,6 +1,6 @@
 ---
 title: Architecture Overview
-description: The five moving parts of DevHub, how data flows between them, and the local-first constraints that shape everything else.
+description: The main parts of DevHub, how data flows between them, and the local-first constraints that shape everything else.
 order: 1
 icon: Compass
 tags: [architecture]
@@ -13,7 +13,7 @@ related:
 
 # Architecture Overview
 
-DevHub is a local-first control center for AI-assisted development.
+DevHub is a local-first workspace for AI-assisted development.
 
 It brings together a dashboard, shared agent configuration, persistent notes, task tracking, and optional work integrations.
 
@@ -26,7 +26,7 @@ It brings together a dashboard, shared agent configuration, persistent notes, ta
 | MCP server    | Lets AI tools use DevHub filesystem data and dashboard-backed workflows |
 | Sync engine   | Copies shared skills, persona, agents, and MCP configs to local tools |
 | Desktop shell | Tauri app: owns the window, the process tree and updates (`desktop/`) |
-| Integrations  | Calendar, Jira, Datadog, GitHub, and internal ops helpers             |
+| Integrations  | Calendar, Jira, Datadog, GitHub, Figma, and plugin integrations             |
 | Database client | `/db` workspace + MCP `db_*` tools for Postgres, MongoDB, SQLite    |
 
 ## Mental Model

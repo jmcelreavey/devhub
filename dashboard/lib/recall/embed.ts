@@ -8,7 +8,7 @@
  * add embeddings" is strong:
  *
  *  - It adds 90–130 MB to a desktop bundle already measured at 243 MB, for a
- *    corpus of ~300 notes. The bundle-size estimate in ROADMAP.md was already
+ *    corpus of ~300 notes. The bundle-size estimate in docs/archive/onboarding-and-tauri-roadmap.md was already
  *    wrong once by an order of magnitude; this would make it worse.
  *  - It needs a model download on first run, which is a network dependency in
  *    a product whose entire pitch is local-first and offline-capable.

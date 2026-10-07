@@ -1,7 +1,7 @@
 ---
 title: Theming
 description: Theme modes, accent presets, plugin whitelabelling, and how the palette is applied on first paint.
-order: 9
+order: 20
 icon: Palette
 tags: [ui]
 related:

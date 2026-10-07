@@ -14,7 +14,7 @@ export function getWritingVoicePrompt(): string {
   const learned = fs.existsSync(learnedFile) ? fs.readFileSync(learnedFile, "utf8") : "";
 
   return [
-    "Apply my-voice in full-voice mode to prose written on John's behalf.",
+    "Apply my-voice in full-voice mode to prose written on the user's behalf.",
     "Keep technical facts, quoted content, identifiers, and the requested output format exact.",
     fs.readFileSync(skill.file, "utf8"),
     fs.readFileSync(path.join(skill.dir, STYLE_GUIDE_FILE), "utf8"),

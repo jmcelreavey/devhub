@@ -1,7 +1,7 @@
 ---
 title: Skills
 description: "Reusable agent instructions: authoring them, syncing them, and where each tool picks them up."
-order: 2
+order: 16
 icon: Sparkles
 tags: [agents]
 related:
@@ -125,7 +125,7 @@ The plan-loop retro (`devhub-retro` / `GET /api/tasks/retro`) lists Claude Code 
 
 ## Skills launched from the dashboard
 
-Some dashboard actions preload a skill. Review-with-agent starts an AionUi conversation; git hook/conflict fix still go through the terminal dock:
+Some dashboard actions preload a skill. Review-with-agent starts an Agents (Paseo) run; git hook/conflict fix still go through the terminal dock:
 
 | Skill | Triggered from | Purpose |
 | ----- | -------------- | ------- |
@@ -134,7 +134,7 @@ Some dashboard actions preload a skill. Review-with-agent starts an AionUi conve
 | `git-conflict-resolve` | Repo Git stash conflicts | Walk through resolving conflict markers after a failed stash apply/pop (`409 stash_conflict`). |
 | `taste-skill` | Briefing canvas generation (house aesthetic) | Anti-slop frontend rules distilled into briefing prompts via `lib/briefing-taste.ts`. Install under `skills/shared/` (or sync to tool paths) for stricter default palettes; **fresh look** / custom aesthetics bypass house rules until reset. |
 | `impeccable` / `ui-ux-pro-max` | Product UI polish / searchable design DB | Prefer these over `frontend-design` / `hallmark` for general UI work. Keep `taste-skill` for briefing canvas. |
-| `my-voice` | Human-facing prose as John | `explain-simply` for chat; `full-voice` for all prose written on John's behalf, including tasks, tickets, notes, docs, PRs, commits, email, and Slack. |
+| `my-voice` | Human-facing prose in your own voice | `explain-simply` for chat; `full-voice` for all prose written on your behalf, including tasks, tickets, notes, docs, PRs, commits, email, and Slack. |
 | `vercel-react-best-practices` / `web-design-guidelines` | Next.js dashboard UI | Vercel-labs skills for DevHub dashboard work. |
 
 Configure the underlying provider (`cursor-cli`, `chatgpt-cli`, `antigravity-cli`, `opencode`, or `api`) from **/setup → AI Provider**. See [Terminal and agent CLI](terminal-and-agent-cli.md#agent-cli-selection).

@@ -1,7 +1,7 @@
 ---
 title: Sharing notes, docs, and diagrams
 description: Publish a note, doc, or diagram as a secret Gist, or as a one-time link that self-destructs.
-order: 8
+order: 10
 icon: Share2
 tags: [workflow]
 related:
@@ -66,7 +66,7 @@ The registry is local state at `~/.local/state/devhub/shares.json` (schema versi
 
 ### Expiry And Cleanup
 
-Live links expire **14 days** after they are first published. A background sweep (every six hours while the dashboard is running) deletes expired gists and removes their registry entries.
+Live links expire **14 days** after they are first published. A background sweep (every six hours while the primary dashboard is running) deletes expired gists and removes their registry entries. Secondary servers started with `DEVHUB_SCHEDULER=0` don't run it.
 
 Use **Remove** or **Remove all** on `/shared` to unpublish early.
 

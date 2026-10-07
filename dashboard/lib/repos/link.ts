@@ -30,7 +30,7 @@ export async function openRepoLinkHref(href: string): Promise<void> {
   const res = await fetch(`/api/repos/${encodeURIComponent(target.repoName)}/open`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path: target.path, line: target.line }),
+    body: JSON.stringify({ filePath: target.path }),
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };

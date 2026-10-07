@@ -1,7 +1,7 @@
 ---
 title: Plan loop
 description: Capture ideas as drafts, write them into plans, hand them to agents, follow the PRs, and learn from what finished.
-order: 10
+order: 2
 icon: Route
 tags: [workflow, agents, tasks]
 related:

@@ -13,8 +13,7 @@ related:
 # DevHub Documentation
 
 DevHub is a local-first workspace for managing AI coding tools, notes, tasks, integrations,
-and shared agent configuration. It runs on your machine, stores everything as files, and
-keeps those files in Git.
+and shared agent configuration. It runs on your machine and stores notes, tasks, docs and shared configuration as files. A linked checkout can sync selected content through Git.
 
 These docs describe the system at a stable concept level. Implementation details that churn
 weekly live in the code; what you'll find here is the shape of things and why it is that
@@ -46,9 +45,15 @@ Read [Architecture Overview](architecture/overview.md) for the full picture.
 | Do a specific task                 | [Skills](guides/skills.md) and the other guides   |
 | Look something up                  | [API Routes](reference/api-routes.md)             |
 | Extend it without forking the core | [Plugin System](architecture/plugins.md)          |
-| Contribute back upstream           | [Fork Workflow](contributing/fork-workflow.md)          |
+| Contribute back upstream           | [Fork Workflow](contributing/fork-workflow.md)    |
+| Check a feature is in scope        | [Scope and constraints](contributing/scope.md)    |
+| See what's planned                 | [Roadmap](../ROADMAP.md) and [proposals](plans/notes-and-learnings.md) |
 
 The sidebar has the full contents; every section is also listed on the docs home page.
+
+**Plans and history are labelled.** `plans/` holds proposals for unfinished work, and
+`archive/` holds plans that have, plus point-in-time audits. Neither describes how DevHub works
+today; the other sections do.
 
 ## Conventions in these docs
 

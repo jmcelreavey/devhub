@@ -1,7 +1,7 @@
 ---
 title: Terminal and agent CLI
 description: The docked terminal, which CLI one-shot AI jobs use, OpenCode session recap, and the shared OpenCode config.
-order: 11
+order: 5
 icon: Terminal
 tags: [workflow]
 related:
@@ -51,11 +51,11 @@ Pasting or dropping an image into the dock writes it to `DEVHUB_TERMINAL_PASTE_D
 | Terminal drawer button             | Opens a new shell session at the developer directory                                                                              |
 | PR **Review with agent** (`/prs`)  | Opens the Agents handoff sheet and starts a Paseo agent with `pr-explain-review` — not a PTY inject                      |
 | Repo Learning **OpenCode handoff** | Opens a terminal in the target repo with a copied handoff prompt                                                                  |
-| Repos **DX Audit**                 | Runs the `dx-audit` skill via the resolved AI provider                                                                            |
+| Repos **DX Audit**                 | Opens the Agents handoff sheet for the `dx-audit` skill                                                                            |
 | Capability **Build lab**           | Runs the `capability-lab` skill in the kitchen-sink workspace                                                                     |
 | MCP `terminal_propose_run`         | Queues a command; the dock shows confirm / edit / deny unless **Auto-run** is on (destructive commands still confirm) |
 
-The PTY server binds **localhost only** and has no authentication — acceptable because DevHub is a local-only tool. Do not expose port `1339` off-host.
+The PTY server binds **localhost only** and checks an exact loopback `Origin`. Desktop sessions also require a short-lived ticket fetched through the authenticated dashboard. Checkout sessions have no desktop token. Keep port `1339` off-host.
 
 Visible dock tabs heartbeat to `GET`/`POST /api/terminal/sessions` so MCP `terminal_list` can see label, cwd, kind, and busy state. Empty until the dock has opened at least once this process.
 

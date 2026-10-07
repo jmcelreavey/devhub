@@ -1,7 +1,7 @@
 ---
 title: Task profiles (home / work)
 description: Keep separate task lists per context in one repo, switch between them per machine, and see the other list read-only.
-order: 20
+order: 21
 icon: UserRound
 tags: [tasks, profiles, git]
 related:
@@ -17,7 +17,8 @@ Everything lives in the one repo and syncs through git as usual.
 ## The rule that avoids merge conflicts
 
 **A machine only writes to its own active profile.** Home writes `tasks/home/`, work writes
-`tasks/work/`, so the same file is never edited on two machines and `git pull` stays a fast-forward.
+`tasks/work/`, which keeps their task day-files separate. Shared notes and settings can
+still conflict, and two machines using the same profile can edit the same task file.
 The other profile's open tasks appear in the task list under **From home (n)** — read-only, on purpose.
 To change one, switch to that profile.
 

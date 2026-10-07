@@ -1,7 +1,7 @@
 ---
 title: Memory providers
 description: Switch this machine between agentmemory, claude-mem or no agent memory at all, with one command each way.
-order: 10
+order: 19
 icon: Database
 tags: [agents, setup]
 related:
@@ -24,7 +24,7 @@ npm run memory -- use none
 npm run memory -- use agentmemory --dry-run   # print the plan, change nothing
 ```
 
-`use X` turns every other provider off first, then turns X on. Nothing is deleted:
+`use X` turns every other provider off first, then turns X on. For agentmemory:
 
 - agentmemory's MCP entry is parked as `~/.config/devhub/mcp-personal/agentmemory.json.disabled` (DevHub only reads `*.json`), so DevHub's sync stops writing it to your tools.
 - Its launchd job is disabled, not removed, and `~/.agentmemory` is never touched.
@@ -43,17 +43,15 @@ DevHub installs claude-mem for **Claude Code only**, pinned to `13.29.0`. Safe-C
 
 ## claude-mem: the provider matters
 
-claude-mem's **default** provider (CMEM Pro) sends observation data, meaning what the agent read, ran and was asked, to a hosted service at cmem.ai. On a work machine that's code and tool output leaving the laptop. DevHub always installs it with `--provider claude`, which runs the compression on your own Claude plan and keeps everything in `~/.claude-mem`. That means the trial spends plan usage in the background, and that is the cost to watch.
+DevHub passes `--provider claude` to the installer and stores memory under `~/.claude-mem`. Claude handles compression, so local memory storage doesn't mean offline inference. Background compression uses your Claude account; watch that usage during a trial.
 
-Also set by the script: telemetry off (`npx claude-mem telemetry disable`), and Claude Code's native auto-memory left alone. The installer prints a sign-in link for the optional cloud trial. Ignore it; cloud sync is off on purpose.
+The script also disables telemetry and leaves Claude Code's native auto-memory alone.
 
-Memory injection starts on the second session in a project. `npx claude-mem doctor` checks the install, and the live view is `http://127.0.0.1:37702`.
+Use `npm run memory -- status` to check the selected provider and worker. claude-mem's live view is `http://127.0.0.1:37702`.
 
 ## Swapping back
 
 `npm run memory -- use agentmemory` runs, in order: stop and uninstall claude-mem, restore the MCP entry, re-sync it to the other tools (add only, no prune), add it to Claude Code with `claude mcp add`, and re-enable the launchd job. Restart your editors afterwards so they pick the MCP server up again.
-
-When the first switch was made (6 Oct 2026) every config it touched was copied to `~/.config/devhub/memory-swap-backup-2026-10-06/`. agentmemory had recorded no sessions at that point, so nothing was lost by turning it off.
 
 ## Notes
 

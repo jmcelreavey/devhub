@@ -1,6 +1,6 @@
 ---
 title: MCP server split plan
-description: Splitting the single notes-server into DevHub MCP core plus a notes server.
+description: Historical plan to split the notes-server into core and plugin MCP servers.
 order: 3
 icon: Archive
 tags: [archive, mcp]
@@ -9,6 +9,8 @@ related:
 ---
 
 # DevHub MCP Split & Expansion — Refactor Plan
+
+This is a historical design record. Tool names, routes and authentication assumptions below describe the proposal at the time; use [MCP server](../architecture/mcp-server.md) for the current contract.
 
 Splitting today's single `notes-server` into two MCP servers — **DevHub MCP** (core) and
 **DevHubBI MCP** (plugin) — and growing both well beyond notes so the agent can *do* what the
@@ -53,16 +55,7 @@ per-tool MCP configs) and documented by the `devhub-notes-mcp` skill.
 - **Datadog** — `/api/datadog/{oncall,recent-alerts,investigate,links}`.
 - **Search** — `/api/search`.
 
-**BI capabilities** are contributed by the `devhub-bi` plugin (gated `navGate: "bi"`) and live
-under `app/ops`, `app/api/bi/**`, `lib/bi-*`, `lib/capi-*`, `lib/jumpbox-*`:
-
-- **Profile** — `/api/bi/aws-profile` (POST switches `AWS_PROFILE`, persists to `.env.local`,
-  re-syncs the dashboard process env; `confirmDangerous` for prd).
-- **CAPI** — `/api/bi/capi/{scripts,preflight,run,runs,stream,workflow}`.
-- **Access** — `/api/bi/{jumpbox,rds,mongo,eks,services,iam-config,user-email}`.
-
-The split has been anticipated: `devhub-bi/README.md` already lists the `/ops` module +
-`api/bi/**` as "not yet extracted (pending docs/notes plugin-awareness in core)."
+The `devhub-bi` plugin owns its operations routes, MCP tools and credentials. The split keeps those capabilities out of the public core; their inventory belongs in the plugin repo.
 
 ---
 
@@ -86,10 +79,7 @@ secrets are loaded once (1Password / AWS creds) by the dashboard. If the MCP she
 own process, switching the profile from the agent would **not** affect the dashboard the user is
 looking at — guaranteed drift. Proxying keeps **one source of truth**.
 
-**Same-origin is already satisfied.** Every mutating route calls `isSameOrigin(req)`, which
-returns `true` when there is no `Origin` header. Node's `fetch` from the MCP process sends no
-`Origin`, so server-to-server POSTs pass without any auth change. (We will still document this
-and leave a hook for a future loopback token.)
+**Authentication changed after this proposal.** Missing `Origin` no longer grants access to mutating routes. The current dashboard client sends a matching `Origin` and, when configured, `X-DevHub-Secret`; see the [current MCP configuration](../architecture/mcp-server.md#configuration).
 
 **Dashboard-down behaviour.** A shared client turns `ECONNREFUSED` into a clear, actionable
 tool error: *"Could not reach the DevHub dashboard at http://localhost:1337 — start it with
@@ -205,18 +195,7 @@ stream.
 
 ### DevHubBI MCP (plugin)
 
-| Tool | Maps to | Notes |
-|---|---|---|
-| `bi_status` | `GET /api/bi` | AWS identity, profile, kube context, dependency check |
-| `bi_switch_profile` | `POST /api/bi/aws-profile` | **the "switch dev profile."** `profile` (e.g. `dev`, `prd-subscriptions`) + `confirm` for dangerous (prd) |
-| `bi_clear_profile` | `DELETE /api/bi/aws-profile` | unset |
-| `bi_capi_scripts` | `GET /api/bi/capi/scripts` | catalog |
-| `bi_capi_preflight` | `GET /api/bi/capi/preflight` | can-run check |
-| `bi_capi_run` | `POST /api/bi/capi/run` | returns `runId`; **confirm-gated** on prd |
-| `bi_capi_run_status` / `bi_capi_runs` | `GET /api/bi/capi/{runs/[id],runs}` | poll / history |
-| `bi_jumpbox_connect` | `POST /api/bi/jumpbox/connect` | confirm-gated |
-| `bi_rds_credentials` / `bi_rds_verify` | `POST /api/bi/rds*` | read vs write access mode |
-| `bi_mongo_info` / `bi_eks` / `bi_services` / `bi_iam_config` | `GET /api/bi/*` | access surfaces |
+Plugin-owned operations are documented in the plugin repo. They don't belong in the core tool inventory.
 
 ---
 
@@ -297,9 +276,7 @@ build`. A short manual matrix (dashboard up vs down; BI enabled vs disabled; prd
   BI behind the plugin. Revisit if any single tool's schema gets unwieldy.
 - **Long-running CAPI / learn runs.** Polling is coarser than the dashboard's SSE; acceptable
   for an agent, but set sane poll guidance in the skill.
-- **Loopback auth.** No-Origin same-origin pass is fine for single-user localhost. If the MCP is
-  ever exposed beyond the loopback, add a shared token header — leave the hook in
-  `dashboard-client.ts`.
+- **Loopback auth.** The proposal's no-Origin bypass has been removed. Current dashboard access and MCP HTTP bearer-token checks are documented in [MCP server](../architecture/mcp-server.md).
 - **`compose-up` / destructive repo actions.** Decide which repo actions are MCP-exposed at all
   vs left dashboard-only (recommend: expose `open`/`clone`/`learn`, hold `compose-up` for v2).
 - **Headless actions.** Confirmed out of scope: action tools require the dashboard; only fs

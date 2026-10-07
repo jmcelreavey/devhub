@@ -66,7 +66,7 @@ Generated areas pile up hundreds of flat files, so the sidebar and the area page
 | Real subfolder | any | The first folder under the area (`learnings/devhub/…` → `devhub`) |
 | `groupBy: "repo"` | PR reviews | Repo from the `repo#123` / `repo@branch` line under the title, else the PR link, else a filename prefix naming a repo another note already named |
 | `groupBy: "period"` | Daily, Task notes | This week, Last week, then month — from the `YYYY-MM-DD` filename |
-| `groupBy: "ticket"` | Discovery | Tracker id from the filename (`PTF-4897-…`), else the title |
+| `groupBy: "ticket"` | Discovery | Tracker id from the filename (`PROJ-1234-…`), else the title |
 
 Sections start collapsed in the sidebar, except the one holding the open note; search opens everything it matches. One-note ticket and folder sections fold into an unlabelled "Other" section (repos and periods do not — a PR title never names its repo). Inside a section notes sort by filename date, then PR number, then mtime: a sync that rewrites the vault gives every untouched note the same mtime, so mtime alone is not an order.
 
@@ -116,11 +116,11 @@ Turn a planning note into Jira sub-tasks, DevHub tasks, and bidirectional entity
 | Notes list row | Same overflow item |
 | Today notes panel | Same launch-menu item |
 
-The dialog (`CreateTasksFromDialog`) previews work items from `GET /api/notes/create-tasks/plan?notePath=`. Optional fields: parent Jira key, project key (default from the parent prefix or `PTF`), parent summary, extra repo names. **Launch agent…** opens `SkillAgentDialog` with the `devhub-create-tasks-from` skill.
+The dialog (`CreateTasksFromDialog`) previews work items from `GET /api/notes/create-tasks/plan?notePath=`. Set a project key or a parent Jira key. Optional fields include a parent summary, extra repo names and instructions. You can edit each proposed ticket title or remove items before launching; the reviewed list is authoritative. **Launch agent…** opens `SkillAgentDialog` with the `devhub-create-tasks-from` skill.
 
 ### How slices are parsed
 
-`parsePlanWorkItems` looks for headings like `PR 1 — WebApp: auth rewrite`. Fallback: level-2 headings that mention `PR`. Empty `workItems` disables Launch until you add those headings (the agent can still ask how to slice if you launch from MCP with a raw note).
+`parsePlanWorkItems` prefers headings like `PR 1 — WebApp: auth rewrite`. Without PR sections, it reads bullets, numbered lists and unchecked checklist items, keeping indented details with their item. It skips completed items, fenced examples and the `## Links` section. An empty reviewed list disables **Launch agent…**; add work items to the note and reopen the dialog.
 
 ### What the agent does
 
@@ -134,7 +134,7 @@ Do not create duplicates for items already linked in `## Links` — call `entity
 
 ## Cross-entity linking
 
-Tasks, calendar events, pull requests, and notes share one **EntityRef** contract so you can hop between related work without hunting paths. The shape lives in `shared/entity-note/` and is re-exported from `dashboard/lib/entity-note.ts` after plugin materialize.
+Tasks, calendar events, pull requests, and notes share one **EntityRef** contract so you can hop between related work without hunting paths. The shape lives in `shared/entity-note/` and is re-exported from `dashboard/lib/entity-note.ts` for dashboard consumers.
 
 | Field    | Meaning                                                                                  |
 | -------- | ---------------------------------------------------------------------------------------- |
@@ -193,7 +193,7 @@ Task rows and the note editor footer share one modal (`dashboard/components/Enti
 | PR       | Open PRs from `GET /api/github/prs`                       | `https://github.com/org/repo/pull/n`                 |
 | Note     | Recent notes from the vault tree                          | Vault-relative path (e.g. `task-notes/2026-07-28-…`) |
 | Repo     | Sibling checkouts from `GET /api/repos`                   | Local folder name                                    |
-| Jira     | Tickets from `GET /api/jira/tickets`                      | Issue key (e.g. `PTF-1234`)                          |
+| Jira     | Tickets from `GET /api/jira/tickets`                      | Issue key (e.g. `PROJ-1234`)                          |
 | Task     | Last 14 days from `GET /api/tasks/history?includeTasks=1` | Task UUID                                            |
 
 Pickers load once per kind when the dialog opens; filtering is in-memory (no per-keystroke remote search). Selecting a row or pasting a valid value calls `buildEntityRefFromInput` (`dashboard/lib/entity-links/build-ref.ts`) and appends the ref to the task's `links` array or the note's `## Links` section. Duplicate refs are ignored.
@@ -208,7 +208,7 @@ The task composer `@` search reuses these picker lists (`useMentionSuggestions`)
 - `PATCH /api/tasks` with `{ id, links: EntityRef[] }` replaces hop-around links on a task.
 - MCP: `notes_create_task`, `notes_create_meeting`, `notes_create_pr`, `entity_links_read`, `notes_cursor_open`, `notes_cursor_apply`, `notes_cursor_delete`; `tasks_create` / `tasks_update` accept `links` and optional `withNote`.
 
-Plugins should import `shared/entity-note` (or `@/lib/entity-note` after materialize) rather than defining their own link shapes.
+Plugins should import `shared/entity-note` (or `@/lib/entity-note` in the dashboard) rather than defining their own link shapes.
 
 ## Cursor note working copies
 
@@ -413,7 +413,7 @@ BlockNote link clicks in notes and docs resolve in-app when possible:
 | ------------------------------ | -------------------------------------------------------------------- |
 | `/notes/...`, `/docs/...`      | Navigate within the dashboard                                        |
 | Relative `.md` / `.json` paths | Resolve relative to the current note or doc slug                     |
-| `repo://` / `repo:`            | Open a sibling repo in Cursor via `POST /api/repos/<name>/open`. Body is `{ filePath?, notePath?, worktree? }` — not `path`/`line`. The in-app click handler still posts the legacy keys, which the route ignores; see [Dashboard — Repo-aware links](dashboard.md#repo-aware-links). |
+| `repo://` / `repo:`            | Open a sibling repo in Cursor via `POST /api/repos/<name>/open`. Body is `{ filePath?, notePath?, worktree? }` — not `path`/`line`. The in-app handler sends `filePath`; line-number fragments aren't passed to Cursor. See [Dashboard — Repo-aware links](dashboard.md#repo-aware-links). |
 | `http(s):`, `mailto:`, `tel:`  | Open externally (⌘/Ctrl-click opens in a new tab)                    |
 
 See [Dashboard — Repo-aware links](dashboard.md#repo-aware-links) for repo link syntax.

@@ -1,7 +1,7 @@
 ---
 title: Desktop recovery
 description: "When the desktop app will not start: a triage order, and how to prove each fix worked."
-order: 12
+order: 23
 icon: LifeBuoy
 tags: [desktop, troubleshooting]
 related:
@@ -14,11 +14,10 @@ related:
 What to do when the desktop app will not start, and how to prove each fix
 worked. Every scenario here has been deliberately triggered and verified.
 
-**Your data is never the thing that broke.** Notes, tasks, collections,
-Upstarts, docs and settings live in
-`~/Library/Application Support/DevHub/` (or wherever you pointed them during
-migration), which the app only ever appends to. Nothing below asks you to touch
-them, and nothing below will lose them.
+Notes, tasks, collections, Upstarts, docs and settings live outside the app bundle,
+in `~/Library/Application Support/DevHub/` or the directories you chose during
+migration. Reinstalling the app preserves those directories. Keep backups before
+changing content paths or replacing configuration.
 
 ## First: read the actual error
 
@@ -101,7 +100,7 @@ authenticated health, that an unauthenticated request is *rejected*, a storage
 round-trip, the PTY listening, no listener left behind, and that writes stayed
 inside the temporary directory.
 
-If this passes, the app is fine and the problem is configuration or environment.
+If this passes, the startup and storage checks work in isolation. Check your configuration and logs next; the test doesn't cover every window or integration.
 If it fails, it names the failing check — reinstall from Releases.
 
 ## An update failed
@@ -118,13 +117,11 @@ intended, not a bug to route around — there is deliberately no "install anyway
 
 ## The terminal will not connect
 
-**Over the network:** expected. Port 1339 is an unauthenticated PTY and is
+**Over the network:** expected. Port 1339 serves the local PTY and is
 never exposed to your LAN. Use the terminal on the machine running DevHub.
 
 **Locally:** check the log for `rejected connection`. The handshake requires a
-short-lived ticket and an exact-origin match. If you reached the dashboard by an
-address other than `127.0.0.1:1337` or `localhost:1337`, the origin check fails
-by design.
+short-lived desktop ticket and an exact loopback origin matching the configured dashboard port. A LAN address fails the origin check by design.
 
 `missing or expired terminal ticket` after the app has been open a long time is
 usually a stale page — reload the window (View → Reload) so it fetches a fresh
@@ -148,7 +145,7 @@ listening.
 Tauri only updates upward — there is no in-app downgrade, deliberately.
 
 Download the older DMG from Releases and install it over the current one. Your
-data is version-independent and will be picked up as-is.
+data stays in its separate folder. Back it up before downgrading; older versions may not understand newer data formats.
 
 ## The dashboard looks stale after `git pull`
 
@@ -158,7 +155,7 @@ The installed `.app` ships a **frozen** Next.js build inside `Contents/Resources
 | --------- | --- |
 | Installed app, you pulled dashboard changes | **View → Rebuild Dashboard…** (or **Status → Rebuild & restart** when the shell is *not* supervising the server). The boot page shows a log panel while Rust runs `desktop/scripts/rebuild-installed-server.mjs`, stages a fresh production Next server **and** peer-services bundle (`start-peer-services.mjs`) from your linked checkout, copies both into this app, and relaunches. |
 | Installed app, active development | **View → Attach to Dev Server…** and run `npm run dev` in the checkout instead — hot reload without rebuilding the bundle. |
-| Browser / checkout `npm run dev` | Restart the dev server, or run `npm run restart` for a production build on port 1337. |
+| Browser / checkout `npm run dev` | Restart the server you started. Use a free port and `DEVHUB_DIST_DIR` for checkout testing; don't stop the packaged app's listener. |
 
 `POST /api/status/dashboard/rebuild` is intentionally unavailable when `DEVHUB_SHELL_SUPERVISED=1` (the desktop sidecar owns the process). Use the menu rebuild in that case — see [Dashboard — Status page runbook](../architecture/dashboard.md#status-page-runbook).
 
@@ -190,10 +187,4 @@ previous app automatically** if any check after the swap fails. Use
 
 ## Nuclear option
 
-```bash
-rm -rf /Applications/DevHub.app
-```
-
-Then reinstall. `~/Library/Application Support/DevHub` survives on purpose —
-deleting an app should not delete your notes. Remove it by hand only if you
-genuinely want your data gone.
+Quit DevHub and reinstall from Releases. The app bundle and `~/Library/Application Support/DevHub` are separate; leave the data folder in place. Keep a backup before a downgrade or a data reset.

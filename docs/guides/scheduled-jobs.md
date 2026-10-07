@@ -1,7 +1,7 @@
 ---
 title: Scheduled jobs
 description: Run DevHub scripts or agent prompts on a cron schedule, catch up after sleep, and wake the Mac to do it.
-order: 7
+order: 9
 icon: Clock
 tags: [workflow]
 related:

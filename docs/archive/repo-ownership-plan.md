@@ -8,8 +8,7 @@ tags: [archive, repos, ownership]
 
 # Repo Ownership Plan
 
-Status: **shipped** (2026-08-11). Sibling of `NOTES_AND_LEARNINGS_PLAN.md` and
-`TEMPLATE_AND_PLUGIN_PLAN.md`.
+Status: **shipped** (2026-08-11). Sibling of [Notes and learnings](../plans/notes-and-learnings.md).
 
 Archived after shipping the ownership workspace.
 
@@ -47,7 +46,7 @@ not file count.
 
 > [!IMPORTANT]
 > The distinguishing move of this plan is **repo-centric, not person-centric**.
-> Every existing surface starts from "John" and finds repos. This one starts
+> Every existing surface starts from the user and finds repos. This one starts
 > from a repo and finds people, changes, and gaps.
 
 ---
@@ -72,8 +71,8 @@ config file to hand-edit. State lives in `.devhub/ownership/repos.json`:
 {
   "repos": [
     {
-      "name": "capi",
-      "fullName": "org/capi",
+      "name": "example-api",
+      "fullName": "org/example-api",
       "addedAt": "2026-08-11T09:00:00Z",
       "lastVisited": "2026-08-11T09:00:00Z", // drives "since I last looked"
       "domains": null, // null = derive; object = override
@@ -124,7 +123,7 @@ tabbed shell to hold them.
 All in core. No plugin-specific paths.
 
 ```
-devhub-private
+devhub/
   app/own/
     page.tsx              index — owned repos, add/remove
     [name]/

@@ -65,6 +65,14 @@ export const DOC_SECTIONS: DocSectionMeta[] = [
     order: 50,
   },
   {
+    id: "plans",
+    label: "Proposals",
+    description: "Plans for unfinished work. Not a description of how things work today.",
+    icon: "Compass",
+    order: 80,
+    secondary: true,
+  },
+  {
     id: "archive",
     label: "Archive",
     description: "Finished plans and point-in-time audits, kept for provenance.",

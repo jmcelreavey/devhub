@@ -29,7 +29,7 @@ three now have a gate or a test.
 The plan text below is left as written, so the estimates it got wrong stay
 visible. Phase headings carry their outcome.
 
-Source plan: [`ROADMAP.md`](../../ROADMAP.md), Phase 2
+Source plan: [onboarding and Tauri roadmap](onboarding-and-tauri-roadmap.md), Phase 2
 
 This plan replaces the Electron launcher with a self-contained Tauri 2 desktop
 application while keeping the existing Next.js dashboard. It also turns first
@@ -260,7 +260,7 @@ Tasks:
 - Verify on macOS arm64 first, then Linux x64. Verify macOS x64 before claiming
   support for that artifact.
 - Record actual installer size, cold start, idle RSS, and time-to-first-window.
-  Replace the estimates in `ROADMAP.md` with measurements.
+  Replace the estimates in `onboarding-and-tauri-roadmap.md` with measurements.
 
 Exit gate:
 
@@ -677,7 +677,7 @@ Tasks:
   external plugin sources in the same change; retain a one-release compatibility
   warning only because plugins are real external consumers.
 - Rewrite `docs/architecture/electron-wrapper.md` as the Tauri architecture doc,
-  update setup/release docs, root scripts, `README.md`, and `ROADMAP.md`.
+  update setup/release docs, root scripts, `README.md`, and `onboarding-and-tauri-roadmap.md`.
 - Remove code paths for dev/production selection, dependency installation, ad-hoc
   update replacement, and blind port killing from the installed experience.
 
@@ -806,7 +806,7 @@ plugin-owned/materialized, edit the plugin source instead.
 
 ## New-chat implementation prompt
 
-Paste the block below into a new chat from the `devhub-private` workspace.
+Paste the block below into a new chat from your DevHub checkout.
 
 ```text
 Implement the Tauri desktop migration described in

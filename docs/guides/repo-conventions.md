@@ -1,7 +1,7 @@
 ---
 title: Repo conventions
 description: Learn and assess repo conventions automatically from PR feedback and guidance, then use them in reviews and new PRs.
-order: 9
+order: 12
 icon: BookOpen
 tags: [workflow, github, agents]
 related:

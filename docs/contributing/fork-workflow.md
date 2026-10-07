@@ -1,7 +1,7 @@
 ---
 title: Fork workflow
 description: "Working as a private mirror of the shared public core: pulling in, pushing back, and the personal-data boundary."
-order: 1
+order: 2
 icon: GitFork
 tags: [contributing]
 related:

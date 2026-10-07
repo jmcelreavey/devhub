@@ -30,7 +30,7 @@ http://localhost:1337/setup
 | Jira Cloud      | Optional ticket views and standup support                                   |
 | Datadog         | Optional alert summaries and deep links                                     |
 | GitHub          | Pull request and repo-related features via the GitHub CLI — **Sign in with GitHub** on this page, or `gh auth login` in a terminal |
-| AI Provider     | Default CLI or HTTP API for in-app generation and agent launches (`cursor-cli`, `chatgpt-cli`, `antigravity-cli`, `opencode`, `api`) |
+| AI Provider     | Default CLI or HTTP API for in-app generation (`cursor-cli`, `chatgpt-cli`, `antigravity-cli`, `opencode`, `api`); coding runs choose a Paseo assistant separately |
 | Infra           | Optional internal infrastructure helpers, when an infra plugin is installed |
 | Notes AI        | Optional OpenAI-compatible BlockNote AI — **env vars only** (see below)     |
 
@@ -57,7 +57,7 @@ Most core settings are created automatically during install.
 
 ## Localhost Vs LAN Access
 
-By default, DevHub services bind to `127.0.0.1`. LAN mode keeps localhost working and starts a small proxy on the detected physical LAN IPv4.
+The packaged app binds its services to `127.0.0.1`. In a checkout, set `DEVHUB_BIND_HOST=127.0.0.1` for local-only use: the launcher otherwise defaults to `0.0.0.0` (all interfaces). LAN mode keeps localhost working and starts a proxy on the detected physical LAN IPv4.
 
 The `auto` LAN detector excludes Tailscale/VPN CGNAT addresses (`100.64.0.0/10`) by default. In normal use, enabling LAN access exposes DevHub on Wi‑Fi/Ethernet, not Tailscale.
 
@@ -71,13 +71,13 @@ Use LAN mode when:
 
 - You want to open DevHub from a phone or tablet on the same Wi-Fi.
 - You trust the network.
-- You understand that DevHub has no built-in authentication.
+- You understand that the dashboard has no user accounts or login.
 
 LAN mode exposes the dashboard (`1337`) and the Paseo web UI (`6767`, password-protected) on your non-Tailscale LAN IP. Terminal `1339` is never proxied. For agents away from home, use **Agents → Connection → Pair a phone**, which goes through Paseo's encrypted relay instead.
 
 When opening DevHub from another device at `http://<lan-ip>:1337` during **`npm run dev`**, Next.js 16+ blocks `/_next/*` chunk requests unless the browser `Origin` matches an allowlisted host pattern. DevHub ships defaults for common private ranges (`192.168.*.*`, `10.*.*.*`, `172.*.*.*`, `*.local`). If the UI stays on loading skeletons from a phone or tablet, add your host pattern to `DEVHUB_ALLOWED_DEV_ORIGINS` in `dashboard/.env.local` (comma-separated) and restart. Production `npm run start` does not use this dev-only gate.
 
-For mutating API routes, set `DEVHUB_API_SECRET` in `dashboard/.env.local` (and in MCP env for dashboard-backed tools) so LAN clients and scripted callers must send `X-DevHub-Secret`. Without it, mutating calls require a strict same-origin `Origin` header. See [Environment Variables](../reference/environment-variables.md#core-variables).
+Mutating API routes accept a desktop session token, a strict same-origin `Origin` header or, when `DEVHUB_API_SECRET` is set, a matching `X-DevHub-Secret`. Put the same secret in MCP env for scripted access to dashboard-backed tools. Setting it doesn't disable same-origin access or add a user login. See [Environment Variables](../reference/environment-variables.md#core-variables).
 
 ## Optional Integrations
 
@@ -93,9 +93,11 @@ The shared configuration files should use environment variable placeholders inst
 
 ### AI Features (not on this page)
 
-Notes AI, Repo Learning generated artifacts, and morning-briefing AI use `AI_API_KEY` in `dashboard/.env.local` (any OpenAI-compatible provider — z.ai by default, or OpenAI, OpenRouter, etc. via `AI_BASE_URL`/`AI_MODEL`). Copy the example lines from `dashboard/.env.example`, restart after changes, and see [Environment Variables](../reference/environment-variables.md#notes-repo-learning-and-briefing-ai-optional).
+BlockNote's in-editor AI needs `AI_API_KEY` in `dashboard/.env.local`. `AI_BASE_URL` and `AI_MODEL` select the HTTP provider and model; the defaults use z.ai. Copy the example lines from `dashboard/.env.example` and see [Environment Variables](../reference/environment-variables.md#notes-repo-learning-and-briefing-ai-optional).
 
-Agent launches and in-app generation that prefer a local CLI use **/setup → AI Provider** (`DEVHUB_AI_PROVIDER`). Antigravity is the `agy` CLI — install it, then pick **Antigravity CLI**. There is no Antigravity desktop app in DevHub. See [Agent CLI selection](../guides/terminal-and-agent-cli.md#agent-cli-selection).
+Repo Learning and morning-briefing generation use **/setup → AI Provider**. They can use a local CLI or the same HTTP API settings.
+
+For CLI generation, choose a provider under **/setup → AI Provider** (`DEVHUB_AI_PROVIDER`). Antigravity uses the `agy` CLI. Coding runs choose an assistant in **Agents** instead. See [Agent CLI selection](../guides/terminal-and-agent-cli.md#agent-cli-selection).
 
 ## After Changing Setup
 

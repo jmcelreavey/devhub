@@ -11,7 +11,6 @@ related:
 # Self-Appraisal Notes — Design Doc & Tool Specs
 
 Status: implemented (see `mcp-servers/devhub-server/src/tools/appraisal.ts`, `mcp-servers/devhub-server/src/appraisal.ts`, and `appraisal.test.ts`)
-Owner: JM
 Scope: extend the existing `devhub-server` MCP with appraisal-specific tools. No new server, no new storage engine.
 
 ## Problem

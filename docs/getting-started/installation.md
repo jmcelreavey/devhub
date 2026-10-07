@@ -22,7 +22,7 @@ Before installing, make sure you have:
 | Node.js 22           | Pinned in `.nvmrc` — run `nvm install && nvm use`                                          |
 | Git                  | Used for repo sync, notes history, and workflow actions                                    |
 | npm 10               | Bundled with Node 22. `npm install` refuses npm 11, which rewrites the lockfile CI rejects  |
-| Aikido Safe-Chain    | Blocks malicious packages at install time (see below)                                      |
+| Aikido Safe-Chain    | Required by the full bootstrap script and by plugins that declare it (see below)                                      |
 | A supported terminal | macOS Terminal, iTerm, Warp, or a WSL terminal work well                                   |
 | 1Password CLI        | Recommended before first run so DevHub can load integration secrets from the `devhub` item |
 
@@ -80,7 +80,7 @@ The root install delegates to the dashboard install. Dashboard `postinstall` (`d
 ## Run The Dashboard
 
 ```bash
-npm run dev
+DEVHUB_BIND_HOST=127.0.0.1 npm run dev
 ```
 
 Open the dashboard at:
@@ -92,7 +92,7 @@ http://localhost:1337
 Use development mode for normal day-to-day work. It reloads as files change. If the desktop app already owns port 1337, keep it running and start the checkout on separate ports:
 
 ```bash
-PORT=1400 TERMINAL_PORT=1402 DEVHUB_SCHEDULER=0 npm run dev
+PORT=1400 TERMINAL_PORT=1402 DEVHUB_BIND_HOST=127.0.0.1 DEVHUB_SCHEDULER=0 DEVHUB_DIST_DIR=.next-dev-1400 npm run dev
 ```
 
 Open http://localhost:1400. The dock discovers `TERMINAL_PORT` from the running dashboard, so it connects to this instance's peer. The scheduler stays with your primary instance.
@@ -121,8 +121,9 @@ A fresh public clone uses the shared engineering standards. Add your personal id
 ## MCP Server Dependencies
 
 The `devhub` MCP server is a separate npm package at `mcp-servers/devhub-server/` with
-its own `node_modules`. AI clients launch it via `tsx` from that package, not from the
-root install.
+its own `node_modules`. AI clients launch `bin/devhub-mcp.mjs`, which builds or reuses
+an esbuild bundle and falls back to `tsx` if needed. The root install doesn't install
+this package directly.
 
 DevHub auto-installs missing MCP package dependencies during:
 

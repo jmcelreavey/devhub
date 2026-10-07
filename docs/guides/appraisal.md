@@ -1,7 +1,7 @@
 ---
 title: Performance appraisal
 description: Capture review evidence through MCP tools and render it as notes in the dashboard.
-order: 6
+order: 14
 icon: Award
 tags: [workflow]
 related:
@@ -21,7 +21,7 @@ Use this when you want **dated, reference-backed moments** during the year — n
 | `/appraisal`  | Self-review hub — goals, themed entries, coverage bars, evidence suggestions from recent PRs/Jira/tasks, HR markdown export |
 | `/one-on-one` | 1:1 prep template seeded from appraisal themes and open goals                                                               |
 
-Both live under **Library** section tabs (or **⌘P**). The evidence panel on `/appraisal` calls `GET /api/appraisal/evidence?days=`; the main year view uses `GET /api/appraisal/year?year=`. Goal create/revise and evidence **Record** use `POST /api/appraisal/year` and `POST /api/appraisal/evidence` respectively (same write paths as the MCP tools).
+Open either page through **⌘P** or its URL. The evidence panel on `/appraisal` calls `GET /api/appraisal/evidence?days=`; the main year view uses `GET /api/appraisal/year?year=`. Goal create/revise and evidence **Record** use `POST /api/appraisal/year` and `POST /api/appraisal/evidence` respectively (same write paths as the MCP tools).
 
 MCP tools remain the primary capture path for agents (`appraisal_record`, etc.); the UI is for review, export, and spotting gaps before review season.
 
@@ -39,7 +39,7 @@ Appraisal paths are **outside** the default `notes_search` workspace slice. Read
 
 1. **Set goals** — `appraisal_set_goal` for each review goal (slug + title). Goals appear under `## Goals` in the year file.
 2. **Record moments** — `appraisal_record` when something worth remembering happens. Requires at least one `references[]` entry (PR, ticket, thread, dashboard link).
-3. **Summarize** — `appraisal_summarize` near review time for theme-grouped bullets and goal coverage.
+3. **Summarise** — `appraisal_summarize` near review time for theme-grouped bullets and goal coverage.
 
 ### `appraisal_record` fields
 
@@ -72,7 +72,7 @@ Updating an entry with the same slug replaces it in place.
 
 - “I just merged PR #412 that cut CI from 22 to 9 minutes — record it under technical with the PR link as a reference.”
 - “Add a growth goal slug `mentoring` titled ‘Grow two engineers to lead small projects’.”
-- “Summarize my 2026 self-appraisal so far, grouped by theme.”
+- “Summarise my 2026 self-appraisal so far, grouped by theme.”
 
 ## Privacy and git
 
