@@ -55,7 +55,7 @@ import {
   isDesktopSession,
   isValidTerminalTicket,
 } from "../lib/desktop/bootstrap-auth";
-import { scrubDesktopRuntimeEnv } from "../lib/process-env";
+import { packagedToolDirs, terminalShellEnv } from "../lib/process-env";
 import { terminalPort } from "../lib/terminal-port";
 
 const PORT = terminalPort();
@@ -153,15 +153,10 @@ function shellCommand(mode: ShellMode): ShellCommand {
 
 /**
  * A clean shell env: inherit PATH/HOME/etc. but strip the npm/Next lifecycle
- * noise this server was launched with so subshells start from a normal slate.
+ * noise and DevHub's own npm prefix, so subshells start from a normal slate.
  */
 function shellEnv(): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(scrubDesktopRuntimeEnv(process.env))) {
-    if (value === undefined) continue;
-    if (key.startsWith("npm_") || key.startsWith("NEXT_") || key === "NODE_OPTIONS") continue;
-    env[key] = value;
-  }
+  const env = terminalShellEnv(process.env, packagedToolDirs(process.env, os.homedir()));
   env.TERM = "xterm-256color";
   env.COLORTERM = "truecolor";
   env.LANG = process.env.LANG ?? "en_US.UTF-8";

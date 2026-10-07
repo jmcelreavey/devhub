@@ -1,5 +1,6 @@
 "use client";
 
+import { isAskChord } from "@/lib/terminal-prompt-chords";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { History, RotateCw, Send, Sparkles, Square } from "lucide-react";
 import { HoverTip } from "@/components/ui/HoverTip";
@@ -158,7 +159,7 @@ export function TerminalPromptBar({
       submit();
       return;
     }
-    if (e.key === "Enter" && e.metaKey && e.shiftKey) {
+    if (isAskChord(e)) {
       e.preventDefault();
       const text = draft.trim();
       if (!text) return;

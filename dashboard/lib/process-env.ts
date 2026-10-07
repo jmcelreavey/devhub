@@ -101,6 +101,49 @@ export function scrubDesktopRuntimeEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEn
   return clean;
 }
 
+/**
+ * The environment an interactive terminal shell starts with.
+ *
+ * Starts from the desktop-scrubbed env, then drops every npm config variable
+ * in either case. DevHub's packaged runtime sets `NPM_CONFIG_PREFIX` so ITS
+ * installs land outside the immutable payload; passed on to a user's shell it
+ * makes nvm refuse to load ("nvm is not compatible with the NPM_CONFIG_PREFIX
+ * environment variable") and sends their `npm -g` into DevHub's tools folder.
+ *
+ * `demoteFromPath` directories (the bundled Node, DevHub's tools/bin) stay
+ * available but go last, so they cannot shadow the user's own node or CLIs.
+ */
+export function terminalShellEnv(
+  source: NodeJS.ProcessEnv,
+  demoteFromPath: readonly string[] = [],
+): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(scrubDesktopRuntimeEnv(source))) {
+    if (value === undefined) continue;
+    if (key.toLowerCase().startsWith("npm_") || key.startsWith("NEXT_") || key === "NODE_OPTIONS") continue;
+    env[key] = value;
+  }
+  if (env.PATH && demoteFromPath.length > 0) {
+    const segments = env.PATH.split(path.delimiter).filter(Boolean);
+    const demoted = new Set(demoteFromPath);
+    env.PATH = [
+      ...segments.filter((segment) => !demoted.has(segment)),
+      ...segments.filter((segment) => demoted.has(segment)),
+    ].join(path.delimiter);
+  }
+  return env;
+}
+
+/** Directories of DevHub's own tooling that a packaged runtime puts on PATH. */
+export function packagedToolDirs(
+  source: NodeJS.ProcessEnv,
+  home: string,
+  executablePath = process.execPath,
+): string[] {
+  if (source.DEVHUB_PACKAGED_RUNTIME !== "1") return [];
+  return [path.dirname(executablePath), path.join(home, ".local", "share", "devhub", "tools", "bin")];
+}
+
 export function augmentedPathEnv(extra: Partial<NodeJS.ProcessEnv> = {}): NodeJS.ProcessEnv {
   const base = { ...scrubNpmEnv(), ...extra };
   const existing = base.PATH ?? "";

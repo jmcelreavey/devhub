@@ -1,5 +1,6 @@
 "use client";
 
+import { useModifierKey } from "@/lib/hooks/use-modifier-key";
 import {
   createContext,
   useCallback,
@@ -325,6 +326,7 @@ function TabKindIcon({ kind }: { kind: WorkspaceTabKind }) {
 }
 
 export function WorkspaceTabStrip() {
+  const modifier = useModifierKey();
   const ctx = useContext(WorkspaceTabsContext);
   const pathname = usePathname();
   const stripRef = useRef<HTMLDivElement>(null);
@@ -422,7 +424,7 @@ export function WorkspaceTabStrip() {
                 <span className="workspace-tab-title">
                   {tab.title}
                   {isGit && <span className="sr-only"> Git</span>}
-                  <span className="sr-only">{i < 9 ? ` (⌘${i + 1})` : ""}</span>
+                  <span className="sr-only">{i < 9 ? ` (${modifier}${i + 1})` : ""}</span>
                 </span>
                 {canClose ? (
                   <button

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import { parseBody } from "@/lib/api-utils";
-import { resolveSetupPath } from "@/lib/setup/input-path";
+import { resolveSetupPath, unsupportedPathMessage } from "@/lib/setup/input-path";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +33,8 @@ function check(rawPath: string, kind: "repoRoot" | "notesDir" | "reposDir"): Che
     return { ok: false, resolved: "", message: "Path is required" };
   }
   // Accepts ~ and, on the Windows app, C:\… or \\wsl.localhost\… notation.
+  const unsupported = unsupportedPathMessage(rawPath);
+  if (unsupported) return { ok: false, resolved: rawPath.trim(), message: unsupported };
   const resolved = resolveSetupPath(rawPath);
   if (!path.isAbsolute(resolved)) {
     return { ok: false, resolved, message: "Path must be absolute" };
@@ -97,9 +99,13 @@ export async function POST(req: NextRequest) {
   const parsed = await parseBody(req, ValidatePathSchema);
   if (!parsed.ok) return parsed.response;
   const { repoRoot, notesDir, reposDir } = parsed.data;
+  // The checkout and the code folder are optional: an empty one is "not chosen",
+  // not an error ("Path is required" under a field that says to leave it empty).
+  const optional = (value: string | undefined, kind: "repoRoot" | "reposDir") =>
+    value === undefined || value.trim() === "" ? null : check(value, kind);
   return NextResponse.json({
-    repoRoot: repoRoot !== undefined ? check(repoRoot, "repoRoot") : null,
+    repoRoot: optional(repoRoot, "repoRoot"),
     notesDir: notesDir !== undefined ? check(notesDir, "notesDir") : null,
-    reposDir: reposDir !== undefined ? check(reposDir, "reposDir") : null,
+    reposDir: optional(reposDir, "reposDir"),
   });
 }

@@ -74,7 +74,7 @@ async function cursorPost(endpoint: string, cookie: string): Promise<unknown> {
 export async function loadCursorUsage(): Promise<ProviderUsage> {
   const base = { id: "cursor", name: "Cursor", meters: [], spend: [] } satisfies Partial<ProviderUsage>;
   const token = await readAccessToken();
-  if (!token) return { ...base, status: "unavailable", message: process.env.WSL_DISTRO_NAME
+  if (!token) return { ...base, status: "unavailable", summary: process.env.WSL_DISTRO_NAME ? "Sign in to the Windows Cursor app" : "Sign in to the Cursor app", message: process.env.WSL_DISTRO_NAME
     ? "Sign in to the Windows Cursor desktop app to see plan usage. The WSL agent CLI has a separate sign-in: `agent login`. If the Windows profile is unavailable from WSL, check usage at cursor.com/dashboard."
     : "Sign in to the Cursor desktop app to see plan usage. The agent CLI has a separate sign-in: `agent login`." };
 
@@ -82,9 +82,9 @@ export async function loadCursorUsage(): Promise<ProviderUsage> {
   try {
     claims = claimsSchema.parse(JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")));
   } catch {
-    return { ...base, status: "error", message: "Cursor's stored sign-in is in an unexpected format." };
+    return { ...base, status: "error", summary: "Couldn't read Cursor's sign-in", message: "Cursor's stored sign-in is in an unexpected format.", reason: "The token in Cursor's local state is not in the format DevHub expects. Signing in to the Cursor app again rewrites it." };
   }
-  if (claims.exp && claims.exp * 1000 < Date.now()) return { ...base, status: "unavailable", message: `Cursor's sign-in has expired. Open the ${process.env.WSL_DISTRO_NAME ? "Windows " : ""}Cursor desktop app to sign in again, then retry.` };
+  if (claims.exp && claims.exp * 1000 < Date.now()) return { ...base, status: "unavailable", summary: "Cursor's sign-in has expired", message: `Cursor's sign-in has expired. Open the ${process.env.WSL_DISTRO_NAME ? "Windows " : ""}Cursor desktop app to sign in again, then retry.` };
 
   // `sub` looks like "google-oauth2|user_01…"; the cookie wants the user id part.
   const userId = claims.sub.split("|").pop();

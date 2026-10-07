@@ -19,7 +19,7 @@ import {
 import { parseBody } from "@/lib/api-utils";
 import { invalidateJiraTicketsCache } from "@/lib/jira/tickets-cache";
 import { SetupSaveSchema } from "@/lib/schemas";
-import { resolveSetupPath } from "@/lib/setup/input-path";
+import { resolveSetupPath, unsupportedPathMessage } from "@/lib/setup/input-path";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +29,8 @@ function mask(val: string): string {
 }
 
 function validateDirectory(p: string): string | null {
+  const unsupported = unsupportedPathMessage(p);
+  if (unsupported) return unsupported;
   const resolved = resolveSetupPath(p);
   if (!path.isAbsolute(resolved)) return "Path must be absolute";
   let stat;

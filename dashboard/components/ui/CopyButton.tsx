@@ -13,10 +13,13 @@ export function CopyButton({
   text,
   label,
   size = 12,
+  showLabel = false,
 }: {
   text: string;
   label: string;
   size?: number;
+  /** Spell out "Copy <label>" next to the icon instead of relying on the tooltip. */
+  showLabel?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const toast = useToast();
@@ -38,12 +41,14 @@ export function CopyButton({
       style={{ padding: "4px 8px", fontSize: "11px" }}
       onClick={() => void copy()}
       title={`Copy ${label}`}
+      aria-label={showLabel ? undefined : `Copy ${label}`}
     >
       {copied ? (
         <Check size={size} className="text-success" />
       ) : (
         <ClipboardCopy size={size} />
       )}
+      {showLabel && <span className="ml-1.5">{copied ? "Copied" : `Copy ${label}`}</span>}
     </button>
   );
 }

@@ -122,18 +122,33 @@ impl WslBackend {
         .map(|table| parse_listening_ports(&table))
     }
 
+    /// The content repo linked through the setup wizard, if any.
+    ///
     /// Content-only Git linking keeps configuration in app data. Auto-detecting
     /// that clone as a legacy checkout would switch to an absent .env.local.
     pub fn has_content_checkout(&self) -> bool {
+        self.content_repo_link().is_some()
+    }
+
+    pub fn content_repo_link(&self) -> Option<String> {
         self.exec(
-            &[
-                "/bin/test",
-                "-s",
-                &format!("{}/content-repo-path.txt", self.app_data),
-            ],
+            &["/bin/cat", &format!("{}/content-repo-path.txt", self.app_data)],
             QUICK_TIMEOUT,
         )
-        .is_ok()
+        .ok()
+        .map(|path| path.trim().to_string())
+        .filter(|path| !path.is_empty())
+    }
+
+    /// The checkout the user's own `devhub.service` runs against (its working
+    /// directory is `<repo>/dashboard`), when that service exists.
+    pub fn running_service_repo(&self) -> Option<String> {
+        self.exec(
+            &["/bin/systemctl", "--user", "show", "devhub.service", "-p", "WorkingDirectory", "--value"],
+            QUICK_TIMEOUT,
+        )
+        .ok()
+        .and_then(|dir| service_repo_root(&dir))
     }
 
     /// The DevHub git checkout to run against, if there is one.
@@ -181,7 +196,9 @@ exit 1"#;
             .is_ok()
     }
 
-    /// Unpack the bundled payload into the distro, then drop older builds.
+    /// Unpack the bundled payload into the distro. Older builds are removed
+    /// separately by `prune_old_payloads`, after `repair_paseo_unit` has made
+    /// sure no service still runs a binary from one of them.
     ///
     /// Extracts to `<id>.partial` and renames, so a crash mid-extract leaves a
     /// directory the next launch ignores rather than a half-installed runtime
@@ -204,9 +221,6 @@ tar -xzf "$tarball" -C "$root/$id.partial"
 rm -rf "$root/$id"
 mv "$root/$id.partial" "$root/$id"
 touch "$root/$id/.complete"
-for old in "$root"/*; do
-  [ "$old" = "$root/$id" ] || rm -rf "$old"
-done
 "#;
         let mut command = self.command();
         command.arg("--exec").args([
@@ -221,6 +235,81 @@ done
         run_captured(command, INSTALL_TIMEOUT)
             .map(|_| ())
             .map_err(|err| format!("Could not install DevHub into WSL: {err}"))
+    }
+
+    /// Make the managed Paseo unit independent of any versioned payload.
+    ///
+    /// Older builds registered `devhub-paseo.service` with a node binary inside
+    /// `runtime/<payload-id>/`. Removing that payload on update left the running
+    /// daemon on a deleted executable, and the next restart failed with 203/EXEC.
+    /// This copies that node to `paseo/runtime/node`, rewrites the unit to use it
+    /// and drops the npm prefix and payload/bundled-node PATH entries earlier
+    /// units carried. It never restarts the daemon.
+    pub fn repair_paseo_unit(&self, payload_id: &str) -> Result<PaseoUnitRepair, String> {
+        let unit_path = paseo_unit_path(&self.home);
+        let Ok(unit) = self.exec(&["/bin/cat", &unit_path], QUICK_TIMEOUT) else {
+            return Ok(PaseoUnitRepair::NoUnit);
+        };
+        let durable_node = paseo_durable_node(&self.app_data);
+        let Some(rewritten) = rewrite_paseo_unit(&unit, &self.app_data, &durable_node) else {
+            return Ok(PaseoUnitRepair::Unchanged);
+        };
+        let old_binary = paseo_exec_binary(&unit).unwrap_or_default();
+        // The unit's own node when it still exists; otherwise this payload's.
+        // A same-major node beats a unit that cannot start.
+        let fallback = format!("{}/runtime/node", self.payload_dir(payload_id));
+        let copy = r#"
+set -e
+dest="$1"; preferred="$2"; fallback="$3"
+if [ ! -x "$dest" ]; then
+  src="$preferred"; [ -x "$src" ] || src="$fallback"
+  mkdir -p "$(dirname "$dest")"
+  cp "$src" "$dest.next"
+  chmod 755 "$dest.next"
+  mv "$dest.next" "$dest"
+fi
+"#;
+        self.exec(
+            &["/bin/sh", "-c", copy, "devhub-paseo-node", &durable_node, &old_binary, &fallback],
+            INSTALL_TIMEOUT,
+        )
+        .map_err(|err| format!("Could not keep Paseo's Node runtime: {err}"))?;
+        let write = r#"
+set -e
+printf '%s\n' "$2" > "$1.next"
+mv "$1.next" "$1"
+systemctl --user daemon-reload || true
+"#;
+        self.exec(
+            &["/bin/sh", "-c", write, "devhub-paseo-unit", &unit_path, rewritten.trim_end()],
+            QUICK_TIMEOUT,
+        )
+        .map_err(|err| format!("Could not update the Paseo service: {err}"))?;
+        Ok(PaseoUnitRepair::Repaired { old_binary })
+    }
+
+    /// Does the managed Paseo unit point at an executable that is missing?
+    /// Reported in the shell log; Agents → Connection shows the same warning.
+    pub fn paseo_unit_binary_missing(&self) -> Option<String> {
+        let unit = self.exec(&["/bin/cat", &paseo_unit_path(&self.home)], QUICK_TIMEOUT).ok()?;
+        let binary = paseo_exec_binary(&unit)?;
+        self.exec(&["/usr/bin/test", "-x", &binary], QUICK_TIMEOUT)
+            .is_err()
+            .then_some(binary)
+    }
+
+    /// Remove every unpacked payload except the current one.
+    pub fn prune_old_payloads(&self, payload_id: &str) -> Result<(), String> {
+        let script = r#"
+root="$1"; id="$2"
+for old in "$root"/*; do
+  [ -e "$old" ] || continue
+  [ "$old" = "$root/$id" ] || rm -rf "$old"
+done
+"#;
+        let root = format!("{}/runtime", self.app_data);
+        self.exec(&["/bin/sh", "-c", script, "devhub-prune", &root, payload_id], INSTALL_TIMEOUT)
+            .map(|_| ())
     }
 
     /// The command that runs the supervisor, stdin piped.
@@ -278,6 +367,156 @@ pub fn parse_listening_ports(table: &str) -> Vec<u16> {
         .collect()
 }
 
+/// `<repo>/dashboard` → `<repo>`. Anything else is not a dev checkout service.
+pub fn service_repo_root(working_directory: &str) -> Option<String> {
+    let dir = working_directory.trim().trim_end_matches('/');
+    dir.strip_suffix("/dashboard")
+        .filter(|repo| repo.starts_with('/'))
+        .map(str::to_string)
+}
+
+/// Should this app defer scheduled jobs to a service already holding the
+/// default ports? Only when both work on the same content: a fresh app-data
+/// profile, or one linked to a different repo, has jobs of its own that nothing
+/// else will run. With no way to tell what the running service uses, assume it
+/// shares our content (the safe side: no duplicate jobs).
+pub fn shares_content(own_content_root: Option<&str>, service_repo: Option<&str>) -> bool {
+    let normalise = |path: &str| path.trim_end_matches('/').to_string();
+    match (own_content_root, service_repo) {
+        (None, _) => false,
+        (Some(_), None) => true,
+        (Some(own), Some(service)) => normalise(own) == normalise(service),
+    }
+}
+
+/// What `repair_paseo_unit` found.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PaseoUnitRepair {
+    /// No managed Paseo service is registered in this distro.
+    NoUnit,
+    /// The service already runs a durable node with a clean environment.
+    Unchanged,
+    /// The service was moved off a versioned payload (or cleaned up).
+    Repaired { old_binary: String },
+}
+
+const PASEO_UNIT: &str = "devhub-paseo.service";
+
+pub fn paseo_unit_path(home: &str) -> String {
+    format!("{}/.config/systemd/user/{PASEO_UNIT}", home.trim_end_matches('/'))
+}
+
+/// The copy of node the Paseo daemon owns, outside every versioned payload.
+pub fn paseo_durable_node(app_data: &str) -> String {
+    format!("{app_data}/paseo/runtime/node")
+}
+
+/// systemd double-quote escaping, matching `systemdQuote` in `paseo-service.mjs`.
+fn systemd_quote(value: &str) -> String {
+    format!(
+        "\"{}\"",
+        value
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('%', "%%")
+            .replace('$', "$$")
+    )
+}
+
+fn systemd_unquote(value: &str) -> String {
+    value
+        .replace("%%", "%")
+        .replace("$$", "$")
+        .replace("\\\"", "\"")
+        .replace("\\\\", "\\")
+}
+
+/// The first token of `ExecStart=` (the daemon's executable), unquoted, and the
+/// rest of the line after it.
+fn split_exec_start(line: &str) -> Option<(String, &str)> {
+    let value = line.strip_prefix("ExecStart=")?;
+    if let Some(quoted) = value.strip_prefix('"') {
+        let mut escaped = false;
+        for (index, ch) in quoted.char_indices() {
+            match ch {
+                '\\' if !escaped => escaped = true,
+                '"' if !escaped => {
+                    return Some((systemd_unquote(&quoted[..index]), &quoted[index + 1..]));
+                }
+                _ => escaped = false,
+            }
+        }
+        None
+    } else {
+        let end = value.find(char::is_whitespace).unwrap_or(value.len());
+        Some((value[..end].to_string(), &value[end..]))
+    }
+}
+
+pub fn paseo_exec_binary(unit: &str) -> Option<String> {
+    unit.lines()
+        .find_map(|line| split_exec_start(line).map(|(binary, _)| binary))
+}
+
+/// Rewrite an older managed Paseo unit, or `None` when it needs no change.
+///
+/// - `ExecStart` under `<app-data>/runtime/` moves to `durable_node`;
+/// - `NPM_CONFIG_PREFIX` / `npm_config_prefix` pointing at DevHub's tools
+///   directory are dropped, so terminals started by Paseo do not inherit them
+///   (nvm refuses to load while they are set);
+/// - `PATH` loses payload and bundled-node entries, and `tools/bin` moves last
+///   so it cannot shadow the user's own tools.
+pub fn rewrite_paseo_unit(unit: &str, app_data: &str, durable_node: &str) -> Option<String> {
+    let payloads = format!("{app_data}/runtime/");
+    let tools = format!("{app_data}/tools");
+    let tools_bin = format!("{tools}/bin");
+    let bundled_node_dir = durable_node.rsplit_once('/').map(|(dir, _)| dir.to_string());
+    let mut changed = false;
+    let mut out: Vec<String> = Vec::new();
+    for line in unit.lines() {
+        if let Some((binary, rest)) = split_exec_start(line) {
+            if binary.starts_with(&payloads) {
+                changed = true;
+                out.push(format!("ExecStart={}{rest}", systemd_quote(durable_node)));
+                continue;
+            }
+        } else if let Some(value) = line
+            .strip_prefix("Environment=\"NPM_CONFIG_PREFIX=")
+            .or_else(|| line.strip_prefix("Environment=\"npm_config_prefix="))
+        {
+            if systemd_unquote(value.trim_end_matches('"')) == tools {
+                changed = true;
+                continue;
+            }
+        } else if let Some(value) = line.strip_prefix("Environment=\"PATH=") {
+            let entries: Vec<String> = systemd_unquote(value.trim_end_matches('"'))
+                .split(':')
+                .filter(|entry| !entry.is_empty())
+                .map(str::to_string)
+                .collect();
+            let mut kept: Vec<String> = entries
+                .iter()
+                .filter(|entry| {
+                    !entry.starts_with(&payloads)
+                        && **entry != tools_bin
+                        && Some(entry.as_str()) != bundled_node_dir.as_deref()
+                })
+                .cloned()
+                .collect();
+            if entries.iter().any(|entry| *entry == tools_bin) {
+                kept.push(tools_bin.clone());
+            }
+            if kept != entries {
+                changed = true;
+                out.push(format!("Environment={}", systemd_quote(&format!("PATH={}", kept.join(":")))));
+                continue;
+            }
+        }
+        out.push(line.to_string());
+    }
+    changed.then(|| format!("{}\n", out.join("\n")))
+}
+
 /// Probe both requested ports before choosing alternatives, so a pinned-port
 /// failure reports every conflict in one pass.
 pub fn select_ports(
@@ -318,6 +557,37 @@ pub fn select_ports(
             .ok_or_else(|| format!("Could not find free dashboard and terminal ports. Occupied: {conflicts}. Close an unused service and Retry."))?;
     }
     Ok(selected)
+}
+
+/// Like `select_ports`, but when the defaults are taken and the ports this
+/// profile used last time are free, reuse them. WebView storage (view
+/// preferences, terminal history) is keyed by origin, so a profile that lands
+/// on a different fallback port each launch keeps losing its settings.
+pub fn select_ports_preferring(
+    preferred: [u16; 2],
+    previous: Option<[u16; 2]>,
+    automatic: [bool; 2],
+    mut available: impl FnMut(u16) -> bool,
+) -> Result<[u16; 2], String> {
+    if let Some(previous) = previous {
+        let defaults_taken = preferred.iter().any(|port| !available(*port));
+        if defaults_taken
+            && automatic == [true, true]
+            && previous[0] != previous[1]
+            && !previous.contains(&0)
+            && previous.iter().all(|port| available(*port))
+        {
+            return Ok(previous);
+        }
+    }
+    select_ports(preferred, automatic, available)
+}
+
+/// `"1338 1341"` as written by the shell, or `None` for anything else.
+pub fn parse_saved_ports(text: &str) -> Option<[u16; 2]> {
+    let mut parts = text.split_whitespace().map(str::parse::<u16>);
+    let ports = [parts.next()?.ok()?, parts.next()?.ok()?];
+    (parts.next().is_none() && ports[0] != ports[1] && !ports.contains(&0)).then_some(ports)
 }
 
 fn wsl_command() -> Command {
@@ -825,5 +1095,144 @@ mod tests {
             .unwrap();
         assert!(wslenv_value.contains("DEVHUB_BOOTSTRAP_TOKEN"));
         assert!(wslenv_value.contains("PORT"));
+    }
+
+    const APP_DATA: &str = "/home/me/.local/share/devhub";
+    const DURABLE: &str = "/home/me/.local/share/devhub/paseo/runtime/node";
+
+    fn old_unit() -> String {
+        [
+            "[Service]",
+            "WorkingDirectory=/home/me/.local/share/devhub/paseo",
+            "Environment=\"PATH=/home/me/.local/share/devhub/tools/bin:/home/me/.local/share/devhub/runtime/abc123/runtime:/home/me/.nvm/bin:/usr/bin\"",
+            "Environment=\"PASEO_HOME=/home/me/.local/share/devhub/paseo/home\"",
+            "Environment=\"NPM_CONFIG_PREFIX=/home/me/.local/share/devhub/tools\"",
+            "Environment=\"npm_config_prefix=/home/me/.local/share/devhub/tools\"",
+            "ExecStart=\"/home/me/.local/share/devhub/runtime/abc123/runtime/node\" \"--disable-warning=DEP0040\" \"/x/paseo\" \"daemon\"",
+            "Restart=on-failure",
+            "",
+        ]
+        .join("\n")
+    }
+
+    #[test]
+    fn paseo_unit_moves_off_a_versioned_payload() {
+        let unit = old_unit();
+        assert_eq!(
+            paseo_exec_binary(&unit).as_deref(),
+            Some("/home/me/.local/share/devhub/runtime/abc123/runtime/node")
+        );
+        let fixed = rewrite_paseo_unit(&unit, APP_DATA, DURABLE).expect("needs repair");
+        assert_eq!(paseo_exec_binary(&fixed).as_deref(), Some(DURABLE));
+        assert!(fixed.contains(
+            "ExecStart=\"/home/me/.local/share/devhub/paseo/runtime/node\" \"--disable-warning=DEP0040\" \"/x/paseo\" \"daemon\""
+        ));
+        assert!(!fixed.contains("/runtime/abc123"));
+    }
+
+    #[test]
+    fn paseo_unit_stops_handing_the_npm_prefix_to_terminals() {
+        let fixed = rewrite_paseo_unit(&old_unit(), APP_DATA, DURABLE).unwrap();
+        assert!(!fixed.to_ascii_lowercase().contains("npm_config_prefix"));
+        // Everything else the unit carried is kept.
+        assert!(fixed.contains("PASEO_HOME=/home/me/.local/share/devhub/paseo/home"));
+        assert!(fixed.contains("Restart=on-failure"));
+    }
+
+    #[test]
+    fn paseo_unit_path_drops_payload_dirs_and_demotes_tools_bin() {
+        let fixed = rewrite_paseo_unit(&old_unit(), APP_DATA, DURABLE).unwrap();
+        assert!(fixed.contains(
+            "Environment=\"PATH=/home/me/.nvm/bin:/usr/bin:/home/me/.local/share/devhub/tools/bin\""
+        ));
+    }
+
+    #[test]
+    fn paseo_unit_keeps_a_user_chosen_npm_prefix() {
+        let unit = old_unit().replace(
+            "NPM_CONFIG_PREFIX=/home/me/.local/share/devhub/tools",
+            "NPM_CONFIG_PREFIX=/home/me/my-global",
+        );
+        let fixed = rewrite_paseo_unit(&unit, APP_DATA, DURABLE).unwrap();
+        assert!(fixed.contains("NPM_CONFIG_PREFIX=/home/me/my-global"));
+    }
+
+    #[test]
+    fn paseo_unit_already_durable_is_left_alone() {
+        let fixed = rewrite_paseo_unit(&old_unit(), APP_DATA, DURABLE).unwrap();
+        assert_eq!(rewrite_paseo_unit(&fixed, APP_DATA, DURABLE), None);
+    }
+
+    #[test]
+    fn paseo_unit_survives_quoted_paths_with_spaces() {
+        let app_data = "/home/my user/.local/share/devhub";
+        let durable = paseo_durable_node(app_data);
+        let unit = format!(
+            "ExecStart=\"{app_data}/runtime/abc/runtime/node\" \"--x\"\nEnvironment=\"PATH={app_data}/runtime/abc/runtime:/usr/bin\"\n"
+        );
+        let fixed = rewrite_paseo_unit(&unit, app_data, &durable).unwrap();
+        assert_eq!(paseo_exec_binary(&fixed).as_deref(), Some(durable.as_str()));
+        assert!(fixed.contains("Environment=\"PATH=/usr/bin\""));
+    }
+
+    #[test]
+    fn paseo_unit_without_an_exec_line_has_no_binary() {
+        assert_eq!(paseo_exec_binary("[Service]\nRestart=no\n"), None);
+        assert_eq!(rewrite_paseo_unit("[Service]\nRestart=no\n", APP_DATA, DURABLE), None);
+    }
+
+    #[test]
+    fn reuses_last_fallback_ports_when_the_defaults_are_taken() {
+        let busy = |port: u16| port != 1337 && port != 1339;
+        assert_eq!(
+            select_ports_preferring([1337, 1339], Some([1338, 1341]), [true, true], busy),
+            Ok([1338, 1341])
+        );
+        // Defaults free: the default origin wins, whatever was used before.
+        assert_eq!(
+            select_ports_preferring([1337, 1339], Some([1338, 1341]), [true, true], |_| true),
+            Ok([1337, 1339])
+        );
+        // The remembered ports are taken too: fall back to a fresh search.
+        assert_eq!(
+            select_ports_preferring([1337, 1339], Some([1338, 1341]), [true, true], |port| port == 1340 || port == 1342),
+            Ok([1340, 1342])
+        );
+        // Pinned ports are never second-guessed.
+        assert!(select_ports_preferring([1337, 1339], Some([1338, 1341]), [false, true], busy).is_err());
+    }
+
+    #[test]
+    fn parses_only_well_formed_saved_ports() {
+        assert_eq!(parse_saved_ports("1338 1341\n"), Some([1338, 1341]));
+        assert_eq!(parse_saved_ports("1338"), None);
+        assert_eq!(parse_saved_ports("1338 1338"), None);
+        assert_eq!(parse_saved_ports("1338 1341 9"), None);
+        assert_eq!(parse_saved_ports("abc def"), None);
+        assert_eq!(parse_saved_ports("0 5"), None);
+    }
+
+    #[test]
+    fn only_defers_scheduled_jobs_when_the_content_is_shared() {
+        assert!(!shares_content(None, Some("/home/me/dev/devhub")), "fresh app data has its own jobs");
+        assert!(!shares_content(Some("/home/me/other"), Some("/home/me/dev/devhub")));
+        assert!(shares_content(Some("/home/me/dev/devhub/"), Some("/home/me/dev/devhub")));
+        assert!(shares_content(Some("/home/me/dev/devhub"), None), "unknown service: stay safe");
+        assert!(!shares_content(None, None));
+    }
+
+    #[test]
+    fn finds_the_checkout_behind_a_dev_service() {
+        assert_eq!(service_repo_root("/home/me/dev/devhub/dashboard\n").as_deref(), Some("/home/me/dev/devhub"));
+        assert_eq!(service_repo_root("/opt/other"), None);
+        assert_eq!(service_repo_root(""), None);
+    }
+
+    #[test]
+    fn paseo_unit_lives_in_the_users_systemd_dir() {
+        assert_eq!(
+            paseo_unit_path("/home/me/"),
+            "/home/me/.config/systemd/user/devhub-paseo.service"
+        );
     }
 }

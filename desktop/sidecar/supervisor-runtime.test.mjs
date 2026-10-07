@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { managedEnv, loadEnvFile } from "./supervisor.mjs";
+import { managedEnv, loadEnvFile, terminalChildEnv } from "./supervisor.mjs";
 
 test("packaged children never install globals inside the runtime payload", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-tools-"));
@@ -37,5 +37,24 @@ test("a linked config cannot re-enable a secondary instance's scheduler", () => 
     if (previous === undefined) delete process.env.DEVHUB_SCHEDULER;
     else process.env.DEVHUB_SCHEDULER = previous;
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the terminal server never receives DevHub's npm prefix", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-tools-"));
+  const previous = { ...process.env };
+  try {
+    process.env.HOME = home;
+    const managed = managedEnv();
+    assert.ok(managed.NPM_CONFIG_PREFIX, "installs launched by the dashboard still use the tools prefix");
+    const env = terminalChildEnv(managed);
+    assert.equal(env.NPM_CONFIG_PREFIX, undefined);
+    assert.equal(env.npm_config_prefix, undefined);
+    assert.equal(env.PATH, managed.PATH);
+    assert.equal(env.HOME, home);
+  } finally {
+    for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key];
+    Object.assign(process.env, previous);
+    fs.rmSync(home, { recursive: true, force: true });
   }
 });

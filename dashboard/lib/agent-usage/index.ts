@@ -5,6 +5,7 @@ import { loadCopilotUsage } from "./copilot";
 import { loadCursorUsage } from "./cursor";
 import { loadOpenRouterUsage } from "./openrouter";
 import { loadZaiUsage } from "./zai";
+import { UsageLoadError } from "./load-error";
 import type { ProviderUsage, UsageProviderId } from "./types";
 
 const CACHE_MS = 5 * 60_000;
@@ -29,7 +30,12 @@ export async function loadAgentUsage(refresh?: string): Promise<ProviderUsage[]>
       return await load();
     } catch (err) {
       console.error(`[agent-usage:${id}]`, err);
-      return { id, name, status: "error", message: `Couldn't load ${name} usage. Try again.`, meters: [], spend: [] } satisfies ProviderUsage;
+      return {
+        id, name, status: "error", meters: [], spend: [],
+        summary: `Couldn't load ${name} usage`,
+        message: `Couldn't load ${name} usage. Try again.`,
+        reason: err instanceof UsageLoadError ? err.reason : "Unexpected error. The DevHub server log has the details.",
+      } satisfies ProviderUsage;
     }
   }));
   return results.filter((usage): usage is ProviderUsage => usage !== null);

@@ -1,11 +1,13 @@
 "use client";
 
 import { PenTool } from "lucide-react";
+import { useShortcutLabel } from "@/lib/hooks/use-modifier-key";
 import { HoverTip } from "@/components/ui/HoverTip";
 
 export function DiagramsBrowseButton() {
+  const label = useShortcutLabel();
   return (
-    <HoverTip label="Diagrams (⌘⇧D)" pos="bottom-end">
+    <HoverTip label={`Diagrams (${label("D", true)})`} pos="bottom-end">
       <button
         type="button"
         className="hub-icon-btn"

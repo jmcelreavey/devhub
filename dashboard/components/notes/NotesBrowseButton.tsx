@@ -1,11 +1,13 @@
 "use client";
 
 import { FolderOpen } from "lucide-react";
+import { useShortcutLabel } from "@/lib/hooks/use-modifier-key";
 import { HoverTip } from "@/components/ui/HoverTip";
 
 export function NotesBrowseButton() {
+  const label = useShortcutLabel();
   return (
-    <HoverTip label="Notes (⌘⇧O)" pos="bottom-end">
+    <HoverTip label={`Notes (${label("O", true)})`} pos="bottom-end">
       <button
         type="button"
         className="hub-icon-btn"

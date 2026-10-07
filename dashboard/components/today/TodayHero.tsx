@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowLeft, ListTodo, Plus } from "lucide-react";
 import { LayoutPresetsButton } from "@/components/shell/LayoutPresets";
+import { useShortcutLabel } from "@/lib/hooks/use-modifier-key";
 import { HoverTip } from "@/components/ui/HoverTip";
 import { TodayRepSignal } from "./TodayRepSignal";
 import { LiveClock } from "./LiveClock";
@@ -34,6 +35,7 @@ export function TodayHero({
   tasks: TaskProbe[] | undefined;
   onFocusTasks: () => void;
 }) {
+  const shortcut = useShortcutLabel();
   const signal = nowNextEvent(calendarEvents);
   const topTask = (tasks ?? []).find((t) => !t.done && !t.abandonedAt && !t.movedAt && t.text);
 
@@ -115,7 +117,7 @@ export function TodayHero({
           </div>
       </div>
       <div className="flex items-center gap-2">
-        <HoverTip label="Quick capture (⌘⇧C)" pos="bottom-end">
+        <HoverTip label={`Quick capture (${shortcut("C", true)})`} pos="bottom-end">
           <button
             type="button"
             className="btn btn-ghost text-xs"

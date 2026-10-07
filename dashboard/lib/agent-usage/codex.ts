@@ -316,7 +316,7 @@ function authMode(): string | null {
 
 export async function loadCodexUsage(now = new Date()): Promise<ProviderUsage> {
   const base = { id: "codex", name: "Codex", meters: [] } satisfies Partial<ProviderUsage>;
-  if (!fs.existsSync(path.join(codexHome(), "sessions"))) return { ...base, spend: [], status: "unavailable", message: "Usage appears after your first Codex session on this machine. You can ignore this if you don't use Codex." };
+  if (!fs.existsSync(path.join(codexHome(), "sessions"))) return { ...base, spend: [], status: "unavailable", summary: "No Codex sessions yet", message: "Usage appears after your first Codex session on this machine. You can ignore this if you don't use Codex." };
   const mode = authMode();
   const notes: string[] = [];
   const spend: UsageSpend[] = [];

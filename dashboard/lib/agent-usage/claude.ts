@@ -65,15 +65,15 @@ function titleCase(value: string): string {
 export async function loadClaudeUsage(): Promise<ProviderUsage> {
   const base = { id: "claude", name: "Claude", meters: [], spend: [] } satisfies Partial<ProviderUsage>;
   const raw = await readCredentials();
-  if (!raw) return { ...base, status: "unavailable", message: "To see plan usage, run `claude auth login` in DevHub's terminal (inside WSL on Windows)." };
+  if (!raw) return { ...base, status: "unavailable", summary: "Sign in to Claude to see plan usage", command: "claude auth login", message: "To see plan usage, run `claude auth login` in DevHub's terminal (inside WSL on Windows)." };
   // JSON.parse errors quote the input, which here is a token — never let one surface.
   let parsed: unknown;
   try { parsed = JSON.parse(raw); } catch { parsed = null; }
   const creds = credentialsSchema.safeParse(parsed);
-  if (!creds.success) return { ...base, status: "error", message: "Claude Code's stored credentials are in an unexpected format." };
+  if (!creds.success) return { ...base, status: "error", summary: "Couldn't read Claude's sign-in", message: "Claude Code's stored credentials are in an unexpected format.", reason: "~/.claude/.credentials.json is not in the format DevHub expects. Signing in again rewrites it." };
   const { accessToken, expiresAt, subscriptionType } = creds.data.claudeAiOauth;
   const plan = subscriptionType ? titleCase(subscriptionType) : undefined;
-  if (expiresAt && expiresAt < Date.now()) return { ...base, plan, status: "unavailable", message: "Claude Code's sign-in has expired. Run `claude auth login` in DevHub's terminal (inside WSL on Windows), then retry." };
+  if (expiresAt && expiresAt < Date.now()) return { ...base, plan, status: "unavailable", summary: "Claude's sign-in has expired", command: "claude auth login", message: "Claude Code's sign-in has expired. Run `claude auth login` in DevHub's terminal (inside WSL on Windows), then retry." };
 
   const response = await fetch(USAGE_URL, {
     headers: { Authorization: `Bearer ${accessToken}`, "anthropic-beta": "oauth-2025-04-20" },

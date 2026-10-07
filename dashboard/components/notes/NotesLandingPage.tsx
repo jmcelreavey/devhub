@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ShortcutKbd } from "@/components/ui/ShortcutKbd";
 import { Clock, Folder, ListChecks, NotebookPen, PenTool, Plus } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { DocIcon } from "@/components/docs/doc-icons";
@@ -98,7 +99,7 @@ export function NotesLandingPage({
               <p className="lib-hero-sub">
                 Your working memory — {total} notes across {browsable.length} areas. Search
                 the full text from <kbd className="lib-kbd">Search…</kbd> in the sidebar, or{" "}
-                <kbd className="lib-kbd">⌘P</kbd> anywhere.
+                <ShortcutKbd className="lib-kbd" keys="P" /> anywhere.
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">

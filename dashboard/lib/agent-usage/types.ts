@@ -21,8 +21,14 @@ export interface ProviderUsage {
   name: string;
   plan?: string;
   status: "ok" | "unavailable" | "error";
-  /** Why a provider is unavailable or failed, or a caveat worth showing next to the numbers. */
+  /** One plain line: the state of this provider, shown as the card headline when it has no numbers. */
+  summary?: string;
+  /** The single command that fixes it. Rendered as code with a copy button. */
+  command?: string;
+  /** Why a provider is unavailable or failed, or a caveat worth showing next to the numbers. May contain `backtick` code. */
   message?: string;
+  /** A short cause for a failure (sign-in rejected, network, changed API), shown behind Details. */
+  reason?: string;
   meters: UsageMeter[];
   spend: UsageSpend[];
 }

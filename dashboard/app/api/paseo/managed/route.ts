@@ -10,6 +10,9 @@ import { disablePaseoRelay, PASEO_DAEMON_LABEL, PASEO_SYSTEMD_UNIT, paseoCli, pa
 import { defaultPaseoProvider, listPaseoProviders } from "@/lib/paseo/providers";
 
 import { checkPaseoUpdate, hasActivePaseoWork } from "@/lib/paseo/update";
+import { missingPaseoUnitBinary } from "@/lib/paseo/unit-health";
+import { paseoUserMessage } from "@/lib/paseo/user-message";
+import { withPaseo } from "@/lib/paseo/client";
 import { repairOpenCodeDevhubMcp } from "@/lib/sync/mcp";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +46,7 @@ export async function GET(req: NextRequest) {
       relayEnabled: managed ? paseoRelayEnabled(managed) : false,
       providers, defaultProvider: providers ? defaultPaseoProvider(providers) ?? null : null,
       authFailed: running && providers === null,
+      unitBinaryMissing: managed ? missingPaseoUnitBinary() : null,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not read Paseo's status." }, { status: 503 });
@@ -86,7 +90,12 @@ export async function POST(req: NextRequest) {
   const input = parsed.data;
   return withMutex("paseo:managed", async () => {
     try {
-      if (input.action === "repair-opencode-mcp") { repairOpenCodeDevhubMcp(); return NextResponse.json({ ok: true }); }
+      if (input.action === "repair-opencode-mcp") {
+        repairOpenCodeDevhubMcp();
+        // Paseo keeps the provider snapshot from its last probe; ask it to look again.
+        const refreshed = await healthy() && await withPaseo(({ api }) => api.providers.refresh()).then(() => true, () => false);
+        return NextResponse.json({ ok: true, restartRequired: !refreshed && Boolean(readPaseoManaged()) });
+      }
       if (input.action === "check-update") return NextResponse.json(await checkPaseoUpdate(true));
       if (input.action === "setup" || input.action === "update") {
         if (await healthy() && await hasActivePaseoWork()) return NextResponse.json({ error: "Finish or stop active chats before updating or reinstalling Paseo." }, { status: 409 });
@@ -95,6 +104,9 @@ export async function POST(req: NextRequest) {
       }
       const managed = readPaseoManaged();
       if (!managed) return NextResponse.json({ error: "Set up managed Paseo first." }, { status: 409 });
+      if ((input.action === "restart" || input.action === "unpair") && await healthy() && await hasActivePaseoWork()) {
+        return NextResponse.json({ error: "Finish or stop active chats before restarting Paseo." }, { status: 409 });
+      }
       if (input.action === "restart") { await restart(); return NextResponse.json({ ok: true }); }
       if (input.action === "default-provider") {
         const providers = await listPaseoProviders();
@@ -123,6 +135,9 @@ export async function POST(req: NextRequest) {
       if (input.action === "update" && typeof stderr === "string" && /\b(?:ETARGET|E404)\b/.test(stderr)) {
         return NextResponse.json({ error: "This release or one of its dependencies is not available through Safe-Chain yet. Your installed Paseo is unchanged. Try again later." }, { status: 409 });
       }
+      // Only messages written for the user are echoed; setup output is diagnostics.
+      const userMessage = paseoUserMessage(error);
+      if (userMessage) return NextResponse.json({ error: userMessage }, { status: 409 });
       // Child output can include the pairing secret; never echo it.
       const hint = input.action === "setup" ? " Check npm and Safe-Chain in Setup → Tools, then retry from Agents → Connection. Setup diagnostics are in the server log." : "";
       return NextResponse.json({ error: `Could not ${input.action === "default-provider" ? "save the default agent" : input.action} Paseo.${hint}` }, { status: 503 });

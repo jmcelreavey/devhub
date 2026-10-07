@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ShortcutKbd } from "@/components/ui/ShortcutKbd";
 import { ArrowRight, BookOpen, Clock, Folder } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { DocIcon } from "@/components/docs/doc-icons";
@@ -149,7 +150,7 @@ export function DocsLandingPage({
                 How DevHub is put together and how to work on it — {totalDocs} pages across{" "}
                 {areas.length} areas. Search the full text from{" "}
                 <kbd className="lib-kbd">Filter docs</kbd> in the sidebar, or{" "}
-                <kbd className="lib-kbd">⌘P</kbd> anywhere.
+                <ShortcutKbd className="lib-kbd" keys="P" /> anywhere.
               </p>
             </div>
             <NewDocButton

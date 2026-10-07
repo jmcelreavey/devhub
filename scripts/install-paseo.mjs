@@ -16,7 +16,11 @@ import { parseEnv } from "node:util";
 import { execFileSync } from "node:child_process";
 import { findBundledCodex, managedPaseoConfig, paseoDaemonArgs, usesWebUiConfig } from "./paseo-config.mjs";
 import { installDevHubBootstrap } from "./paseo-web-bootstrap.mjs";
-import { PASEO_SYSTEMD_UNIT, renderSystemdUnit } from "./paseo-service.mjs";
+import { PASEO_SYSTEMD_UNIT, buildDaemonPath, renderSystemdUnit } from "./paseo-service.mjs";
+
+/** An error whose text is safe to show in the UI as written; main() marks it for the route. */
+class UserMessage extends Error {}
+const USER_MESSAGE_PREFIX = "DEVHUB_USER_MESSAGE: ";
 
 const updateRequested = process.argv.includes("--update");
 const pinned = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "paseo-release.json"), "utf8"));
@@ -55,7 +59,7 @@ function configuredPassword() {
   const env = { ...(fs.existsSync(file) ? parseEnv(fs.readFileSync(file, "utf8")) : {}), ...process.env };
   const password = env.DEVHUB_PASEO_PASSWORD?.trim() || env.OPENCHAMBER_UI_PASSWORD?.trim()
     || (fs.existsSync(passwordFile) ? fs.readFileSync(passwordFile, "utf8").trim() : "");
-  if (!password && fs.existsSync(manifest)) throw new Error("Paseo is already installed. Enter its existing Agents password in DevHub Setup before reinstalling.");
+  if (!password && fs.existsSync(manifest)) throw new UserMessage("Paseo is already installed. Enter its existing Agents password in DevHub Setup before reinstalling.");
   if (!password) return randomBytes(32).toString("base64url");
   return password;
 }
@@ -63,7 +67,7 @@ function configuredPassword() {
 async function assertPortFree() {
   await new Promise((resolve, reject) => {
     const server = net.createServer();
-    server.once("error", () => reject(new Error(`Port ${port} is occupied. Stop whatever holds it (another Paseo daemon? On Linux: \`systemctl --user disable --now paseo\`) before setup.`)));
+    server.once("error", () => reject(new UserMessage(`Port ${port} is occupied. Stop whatever holds it (another Paseo daemon? On Linux: \`systemctl --user disable --now paseo\`) before setup.`)));
     server.listen(port, "127.0.0.1", () => server.close(resolve));
   });
 }
@@ -84,7 +88,7 @@ function installedVersion() {
 /** Safe-Chain is required for every npm install in DevHub; never fall back to plain npm. */
 function installCli(version) {
   const npm = which("aikido-npm");
-  if (!npm) throw new Error("Safe-Chain is required: install @aikidosec/safe-chain and run `safe-chain setup` (see README).");
+  if (!npm) throw new UserMessage("Safe-Chain is required: install @aikidosec/safe-chain and run `safe-chain setup` (see README).");
   fs.mkdirSync(root, { recursive: true, mode: 0o700 });
   const staging = fs.mkdtempSync(path.join(root, ".install-"));
   const names = ["node_modules", "package.json", "package-lock.json"];
@@ -132,15 +136,21 @@ function writeConfig(passwordHash, version) {
 
 /** The daemon finds claude, cursor-agent, opencode and codex on PATH, so it needs the user's. */
 function daemonPath() {
-  return [...new Set([path.join(npmPrefix, "bin"), path.dirname(daemonNode), ...(process.env.PATH || "/usr/bin:/bin").split(path.delimiter)]
-    .filter(dir => dir && !dir.includes("node_modules") && fs.existsSync(dir)))].join(path.delimiter);
+  return buildDaemonPath({
+    current: process.env.PATH,
+    delimiter: path.delimiter,
+    toolsBin: path.join(npmPrefix, "bin"),
+    nodeDir: path.dirname(daemonNode),
+    payloadRoot: path.join(os.homedir(), ".local", "share", "devhub", "runtime"),
+    exists: (dir) => fs.existsSync(dir),
+  });
 }
 
 function registerSystemd(args) {
   const dir = path.join(os.homedir(), ".config", "systemd", "user");
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, PASEO_SYSTEMD_UNIT);
-  const unit = renderSystemdUnit({ root, home, args, path: daemonPath(), npmPrefix, log: path.join(root, label + ".log") });
+  const unit = renderSystemdUnit({ root, home, args, path: daemonPath(), log: path.join(root, label + ".log") });
   fs.writeFileSync(`${file}.next`, unit, { mode: 0o600 });
   fs.renameSync(`${file}.next`, file);
   try {
@@ -150,7 +160,8 @@ function registerSystemd(args) {
     // start on a running unit would leave the old daemon in place.
     run("systemctl", ["--user", "restart", PASEO_SYSTEMD_UNIT], { timeout: 60_000 });
   } catch (error) {
-    throw new Error("Could not start the Paseo service with systemd --user. In WSL, enable systemd (`[boot] systemd=true` in /etc/wsl.conf, then `wsl --shutdown`). " + (error instanceof Error ? error.message : ""));
+    console.error(error instanceof Error ? error.message : error);
+    throw new UserMessage("Could not start the Paseo service with systemd --user. In WSL, enable systemd (`[boot] systemd=true` in /etc/wsl.conf, then `wsl --shutdown`).");
   }
 }
 
@@ -163,7 +174,7 @@ function register(args) {
     '<key>Label</key><string>' + label + '</string><key>ProgramArguments</key><array>' + args.map((a) => '<string>' + xml(a) + '</string>').join("") + '</array>' +
     '<key>WorkingDirectory</key><string>' + xml(root) + '</string>' +
     // The daemon finds claude, cursor-agent, opencode and codex on PATH, so it needs the user's.
-    '<key>EnvironmentVariables</key><dict><key>PATH</key><string>' + xml(daemonPath()) + '</string><key>PASEO_HOME</key><string>' + xml(home) + '</string><key>NPM_CONFIG_PREFIX</key><string>' + xml(npmPrefix) + '</string><key>npm_config_prefix</key><string>' + xml(npmPrefix) + '</string></dict>' +
+    '<key>EnvironmentVariables</key><dict><key>PATH</key><string>' + xml(daemonPath()) + '</string><key>PASEO_HOME</key><string>' + xml(home) + '</string></dict>' +
     '<key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>ThrottleInterval</key><integer>10</integer><key>Umask</key><integer>63</integer>' +
     '<key>StandardOutPath</key><string>' + xml(log) + '</string><key>StandardErrorPath</key><string>' + xml(log) + '</string></dict></plist>';
   const existing = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
@@ -194,7 +205,7 @@ async function main() {
   let version = installed || pinned.cli;
   if (updateRequested) {
     const npm = which("aikido-npm");
-    if (!npm) throw new Error("Safe-Chain is required to update Paseo.");
+    if (!npm) throw new UserMessage("Safe-Chain is required to update Paseo.");
     // Ask the same protected registry that will install it; published releases can still be held for minimum age.
     // Safe-Chain prints a notice on stdout after the JSON version. One quoted version is the release.
     const versions = run(npm, ["view", "@getpaseo/cli", "version", "--json"], { timeout: 30_000 }).split(/\r?\n/).map((line) => line.trim()).filter((line) => /^"\d+\.\d+\.\d+"$/.test(line));
@@ -235,4 +246,8 @@ async function main() {
   console.log(`Managed Paseo ${version} is running on 127.0.0.1:${port}.`);
 }
 
-main().catch((error) => { console.error(error instanceof Error ? error.message : "Paseo setup failed."); process.exitCode = 1; });
+main().catch((error) => {
+  const message = error instanceof Error ? error.message : "Paseo setup failed.";
+  console.error(error instanceof UserMessage ? USER_MESSAGE_PREFIX + message : message);
+  process.exitCode = 1;
+});

@@ -1,5 +1,6 @@
 "use client";
 
+import { ShortcutKbd } from "@/components/ui/ShortcutKbd";
 import { useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { EmptyState, FetchError, LoadingLine, PageHeader, SearchInput } from "@/components";
@@ -47,7 +48,7 @@ export default function SearchPage() {
     <div className="page-wrapper">
       <PageHeader
         title="Search"
-        subtitle={<>Everything — notes, docs, tasks, learnings, diagrams, events. Quick jump: <kbd className="text-[10px] px-1 rounded" style={{ background: "var(--bg-elevated)" }}>⌘P</kbd></>}
+        subtitle={<>Everything — notes, docs, tasks, learnings, diagrams, events. Quick jump: <ShortcutKbd keys="P" className="text-[10px] px-1 rounded" /></>}
       />
 
       <div className="card card-body mb-4 space-y-3">

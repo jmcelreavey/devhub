@@ -24,6 +24,7 @@ import { JiraTicketQueueRow } from "@/components/jira/JiraTicketRow";
 import type { JiraTicket } from "@/lib/jira/client";
 import ticketStyles from "@/components/jira/JiraTicketRow.module.css";
 import { LayoutPresetsButton } from "@/components/shell/LayoutPresets";
+import { useShortcutLabel } from "@/lib/hooks/use-modifier-key";
 import { HoverTip } from "@/components/ui/HoverTip";
 import { TodayBootScreen, useTodayBoot } from "@/components/today/TodayBootScreen";
 import { readFocusSession, writeFocusSession } from "@/lib/focus-session-storage";
@@ -186,6 +187,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
  * one never slips past), and the task list. Tasks live only in THEN.
  */
 export function TodayFocusView() {
+  const shortcut = useShortcutLabel();
   const [, setNow] = useState(() => new Date());
   const [skips, setSkips] = useState<Record<string, string>>(() => readSkips());
   const [showSkipped, setShowSkipped] = useState(false);
@@ -356,7 +358,7 @@ export function TodayFocusView() {
             })()}
           </div>
           <div className="flex items-center gap-2">
-            <HoverTip label="Quick capture (⌘⇧C)" pos="bottom-end">
+            <HoverTip label={`Quick capture (${shortcut("C", true)})`} pos="bottom-end">
               <button
                 type="button"
                 className="btn btn-ghost"

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import path from "node:path";
-import { augmentedPathEnv, extraPathSegments, scrubDesktopRuntimeEnv, scrubNpmEnv } from "./process-env";
+import { augmentedPathEnv, extraPathSegments, packagedToolDirs, scrubDesktopRuntimeEnv, scrubNpmEnv, terminalShellEnv } from "./process-env";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -105,5 +105,45 @@ describe("scrubDesktopRuntimeEnv", () => {
     expect(env.PORT).toBeUndefined();
     expect(env.__NEXT_PRIVATE_STANDALONE_CONFIG).toBeUndefined();
     expect(env.__NEXT_PRIVATE_RENDER_WORKER).toBeUndefined();
+  });
+});
+
+describe("terminalShellEnv", () => {
+  const packaged = {
+    HOME: "/home/me",
+    DEVHUB_DESKTOP: "1",
+    DEVHUB_PACKAGED_RUNTIME: "1",
+    NPM_CONFIG_PREFIX: "/home/me/.local/share/devhub/tools",
+    npm_config_prefix: "/home/me/.local/share/devhub/tools",
+    NODE_OPTIONS: "--max-old-space-size=512",
+    PATH: "/home/me/.local/share/devhub/tools/bin:/home/me/.nvm/bin:/usr/bin:/home/me/.local/share/devhub/runtime/abc/runtime",
+  } as unknown as NodeJS.ProcessEnv;
+
+  it("hands an interactive shell no npm prefix, so nvm can load", () => {
+    const env = terminalShellEnv(packaged);
+    expect(Object.keys(env).filter((key) => key.toLowerCase() === "npm_config_prefix")).toEqual([]);
+    expect(Object.keys(env).filter((key) => key.toLowerCase().startsWith("npm_"))).toEqual([]);
+    expect(env.NODE_OPTIONS).toBeUndefined();
+    expect(env.DEVHUB_DESKTOP).toBeUndefined();
+    expect(env.HOME).toBe("/home/me");
+  });
+
+  it("keeps the bundled Node and tools/bin on PATH but behind the user's own", () => {
+    const dirs = packagedToolDirs(packaged, "/home/me", "/home/me/.local/share/devhub/runtime/abc/runtime/node");
+    expect(dirs).toEqual([
+      "/home/me/.local/share/devhub/runtime/abc/runtime",
+      "/home/me/.local/share/devhub/tools/bin",
+    ]);
+    expect(terminalShellEnv(packaged, dirs).PATH?.split(path.delimiter)).toEqual([
+      "/home/me/.nvm/bin",
+      "/usr/bin",
+      "/home/me/.local/share/devhub/tools/bin",
+      "/home/me/.local/share/devhub/runtime/abc/runtime",
+    ]);
+  });
+
+  it("leaves PATH alone outside the packaged runtime", () => {
+    expect(packagedToolDirs({ HOME: "/home/me" } as unknown as NodeJS.ProcessEnv, "/home/me")).toEqual([]);
+    expect(terminalShellEnv({ PATH: "/a:/b" } as unknown as NodeJS.ProcessEnv).PATH).toBe("/a:/b");
   });
 });

@@ -14,7 +14,7 @@ import Link from "next/link";
 interface ProviderRow { id: string; label: string; ready: boolean; error?: string }
 interface PaseoStatus {
   installed: boolean; running: boolean; version: string | null; web: string; relayEnabled: boolean;
-  providers: ProviderRow[] | null; defaultProvider: string | null; authFailed: boolean; error?: string;
+  providers: ProviderRow[] | null; defaultProvider: string | null; authFailed: boolean; unitBinaryMissing?: string | null; error?: string;
 }
 async function post(body: Record<string, string>): Promise<Record<string, unknown>> {
   const response = await fetch("/api/paseo/managed", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -64,6 +64,7 @@ export function PaseoConnection({ setup = false }: { setup?: boolean }) {
         <span className="text-xs text-text-subtle ml-auto">{data.web}</span>
       </div>
       {data.authFailed && <p className="tone-panel tone-panel--warning text-sm">Paseo is already running, but DevHub could not connect. Enter its existing Agents password in <Link href="/setup" className="underline">Setup</Link>, then restart DevHub and retry. Reinstalling is not required.</p>}
+      {data.unitBinaryMissing && <p className="tone-panel tone-panel--warning text-sm" role="alert">Paseo&apos;s service points at a Node runtime that no longer exists, so it will not start after a restart. Choose <strong>Reinstall</strong> to repair it; your password and chats are kept.</p>}
       {update?.available && <p className="text-sm">Paseo {update.latest} has been published. {updateReady ? "Updating restarts Paseo; finish active chats first." : "It is waiting for Safe-Chain’s package safety window. DevHub will keep checking."}</p>}
       {update?.error && <p className="text-sm text-text-muted">{update.error}</p>}
       <div className="flex gap-3 flex-wrap">
@@ -81,7 +82,7 @@ export function PaseoConnection({ setup = false }: { setup?: boolean }) {
       <h3 className="font-medium">Agents</h3>
       <ul className="space-y-1.5 text-sm">{data.providers.map((p) => <li key={p.id} className="flex items-start gap-2">
         <span className={`tone-dot tone-dot--sm mt-1.5 ${p.ready ? "tone-dot--success" : "tone-dot--warning"}`} aria-hidden />
-        <div className="flex-1 min-w-0">{p.error ? <ProviderError provider={p.label} error={p.error} onRepair={busy ? undefined : () => void act("repair-opencode-mcp")} /> : p.label}</div>
+        <div className="flex-1 min-w-0">{p.error ? <ProviderError provider={p.label} error={p.error} onRepaired={() => void mutate()} /> : p.label}</div>
       </li>)}</ul>
       <label className="block text-sm">Default agent for background work
         <select className="input w-full mt-1" disabled={Boolean(busy)} value={data.defaultProvider ?? ""} onChange={(e) => void act("default-provider", { provider: e.target.value })}>

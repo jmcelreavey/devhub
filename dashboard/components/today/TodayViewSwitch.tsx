@@ -6,6 +6,7 @@ import { TodayFocusView } from "@/components/today/TodayFocusView";
 import { TodayPage } from "@/components/today/TodayPage";
 import { TodayBootScreen } from "@/components/today/TodayBootScreen";
 import { WhileYouWereAway } from "@/components/briefing/WhileYouWereAway";
+import { ContentRepoReminder } from "@/components/setup/ContentRepoReminder";
 
 /**
  * Picks the Today view: the dashboard grid (default) or Calm Focus.
@@ -31,6 +32,7 @@ export function TodayViewSwitch() {
       */}
       <div className="px-4 pt-3">
         <WhileYouWereAway />
+        <ContentRepoReminder />
       </div>
       {view === "focus" ? <TodayFocusView /> : <TodayPage />}
     </>

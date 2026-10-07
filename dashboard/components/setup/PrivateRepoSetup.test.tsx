@@ -10,60 +10,91 @@ const renderRepo = (ui: ReactNode) => render(
 
 vi.mock("@/lib/desktop/bridge", () => ({ isDesktop: () => false, pickFolder: vi.fn() }));
 
+const gitPresent = { present: true, version: "git version 2.43.0", where: "Ubuntu (WSL terminal)", installCommand: null, installUrl: "https://git-scm.com/downloads" };
+const gitMissing = { present: false, version: null, where: "Ubuntu (WSL terminal)", installCommand: "sudo apt-get update && sudo apt-get install -y git", installUrl: "https://git-scm.com/downloads" };
+let git: typeof gitPresent | typeof gitMissing;
+let repoStatus: Record<string, unknown>;
+let post: ReturnType<typeof vi.fn<(url: string, init: RequestInit) => Promise<Response>>>;
+
 beforeEach(() => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-    ok: true, json: async () => ({ directory: "/code/devhub-private", linked: false }),
+  git = gitPresent;
+  repoStatus = { directory: "/code/devhub-private", linked: false };
+  post = vi.fn(async () => ({ ok: true, json: async () => ({}) }) as Response);
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    if (init?.method === "POST") return post(url, init);
+    const body = url === "/api/setup/git" ? git : repoStatus;
+    return { ok: true, json: async () => body } as Response;
   }));
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+const openAlternatives = () => fireEvent.click(screen.getByText(/Use a different name or folder/));
 
 describe("private repository onboarding", () => {
-  it("explains prerequisites without offering a creation action before sign-in", () => {
+  it("is optional and says DevHub works without it, even before signing in", async () => {
     renderRepo(<PrivateRepoSetup connected={false} onLinked={vi.fn()} />);
-    expect(screen.getByText(/Sign in above to connect your private repo/)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Create and connect" })).toBeNull();
-    expect(fetch).not.toHaveBeenCalled();
+    expect(screen.getByText("Optional")).toBeTruthy();
+    expect(screen.getByText(/works fully on this PC without it/)).toBeTruthy();
+    expect(screen.getByText(/Sign in with GitHub above to connect a private repo/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Create my private DevHub repo" })).toBeNull();
+    expect(fetch).not.toHaveBeenCalledWith("/api/setup/private-repo");
   });
-  it("shows the private-copy action and asks for an explicit click before creating anything", async () => {
-    renderRepo(<PrivateRepoSetup connected onLinked={vi.fn()} />);
-    await waitFor(() => expect(screen.getByLabelText("New local folder")).toHaveProperty("value", "/code/devhub-private"));
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(fetch).toHaveBeenCalledWith("/api/setup/private-repo");
-    expect(screen.getByText(/a GitHub fork of a public repo would stay public/)).toBeTruthy();
+  it("lets the user step away with Do this later", async () => {
+    const onLater = vi.fn();
+    renderRepo(<PrivateRepoSetup connected={false} onLinked={vi.fn()} onLater={onLater} />);
+    fireEvent.click(screen.getByRole("button", { name: "Do this later" }));
+    expect(onLater).toHaveBeenCalledOnce();
+  });
+  it("creates the private repo with one click using the defaults", async () => {
+    const onLinked = vi.fn();
+    post.mockResolvedValue({ ok: true, json: async () => ({ directory: "/code/devhub-private", url: "https://github.com/test-user/devhub-private" }) } as Response);
+    renderRepo(<PrivateRepoSetup connected onLinked={onLinked} />);
+    const create = await screen.findByRole("button", { name: "Create my private DevHub repo" });
+    await waitFor(() => expect(create).not.toBeDisabled());
+    expect(screen.getByText(/a fork of a public repo would/)).toBeTruthy();
+    fireEvent.click(create);
+    await screen.findByText(/Quit and reopen DevHub/);
+    expect(onLinked).toHaveBeenCalledOnce();
+    expect(JSON.parse(String(post.mock.calls[0][1].body))).toEqual({ action: "create", name: "devhub-private", directory: "/code/devhub-private" });
   });
   it("offers cloning an existing private GitHub repo for a new machine", async () => {
     renderRepo(<PrivateRepoSetup connected onLinked={vi.fn()} />);
-    await screen.findByRole("button", { name: "Clone my private repo" });
+    await screen.findByRole("button", { name: "Create my private DevHub repo" });
+    openAlternatives();
     fireEvent.click(screen.getByRole("button", { name: "Clone my private repo" }));
     expect(screen.getByLabelText("Private GitHub repository")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Clone and connect" })).toBeDisabled();
   });
-  it("shows the restart instruction after a successful create request", async () => {
+  it("keeps the options available and shows an error when privacy validation fails", async () => {
+    repoStatus = { directory: "/code/existing", existing: true, linked: false };
+    post.mockResolvedValue({ ok: false, json: async () => ({ error: "This repository is public." }) } as Response);
     const onLinked = vi.fn();
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true, json: async () => ({ directory: "/code/devhub-private", linked: false }),
-    } as Response).mockResolvedValueOnce({
-      ok: true, json: async () => ({ directory: "/code/devhub-private", url: "https://github.com/test-user/devhub-private" }),
-    } as Response);
     renderRepo(<PrivateRepoSetup connected onLinked={onLinked} />);
-    await waitFor(() => expect(screen.getByRole("button", { name: "Create and connect" })).not.toBeDisabled());
-    fireEvent.click(screen.getByRole("button", { name: "Create and connect" }));
-    await screen.findByText(/Quit and reopen DevHub/);
-    expect(onLinked).toHaveBeenCalledOnce();
-    const [, options] = vi.mocked(fetch).mock.calls[1];
-    expect(JSON.parse(String(options?.body))).toEqual({ action: "create", name: "devhub-private", directory: "/code/devhub-private" });
-  });
-  it("keeps the form available and shows an error when privacy validation fails", async () => {
-    const onLinked = vi.fn();
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true, json: async () => ({ directory: "/code/existing", existing: true, linked: false }),
-    } as Response).mockResolvedValueOnce({
-      ok: false, json: async () => ({ error: "This repository is public." }),
-    } as Response);
-    renderRepo(<PrivateRepoSetup connected onLinked={onLinked} />);
+    await screen.findByRole("button", { name: "Create my private DevHub repo" });
+    openAlternatives();
     await waitFor(() => expect(screen.getByRole("button", { name: "Connect private repo" })).not.toBeDisabled());
     fireEvent.click(screen.getByRole("button", { name: "Connect private repo" }));
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", "This repository is public.");
     expect(onLinked).not.toHaveBeenCalled();
+  });
+});
+
+describe("without Git", () => {
+  it("shows the install command with a copy button and a re-check instead of the create action", async () => {
+    git = gitMissing;
+    renderRepo(<PrivateRepoSetup connected onLinked={vi.fn()} />);
+    expect(await screen.findByText("Git isn't installed yet")).toBeTruthy();
+    expect(screen.getByText(gitMissing.installCommand)).toBeTruthy();
+    expect(screen.getByText(/Run this in Ubuntu \(WSL terminal\)/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Copy install command/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Create my private DevHub repo" })).toBeNull();
+    // Installed in a terminal, then re-checked.
+    git = gitPresent;
+    fireEvent.click(screen.getByRole("button", { name: /Re-check Git/ }));
+    expect(await screen.findByRole("button", { name: "Create my private DevHub repo" })).toBeTruthy();
+  });
+  it("points to the download page where no command fits", async () => {
+    git = { ...gitMissing, installCommand: null } as unknown as typeof gitMissing;
+    renderRepo(<PrivateRepoSetup connected={false} onLinked={vi.fn()} />);
+    expect((await screen.findByText(/Install it from/)).textContent).toContain("git-scm.com/downloads");
   });
 });

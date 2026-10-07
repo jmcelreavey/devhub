@@ -71,6 +71,16 @@ everything after it, and `sidecar_env()` is the single seam between them.
 That check is the point: without it, an installed app with `REPO_ROOT` pointed
 at its own bundle would run `git status` against the application.
 
+## No fork, no GitHub, no Git
+
+The macOS app behaves like the Windows one: content starts in app data, setup
+finishes without a repo, and the private-repo step (*Setup → GitHub*) is optional
+and skippable. If `git` is missing (a Mac without the command-line tools) the
+step shows `xcode-select --install` with a copy button and a re-check, and
+`setupPrivateRepo` stops before creating anything. See
+[Windows app (WSL2)](desktop-windows-wsl.md#no-fork-no-github-no-git) for the
+full flow.
+
 ## Security posture
 
 The page in the window is a **remote origin** (`http://127.0.0.1:1337`).

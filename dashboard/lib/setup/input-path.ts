@@ -59,3 +59,14 @@ export function resolveSetupPath(raw: string, ctx: SetupPathContext = defaultCon
   }
   return path.isAbsolute(value) ? path.resolve(value) : value;
 }
+
+/**
+ * Why a typed path can never work, or null. `\\server\share` has no WSL
+ * equivalent, and "Path must be absolute" sends people hunting for a typo.
+ */
+export function unsupportedPathMessage(raw: string, ctx: SetupPathContext = defaultContext()): string | null {
+  const value = raw.trim();
+  if (!value.startsWith("\\\\") || value.startsWith("\\\\?\\")) return null;
+  if (ctx.wsl && windowsPathToWsl(value)) return null;
+  return "Network shares (\\\\server\\share) aren't supported. Choose a folder on this PC or inside Ubuntu.";
+}

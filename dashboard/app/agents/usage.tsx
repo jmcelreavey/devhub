@@ -5,6 +5,8 @@ import { useState } from "react";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { FetchError } from "@/components/ui/FetchError";
 import { formatRelative } from "@/lib/utils";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { InlineCodeText } from "@/components/ui/InlineCodeText";
 import type { ProviderUsage, UsageMeter, UsageSpend } from "@/lib/agent-usage/types";
 
 // The server caches each provider for five minutes; polling faster only re-reads that cache.
@@ -44,9 +46,28 @@ function ProviderCard({ provider, retry, busy }: { provider: ProviderUsage; retr
     </header>
     {provider.meters.map((meter) => <Meter key={meter.label} meter={meter} />)}
     {provider.spend.length > 0 && <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">{provider.spend.map((spend) => <SpendRow key={`${spend.source}:${spend.label}`} spend={spend} />)}</dl>}
-    {provider.message && <p className={provider.status === "error" ? "text-sm text-danger" : "text-xs text-text-subtle"}>{provider.message}</p>}
-    {muted && <button type="button" className="btn btn-ghost" disabled={busy} onClick={retry}>Retry {provider.name} usage</button>}
+    {muted ? <UnavailableBody provider={provider} retry={retry} busy={busy} /> : provider.message && <p className="text-xs text-text-subtle"><InlineCodeText text={provider.message} /></p>}
   </section>;
+}
+
+/** Headline, the one command to run, and the long explanation behind Details. */
+function UnavailableBody({ provider, retry, busy }: { provider: ProviderUsage; retry: () => void; busy: boolean }) {
+  const headline = provider.summary ?? provider.message ?? "Usage isn't available.";
+  const hasDetails = Boolean((provider.message && provider.summary) || provider.reason);
+  return <div className="space-y-2">
+    <p className={provider.status === "error" ? "text-sm text-danger" : "text-sm"}>{headline}</p>
+    {provider.command && <div className="flex items-center gap-2"><code className="px-2 py-1 rounded bg-bg text-xs">{provider.command}</code><CopyButton text={provider.command} label={provider.command} /></div>}
+    <div className="flex items-center gap-3 flex-wrap">
+      <button type="button" className="btn btn-ghost" disabled={busy} onClick={retry}>Retry {provider.name} usage</button>
+      {hasDetails && <details className="text-xs text-text-muted flex-1 min-w-0">
+        <summary className="cursor-pointer">Details</summary>
+        <div className="mt-2 space-y-1.5">
+          {provider.reason && <p><span className="text-text-subtle">Reason: </span>{provider.reason}</p>}
+          {provider.message && provider.summary && <p><InlineCodeText text={provider.message} copyCommands={!provider.command} /></p>}
+        </div>
+      </details>}
+    </div>
+  </div>;
 }
 
 function meterTone(percent: number): string {

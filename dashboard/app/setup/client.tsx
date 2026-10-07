@@ -5,6 +5,7 @@ import { PaseoConnection } from "@/app/agents/paseo-connection";
 import { PrivateRepoSetup } from "@/components/setup/PrivateRepoSetup";
 import { filterStepsByGoals } from "@/lib/setup/goals";
 import { useSetupProgress } from "@/lib/setup/use-setup-progress";
+import { requestedSetupStep } from "@/lib/setup/progress";
 import type { SetupStepId } from "@/lib/setup/progress";
 import { FetchError } from "@/components/ui/FetchError";
 import { useRouter } from "next/navigation";
@@ -139,6 +140,16 @@ export default function SetupPage() {
   const router = useRouter();
   const progressState = useSetupProgress();
   const { currentStep: currentStepId, goals, updateGoals, setCurrentStepId } = progressState;
+
+  useEffect(() => {
+    if (!progressState.ready) return;
+    const requested = requestedSetupStep(window.location.search);
+    if (!requested) return;
+    setCurrentStepId(requested);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("step");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+  }, [progressState.ready, setCurrentStepId]);
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [pathsForm, setPathsForm] = useState<PathsForm>({ repoRoot: "", notesDir: "", reposDir: "" });
   const [pathChecks, setPathChecks] = useState<{
@@ -964,7 +975,7 @@ export default function SetupPage() {
                 login={githubLogin}
                 error={error}
               />
-              {status.desktop && <PrivateRepoSetup connected={status.github} onLinked={() => void loadSetupStatus()} />}
+              {status.desktop && <PrivateRepoSetup connected={status.github} onLinked={() => void loadSetupStatus()} onLater={() => { progressState.skipStep(step.id); goNext(); }} />}
             </div>
           )}
           {step.id === "datadog" && (

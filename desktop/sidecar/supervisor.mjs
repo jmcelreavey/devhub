@@ -181,6 +181,17 @@ export function managedEnv() {
     PATH: `${path.join(prefix, "bin")}${path.delimiter}${repairedPath()}` };
 }
 
+/**
+ * The env for the PTY server, whose shells are the user's own terminals.
+ *
+ * The npm prefix in `managedEnv()` exists for DevHub's installs. A shell that
+ * inherits it cannot load nvm and sends `npm -g` into DevHub's tools folder.
+ * The PTY server scrubs its shells again; this keeps it out of the process.
+ */
+export function terminalChildEnv(env) {
+  return Object.fromEntries(Object.entries(env).filter(([key]) => !key.toLowerCase().startsWith("npm_config_")));
+}
+
 function waitForPort(port, host, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   return new Promise((resolve, reject) => {
@@ -362,7 +373,7 @@ async function main() {
   const ptyEntry = path.join(here, "terminal-pty-server.cjs");
   if (fs.existsSync(ptyEntry)) {
     emit({ state: "starting", service: "terminal" });
-    startTerminal(ptyEntry, serverDir, { ...env, TERMINAL_PORT: String(terminalPort) });
+    startTerminal(ptyEntry, serverDir, { ...terminalChildEnv(env), TERMINAL_PORT: String(terminalPort) });
   } else {
     log(`no terminal server staged at ${ptyEntry} — the terminal dock will not connect`);
   }

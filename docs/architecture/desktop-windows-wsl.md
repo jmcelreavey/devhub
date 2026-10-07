@@ -131,6 +131,11 @@ Ubuntu. Finish the Linux account setup in Ubuntu, restart if Windows asks, and
 open DevHub again. DevHub then installs its bundled payload in the distro and
 opens the dashboard. An existing user WSL2 distro is reused.
 
+A profile configured by an older build (a linked checkout or content repo, or
+saved paths and keys, but no `first-run.json`) is recorded as finished on first
+read, so an upgrade opens Today, never the wizard. A silent or updater upgrade
+keeps a Desktop shortcut the user deleted deleted (`installer-hooks.nsh`).
+
 An unfinished desktop setup opens **Set up DevHub** automatically. The wizard
 remembers its step and goals across reloads; **Your folders → Browse…** opens
 the native code-folder picker. **Set up later** opens the dashboard and keeps
@@ -197,16 +202,41 @@ password entered in Setup; a running but unreachable daemon is reported as a
 connection problem, without asking the user to install another one.
 
 Managed agent tools install under `~/.local/share/devhub/tools`, outside the
-versioned runtime. Reinstall managed Paseo once to update an older service's
-npm prefix. A daemon installed from the app keeps its own Node executable so
-an app update cannot remove the executable its service uses.
+versioned runtime. The npm prefix that points there is scoped to DevHub's own
+installs (the dashboard server and the `install-paseo` call). It is **not**
+exported to interactive shells: DevHub's terminal drops every `npm_config_*`
+variable and puts the bundled Node and `tools/bin` last on `PATH`, and the
+Paseo unit exports no prefix and lists neither payload directories nor the
+bundled Node first, so `nvm` loads and `npm -g` lands where the user expects.
+
+A daemon installed from the app keeps its own Node executable
+(`~/.local/share/devhub/paseo/runtime/node`). On every launch, before old
+payloads are removed, the shell reads `devhub-paseo.service`; if it still runs a
+node from `runtime/<payload-id>/`, that binary is copied to the durable path,
+the unit is rewritten (and stripped of the old npm prefix and payload `PATH`
+entries) and `systemd --user daemon-reload` runs. The daemon is not restarted.
+If that fails the old payloads are kept. A unit whose executable is missing is
+logged by the shell and flagged in Agents → Connection, where **Reinstall**
+repairs it with the existing password.
 
 DevHub's agent launch and Connection screens keep diagnostic logs behind
-**Details**, with sign-in or repair guidance. **Repair DevHub MCP** repairs only
+**Details**: a one-line summary and the single next action (a **Sign in to
+Cursor** or **Repair DevHub MCP entry** button, in the card and in the dialog),
+with the raw log below, collapsed, ANSI codes stripped, and a labelled copy
+button. Agents → Usage cards follow the same shape: a headline, the one command
+as code with a copy button, Retry, and the long explanation and a short failure
+reason (for example why z.ai could not be read) behind Details. **Repair DevHub MCP** repairs only
 OpenCode's existing `mcp.devhub` entry and keeps the original config in
 `opencode.json.devhub-backup`. It uses OpenCode's
 [local MCP schema](https://opencode.ai/docs/mcp-servers/#local).
 Errors rendered inside Paseo's own embedded chat UI remain owned by Paseo.
+After a repair DevHub asks Paseo to refresh its provider list; if that fails it
+says to restart Paseo. Restart (and turning off phone access) refuse while a
+chat is running, like setup and update.
+
+Paseo setup failures that are safe to show (existing daemon needs its password,
+port in use, systemd missing) reach the UI as written; other installer output
+stays in the server log.
 
 ## Behaviour to know
 
@@ -220,11 +250,58 @@ Errors rendered inside Paseo's own embedded chat UI remain owned by Paseo.
   is unregistered there. On Windows a registered worker held the bootstrap
   navigation for ~60s on every launch after the first (0.5s without it).
 - If a `systemd --user` DevHub service already holds the default ports, it stays
-  running. The app uses free ports and disables its own scheduler to avoid
-  duplicate jobs against the same content. Native commands are permitted at
+  running. The app uses free ports. It disables its own scheduler only when that
+  service works on the same content (its checkout is the app's linked repo); a
+  fresh profile with its own data keeps its jobs. The fallback ports are
+  remembered in `%APPDATA%\DevHub\config\fallback-ports.txt` and reused while the
+  defaults stay taken, because WebView settings (Focus vs Dashboard, terminal
+  history) are keyed by origin. Native commands are permitted at
   the selected dashboard origin, rather than every loopback port.
+- Shortcuts show Ctrl on Windows (`useModifierKey()` / `ShortcutKbd`), and the
+  terminal prompt bar's ask chord is Ctrl+Shift+Enter there. The window is
+  un-minimized when it first shows, so a saved off-screen state cannot hide it.
+- Setup's folder fields: an empty optional code folder is not an error, and
+  `\\server\share` paths say network shares are unsupported.
 - Release builds hide checkout rebuild notices. Linking a private content repo
   does not mean the bundled application needs a developer rebuild.
+
+## No fork, no GitHub, no Git
+
+DevHub does not need a fork, a GitHub account or Git to run, and setup never
+waits on a repo.
+
+- **Content lives in app data first.** On the desktop app notes, tasks,
+  collections and diagrams default to `~/.local/share/devhub/` in the distro
+  (`setupCoreDefaults`). The repo-root field stays empty. Finishing setup (or
+  **Set up later**) works with the GitHub step skipped.
+- **The private repo is optional.** Setup → GitHub has *Back up to a private
+  GitHub repo*. It says what the repo is for, and **Do this later** skips it. It is
+  not a fork: a fork of a public repo stays public. **Create my private DevHub
+  repo** makes a private repo in the user's account, clones the public core
+  (`upstream`), points `origin` at the private repo, copies the current notes,
+  tasks and diagrams in, commits with a noreply identity and pushes. Tokens stay in `gh`'s credential store and
+  are never committed. *Clone my private repo* and *Link existing checkout* sit
+  under the same disclosure and reuse the same code (`setupPrivateRepo`).
+- **Sign-in is DevHub's own device flow** (the same thing `gh auth login --web`
+  does): a one-time code and the GitHub URL, then the token is handed to the
+  bundled `gh`. The bundled `gh` is only used for create, clone and the check that
+  `origin` is private; nothing else in the app needs it.
+- **Git is detected where DevHub runs** (`/api/setup/git`): the Ubuntu distro on
+  Windows, the Mac on macOS. If it is missing the repo section shows
+  `sudo apt-get update && sudo apt-get install -y git` (Ubuntu) or
+  `xcode-select --install` (macOS) with a copy button and **Re-check Git**. Git is
+  not bundled: it needs the distro's own exec path and libraries, and an
+  apt-managed git is the one every other tool in the distro expects.
+  `setupPrivateRepo` checks git and `gh` first and stops before creating
+  anything. Any other `git` call that cannot start now reports "Git isn't
+  installed" with the same command, instead of `spawn git ENOENT`.
+- **Connect later.** After setup finishes, Today shows a dismissible strip
+  (*Your notes and tasks are stored only on this PC… optional*) with **Set up
+  private repo**, which opens `/setup?step=github`. **Not now** is remembered in the
+  setup record and the strip disappears once a repo is linked. Setup is also
+  always in the toolbar.
+
+Linking changes the content root, so DevHub asks to quit and reopen afterwards.
 
 ## Next installer retest
 
@@ -240,6 +317,10 @@ installer tested on Windows before tagging a release:
 - Re-test existing Paseo discovery, a fresh optional installation, Pi installs,
   OpenCode repair and provider sign-ins. Check startup phase timings on cold
   and subsequent launches.
+- Upgrade over an install whose Paseo unit still points at an old payload, and
+  over a configured profile (it must open Today, not Setup); `nvm current` in
+  DevHub's terminal; Usage cards and the Details dialogs; the no-fork / no-Git
+  path on a fresh profile.
 
 ## Known gaps
 

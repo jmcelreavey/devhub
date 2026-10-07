@@ -1,5 +1,6 @@
 "use client";
 
+import { ShortcutKbd } from "@/components/ui/ShortcutKbd";
 import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { Clock, Folder, PenTool, Plus } from "lucide-react";
@@ -105,7 +106,7 @@ export function DiagramsLandingPage({
               <h1 className="lib-hero-title">Diagrams</h1>
               <p className="lib-hero-sub">
                 Architecture and flow canvases — {total} diagrams across {browsable.length}{" "}
-                areas. Filter from the sidebar, or <kbd className="lib-kbd">⌘P</kbd> anywhere.
+                areas. Filter from the sidebar, or <ShortcutKbd className="lib-kbd" keys="P" /> anywhere.
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">

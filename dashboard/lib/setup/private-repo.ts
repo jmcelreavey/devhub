@@ -5,6 +5,7 @@ import { execExternal } from "@/lib/exec-external";
 import { execGh, ghEnv } from "@/lib/gh-exec";
 import { getAppDataDir, getCheckoutRoot, isDesktopRuntime } from "@/lib/desktop/runtime-paths";
 import { patchDashboardEnvLocalFile, patchEnvFileKeys, readDashboardEnvLocalFile, DASHBOARD_MANAGED_ENV_KEYS } from "@/lib/dashboard-env-local";
+import { assertGhAvailable, assertGitAvailable } from "@/lib/setup/git-check";
 import { getNotesDir, getTasksDir, getCollectionsDir, getUpstartsDir, getRepsDir } from "@/lib/content/dirs";
 
 const PUBLIC_REPO = "https://github.com/jmcelreavey/devhub.git";
@@ -130,10 +131,21 @@ async function canonicalFuturePath(directory: string): Promise<string> {
   }
 }
 
+/**
+ * Where a new private checkout goes by default. `~/Developer` is a macOS
+ * habit; the WSL launcher looks for a checkout under `~/dev`.
+ */
+export function suggestedPrivateRepoDirectory(home: string, platform: NodeJS.Platform = process.platform): string {
+  return path.join(home, platform === "darwin" ? "Developer" : "dev", "devhub-private");
+}
+
 let setupRunning = false;
 
 export async function setupPrivateRepo(input: z.infer<typeof PrivateRepoSetupSchema>): Promise<{ directory: string; url: string }> {
   if (!isDesktopRuntime()) throw new Error("Private-repo onboarding is for the installed desktop app.");
+  // Before anything is created: a missing tool should say so, not fail halfway as `spawn git ENOENT`.
+  assertGitAvailable();
+  assertGhAvailable();
   if (setupRunning) throw new Error("Private repository setup is already running.");
   setupRunning = true;
   try {

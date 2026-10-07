@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { beginExternalCall, endExternalCall } from "@/lib/exec-registry";
+import { GitMissingError, checkGit } from "@/lib/setup/git-check";
 
 const execFileAsync = promisify(execFile);
 
@@ -57,6 +58,10 @@ export async function execExternal(
     return { stdout, stderr };
   } catch (err) {
     endExternalCall(id, { ok: false, timedOut: isExecTimeout(err) });
+    // `spawn git ENOENT` tells a new user nothing; say how to install it. `code` is kept for callers that test it.
+    if (file === "git" && (err as NodeJS.ErrnoException | null)?.code === "ENOENT") {
+      throw Object.assign(new GitMissingError(checkGit()), { code: "ENOENT" });
+    }
     throw err;
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveSetupPath, windowsPathToWsl } from "./input-path";
+import { resolveSetupPath, unsupportedPathMessage, windowsPathToWsl } from "./input-path";
 
 describe("windowsPathToWsl", () => {
   it("maps drive paths onto /mnt", () => {
@@ -44,5 +44,17 @@ describe("resolveSetupPath", () => {
     expect(resolveSetupPath("/home/me/dev/", wsl)).toBe("/home/me/dev");
     expect(resolveSetupPath("dev", wsl)).toBe("dev");
     expect(resolveSetupPath("", wsl)).toBe("");
+  });
+});
+
+describe("unsupportedPathMessage", () => {
+  const wsl = { home: "/home/me", wsl: true };
+  it("says network shares are unsupported instead of 'Path must be absolute'", () => {
+    expect(unsupportedPathMessage("\\\\fileserver\\team\\code", wsl)).toMatch(/Network shares/);
+  });
+  it("leaves WSL paths, drive paths and ordinary input alone", () => {
+    expect(unsupportedPathMessage("\\\\wsl.localhost\\Ubuntu\\home\\me", wsl)).toBeNull();
+    expect(unsupportedPathMessage("C:\\Users\\me\\code", wsl)).toBeNull();
+    expect(unsupportedPathMessage("relative/dir", wsl)).toBeNull();
   });
 });

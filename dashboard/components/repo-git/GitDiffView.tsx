@@ -1,5 +1,6 @@
 "use client";
 
+import { useShortcutLabel } from "@/lib/hooks/use-modifier-key";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Bot, ChevronDown, ChevronUp, MessageSquare, Minus, Plus, Search, X } from "lucide-react";
 import type { ElementContent } from "hast";
@@ -156,6 +157,7 @@ export function GitDiffView({
   view = "unified",
   commentsEnabled = false,
 }: GitDiffViewProps) {
+  const shortcut = useShortcutLabel();
   const rootRef = useRef<HTMLPreElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const aiPopRef = useRef<HTMLDivElement>(null);
@@ -704,7 +706,7 @@ export function GitDiffView({
         <button
           type="button"
           className="btn btn-ghost repo-git-diff-find-open"
-          title="Find in diff (⌘F)"
+          title={`Find in diff (${shortcut("F")})`}
           aria-label="Find in diff"
           onClick={openFind}
         >

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { PASEO_SYSTEMD_UNIT, renderSystemdUnit, systemdPath, systemdQuote } from "./paseo-service.mjs";
+import { PASEO_SYSTEMD_UNIT, buildDaemonPath, renderSystemdUnit, systemdPath, systemdQuote } from "./paseo-service.mjs";
 
 test("quotes spaces, quotes, backslashes, % and $ so systemd reads them literally", () => {
   assert.equal(systemdQuote("/home/me/My Dir"), '"/home/me/My Dir"');
@@ -39,10 +39,26 @@ test("never backgrounds the daemon", () => {
   assert.doesNotMatch(renderSystemdUnit(sample), /Type=forking/);
 });
 
-test("agent installs use a persistent npm prefix, including paths with spaces", () => {
+test("the unit exports no npm prefix, so terminals it starts can load nvm", () => {
   const unit = renderSystemdUnit({ ...sample, npmPrefix: "/home/me/My Tools" });
-  assert.match(unit, /Environment="NPM_CONFIG_PREFIX=\/home\/me\/My Tools"/);
-  assert.match(unit, /Environment="npm_config_prefix=\/home\/me\/My Tools"/);
+  assert.doesNotMatch(unit, /npm_config_prefix/i);
+});
+
+test("daemon PATH keeps the user's order and demotes DevHub's own tooling", () => {
+  const payloadRoot = "/home/me/.local/share/devhub/runtime";
+  const path = buildDaemonPath({
+    current: `/home/me/.local/share/devhub/tools/bin:/home/me/.nvm/bin:${payloadRoot}/abc/runtime:/usr/bin`,
+    toolsBin: "/home/me/.local/share/devhub/tools/bin",
+    nodeDir: "/home/me/.local/share/devhub/paseo/runtime",
+    payloadRoot,
+  });
+  assert.equal(path, "/home/me/.nvm/bin:/usr/bin:/home/me/.local/share/devhub/tools/bin:/home/me/.local/share/devhub/paseo/runtime");
+});
+
+test("daemon PATH never lists a versioned payload, even as the node dir", () => {
+  const payloadRoot = "/d/runtime";
+  const path = buildDaemonPath({ current: "/usr/bin", toolsBin: "/d/tools/bin", nodeDir: `${payloadRoot}/abc/runtime`, payloadRoot });
+  assert.equal(path, "/usr/bin:/d/tools/bin");
 });
 
 test("refuses to render without a command line", () => {

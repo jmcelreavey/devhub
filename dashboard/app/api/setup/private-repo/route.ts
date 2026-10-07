@@ -5,7 +5,7 @@ import fs from "node:fs";
 import { parseBody, requireDashboardAuth } from "@/lib/api-utils";
 import { getCheckoutRoot, isDesktopRuntime } from "@/lib/desktop/runtime-paths";
 import { readDashboardEnvLocalFile } from "@/lib/dashboard-env-local";
-import { PrivateRepoSetupSchema, setupPrivateRepo, assertPrivateRepo } from "@/lib/setup/private-repo";
+import { PrivateRepoSetupSchema, setupPrivateRepo, assertPrivateRepo, suggestedPrivateRepoDirectory } from "@/lib/setup/private-repo";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   if (!isDesktopRuntime()) return NextResponse.json({ error: "Desktop app required." }, { status: 400 });
   const directory = getCheckoutRoot();
   if (!directory) {
-    const suggested = path.join(os.homedir(), "Developer", "devhub-private");
+    const suggested = suggestedPrivateRepoDirectory(os.homedir());
     return NextResponse.json({ directory: suggested, existing: fs.existsSync(path.join(suggested, ".git")), linked: false });
   }
   try {

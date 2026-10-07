@@ -2,12 +2,24 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { copyPrivateContent, githubRepoFromOrigin, setupPrivateRepo, assertPrivateRepo } from "./private-repo";
+import { copyPrivateContent, githubRepoFromOrigin, setupPrivateRepo, assertPrivateRepo, suggestedPrivateRepoDirectory } from "./private-repo";
+import { GhMissingError, GitMissingError } from "./git-check";
 
 const mocks = vi.hoisted(() => ({
   exec: vi.fn(), gh: vi.fn(), patch: vi.fn(),
   appData: "", checkout: null as string | null,
+  hasGit: true, hasGh: true,
 }));
+vi.mock("./git-check", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./git-check")>();
+  return {
+    ...actual,
+    assertGitAvailable: () => {
+      if (!mocks.hasGit) throw new actual.GitMissingError({ present: false, version: null, where: "Ubuntu (WSL terminal)", installCommand: "sudo apt-get update && sudo apt-get install -y git", installUrl: "https://git-scm.com/downloads" });
+    },
+    assertGhAvailable: () => { if (!mocks.hasGh) throw new actual.GhMissingError(); },
+  };
+});
 vi.mock("@/lib/exec-external", () => ({ execExternal: (...args: unknown[]) => mocks.exec(...args) }));
 vi.mock("@/lib/gh-exec", () => ({ execGh: (...args: unknown[]) => mocks.gh(...args), ghEnv: () => ({}) }));
 vi.mock("@/lib/dashboard-env-local", () => ({
@@ -32,6 +44,8 @@ vi.mock("@/lib/content/dirs", () => ({
 let tmp: string;
 beforeEach(async () => {
   vi.clearAllMocks();
+  mocks.hasGit = true;
+  mocks.hasGh = true;
   tmp = await fs.mkdtemp(path.join(os.tmpdir(), "devhub-private-setup-"));
   mocks.appData = path.join(tmp, "app-data");
   mocks.checkout = null;
@@ -156,5 +170,29 @@ describe("creating a private mirror", () => {
     mocks.checkout = "/already-linked";
     await expect(setupPrivateRepo({ action: "create", name: "devhub-private", directory: path.join(tmp, "new") })).rejects.toThrow("already linked");
     expect(mocks.gh).not.toHaveBeenCalled();
+  });
+});
+
+describe("tools missing before setup starts", () => {
+  const create = { action: "create", name: "devhub-private", directory: "" } as const;
+  it("explains how to install git, and touches nothing", async () => {
+    mocks.hasGit = false;
+    await expect(setupPrivateRepo({ ...create, directory: path.join(tmp, "repo") })).rejects.toThrow(GitMissingError);
+    await expect(setupPrivateRepo({ ...create, directory: path.join(tmp, "repo") })).rejects.toThrow(/sudo apt-get update && sudo apt-get install -y git/);
+    expect(mocks.exec).not.toHaveBeenCalled();
+    expect(mocks.gh).not.toHaveBeenCalled();
+    await expect(fs.access(path.join(tmp, "repo"))).rejects.toThrow();
+  });
+  it("says the GitHub CLI is missing rather than failing on the first gh call", async () => {
+    mocks.hasGh = false;
+    await expect(setupPrivateRepo({ ...create, directory: path.join(tmp, "repo") })).rejects.toThrow(GhMissingError);
+    expect(mocks.exec).not.toHaveBeenCalled();
+  });
+});
+
+describe("suggestedPrivateRepoDirectory", () => {
+  it("uses ~/dev on Linux and WSL, where the launcher looks, and ~/Developer on macOS", () => {
+    expect(suggestedPrivateRepoDirectory("/home/me", "linux")).toBe("/home/me/dev/devhub-private");
+    expect(suggestedPrivateRepoDirectory("/Users/me", "darwin")).toBe("/Users/me/Developer/devhub-private");
   });
 });

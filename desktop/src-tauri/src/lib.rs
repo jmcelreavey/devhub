@@ -1453,6 +1453,36 @@ fn startup_phase<T, E>(
     result
 }
 
+/// Older payloads are deleted on update, so a Paseo service that still runs a
+/// node binary from one has to be moved first. If it cannot be repaired the old
+/// payloads stay: a slightly larger disk beats an agent daemon that cannot
+/// restart.
+fn keep_paseo_runnable_then_prune(log: &DesktopLog, backend: &wsl::WslBackend, id: &str) {
+    match backend.repair_paseo_unit(id) {
+        Ok(repair) => {
+            if let wsl::PaseoUnitRepair::Repaired { old_binary } = &repair {
+                log.write_line(
+                    "shell:wsl",
+                    &format!("[paseo] moved the Paseo service off {old_binary} to its own node runtime"),
+                );
+            }
+            if let Err(err) = backend.prune_old_payloads(id) {
+                log.write_line("shell:wsl", &format!("[wsl] could not remove old payloads: {err}"));
+            }
+        }
+        Err(err) => log.write_line(
+            "shell:wsl",
+            &format!("[paseo] {err}; keeping older payloads so the service can still start"),
+        ),
+    }
+    if let Some(missing) = backend.paseo_unit_binary_missing() {
+        log.write_line(
+            "shell:wsl",
+            &format!("[paseo] the Paseo service points at {missing}, which is missing. Reinstall managed Paseo from Agents → Connection."),
+        );
+    }
+}
+
 fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     let sidecar = state.sidecar.clone();
@@ -1488,16 +1518,18 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
     let repo_pref = std::env::var("DEVHUB_WSL_REPO").ok().or_else(|| {
         std::fs::read_to_string(state.paths.app_data.join("config").join("wsl-repo.txt")).ok()
     });
-    let checkout = if backend.has_content_checkout() {
+    let content_link = backend.content_repo_link();
+    let checkout = if content_link.is_some() {
         None
     } else {
         backend.find_checkout(repo_pref.as_deref())
     };
     log.write_line(
         "shell:wsl",
-        &match &checkout {
-            Some(repo) => format!("[wsl] linked checkout {repo}"),
-            None => "[wsl] no checkout linked — using fresh app data".to_string(),
+        &match (&checkout, &content_link) {
+            (Some(repo), _) => format!("[wsl] linked checkout {repo}"),
+            (None, Some(repo)) => format!("[wsl] content repo linked: {repo}"),
+            (None, None) => "[wsl] no checkout linked — using fresh app data".to_string(),
         },
     );
 
@@ -1534,6 +1566,7 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
             } else {
                 log.write_line("shell:wsl", &format!("[wsl] reusing cached payload {id}"));
             }
+            keep_paseo_runnable_then_prune(&log, &backend, &id);
             dir
         }
     };
@@ -1545,10 +1578,15 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
         ),
     );
 
+    let ports_file = state.paths.app_data.join("config").join("fallback-ports.txt");
+    let previous_ports = std::fs::read_to_string(&ports_file)
+        .ok()
+        .and_then(|text| wsl::parse_saved_ports(&text));
     let ports = startup_phase(&log, "ports", || {
         let occupied = backend.listening_ports()?;
-        wsl::select_ports(
+        wsl::select_ports_preferring(
             sidecar.preferred_ports,
+            previous_ports,
             [
                 std::env::var_os("DEVHUB_PORT").is_none(),
                 std::env::var_os("DEVHUB_TERMINAL_PORT").is_none(),
@@ -1559,7 +1597,14 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
             },
         )
     })?;
-    let secondary = ports != sidecar.preferred_ports
+    if ports != sidecar.preferred_ports {
+        // Remembered so the next launch gets the same origin (and its saved settings).
+        if let Some(dir) = ports_file.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let _ = std::fs::write(&ports_file, format!("{} {}\n", ports[0], ports[1]));
+    }
+    let service_holds_default_ports = ports != sidecar.preferred_ports
         && (backend
             .exec(
                 &[
@@ -1574,6 +1619,12 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
             .is_ok()
             || dev_server_responds(&format!("http://127.0.0.1:{}", sidecar.preferred_ports[0]))
                 .is_ok());
+    // Defer scheduled jobs only to a service that runs the same content.
+    let secondary = service_holds_default_ports
+        && wsl::shares_content(
+            checkout.as_deref().or(content_link.as_deref()),
+            backend.running_service_repo().as_deref(),
+        );
     if ports != sidecar.preferred_ports {
         log.write_line("shell:startup", &format!(
             "[startup] requested ports {:?} unavailable; using dashboard={} terminal={}; secondary={secondary}. Existing services keep running.",
@@ -1823,6 +1874,9 @@ fn left_boot_page(url: &tauri::Url) -> bool {
 /// appears with the boot state already rendered reads as starting up.
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
+        // Saved window state can restore a force-closed app as minimized
+        // (off-screen at -32000,-32000 on Windows); show() alone leaves it so.
+        let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
     }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { findApiKey } from "./opencode-auth";
+import { UsageLoadError } from "./load-error";
 import type { ProviderUsage } from "./types";
 
 // Undocumented: the endpoint z.ai's own usage page (and community GLM plan
@@ -21,10 +22,18 @@ const LIMIT_LABELS: Record<string, string> = {
 export async function loadZaiUsage(): Promise<ProviderUsage | null> {
   const key = await findApiKey("ZAI_API_KEY", ["zai-coding-plan", "zai", "zhipuai-coding-plan"]);
   if (!key) return null;
-  const response = await fetch(QUOTA_URL, { headers: { Authorization: key, "Accept-Language": "en-US,en" }, signal: AbortSignal.timeout(15_000) });
-  if (!response.ok) throw new Error(`z.ai usage failed (HTTP ${response.status}).`);
+  let response: Response;
+  try {
+    response = await fetch(QUOTA_URL, { headers: { Authorization: key, "Accept-Language": "en-US,en" }, signal: AbortSignal.timeout(15_000) });
+  } catch {
+    throw new UsageLoadError("Couldn't load z.ai usage: the request failed.", "Couldn't reach z.ai (network error or timeout).");
+  }
+  if (response.status === 401 || response.status === 403) {
+    throw new UsageLoadError(`z.ai usage failed (HTTP ${response.status}).`, `z.ai rejected the API key (HTTP ${response.status}). Check ZAI_API_KEY or the key saved in OpenCode.`);
+  }
+  if (!response.ok) throw new UsageLoadError(`z.ai usage failed (HTTP ${response.status}).`, `z.ai's usage endpoint answered HTTP ${response.status}.`);
   const parsed = quotaSchema.safeParse(await response.json().catch(() => null));
-  if (!parsed.success) throw new Error("Couldn't load z.ai usage: the service returned no usable quota data.");
+  if (!parsed.success) throw new UsageLoadError("Couldn't load z.ai usage: the service returned no usable quota data.", "z.ai returned data in an unexpected shape. The usage endpoint is undocumented and may have changed.");
   const { level, limits } = parsed.data.data;
   return {
     id: "zai",
