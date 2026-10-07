@@ -23,31 +23,31 @@ const mt = fs.readdirSync(sdkBin)
   .find((candidate) => fs.existsSync(candidate));
 if (!mt) throw new Error("Windows SDK manifest tool (mt.exe) is missing.");
 
-function run(command, args, capture = false) {
+function run(command, args) {
   const result = spawnSync(command, args, {
     cwd: cargoDir,
     encoding: "utf8",
-    stdio: capture ? ["inherit", "pipe", "inherit"] : "inherit",
+    stdio: "inherit",
     timeout: 15 * 60 * 1000,
-    maxBuffer: 16 * 1024 * 1024,
   });
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
-  return result.stdout ?? "";
 }
 
-const output = run("cargo", ["test", "--no-run", "--message-format=json"], true);
-const executables = output.split(/\r?\n/).filter(Boolean)
-  .map((line) => JSON.parse(line))
-  .filter((artifact) => artifact.reason === "compiler-artifact" && artifact.profile.test && artifact.executable)
-  .map((artifact) => artifact.executable);
-if (executables.length === 0) throw new Error("Cargo produced no test executables.");
-
-for (const executable of new Set(executables)) {
+if (process.argv[2] === "--run") {
+  const executable = process.argv[3];
+  if (!executable) throw new Error("Cargo supplied no test executable.");
   run(mt, [
     "-manifest", path.join(scriptsDir, "windows-test-manifest.xml"),
     `-outputresource:${executable};#1`,
   ]);
+  run(executable, process.argv.slice(4));
+} else {
+  // Apply the manifest after Cargo's final link, preserving its test environment.
+  // A per-command runner leaves ordinary app launches unchanged.
+  const runner = [process.execPath, fileURLToPath(import.meta.url), "--run"];
+  run("cargo", [
+    "test", "--config",
+    `target.x86_64-pc-windows-msvc.runner=${JSON.stringify(runner)}`,
+  ]);
 }
-// Cargo reuses the prepared executables; failures still propagate normally.
-run("cargo", ["test"]);
