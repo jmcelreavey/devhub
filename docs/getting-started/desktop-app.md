@@ -22,8 +22,9 @@ Public installer releases have not been published yet. Build artifacts are
 available from successful **Release desktop** workflow runs; tagged releases
 will appear under [Releases](https://github.com/jmcelreavey/devhub/releases).
 
-**macOS:** choose the `.dmg` for Apple Silicon or Intel, open it, drag DevHub
-to Applications, then launch it.
+**macOS 13 or later:** choose the `.dmg` for Apple Silicon or Intel, open it,
+drag DevHub to Applications, then launch it. The bundled GitHub CLI sets this
+minimum version.
 
 **Windows:** run the `-setup.exe`. It installs DevHub for your Windows user
 and installs WebView2 if needed. On first launch, choose **Set up Windows
