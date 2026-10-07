@@ -35,23 +35,28 @@ open DevHub again. DevHub uses an existing user WSL2 distro when available.
 Windows installs remain unverified on a clean Windows machine. See
 [Windows app](../architecture/desktop-windows-wsl.md) for the current limits.
 
-### "DevHub can't be opened because Apple cannot check it"
+### Unsigned installers
 
-Builds are currently signed **ad-hoc**, which means macOS can confirm the app
-has not been tampered with but cannot confirm who made it. Gatekeeper blocks
-double-clicking on that basis.
+DevHub currently ships without an Apple Developer ID or Windows publisher
+certificate. These are optional for building and distributing installers, but
+the operating system cannot verify the publisher.
 
-Right-click the app → **Open** → **Open**. macOS remembers the decision, so this
-is a one-time step.
+**macOS:** the app has an ad-hoc signature and is not notarised. After trying
+to open a download you trust, go to **System Settings → Privacy & Security →
+Open Anyway**, then confirm **Open**. macOS saves an exception for that app.
+See [Apple's instructions](https://support.apple.com/en-au/102445). Rebuilds can
+also trigger permission prompts again; see
+[macOS permissions](../guides/macos-permissions.md).
 
-This goes away once releases are signed with an Apple Developer ID. Until then
-it is the honest trade-off: no Apple Developer Program membership, one extra
-click on first launch.
+**Windows:** SmartScreen may show **Windows protected your PC**. For a download
+you trust, choose **More info → Run anyway** when offered. Smart App Control or
+an organisation's policy can block unsigned apps without offering that choice.
+On a managed machine, ask your administrator; do not disable system-wide
+protection to install DevHub. See
+[Microsoft's explanation](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation).
 
-An ad-hoc signature also means macOS re-asks for Files & Folders, Local Network
-and Automation after every rebuild, because the signature it remembers them
-against changes each time. See [macOS permissions](../guides/macos-permissions.md)
-to grant them once and have it stick.
+Updater signatures are separate: DevHub still verifies downloaded updates
+against its own release key. They do not remove these operating-system prompts.
 
 ## First launch
 

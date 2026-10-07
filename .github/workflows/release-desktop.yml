@@ -191,9 +191,10 @@ jobs:
         if: runner.os == 'macOS' && env.HAS_APPLE_SIGNING != 'true'
         run: |
           echo "::warning::No Apple Developer ID secrets on this repository — \
-          building an UNSIGNED macOS bundle. Gatekeeper will quarantine it on \
-          any machine that did not build it. Set APPLE_SIGNING_IDENTITY and \
-          friends before publishing to anyone else."
+          building a macOS bundle without a verified publisher or notarisation. \
+          Users must approve first launch in Privacy & Security; managed-device \
+          policies may block it. See docs/getting-started/desktop-app.md. \
+          Apple signing credentials are optional."
 
       - name: Build, sign, and bundle
         uses: tauri-apps/tauri-action@v0
