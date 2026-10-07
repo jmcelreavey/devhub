@@ -287,6 +287,8 @@ fn wslenv<'a>(names: impl Iterator<Item = &'a str>) -> String {
 /// username. Those prompts cannot be completed by a hidden background process.
 #[cfg(target_os = "windows")]
 pub fn launch_installer() -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+
     let system_root =
         std::env::var_os("SystemRoot").ok_or("Windows system directory is unavailable.")?;
     let powershell = std::path::PathBuf::from(system_root)

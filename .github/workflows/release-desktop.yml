@@ -95,6 +95,7 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: desktop/src-tauri -> target
+          cache-on-failure: true
           key: ${{ matrix.target }}
 
       # This list is not guesswork — it is what the Ubuntu 22.04 container in
@@ -327,6 +328,7 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: desktop/src-tauri -> target
+          cache-on-failure: true
           key: x86_64-pc-windows-msvc
 
       # Icon staging runs before tauri-action installs its build tools.
