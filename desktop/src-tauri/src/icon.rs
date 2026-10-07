@@ -117,10 +117,10 @@ fn reset_macos_dock_to_bundle() -> Result<(), String> {
     Ok(())
 }
 
-fn apply_kind(app: &AppHandle, kind: &DesktopIconKind, png: &[u8]) -> Result<(), String> {
+fn apply_kind(app: &AppHandle, _kind: &DesktopIconKind, png: &[u8]) -> Result<(), String> {
     apply_window_icons(app, png)?;
     #[cfg(target_os = "macos")]
-    match kind {
+    match _kind {
         DesktopIconKind::Default => reset_macos_dock_to_bundle()?,
         DesktopIconKind::Plugin => set_macos_dock_icon(png)?,
     }

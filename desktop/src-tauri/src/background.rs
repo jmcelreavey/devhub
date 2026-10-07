@@ -11,10 +11,14 @@
 //! Paths reach the root shell only as `osascript` arguments quoted by
 //! AppleScript's `quoted form of`, never spliced into the script text.
 
+#[cfg(target_os = "macos")]
 use std::process::Command;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
+#[cfg(target_os = "macos")]
+use tauri::Manager;
 
 /// Desktop log (View → Show Logs), next to the scheduler's own lines.
+#[cfg(target_os = "macos")]
 fn log(app: &AppHandle, line: &str) {
     if let Some(state) = app.try_state::<crate::AppState>() {
         state.log.write_line("shell:background", line);
@@ -171,7 +175,6 @@ mod login_item {
     extern "C" {}
 
     fn main_app_service() -> Result<id, String> {
-        // SMAppService is macOS 13+; the bundle still supports 11.
         let class = Class::get("SMAppService").ok_or("Launch at login needs macOS 13 or later")?;
         Ok(unsafe { msg_send![class, mainAppService] })
     }
