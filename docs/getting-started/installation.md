@@ -95,7 +95,7 @@ Use development mode for normal day-to-day work. It reloads as files change. If 
 PORT=1400 TERMINAL_PORT=1402 DEVHUB_SCHEDULER=0 npm run dev
 ```
 
-Open http://localhost:1400. The scheduler stays with your primary instance.
+Open http://localhost:1400. The dock discovers `TERMINAL_PORT` from the running dashboard, so it connects to this instance's peer. The scheduler stays with your primary instance.
 
 ## Production Mode
 

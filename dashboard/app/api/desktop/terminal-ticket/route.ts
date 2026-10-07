@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { terminalPort } from "@/lib/terminal-port";
 import {
   isAuthenticatedDesktopRequest,
   isDesktopSession,
@@ -21,10 +22,10 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   if (!isDesktopSession()) {
-    return NextResponse.json({ ticket: null, desktop: false });
+    return NextResponse.json({ ticket: null, desktop: false, port: terminalPort() });
   }
   if (!isAuthenticatedDesktopRequest(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  return NextResponse.json({ ticket: issueTerminalTicket(), desktop: true });
+  return NextResponse.json({ ticket: issueTerminalTicket(), desktop: true, port: terminalPort() });
 }

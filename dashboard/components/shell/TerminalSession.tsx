@@ -747,9 +747,18 @@ export function TerminalSession({
        * no ticket, so `npm run dev` is unaffected.
        */
       let ticket: string | null = null;
+      let peerPort = TERMINAL_PORT;
       try {
         const res = await fetch("/api/desktop/terminal-ticket", { credentials: "same-origin" });
-        if (res.ok) ticket = ((await res.json()) as { ticket: string | null }).ticket;
+        if (res.ok) {
+          const data = (await res.json()) as { ticket: string | null; port?: number };
+          ticket = data.ticket;
+          // Runtime metadata also works when npm start uses a different port from the build.
+          if (!process.env.NEXT_PUBLIC_TERMINAL_PORT && typeof data.port === "number" &&
+            Number.isInteger(data.port) && data.port >= 1 && data.port <= 65535) {
+            peerPort = String(data.port);
+          }
+        }
       } catch {
         /* browser mode, or the route is unavailable — origin checking applies */
       }
@@ -757,7 +766,7 @@ export function TerminalSession({
       if (ticket) params.set("ticket", ticket);
 
       const socket = new WebSocket(
-        `${proto}://${window.location.hostname}:${TERMINAL_PORT}/?${params}`,
+        `${proto}://${window.location.hostname}:${peerPort}/?${params}`,
       );
       socketRef = socket;
       // Only bail if unmount already happened. killOnUnmount is honoured at
@@ -872,13 +881,13 @@ export function TerminalSession({
           term.writeln("\x1b[2m── session ended · Restart to start a new shell ──\x1b[0m");
           return;
         }
-        const url = `${window.location.hostname}:${TERMINAL_PORT}`;
+        const url = `${window.location.hostname}:${peerPort}`;
         term.writeln("");
         term.writeln(`\x1b[31m⚠ Could not reach the terminal peer at ${url}.\x1b[0m`);
         term.writeln("\x1b[2mUsually one of:\x1b[0m");
         term.writeln("\x1b[2m  · the PTY server is not running — start it with `npm run dev`\x1b[0m");
         term.writeln(
-          `\x1b[2m  · it is listening on another port — set NEXT_PUBLIC_TERMINAL_PORT (this page tried ${TERMINAL_PORT})\x1b[0m`,
+          `\x1b[2m  · it is listening on another port — check TERMINAL_PORT or NEXT_PUBLIC_TERMINAL_PORT (this page tried ${peerPort})\x1b[0m`,
         );
         term.writeln(
           "\x1b[2m  · this page is not on a loopback host; the peer is never exposed over LAN\x1b[0m",

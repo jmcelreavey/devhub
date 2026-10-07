@@ -7,6 +7,7 @@ import { QuickActions } from "@/components/shell/QuickActions";
 import { SectionTabs } from "@/components/shell/SectionTabs";
 import { useWorkspaceTabs } from "@/components/shell/WorkspaceTabs";
 import { crumbKey, uniqueSessionHistory } from "@/lib/session-history";
+import { useClientMounted } from "@/lib/hooks/use-client-mounted";
 import { FocusTimer } from "@/components/tasks/FocusTimer";
 import { HoverTip } from "@/components/ui/HoverTip";
 import { Search, Settings } from "lucide-react";
@@ -23,7 +24,10 @@ export function HubTopBar() {
   // Previous pages only, newest first. The current page is already named by
   // the workspace tab directly below, and a "›" trail read as a hierarchy —
   // "Docs › Logs" looked like Logs lived inside Docs.
-  const recent = uniqueSessionHistory(useWorkspaceTabs().history, 5)
+  const { history } = useWorkspaceTabs();
+  const mounted = useClientMounted();
+  // Stored history can arrive before this Suspense boundary has hydrated.
+  const recent = (mounted ? uniqueSessionHistory(history, 5) : [])
     .filter((entry) => crumbKey(entry.href) !== crumbKey(pathname))
     .reverse()
     .slice(0, 4);

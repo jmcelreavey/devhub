@@ -40,6 +40,18 @@ describe("detectBiPresence", () => {
     expect(detectBiPresence(none, home)).toEqual({ bi: false, awsProfile: null, capiRepoPath: null });
   });
 
+  it.each([true, false])("exposes setup for an enabled plugin before AWS is configured (enabled=%s)", (enabled) => {
+    const plugin = path.join(home, "plugin");
+    fs.mkdirSync(plugin);
+    fs.writeFileSync(path.join(plugin, "devhub-plugin.json"), JSON.stringify({
+      name: "bi", version: "1", devhubApi: "1", contributes: {}, navGate: "bi",
+    }));
+    const file = path.join(home, ".config/devhub/plugins.json");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ plugins: [{ name: "bi", path: plugin, enabled }] }));
+    expect(detectBiPresence(none, home)).toEqual({ bi: enabled, awsProfile: null, capiRepoPath: null });
+  });
+
   it("is true when an AWS profile env is set, and prefers it", () => {
     const r = detectBiPresence((k) => (k === "AWS_PROFILE" ? "work" : null), home);
     expect(r.bi).toBe(true);

@@ -31,6 +31,7 @@
     "demos:illustrations": "cd dashboard && ./node_modules/.bin/tsx scripts/record-illustrations.ts",
     "docs:diagrams": "npm run docs:diagrams --prefix ./dashboard",
     "setup": "npm run setup --prefix ./dashboard",
+    "plugins": "npm run plugins --prefix ./dashboard --",
     "clean": "npm run clean --prefix ./dashboard",
     "restart": "npm run restart --prefix ./dashboard",
     "desktop:sign": "node desktop/scripts/sign-local.mjs",

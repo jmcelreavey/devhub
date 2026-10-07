@@ -4,7 +4,7 @@
  *
  * Each browser connection spawns a shell rooted at the developer directory
  * (~/Developer) and relays bytes both ways. The xterm.js client
- * (components/TerminalDock.tsx) connects over ws://localhost:1339.
+ * (components/shell/TerminalSession.tsx) discovers the peer port from the dashboard.
  *
  * Shell modes (client picks via `?shell=` on the WS URL):
  * - `login` — $SHELL -l, full rc files. The real environment.
@@ -56,8 +56,9 @@ import {
   isValidTerminalTicket,
 } from "../lib/desktop/bootstrap-auth";
 import { scrubDesktopRuntimeEnv } from "../lib/process-env";
+import { terminalPort } from "../lib/terminal-port";
 
-const PORT = Number.parseInt(process.env.TERMINAL_PORT ?? "1339", 10);
+const PORT = terminalPort();
 /** A shell that prints nothing for this long during startup is presumed hung. */
 const HANG_MS = 4_000;
 /** Session logs older than this are pruned on startup. */

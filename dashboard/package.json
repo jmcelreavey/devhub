@@ -32,6 +32,7 @@
     "verify": "npm run verify:checks && npm run skills:verify-vendor && npm run verify:build && DEVHUB_VERIFY_BUILD=1 npm run check:dynamic-routes",
     "postinstall": "tsx scripts/postinstall.ts",
     "setup": "tsx scripts/setup-reminder.ts",
+    "plugins": "tsx scripts/plugins.ts",
     "docs:diagrams": "tsx scripts/check-docs-diagrams.mts",
     "check:dynamic-routes": "tsx scripts/check-no-prerendered-content-routes.mts",
     "test:e2e": "playwright test",

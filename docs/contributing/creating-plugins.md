@@ -87,7 +87,18 @@ the plugin checkout:
 
 ## 3. Register the plugin locally
 
-Plugins are listed in a **machine-local** file (never committed), `~/.config/devhub/plugins.json`:
+From the DevHub repo root, register the cloned plugin:
+
+```bash
+npm run plugins -- add ~/dev/devhub-myplugin
+npm run plugins -- list
+```
+
+The command validates the manifest, saves the path and enables the plugin. Relative
+paths refer to the directory you ran the command from. Repeating `add` updates the
+existing entry instead of duplicating it.
+
+The registry is **machine-local** and never committed: `~/.config/devhub/plugins.json`:
 
 ```json
 {
@@ -97,11 +108,17 @@ Plugins are listed in a **machine-local** file (never committed), `~/.config/dev
 }
 ```
 
-`path` accepts `~`. Set `"enabled": false` to disable without removing.
+`path` accepts `~`. Use `npm run plugins -- disable myplugin` or
+`npm run plugins -- enable myplugin` to change it without removing the entry.
+The CLI preserves other entries and settings; malformed registry JSON must be fixed
+before it will write.
 
 ## 4. Sync and verify
 
-From the DevHub dashboard: **Skills / Actions → Sync**. Or from the CLI:
+Restart the dashboard after adding or enabling a plugin. `npm run dev` materialises
+its dashboard modules and installs missing plugin MCP dependencies. Then use
+**Skills / Actions → Sync** to publish its skills, agents and MCP definitions to your
+AI tools. Or run the sync from the CLI:
 
 ```bash
 cd ~/dev/devhub/dashboard

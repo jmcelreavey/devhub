@@ -100,9 +100,10 @@ resolve unchanged and Next compiles them as if they were core files. It:
 Nav: plugins declare `dashboard.nav` entries in `devhub-plugin.json`. The materialiser
 writes them into `lib/plugin-nav.generated.ts`; core merges them into the sidebar via
 `groupSidebarNav` (and into ⌘P via `ALL_NAV_DESTINATIONS`). Use `group: "bi"` for
-BI-owned destinations — Ops ships that way from `devhub-bi`. The `bi` gate is still
-computed by a dependency-free `lib/bi-presence.ts` detector so core holds no BI feature
-code.
+BI-owned destinations — Ops ships that way from `devhub-bi`. `lib/bi-presence.ts`
+opens that gate when an enabled plugin declares `navGate: "bi"`, even before AWS or
+email setup. Existing local AWS/email detection remains available; core holds no BI
+feature code.
 
 ### Database connections
 
@@ -281,6 +282,18 @@ devhub-bi/
 ```
 
 ## Registry (machine-local, never committed)
+
+Register and manage plugins from the DevHub repo root:
+
+```bash
+npm run plugins -- add ~/Developer/devhub-bi
+npm run plugins -- list                 # enabled, valid plugins
+npm run plugins -- disable bi
+npm run plugins -- enable bi
+```
+
+Mutations validate the manifest and registry, preserve unrelated settings and write
+atomically. Restart the dashboard to apply them, then use Skills → Sync for AI tools.
 
 `~/.config/devhub/plugins.json` lists which plugins this machine has and whether they're
 enabled (same home as the `mcp-personal/` catalog):
