@@ -126,13 +126,12 @@ impl WslBackend {
     ///
     /// Content-only Git linking keeps configuration in app data. Auto-detecting
     /// that clone as a legacy checkout would switch to an absent .env.local.
-    pub fn has_content_checkout(&self) -> bool {
-        self.content_repo_link().is_some()
-    }
-
     pub fn content_repo_link(&self) -> Option<String> {
         self.exec(
-            &["/bin/cat", &format!("{}/content-repo-path.txt", self.app_data)],
+            &[
+                "/bin/cat",
+                &format!("{}/content-repo-path.txt", self.app_data),
+            ],
             QUICK_TIMEOUT,
         )
         .ok()
@@ -144,7 +143,15 @@ impl WslBackend {
     /// directory is `<repo>/dashboard`), when that service exists.
     pub fn running_service_repo(&self) -> Option<String> {
         self.exec(
-            &["/bin/systemctl", "--user", "show", "devhub.service", "-p", "WorkingDirectory", "--value"],
+            &[
+                "/bin/systemctl",
+                "--user",
+                "show",
+                "devhub.service",
+                "-p",
+                "WorkingDirectory",
+                "--value",
+            ],
             QUICK_TIMEOUT,
         )
         .ok()
@@ -270,7 +277,15 @@ if [ ! -x "$dest" ]; then
 fi
 "#;
         self.exec(
-            &["/bin/sh", "-c", copy, "devhub-paseo-node", &durable_node, &old_binary, &fallback],
+            &[
+                "/bin/sh",
+                "-c",
+                copy,
+                "devhub-paseo-node",
+                &durable_node,
+                &old_binary,
+                &fallback,
+            ],
             INSTALL_TIMEOUT,
         )
         .map_err(|err| format!("Could not keep Paseo's Node runtime: {err}"))?;
@@ -281,7 +296,14 @@ mv "$1.next" "$1"
 systemctl --user daemon-reload || true
 "#;
         self.exec(
-            &["/bin/sh", "-c", write, "devhub-paseo-unit", &unit_path, rewritten.trim_end()],
+            &[
+                "/bin/sh",
+                "-c",
+                write,
+                "devhub-paseo-unit",
+                &unit_path,
+                rewritten.trim_end(),
+            ],
             QUICK_TIMEOUT,
         )
         .map_err(|err| format!("Could not update the Paseo service: {err}"))?;
@@ -291,7 +313,9 @@ systemctl --user daemon-reload || true
     /// Does the managed Paseo unit point at an executable that is missing?
     /// Reported in the shell log; Agents → Connection shows the same warning.
     pub fn paseo_unit_binary_missing(&self) -> Option<String> {
-        let unit = self.exec(&["/bin/cat", &paseo_unit_path(&self.home)], QUICK_TIMEOUT).ok()?;
+        let unit = self
+            .exec(&["/bin/cat", &paseo_unit_path(&self.home)], QUICK_TIMEOUT)
+            .ok()?;
         let binary = paseo_exec_binary(&unit)?;
         self.exec(&["/usr/bin/test", "-x", &binary], QUICK_TIMEOUT)
             .is_err()
@@ -308,8 +332,11 @@ for old in "$root"/*; do
 done
 "#;
         let root = format!("{}/runtime", self.app_data);
-        self.exec(&["/bin/sh", "-c", script, "devhub-prune", &root, payload_id], INSTALL_TIMEOUT)
-            .map(|_| ())
+        self.exec(
+            &["/bin/sh", "-c", script, "devhub-prune", &root, payload_id],
+            INSTALL_TIMEOUT,
+        )
+        .map(|_| ())
     }
 
     /// The command that runs the supervisor, stdin piped.
@@ -403,7 +430,10 @@ pub enum PaseoUnitRepair {
 const PASEO_UNIT: &str = "devhub-paseo.service";
 
 pub fn paseo_unit_path(home: &str) -> String {
-    format!("{}/.config/systemd/user/{PASEO_UNIT}", home.trim_end_matches('/'))
+    format!(
+        "{}/.config/systemd/user/{PASEO_UNIT}",
+        home.trim_end_matches('/')
+    )
 }
 
 /// The copy of node the Paseo daemon owns, outside every versioned payload.
@@ -470,7 +500,9 @@ pub fn rewrite_paseo_unit(unit: &str, app_data: &str, durable_node: &str) -> Opt
     let payloads = format!("{app_data}/runtime/");
     let tools = format!("{app_data}/tools");
     let tools_bin = format!("{tools}/bin");
-    let bundled_node_dir = durable_node.rsplit_once('/').map(|(dir, _)| dir.to_string());
+    let bundled_node_dir = durable_node
+        .rsplit_once('/')
+        .map(|(dir, _)| dir.to_string());
     let mut changed = false;
     let mut out: Vec<String> = Vec::new();
     for line in unit.lines() {
@@ -503,12 +535,15 @@ pub fn rewrite_paseo_unit(unit: &str, app_data: &str, durable_node: &str) -> Opt
                 })
                 .cloned()
                 .collect();
-            if entries.iter().any(|entry| *entry == tools_bin) {
+            if entries.contains(&tools_bin) {
                 kept.push(tools_bin.clone());
             }
             if kept != entries {
                 changed = true;
-                out.push(format!("Environment={}", systemd_quote(&format!("PATH={}", kept.join(":")))));
+                out.push(format!(
+                    "Environment={}",
+                    systemd_quote(&format!("PATH={}", kept.join(":")))
+                ));
                 continue;
             }
         }
@@ -1178,7 +1213,10 @@ mod tests {
     #[test]
     fn paseo_unit_without_an_exec_line_has_no_binary() {
         assert_eq!(paseo_exec_binary("[Service]\nRestart=no\n"), None);
-        assert_eq!(rewrite_paseo_unit("[Service]\nRestart=no\n", APP_DATA, DURABLE), None);
+        assert_eq!(
+            rewrite_paseo_unit("[Service]\nRestart=no\n", APP_DATA, DURABLE),
+            None
+        );
     }
 
     #[test]
@@ -1195,11 +1233,15 @@ mod tests {
         );
         // The remembered ports are taken too: fall back to a fresh search.
         assert_eq!(
-            select_ports_preferring([1337, 1339], Some([1338, 1341]), [true, true], |port| port == 1340 || port == 1342),
+            select_ports_preferring([1337, 1339], Some([1338, 1341]), [true, true], |port| port
+                == 1340
+                || port == 1342),
             Ok([1340, 1342])
         );
         // Pinned ports are never second-guessed.
-        assert!(select_ports_preferring([1337, 1339], Some([1338, 1341]), [false, true], busy).is_err());
+        assert!(
+            select_ports_preferring([1337, 1339], Some([1338, 1341]), [false, true], busy).is_err()
+        );
     }
 
     #[test]
@@ -1214,16 +1256,31 @@ mod tests {
 
     #[test]
     fn only_defers_scheduled_jobs_when_the_content_is_shared() {
-        assert!(!shares_content(None, Some("/home/me/dev/devhub")), "fresh app data has its own jobs");
-        assert!(!shares_content(Some("/home/me/other"), Some("/home/me/dev/devhub")));
-        assert!(shares_content(Some("/home/me/dev/devhub/"), Some("/home/me/dev/devhub")));
-        assert!(shares_content(Some("/home/me/dev/devhub"), None), "unknown service: stay safe");
+        assert!(
+            !shares_content(None, Some("/home/me/dev/devhub")),
+            "fresh app data has its own jobs"
+        );
+        assert!(!shares_content(
+            Some("/home/me/other"),
+            Some("/home/me/dev/devhub")
+        ));
+        assert!(shares_content(
+            Some("/home/me/dev/devhub/"),
+            Some("/home/me/dev/devhub")
+        ));
+        assert!(
+            shares_content(Some("/home/me/dev/devhub"), None),
+            "unknown service: stay safe"
+        );
         assert!(!shares_content(None, None));
     }
 
     #[test]
     fn finds_the_checkout_behind_a_dev_service() {
-        assert_eq!(service_repo_root("/home/me/dev/devhub/dashboard\n").as_deref(), Some("/home/me/dev/devhub"));
+        assert_eq!(
+            service_repo_root("/home/me/dev/devhub/dashboard\n").as_deref(),
+            Some("/home/me/dev/devhub")
+        );
         assert_eq!(service_repo_root("/opt/other"), None);
         assert_eq!(service_repo_root(""), None);
     }

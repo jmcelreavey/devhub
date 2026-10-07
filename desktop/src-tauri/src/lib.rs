@@ -1463,11 +1463,16 @@ fn keep_paseo_runnable_then_prune(log: &DesktopLog, backend: &wsl::WslBackend, i
             if let wsl::PaseoUnitRepair::Repaired { old_binary } = &repair {
                 log.write_line(
                     "shell:wsl",
-                    &format!("[paseo] moved the Paseo service off {old_binary} to its own node runtime"),
+                    &format!(
+                        "[paseo] moved the Paseo service off {old_binary} to its own node runtime"
+                    ),
                 );
             }
             if let Err(err) = backend.prune_old_payloads(id) {
-                log.write_line("shell:wsl", &format!("[wsl] could not remove old payloads: {err}"));
+                log.write_line(
+                    "shell:wsl",
+                    &format!("[wsl] could not remove old payloads: {err}"),
+                );
             }
         }
         Err(err) => log.write_line(
@@ -1578,7 +1583,11 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
         ),
     );
 
-    let ports_file = state.paths.app_data.join("config").join("fallback-ports.txt");
+    let ports_file = state
+        .paths
+        .app_data
+        .join("config")
+        .join("fallback-ports.txt");
     let previous_ports = std::fs::read_to_string(&ports_file)
         .ok()
         .and_then(|text| wsl::parse_saved_ports(&text));
