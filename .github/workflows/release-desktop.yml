@@ -45,7 +45,7 @@ jobs:
           - os: macos-15-intel
             label: macOS (Intel)
             target: x86_64-apple-darwin
-            args: "--target x86_64-apple-darwin"
+            args: "--verbose --target x86_64-apple-darwin"
           - os: ubuntu-22.04
             label: Linux (x64)
             target: x86_64-unknown-linux-gnu
@@ -212,9 +212,9 @@ jobs:
           # a remote code execution channel, not a convenience.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # GitHub's macOS runners have Finder. Keep the configured DMG background
-          # and icon positions instead of Tauri's default CI styling bypass.
-          TAURI_BUNDLER_DMG_IGNORE_CI: "true"
+          # Finder styling works on the Apple Silicon runner. Intel keeps Tauri's
+          # CI-safe layout; its app and volume icons are still included.
+          TAURI_BUNDLER_DMG_IGNORE_CI: ${{ matrix.target == 'aarch64-apple-darwin' && 'true' || 'false' }}
           # AppImage packaging on a GitHub runner, both of which are required:
           #
           # linuxdeploy ships as an AppImage and mounts itself with FUSE, which
