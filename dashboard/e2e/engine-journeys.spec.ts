@@ -185,8 +185,9 @@ test.describe("canvas (tldraw)", () => {
     const opened = await openFirstDiagram(page);
     test.skip(!opened, "no diagrams exist in this environment");
 
-    const canvas = page.locator("canvas, .tl-canvas").first();
-    await expect(canvas, "tldraw should mount a canvas").toBeAttached({ timeout: 30_000 });
+    // tldraw attaches a loading canvas before the editor has visible geometry.
+    const canvas = page.locator(".diagram-canvas .tl-canvas");
+    await expect(canvas, "tldraw should show a canvas").toBeVisible({ timeout: 30_000 });
 
     const box = await canvas.boundingBox();
     expect(box?.width ?? 0, "canvas should have real width").toBeGreaterThan(100);
