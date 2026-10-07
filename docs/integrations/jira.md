@@ -17,6 +17,7 @@ The Jira integration brings assigned tickets into DevHub and improves standup ge
 - Ticket list and status filters.
 - Today widget for assigned work.
 - Links from Jira keys in tasks.
+- Parent ticket keys on Jira and task rows; click a parent key to copy it.
 - Standup content based on recent ticket activity.
 
 ## Setup
@@ -37,11 +38,21 @@ This helps with linking and standup generation.
 
 ## Create Tickets From Tasks
 
-Each task row has an **Add to Jira** action (Jira icon) when Jira is configured. It opens a confirmation modal that:
+Right-click an open task and choose **Generate Jira ticket…**. The
+`devhub-draft-jira-ticket` skill uses the task note, linked notes, nearby references
+and available Jira descriptions to draft a title and description in your writing
+voice. It uses the same configured AI provider as the notes preview.
+
+Review and edit both fields in the creation form. Generation does not create a
+ticket or change the task; **Create ticket** submits the reviewed content to Jira.
+Generated Jira text omits DevHub references and local dashboard links. If a
+reference could not be read, the form tells you what is missing.
+
+The daily task list also offers **Add to Jira manually…**. The creation form:
 
 - Seeds the summary from task text (strips an existing linked key if present).
-- Lets you pick a parent: the task's linked ticket, another key, or none.
-- Resolves the project from the parent key prefix (or `JIRA_DEFAULT_PROJECT` when there is no parent).
+- Lets you pick a parent: the linked ticket's parent when it has one, another key, or none.
+- Resolves the project from the selected key prefix, falling back to `PTF`.
 - Shows board, active sprint, assignee, and inherited **Team** from `GET /api/jira/meta` (pass `reference=<parentKey>` to inherit Team from the parent).
 - Optionally adds the issue to the active sprint.
 - Creates a **Task** or **Sub-task** (when a parent is set) via `POST /api/jira/issue`, assigns to you by default, and rewrites the task text with the new key.
@@ -49,6 +60,7 @@ Each task row has an **Add to Jira** action (Jira icon) when Jira is configured.
 | Route                                                     | Purpose                                                                                                                            |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /api/jira/meta?project=<KEY>&reference=<parentKey>?` | Board, sprint, Team field ids/values, and assignee for the modal                                                                   |
+| `POST /api/jira/draft` | Body: `{ taskId, date }` — returns `{ summary, description, warnings }` for review; no Jira or task writes |
 | `POST /api/jira/issue`                                    | Body: `{ projectKey, summary, description?, parentKey?, issuetypeName?, assignToMe?, sprintId? }` — returns `{ key, url }` (`201`) |
 
 ## Create Tickets From MCP
@@ -56,7 +68,7 @@ Each task row has an **Add to Jira** action (Jira icon) when Jira is configured.
 Agents can use `jira_ticket_create` with `projectKey`, `summary`, and a Markdown
 `description`. Optional fields are `parentKey`, `assignToMe` (defaults to true),
 and `sprintId`. The dashboard chooses the issue type from the parent and inherits
-its Team, just as **Add to Jira** does.
+its Team, just as the creation form does.
 
 Creation requires `confirm: true` after user approval. Without it, the tool previews
 the request without contacting Jira. A successful call returns `key` and `url`;

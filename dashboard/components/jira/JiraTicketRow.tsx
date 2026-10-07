@@ -10,6 +10,7 @@ import { createOrOpenVaultNote } from "@/lib/create-vault-note";
 import { openInBrowser } from "@/lib/desktop/bridge";
 import { PersonChip } from "@/components/PersonChip";
 import { JiraStatusPill } from "@/components/jira/JiraStatusPill";
+import { JiraParentChip } from "@/components/jira/JiraKeyChip";
 import { JiraTransitionModal } from "@/components/jira/JiraTransitionModal";
 import { useVaultNoteExists } from "@/components/EntityNoteAction";
 import {
@@ -117,6 +118,12 @@ export function useJiraTicketMenu(ticket: JiraTicket, onTransitioned?: () => voi
             icon: <Copy size={12} />,
             onSelect: () => void copyTextAndToast(ticket.key, ticket.key, toast),
           },
+          ...(ticket.parent ? [{
+            id: "copy-parent-key",
+            label: `Copy parent key (${ticket.parent.key})`,
+            icon: <Copy size={12} aria-hidden />,
+            onSelect: () => void copyTextAndToast(ticket.parent!.key, "parent key", toast),
+          }] : []),
           {
             id: "open-jira",
             label: "Open in Jira",
@@ -297,6 +304,7 @@ export function JiraTicketRow({
         >
           {ticket.key}
         </a>
+        {ticket.parent ? <JiraParentChip parent={ticket.parent} /> : null}
         {showDetails ? (
           <span className={styles.details} title={`${ticket.project} (${ticket.projectKey}) · ${ticket.issuetype} · ${ticket.priority} priority`}>
             {ticket.issuetype} · {ticket.priority} priority

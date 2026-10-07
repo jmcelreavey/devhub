@@ -13,7 +13,9 @@ const mocks = vi.hoisted(() => ({
   error: vi.fn(),
   push: vi.fn(),
   mutate: vi.fn(),
+  copy: vi.fn(),
 }));
+vi.mock("@/lib/clipboard", () => ({ copyTextToClipboard: mocks.copy }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("swr", () => ({ mutate: mocks.mutate }));
 vi.mock("@/lib/hooks/use-fetch", () => ({
@@ -55,6 +57,7 @@ const task: Task = {
 beforeEach(() => {
   vi.stubGlobal("fetch", mocks.fetch);
   mocks.fetch.mockResolvedValue({ ok: true, json: async () => task });
+  mocks.copy.mockResolvedValue(undefined);
 });
 afterEach(() => {
   cleanup();
@@ -83,9 +86,26 @@ it.each([
   else expect(screen.queryByRole("dialog")).toBeNull();
 });
 
+it.each([JiraTicketQueueRow, JiraTicketRow])("shows and copies the parent from either ticket row", async (Row) => {
+  render(<Row ticket={{ ...ticket, parent: { key: "TEST-1", summary: "Subscription reliability" } }} />);
+  fireEvent.click(screen.getByRole("button", { name: "Copy parent ticket key TEST-1" }));
+  await waitFor(() => expect(mocks.copy).toHaveBeenCalledWith("TEST-1"));
+  expect(mocks.copy).not.toHaveBeenCalledWith(ticket.key);
+  openMenu();
+  fireEvent.click(menuItem("Copy parent key (TEST-1)"));
+  await waitFor(() => expect(mocks.copy).toHaveBeenCalledTimes(2));
+});
+
+it("omits parent controls when Jira has no parent", () => {
+  render(<JiraTicketRow ticket={ticket} />);
+  expect(screen.queryByRole("button", { name: /Copy parent ticket/ })).toBeNull();
+  openMenu();
+  expect(screen.queryByRole("menuitem", { name: /Copy parent key/, hidden: true })).toBeNull();
+});
+
 function openMenu() {
   fireEvent.click(screen.getByRole("button", { name: "Actions for TEST-123" }));
-  expect(screen.getByRole("menu", { hidden: true }).hasAttribute("hidden")).toBe(false);
+  expect(screen.getAllByRole("menu", { hidden: true }).some((menu) => !menu.hasAttribute("hidden"))).toBe(true);
 }
 
 function menuItem(name: string | RegExp) {

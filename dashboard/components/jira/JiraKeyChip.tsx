@@ -8,11 +8,22 @@ import { buildEntityRefMenuGroups } from "@/lib/entity-ref-menu";
 import { JiraTransitionModal } from "@/components/jira/JiraTransitionModal";
 import { jiraBrowseUrl } from "@/lib/utils";
 import type { EntityRef } from "@/lib/entity-note";
+import type { JiraTicketRef } from "@/lib/jira/client";
+
+export function JiraParentChip({ parent }: { parent: JiraTicketRef }) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-text-subtle" title={parent.summary || undefined}>
+      Parent
+      <JiraKeyChip jiraKey={parent.key} label={`Copy parent ticket key ${parent.key}`} />
+    </span>
+  );
+}
 
 interface JiraKeyChipProps {
   jiraKey: string;
   /** Dim + strike when the owning task is done. */
   done?: boolean;
+  label?: string;
 }
 
 /**
@@ -20,7 +31,7 @@ interface JiraKeyChipProps {
  * Jira entity menu (open / update state / copy) so the row menu doesn't
  * swallow the chip.
  */
-export function JiraKeyChip({ jiraKey, done = false }: JiraKeyChipProps) {
+export function JiraKeyChip({ jiraKey, done = false, label }: JiraKeyChipProps) {
   const toast = useToast();
   const menu = useContextMenu<EntityRef>();
   const [transitionOpen, setTransitionOpen] = useState(false);
@@ -46,7 +57,7 @@ export function JiraKeyChip({ jiraKey, done = false }: JiraKeyChipProps) {
         data-entity-chip=""
         data-kind="jira"
         className="jira-key-chip shrink-0 cursor-pointer rounded px-1.5 py-0.5 font-mono text-xs"
-        aria-label={`Jira ${jiraKey}`}
+        aria-label={label ?? `Jira ${jiraKey}`}
         title={`Copy ${jiraKey}`}
         onClick={copyWithToast(jiraKey, jiraKey, toast)}
         onContextMenu={(e) => menu.openAt(e, ref)}

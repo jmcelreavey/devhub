@@ -92,8 +92,7 @@ created under this parent (or under the creation parent per BI Jira hierarchy �
 
 - **Type:** Story (or Task if Story is unavailable in the project).
 - **Summary:** `epicSummary` from the plan payload, or the note title.
-- **Description:** One paragraph from the plan intro + link to the gist + link to the
-  DevHub note (`/notes/<notePath>`).
+- **Description:** One paragraph from the plan intro + link to the published plan gist.
 - **Sprint / team:** Set only on the **parent**, not on sub-tasks. Use `jiraMeta` from
   the plan payload when present. Do not invent custom field ids — prefer Atlassian MCP
   `createJiraIssue` with `additional_fields` only when the dashboard meta is missing.
@@ -115,7 +114,6 @@ For each `workItems[]` entry:
 - **Summary:** `summary` or a trimmed `title` (≤255 chars).
 - **Description:** Item `description` or section body + links:
   - Plan gist (from step 1)
-  - DevHub note path
   - Repo(s) involved
 - **Parent:** the resolved parent key from step 2.
 
@@ -165,7 +163,6 @@ adding links. Never drop plan prose.
 `editJiraIssue` on the parent (Atlassian MCP) or dashboard API:
 
 - Add a **Plan** link (gist).
-- Add a **DevHub** link to the note.
 - List sub-task keys with one-line summaries.
 
 Append; do not replace existing description content.
@@ -198,5 +195,8 @@ Include the gist URL and parent key.
 
 - Ask before creating a **new** parent epic if the note already links a Jira parent.
 - Never log CVs, credentials, or full plan bodies in terminal output.
+- Jira titles and descriptions must make sense to colleagues who don't use DevHub:
+  do not mention DevHub, local note paths or dashboard URLs. Use the published plan
+  gist and relevant repository links; keep DevHub links in DevHub tasks and notes.
 - No AI attribution in Jira descriptions, task text, or commits.
 - Minimal scope: create and link tickets — do not start implementation.

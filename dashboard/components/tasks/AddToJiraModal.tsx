@@ -1,16 +1,20 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { mutate as globalMutate } from "swr";
-import { Loader2, CheckCircle2, Circle, AlertTriangle } from "lucide-react";
+import { Loader2, CheckCircle2, Circle, AlertTriangle, Sparkles } from "lucide-react";
 import { ModalShell } from "@/components/shell/ModalShell";
 import { RichTextField } from "@/components/ui/RichTextField";
+import { FetchError } from "@/components/ui/FetchError";
+import { SkeletonRows } from "@/components/ui/SkeletonRows";
+import { JiraKeyChip } from "@/components/jira/JiraKeyChip";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
-import { JIRA_KEY_RE } from "@/lib/utils";
+import { JIRA_KEY_RE, todayISO } from "@/lib/utils";
 import { creationParentForLinkedIssue, issueTypeForParent } from "@/lib/jira/issue-type";
 import { openInBrowser } from "@/lib/desktop/bridge";
 import type { JiraMeta } from "@/lib/jira/client";
+import type { JiraTicketDraftResult } from "@/lib/jira/draft-ticket";
 import type { Task } from "@/components/tasks/TaskList";
 
 type ParentMode = "linked" | "other" | "none";
@@ -36,22 +40,67 @@ function summaryFromTask(text: string, jiraKey?: string): string {
 export interface AddToJiraModalProps {
   open: boolean;
   task: Task;
+  date?: string;
+  generateOnOpen?: boolean;
   onClose: () => void;
   /** Called after a ticket is created so the caller can rewrite the task text. */
   onCreated: (newKey: string, newUrl: string) => void;
 }
 
-export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModalProps) {
+export function AddToJiraModal({ open, task, date, generateOnOpen = false, onClose, onCreated }: AddToJiraModalProps) {
   const toast = useToast();
   const linkedKey = task.jiraKey;
 
   // Modal mounts fresh per open, so initial state derives straight from the task.
   const [summary, setSummary] = useState(() => summaryFromTask(task.text, linkedKey));
   const [description, setDescription] = useState("");
+  const [initialDescription, setInitialDescription] = useState("");
+  const [generating, setGenerating] = useState(generateOnOpen);
+  const [draftAttempt, setDraftAttempt] = useState(generateOnOpen ? 1 : 0);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [draftWarnings, setDraftWarnings] = useState<string[]>([]);
+  const taskDate = date ?? todayISO();
   const [parentMode, setParentMode] = useState<ParentMode>(linkedKey ? "linked" : "none");
   const [otherKey, setOtherKey] = useState("");
   const [includeSprint, setIncludeSprint] = useState(true);
   const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    if (!open || draftAttempt === 0) return;
+    const controller = new AbortController();
+    async function loadDraft() {
+      try {
+        const response = await fetch("/api/jira/draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ taskId: task.id, date: taskDate }),
+          signal: controller.signal,
+        });
+        const result = await response.json() as JiraTicketDraftResult & { error?: string };
+        if (!response.ok) throw new Error(result.error ?? "Couldn't generate the Jira draft.");
+        if (controller.signal.aborted) return;
+        setSummary(result.summary);
+        setDescription(result.description);
+        setInitialDescription(result.description);
+        setDraftWarnings(result.warnings ?? []);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setDraftError(error instanceof Error ? error.message : "Couldn't generate the Jira draft.");
+      } finally {
+        if (!controller.signal.aborted) setGenerating(false);
+      }
+    }
+    void loadDraft();
+    return () => controller.abort();
+  }, [open, draftAttempt, task.id, taskDate]);
+
+  const generateDraft = () => {
+    setInitialDescription(description);
+    setDraftError(null);
+    setDraftWarnings([]);
+    setGenerating(true);
+    setDraftAttempt((attempt) => attempt + 1);
+  };
 
   const resolvedParentKey =
     parentMode === "linked" ? linkedKey ?? null : parentMode === "other" ? otherKey.trim().toUpperCase() || null : null;
@@ -66,7 +115,7 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
   const parentKeyValid = !parentLookupKey || JIRA_KEY_RE.test(parentLookupKey);
 
   // Look up the chosen parent's title (and its parent) before creating.
-  const { data: parent, isLoading: parentLoading } = useLive<{
+  const { data: parent, isLoading: parentLoading, error: parentError, mutate: retryParent } = useLive<{
     key: string;
     summary?: string;
     issuetype?: string;
@@ -80,17 +129,23 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
   const creationParentKey = resolvedParentKey ? creationParent?.key ?? resolvedParentKey : null;
   const metaParams = new URLSearchParams({ project: projectKey });
   if (creationParentKey) metaParams.set("reference", creationParentKey);
-  const { data: meta, isLoading: metaLoading } = useLive<JiraMeta>(open ? `/api/jira/meta?${metaParams.toString()}` : null, { refreshInterval: 0 });
+  const { data: meta, isLoading: metaLoading, error: metaError, mutate: retryMeta } = useLive<JiraMeta>(open ? `/api/jira/meta?${metaParams.toString()}` : null, { refreshInterval: 0 });
 
   const willRemoveLink = !!linkedKey && parentMode !== "linked";
   const issueTypeName = creationParentKey ? issueTypeForParent(creationParent?.issuetype) : "Task";
   const parentMissing = !!resolvedParentKey && !parentLoading && !parent?.key;
-  const descriptionValid = description.trim().length > 0;
+  const summaryValid = summary.trim().length > 0 && summary.trim().length <= 255;
+  const descriptionValid = description.trim().length > 0 && description.trim().length <= 5_000;
+  const contextReady = meta?.configured === true && !metaLoading && !metaError;
 
   const create = useCallback(async () => {
-    if (creating) return;
+    if (creating || generating) return;
+    if (!contextReady) {
+      toast.error("Wait for Jira settings to load before creating the ticket.");
+      return;
+    }
     const trimmedSummary = summary.trim();
-    if (!trimmedSummary) {
+    if (!summaryValid) {
       toast.error("Add a summary first.");
       return;
     }
@@ -107,7 +162,7 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
       return;
     }
     const trimmedDescription = description.trim();
-    if (!trimmedDescription) {
+    if (!descriptionValid) {
       toast.error("Add a description first.");
       return;
     }
@@ -150,6 +205,10 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
     }
   }, [
     creating,
+    generating,
+    contextReady,
+    summaryValid,
+    descriptionValid,
     summary,
     otherKeyValid,
     parentLoading,
@@ -167,10 +226,10 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
   return (
     <ModalShell
       open={open}
-      onClose={onClose}
+      onClose={() => { if (!creating) onClose(); }}
       dismissOnBackdrop={false}
-      title="Add to Jira"
-      description="Create a Task in Jira from this to-do."
+      title="Create Jira ticket"
+      description="Review and edit the title and description, then create the ticket."
       footer={
         <div className="flex items-center justify-end gap-2">
           <button type="button" className="btn btn-ghost" onClick={onClose} disabled={creating}>
@@ -182,7 +241,9 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
             onClick={create}
             disabled={
               creating ||
-              !summary.trim() ||
+              generating ||
+              !contextReady ||
+              !summaryValid ||
               !descriptionValid ||
               !otherKeyValid ||
               parentLoading ||
@@ -202,22 +263,40 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
       }
     >
       <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-text-subtle">Use the task and linked references to draft this ticket.</span>
+          <button type="button" className="btn btn-ghost shrink-0" onClick={generateDraft} disabled={generating || creating}>
+            <Sparkles size={13} aria-hidden />
+            {generating ? "Generating…" : "Generate draft"}
+          </button>
+        </div>
+        {draftError && <FetchError bare message={draftError} onRetry={generateDraft} />}
+        {draftWarnings.length > 0 && (
+          <div className="tone-panel tone-panel--warning text-xs" role="status">
+            {draftWarnings.join(" ")} Check the draft against the missing references.
+          </div>
+        )}
         {/* Summary */}
         <label className="block">
           <span className="text-xs font-medium text-text-subtle">
-            Summary
+            Title
           </span>
           <input
             className="input mt-1 w-full"
             value={summary}
             onChange={(e) => setSummary(e.target.value)}
-            placeholder="Ticket summary"
+            placeholder="Ticket title"
+            maxLength={255}
+            disabled={generating || creating}
             autoFocus
           />
+          {summary.trim().length > 255 && (
+            <p className="mt-1 text-xs text-danger" role="alert">Keep the title within 255 characters.</p>
+          )}
         </label>
 
         {/* Parent selection */}
-        <fieldset className="space-y-1.5">
+        <fieldset className="space-y-1.5" disabled={creating} inert={creating}>
           <legend className="text-xs font-medium text-text-subtle">
             Create under
           </legend>
@@ -227,7 +306,7 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
               checked={parentMode === "linked"}
               onSelect={() => setParentMode("linked")}
               label={`Linked ticket (${linkedKey})`}
-              hint="New Task’s parent is set to the ticket already on this to-do."
+              hint="Uses this ticket’s parent when it has one, so the new ticket sits alongside it."
             />
           )}
 
@@ -235,7 +314,7 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
             checked={parentMode === "other"}
             onSelect={() => setParentMode("other")}
             label="Another ticket"
-            hint="e.g. an epic like PTF-3896 - the new Task is parented to it."
+            hint="Enter the key of the epic or ticket this work belongs under."
           >
             {parentMode === "other" && (
               <input
@@ -273,14 +352,27 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
         )}
 
         {/* Description */}
-        <div className="block">
+        <div className="block" role="group" aria-label="Description">
           <span className="text-xs font-medium text-text-subtle">
             Description
           </span>
           <div className="mt-1">
-            <RichTextField onChangeMarkdown={setDescription} />
+            {generating ? (
+              <div role="status" aria-live="polite">
+                <p className="mb-2 text-xs text-text-subtle">Reading linked material and drafting the ticket…</p>
+                <SkeletonRows count={2} height={48} />
+              </div>
+            ) : (
+              <RichTextField initialMarkdown={initialDescription} disabled={creating} onChangeMarkdown={setDescription} />
+            )}
+            {description.trim().length > 5_000 && (
+              <p className="mt-1 text-xs text-danger" role="alert">Keep the description within 5,000 characters.</p>
+            )}
           </div>
         </div>
+
+        {parentError && <FetchError bare message="Couldn't check the parent ticket." onRetry={() => void retryParent()} />}
+        {metaError && <FetchError bare message="Couldn't load Jira settings." onRetry={() => void retryMeta()} />}
 
         {/* Detected context - confirm before creating */}
         <div className="rounded-lg p-3" style={{ background: "var(--bg)", border: "1px solid var(--border-muted)" }}>
@@ -288,7 +380,7 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
             <span className="text-xs font-medium text-text-subtle">
               Will be created as
             </span>
-            {metaLoading && <Loader2 size={12} className="animate-spin text-text-subtle" />}
+            {metaLoading && <span className="skeleton inline-block h-3 w-16" aria-label="Loading Jira settings" />}
           </div>
           <dl className="space-y-1.5 text-xs">
             <MetaRow label="Project" value={projectKey} />
@@ -298,9 +390,9 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
               value={
                 creationParentKey ? (
                   <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
-                    <span className="font-mono">{creationParentKey}</span>
+                    <JiraKeyChip jiraKey={creationParentKey} label={`Copy parent ticket key ${creationParentKey}`} />
                     {parentLoading ? (
-                      <Loader2 size={11} className="animate-spin text-text-subtle" />
+                      <span className="skeleton inline-block h-3 w-16" aria-label="Checking parent" />
                     ) : creationParent?.summary ? (
                       <span className="text-text-subtle">· {creationParent.summary}</span>
                     ) : (
@@ -329,17 +421,17 @@ export function AddToJiraModal({ open, task, onClose, onCreated }: AddToJiraModa
             <MetaRow label="Board" value={meta?.board?.name ?? (meta?.configured === false ? "Jira not configured" : "-")} />
             <MetaRow
               label="Sprint"
-              value={
+              value={issueTypeName === "Sub-task" ? "Inherited from parent" : (
                 <label className="inline-flex cursor-pointer items-center gap-1.5">
                   <input
                     type="checkbox"
                     checked={includeSprint && !!meta?.sprint}
-                    disabled={!meta?.sprint}
+                    disabled={creating || !meta?.sprint}
                     onChange={(e) => setIncludeSprint(e.target.checked)}
                   />
                   <span>{meta?.sprint ? meta.sprint.name : "No active sprint found"}</span>
                 </label>
-              }
+              )}
             />
             <MetaRow label="Team" value={meta?.teamLabel ?? "-"} />
           </dl>

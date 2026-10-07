@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { blocknoteDashboardTheme } from "@/lib/blocknote/dashboard-theme";
@@ -8,6 +9,8 @@ import "@blocknote/core/style.css";
 import "@blocknote/mantine/style.css";
 
 export interface RichTextFieldProps {
+  initialMarkdown?: string;
+  disabled?: boolean;
   /** Receives the editor contents as Markdown on every change. */
   onChangeMarkdown: (markdown: string) => void;
 }
@@ -18,8 +21,13 @@ export interface RichTextFieldProps {
  * italic, code, links, headings and lists are supported via the formatting
  * toolbar (select text) and the "/" slash menu.
  */
-export function RichTextField({ onChangeMarkdown }: RichTextFieldProps) {
+export function RichTextField({ initialMarkdown, disabled = false, onChangeMarkdown }: RichTextFieldProps) {
   const editor = useCreateBlockNote({ animations: false });
+
+  useEffect(() => {
+    if (!initialMarkdown) return;
+    editor.replaceBlocks(editor.document, editor.tryParseMarkdownToBlocks(initialMarkdown));
+  }, [editor, initialMarkdown]);
 
   return (
     <div
@@ -32,6 +40,7 @@ export function RichTextField({ onChangeMarkdown }: RichTextFieldProps) {
     >
       <BlockNoteView
         editor={editor}
+        editable={!disabled}
         theme={blocknoteDashboardTheme}
         onChange={() => {
           Promise.resolve(editor.blocksToMarkdownLossy(editor.document)).then((md) =>

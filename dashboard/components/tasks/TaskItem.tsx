@@ -12,7 +12,7 @@ import { useState, useEffect, useRef, type HTMLAttributes } from "react";
 import { useRouter } from "next/navigation";
 import { type Task } from "@/lib/tasks/types";
 import { TaskTextContent } from "@/components/tasks/TaskText";
-import { stripLinkedJiraKeyFromText, stripTagTokens } from "@/lib/tasks/task-text";
+import { rewriteTaskKey, stripLinkedJiraKeyFromText, stripTagTokens } from "@/lib/tasks/task-text";
 import { canonicalizeEntityRef, entityKey } from "@/lib/entity-note";
 import { useTagMenuGroup, withTagsGroup } from "@/lib/hooks/use-tag-menu";
 import { statusTone } from "@/components/jira/JiraWidget";
@@ -32,7 +32,9 @@ import {
   FileText,
   Link2,
 } from "lucide-react";
-import { JiraKeyChip } from "@/components/jira/JiraKeyChip";
+import { JiraKeyChip, JiraParentChip } from "@/components/jira/JiraKeyChip";
+import type { JiraTicketRef } from "@/lib/jira/client";
+import { AddToJiraModal } from "@/components/tasks/AddToJiraModal";
 import { JiraStatusPill } from "@/components/jira/JiraStatusPill";
 import { HoverTip } from "@/components/ui/HoverTip";
 import { SeverityPill } from "@/components/ui/Severity";
@@ -57,6 +59,7 @@ import { useTaskAgentActions } from "@/components/tasks/useTaskAgentActions";
 
 interface JiraStatus {
   name: string;
+  parent?: JiraTicketRef | null;
 }
 
 export function TaskItem({
@@ -113,6 +116,7 @@ export function TaskItem({
   const taskDate = date ?? todayISO();
   const [editing, setEditing] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
+  const [jiraDraftOpen, setJiraDraftOpen] = useState(false);
   const [editText, setEditText] = useState(task.text);
   const [showAbandon, setShowAbandon] = useState(false);
   const [abandonReason, setAbandonReason] = useState("");
@@ -291,11 +295,19 @@ export function TaskItem({
               },
             ]
           : []),
+        ...(!isInactive && !task.done
+          ? [{
+              id: "generate-jira",
+              label: "Generate Jira ticket…",
+              icon: <Ticket size={12} aria-hidden />,
+              onSelect: () => setJiraDraftOpen(true),
+            }]
+          : []),
         ...(!isInactive && !task.done && onAddToJira
           ? [
               {
                 id: "jira",
-                label: task.jiraKey ? "Update Jira ticket" : "Add to Jira",
+                label: "Add to Jira manually…",
                 icon: <Ticket size={12} aria-hidden />,
                 onSelect: onAddToJira,
               },
@@ -446,6 +458,7 @@ export function TaskItem({
 
         <div className="task-row-content flex-1 min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-1">
           {task.jiraKey && !isAbandoned && !hideJiraKey && <JiraKeyChip jiraKey={task.jiraKey} done={task.done} />}
+          {task.jiraKey && !isAbandoned && !hideJiraKey && jiraStatus?.parent && <JiraParentChip parent={jiraStatus.parent} />}
 
           {editing ? (
             <input
@@ -563,6 +576,16 @@ export function TaskItem({
         }}
       />
       {agent.dialogs}
+      {jiraDraftOpen && (
+        <AddToJiraModal
+          open
+          task={task}
+          date={taskDate}
+          generateOnOpen
+          onClose={() => setJiraDraftOpen(false)}
+          onCreated={(newKey) => onEdit(rewriteTaskKey(task.text, task.jiraKey, newKey))}
+        />
+      )}
       <ContextMenu
         open={menu.target !== null}
         position={menu.position}

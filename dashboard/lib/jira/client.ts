@@ -25,6 +25,7 @@ export interface JiraTicket {
   updatedAt: string;
   /** Assignee when Jira returned one (always present for assignee=currentUser() queries). */
   assignee?: JiraPerson;
+  parent?: JiraTicketRef | null;
 }
 
 /** Standup slice: still assigned to you, with `updated` in the given local calendar window. */
@@ -53,6 +54,11 @@ interface JiraIssueFields {
   updated?: string;
   resolution?: JiraNamedField | null;
   assignee?: JiraAssigneeField | null;
+  parent?: { key?: string; fields?: { summary?: string } } | null;
+}
+
+function mapJiraParent(parent: JiraIssueFields["parent"]): JiraTicketRef | null {
+  return parent?.key ? { key: parent.key, summary: parent.fields?.summary ?? "" } : null;
 }
 
 function mapJiraAssignee(fields: JiraIssueFields): JiraPerson | undefined {
@@ -117,7 +123,7 @@ export async function getMyTickets(): Promise<JiraTicket[]> {
 
   const issues = await searchJql(j, {
     jql: "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
-    fields: ["summary", "status", "priority", "issuetype", "project", "updated", "assignee"],
+    fields: ["summary", "status", "priority", "issuetype", "project", "updated", "assignee", "parent"],
     maxResults: 100,
   });
 
@@ -132,6 +138,7 @@ export async function getMyTickets(): Promise<JiraTicket[]> {
     url: `https://${j.domain}/browse/${issue.key}`,
     updatedAt: issue.fields.updated ?? "",
     assignee: mapJiraAssignee(issue.fields),
+    parent: mapJiraParent(issue.fields.parent),
   }));
 }
 
@@ -168,7 +175,7 @@ export async function getMyAssignedTicketsTouchedInRange(
 
   const issues = await searchJql(j, {
     jql,
-    fields: ["summary", "status", "priority", "issuetype", "project", "updated", "resolution", "assignee"],
+    fields: ["summary", "status", "priority", "issuetype", "project", "updated", "resolution", "assignee", "parent"],
     maxResults: 50,
   });
 
@@ -189,6 +196,7 @@ export async function getMyAssignedTicketsTouchedInRange(
       url: `https://${j.domain}/browse/${issue.key}`,
       updatedAt: issue.fields.updated ?? "",
       assignee: mapJiraAssignee(issue.fields),
+      parent: mapJiraParent(issue.fields.parent),
       resolutionName,
     };
   });
@@ -207,11 +215,12 @@ export interface JiraTicketDetail {
   parent: JiraTicketRef | null;
 }
 
-export async function getTicket(key: string): Promise<JiraTicketDetail | null> {
+export async function getTicket(key: string, signal?: AbortSignal): Promise<JiraTicketDetail | null> {
   const j = getResolvedJiraEnv();
   if (!j) return null;
 
   const res = await fetch(`${apiBase(j)}/issue/${key}?fields=status,summary,issuetype,parent`, {
+    signal,
     headers: {
       Authorization: authHeader(j),
       Accept: "application/json",
@@ -228,11 +237,7 @@ export async function getTicket(key: string): Promise<JiraTicketDetail | null> {
       parent?: { key?: string; fields?: { summary?: string } };
     };
   };
-  const parentRaw = data.fields?.parent;
-  const parent =
-    parentRaw?.key != null
-      ? { key: parentRaw.key, summary: parentRaw.fields?.summary ?? "" }
-      : null;
+  const parent = mapJiraParent(data.fields?.parent);
   return {
     key: data.key ?? key,
     status: { name: data.fields?.status?.name ?? "Unknown" },

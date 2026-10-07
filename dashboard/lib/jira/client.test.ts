@@ -70,6 +70,7 @@ describe("getMyTickets", () => {
               key: "PTF-1",
               fields: {
                 summary: "Native share",
+                parent: { key: "PTF-10", fields: { summary: "Sharing improvements" } },
                 status: { name: "Open" },
                 priority: { name: "Medium" },
                 issuetype: { name: "Task" },
@@ -87,8 +88,10 @@ describe("getMyTickets", () => {
 
     const tickets = await getMyTickets();
     expect(tickets).toEqual([
-      expect.objectContaining({ key: "PTF-1", summary: "Native share", status: "Open" }),
+      expect.objectContaining({ key: "PTF-1", summary: "Native share", status: "Open", parent: { key: "PTF-10", summary: "Sharing improvements" } }),
     ]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    const request = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(request[1].body)).fields).toContain("parent");
   });
 });

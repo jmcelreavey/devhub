@@ -53,11 +53,12 @@ export function adfToPlainText(node: unknown): string {
 }
 
 /** Best-effort Jira description text; null when unconfigured / missing / error. */
-export async function fetchJiraDescriptionText(key: string): Promise<string | null> {
+export async function fetchJiraDescriptionText(key: string, signal?: AbortSignal): Promise<string | null> {
   const j = getResolvedJiraEnv();
   if (!j) return null;
   try {
     const res = await fetch(`${apiBase(j)}/issue/${encodeURIComponent(key)}?fields=description`, {
+      signal,
       headers: {
         Authorization: authHeader(j),
         Accept: "application/json",

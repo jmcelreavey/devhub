@@ -14,6 +14,7 @@ import { CheckCircle2, ChevronRight, ChevronDown } from "lucide-react";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { AddToJiraModal } from "@/components/tasks/AddToJiraModal";
+import type { JiraTicketRef } from "@/lib/jira/client";
 import { JiraTransitionModal } from "@/components/jira/JiraTransitionModal";
 import { SortableList } from "@/components/ui/SortableList";
 import { useGridSize } from "@/lib/hooks/use-grid-size";
@@ -30,6 +31,7 @@ export { TaskItem } from "@/components/tasks/TaskItem";
 
 interface JiraStatus {
   name: string;
+  parent?: JiraTicketRef | null;
 }
 
 const EMPTY_TASKS: Task[] = [];
@@ -100,7 +102,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
       keys.map((key) =>
         fetch(`/api/jira/ticket/${key}`)
           .then((r) => (r.ok ? r.json() : null))
-          .then((d) => (d ? { key, status: d.status } : null))
+          .then((d) => (d ? { key, status: { ...d.status, parent: d.parent } } : null))
           .catch(() => null),
       ),
     ).then((results) => {
@@ -539,8 +541,8 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
     try {
       const res = await fetch(`/api/jira/ticket/${key}`);
       if (!res.ok) return;
-      const d = (await res.json()) as { status?: JiraStatus };
-      if (d.status) setJiraStatuses((prev) => ({ ...prev, [key]: d.status! }));
+      const d = (await res.json()) as { status?: JiraStatus; parent?: JiraTicketRef | null };
+      if (d.status) setJiraStatuses((prev) => ({ ...prev, [key]: { ...d.status!, parent: d.parent } }));
     } catch (e) {
       console.error("refresh jira status:", e);
     }

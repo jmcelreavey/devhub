@@ -152,6 +152,7 @@ export function buildCreateTasksFromPrompt(input: CreateTasksFromPlanInput): str
   const lines = [
     "Use the devhub-create-tasks-from skill to turn this planning note into Jira sub-tasks and DevHub tasks with full entity linking.",
     "Before writing ticket titles/descriptions, task text, or note prose on John’s behalf, load the my-voice skill in full-voice mode and its writing style guide. Preserve technical facts, identifiers, links, and reproduction details.",
+    "Do not mention DevHub or link to local notes/dashboard URLs in Jira titles or descriptions. Use the published plan and repository links so colleagues can read the ticket without DevHub.",
     `Plan URL (curl it first — note path, parsed work items, repos, Jira meta): ${planUrl}`,
     `Note path: ${input.notePath}`,
   ];
