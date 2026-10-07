@@ -365,7 +365,7 @@ jobs:
         working-directory: desktop/src-tauri
         run: |
           cargo fmt --check
-          cargo test
+          node ../scripts/test-windows.mjs
 
       # Updater artifacts need the signing key; a dispatch run on a repo without
       # it should still yield an installable .exe. So: key present -> signed

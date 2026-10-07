@@ -110,7 +110,10 @@ Staging takes a couple of minutes because it runs a full Next production build.
 If you are only changing Rust, stage once and then use `cargo` directly in
 `desktop/src-tauri/`.
 
-`desktop:stage` also runs `desktop/scripts/stage-icons.mjs`, which copies either the plugin branding icon (`dashboard/public/plugin-desktop-icon.png`, materialised by `sync_plugins` when a branding plugin is enabled) or the core DevHub bottle (`dashboard/public/icon-512.png`) into `desktop/staging/icons/` before `cargo tauri icon` generates bundle assets. Icons in `src-tauri/icons/` are committed defaults; plugin branding stages into the gitignored staging dir so a whitelabel build does not dirty core icons.
+`desktop:stage` also runs `desktop/scripts/stage-icons.mjs`. The bundled icon
+always uses the core DevHub bottle (`dashboard/public/icon-512.png`). Plugin
+branding is staged separately as `plugin.png` for the runtime overlay. Generated
+icons go into the gitignored `desktop/staging/icons/` directory.
 
 ```bash
 cd desktop/src-tauri
@@ -118,6 +121,11 @@ cargo test
 cargo clippy --all-targets -- -D warnings
 cargo fmt
 ```
+
+On Windows, run `node desktop/scripts/test-windows.mjs` from the repo root
+instead of plain `cargo test`. It uses the installed Windows SDK's `mt.exe` to
+embed Common Controls v6 in the test executables before running the tests.
+This works around [Tauri's test-loader issue](https://github.com/tauri-apps/tauri/issues/13419).
 
 ## How a launch actually works
 
@@ -137,11 +145,16 @@ cargo fmt
 
 ## Staging pipeline
 
-`desktop/scripts/stage-all.mjs` runs three steps:
+`desktop/scripts/stage-all.mjs` stages the runtime, tools, resources, icons,
+wake helper and dashboard in dependency order:
 
 **`stage-node-runtime.mjs`** downloads the Node runtime pinned in
 `desktop/node-runtime.json`, verifies it against a committed SHA-256, extracts
 only `bin/node`, and names it with the Rust target triple Tauri expects.
+
+**`stage-github-cli.mjs`** downloads the GitHub CLI version pinned in
+`desktop/github-cli.json`, verifies its committed SHA-256 and stages the binary
+and licence beside Node.
 
 **`stage-resources.mjs`** copies generic assets using an **allowlist**. This
 repo is the private mirror — notes and a personal identity file are committed
