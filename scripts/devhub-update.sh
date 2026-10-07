@@ -87,7 +87,7 @@ git remote get-url upstream >/dev/null 2>&1 || fail \
 # --- fetch + resolve upstream default branch ---
 log "Fetching upstream..."
 git fetch --quiet upstream
-UPSTREAM_BRANCH="$(git rev-parse --abbrev-ref upstream/HEAD 2>/dev/null | sed 's@^upstream/@@' || true)"
+UPSTREAM_BRANCH="$(git symbolic-ref --quiet --short refs/remotes/upstream/HEAD 2>/dev/null | sed 's@^upstream/@@' || true)"
 [[ -n "$UPSTREAM_BRANCH" ]] || UPSTREAM_BRANCH="$BRANCH"
 UPSTREAM_REF="upstream/${UPSTREAM_BRANCH}"
 UPSTREAM_SHA="$(git rev-parse "$UPSTREAM_REF")"
