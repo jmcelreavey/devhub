@@ -1,0 +1,50 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { loadRebuildOffer, startCheckoutRebuild } from "@/lib/desktop/checkout-rebuild";
+import { POST } from "./route";
+
+vi.mock("@/lib/desktop/checkout-rebuild", () => ({
+  loadRebuildOffer: vi.fn(),
+  startCheckoutRebuild: vi.fn(),
+}));
+
+function request(body: string) {
+  return new Request("http://127.0.0.1:1337/api/rebuild", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+  });
+}
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.mocked(loadRebuildOffer).mockResolvedValue({ available: true, mode: "service" } as never);
+  vi.mocked(startCheckoutRebuild).mockReturnValue({ ok: true });
+});
+
+describe("POST /api/rebuild", () => {
+  it("starts a pull and rebuild when asked to pull", async () => {
+    const res = await POST(request(JSON.stringify({ pull: true })));
+    expect(res.status).toBe(200);
+    expect(startCheckoutRebuild).toHaveBeenCalledWith(expect.objectContaining({ mode: "service" }), true);
+  });
+
+  it("rebuilds without pulling when pull is omitted", async () => {
+    await POST(request("{}"));
+    expect(startCheckoutRebuild).toHaveBeenCalledWith(expect.anything(), false);
+  });
+
+  it("rejects anything but { pull?: boolean } and never starts a rebuild", async () => {
+    for (const body of [JSON.stringify({ pull: "yes" }), JSON.stringify({ pull: true, checkout: "/tmp/elsewhere" }), "not json"]) {
+      const res = await POST(request(body));
+      expect(res.status).toBe(400);
+    }
+    expect(startCheckoutRebuild).not.toHaveBeenCalled();
+  });
+
+  it("passes a refusal through with its status", async () => {
+    vi.mocked(startCheckoutRebuild).mockReturnValue({ ok: false, status: 409, error: "A rebuild is already running." });
+    const res = await POST(request(JSON.stringify({ pull: true })));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "A rebuild is already running." });
+  });
+});

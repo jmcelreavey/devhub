@@ -6,7 +6,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { getNotesDir } from "@/lib/content/dirs";
 import { blocksToText } from "@/lib/markdown-convert";
+import { adfToPlainText } from "@/lib/jira/adf";
 import { getResolvedJiraEnv, authHeader, apiBase } from "@/lib/jira/env";
+
+export { adfToPlainText };
 import { resolveTaskNotePath } from "./task-notes";
 import { currentTaskNode, loadTaskIndex, taskLineageIds, type TaskNode } from "./task-index";
 export { resolveTaskNotePath } from "./task-notes";
@@ -36,20 +39,6 @@ export function readTaskNoteMarkdown(notePath: string): string | null {
   } catch {
     return null;
   }
-}
-
-/** Flatten ADF (or plain string) description to plain text for the checklist. */
-export function adfToPlainText(node: unknown): string {
-  if (node == null) return "";
-  if (typeof node === "string") return node;
-  if (typeof node !== "object") return "";
-  const obj = node as { type?: string; text?: string; content?: unknown[] };
-  if (typeof obj.text === "string") return obj.text;
-  if (!Array.isArray(obj.content)) return "";
-  const parts = obj.content.map(adfToPlainText);
-  // Block nodes separate with newlines; inline runs concatenate.
-  const block = obj.type === "doc" || obj.type === "bulletList" || obj.type === "orderedList" || obj.type === "blockquote";
-  return parts.join(block ? "\n" : "");
 }
 
 /** Best-effort Jira description text; null when unconfigured / missing / error. */

@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
-import { withErrorHandler } from "@/lib/api-utils";
+import { z } from "zod";
+import { parseBody, withErrorHandler } from "@/lib/api-utils";
 import { loadRebuildOffer, startCheckoutRebuild } from "@/lib/desktop/checkout-rebuild";
 
 export const dynamic = "force-dynamic";
+
+const RebuildRequestSchema = z.object({ pull: z.boolean().optional() }).strict();
 
 /**
  * Rebuild the running app from the linked checkout.
@@ -10,8 +13,8 @@ export const dynamic = "force-dynamic";
  * GET is unauthenticated on purpose, same as `/api/status/dashboard/rebuild`:
  * the update banner and the status page poll it, including while a restart is
  * in progress. It reports capability and the rebuild log, never a path the
- * caller supplied. POST is origin-guarded by `proxy.ts` and ignores every
- * field except `pull`.
+ * caller supplied. POST is origin-guarded by `proxy.ts` and accepts only
+ * `{ pull?: boolean }`.
  */
 export const GET = withErrorHandler(async () => {
   const offer = await loadRebuildOffer();
@@ -28,8 +31,9 @@ export const GET = withErrorHandler(async () => {
 }, "rebuild");
 
 export const POST = withErrorHandler(async (req: Request) => {
-  const body = (await req.json().catch(() => null)) as { pull?: unknown } | null;
-  const pull = body?.pull === true;
+  const parsed = await parseBody(req, RebuildRequestSchema);
+  if (!parsed.ok) return parsed.response;
+  const pull = parsed.data.pull === true;
   const offer = await loadRebuildOffer();
   const started = startCheckoutRebuild(offer, pull);
   if (!started.ok) {

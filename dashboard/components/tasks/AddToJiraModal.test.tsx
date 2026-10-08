@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { AddToJiraModal } from "./AddToJiraModal";
@@ -107,4 +107,67 @@ it("makes unavailable reference material visible in the review", async () => {
   render(<AddToJiraModal {...props} generateOnOpen />);
   await screen.findByText(/Couldn't read Jira ticket TEST-1/);
   expect(props.onCreated).not.toHaveBeenCalled();
+});
+
+function ndjsonResponse(events: unknown[], { hang = false } = {}) {
+  const body = `${events.map((event) => JSON.stringify(event)).join("\n")}\n`;
+  const bytes = new TextEncoder().encode(body);
+  let sent = false;
+  return {
+    ok: true,
+    headers: { get: (name: string) => (name.toLowerCase() === "content-type" ? "application/x-ndjson" : null) },
+    body: {
+      getReader: () => ({
+        read: () => {
+          if (!sent) {
+            sent = true;
+            return Promise.resolve({ done: false, value: bytes });
+          }
+          return hang ? new Promise(() => {}) : Promise.resolve({ done: true, value: undefined });
+        },
+      }),
+    },
+  };
+}
+
+it("shows the current step, its elapsed time and the streamed draft", async () => {
+  mocks.fetch.mockResolvedValue(ndjsonResponse([
+    { type: "step", step: "context", status: "running", at: 0 },
+    { type: "step", step: "context", status: "done", at: 4200 },
+    { type: "step", step: "jira", status: "running", at: 0 },
+    { type: "step", step: "jira", status: "done", at: 4300 },
+    { type: "step", step: "draft", status: "running", at: 4300 },
+    { type: "partial", summary: "Partial title", description: "Partial body" },
+  ], { hang: true }));
+  render(<AddToJiraModal {...props} generateOnOpen />);
+  expect(await screen.findByText("Partial body")).toBeInTheDocument();
+  expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("Writing the draft");
+  expect(screen.getByText("4.2s")).toBeInTheDocument();
+  expect((screen.getByRole("textbox", { name: "Title" }) as HTMLInputElement).value).toBe("Partial title");
+  expect(screen.getByText("Partial body")).toBeInTheDocument();
+  expect(screen.queryByRole("textbox", { name: "Description" })).toBeNull();
+});
+
+it("ticks the total while the draft is still running", async () => {
+  vi.useFakeTimers();
+  try {
+    mocks.fetch.mockImplementation(() => new Promise(() => {}));
+    render(<AddToJiraModal {...props} generateOnOpen />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1200); });
+    expect(screen.getByText("Total 1.2s")).toBeInTheDocument();
+    expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("Reading the task and linked notes");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("marks the step that failed", async () => {
+  mocks.fetch.mockResolvedValue(ndjsonResponse([
+    { type: "step", step: "draft", status: "running", at: 10 },
+    { type: "step", step: "draft", status: "error", at: 80 },
+    { type: "error", step: "draft", message: "The model failed.", totalMs: 80 },
+  ]));
+  render(<AddToJiraModal {...props} generateOnOpen />);
+  expect(await screen.findByText("The model failed.")).toBeInTheDocument();
+  expect(screen.getByText("Writing the draft").closest("li")).toHaveAttribute("data-status", "error");
 });

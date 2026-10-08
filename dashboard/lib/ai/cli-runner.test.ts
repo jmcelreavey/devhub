@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   CURSOR_HEADLESS_FORBIDDEN_FLAGS,
   applyCliTokenBudget,
+  createCursorDeltaParser,
   cursorAgentPrintArgs,
   describeCliTimeout,
   extractCursorStreamText,
@@ -111,6 +112,55 @@ describe("execCapture failures", () => {
   it("reports a failed exit when the CLI emits no diagnostics", async () => {
     await expect(execCapture(process.execPath, ["-e", "process.exitCode = 2;"], 5_000, tmp, undefined, 1_000, extractCursorStreamText))
       .rejects.toThrow("failed (exit 2)");
+  });
+});
+
+describe("createCursorDeltaParser", () => {
+  const delta = (text: string) => JSON.stringify({ type: "assistant", timestamp_ms: 1, message: { content: [{ type: "text", text }] } });
+  const whole = (text: string) => JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text }] } });
+
+  it("forwards live deltas and skips the repeated full message", () => {
+    const seen: string[] = [];
+    const feed = createCursorDeltaParser((text) => seen.push(text));
+    feed([delta('{"sum'), delta('mary"'), whole('{"summary"'), JSON.stringify({ type: "result", result: '{"summary"' })].join("\n") + "\n");
+    expect(seen).toEqual(['{"sum', 'mary"']);
+  });
+
+  it("ignores thinking, init and non-JSON lines", () => {
+    const seen: string[] = [];
+    const feed = createCursorDeltaParser((text) => seen.push(text));
+    feed(`${JSON.stringify({ type: "thinking", subtype: "delta", text: "hmm", timestamp_ms: 1 })}\nnot json\n${JSON.stringify({ type: "system" })}\n`);
+    expect(seen).toEqual([]);
+  });
+
+  it("reassembles a line split across chunks", () => {
+    const seen: string[] = [];
+    const feed = createCursorDeltaParser((text) => seen.push(text));
+    const line = delta("hello");
+    feed(line.slice(0, 20));
+    expect(seen).toEqual([]);
+    feed(line.slice(20) + "\n");
+    expect(seen).toEqual(["hello"]);
+  });
+});
+
+describe("execCapture progress", () => {
+  it("hands stdout to the listener while the process is still running", async () => {
+    const chunks: string[] = [];
+    const script = 'process.stdout.write("one"); setTimeout(() => process.stdout.write("two"), 150);';
+    const done = execCapture(process.execPath, ["-e", script], 5_000, tmp, undefined, 1_000, undefined, (chunk) => chunks.push(chunk));
+    await new Promise((resolve) => setTimeout(resolve, 75));
+    expect(chunks.join("")).toBe("one");
+    await expect(done).resolves.toBe("onetwo");
+    expect(chunks.join("")).toBe("onetwo");
+  });
+
+  it("keeps a multi-byte character intact when it straddles two chunks", async () => {
+    const chunks: string[] = [];
+    // "é" is two bytes; write them separately.
+    const script = 'process.stdout.write(Buffer.from([0xc3])); setTimeout(() => process.stdout.write(Buffer.from([0xa9])), 100);';
+    await execCapture(process.execPath, ["-e", script], 5_000, tmp, undefined, 1_000, undefined, (chunk) => chunks.push(chunk));
+    expect(chunks.join("")).toBe("é");
   });
 });
 

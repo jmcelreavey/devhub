@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { mutate as globalMutate } from "swr";
 import { Loader2, CheckCircle2, Circle, AlertTriangle, Sparkles } from "lucide-react";
 import { ModalShell } from "@/components/shell/ModalShell";
 import { RichTextField } from "@/components/ui/RichTextField";
 import { FetchError } from "@/components/ui/FetchError";
-import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { JiraKeyChip } from "@/components/jira/JiraKeyChip";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
@@ -15,6 +14,7 @@ import { creationParentForLinkedIssue, issueTypeForParent } from "@/lib/jira/iss
 import { openInBrowser } from "@/lib/desktop/bridge";
 import type { JiraMeta } from "@/lib/jira/client";
 import type { JiraTicketDraftResult } from "@/lib/jira/draft-ticket";
+import { DRAFT_NDJSON_TYPE, DRAFT_STEPS, parseNdjsonChunk, type DraftEvent, type DraftStepId } from "@/lib/jira/draft-events";
 import type { Task } from "@/components/tasks/TaskList";
 
 type ParentMode = "linked" | "other" | "none";
@@ -59,6 +59,10 @@ export function AddToJiraModal({ open, task, date, generateOnOpen = false, onClo
   const [draftAttempt, setDraftAttempt] = useState(generateOnOpen ? 1 : 0);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [draftWarnings, setDraftWarnings] = useState<string[]>([]);
+  const [progress, setProgress] = useState<Record<DraftStepId, DraftStepView> | null>(() => (generateOnOpen ? freshDraftSteps() : null));
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [streamedDescription, setStreamedDescription] = useState("");
+  const sawSteps = useRef(false);
   const taskDate = date ?? todayISO();
   const [parentMode, setParentMode] = useState<ParentMode>(linkedKey ? "linked" : "none");
   const [otherKey, setOtherKey] = useState("");
@@ -66,25 +70,87 @@ export function AddToJiraModal({ open, task, date, generateOnOpen = false, onClo
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
+    if (!generating) return;
+    // Zero is set in the click handler. The interval only publishes the clock.
+    const origin = Date.now();
+    const timer = setInterval(() => setElapsedMs(Date.now() - origin), 200);
+    return () => clearInterval(timer);
+  }, [generating, draftAttempt]);
+
+  useEffect(() => {
     if (!open || draftAttempt === 0) return;
     const controller = new AbortController();
     async function loadDraft() {
+      let streamed = "";
+      let finished = false;
+      const apply = (event: DraftEvent) => {
+        if (event.type === "step") {
+          sawSteps.current = true;
+          setProgress((current) => {
+            const prev = current ?? freshDraftSteps();
+            const step = prev[event.step];
+            return {
+              ...prev,
+              [event.step]: {
+                status: event.status,
+                startedAt: event.status === "running" ? event.at : step.startedAt ?? event.at,
+                endedAt: event.status === "done" || event.status === "error" ? event.at : undefined,
+                detail: event.detail,
+              },
+            };
+          });
+          return;
+        }
+        if (event.type === "partial") {
+          if (event.summary) setSummary(event.summary);
+          if (event.description) {
+            streamed = event.description;
+            setStreamedDescription(event.description);
+          }
+          return;
+        }
+        if (event.type === "result") {
+          finished = true;
+          setSummary(event.draft.summary);
+          setDescription(event.draft.description);
+          setInitialDescription(event.draft.description);
+          setDraftWarnings(event.draft.warnings ?? []);
+          setStreamedDescription("");
+          setProgress(null);
+          return;
+        }
+        finished = true;
+        setDraftError(event.message);
+        const failedStep = event.step;
+        if (failedStep) {
+          setProgress((current) => {
+            if (!current) return current;
+            const next = { ...current };
+            for (const id of Object.keys(next) as DraftStepId[]) {
+              if (id !== failedStep && next[id].status === "running") next[id] = { ...next[id], status: "pending" };
+            }
+            next[failedStep] = { ...next[failedStep], status: "error", endedAt: event.totalMs, detail: event.message };
+            return next;
+          });
+        }
+        if (streamed) {
+          setDescription(streamed);
+          setInitialDescription(streamed);
+        }
+      };
       try {
         const response = await fetch("/api/jira/draft", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", Accept: `${DRAFT_NDJSON_TYPE}, application/json` },
           body: JSON.stringify({ taskId: task.id, date: taskDate }),
           signal: controller.signal,
         });
-        const result = await response.json() as JiraTicketDraftResult & { error?: string };
-        if (!response.ok) throw new Error(result.error ?? "Couldn't generate the Jira draft.");
         if (controller.signal.aborted) return;
-        setSummary(result.summary);
-        setDescription(result.description);
-        setInitialDescription(result.description);
-        setDraftWarnings(result.warnings ?? []);
+        await readDraftResponse(response, controller.signal, apply);
+        if (!finished && !controller.signal.aborted) throw new Error("The draft ended before it finished.");
       } catch (error) {
         if (controller.signal.aborted) return;
+        if (!sawSteps.current) setProgress(null);
         setDraftError(error instanceof Error ? error.message : "Couldn't generate the Jira draft.");
       } finally {
         if (!controller.signal.aborted) setGenerating(false);
@@ -98,6 +164,10 @@ export function AddToJiraModal({ open, task, date, generateOnOpen = false, onClo
     setInitialDescription(description);
     setDraftError(null);
     setDraftWarnings([]);
+    setStreamedDescription("");
+    setElapsedMs(0);
+    sawSteps.current = false;
+    setProgress(freshDraftSteps());
     setGenerating(true);
     setDraftAttempt((attempt) => attempt + 1);
   };
@@ -137,6 +207,15 @@ export function AddToJiraModal({ open, task, date, generateOnOpen = false, onClo
   const summaryValid = summary.trim().length > 0 && summary.trim().length <= 255;
   const descriptionValid = description.trim().length > 0 && description.trim().length <= 5_000;
   const contextReady = meta?.configured === true && !metaLoading && !metaError;
+  const canCreate =
+    !creating &&
+    !generating &&
+    contextReady &&
+    summaryValid &&
+    descriptionValid &&
+    otherKeyValid &&
+    !parentLoading &&
+    !parentMissing;
 
   const create = useCallback(async () => {
     if (creating || generating) return;
@@ -239,17 +318,8 @@ export function AddToJiraModal({ open, task, date, generateOnOpen = false, onClo
             type="button"
             className="btn"
             onClick={create}
-            disabled={
-              creating ||
-              generating ||
-              !contextReady ||
-              !summaryValid ||
-              !descriptionValid ||
-              !otherKeyValid ||
-              parentLoading ||
-              parentMissing
-            }
-            style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
+            disabled={!canCreate}
+            style={canCreate ? { background: "var(--accent)", color: "var(--accent-fg)" } : undefined}
           >
             {creating ? (
               <span className="inline-flex items-center gap-1.5">
@@ -357,12 +427,14 @@ export function AddToJiraModal({ open, task, date, generateOnOpen = false, onClo
             Description
           </span>
           <div className="mt-1">
-            {generating ? (
-              <div role="status" aria-live="polite">
-                <p className="mb-2 text-xs text-text-subtle">Reading linked material and drafting the ticket…</p>
-                <SkeletonRows count={2} height={48} />
+            {progress && (
+              <div className="mb-3">
+                <DraftProgressList steps={progress} elapsedMs={generating ? elapsedMs : null} />
               </div>
-            ) : (
+            )}
+            {generating && streamedDescription ? (
+              <pre className="max-h-48 overflow-auto whitespace-pre-wrap font-sans text-xs text-text">{streamedDescription}</pre>
+            ) : generating ? null : (
               <RichTextField initialMarkdown={initialDescription} disabled={creating} onChangeMarkdown={setDescription} />
             )}
             {description.trim().length > 5_000 && (
@@ -439,6 +511,115 @@ export function AddToJiraModal({ open, task, date, generateOnOpen = false, onClo
       </div>
     </ModalShell>
   );
+}
+
+interface DraftStepView {
+  status: "pending" | "running" | "done" | "error";
+  startedAt?: number;
+  endedAt?: number;
+  detail?: string;
+}
+
+function freshDraftSteps(): Record<DraftStepId, DraftStepView> {
+  return {
+    context: { status: "running", startedAt: 0 },
+    jira: { status: "pending" },
+    draft: { status: "pending" },
+    format: { status: "pending" },
+  };
+}
+
+function formatElapsed(ms: number): string {
+  const seconds = Math.max(0, ms) / 1000;
+  if (seconds < 10) return `${seconds.toFixed(1)}s`;
+  const whole = Math.round(seconds);
+  if (whole < 60) return `${whole}s`;
+  const minutes = Math.floor(whole / 60);
+  return `${minutes}m ${(whole % 60).toString().padStart(2, "0")}s`;
+}
+
+function stepElapsed(step: DraftStepView, elapsedMs: number | null): string | null {
+  if (step.startedAt === undefined) return null;
+  if (step.status === "done" || step.status === "error") {
+    return formatElapsed((step.endedAt ?? step.startedAt) - step.startedAt);
+  }
+  if (step.status === "running" && elapsedMs !== null) return formatElapsed(Math.max(0, elapsedMs - step.startedAt));
+  return null;
+}
+
+function DraftProgressList({ steps, elapsedMs }: { steps: Record<DraftStepId, DraftStepView>; elapsedMs: number | null }) {
+  const current = DRAFT_STEPS.find((step) => steps[step.id].status === "running");
+  return (
+    <div>
+      {current && <p className="sr-only" aria-live="polite">{current.label}</p>}
+      <ol aria-label="Draft progress" className="space-y-1">
+        {DRAFT_STEPS.map((step) => {
+          const state = steps[step.id];
+          const elapsed = stepElapsed(state, elapsedMs);
+          return (
+            <li
+              key={step.id}
+              data-status={state.status}
+              aria-current={state.status === "running" ? "step" : undefined}
+              className={`flex items-center gap-2 text-xs ${state.status === "error" ? "text-danger" : state.status === "running" ? "font-medium text-text" : "text-text-subtle"}`}
+            >
+              {state.status === "done" ? (
+                <CheckCircle2 size={13} className="shrink-0" aria-hidden />
+              ) : state.status === "error" ? (
+                <AlertTriangle size={13} className="shrink-0" aria-hidden />
+              ) : state.status === "running" ? (
+                <Loader2 size={13} className="shrink-0 animate-spin" aria-hidden />
+              ) : (
+                <Circle size={13} className="shrink-0" aria-hidden />
+              )}
+              <span className="min-w-0">{step.label}</span>
+              {elapsed && <span className="ml-auto tabular-nums">{elapsed}</span>}
+            </li>
+          );
+        })}
+      </ol>
+      {elapsedMs !== null && <p className="mt-2 text-xs tabular-nums text-text-subtle">Total {formatElapsed(elapsedMs)}</p>}
+    </div>
+  );
+}
+
+interface DraftFetchResponse {
+  ok: boolean;
+  status?: number;
+  headers?: { get?: (name: string) => string | null };
+  json: () => Promise<JiraTicketDraftResult & { error?: string }>;
+  body?: {
+    getReader: () => {
+      read: () => Promise<{ done: boolean; value?: Uint8Array }>;
+      releaseLock?: () => void;
+    };
+  } | null;
+}
+
+async function readDraftResponse(response: DraftFetchResponse, signal: AbortSignal, onEvent: (event: DraftEvent) => void): Promise<void> {
+  const contentType = response.headers?.get?.("content-type") ?? "";
+  if (!contentType.includes(DRAFT_NDJSON_TYPE) || !response.body) {
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error ?? "Couldn't generate the Jira draft.");
+    if (signal.aborted) return;
+    onEvent({ type: "result", draft: result, totalMs: 0 });
+    return;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (!signal.aborted) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parsed = parseNdjsonChunk(buffer);
+      buffer = parsed.rest;
+      for (const event of parsed.events) onEvent(event);
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
 }
 
 function ParentRadio({

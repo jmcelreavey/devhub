@@ -10,6 +10,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { StringDecoder } from "node:string_decoder";
 import { cliLimiter } from "./cli-limit";
 import fs from "node:fs";
 import os from "node:os";
@@ -163,6 +164,36 @@ export function extractCursorStreamText(raw: string): string {
 }
 
 /**
+ * Feed raw stdout chunks in; get each piece of reply text out as it arrives.
+ *
+ * Partial-output mode stamps every live delta with `timestamp_ms` and then
+ * repeats the whole message once, unstamped, at the end. Only stamped events
+ * are forwarded, otherwise the reply would be streamed twice.
+ */
+export function createCursorDeltaParser(onText: (delta: string) => void): (chunk: string) => void {
+  let pending = "";
+  return (chunk) => {
+    pending += chunk;
+    const lines = pending.split("\n");
+    pending = lines.pop() ?? "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("{")) continue;
+      let event: { type?: string; timestamp_ms?: unknown; message?: { content?: { type?: string; text?: string }[] } };
+      try {
+        event = JSON.parse(trimmed);
+      } catch {
+        continue;
+      }
+      if (event.type !== "assistant" || typeof event.timestamp_ms !== "number") continue;
+      for (const block of event.message?.content ?? []) {
+        if (block?.type === "text" && block.text) onText(block.text);
+      }
+    }
+  };
+}
+
+/**
  * Longest a CLI may go without writing a byte before we give up on it.
  *
  * The previous total wall-clock timeout was the wrong measure: generating a
@@ -228,11 +259,13 @@ export async function execCapture(
   idleTimeoutMs: number = DEFAULT_IDLE_TIMEOUT_MS,
   /** Decode the wire format (e.g. stream-json) before it is judged or returned. */
   transform?: (raw: string) => string,
+  /** Raw stdout as it arrives, for callers that show progress. */
+  onData?: (chunk: string) => void,
 ): Promise<string> {
   // The limiter wraps only the spawn, so a job's clock starts when its process
   // does — time spent queueing behind other runs is not held against it.
   return cliLimiter.run(
-    () => captureOnce(bin, args, timeoutMs, cwd, signal, idleTimeoutMs, transform),
+    () => captureOnce(bin, args, timeoutMs, cwd, signal, idleTimeoutMs, transform, onData),
     signal,
   );
 }
@@ -245,6 +278,7 @@ async function captureOnce(
   signal: AbortSignal | undefined,
   idleTimeoutMs: number,
   transform: ((raw: string) => string) | undefined,
+  onData: ((chunk: string) => void) | undefined,
 ): Promise<string> {
   const startedAt = Date.now();
   const outcome = await new Promise<
@@ -263,6 +297,8 @@ async function captureOnce(
       let idleTimer: NodeJS.Timeout | undefined;
       let timedOut = false;
       let timeoutReason: TimeoutReason = "idle";
+      // A multi-byte character can straddle two chunks.
+      const decoder = onData ? new StringDecoder("utf8") : null;
 
       const finish = (code: number | null, err?: Error) => {
         if (settled) return;
@@ -341,6 +377,7 @@ async function captureOnce(
         bytes += chunk.length;
         // Keep the tail if a CLI floods us; the document end is what matters.
         if (bytes <= MAX_BUFFER) out += chunk.toString("utf8");
+        if (decoder) onData!(decoder.write(chunk));
         touch();
       });
       child.stderr?.on("data", (chunk: Buffer) => {
@@ -408,6 +445,8 @@ export async function generateTextViaCli(
     model?: string;
     cwd?: string | null;
     abortSignal?: AbortSignal;
+    /** Streams reply text as it is generated. Only the Cursor CLI supports it; the rest return the finished reply. */
+    onTextDelta?: (delta: string) => void;
   },
 ): Promise<CliGenerateResult> {
   const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -427,6 +466,7 @@ export async function generateTextViaCli(
       opts?.abortSignal,
       idleTimeoutMs,
       extractCursorStreamText,
+      opts?.onTextDelta ? createCursorDeltaParser(opts.onTextDelta) : undefined,
     );
     return { text, provider };
   }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createIssue, getJiraMeta, getTicket } from "@/lib/jira/client";
+import { createIssue, getJiraMeta, getTicket, invalidateJiraMetaCache } from "@/lib/jira/client";
 import { issueTypeForParent } from "@/lib/jira/issue-type";
 import { JiraCreateIssueSchema } from "@/lib/schemas";
 import { withErrorHandler, parseBody, notConfigured } from "@/lib/api-utils";
@@ -27,18 +27,25 @@ export const POST = withErrorHandler(async (req: Request) => {
   if (input.parentKey && !parentTicket) return NextResponse.json({ error: `Parent ${input.parentKey} was not found in Jira.` }, { status: 400 });
   const issuetypeName = input.parentKey ? issueTypeForParent(parentTicket?.issuetype) : "Task";
 
-  const created = await createIssue({
-    projectKey: input.projectKey,
-    summary: input.summary,
-    description: input.description,
-    parentKey: input.parentKey ?? null,
-    issuetypeName,
-    assignToMe: input.assignToMe ?? true,
-    sprintId: input.sprintId ?? null,
-    sprintFieldId: meta.sprintFieldId,
-    teamFieldId: meta.teamFieldId,
-    teamValue: meta.teamValue,
-  });
+  let created;
+  try {
+    created = await createIssue({
+      projectKey: input.projectKey,
+      summary: input.summary,
+      description: input.description,
+      parentKey: input.parentKey ?? null,
+      issuetypeName,
+      assignToMe: input.assignToMe ?? true,
+      sprintId: input.sprintId ?? null,
+      sprintFieldId: meta.sprintFieldId,
+      teamFieldId: meta.teamFieldId,
+      teamValue: meta.teamValue,
+    });
+  } catch (error) {
+    // A rejected create may mean the cached sprint/team field ids are stale.
+    invalidateJiraMetaCache();
+    throw error;
+  }
 
   invalidateJiraTicketsCache();
   invalidateSidebarCountsCache();

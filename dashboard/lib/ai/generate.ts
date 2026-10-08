@@ -3,7 +3,7 @@
  * preference (CLI print mode or HTTP API via Vercel AI SDK).
  */
 
-import { generateText } from "ai";
+import { generateText, streamText } from "ai";
 import { generateTextViaCli } from "@/lib/ai/cli-runner";
 import { getNotesAiCallOptions, getNotesAiModel } from "@/lib/ai/provider";
 import { startGenerationActivity, type AiActivityOptions } from "@/lib/ai/activity";
@@ -32,6 +32,12 @@ export interface GenerateAiTextOptions {
   cwd?: string | null;
   /** HTTP API only — CLI print mode cannot see images. */
   images?: { dataUrl: string }[];
+  /**
+   * Called with each piece of the reply as it is generated. The HTTP API and
+   * Cursor CLI stream; other CLIs only return the finished reply, so this is
+   * never called for them. Image requests don't stream either.
+   */
+  onTextDelta?: (delta: string) => void;
 }
 
 export interface GenerateAiTextResult {
@@ -63,6 +69,29 @@ export async function generateAiText(
     const images = (opts.images ?? []).filter((img) => img.dataUrl.startsWith("data:image/"));
     const tokenOpts =
       opts.maxOutputTokens !== undefined ? { maxOutputTokens: opts.maxOutputTokens } : {};
+    if (opts.onTextDelta && images.length === 0) {
+      const stream = streamText({
+        model,
+        ...(opts.system ? { system: opts.system } : {}),
+        prompt: opts.prompt,
+        ...tokenOpts,
+        ...callOptions,
+        // Errors are rethrown from fullStream below; without a handler the SDK also logs them.
+        onError: () => {},
+      });
+      let text = "";
+      for await (const part of stream.fullStream) {
+        if (part.type === "text-delta") {
+          text += part.text;
+          opts.onTextDelta(part.text);
+        } else if (part.type === "error") {
+          throw part.error instanceof Error ? part.error : new Error(String(part.error));
+        }
+      }
+      // An aborted stream just ends, so a cancelled run must not look like a short reply.
+      opts.abortSignal?.throwIfAborted();
+      return { text: text.trim(), provider, finishReason: await stream.finishReason };
+    }
     const result =
       images.length > 0
         ? await generateText({
@@ -119,6 +148,7 @@ export async function generateAiText(
       model: opts.model,
       cwd: opts.cwd,
       abortSignal: opts.abortSignal,
+      onTextDelta: opts.onTextDelta,
     });
     activity.append(cli.text);
     activity.succeed();

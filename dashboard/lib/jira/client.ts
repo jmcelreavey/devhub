@@ -1,5 +1,7 @@
+import { adfToPlainText } from "@/lib/jira/adf";
 import { pickAtlassianAvatarUrl, rememberAtlassianAvatar } from "@/lib/jira/avatars";
 import { getResolvedJiraEnv, authHeader, apiBase, jsonHeaders, type ResolvedJira } from "@/lib/jira/env";
+import { createTtlCache } from "@/lib/jira/ttl-cache";
 import {
   getJiraTicketsCache,
   setJiraTicketsCache,
@@ -215,11 +217,32 @@ export interface JiraTicketDetail {
   parent: JiraTicketRef | null;
 }
 
-export async function getTicket(key: string, signal?: AbortSignal): Promise<JiraTicketDetail | null> {
+interface JiraTicketPayload {
+  key?: string;
+  fields?: {
+    status?: { name?: string };
+    summary?: string;
+    issuetype?: { name?: string };
+    parent?: { key?: string; fields?: { summary?: string } };
+    description?: unknown;
+  };
+}
+
+function ticketDetailFrom(key: string, data: JiraTicketPayload): JiraTicketDetail {
+  return {
+    key: data.key ?? key,
+    status: { name: data.fields?.status?.name ?? "Unknown" },
+    summary: data.fields?.summary ?? "",
+    issuetype: data.fields?.issuetype?.name ?? "Task",
+    parent: mapJiraParent(data.fields?.parent),
+  };
+}
+
+async function fetchTicketPayload(key: string, fields: string, signal?: AbortSignal): Promise<JiraTicketPayload | null> {
   const j = getResolvedJiraEnv();
   if (!j) return null;
 
-  const res = await fetch(`${apiBase(j)}/issue/${key}?fields=status,summary,issuetype,parent`, {
+  const res = await fetch(`${apiBase(j)}/issue/${key}?fields=${fields}`, {
     signal,
     headers: {
       Authorization: authHeader(j),
@@ -228,23 +251,24 @@ export async function getTicket(key: string, signal?: AbortSignal): Promise<Jira
   });
 
   if (!res.ok) return null;
-  const data = (await res.json()) as {
-    key?: string;
-    fields?: {
-      status?: { name?: string };
-      summary?: string;
-      issuetype?: { name?: string };
-      parent?: { key?: string; fields?: { summary?: string } };
-    };
-  };
-  const parent = mapJiraParent(data.fields?.parent);
-  return {
-    key: data.key ?? key,
-    status: { name: data.fields?.status?.name ?? "Unknown" },
-    summary: data.fields?.summary ?? "",
-    issuetype: data.fields?.issuetype?.name ?? "Task",
-    parent,
-  };
+  return (await res.json()) as JiraTicketPayload;
+}
+
+export async function getTicket(key: string, signal?: AbortSignal): Promise<JiraTicketDetail | null> {
+  const data = await fetchTicketPayload(key, "status,summary,issuetype,parent", signal);
+  return data && ticketDetailFrom(key, data);
+}
+
+export interface JiraTicketWithDescription extends JiraTicketDetail {
+  /** Plain text, or null when the ticket has none. */
+  description: string | null;
+}
+
+/** {@link getTicket} plus the description, in a single request. */
+export async function getTicketWithDescription(key: string, signal?: AbortSignal): Promise<JiraTicketWithDescription | null> {
+  const data = await fetchTicketPayload(key, "status,summary,issuetype,parent,description", signal);
+  if (!data) return null;
+  return { ...ticketDetailFrom(key, data), description: adfToPlainText(data.fields?.description ?? null).trim() || null };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -434,6 +458,31 @@ export interface JiraMeta {
  * the Team value be inherited from the most relevant issue.
  */
 export async function getJiraMeta(
+  projectKey: string,
+  referenceKey?: string,
+): Promise<JiraMeta> {
+  const j = getResolvedJiraEnv();
+  // Unconfigured is a cheap, env-dependent answer; don't hold it.
+  if (!j) return loadJiraMeta(projectKey, referenceKey);
+  return jiraMetaCache.get(`${j.domain}|${projectKey}|${referenceKey ?? ""}`, () =>
+    loadJiraMeta(projectKey, referenceKey),
+  );
+}
+
+/**
+ * Board, sprint, field ids and the inherited Team change rarely but cost a
+ * dozen sequential requests to resolve (the Team walk alone is two per hop).
+ * Five minutes keeps a sprint rollover from lingering.
+ */
+export const JIRA_META_TTL_MS = 5 * 60 * 1000;
+const jiraMetaCache = createTtlCache<JiraMeta>(JIRA_META_TTL_MS);
+
+/** Drop cached metadata, e.g. after a failed create that may have used stale field ids. */
+export function invalidateJiraMetaCache(): void {
+  jiraMetaCache.invalidate();
+}
+
+async function loadJiraMeta(
   projectKey: string,
   referenceKey?: string,
 ): Promise<JiraMeta> {
