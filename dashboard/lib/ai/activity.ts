@@ -13,9 +13,17 @@ export interface AiActivityOptions extends Partial<AgentActivityContext> {
 interface GenerationOptions {
   provider: string;
   model?: string;
+  /** Effort taken from this call's provider options. Omitted from the run when the call sent none. */
+  reasoningEffort?: string;
   prompt: string;
   context?: AiActivityOptions;
   signal?: AbortSignal;
+}
+
+/** What this call put on the wire. Not re-derived from env or the model id. */
+function reasoningEffortSent(providerOptions: { openai?: { reasoningEffort?: unknown } } | undefined): string | undefined {
+  const effort = providerOptions?.openai?.reasoningEffort;
+  return typeof effort === "string" && effort.trim() !== "" ? effort : undefined;
 }
 
 export function startGenerationActivity(options: GenerationOptions) {
@@ -28,6 +36,7 @@ export function startGenerationActivity(options: GenerationOptions) {
     provider: options.provider,
     providerLabel: options.provider === "api" ? "AI generation" : `${options.provider} generation`,
     model: options.model,
+    ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
     bin: "generation",
     args: [],
     format: "text",
@@ -101,7 +110,12 @@ export function aiActivityMiddleware(context: AiActivityOptions = {}): LanguageM
     specificationVersion: "v3",
     async wrapGenerate({ doGenerate, params, model }) {
       const activity = startGenerationActivity({
-        provider: "api", model: model.modelId, prompt: promptText(params.prompt), context: grouped, signal: params.abortSignal,
+        provider: "api",
+        model: model.modelId,
+        reasoningEffort: reasoningEffortSent(params.providerOptions),
+        prompt: promptText(params.prompt),
+        context: grouped,
+        signal: params.abortSignal,
       });
       try {
         const result = await doGenerate();
@@ -116,7 +130,12 @@ export function aiActivityMiddleware(context: AiActivityOptions = {}): LanguageM
     },
     async wrapStream({ doStream, params, model }) {
       const activity = startGenerationActivity({
-        provider: "api", model: model.modelId, prompt: promptText(params.prompt), context: grouped, signal: params.abortSignal,
+        provider: "api",
+        model: model.modelId,
+        reasoningEffort: reasoningEffortSent(params.providerOptions),
+        prompt: promptText(params.prompt),
+        context: grouped,
+        signal: params.abortSignal,
       });
       try {
         const result = await doStream();

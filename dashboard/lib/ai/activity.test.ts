@@ -87,6 +87,21 @@ describe("AI activity", () => {
     expect(listAgentRuns()[0].status.state).toBe("cancelled");
   });
 
+  it("records the reasoning effort from the call and omits the field when none was sent", async () => {
+    const result = { content: [{ type: "text" as const, text: "Draft." }], finishReason: { unified: "stop" as const, raw: "stop" }, usage, warnings: [] };
+    const model = wrapLanguageModel({
+      model: new MockLanguageModelV3({ modelId: "gpt-6-luna", doGenerate: result }),
+      middleware: aiActivityMiddleware({ action: "Draft Jira ticket" }),
+    });
+    await model.doGenerate({ prompt, providerOptions: { openai: { reasoningEffort: "low" } } });
+    expect(listAgentRuns()[0]?.spec).toMatchObject({ provider: "api", model: "gpt-6-luna", reasoningEffort: "low" });
+
+    await model.doGenerate({ prompt });
+    const plain = listAgentRuns()[0]?.spec;
+    expect(plain).toMatchObject({ provider: "api", model: "gpt-6-luna" });
+    expect(plain).not.toHaveProperty("reasoningEffort");
+  });
+
   it("does not overwrite cancellation with a late successful result", () => {
     const controller = new AbortController();
     const activity = startGenerationActivity({ provider: "codex", prompt: "A prompt", signal: controller.signal });

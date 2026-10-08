@@ -57,6 +57,11 @@ export interface AgentRunSpec {
   title: string;
   prompt: string;
   model?: string;
+  /**
+   * Reasoning effort copied from the HTTP call's provider options.
+   * Omitted when the call did not send one.
+   */
+  reasoningEffort?: string;
   /** Nesting level of the run itself (a run started by a human is 0). */
   depth: number;
   createdAt: number;

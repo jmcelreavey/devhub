@@ -21,6 +21,7 @@ export interface AgentRunSummary {
   providerLabel: string;
   title: string;
   model: string | null;
+  reasoningEffort?: string | null;
   state: AgentRunState;
   runtime?: "legacy-cli" | "aionui" | "paseo" | "generation";
   conversationId?: string | null;
@@ -99,6 +100,11 @@ export function formatAgentEvent(event: AgentRunEvent): string {
   }
 }
 
+function recordedModelLabel(model: string | null, reasoningEffort?: string | null): string {
+  const detail = [model, reasoningEffort].filter(Boolean).join(" · ");
+  return detail ? ` (${detail})` : "";
+}
+
 export function formatRunSummary(run: AgentRunSummary): string {
   const stats = [
     run.turns !== null ? `${run.turns} turns` : null,
@@ -106,7 +112,7 @@ export function formatRunSummary(run: AgentRunSummary): string {
     run.exitCode !== null ? `exit ${run.exitCode}` : null,
   ].filter(Boolean);
   const lines = [
-    `${run.id} · ${run.providerLabel}${run.model ? ` (${run.model})` : ""} · ${run.state.toUpperCase()}`,
+    `${run.id} · ${run.providerLabel}${recordedModelLabel(run.model, run.reasoningEffort)} · ${run.state.toUpperCase()}`,
     `Title: ${run.title}`,
     `Cwd: ${run.cwd}`,
     run.worktree ? `Worktree: ${run.worktree.path} (branch ${run.worktree.branch})` : null,

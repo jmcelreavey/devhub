@@ -5,6 +5,26 @@
       "npm": "@ai-sdk/openai",
       "name": "OpenAI (API Key)",
       "models": {
+        "gpt-6-luna": {
+          "name": "GPT-6 Luna",
+          "limit": {
+            "context": 1050000,
+            "output": 128000
+          },
+          "cost": {
+            "input": 0.1,
+            "output": 0.5,
+            "cache_read": 0.01,
+            "cache_write": 0.125
+          },
+          "variants": {
+            "none": { "reasoningEffort": "none" },
+            "low": { "reasoningEffort": "low" },
+            "high": { "reasoningEffort": "high" },
+            "xhigh": { "reasoningEffort": "xhigh" },
+            "max": { "reasoningEffort": "max" }
+          }
+        },
         "gpt-5.6-sol": {
           "name": "GPT-5.6 Sol",
           "limit": {
@@ -50,10 +70,10 @@
             "output": 128000
           },
           "cost": {
-            "input": 1,
-            "output": 6,
-            "cache_read": 0.1,
-            "cache_write": 1.25
+            "input": 0.2,
+            "output": 1.2,
+            "cache_read": 0.02,
+            "cache_write": 0.25
           },
           "variants": {
             "low": { "reasoningEffort": "low" },

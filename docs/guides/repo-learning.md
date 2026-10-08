@@ -43,12 +43,14 @@ Examples:
 ```bash
 # OpenAI
 AI_BASE_URL=https://api.openai.com/v1
-AI_MODEL=gpt-4o-mini
+AI_MODEL=gpt-6-luna
 
 # Default z.ai Coding Plan
 AI_BASE_URL=https://api.z.ai/api/coding/paas/v4
 AI_MODEL=glm-5-turbo
 ```
+
+On OpenAI, `gpt-*-luna` sends reasoning effort `low` unless `AI_REASONING_EFFORT` or a per-call override is set.
 
 Set `AI_API_KEY` in `dashboard/.env.local` or a matching 1Password `devhub` item. Set `AI_BASE_URL` and `AI_MODEL` in `dashboard/.env.local` when you want something other than the z.ai defaults; non-secret URLs/model names are not pulled from 1Password by default.
 

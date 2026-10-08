@@ -22,7 +22,10 @@ export interface GenerateAiTextOptions {
   prefer?: AiProviderId | null;
   /** Model for this call only; blank keeps the provider's configured default. */
   model?: string;
-  /** HTTP API on OpenAI only: `reasoning.effort` for this call. Blank keeps the model's default. */
+  /**
+   * HTTP API on OpenAI only: `reasoning.effort` for this call.
+   * Wins over `AI_REASONING_EFFORT`. Blank falls through to that env, then `low` for `gpt-*-luna`.
+   */
   reasoningEffort?: ReasoningEffort | null;
   /** CLI timeout override (ignored for API). */
   timeoutMs?: number;

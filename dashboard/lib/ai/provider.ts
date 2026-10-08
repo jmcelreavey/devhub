@@ -58,15 +58,40 @@ export function normalizeReasoningEffort(raw: string | undefined | null): Reason
   return value && (REASONING_EFFORTS as readonly string[]).includes(value) ? (value as ReasoningEffort) : null;
 }
 
+/** `gpt-6-luna`, `gpt-5.6-luna`, and the same id behind a provider prefix. */
+const LUNA_FAMILY_MODEL = /^gpt-.+-luna$/i;
+
+function modelName(modelId: string): string {
+  return modelId.split("/").pop()?.trim() || modelId.trim();
+}
+
+/**
+ * Effort to send when nobody asked for one.
+ * Luna's own default is `medium`; `low` is faster on the same drafts and the quality held up.
+ * Every other model sends nothing and keeps its provider default.
+ */
+function defaultReasoningEffort(modelId: string): ReasoningEffort | null {
+  return LUNA_FAMILY_MODEL.test(modelName(modelId)) ? "low" : null;
+}
+
+/**
+ * First match wins: per-call override, then `AI_REASONING_EFFORT`, then the model default.
+ * An invalid env value is ignored so the next step can apply. `null` is not an override.
+ */
+function resolveReasoningEffort(modelId: string, featureOverride?: ReasoningEffort | null): ReasoningEffort | null {
+  if (featureOverride) return featureOverride;
+  return normalizeReasoningEffort(process.env.AI_REASONING_EFFORT) ?? defaultReasoningEffort(modelId);
+}
+
 const DISABLE_THINKING = {
   providerOptions: { [PROVIDER_NAME]: { thinking: { type: "disabled" as const } } },
 } as const;
 
 /**
- * Per-call options to spread into generateText/streamText. The `thinking` switch
- * is a GLM/z.ai extension; other OpenAI-compatible providers (OpenAI, OpenRouter,
- * …) reject unknown body fields, so it's only emitted when pointed at a GLM model
- * on z.ai. For any other provider this returns an empty object.
+ * Per-call options to spread into generateText/streamText.
+ * Reasoning effort is only attached for OpenAI endpoints (`api.openai.com`).
+ * The `thinking` switch is a GLM/z.ai extension and replaces that field; other
+ * providers reject unknown body fields, so anything else gets an empty object.
  */
 export function getNotesAiCallOptions(
   modelOverride?: string,
@@ -75,7 +100,7 @@ export function getNotesAiCallOptions(
   const { baseURL, modelId } = resolveProviderConfig(modelOverride);
   const isGlm = /z\.ai/i.test(baseURL) || /glm/i.test(modelId);
   if (isGlm) return DISABLE_THINKING;
-  // Only OpenAI proper gets the effort: other compatible endpoints may reject the field.
-  if (reasoningEffort && isOpenAiEndpoint(baseURL)) return { providerOptions: { openai: { reasoningEffort } } };
+  const effort = resolveReasoningEffort(modelId, reasoningEffort);
+  if (effort && isOpenAiEndpoint(baseURL)) return { providerOptions: { openai: { reasoningEffort: effort } } };
   return {};
 }

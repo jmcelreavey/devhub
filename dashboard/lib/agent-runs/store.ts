@@ -388,6 +388,7 @@ export function toAgentRunSummary(run: AgentRun) {
     providerLabel: spec.providerLabel,
     title: spec.title,
     model: spec.model ?? null,
+    reasoningEffort: spec.reasoningEffort ?? null,
     state: status.state,
     cwd: spec.cwd,
     worktree: spec.worktree ?? null,

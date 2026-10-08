@@ -45,6 +45,11 @@ const STATUS_FLUSH_MS = 1_000;
 const KILL_GRACE_MS = 5_000;
 const RESULT_TEXT_MAX = 8_000;
 
+function recordedModelLabel(model?: string, reasoningEffort?: string): string {
+  const detail = [model, reasoningEffort].filter(Boolean).join(" · ");
+  return detail ? ` (${detail})` : "";
+}
+
 const dim = (s: string) => `\x1b[90m${s}\x1b[0m`;
 const green = (s: string) => `\x1b[32m${s}\x1b[0m`;
 const red = (s: string) => `\x1b[31m${s}\x1b[0m`;
@@ -166,7 +171,7 @@ function main(): void {
 
   process.stdout.write(
     [
-      dim(`── DevHub agent run ${spec.id} · ${spec.providerLabel}${spec.model ? ` (${spec.model})` : ""} ──`),
+      dim(`── DevHub agent run ${spec.id} · ${spec.providerLabel}${recordedModelLabel(spec.model, spec.reasoningEffort)} ──`),
       dim(`cwd ${spec.cwd}${spec.worktree ? ` (worktree ${spec.worktree.branch})` : ""}`),
       dim(clip(spec.prompt.replace(/\s+/g, " "), 300)),
       "",

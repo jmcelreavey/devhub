@@ -51,6 +51,12 @@ describe("formatRunSummary", () => {
     expect(done).toContain("Result:\nFixed it.");
     expect(formatRunSummary({ ...baseRun, state: "running", resultText: "partial" })).not.toContain("Result:");
   });
+
+  it("shows the model and the reasoning effort that were recorded", () => {
+    expect(formatRunSummary({ ...baseRun, model: "gpt-6-luna", reasoningEffort: "low" })).toContain("Claude Code (gpt-6-luna · low)");
+    expect(formatRunSummary({ ...baseRun, model: "gpt-6-luna" })).toContain("Claude Code (gpt-6-luna)");
+    expect(formatRunSummary(baseRun)).toContain("Claude Code · QUEUED");
+  });
 });
 
 describe("formatAgentEvent", () => {

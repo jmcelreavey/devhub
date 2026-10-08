@@ -114,13 +114,16 @@ Set `AI_BASE_URL`, `AI_MODEL` and `AI_API_KEY` in `dashboard/.env.local` for HTT
 | ------------------- | -------- | -------------------------------------------------------- | ------------------------------------------------------------- |
 | `AI_API_KEY`        | Yes      | —                                                        | Bearer token for your provider                                |
 | `AI_BASE_URL`       | No       | `https://api.z.ai/api/coding/paas/v4`                    | OpenAI-compatible API base (no trailing slash)                |
-| `AI_MODEL`          | No       | `glm-5-turbo`                                            | Model id sent in chat completion requests                     |
-| `AI_IMAGE_BASE_URL` | No       | mirrors `AI_BASE_URL` when it points at `api.openai.com` | OpenAI-compatible **images** API base for briefing canvas art |
+| `AI_MODEL`            | No       | `glm-5-turbo`                                            | Model id sent in chat completion requests                     |
+| `AI_REASONING_EFFORT` | No       | `low` for `gpt-*-luna` on OpenAI; otherwise unset        | OpenAI `reasoning.effort`. Invalid values are ignored         |
+| `AI_IMAGE_BASE_URL`   | No       | mirrors `AI_BASE_URL` when it points at `api.openai.com` | OpenAI-compatible **images** API base for briefing canvas art |
 | `AI_IMAGE_MODEL`    | No       | `gpt-image-1` when base is OpenAI                        | Image model id (`/images/generations`)                        |
 
 The GLM-specific `thinking` request option is only sent when `AI_BASE_URL`/`AI_MODEL` point at a z.ai GLM model, so other providers (OpenAI, etc.) aren't sent fields they'd reject.
 
-For OpenAI chat, set `AI_BASE_URL=https://api.openai.com/v1` and `AI_MODEL=gpt-4o-mini` (or similar). Briefing canvas imagery auto-enables on OpenAI bases; for other image endpoints set `AI_IMAGE_BASE_URL` and `AI_IMAGE_MODEL` explicitly. Generated PNGs cache under `~/.cache/devhub/briefing-images/`.
+Reasoning effort is resolved in one place and only sent to `api.openai.com`: a per-call override (such as `JIRA_DRAFT_REASONING_EFFORT`), then `AI_REASONING_EFFORT`, then the model default. `gpt-*-luna` defaults to `low`. Every other model sends nothing and keeps the provider's own default. Accepted values are `none`, `minimal`, `low`, `medium`, `high`, `xhigh` and `max`.
+
+For OpenAI chat, set `AI_BASE_URL=https://api.openai.com/v1` and `AI_MODEL=gpt-6-luna`. Briefing canvas imagery auto-enables on OpenAI bases; for other image endpoints set `AI_IMAGE_BASE_URL` and `AI_IMAGE_MODEL` explicitly. Generated PNGs cache under `~/.cache/devhub/briefing-images/`.
 
 Copy the commented block from `dashboard/.env.example` into `.env.local`, set `AI_API_KEY`, and restart the dev server.
 
@@ -132,9 +135,9 @@ Copy the commented block from `dashboard/.env.example` into `.env.local`, set `A
 | ----------------------------- | ------- | ------- |
 | `JIRA_DRAFT_PROVIDER`         | —       | Provider for drafts: `api` (HTTP, uses `AI_API_KEY` / `AI_BASE_URL`), `cursor`, `codex`, `opencode`, `antigravity` |
 | `JIRA_DRAFT_MODEL`            | —       | Model id for drafts (for `api`, an id your `AI_BASE_URL` serves) |
-| `JIRA_DRAFT_REASONING_EFFORT` | —       | OpenAI endpoints only: `none`, `minimal`, `low`, `medium`, `high`, `xhigh` or `max`. Ignored elsewhere |
+| `JIRA_DRAFT_REASONING_EFFORT` | —       | Overrides `AI_REASONING_EFFORT` for drafts. OpenAI endpoints only: `none`, `minimal`, `low`, `medium`, `high`, `xhigh` or `max`. An invalid value is ignored |
 
-A CLI agent can take 30–60 seconds per draft. A small model over the HTTP API with a low reasoning effort usually answers in a few seconds. In a packaged app, put these in the env file the app reads (the linked checkout's `dashboard/.env.local`, or `config/.env.local` in the app data folder) and restart DevHub.
+A CLI agent can take 30–60 seconds per draft. `gpt-6-luna` on the HTTP API uses reasoning effort `low` by default and usually answers in a few seconds. In a packaged app, put these in the env file the app reads (the linked checkout's `dashboard/.env.local`, or `config/.env.local` in the app data folder) and restart DevHub.
 
 Without an HTTP key, notes still work but in-editor AI is unavailable. Repo Learning and briefing generation can use a configured CLI. When no AI provider is available, deterministic repo facts and RSS/weather/event content still load; generated actions report configuration errors or fall back to deterministic content.
 
