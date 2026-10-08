@@ -23,6 +23,20 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use crate::paths::APP_DATA_SUBDIRS;
+const REJECT_LOCAL_PAYLOAD_SCRIPT: &str = r#"
+const fs = require('node:fs');
+const path = require('node:path');
+const [config, failedDir, reason] = process.argv.slice(1);
+const source = path.join(config, 'local-payload.json');
+if (fs.existsSync(source)) {
+  const record = JSON.parse(fs.readFileSync(source, 'utf8'));
+  if (record.dir === failedDir) {
+    const failed = path.join(config, 'local-payload.failed.json');
+    fs.renameSync(source, failed);
+    fs.writeFileSync(failed, JSON.stringify({...record, failureReason: reason, failedAt: new Date().toISOString()}, null, 2) + '\n');
+  }
+}
+"#;
 
 /// A cold WSL VM boot is 5–20s; a machine that just woke from sleep can take
 /// far longer. Generous, because the failure mode of giving up early is telling
@@ -223,6 +237,29 @@ exit 1"#;
         let path = format!("{}/config/local-payload.json", self.app_data);
         let text = self.exec(&["/bin/cat", &path], QUICK_TIMEOUT).ok()?;
         parse_local_payload(&text)
+    }
+
+    pub fn reject_local_payload(
+        &self,
+        installed_dir: &str,
+        failed_dir: &str,
+        reason: &str,
+    ) -> Result<(), String> {
+        let node = format!("{installed_dir}/runtime/node");
+        let config = format!("{}/config", self.app_data);
+
+        self.exec(
+            &[
+                &node,
+                "-e",
+                REJECT_LOCAL_PAYLOAD_SCRIPT,
+                &config,
+                failed_dir,
+                reason,
+            ],
+            QUICK_TIMEOUT,
+        )
+        .map(|_| ())
     }
 
     /// `.complete` exists, and only for a path a rebuild is allowed to name.
@@ -525,6 +562,26 @@ pub fn choose_startup_payload(
         );
     }
     (record.dir.clone(), "checkout build")
+}
+
+pub fn start_payload_with_fallback(
+    selected: &str,
+    installed: &str,
+    mut start: impl FnMut(&str) -> Result<(), String>,
+    mut reject: impl FnMut(&str) -> Result<(), String>,
+) -> Result<Option<String>, String> {
+    let error = match start(selected) {
+        Ok(()) => return Ok(None),
+        Err(error) if selected == installed => return Err(error),
+        Err(error) => error,
+    };
+    let mut notice =
+        format!("Checkout payload failed startup: {error}. Using the installed payload.");
+    if let Err(error) = reject(&error) {
+        notice.push_str(&format!(" Could not move its record aside: {error}"));
+    }
+    start(installed)?;
+    Ok(Some(notice))
 }
 
 /// What `prune_old_payloads` keeps. Checkout builds (`local-*`) are owned by
@@ -1121,6 +1178,127 @@ fn strip_prefix_ignore_case<'a>(text: &'a str, prefix: &str) -> Option<&'a str> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quarantine_script_moves_only_the_failed_record_and_preserves_the_reason() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("local-payload.json");
+        let failed = root.path().join("local-payload.failed.json");
+        std::fs::write(
+            &source,
+            r#"{"dir":"/runtime/local-test","commit":"abc","basePayloadId":"pay"}"#,
+        )
+        .unwrap();
+        let reject = || {
+            let output = Command::new("node")
+                .args(["-e", REJECT_LOCAL_PAYLOAD_SCRIPT])
+                .arg(root.path())
+                .args(["/runtime/local-test", "could not start"])
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        reject();
+        assert!(!source.exists());
+        let quarantined = std::fs::read_to_string(&failed).unwrap();
+        let record: serde_json::Value = serde_json::from_str(&quarantined).unwrap();
+        assert_eq!(record["failureReason"], "could not start");
+        assert_eq!(record["commit"], "abc");
+        assert!(record["failedAt"].as_str().unwrap().contains('T'));
+        let newer = r#"{"dir":"/runtime/local-new","commit":"def","basePayloadId":"pay"}"#;
+        std::fs::write(&source, newer).unwrap();
+        reject();
+        assert_eq!(std::fs::read_to_string(source).unwrap(), newer);
+        assert_eq!(std::fs::read_to_string(failed).unwrap(), quarantined);
+    }
+
+    #[test]
+    fn failed_local_payload_moves_record_and_starts_installed() {
+        let root = tempfile::tempdir().unwrap();
+        let record = root.path().join("local-payload.json");
+        let failed = root.path().join("local-payload.failed.json");
+        std::fs::write(&record, "checkout build").unwrap();
+        let mut attempts = Vec::new();
+        let notice = start_payload_with_fallback(
+            "local",
+            "installed",
+            |dir| {
+                attempts.push(dir.to_string());
+                if dir == "local" {
+                    Err("not healthy".into())
+                } else {
+                    assert!(!record.exists());
+                    assert!(failed.exists());
+                    Ok(())
+                }
+            },
+            |reason| {
+                assert_eq!(reason, "not healthy");
+                std::fs::rename(&record, &failed).map_err(|error| error.to_string())
+            },
+        )
+        .unwrap();
+        assert_eq!(attempts, ["local", "installed"]);
+        assert!(notice.unwrap().contains("Using the installed payload"));
+    }
+
+    #[test]
+    fn healthy_local_payload_is_not_rejected() {
+        assert_eq!(
+            start_payload_with_fallback(
+                "local",
+                "installed",
+                |_| Ok(()),
+                |_| { panic!("healthy record must stay") }
+            ),
+            Ok(None)
+        );
+    }
+
+    #[test]
+    fn installed_failure_keeps_the_existing_error_path() {
+        assert_eq!(
+            start_payload_with_fallback(
+                "installed",
+                "installed",
+                |_| Err("installed failed".into()),
+                |_| { panic!("installed payload has no local record to reject") }
+            ),
+            Err("installed failed".into())
+        );
+        assert_eq!(
+            start_payload_with_fallback(
+                "local",
+                "installed",
+                |dir| Err(format!("{dir} failed")),
+                |_| Ok(())
+            ),
+            Err("installed failed".into())
+        );
+    }
+
+    #[test]
+    fn quarantine_failure_is_reported_but_does_not_prevent_fallback() {
+        let notice = start_payload_with_fallback(
+            "local",
+            "installed",
+            |dir| {
+                if dir == "local" {
+                    Err("local failed".into())
+                } else {
+                    Ok(())
+                }
+            },
+            |_| Err("read-only config".into()),
+        )
+        .unwrap()
+        .unwrap();
+        assert!(notice.contains("Could not move its record aside: read-only config"));
+    }
 
     fn utf16le(text: &str) -> Vec<u8> {
         text.encode_utf16().flat_map(|u| u.to_le_bytes()).collect()

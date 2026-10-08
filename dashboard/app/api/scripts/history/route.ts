@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import fs from "node:fs";
-import path from "node:path";
-import { getHome } from "@/lib/notes/dir";
+import { runHistoryFile } from "@/lib/run-history-path";
 
 interface RunEntry {
   runId: string;
@@ -12,7 +11,7 @@ interface RunEntry {
 }
 
 export async function GET() {
-  const logPath = path.join(getHome(), ".local/state/devhub/runs.jsonl");
+  const logPath = runHistoryFile();
   if (!fs.existsSync(logPath)) return NextResponse.json([]);
 
   const lines = fs.readFileSync(logPath, "utf-8").trim().split("\n").filter(Boolean);

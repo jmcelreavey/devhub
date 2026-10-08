@@ -16,12 +16,14 @@ const live = vi.hoisted(() => ({
   mutate: vi.fn(),
 }));
 
+const desktop = vi.hoisted(() => ({ enabled: false }));
+
 vi.mock("@/lib/hooks/use-fetch", () => ({
   useLive: () => live,
 }));
 
 vi.mock("@/lib/desktop/bridge", () => ({
-  isDesktop: () => false,
+  isDesktop: () => desktop.enabled,
 }));
 
 function status(state: RebuildStatus["state"]): RebuildStatus {
@@ -38,6 +40,7 @@ function status(state: RebuildStatus["state"]): RebuildStatus {
 
 describe("CheckoutRebuildCard", () => {
   beforeEach(() => {
+    desktop.enabled = false;
     live.mutate.mockReset();
     live.error = undefined;
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ message: "Rebuild started." }) })));
@@ -87,6 +90,20 @@ describe("CheckoutRebuildCard", () => {
     };
     render(<CheckoutRebuildCard />);
     expect(screen.getByRole("alert")).toHaveTextContent("npm install failed.");
+    expect(screen.getByRole("button", { name: /pull and rebuild/i })).toBeEnabled();
+  });
+
+  it.each(["interrupted", "failed"] as const)("keeps Restart DevHub after a later %s run", (state) => {
+    desktop.enabled = true;
+    live.data = {
+      available: true,
+      mode: "payload",
+      checkoutAhead: true,
+      status: { ...status(state), restartRequired: true },
+      log: "",
+    };
+    render(<CheckoutRebuildCard />);
+    expect(screen.getByRole("button", { name: "Restart DevHub" })).toBeEnabled();
     expect(screen.getByRole("button", { name: /pull and rebuild/i })).toBeEnabled();
   });
 });

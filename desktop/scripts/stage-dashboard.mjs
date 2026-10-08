@@ -20,6 +20,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
+import { isUtf8 } from "node:buffer";
 import {
   dashboardDir,
   desktopDir,
@@ -180,18 +181,61 @@ async function buildNext() {
  * `.next` next to server.js, so a rebuild into `.next-rebuild` is flattened
  * back to that shape and the recorded distDir is rewritten to match.
  */
-export function rewriteDistDirText(text, fromDir, toDir) {
-  if (!fromDir || fromDir === toDir) return text;
-  const pairs = [
-    [`"distDir":"${fromDir}"`, `"distDir":"${toDir}"`],
-    [`"distDir": "${fromDir}"`, `"distDir": "${toDir}"`],
-    [`'distDir':'${fromDir}'`, `'distDir':'${toDir}'`],
-    [`distDir:"${fromDir}"`, `distDir:"${toDir}"`],
-    [`distDir: "${fromDir}"`, `distDir: "${toDir}"`],
-  ];
-  let out = text;
-  for (const [from, to] of pairs) out = out.split(from).join(to);
-  return out;
+export function relocateDistPaths(value, fromDir, toDir = ".next") {
+  if (typeof value === "string") {
+    const parts = value.split(/([/\\])/);
+    const custom = parts.indexOf(fromDir);
+    if (custom !== -1 && (path.posix.isAbsolute(value) || path.win32.isAbsolute(value))) {
+      return toDir + parts.slice(custom + 1).join("").replaceAll("\\", "/");
+    }
+    return parts.map((part) => part === fromDir ? toDir : part).join("");
+  }
+  if (Array.isArray(value)) return value.map((item) => relocateDistPaths(item, fromDir, toDir));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, relocateDistPaths(item, fromDir, toDir)]));
+  }
+  return value;
+}
+
+export function rewriteStandaloneConfig(text, fromDir) {
+  const match = /^const nextConfig = (\{[^\n]*\})[ \t]*;?\r?$/m.exec(text);
+  if (!match) throw new Error("Standalone server.js has no inlined nextConfig JSON.");
+  const config = relocateDistPaths(JSON.parse(match[1]), fromDir);
+  config.distDir = ".next";
+  config.distDirRoot = ".next";
+  return text.replace(match[0], "const nextConfig = " + JSON.stringify(config));
+}
+
+export function rewriteStagedJavaScript(text, fromDir) {
+  if (!text.includes(fromDir)) return text;
+  const { tokenizer } = require(require.resolve("acorn", { paths: [dashboardDir] }));
+  const replacements = [];
+  for (const token of tokenizer(text, { ecmaVersion: "latest", sourceType: "module" })) {
+    if (token.type.label !== "string") continue;
+    const relocated = relocateDistPaths(token.value, fromDir);
+    if (relocated !== token.value) replacements.push({ start: token.start, end: token.end, value: JSON.stringify(relocated) });
+  }
+  for (const replacement of replacements.reverse()) {
+    text = text.slice(0, replacement.start) + replacement.value + text.slice(replacement.end);
+  }
+  return text;
+}
+
+export function assertNoStagedDistReferences(serverRoot, distDir, fsx = fs) {
+  if (!distDir || distDir === ".next") return;
+  const visit = (dir) => {
+    for (const entry of fsx.readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) visit(file);
+      else if (entry.isFile()) {
+        const bytes = fsx.readFileSync(file);
+        if (isUtf8(bytes) && bytes.includes(Buffer.from(distDir))) {
+          throw new Error("Staged text still references " + distDir + ": " + path.relative(serverRoot, file));
+        }
+      }
+    }
+  };
+  visit(serverRoot);
 }
 
 export function normalizeStagedDist(serverRoot, distDir, fsx = fs) {
@@ -199,17 +243,34 @@ export function normalizeStagedDist(serverRoot, distDir, fsx = fs) {
   const from = path.join(serverRoot, distDir);
   const to = path.join(serverRoot, ".next");
   if (!fsx.existsSync(from)) {
-    throw new Error(
-      `Standalone output has no ${distDir} directory; the staged server would have no .next/server.`,
-    );
+    throw new Error("Standalone output has no " + distDir + " directory; the staged server would have no .next/server.");
   }
   fsx.mkdirSync(to, { recursive: true });
   fsx.cpSync(from, to, { recursive: true, force: true });
   fsx.rmSync(from, { recursive: true, force: true });
-  for (const file of [path.join(to, "required-server-files.json"), path.join(serverRoot, "server.js")]) {
-    if (!fsx.existsSync(file)) continue;
-    fsx.writeFileSync(file, rewriteDistDirText(fsx.readFileSync(file, "utf8"), distDir, ".next"));
-  }
+  const rewriteRuntimeFiles = (dir) => {
+    for (const entry of fsx.readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory() && entry.name !== "node_modules") rewriteRuntimeFiles(file);
+      else if (entry.isFile() && /\.(?:c?js|mjs)$/.test(entry.name) && entry.name !== "server.js") {
+        const text = fsx.readFileSync(file, "utf8");
+        const relocated = rewriteStagedJavaScript(text, distDir);
+        if (relocated !== text) fsx.writeFileSync(file, relocated);
+      } else if (entry.isFile() && entry.name.endsWith(".json")) {
+        const value = relocateDistPaths(JSON.parse(fsx.readFileSync(file, "utf8")), distDir);
+        if (entry.name === "required-server-files.json" && value.config) {
+          value.config.distDir = ".next";
+          value.config.distDirRoot = ".next";
+        }
+        fsx.writeFileSync(file, JSON.stringify(value) + "\n");
+      }
+    }
+  };
+  rewriteRuntimeFiles(serverRoot);
+  const server = path.join(serverRoot, "server.js");
+  fsx.writeFileSync(server, rewriteStandaloneConfig(fsx.readFileSync(server, "utf8"), distDir));
+  fsx.rmSync(path.join(serverRoot, "eslint.config.mjs"), { force: true });
+  fsx.rmSync(path.join(serverRoot, "tsconfig.tsbuildinfo"), { force: true });
 }
 
 function stageServer() {
@@ -536,6 +597,7 @@ async function stageServices() {
  * Better a red build than a signed installer that does this to a stranger.
  */
 function assertStaged() {
+  assertNoStagedDistReferences(serverDir, nextDistDir());
   const required = [
     [path.join(serverDir, "server.js"), "Next standalone entrypoint"],
     [path.join(serverDir, ".next", "static"), "client assets"],

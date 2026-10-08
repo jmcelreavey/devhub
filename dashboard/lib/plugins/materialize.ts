@@ -10,6 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { terminalShellEnv } from "../process-env";
 import { listEnabledPlugins } from "./registry";
 import type { RegisteredPlugin } from "./types";
 
@@ -267,7 +268,8 @@ export function materializePlugins(opts: MaterializeOptions): number {
   // Stale overlays: restore the committed baseline and stop hiding local churn.
   for (const pat of staleOverlays) {
     setSkipWorktree(repoRoot, pat, false);
-    spawnSync("git", ["-C", repoRoot, "checkout", "--", pat], { encoding: "utf-8" });
+    // checkout can fire a user's post-checkout hook, so it gets a user-shell env.
+    spawnSync("git", ["-C", repoRoot, "checkout", "--", pat], { encoding: "utf-8", env: terminalShellEnv(process.env) as NodeJS.ProcessEnv });
     emit(`  RESTORED BASELINE: ${pat}`);
   }
 

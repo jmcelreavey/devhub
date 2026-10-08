@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { commitAndPushPaths, dryRunScopedSync, existingScopedPaths } from "./orchestrator";
+import { commitAndPushDirty, commitAndPushPaths, dryRunScopedSync, existingScopedPaths } from "./orchestrator";
 
 const mocks = vi.hoisted(() => ({ git: vi.fn(), tracked: new Set<string>() }));
 vi.mock("@/lib/git/repo-local", () => ({ runGitRepo: mocks.git }));
@@ -67,5 +67,23 @@ describe("content sync with folders that don't exist yet", () => {
   it("existingScopedPaths ignores git failures for the tracked check", () => {
     mocks.git.mockReturnValue({ status: 128, stdout: "", stderr: "not a git repo" });
     expect(existingScopedPaths(repo, ["notes"])).toEqual([]);
+  });
+});
+
+describe("pre-push content switch", () => {
+  const pushOpts = () => mocks.git.mock.calls.filter(([, args]) => args[0] === "push").map(([, , opts]) => opts);
+  it("is set on the content sync's push, so the hook can skip verify for content-only commits", async () => {
+    mkdirs("notes");
+    await commitAndPushPaths({ repoRoot: repo, emit, paths: CONTENT, commitMessage: "chore: sync" });
+    expect(pushOpts()).toEqual([{ env: { DEVHUB_PREPUSH: "content" } }]);
+  });
+  it("is not set on a commit-everything push, which can carry code", async () => {
+    mocks.git.mockImplementation((_cwd: string, args: string[]) => {
+      if (args[0] === "branch") return { status: 0, stdout: "main\n", stderr: "" };
+      if (args[0] === "status") return { status: 0, stdout: " M dashboard/x.ts\n", stderr: "" };
+      return { status: 0, stdout: "", stderr: "" };
+    });
+    await commitAndPushDirty({ repoRoot: repo, emit });
+    expect(pushOpts()).toEqual([undefined]);
   });
 });

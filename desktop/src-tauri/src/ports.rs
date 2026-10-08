@@ -281,12 +281,6 @@ pub fn pinned_conflict_message(base: &str, plan: &ClashPlan) -> String {
     }
 }
 
-/// A stop counts when either signal landed. pkill often reaps the pid, so the
-/// follow-up kill then fails even though the process is gone.
-pub fn stop_signalled(pkill_ok: bool, kill_ok: bool) -> bool {
-    pkill_ok || kill_ok
-}
-
 /// Holders worth a "left running" log line. `devhub.service` is the expected
 /// occupant of the default ports. A user who already chose other ports does
 /// not need the line either.
@@ -304,9 +298,8 @@ pub fn foreign_left_running(others: &[Holder], user_chose_other_ports: bool) -> 
 ///
 /// Every holder is looked up again immediately before it is signalled, so a pid
 /// that has been reused by another program since the dialog was shown is never
-/// hit. Returns the pids that were signalled.
-pub fn stop_own_holders(backend: &WslBackend, install_dir: &str, planned: &[Holder]) -> Vec<u32> {
-    let mut stopped = Vec::new();
+/// hit. The caller collects stopped holders after waiting for shutdown.
+pub fn stop_own_holders(backend: &WslBackend, install_dir: &str, planned: &[Holder]) {
     for holder in planned.iter().filter(|h| h.kind.may_stop()) {
         let fresh = match holder.side {
             Side::Wsl => wsl_holders(backend, holder.port),
@@ -319,7 +312,7 @@ pub fn stop_own_holders(backend: &WslBackend, install_dir: &str, planned: &[Hold
             continue;
         };
         let pid = current.pid.to_string();
-        let ok = match current.side {
+        match current.side {
             Side::Wsl => {
                 // The supervisor takes its children (Next, the PTY server) down
                 // with it; signalling the listener alone would leave a parent
@@ -328,24 +321,97 @@ pub fn stop_own_holders(backend: &WslBackend, install_dir: &str, planned: &[Hold
                     "{}/runtime/[^ /]+/services/supervisor\\.mjs",
                     backend.app_data.trim_end_matches('/').replace('.', "\\.")
                 );
-                let pkill_ok = backend
-                    .exec(
-                        &["/usr/bin/pkill", "-TERM", "-f", &pattern],
-                        Duration::from_secs(10),
-                    )
-                    .is_ok();
-                let kill_ok = backend
-                    .exec(&["/bin/kill", "-TERM", &pid], Duration::from_secs(10))
-                    .is_ok();
-                stop_signalled(pkill_ok, kill_ok)
+                let _ = backend.exec(
+                    &["/usr/bin/pkill", "-TERM", "-f", &pattern],
+                    Duration::from_secs(10),
+                );
+                let _ = backend.exec(&["/bin/kill", "-TERM", &pid], Duration::from_secs(10));
             }
-            Side::Windows => stop_windows_process(current.pid),
-        };
-        if ok {
-            stopped.push(current.pid);
+            Side::Windows => {
+                stop_windows_process(current.pid);
+            }
         }
     }
-    stopped
+}
+
+pub fn collect_stopped_holders(
+    planned: &[Holder],
+    mut process_gone: impl FnMut(&Holder) -> bool,
+) -> Vec<Holder> {
+    planned
+        .iter()
+        .filter(|holder| holder.kind.may_stop() && process_gone(holder))
+        .cloned()
+        .collect()
+}
+
+const WSL_PROCESS_GONE_SCRIPT: &str = r#"if [ ! -d "/proc/$1" ]; then printf gone; fi"#;
+
+pub fn stopped_own_holders(backend: &WslBackend, planned: &[Holder]) -> Vec<Holder> {
+    collect_stopped_holders(planned, |holder| match holder.side {
+        Side::Wsl => backend
+            .exec(
+                &[
+                    "/bin/sh",
+                    "-c",
+                    WSL_PROCESS_GONE_SCRIPT,
+                    "devhub-stopped-holder",
+                    &holder.pid.to_string(),
+                ],
+                Duration::from_secs(10),
+            )
+            .is_ok_and(|output| output.trim() == "gone"),
+        Side::Windows => windows_process_gone(holder.pid),
+    })
+}
+
+pub fn format_stopped_holders(holders: &[Holder]) -> String {
+    holders
+        .iter()
+        .map(|holder| format!("{} (pid {})", holder.port, holder.pid))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn windows_process_gone(pid: u32) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let script = format!("try {{ [System.Diagnostics.Process]::GetProcessById({pid}) | Out-Null }} catch [System.ArgumentException] {{ 'gone' }}");
+        let Ok(mut child) = std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .creation_flags(0x0800_0000)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        else {
+            return false;
+        };
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            match child.try_wait() {
+                Ok(Some(_)) => {
+                    return child.wait_with_output().is_ok_and(|output| {
+                        output.status.success()
+                            && String::from_utf8_lossy(&output.stdout).trim() == "gone"
+                    });
+                }
+                Ok(None) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                _ => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return false;
+                }
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = pid;
+        false
+    }
 }
 
 fn stop_windows_process(pid: u32) -> bool {
@@ -597,10 +663,43 @@ mod tests {
     }
 
     #[test]
-    fn a_stop_counts_when_pkill_already_reaped_the_pid() {
-        assert!(stop_signalled(true, false));
-        assert!(stop_signalled(false, true));
-        assert!(!stop_signalled(false, false));
+    fn stopped_holders_include_children_reaped_by_the_supervisor_and_name_each_port() {
+        let dashboard = holder(HolderKind::OwnSidecar, 146151);
+        let terminal = Holder {
+            port: 1339,
+            ..holder(HolderKind::OwnSidecar, 146153)
+        };
+        let still_running = holder(HolderKind::OwnSidecar, 99);
+        let service = holder(HolderKind::DevhubService, 77);
+        let planned = [dashboard.clone(), terminal.clone(), still_running, service];
+        let stopped = collect_stopped_holders(&planned, |holder| holder.pid != 99);
+        assert_eq!(stopped, vec![dashboard, terminal]);
+        assert_eq!(
+            format_stopped_holders(&stopped),
+            "1337 (pid 146151), 1339 (pid 146153)"
+        );
+        assert_eq!(format_stopped_holders(&[]), "");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn process_probe_reports_gone_only_after_the_pid_directory_disappears() {
+        let proc = tempfile::tempdir().unwrap();
+        let pid_dir = proc.path().join("146153");
+        std::fs::create_dir(&pid_dir).unwrap();
+        let script =
+            WSL_PROCESS_GONE_SCRIPT.replace("/proc/", &format!("{}/", proc.path().display()));
+        let probe = || {
+            let output = std::process::Command::new("/bin/sh")
+                .args(["-c", &script, "devhub-stopped-holder", "146153"])
+                .output()
+                .unwrap();
+            assert!(output.status.success());
+            String::from_utf8(output.stdout).unwrap()
+        };
+        assert_eq!(probe(), "");
+        std::fs::remove_dir(pid_dir).unwrap();
+        assert_eq!(probe(), "gone");
     }
 
     #[test]

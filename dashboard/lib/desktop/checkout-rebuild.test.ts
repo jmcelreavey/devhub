@@ -108,6 +108,33 @@ describe("classifyRebuild", () => {
 });
 
 describe("launchRebuild", () => {
+  it.each([true, false])("only bootstraps pulls from the installed payload (pull=%s)", async (pull) => {
+    const spawned: string[][] = [];
+    const offer = classifyRebuild(facts());
+    const bundled = "/home/me/.local/share/devhub/runtime/pay/resources/scripts/checkout-rebuild.mjs";
+    const checkoutScript = "/home/me/dev/devhub-private/scripts/checkout-rebuild.mjs";
+    await launchRebuild(offer, pull, {
+      scriptPath: checkoutScript,
+      existsSync: (file) => file === bundled,
+      lockHeld: () => false,
+      systemd: false,
+      spawn: (_cmd, args) => { spawned.push(args); return { unref() {} }; },
+    });
+    expect(spawned[0][0]).toBe(pull ? bundled : checkoutScript);
+    expect(spawned[0]).toContain("--launcher=detached");
+  });
+
+  it("falls back to the checkout bootstrap for older installed payloads", async () => {
+    let script = "";
+    await launchRebuild(classifyRebuild(facts()), true, {
+      scriptPath: "/checkout/scripts/checkout-rebuild.mjs",
+      existsSync: () => false,
+      lockHeld: () => false,
+      systemd: false,
+      spawn: (_cmd, args) => { script = args[0]; return { unref() {} }; },
+    });
+    expect(script).toBe("/checkout/scripts/checkout-rebuild.mjs");
+  });
   it("spawns one detached rebuild and will not start a second", async () => {
     const spawned: string[][] = [];
     const deps = {

@@ -6,6 +6,7 @@ import { execExternal } from "@/lib/exec-external";
 import { readBundleSource } from "@/lib/desktop/bundle-source";
 import { cleanBuildEnv, withNodeToolchain } from "@/lib/desktop/build-env.mjs";
 import { getAppDataDir, getCheckoutRoot } from "@/lib/desktop/runtime-paths";
+import { payloadRestartStatus } from "@/lib/desktop/payload-restart";
 
 export type RebuildMode = "service" | "payload";
 
@@ -382,6 +383,7 @@ export async function launchRebuild(
     spawn: SpawnLike;
     lockHeld: (file: string) => boolean;
     scriptPath: string;
+    existsSync?: (file: string) => boolean;
     execPath?: string;
     env?: NodeJS.ProcessEnv;
     systemd?: boolean;
@@ -400,9 +402,15 @@ export async function launchRebuild(
   const execPath = deps.execPath ?? process.execPath;
   const systemd = deps.systemd ?? systemdRunAvailable();
   const log = deps.log ?? ((line: string) => console.error(`[rebuild] ${line}`));
+  const bundledScript = offer.mode === "payload" && pull && offer.basePayloadDir
+    ? path.join(offer.basePayloadDir, "resources", "scripts", "checkout-rebuild.mjs")
+    : null;
+  const scriptPath = bundledScript && (deps.existsSync ?? fs.existsSync)(bundledScript)
+    ? bundledScript
+    : deps.scriptPath;
   const scriptArgsFor = (launcher: "systemd-run" | "detached") => {
     const args = [
-      deps.scriptPath,
+      scriptPath,
       `--mode=${offer.mode}`,
       `--checkout=${offer.checkout}`,
       `--state=${offer.stateDir}`,
@@ -593,7 +601,12 @@ export async function loadRebuildOffer(env: NodeJS.ProcessEnv = process.env): Pr
     stateDir: rebuildStateDir(env, os.homedir(), { mode: modeGuess, port }),
     port,
   });
-  return { ...decision, status: settleRebuildStatus(decision.stateDir), log: readRebuildLog(decision.stateDir) };
+  const status = settleRebuildStatus(decision.stateDir);
+  return {
+    ...decision,
+    status: decision.mode === "payload" ? payloadRestartStatus(decision.appData, runningCommit, status) : status,
+    log: readRebuildLog(decision.stateDir),
+  };
 }
 
 export async function startCheckoutRebuild(

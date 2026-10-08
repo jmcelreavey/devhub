@@ -1,6 +1,8 @@
 import { execFile } from "node:child_process";
+import path from "node:path";
 import { promisify } from "node:util";
 import { beginExternalCall, endExternalCall } from "@/lib/exec-registry";
+import { terminalShellEnv } from "@/lib/process-env";
 import { GitMissingError, checkGit } from "@/lib/setup/git-check";
 
 const execFileAsync = promisify(execFile);
@@ -38,6 +40,16 @@ export interface ExecExternalResult {
   stderr: string;
 }
 
+/**
+ * git runs the user's hooks (pre-commit, pre-push, post-merge…), so it gets the
+ * env of a user's shell, not the packaged server's managed one. That env sets
+ * NPM_CONFIG_PREFIX, which makes a hook that sources nvm fail and strips the
+ * Node dirs it needs. Applied here so no caller can forget it.
+ */
+function isGit(file: string): boolean {
+  return /^git(\.exe)?$/i.test(path.basename(file));
+}
+
 export async function execExternal(
   file: string,
   args: readonly string[],
@@ -49,7 +61,7 @@ export async function execExternal(
     const { stdout, stderr } = await execFileAsync(file, [...args], {
       encoding: "utf-8",
       cwd: opts.cwd,
-      env: opts.env,
+      env: isGit(file) ? (terminalShellEnv(opts.env ?? process.env) as NodeJS.ProcessEnv) : opts.env,
       maxBuffer: opts.maxBuffer,
       timeout: timeoutMs,
       killSignal: "SIGKILL",

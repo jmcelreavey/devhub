@@ -26,11 +26,20 @@ describe("POST /api/rebuild", () => {
     const res = await POST(request(JSON.stringify({ pull: true })));
     expect(res.status).toBe(200);
     expect(startCheckoutRebuild).toHaveBeenCalledWith(expect.objectContaining({ mode: "service" }), true);
+    expect((await res.json()).message).toMatch(/^Pull and rebuild started/);
   });
 
   it("rebuilds without pulling when pull is omitted", async () => {
-    await POST(request("{}"));
+    const res = await POST(request("{}"));
     expect(startCheckoutRebuild).toHaveBeenCalledWith(expect.anything(), false);
+    expect((await res.json()).message).toMatch(/^Rebuild started/);
+  });
+
+  it.each(["service", "payload"])("describes an explicit no-pull rebuild in %s mode", async (mode) => {
+    vi.mocked(loadRebuildOffer).mockResolvedValue({ available: true, mode } as never);
+    const res = await POST(request(JSON.stringify({ pull: false })));
+    expect(startCheckoutRebuild).toHaveBeenCalledWith(expect.anything(), false);
+    expect((await res.json()).message).toMatch(/^Rebuild started/);
   });
 
   it("rejects anything but { pull?: boolean } and never starts a rebuild", async () => {

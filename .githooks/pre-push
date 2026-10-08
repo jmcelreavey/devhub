@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
-# Pre-push hook — run dashboard verify (lint + typecheck + tests) before
-# pushing. Set DEVHUB_SKIP_VERIFY=1 to bypass for emergency pushes.
+# Pre-push hook — run the leak scan, then dashboard verify (lint + typecheck +
+# tests), before pushing.
+#
+# DEVHUB_SKIP_VERIFY=1     bypass everything, leak scan included (emergencies).
+# DEVHUB_PREPUSH=content   set by the app's content sync only. Skips the ~2 min
+#                          verify when every commit being pushed touches only
+#                          content folders; the leak scan still runs either way.
+#                          Any other file in the push runs the full verify.
 set -e
 
 if [[ "${DEVHUB_SKIP_VERIFY:-0}" == "1" ]]; then
@@ -11,10 +17,67 @@ fi
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 DASHBOARD_DIR="$REPO_ROOT/dashboard"
 
+# Keep in step with CONTENT_SYNC_PATHS in dashboard/lib/content/sync-paths.ts
+# (a unit test fails if they drift).
+CONTENT_PATHS=(notes collections tasks docs diagrams upstarts)
+
+is_content_path() {
+    local file="$1" folder
+    # Timers stay on the machine that made them; never treat them as syncable content.
+    case "$file" in
+        tasks/.local | tasks/.local/* | tasks/*/.local | tasks/*/.local/*) return 1 ;;
+    esac
+    for folder in "${CONTENT_PATHS[@]}"; do
+        [[ "$file" == "$folder" || "$file" == "$folder/"* ]] && return 0
+    done
+    return 1
+}
+
+# stdin is git's "<local ref> <local sha> <remote ref> <remote sha>" lines.
+# Prints why the push is NOT content-only (a file, or a failure to tell), and
+# nothing when every commit touches only content paths. Fails closed: if we
+# can't list the commits, the full verify runs.
+non_content_reason() {
+    local remote="$1" local_ref local_sha remote_ref remote_sha commits commit file
+    while read -r local_ref local_sha remote_ref remote_sha; do
+        [[ -n "$local_sha" ]] || continue
+        [[ "$local_sha" =~ ^0+$ ]] && continue # deleting a ref pushes no commits
+        if [[ "$remote_sha" =~ ^0+$ ]]; then
+            # New remote ref: everything the remote doesn't already have.
+            commits="$(git rev-list "$local_sha" --not --remotes="$remote" 2>/dev/null)" \
+                || { echo "could not list the new commits on $local_ref"; return; }
+        else
+            commits="$(git rev-list "$remote_sha..$local_sha" 2>/dev/null)" \
+                || { echo "could not list the commits on $local_ref"; return; }
+        fi
+        for commit in $commits; do
+            # -m so a merge is judged against each parent; --no-renames so a move
+            # out of a content folder lists both paths.
+            while IFS= read -r file; do
+                [[ -n "$file" ]] || continue
+                if ! is_content_path "$file"; then
+                    echo "${commit:0:9} touches $file"
+                    return
+                fi
+            done < <(git diff-tree --no-commit-id --name-only -r -m --no-renames --root "$commit" 2>/dev/null)
+        done
+    done <<< "$2"
+}
+
+CONTENT_ONLY=0
+if [[ "${DEVHUB_PREPUSH:-}" == "content" ]]; then
+    NON_CONTENT="$(non_content_reason "${1:-}" "$(cat)")"
+    if [[ -z "$NON_CONTENT" ]]; then
+        CONTENT_ONLY=1
+    else
+        echo "[pre-push] DEVHUB_PREPUSH=content, but $NON_CONTENT — running the full verify."
+    fi
+fi
+
 # Verify needs the repo's pinned Node (.nvmrc) — pushes from shells without nvm
 # loaded (IDEs, GUI clients, plain terminals) would otherwise run vitest under
 # an older system Node and false-fail. Source nvm here when node doesn't match.
-if [[ -f "$REPO_ROOT/.nvmrc" ]]; then
+if [[ "$CONTENT_ONLY" != "1" && -f "$REPO_ROOT/.nvmrc" ]]; then
     WANT_NODE="$(tr -d '[:space:]' < "$REPO_ROOT/.nvmrc")"
     HAVE_NODE="$(node --version 2>/dev/null || true)"
     case "${HAVE_NODE#v}" in
@@ -41,6 +104,13 @@ echo "[pre-push] Scanning for internal-name / secret leaks…"
 if ! bash "$REPO_ROOT/scripts/scan-leaks.sh" tree; then
     echo "[pre-push] Leak scan failed. Fix the hits above or set DEVHUB_SKIP_VERIFY=1 to override."
     exit 1
+fi
+
+# Content-only push from the app: the leak scan above is the check that matters
+# for notes and tasks, and verify covers code that isn't in this push.
+if [[ "$CONTENT_ONLY" == "1" ]]; then
+    echo "[pre-push] DEVHUB_PREPUSH=content and every pushed commit is content-only — skipping verify (leak scan passed)."
+    exit 0
 fi
 
 if [[ ! -d "$DASHBOARD_DIR/node_modules" ]]; then

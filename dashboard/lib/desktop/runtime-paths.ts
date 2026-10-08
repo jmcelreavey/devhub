@@ -140,15 +140,15 @@ export function getAppDataDir(): string {
 }
 
 /** OS-conventional app data location. Exported so the Rust shell and tests agree. */
-export function defaultAppDataDir(home: string = os.homedir()): string {
+export function defaultAppDataDir(home: string = os.homedir(), env: Readonly<Record<string, string | undefined>> = process.env): string {
   if (process.platform === "darwin") {
     return path.join(home, "Library", "Application Support", "DevHub");
   }
   if (process.platform === "win32") {
-    const appData = trimmedEnv("APPDATA");
+    const appData = env.APPDATA?.trim();
     return path.join(appData ? path.resolve(appData) : path.join(home, "AppData", "Roaming"), "DevHub");
   }
-  const xdg = trimmedEnv("XDG_DATA_HOME");
+  const xdg = env.XDG_DATA_HOME?.trim();
   return path.join(xdg ? path.resolve(xdg) : path.join(home, ".local", "share"), "devhub");
 }
 

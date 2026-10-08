@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { runHistoryFile } from "@/lib/run-history-path";
 import { getRepoRoot, getHome, getCheckoutRoot } from "@/lib/content/dirs";
 import { syncSkills, verifySync } from "@/lib/sync/skills";
 import { syncAgents } from "@/lib/sync/agents";
@@ -504,10 +505,10 @@ export function getRun(runId: string): RunState | undefined {
   return runs.get(runId);
 }
 
-function writeAuditLog(run: RunState): void {
+export function writeAuditLog(run: Pick<RunState, "runId" | "script" | "startedAt" | "finishedAt" | "exitCode">): void {
   try {
-    const stateDir = path.join(/*turbopackIgnore: true*/ getHome(), ".local/state/devhub");
-    fs.mkdirSync(stateDir, { recursive: true });
+    const file = runHistoryFile();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
     const entry =
       JSON.stringify({
         runId: run.runId,
@@ -516,7 +517,7 @@ function writeAuditLog(run: RunState): void {
         finishedAt: run.finishedAt,
         exitCode: run.exitCode,
       }) + "\n";
-    fs.appendFileSync(path.join(stateDir, "runs.jsonl"), entry);
+    fs.appendFileSync(file, entry);
   } catch {
     /* non-fatal */
   }

@@ -219,7 +219,7 @@ export function ContentSyncIndicator() {
       if (code === 2 || (nextContent === 0 && next.ahead > 0)) {
         if (offerHookFailureFromLog(lines, "push")) return;
         toast.error(
-          `Committed locally, but push failed (exit ${code}). ${next.ahead} unpushed commit${next.ahead !== 1 ? "s" : ""} remain.`,
+          `Committed locally, but push failed (exit ${code}). ${next.ahead} unpushed commit${next.ahead !== 1 ? "s remain" : " remains"}.`,
         );
         return;
       }
@@ -248,7 +248,7 @@ export function ContentSyncIndicator() {
       if (offerHookFailureFromLog(lines, "push")) return;
       toast.error(
         next.ahead > 0
-          ? `Push failed (exit ${code}). ${next.ahead} unpushed commit${next.ahead !== 1 ? "s" : ""} remain.`
+          ? `Push failed (exit ${code}). ${next.ahead} unpushed commit${next.ahead !== 1 ? "s remain" : " remains"}.`
           : `Push failed (exit ${code}).`,
       );
     } catch (error) {
@@ -399,8 +399,8 @@ export function ContentSyncIndicator() {
                 syncing
                   ? syncPhase
                   : contentChanges > 0
-                    ? `Sync ${contentChanges} content changes`
-                    : `Push ${gitDirty.ahead} unpushed commits`
+                    ? `Sync ${contentChanges} content change${contentChanges !== 1 ? "s" : ""}`
+                    : `Push ${gitDirty.ahead} unpushed commit${gitDirty.ahead !== 1 ? "s" : ""}`
               }
               aria-busy={syncing}
               style={contentBusyStyle}

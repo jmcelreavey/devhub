@@ -142,6 +142,20 @@ describe("terminalShellEnv", () => {
     ]);
   });
 
+  it("demotes the packaged tool dirs by default and drops the payload's private npm-bin", () => {
+    const runtime = path.dirname(process.execPath);
+    const env = terminalShellEnv({
+      ...packaged,
+      PATH: [`/home/me/.local/share/devhub/tools/bin`, runtime, path.join(runtime, "npm-bin"), "/home/me/.nvm/bin", "/usr/bin"].join(path.delimiter),
+    } as unknown as NodeJS.ProcessEnv);
+    expect(env.PATH?.split(path.delimiter)).toEqual([
+      "/home/me/.nvm/bin",
+      "/usr/bin",
+      "/home/me/.local/share/devhub/tools/bin",
+      runtime,
+    ]);
+  });
+
   it("leaves PATH alone outside the packaged runtime", () => {
     expect(packagedToolDirs({ HOME: "/home/me" } as unknown as NodeJS.ProcessEnv, "/home/me")).toEqual([]);
     expect(terminalShellEnv({ PATH: "/a:/b" } as unknown as NodeJS.ProcessEnv).PATH).toBe("/a:/b");

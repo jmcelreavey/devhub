@@ -31,6 +31,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { smokePayload } from "./checkout-payload-smoke.mjs";
 import {
   cleanBuildEnv,
   lockfilesMatchIgnoringLibc,
@@ -60,6 +61,7 @@ export const MODE_PHASES = {
 export const UNIT = "devhub.service";
 export const REBUILD_DIST = ".next-rebuild";
 export const PREVIOUS_DIST = ".next-previous";
+export const REBUILD_CODE = ["scripts/checkout-rebuild.mjs", "scripts/checkout-payload-smoke.mjs", "dashboard/lib/desktop/build-env.mjs"];
 
 export class RebuildError extends Error {
   constructor(message, { rolledBack = false } = {}) {
@@ -106,7 +108,15 @@ export function acquireLock(lockFile, { fs: fsx = fs, alive = pidAlive, pid = pr
       const fd = fsx.openSync(lockFile, "wx");
       fsx.writeSync(fd, JSON.stringify({ pid, startedAt: now() }));
       fsx.closeSync(fd);
-      return { ok: true, release: () => fsx.rmSync(lockFile, { force: true }) };
+      let released = false;
+      return {
+        ok: true,
+        release: () => {
+          if (released) return;
+          released = true;
+          fsx.rmSync(lockFile, { force: true });
+        },
+      };
     } catch (error) {
       if (error?.code !== "EEXIST") throw error;
       let owner = null;
@@ -208,14 +218,16 @@ export async function runRebuild(options, deps) {
   const { mode, checkout, stateDir } = options;
   const { fs: fsx = fs, run: runRaw, now = () => new Date().toISOString(), sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = deps;
   const execPath = deps.execPath ?? process.execPath;
+  let handedOver = false;
   const baseEnv = withNodeToolchain(cleanBuildEnv(deps.env ?? process.env), execPath);
   if (!MODE_PHASES[mode]) throw new Error(`Unknown rebuild mode: ${mode}`);
 
   const statusFile = path.join(stateDir, "rebuild-status.json");
+  const lockFile = path.join(stateDir, "rebuild.lock");
   const logFile = path.join(stateDir, "rebuild.log");
   fsx.mkdirSync(stateDir, { recursive: true });
 
-  const lock = acquireLock(path.join(stateDir, "rebuild.lock"), {
+  const lock = acquireLock(lockFile, {
     fs: fsx,
     alive: deps.alive ?? pidAlive,
     pid: deps.pid ?? process.pid,
@@ -268,6 +280,7 @@ export async function runRebuild(options, deps) {
     });
 
     await step("pull", async () => {
+      if (options.afterPull) return;
       if (!options.pull) return "skipped";
       await mustRun("git", ["fetch", "--quiet"], { cwd: checkout }, "git fetch");
       state = await inspectCheckout(git, checkout, fsx);
@@ -275,10 +288,42 @@ export async function runRebuild(options, deps) {
       if (refusal) throw new RebuildError(refusal);
       if (!state.hasUpstream || state.behind === 0) return "skipped";
       // --ff-only: a fast-forward cannot overwrite anything of the user's.
+      const oldHead = state.head;
       await mustRun("git", ["pull", "--ff-only"], { cwd: checkout }, "git pull");
       state = await inspectCheckout(git, checkout, fsx);
+      if (oldHead !== state.head) {
+        const changed = await mustRun("git", ["diff", "--name-only", oldHead, state.head, "--", ...REBUILD_CODE], { cwd: checkout }, "Checking updated rebuild code");
+        if (changed.stdout.trim()) status.afterPull = oldHead;
+      }
     });
     status.commit = state.head;
+    // Launched from the installed bundle's copy (payload pulls): once the pull
+    // is done, the checkout's own script is the one that matches its code.
+    const checkoutScript = path.join(checkout, "scripts", "checkout-rebuild.mjs");
+    if (options.pull && !status.afterPull && deps.selfPath
+      && path.resolve(deps.selfPath) !== path.resolve(checkoutScript) && fsx.existsSync(checkoutScript)) {
+      status.afterPull = state.head;
+    }
+    if (status.afterPull) {
+      const args = deps.argv ?? rebuildArgs(options);
+      log("Handing over to the checkout's own rebuild script after the pull.");
+      lock.release();
+      handedOver = true;
+      const result = await run(execPath, [path.join(checkout, "scripts", "checkout-rebuild.mjs"), ...afterPullArgs(args, status.afterPull)], { cwd: checkout });
+      const remainingLock = readJson(lockFile, fsx);
+      if (remainingLock && Number.isInteger(remainingLock.pid)) {
+        if ((deps.alive ?? pidAlive)(remainingLock.pid)) {
+          return { state: "refused", error: "Another rebuild owns the lock after hand-over.", exitCode: result.code || 1 };
+        }
+        fsx.rmSync(lockFile, { force: true });
+      }
+      const childStatus = readJson(statusFile, fsx);
+      if (childStatus && ["succeeded", "failed", "refused"].includes(childStatus.state)) {
+        return { ...childStatus, exitCode: result.code };
+      }
+      handedOver = false;
+      throw new RebuildError("The updated rebuild script exited without a final status (exit " + result.code + "). See the log.");
+    }
 
     const dashboard = path.join(checkout, "dashboard");
     const lockDirs = mode === "payload" ? [dashboard, path.join(checkout, "desktop")] : [dashboard];
@@ -444,6 +489,12 @@ export async function runRebuild(options, deps) {
         fsx.mkdirSync(path.dirname(launcher), { recursive: true });
         fsx.copyFileSync(path.join(checkout, "desktop", "wsl", "devhub-wsl-launch.sh"), launcher);
         fsx.chmodSync(launcher, 0o755);
+        try {
+          await (deps.smokePayload ?? smokePayload)(partial, { env: baseEnv, log });
+        } catch (error) {
+          fsx.rmSync(partial, { recursive: true, force: true });
+          throw error;
+        }
         fsx.writeFileSync(path.join(partial, ".complete"), "");
         fsx.rmSync(target, { recursive: true, force: true });
         fsx.renameSync(partial, target);
@@ -464,13 +515,16 @@ export async function runRebuild(options, deps) {
     status.phase = null;
     log(`[${now()}] rebuild finished`);
   } catch (error) {
+    handedOver = handedOver && fsx.existsSync(lockFile);
     status.state = "failed";
     status.error = error instanceof Error ? error.message : String(error);
     if (error instanceof RebuildError && error.rolledBack) status.rolledBack = true;
     log(`[${now()}] rebuild failed: ${status.error}`);
   } finally {
-    status.finishedAt = now();
-    save();
+    if (!handedOver) {
+      status.finishedAt = now();
+      save();
+    }
     lock.release();
   }
   return status;
@@ -521,22 +575,38 @@ function parseArgs(argv) {
   return out;
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
-  const args = parseArgs(process.argv.slice(2));
-  const port = args.port ?? "1337";
-  const options = {
+export function optionsFromArgs(argv) {
+  const args = parseArgs(argv);
+  return {
     mode: args.mode,
     checkout: args.checkout,
     stateDir: args.state,
     appData: args["app-data"],
     basePayloadDir: args["base-payload"],
     basePayloadId: args["base-payload-id"],
-    pull: args.pull,
+    pull: args.pull && !args["after-pull"],
+    afterPull: args["after-pull"],
+    launcher: args.launcher,
+    port: args.port ?? "1337",
   };
+}
+
+function rebuildArgs(options) {
+  const mapping = { mode: "mode", checkout: "checkout", state: "stateDir", "app-data": "appData", "base-payload": "basePayloadDir", "base-payload-id": "basePayloadId", launcher: "launcher", port: "port" };
+  return Object.entries(mapping).filter(([, key]) => options[key] !== undefined).map(([flag, key]) => "--" + flag + "=" + options[key]);
+}
+
+export function afterPullArgs(argv, oldHead) {
+  return [...argv.filter((arg) => arg !== "--pull" && !arg.startsWith("--after-pull=")), "--after-pull=" + oldHead];
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  const argv = process.argv.slice(2);
+  const options = optionsFromArgs(argv);
   if (!options.mode || !options.checkout || !options.stateDir) {
     process.stderr.write("usage: checkout-rebuild.mjs --mode=service|payload --checkout=DIR --state=DIR [--pull] [--app-data=DIR --base-payload=DIR] [--port=N]\n");
     process.exit(2);
   }
-  const result = await runRebuild(options, { run: spawnRun, healthy: () => healthy(`http://127.0.0.1:${port}/api/status/dashboard/rebuild`) });
-  process.exit(result.state === "succeeded" ? 0 : 1);
+  const result = await runRebuild(options, { argv, selfPath: fileURLToPath(import.meta.url), run: spawnRun, healthy: () => healthy("http://127.0.0.1:" + options.port + "/api/status/dashboard/rebuild") });
+  process.exit(result.exitCode ?? (result.state === "succeeded" ? 0 : 1));
 }

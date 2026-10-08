@@ -47,7 +47,7 @@ export const POST = withErrorHandler(async (req: Request) => {
     started: true,
     mode: offer.mode,
     message: offer.mode === "service"
-      ? "Pull and rebuild started. The service keeps the current build until the new one is up."
-      : "Pull and rebuild started. DevHub will ask you to restart when the new build is ready.",
+      ? (pull ? "Pull and rebuild" : "Rebuild") + " started. The service keeps the current build until the new one is up."
+      : (pull ? "Pull and rebuild" : "Rebuild") + " started. DevHub will ask you to restart when the new build is ready.",
   });
 }, "rebuild");

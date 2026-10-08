@@ -1,7 +1,5 @@
 import fs from "node:fs";
-import path from "node:path";
-// Same import scripts-runner.ts uses, so reader and writer agree on the path.
-import { getHome } from "@/lib/notes/dir";
+import { runHistoryFile } from "@/lib/run-history-path";
 
 /**
  * Reads back the run audit log that `scripts-runner` has been writing all along.
@@ -34,7 +32,7 @@ export interface RunHistoryRow extends RunHistoryEntry {
 const MAX_BYTES = 512 * 1024;
 
 export function runsLogPath(): string {
-  return path.join(getHome(), ".local/state/devhub", "runs.jsonl");
+  return runHistoryFile();
 }
 
 /** One JSONL line -> entry, or null if it's not usable. */

@@ -11,6 +11,7 @@
  */
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { augmentedPathEnv, terminalShellEnv } from "@/lib/process-env";
 
 type Emit = (line: string) => void;
 
@@ -29,7 +30,7 @@ export function pullCore({ emit, repoRoot, dryRun }: PullCoreOptions): Promise<n
 
   const child = spawn("bash", args, {
     cwd: repoRoot,
-    env: process.env,
+    env: terminalShellEnv(augmentedPathEnv()) as NodeJS.ProcessEnv,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: 300_000,
   });

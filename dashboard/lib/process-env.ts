@@ -115,7 +115,7 @@ export function scrubDesktopRuntimeEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEn
  */
 export function terminalShellEnv(
   source: NodeJS.ProcessEnv,
-  demoteFromPath: readonly string[] = [],
+  demoteFromPath: readonly string[] = packagedToolDirs(source, source.HOME ?? ""),
 ): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(scrubDesktopRuntimeEnv(source))) {
@@ -124,7 +124,8 @@ export function terminalShellEnv(
     env[key] = value;
   }
   if (env.PATH && demoteFromPath.length > 0) {
-    const segments = env.PATH.split(path.delimiter).filter(Boolean);
+    const privateNpmDirs = new Set(demoteFromPath.map((dir) => path.join(dir, "npm-bin")));
+    const segments = env.PATH.split(path.delimiter).filter((segment) => segment && !privateNpmDirs.has(segment));
     const demoted = new Set(demoteFromPath);
     env.PATH = [
       ...segments.filter((segment) => !demoted.has(segment)),
@@ -141,7 +142,11 @@ export function packagedToolDirs(
   executablePath = process.execPath,
 ): string[] {
   if (source.DEVHUB_PACKAGED_RUNTIME !== "1") return [];
-  return [path.dirname(executablePath), path.join(home, ".local", "share", "devhub", "tools", "bin")];
+  return [
+    path.dirname(executablePath),
+    path.join(home, ".local", "share", "devhub", "tools", "bin"),
+    ...(source.DEVHUB_BASE_PAYLOAD_DIR ? [path.join(source.DEVHUB_BASE_PAYLOAD_DIR, "runtime")] : []),
+  ];
 }
 
 export function augmentedPathEnv(extra: Partial<NodeJS.ProcessEnv> = {}): NodeJS.ProcessEnv {

@@ -62,9 +62,16 @@ function resolveCommitMessage(message: ScopedCommitMessage, files: string[]): st
   return (typeof message === "function" ? message(files) : message).trim();
 }
 
-function runGit(repoRoot: string, args: string[]) {
-  return runGitRepo(repoRoot, args);
+function runGit(repoRoot: string, args: string[], env?: Record<string, string>) {
+  return runGitRepo(repoRoot, args, env ? { env } : undefined);
 }
+
+/**
+ * Tells .githooks/pre-push this push comes from the content sync. The hook skips
+ * the slow verify only if every pushed commit is content-only, and always runs
+ * the leak scan. Set on nothing but content pushes.
+ */
+const CONTENT_PUSH_ENV = { DEVHUB_PREPUSH: "content" };
 
 /** Cap hook/verify dumps so a failed push doesn't flood the run log. */
 const GIT_FAIL_TAIL_LINES = 40;
@@ -120,12 +127,13 @@ function pushOriginBranch(
   emit: (line: string) => void,
   repoRoot: string,
   branch: string,
+  env?: Record<string, string>,
 ): boolean {
   emit(`Pushing to origin/${branch}...`);
-  let p = runGit(repoRoot, ["push", "origin", branch]);
+  let p = runGit(repoRoot, ["push", "origin", branch], env);
   if (p.status !== 0) {
     emit("Push failed; retrying with --set-upstream...");
-    p = runGit(repoRoot, ["push", "--set-upstream", "origin", branch]);
+    p = runGit(repoRoot, ["push", "--set-upstream", "origin", branch], env);
   }
   if (p.status !== 0) {
     emitGitFailure(emit, "WARNING: Push failed — check remote connection and auth.", p, repoRoot);
@@ -278,7 +286,7 @@ export async function commitAndPushPaths(opts: CommitAndPushPathsOptions): Promi
     return 1;
   }
 
-  if (!pushOriginBranch(emit, repoRoot, branch)) {
+  if (!pushOriginBranch(emit, repoRoot, branch, CONTENT_PUSH_ENV)) {
     emit("ERROR: Committed locally but push failed — unpushed commits remain.");
     return 2;
   }
@@ -346,7 +354,7 @@ export async function pushUnpushedCommits(opts: PushUnpushedCommitsOptions): Pro
 
   if (!hasRemoteBranch) {
     emit(`origin/${branch} not found. Publishing branch with upstream...`);
-    return pushOriginBranch(emit, repoRoot, branch) ? 0 : 1;
+    return pushOriginBranch(emit, repoRoot, branch, CONTENT_PUSH_ENV) ? 0 : 1;
   }
 
   const ahead = countCommitsAheadOfOrigin(repoRoot, branch);
@@ -356,7 +364,7 @@ export async function pushUnpushedCommits(opts: PushUnpushedCommitsOptions): Pro
   }
 
   emit(`Found ${ahead} unpushed commit(s) on ${branch}.`);
-  return pushOriginBranch(emit, repoRoot, branch) ? 0 : 1;
+  return pushOriginBranch(emit, repoRoot, branch, CONTENT_PUSH_ENV) ? 0 : 1;
 }
 
 export async function updateAndSync(opts: OrchestratorOptions): Promise<number> {

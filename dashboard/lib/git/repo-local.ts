@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { execExternal, isExecTimeout } from "@/lib/exec-external";
-import { augmentedPathEnv, scrubDesktopRuntimeEnv } from "@/lib/process-env";
+import { augmentedPathEnv, terminalShellEnv } from "@/lib/process-env";
 
 const GH_GIT_CREDENTIAL_CONFIG = [
   "-c",
@@ -21,10 +21,12 @@ interface GitRepoRunOptions {
   useGhCredentials?: boolean;
   timeout?: number;
   maxBuffer?: number;
+  /** Extra variables for this one command, e.g. DEVHUB_PREPUSH for a content-sync push. */
+  env?: Record<string, string>;
 }
 
-export function gitEnv(): NodeJS.ProcessEnv {
-  return scrubDesktopRuntimeEnv(augmentedPathEnv({ GIT_TERMINAL_PROMPT: "0" }));
+export function gitEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+  return { ...terminalShellEnv(augmentedPathEnv({ GIT_TERMINAL_PROMPT: "0" })), ...extra } as NodeJS.ProcessEnv;
 }
 
 /** Git commands that talk to remotes and need GitHub CLI credential helper in the dashboard server. */
@@ -76,7 +78,7 @@ export function runGitRepo(
   const maxBuffer = opts?.maxBuffer ?? GIT_MAX_BUFFER_BYTES;
   const r = spawnSync("git", gitArgsForRepo(repoRoot, args, useGh), {
     encoding: "utf-8",
-    env: gitEnv(),
+    env: gitEnv(opts?.env),
     maxBuffer,
   });
   const processError = r.error
@@ -103,7 +105,7 @@ export async function runGitRepoAsync(
   const maxBuffer = opts?.maxBuffer ?? GIT_MAX_BUFFER_BYTES;
   try {
     const { stdout, stderr } = await execExternal("git", gitArgsForRepo(repoRoot, args, useGh), {
-      env: gitEnv(),
+      env: gitEnv(opts?.env),
       maxBuffer,
       timeoutMs: timeout,
       label: `git:${args[0] ?? "?"}`,

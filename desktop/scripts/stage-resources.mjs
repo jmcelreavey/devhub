@@ -30,6 +30,9 @@ function log(msg) {
  */
 const ALLOWLIST = [
   { from: "skills/shared", to: "skills/shared" },
+  { from: "scripts/checkout-rebuild.mjs", to: "scripts/checkout-rebuild.mjs" },
+  { from: "scripts/checkout-payload-smoke.mjs", to: "scripts/checkout-payload-smoke.mjs" },
+  { from: "dashboard/lib/desktop/build-env.mjs", to: "dashboard/lib/desktop/build-env.mjs" },
   // Managed Paseo setup/updates must also work without a linked checkout.
   { from: "scripts/install-paseo.mjs", to: "scripts/install-paseo.mjs" },
   { from: "scripts/paseo-config.mjs", to: "scripts/paseo-config.mjs" },

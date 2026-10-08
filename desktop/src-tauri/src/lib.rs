@@ -1394,6 +1394,29 @@ fn start_sidecar(app: &tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+fn payload_event_visible(
+    event: &BootState,
+    recoverable: bool,
+    checking: bool,
+    active: bool,
+) -> bool {
+    active
+        && !(recoverable
+            && checking
+            && matches!(event, BootState::Failed { .. } | BootState::Stopping))
+}
+
+fn ready_dashboard(app: &tauri::AppHandle, sidecar: &Sidecar) {
+    set_boot(
+        app,
+        BootState::Ready {
+            url: sidecar.bootstrap_url(),
+        },
+    );
+    load_dashboard(app, sidecar);
+    updater::check_in_background(app);
+}
+
 /// Wait for the sidecar's authenticated health check, then hand the window to
 /// the dashboard. Shared by the native and WSL start paths.
 fn open_when_healthy(app: &tauri::AppHandle, sidecar: Arc<Sidecar>, timeout: Duration) {
@@ -1402,20 +1425,7 @@ fn open_when_healthy(app: &tauri::AppHandle, sidecar: Arc<Sidecar>, timeout: Dur
     std::thread::spawn(move || {
         match startup_phase(&log, "health", || sidecar.wait_until_healthy(timeout)) {
             Ok(()) => {
-                // Bootstrap URL, not the bare origin: the boot page also
-                // navigates itself on Ready, and without the token it would
-                // land on / with no session cookie.
-                let handoff = sidecar.bootstrap_url();
-                set_boot(
-                    &handle,
-                    BootState::Ready {
-                        url: handoff.clone(),
-                    },
-                );
-                load_dashboard(&handle, &sidecar);
-                // Only once the app is healthy and on screen. Checking during
-                // startup competes with the thing the user is waiting for.
-                updater::check_in_background(&handle);
+                ready_dashboard(&handle, &sidecar);
             }
             Err(err) => fail(&handle, &err),
         }
@@ -1568,11 +1578,7 @@ fn resolve_ports(
             },
         );
         if freed {
-            let stopped = ports::stop_own_holders(backend, &install_dir, &plan.stoppable);
-            log.write_line(
-                "shell:startup",
-                &format!("[startup] asked DevHub's own leftover processes to stop: {stopped:?}"),
-            );
+            ports::stop_own_holders(backend, &install_dir, &plan.stoppable);
             // Give the supervisor time to take its children down.
             let deadline = Instant::now() + Duration::from_secs(15);
             loop {
@@ -1584,6 +1590,18 @@ fn resolve_ports(
                 }
                 std::thread::sleep(Duration::from_millis(500));
             }
+            let stopped = ports::stopped_own_holders(backend, &plan.stoppable);
+            log.write_line(
+                "shell:startup",
+                &if stopped.is_empty() {
+                    "[startup] asked DevHub's own leftover processes to stop; none confirmed gone yet".to_string()
+                } else {
+                    format!(
+                        "[startup] stopped DevHub's own leftover processes: {}",
+                        ports::format_stopped_holders(&stopped)
+                    )
+                },
+            );
             // wslrelay can keep the Windows bind after the Linux listener is gone.
             let freed_ports: Vec<u16> = plan.stoppable.iter().map(|holder| holder.port).collect();
             let windows_clear = wsl::retry_until_clear(
@@ -1832,22 +1850,76 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
             service: "packaged-server".into(),
         },
     );
-    let events = app.clone();
-    startup_phase(&log, "supervisor-launch", || {
-        sidecar.start_wsl(
-            &backend,
-            &payload,
-            checkout.as_deref(),
-            secondary,
-            sidecar::BasePayload {
-                dir: &base_payload_dir,
-                id: &base_payload_id,
-            },
-            move |event| set_boot(&events, event),
-        )
-    })
-    .map_err(|err| format!("Could not start DevHub inside WSL: {err}"))?;
-    open_when_healthy(app, sidecar, Duration::from_secs(120));
+    let notice = wsl::start_payload_with_fallback(
+        &payload,
+        &base_payload_dir,
+        |dir| {
+            let events = app.clone();
+            let active = Arc::new(AtomicBool::new(true));
+            let checking = Arc::new(AtomicBool::new(true));
+            let event_active = active.clone();
+            let event_checking = checking.clone();
+            let recoverable = dir != base_payload_dir;
+            let result = (|| {
+                startup_phase(&log, "supervisor-launch", || {
+                    sidecar.start_wsl(
+                        &backend,
+                        dir,
+                        checkout.as_deref(),
+                        secondary,
+                        sidecar::BasePayload {
+                            dir: &base_payload_dir,
+                            id: &base_payload_id,
+                        },
+                        move |event| {
+                            if payload_event_visible(
+                                &event,
+                                recoverable,
+                                event_checking.load(Ordering::SeqCst),
+                                event_active.load(Ordering::SeqCst),
+                            ) {
+                                set_boot(&events, event);
+                            }
+                        },
+                    )
+                })
+                .map_err(|err| format!("Could not start DevHub inside WSL: {err}"))?;
+                let timeout = if dir == base_payload_dir { 120 } else { 45 };
+                startup_phase(&log, "health", || {
+                    sidecar.wait_until_healthy(Duration::from_secs(timeout))
+                })
+            })();
+            if result.is_err() {
+                active.store(false, Ordering::SeqCst);
+                sidecar.stop();
+            } else {
+                checking.store(false, Ordering::SeqCst);
+            }
+            result
+        },
+        |reason| {
+            log.write_line(
+                "shell:wsl",
+                &format!("[wsl] checkout payload failed: {reason}; disabling its record and starting the installed payload"),
+            );
+            let result = backend.reject_local_payload(&base_payload_dir, &payload, reason);
+            if let Err(error) = &result {
+                log.write_line(
+                    "shell:wsl",
+                    &format!("[wsl] could not disable checkout payload: {error}"),
+                );
+            }
+            result
+        },
+    )?;
+    ready_dashboard(app, &sidecar);
+    if let Some(notice) = notice {
+        log.write_line("shell:wsl", &format!("[wsl] {notice}"));
+        app.dialog()
+            .message("The checkout build could not start. DevHub is using the installed build; rebuild the checkout before trying it again.")
+            .title("Using the installed build")
+            .show(|_| {});
+    }
     Ok(())
 }
 
@@ -2948,6 +3020,31 @@ mod tests {
 
     use super::*;
     use std::net::Ipv4Addr;
+
+    #[test]
+    fn local_startup_failures_and_old_attempt_events_do_not_replace_fallback_boot() {
+        let failed = BootState::Failed {
+            error: "local failed".into(),
+            logs: Vec::new(),
+            stoppable_dev_server: false,
+            install_wsl: false,
+        };
+        assert!(!payload_event_visible(&failed, true, true, true));
+        assert!(payload_event_visible(&failed, false, true, true));
+        assert!(payload_event_visible(&failed, true, false, true));
+        assert!(!payload_event_visible(
+            &BootState::Preparing,
+            true,
+            false,
+            false
+        ));
+        assert!(!payload_event_visible(
+            &BootState::Stopping,
+            true,
+            true,
+            true
+        ));
+    }
 
     fn url(s: &str) -> tauri::Url {
         s.parse().unwrap()
