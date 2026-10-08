@@ -31,7 +31,7 @@ export function RepoAwareLink({ href, children, className }: { href: string; chi
       rel={repoLabel ? undefined : "noopener noreferrer"}
       title={repoLabel ?? undefined}
       onClick={onClick}
-      style={{ color: "var(--accent)", textDecoration: "underline", textUnderlineOffset: "2px" }}
+      style={{ color: "var(--accent-text, var(--accent))", textDecoration: "underline", textUnderlineOffset: "2px" }}
     >
       {children}
     </a>

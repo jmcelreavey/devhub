@@ -103,7 +103,7 @@ export function QuickCaptureModal({ open, onClose, defaultKind = "task" }: Quick
               type="button"
               onClick={() => setKind(id)}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium"
-              style={{ background: kind === id ? "var(--accent-dim)" : "transparent", color: kind === id ? "var(--accent)" : "var(--text-muted)" }}
+              style={{ background: kind === id ? "var(--accent-dim)" : "transparent", color: kind === id ? "var(--accent-text, var(--accent))" : "var(--text-muted)" }}
             >
               <Icon size={13} />{label}
             </button>

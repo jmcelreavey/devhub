@@ -18,6 +18,19 @@ interface EmptyStateProps {
   bare?: boolean;
 }
 
+const HOLLOW_WHISPERS = [
+  "…it's quiet here. too quiet.",
+  "nothing left. or nothing yet?",
+  "don't look behind you",
+  "something was here.",
+] as const;
+
+function hollowWhisper(title: string): string {
+  let seed = 0;
+  for (const ch of title) seed += ch.charCodeAt(0);
+  return HOLLOW_WHISPERS[seed % HOLLOW_WHISPERS.length];
+}
+
 function quipForToday(quips: readonly string[]): string {
   const seed = todayISO()
     .split("")
@@ -31,8 +44,8 @@ export function EmptyState({ icon, title, subtitle, action, quips, bare }: Empty
     <div
       className={
         bare
-          ? "flex flex-col items-start justify-center py-6 text-left"
-          : "card card-body flex flex-col items-start justify-center py-6 text-left"
+          ? "empty-state flex flex-col items-start justify-center py-6 text-left"
+          : "empty-state card card-body flex flex-col items-start justify-center py-6 text-left"
       }
     >
       <div className="flex items-start gap-2.5">
@@ -46,6 +59,7 @@ export function EmptyState({ icon, title, subtitle, action, quips, bare }: Empty
           {sub && (
             <p className="text-xs text-text-subtle">{sub}</p>
           )}
+          <p className="hollow-whisper">{hollowWhisper(title)}</p>
         </div>
       </div>
       {action ? <div className="mt-3 ml-0">{action}</div> : null}

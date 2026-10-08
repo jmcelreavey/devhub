@@ -402,7 +402,7 @@ body[data-motion="off"] .terminal-block-chip[data-pending]::after {
 
 .terminal-view-toggle button[data-active] {
   background: var(--bg-overlay);
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 .terminal-session-xterm[data-under] {
   visibility: hidden;
@@ -564,7 +564,7 @@ body[data-motion="off"] .terminal-block-chip[data-pending]::after {
 }
 
 .terminal-block-glyph {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   font-family: var(--font-mono);
   font-size: 11px;
   flex-shrink: 0;
@@ -588,7 +588,7 @@ body[data-motion="off"] .terminal-block-chip[data-pending]::after {
 }
 
 .terminal-block-card-cmd:hover {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 
 .terminal-block-card-meta {
@@ -807,5 +807,5 @@ textarea.terminal-prompt-editor {
 }
 
 .terminal-dock-btn[data-on] {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }

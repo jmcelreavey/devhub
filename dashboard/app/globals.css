@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./hollow.css";
 
 /* Hallmark · genre: modern-minimal · designed-as-app · theme: graphite-neon (user-selectable presets) · enrichment: none · nav: app-sidebar · footer: none · contrast: pass
  * quarantine: /api/briefing/canvas — iframe canvas emits local CSS constrained to --app-* tokens bridged from shell (lib/briefing-theme.ts). Not app chrome.
@@ -339,6 +340,56 @@
   --danger-dim: rgba(210, 15, 57, 0.1);
 }
 
+/* Hollow — bruised black / dried blood, and stained paper in the light variant */
+:root[data-theme="dark"][data-theme-preset="hollow"] {
+  --bg: #100c13;
+  --bg-sidebar: #0c090f;
+  --bg-surface: #1b161e;
+  --bg-elevated: #241c27;
+  --bg-overlay: #2c232e;
+  --border: #493c48;
+  --border-muted: #352a35;
+  --text: #e5e2d8;
+  --text-muted: #c4c4b6;
+  --text-subtle: #b8b9aa;
+  --accent: #a3201c;
+  --accent-hover: #aa2521;
+  --accent-text: #fa9998;
+  --accent-text-hover: #f5b3ae;
+  --accent-dim: rgba(163, 32, 28, 0.22);
+  --accent-fg: #fff4e3;
+  --success: #c5d48a;
+  --success-dim: rgba(197, 212, 138, 0.14);
+  --warning: #e0c48a;
+  --warning-dim: rgba(224, 196, 138, 0.16);
+  --danger: #e5a89b;
+  --danger-dim: rgba(232, 144, 136, 0.16);
+}
+:root[data-theme="light"][data-theme-preset="hollow"] {
+  --bg: #d8d4c9;
+  --bg-sidebar: #cbc7bb;
+  --bg-surface: #e3dfd4;
+  --bg-elevated: #e8e4d9;
+  --bg-overlay: #ccc8bc;
+  --border: #989487;
+  --border-muted: #bcb7aa;
+  --text: #161310;
+  --text-muted: #322a24;
+  --text-subtle: #3a322b;
+  --accent: #710f19;
+  --accent-hover: #5b0a13;
+  --accent-text: #650d17;
+  --accent-text-hover: #540810;
+  --accent-dim: rgba(113, 15, 25, 0.16);
+  --accent-fg: #f4efe8;
+  --success: #243010;
+  --success-dim: rgba(36, 48, 16, 0.14);
+  --warning: #3f2b07;
+  --warning-dim: rgba(63, 43, 7, 0.14);
+  --danger: #4c1612;
+  --danger-dim: rgba(76, 22, 18, 0.14);
+}
+
 @theme inline {
   --color-bg: var(--bg);
   --color-bg-surface: var(--bg-surface);
@@ -459,14 +510,14 @@ h3,
 }
 .jira-widget-key:hover {
   background: var(--accent-dim) !important;
-  color: var(--accent) !important;
+  color: var(--accent-text, var(--accent)) !important;
 }
 .jira-widget-key:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 .jira-widget-open:hover {
-  color: var(--accent) !important;
+  color: var(--accent-text, var(--accent)) !important;
   background: var(--accent-dim);
 }
 
@@ -548,7 +599,7 @@ h3,
 }
 .badge-accent {
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 
 /* ─── Button ─── */
@@ -679,7 +730,7 @@ h3,
   color: var(--text-subtle);
 }
 .search-field__icon--accent {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 .search-field__input {
   flex: 1;
@@ -803,11 +854,11 @@ body[data-motion="off"] .search-field {
 }
 
 .markdown-body a {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   text-decoration: none;
 }
 .markdown-body a:hover {
-  color: var(--accent-hover);
+  color: var(--accent-text-hover, var(--accent-hover));
   text-decoration: underline;
 }
 
@@ -1152,7 +1203,7 @@ a:focus-visible {
   color: var(--danger);
 }
 .toast-info .toast-icon {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 .toast-message {
   flex: 1;
@@ -1160,7 +1211,7 @@ a:focus-visible {
 .toast-action {
   background: transparent;
   border: 1px solid currentColor;
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   border-radius: var(--radius-sm);
   font-size: 12px;
   padding: 3px 8px;
@@ -1249,7 +1300,7 @@ a:focus-visible {
   font-weight: 600;
   letter-spacing: -0.01em;
   text-transform: none;
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   display: flex;
   align-items: center;
 }
@@ -1295,11 +1346,11 @@ a:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   text-decoration: none;
 }
 .hub-hero-link:hover {
-  color: var(--accent-hover);
+  color: var(--accent-text-hover, var(--accent-hover));
 }
 
 .hub-hero-right {
@@ -1818,7 +1869,7 @@ body[data-grid-resizing="true"] * {
 .standup-config-chip[data-active="true"] {
   background: var(--accent-dim, rgba(56, 139, 253, 0.18));
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 
 /* Standup preview modal — list-style rendered markdown view. */
@@ -1937,7 +1988,7 @@ body[data-grid-resizing="true"] * {
   margin: 0 auto 14px;
   border-radius: 50%;
   background: color-mix(in oklab, var(--accent) 22%, transparent);
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 .focus-complete-title {
   margin: 0 0 8px;
@@ -1990,7 +2041,7 @@ body[data-grid-resizing="true"] * {
 .welcome-icon {
   flex-shrink: 0;
   margin-top: 2px;
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 .welcome-body {
   flex: 1;
@@ -2152,7 +2203,7 @@ body[data-grid-resizing="true"] * {
 }
 .workspace-tab[data-active] .workspace-tab-icon {
   opacity: 1;
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 .workspace-tab-title {
   overflow: hidden;
@@ -2620,6 +2671,8 @@ body[data-grid-resizing="true"] * {
   z-index: 50;
   box-shadow: var(--shadow-popover);
   animation: plus-pop var(--dur-fast) var(--ease-swift) both;
+  max-height: min(calc(100dvh - 56px), 920px);
+  overflow-y: auto;
 }
 
 .accent-picker-modes {
@@ -2909,7 +2962,7 @@ body[data-grid-resizing="true"] * {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 .tag-context-group ul {
   display: flex;
@@ -2981,7 +3034,7 @@ body[data-grid-resizing="true"] * {
 .jira-key-chip--quiet:hover,
 .jira-key-chip--quiet:focus-visible {
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 
 /* Inline #tag chips grouped so a wrapping title carries them as one block —
@@ -3011,7 +3064,7 @@ body[data-grid-resizing="true"] * {
 }
 
 .task-timer-readout[data-running="true"] {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 
 .task-timer-dot {
@@ -3046,12 +3099,12 @@ body[data-motion="off"] .task-timer-dot {
 
 /* A running timer's play/pause icon picks up the accent, matching the readout. */
 .task-icon-action[data-running="true"] {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 
 .task-icon-action[data-linked="true"],
 .hub-icon-btn[data-linked="true"] {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 
 /* Fixed right rail: meta pills + note glyph + tags + kebab. The 28px controls
@@ -3133,7 +3186,7 @@ body[data-motion="off"] .task-timer-dot {
 /* A pressed toggle keeps its accent under the pointer instead of looking switched off. */
 .task-icon-action[data-linked="true"]:hover,
 .task-icon-action[data-linked="true"]:focus-visible {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 
 @media (max-width: 520px) {
@@ -3703,7 +3756,7 @@ body[data-density="compact"] .card {
   text-decoration: none;
 }
 .briefing-note-link:hover {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   text-decoration: underline;
 }
 .briefing-card {
@@ -3741,7 +3794,7 @@ body[data-density="compact"] .card {
   display: inline-block;
   margin-left: 6px;
   font-size: 10px;
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   background: var(--accent-dim);
   padding: 0 6px;
   border-radius: var(--radius-sm);
@@ -3778,7 +3831,7 @@ body[data-density="compact"] .card {
   transition: color var(--dur-quick) var(--ease-swift);
 }
 .briefing-link:hover {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   text-decoration: underline;
 }
 .briefing-meta {
@@ -4296,7 +4349,7 @@ body[data-motion="off"] .briefing-wx-card {
   color: var(--text-subtle);
 }
 .briefing-chat-row.is-ai .briefing-chat-avatar {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   background: var(--accent-dim);
 }
 .briefing-chat-bubble {
@@ -4993,6 +5046,10 @@ html[data-logo="plugin"] .boot-logo-devhub {
   color: var(--text-subtle);
   overflow: hidden;
 }
+.boot-line-hollow,
+.hollow-whisper {
+  display: none;
+}
 .boot-bar {
   width: 160px;
   height: 3px;
@@ -5468,7 +5525,7 @@ html[data-logo="plugin"] .boot-logo-devhub {
 }
 .terminal-dock-kind[data-agent] {
   border-color: color-mix(in oklab, var(--accent) 35%, var(--border-muted));
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   background: color-mix(in oklab, var(--accent) 10%, var(--bg-overlay));
 }
 .terminal-agent-pane {
@@ -5616,7 +5673,7 @@ body[data-motion="off"] .terminal-agent-strip-pulse {
   font-weight: 700;
   letter-spacing: -0.01em;
   text-transform: none;
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   flex-shrink: 0;
 }
 .hero-signal-text {
@@ -6040,7 +6097,7 @@ body[data-motion="off"] .context-menu:not([hidden]) {
 }
 .row-menu-kebab:hover,
 .row-menu-kebab:focus-visible {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   background: var(--bg-muted);
 }
 @media (pointer: coarse) {
@@ -6070,7 +6127,7 @@ body[data-motion="off"] .context-menu:not([hidden]) {
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   opacity: 0.85;
   cursor: pointer;
 }
@@ -6160,7 +6217,7 @@ body[data-motion="off"] .context-menu:not([hidden]) {
   color: var(--warning);
 }
 .task-agent-chip[data-kind="ready"] {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 .task-agent-chip[data-kind="attention"] {
   border-color: color-mix(in oklab, var(--danger) 45%, var(--border-muted));
@@ -6248,7 +6305,7 @@ button.task-agent-chip {
 .launch-menu-icon {
   display: inline-flex;
   margin-top: 1px;
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 .launch-menu-copy {
   display: flex;
@@ -6276,7 +6333,7 @@ button.task-agent-chip {
 @media (hover: hover) {
   .task-toggle:hover svg {
     scale: 1.2;
-    color: var(--accent) !important;
+    color: var(--accent-text, var(--accent)) !important;
   }
 }
 .task-toggle:active svg {
@@ -6470,7 +6527,7 @@ main,
   border-radius: var(--radius-sm);
 }
 .radar-badge-new {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   background: var(--accent-dim);
 }
 .radar-badge-spread {
@@ -6546,7 +6603,7 @@ main,
   line-height: 1.3;
 }
 .repo-card-work > svg {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 .repo-card-work-key {
   flex-shrink: 0;
@@ -6824,7 +6881,7 @@ body[data-motion="off"] .evolution-arrow {
 }
 .briefing-task-badge.is-running {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 .briefing-task-badge.is-done {
   background: var(--success-dim);
@@ -7177,7 +7234,7 @@ body[data-motion="off"] .evolution-arrow {
   cursor: pointer;
 }
 .repo-git-commit-menu-item[data-active] {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 .repo-git-commit-menu-item:hover {
   background: var(--bg-elevated);
@@ -7623,7 +7680,7 @@ body[data-motion="off"] .evolution-arrow {
   background: var(--bg-elevated);
 }
 .repo-git-diff-context-btn[data-active] {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   background: color-mix(in oklab, var(--accent) 14%, transparent);
 }
 .repo-git-diff-open {
@@ -7716,7 +7773,7 @@ body[data-motion="off"] .evolution-arrow {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 .repo-git-dir-preview-title {
   font-size: 12px;
@@ -7938,7 +7995,7 @@ body[data-motion="off"] .evolution-arrow {
   color: var(--text);
 }
 .repo-git-diff-ai-pop-item[data-primary] svg {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 .repo-git-diff-add {
   background: color-mix(in oklab, var(--success) 12%, transparent);
@@ -8025,7 +8082,7 @@ body[data-motion="off"] .evolution-arrow {
   opacity: 1;
 }
 .repo-git-comment-btn:hover {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   background: var(--bg-elevated);
 }
 .repo-git-comment-row {
@@ -8287,7 +8344,7 @@ body[data-motion="off"] .evolution-arrow {
   padding: 0 5px;
   border-radius: 4px;
   background: color-mix(in oklab, var(--accent) 14%, transparent);
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   white-space: nowrap;
   max-width: 11rem;
   overflow: hidden;
@@ -9006,7 +9063,7 @@ body.col-resizing {
   background: var(--bg-elevated);
 }
 .repo-git-rail-branch[data-current] {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   font-weight: 600;
 }
 .repo-git-rail-branch:disabled {
@@ -9160,7 +9217,7 @@ body.col-resizing {
   justify-content: center;
 }
 .repo-git-graph-hash {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   font-size: 10px;
 }
 .repo-git-graph-row .repo-git-graph-hash {
@@ -9434,7 +9491,7 @@ button.repo-git-avatar-zoom:focus-visible {
 }
 .repo-git-blame-history-open:hover,
 .repo-git-blame-history-open:focus-visible {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 .repo-git-blame-table {
   border: 1px solid var(--border);
@@ -9510,7 +9567,7 @@ button.repo-git-blame-history-row {
   padding: 2px 6px;
 }
 .repo-git-blame-meta {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   font-size: 10px;
 }
 .repo-git-blame-author {
@@ -9770,7 +9827,7 @@ body[data-motion="off"] .repo-git-filter-search {
 }
 
 .lib-breadcrumbs a:hover {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 
 .docs-title {
@@ -9823,7 +9880,7 @@ body[data-motion="off"] .repo-git-filter-search {
 
 .docs-tag:hover {
   border-color: var(--accent-dim);
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 
 /* -------------------------------------------------------------------- prose */
@@ -9914,7 +9971,7 @@ body[data-motion="off"] .repo-git-filter-search {
 }
 
 .docs-link {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   text-decoration: none;
   border-bottom: 1px solid var(--accent-dim);
   transition: border-color var(--dur-quick) var(--ease-swift);
@@ -10092,7 +10149,7 @@ ul.docs-list ul.docs-list {
   font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.01em;
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   margin-bottom: var(--space-2);
 }
 
@@ -10293,7 +10350,7 @@ ul.docs-list ul.docs-list {
 }
 
 .docs-toc-link[data-active="true"] {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   border-left-color: var(--accent);
 }
 
@@ -10729,7 +10786,7 @@ button.entity-link-chip-more {
    the accent bar; the active (keyboard) row gets a lighter bar when unselected. */
 .entity-link-cal-item[data-selected="true"] {
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
@@ -10743,7 +10800,7 @@ button.entity-link-chip-more {
 }
 
 .entity-link-cal-item[data-selected="true"] .entity-link-cal-time {
-  color: color-mix(in oklab, var(--accent) 70%, var(--text-muted));
+  color: color-mix(in oklab, var(--accent-text, var(--accent)) 70%, var(--text-muted));
 }
 
 .entity-link-pick-key {
@@ -10900,7 +10957,7 @@ button.entity-link-chip-more {
   border-radius: var(--radius-sm);
   background: var(--bg-elevated);
   border: 1px solid var(--border-muted);
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 
 .lib-section-title {
@@ -10987,7 +11044,7 @@ button.entity-link-chip-more {
 }
 
 .lib-nav-link[data-active="true"] {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   border-left-color: var(--accent);
   font-weight: 550;
 }
@@ -11128,7 +11185,7 @@ body[data-motion="off"] .lib-pager-link {
 }
 
 .lib-search-hit-title:hover {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 
 .lib-search-hit-title svg {
@@ -11164,7 +11221,7 @@ body[data-motion="off"] .lib-pager-link {
 }
 
 .lib-search-match:hover .lib-search-match-heading {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 
 .lib-search-match-snippet {
@@ -11223,7 +11280,7 @@ body[data-motion="off"] .lib-search-match {
 }
 
 .docs-card:hover .lib-card-icon {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 
 .lib-section-count {
@@ -11338,7 +11395,7 @@ body[data-motion="off"] .lib-card-icon {
   height: 22px;
   border-radius: 999px;
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   font-size: 11px;
   font-weight: 650;
 }
@@ -11366,7 +11423,7 @@ body[data-motion="off"] .lib-card-icon {
 }
 
 .lib-path-step:hover .lib-path-arrow {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 
 /* ------------------------------------------------------------------ areas */
@@ -11788,7 +11845,7 @@ body[data-motion="off"] .lib-card-icon {
   border-radius: 999px;
   border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--border));
   background: color-mix(in oklab, var(--accent) 10%, transparent);
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   text-decoration: none;
   white-space: nowrap;
   transition:
@@ -11854,7 +11911,7 @@ body[data-motion="off"] .lib-card-icon {
   border-style: dashed;
 }
 .repo-git-context-chip[data-kind="tag"] {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 /* A same-repo review is the answer; a cross-repo ticket hit is a lead. The
    dashed border is the visual difference between the two. */
@@ -11862,7 +11919,7 @@ body[data-motion="off"] .lib-card-icon {
 .repo-git-context-chip[data-confidence="ticket"] {
   border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
   background: color-mix(in oklab, var(--accent) 10%, transparent);
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 .repo-git-context-chip[data-confidence="related"] {
   border-style: dashed;
@@ -12007,7 +12064,7 @@ body[data-motion="off"] .lib-card-icon {
   font-size: 11px;
 }
 .repo-git-branch-relation-counts [data-dir="ahead"] {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 .repo-git-branch-relation-counts [data-dir="behind"] {
   color: var(--warning);
@@ -12056,7 +12113,7 @@ body[data-motion="off"] .lib-card-icon {
   padding: 0 6px;
   border-radius: 999px;
   background: color-mix(in oklab, var(--accent) 16%, transparent);
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   font-size: 10px;
   font-weight: 600;
   white-space: nowrap;
@@ -12940,7 +12997,7 @@ a.repo-git-context-chip[data-kind="pr"][data-checks="pending"] {
   gap: 6px;
 }
 .db-ai-icon {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   flex-shrink: 0;
 }
 .db-ai-input {

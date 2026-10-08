@@ -75,6 +75,13 @@ const BOOT_LINES = [
   "Negotiating with the calendar…",
 ];
 
+const HOLLOW_BOOT_LINES = [
+  "…something is loading. it knows you're waiting.",
+  "counting unfinished business…",
+  "don't look behind you",
+  "it's almost here",
+];
+
 /**
  * Full-screen branded boot moment. Brand mark with an orbiting ring, a dry
  * rotating status line, and a shimmer bar. Fades out as one unit.
@@ -121,8 +128,11 @@ export function TodayBootScreen({ state }: { state: BootState }) {
       </div>
       {BRAND_LABEL && <div className="boot-title">{BRAND_LABEL}</div>}
       <div className="boot-line" aria-hidden>
-        <span key={lineIdx} className="boot-line-text">
-          {BOOT_LINES[lineIdx]}
+        <span key={lineIdx} className="boot-line-text boot-line-default">
+          {BOOT_LINES[lineIdx % BOOT_LINES.length]}
+        </span>
+        <span key={`hollow-${lineIdx}`} className="boot-line-hollow">
+          {HOLLOW_BOOT_LINES[lineIdx % HOLLOW_BOOT_LINES.length]}
         </span>
       </div>
       <div className="boot-bar" aria-hidden>

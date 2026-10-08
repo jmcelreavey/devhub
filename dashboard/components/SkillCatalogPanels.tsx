@@ -153,7 +153,7 @@ const migrationBadgeStyle: CSSProperties = {
   padding: "1px 5px",
   borderRadius: "3px",
   background: "var(--accent-dim)",
-  color: "var(--accent)",
+  color: "var(--accent-text, var(--accent))",
   fontWeight: 600,
 };
 

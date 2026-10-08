@@ -268,7 +268,7 @@ export function LabButton({
     <button
       type="button"
       className="btn btn-ghost text-xs"
-      style={{ padding: compact ? "3px 7px" : "4px 8px", color: done ? "var(--accent)" : undefined }}
+      style={{ padding: compact ? "3px 7px" : "4px 8px", color: done ? "var(--accent-text, var(--accent))" : undefined }}
       onClick={onClick}
     >
       {loading ? (
@@ -363,7 +363,7 @@ export function LabPanel({
           <button
             type="button"
             className="btn btn-ghost"
-            style={{ padding: "2px 6px", color: lab.done ? "var(--accent)" : undefined }}
+            style={{ padding: "2px 6px", color: lab.done ? "var(--accent-text, var(--accent))" : undefined }}
             onClick={onToggleDone}
             disabled={busy}
           >
@@ -467,7 +467,7 @@ export function LabPanel({
                     key={f}
                     href={cursorFileUrl(`${lab.workspacePath}/${f}`)}
                     className="lab-evidence-link mr-1"
-                    style={{ color: "var(--accent)", textDecoration: "none" }}
+                    style={{ color: "var(--accent-text, var(--accent))", textDecoration: "none" }}
                     title={`Open ${f} in Cursor`}
                   >
                     <code>{f}</code>
@@ -565,7 +565,7 @@ function EvidenceRef({
         href={url}
         {...(newTab ? { target: "_blank", rel: "noreferrer" } : {})}
         className="lab-evidence-link min-w-0"
-        style={{ color: "var(--accent)", textDecoration: "none" }}
+        style={{ color: "var(--accent-text, var(--accent))", textDecoration: "none" }}
         title={newTab ? undefined : "Open in Cursor"}
       >
         {inner}

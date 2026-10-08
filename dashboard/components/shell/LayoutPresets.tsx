@@ -149,7 +149,7 @@ export function LayoutPresetsButton() {
               >
                 <span
                   className="text-[13px]"
-                  style={{ color: view === id ? "var(--accent)" : "var(--text)" }}
+                  style={{ color: view === id ? "var(--accent-text, var(--accent))" : "var(--text)" }}
                 >
                   {name}
                 </span>

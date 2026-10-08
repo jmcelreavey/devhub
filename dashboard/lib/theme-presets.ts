@@ -4,6 +4,7 @@ import {
   PLUGIN_DEFAULT_PRESET,
   PLUGIN_DEFAULT_MODE,
 } from "./plugin-branding.generated";
+import { getHollowAttributeBootstrapScript, HOLLOW_PRESET_ID } from "./hollow-theme";
 
 export type { ThemeMode } from "./theme-presets-types";
 
@@ -32,6 +33,7 @@ export const THEME_EVENT = "devhub:theme-change";
  *   midnight    saturated oceanic navy + electric azure   — coldest, highest contrast
  *   tokyo       purple-black + violet/magenta neon        — neon-noir
  *   catppuccin  authentic Mocha/Latte mauve               — softest, lowest contrast
+ *   hollow      bruised near-black + dried blood           — horror; light is stained paper
  *
  * Swatches must match the real `--bg` in globals.css; they are what the picker
  * renders, so a drifted swatch is a picker that lies.
@@ -83,6 +85,15 @@ export const CORE_THEME_PRESETS = [
     lightSwatch: "#eff1f5",
     darkAccent: "#cba6f7",
     lightAccent: "#8839ef",
+  },
+  {
+    id: HOLLOW_PRESET_ID,
+    label: "Hollow",
+    description: "Bruised black + dried blood",
+    darkSwatch: "#100c13",
+    lightSwatch: "#d8d4c9",
+    darkAccent: "#a3201c",
+    lightAccent: "#710f19",
   },
 ] as const;
 
@@ -191,7 +202,7 @@ export function getThemeBootstrapInlineScript(): string {
   const presetKey = JSON.stringify(THEME_PRESET_KEY);
   const defaultPreset = JSON.stringify(DEFAULT_THEME_PRESET_ID);
   const defaultMode = JSON.stringify(DEFAULT_THEME_MODE_SETTING);
-  return `(function(){try{var m=${modeKey};var p=${presetKey};var setting=localStorage.getItem(m)||${defaultMode};if(setting!=="dark"&&setting!=="light"&&setting!=="system"){setting=${defaultMode};}var resolved=setting;if(setting==="system"){resolved=(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";}var preset=localStorage.getItem(p)||${defaultPreset};var root=document.documentElement;root.setAttribute("data-theme",resolved);root.setAttribute("data-theme-mode",setting);root.setAttribute("data-theme-preset",preset);}catch(e){document.documentElement.setAttribute("data-theme","dark");document.documentElement.setAttribute("data-theme-mode",${defaultMode});document.documentElement.setAttribute("data-theme-preset",${defaultPreset});}})();`;
+  return `(function(){try{var m=${modeKey};var p=${presetKey};var setting=localStorage.getItem(m)||${defaultMode};if(setting!=="dark"&&setting!=="light"&&setting!=="system"){setting=${defaultMode};}var resolved=setting;if(setting==="system"){resolved=(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";}var preset=localStorage.getItem(p)||${defaultPreset};var root=document.documentElement;root.setAttribute("data-theme",resolved);root.setAttribute("data-theme-mode",setting);root.setAttribute("data-theme-preset",preset);}catch(e){document.documentElement.setAttribute("data-theme","dark");document.documentElement.setAttribute("data-theme-mode",${defaultMode});document.documentElement.setAttribute("data-theme-preset",${defaultPreset});}})();${getHollowAttributeBootstrapScript()}`;
 }
 
 export interface ThemeSelection {

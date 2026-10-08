@@ -272,9 +272,9 @@ export function ManagedCatalogList(props: ManagedCatalogListProps) {
                   aria-expanded={isOpen}
                 >
                   {kind === "agent" ? (
-                    <Bot size={12} style={{ color: "var(--accent)", flexShrink: 0 }} aria-hidden />
+                    <Bot size={12} style={{ color: "var(--accent-text, var(--accent))", flexShrink: 0 }} aria-hidden />
                   ) : (
-                    <Zap size={12} style={{ color: "var(--accent)", flexShrink: 0 }} aria-hidden />
+                    <Zap size={12} style={{ color: "var(--accent-text, var(--accent))", flexShrink: 0 }} aria-hidden />
                   )}
                   {isRenaming ? (
                     <input
@@ -303,7 +303,7 @@ export function ManagedCatalogList(props: ManagedCatalogListProps) {
                         padding: "1px 5px",
                         borderRadius: "3px",
                         background: "var(--accent-dim)",
-                        color: "var(--accent)",
+                        color: "var(--accent-text, var(--accent))",
                         fontWeight: 600,
                       }}
                     >

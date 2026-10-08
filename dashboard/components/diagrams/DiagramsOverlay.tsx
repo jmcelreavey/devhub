@@ -213,7 +213,7 @@ export function DiagramsOverlay({ open, onClose }: DiagramsOverlayProps) {
                 className="text-xs px-3 py-1.5 rounded-md"
                 style={{
                   background: "var(--accent-dim)",
-                  color: "var(--accent)",
+                  color: "var(--accent-text, var(--accent))",
                   border: "1px solid var(--accent)",
                 }}
               >

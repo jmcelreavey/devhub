@@ -270,7 +270,7 @@ export default function RepView() {
           )}
         </div>
         {rep && (
-          <span className="badge" style={{ background: "var(--accent-dim)", color: "var(--accent)" }}>
+          <span className="badge" style={{ background: "var(--accent-dim)", color: "var(--accent-text, var(--accent))" }}>
             {REP_KIND_LABEL[rep.kind]}
           </span>
         )}

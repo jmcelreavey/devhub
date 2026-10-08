@@ -370,7 +370,7 @@ export function PersonaPanel() {
                   onClick={() => toggle(t.id)}
                   aria-expanded={isOpen}
                 >
-                  <FileText size={12} style={{ color: t.kind === "source" ? "var(--accent)" : "var(--text-subtle)", flexShrink: 0 }} aria-hidden />
+                  <FileText size={12} style={{ color: t.kind === "source" ? "var(--accent-text, var(--accent))" : "var(--text-subtle)", flexShrink: 0 }} aria-hidden />
                   <span className="font-medium text-sm text-text">
                     {t.label}
                   </span>
@@ -396,7 +396,7 @@ export function PersonaPanel() {
                         padding: "1px 5px",
                         borderRadius: "3px",
                         background: "var(--accent-dim)",
-                        color: "var(--accent)",
+                        color: "var(--accent-text, var(--accent))",
                         fontWeight: 600,
                         letterSpacing: "-0.01em",
                       }}

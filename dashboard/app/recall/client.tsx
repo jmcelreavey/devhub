@@ -318,7 +318,7 @@ export default function RecallPage() {
                 style={{
                   cursor: "pointer",
                   background: active ? "var(--accent-dim)" : "transparent",
-                  color: active ? "var(--accent)" : "var(--text-subtle)",
+                  color: active ? "var(--accent-text, var(--accent))" : "var(--text-subtle)",
                   border: "1px solid var(--border)",
                 }}
                 aria-pressed={active}
@@ -539,7 +539,7 @@ function EventSpine({
                 style={{
                   cursor: "pointer",
                   background: active ? "var(--accent-dim)" : "transparent",
-                  color: active ? "var(--accent)" : "var(--text-subtle)",
+                  color: active ? "var(--accent-text, var(--accent))" : "var(--text-subtle)",
                   border: "1px solid var(--border)",
                 }}
                 aria-pressed={active}

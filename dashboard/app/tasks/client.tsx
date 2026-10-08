@@ -313,7 +313,7 @@ export default function TasksPage() {
               className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
               style={{
                 background: filter === value ? "var(--accent-dim)" : "var(--bg-elevated)",
-                color: filter === value ? "var(--accent)" : "var(--text-muted)",
+                color: filter === value ? "var(--accent-text, var(--accent))" : "var(--text-muted)",
                 border: filter === value ? "1px solid color-mix(in oklab, var(--accent) 30%, transparent)" : "1px solid var(--border-muted)",
               }}
               aria-pressed={filter === value}

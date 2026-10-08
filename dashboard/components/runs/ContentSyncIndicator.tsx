@@ -367,7 +367,7 @@ export function ContentSyncIndicator() {
 
   const contentBusyStyle = syncing
     ? {
-        color: "var(--accent)",
+        color: "var(--accent-text, var(--accent))",
         width: "auto" as const,
         minWidth: 28,
         padding: "0 8px",
@@ -380,7 +380,7 @@ export function ContentSyncIndicator() {
         whiteSpace: "nowrap" as const,
         cursor: "wait" as const,
       }
-    : { color: "var(--accent)" };
+    : { color: "var(--accent-text, var(--accent))" };
 
   return (
     <>

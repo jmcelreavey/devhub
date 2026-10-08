@@ -23,10 +23,11 @@ export default function NotFound() {
         >
           This page wandered off
         </h1>
-        <p className="text-sm mb-6" style={{ color: "var(--text-muted)", maxWidth: "36ch" }}>
+        <p className="empty-state text-sm mb-2" style={{ color: "var(--text-muted)", maxWidth: "36ch" }}>
           Nothing lives at this address. It may have moved in the last reshuffle - search knows where
           everything went.
         </p>
+        <p className="hollow-whisper">{"…it's quiet here. too quiet."}</p>
         <div className="flex flex-wrap items-center gap-2">
           <Link href="/" className="btn btn-primary">
             <ArrowLeft size={13} aria-hidden /> Back to Today

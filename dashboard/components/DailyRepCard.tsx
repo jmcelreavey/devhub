@@ -77,7 +77,7 @@ export function DailyRepCard() {
             {stats && stats.streak > 0 && (
               <span
                 className="badge inline-flex items-center gap-1"
-                style={{ background: "var(--accent-dim)", color: "var(--accent)" }}
+                style={{ background: "var(--accent-dim)", color: "var(--accent-text, var(--accent))" }}
               >
                 <Flame size={10} aria-hidden /> {stats.streak}d
               </span>

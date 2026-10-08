@@ -123,7 +123,7 @@ export function FeatureCard({
           padding: "2px 8px",
           borderRadius: "4px",
           background: "var(--accent-dim)",
-          color: "var(--accent)",
+          color: "var(--accent-text, var(--accent))",
           fontWeight: 600,
         }}
       >

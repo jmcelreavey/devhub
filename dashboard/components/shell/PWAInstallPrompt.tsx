@@ -102,7 +102,7 @@ export function PWAInstallPrompt() {
         {installed ? (
           <Trash2 size={14} style={{ color: "var(--warning)", flexShrink: 0 }} />
         ) : canInstall ? (
-          <Download size={14} style={{ color: "var(--accent)", flexShrink: 0 }} />
+          <Download size={14} style={{ color: "var(--accent-text, var(--accent))", flexShrink: 0 }} />
         ) : (
           <Info size={14} style={{ color: "var(--text-subtle)", flexShrink: 0 }} />
         )}

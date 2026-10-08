@@ -242,7 +242,7 @@ export function TasksOverlay({ open, onClose }: TasksOverlayProps) {
                         className="shrink-0 font-mono px-1.5 py-0.5 rounded"
                         style={{
                           background: "var(--accent-dim)",
-                          color: "var(--accent)",
+                          color: "var(--accent-text, var(--accent))",
                           fontSize: 12,
                         }}
                       >

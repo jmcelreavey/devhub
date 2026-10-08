@@ -142,7 +142,7 @@ export function CalendarWidget({ collapsed = false, collapsedSummary, onToggle }
           </span>
           <span
             className="text-xs shrink-0"
-            style={{ color: isImminent(next.start) ? "var(--warning)" : "var(--accent)" }}
+            style={{ color: isImminent(next.start) ? "var(--warning)" : "var(--accent-text, var(--accent))" }}
           >
             in {timeUntil(next.start)}
           </span>

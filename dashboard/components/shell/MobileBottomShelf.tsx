@@ -66,7 +66,7 @@ export function MobileBottomShelf() {
                 key={href}
                 href={href}
                 className="flex-1 flex flex-col items-center justify-center gap-0.5 no-underline transition-colors"
-                style={{ color: active ? "var(--accent)" : "var(--text-subtle)" }}
+                style={{ color: active ? "var(--accent-text, var(--accent))" : "var(--text-subtle)" }}
               >
                 <Icon size={18} strokeWidth={active ? 2 : 1.6} aria-hidden />
                 <span style={{ fontSize: 10, fontWeight: active ? 600 : 400 }}>{label}</span>

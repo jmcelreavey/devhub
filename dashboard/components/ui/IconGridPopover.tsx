@@ -169,7 +169,7 @@ export function IconGridPopover<T extends string = string>({
                       style={{
                         borderColor: isSelected ? "var(--accent)" : "transparent",
                         background: isSelected ? "var(--accent-dim)" : "transparent",
-                        color: isSelected ? "var(--accent)" : "var(--text-subtle)",
+                        color: isSelected ? "var(--accent-text, var(--accent))" : "var(--text-subtle)",
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -212,12 +212,12 @@ export function IconGridPopover<T extends string = string>({
           ? {
               borderColor: open ? "var(--accent)" : undefined,
               background: open ? "var(--accent-dim)" : undefined,
-              color: "var(--accent)",
+              color: "var(--accent-text, var(--accent))",
             }
           : {
               borderColor: open ? "var(--accent)" : "var(--border)",
               background: open ? "var(--accent-dim)" : "var(--bg-elevated)",
-              color: "var(--accent)",
+              color: "var(--accent-text, var(--accent))",
             }
       }
       onClick={(e) => {

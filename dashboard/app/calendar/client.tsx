@@ -230,7 +230,7 @@ export default function CalendarPage() {
             <div
               className="card-header"
               style={{
-                color: isToday(dateStr) ? "var(--accent)" : undefined,
+                color: isToday(dateStr) ? "var(--accent-text, var(--accent))" : undefined,
                 borderBottom: isToday(dateStr) ? "2px solid var(--accent)" : undefined,
               }}
             >

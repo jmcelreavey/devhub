@@ -296,7 +296,7 @@ export function TaskComposer({
         <div
           className="flex items-center gap-2 px-2 py-1.5 rounded bg-bg-elevated"
         >
-          <LinkIcon size={12} style={{ color: "var(--accent)", flexShrink: 0 }} aria-hidden />
+          <LinkIcon size={12} style={{ color: "var(--accent-text, var(--accent))", flexShrink: 0 }} aria-hidden />
           <span className="text-xs shrink-0 text-text-subtle">
             Link name:
           </span>

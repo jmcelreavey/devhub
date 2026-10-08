@@ -383,7 +383,7 @@ export function TodayFocusView() {
               padding: "12px 16px",
             }}
           >
-            <Sun size={14} style={{ color: "var(--accent)", flex: "none", marginTop: 3 }} aria-hidden />
+            <Sun size={14} style={{ color: "var(--accent-text, var(--accent))", flex: "none", marginTop: 3 }} aria-hidden />
             {briefingLine === undefined ? (
               <div className="min-w-0 flex-1 space-y-1.5 py-0.5">
                 <div className="skeleton" style={{ height: 12, width: "92%" }} />

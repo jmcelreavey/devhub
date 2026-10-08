@@ -34,6 +34,8 @@ import { TabTitle } from "@/components/shell/TabTitle";
 import { TerminalDock } from "@/components/shell/TerminalDock";
 import { TerminalTranscriptModal } from "@/components/shell/TerminalTranscriptModal";
 import { ThemeSystemSync } from "@/components/shell/ThemeSystemSync";
+import { HollowGate } from "@/components/hollow/HollowGate";
+import { HollowNudge } from "@/components/hollow/HollowNudge";
 import { ToastProvider } from "@/components/shell/ToastProvider";
 import { UiPrefsBootstrap } from "@/components/shell/UiPrefsBootstrap";
 import { WorkspaceTabPanels,WorkspaceTabsProvider,WorkspaceTabStrip } from "@/components/shell/WorkspaceTabs";
@@ -145,6 +147,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <RouteUsageRecorder />
         </Suspense>
         <ThemeSystemSync />
+        <HollowGate />
         <ToastProvider>
           <ConfirmProvider>
             <Suspense fallback={null}>
@@ -169,6 +172,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <Suspense fallback={null}>
                 <HubTopBar />
               </Suspense>
+              <HollowNudge />
               <WorkspaceTabStrip />
 
               {/* Renders nothing outside the packaged desktop app. Placed above

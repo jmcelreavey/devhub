@@ -59,7 +59,7 @@
   cursor: pointer;
 }
 .scopes button:hover { background: var(--bg-elevated); color: var(--text); }
-.scopes button[aria-pressed="true"] { color: var(--accent); background: var(--accent-dim); font-weight: 600; }
+.scopes button[aria-pressed="true"] { color: var(--accent-text, var(--accent)); background: var(--accent-dim); font-weight: 600; }
 .panel button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .results { overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; flex: 1; min-height: 120px; padding: 8px; }
 .section { padding: 12px 12px 6px; color: var(--text-subtle); font-size: 11px; font-weight: 600; }
@@ -84,8 +84,8 @@
 .excerpt { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .kind { flex-shrink: 0; color: var(--text-subtle); font-size: 11px; }
 .rowAction { display: grid; place-items: center; width: 16px; flex-shrink: 0; color: var(--text-subtle); }
-.row[aria-selected="true"] .rowAction { color: var(--accent); }
-.match { background: transparent; color: var(--accent); font-weight: 650; }
+.row[aria-selected="true"] .rowAction { color: var(--accent-text, var(--accent)); }
+.match { background: transparent; color: var(--accent-text, var(--accent)); font-weight: 650; }
 .empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 36px 20px; text-align: center; color: var(--text-subtle); }
 .empty strong { font-size: 15px; font-weight: 500; color: var(--text); overflow-wrap: anywhere; }
 .empty p { max-width: 40ch; font-size: 13px; line-height: 1.6; }

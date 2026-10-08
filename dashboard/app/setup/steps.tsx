@@ -251,7 +251,7 @@ export function GitHubStep({
         }}
       >
         {configured ? <CheckCircle2 size={18}  className="text-accent" /> : <Circle size={18} />}
-        <span style={{ fontSize: "13px", color: configured ? "var(--accent)" : "var(--text-subtle)", fontWeight: 500 }}>
+        <span style={{ fontSize: "13px", color: configured ? "var(--accent-text, var(--accent))" : "var(--text-subtle)", fontWeight: 500 }}>
           {configured
             ? login
               ? `GitHub CLI is connected as ${login}`
@@ -279,7 +279,7 @@ export function GitHubStep({
                 fontSize: "22px",
                 fontWeight: 700,
                 letterSpacing: "3px",
-                color: "var(--accent)",
+                color: "var(--accent-text, var(--accent))",
                 fontFamily: "monospace",
               }}
             >
@@ -387,7 +387,7 @@ export function InfraStep({
           <div
             style={{
               fontSize: "13px",
-              color: configured ? "var(--accent)" : "var(--text-subtle)",
+              color: configured ? "var(--accent-text, var(--accent))" : "var(--text-subtle)",
               fontWeight: 500,
             }}
           >
@@ -643,7 +643,7 @@ export function PathField({
             onClick={onUseDefault}
             style={{
               fontSize: "11px",
-              color: "var(--accent)",
+              color: "var(--accent-text, var(--accent))",
               background: "none",
               border: "none",
               cursor: "pointer",
@@ -747,7 +747,7 @@ export function DatadogStep({
       href={`${appOrigin.replace(/\/$/, "")}${path}`}
       target="_blank"
       rel="noopener noreferrer"
-      style={{ color: "var(--accent)", textDecoration: "underline" }}
+      style={{ color: "var(--accent-text, var(--accent))", textDecoration: "underline" }}
     >
       {text}
       <ExternalLink size={10} style={{ display: "inline", marginLeft: "2px", verticalAlign: "middle" }} />
@@ -765,7 +765,7 @@ export function DatadogStep({
       <span
         style={{
           fontSize: primary ? "13px" : "12px",
-          color: done ? "var(--accent)" : "var(--text-subtle)",
+          color: done ? "var(--accent-text, var(--accent))" : "var(--text-subtle)",
           fontWeight: primary ? 500 : 400,
         }}
       >
@@ -886,7 +886,7 @@ export function DatadogStep({
         {checking ? "Checking..." : "Check connection"}
       </button>
       {checkOk && (
-        <p className="mt-2 text-[12px] leading-snug" style={{ color: "var(--accent)" }}>
+        <p className="mt-2 text-[12px] leading-snug" style={{ color: "var(--accent-text, var(--accent))" }}>
           {checkOk}
         </p>
       )}
@@ -955,7 +955,7 @@ export function CalendarStep({
               padding: "10px 14px",
               borderRadius: "8px",
               background: "var(--accent-dim)",
-              color: "var(--accent)",
+              color: "var(--accent-text, var(--accent))",
               fontSize: "13px",
               marginBottom: "12px",
             }}
@@ -976,7 +976,7 @@ export function CalendarStep({
           }}
         >
           <CheckCircle2 size={18}  className="text-accent" />
-          <span style={{ fontSize: "13px", color: "var(--accent)", fontWeight: 500 }}>
+          <span style={{ fontSize: "13px", color: "var(--accent-text, var(--accent))", fontWeight: 500 }}>
             Calendar is connected
           </span>
         </div>
@@ -1014,7 +1014,7 @@ export function CalendarStep({
             padding: "10px 14px",
             borderRadius: "8px",
             background: "var(--accent-dim)",
-            color: "var(--accent)",
+            color: "var(--accent-text, var(--accent))",
             fontSize: "13px",
             marginBottom: "16px",
           }}
@@ -1096,7 +1096,7 @@ export function JiraStep({
       <span
         style={{
           fontSize: "13px",
-          color: configured ? "var(--accent)" : "var(--text-subtle)",
+          color: configured ? "var(--accent-text, var(--accent))" : "var(--text-subtle)",
           fontWeight: 500,
         }}
       >
@@ -1117,7 +1117,7 @@ export function JiraStep({
           href="https://id.atlassian.com/manage-profile/security/api-tokens"
           target="_blank"
           rel="noopener noreferrer"
-          style={{ color: "var(--accent)", textDecoration: "underline" }}
+          style={{ color: "var(--accent-text, var(--accent))", textDecoration: "underline" }}
         >
           Atlassian Security Settings
           <ExternalLink size={10} style={{ display: "inline", marginLeft: "2px", verticalAlign: "middle" }} />
@@ -1163,7 +1163,7 @@ export function JiraStep({
         {checking ? "Checking..." : "Check connection"}
       </button>
       {checkOk && (
-        <p className="mt-2 text-[12px] leading-snug" style={{ color: "var(--accent)" }}>
+        <p className="mt-2 text-[12px] leading-snug" style={{ color: "var(--accent-text, var(--accent))" }}>
           {checkOk}
         </p>
       )}
@@ -1371,8 +1371,8 @@ export function DoneStep({ saveResult }: { saveResult: { ok: boolean; message: s
             <br />
             <span className="text-text-muted">
               {desktop ? "Quit and reopen DevHub, or use Restart Backend in the tray menu." : <>In your terminal: stop the dashboard (Ctrl+C) and re-run{" "}
-              <code style={{ color: "var(--accent)", fontSize: "11px" }}>npm run dev</code> or{" "}
-              <code style={{ color: "var(--accent)", fontSize: "11px" }}>npm run start</code>.</>}
+              <code style={{ color: "var(--accent-text, var(--accent))", fontSize: "11px" }}>npm run dev</code> or{" "}
+              <code style={{ color: "var(--accent-text, var(--accent))", fontSize: "11px" }}>npm run start</code>.</>}
             </span>
           </p>
         </div>

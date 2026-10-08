@@ -259,7 +259,7 @@ export function ScriptRunner({ onDone }: { onDone?: () => void } = {}) {
             {previewMeta.mutates ? (
               <AlertTriangle size={16} style={{ color: "var(--warning)", flexShrink: 0, marginTop: 2 }} aria-hidden />
             ) : (
-              <Eye size={16} style={{ color: "var(--accent)", flexShrink: 0, marginTop: 2 }} aria-hidden />
+              <Eye size={16} style={{ color: "var(--accent-text, var(--accent))", flexShrink: 0, marginTop: 2 }} aria-hidden />
             )}
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold text-text">

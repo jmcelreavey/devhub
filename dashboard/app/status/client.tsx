@@ -1002,7 +1002,7 @@ export default function StatusPage() {
                 role="status"
                 aria-live="polite"
                 className="text-xs leading-relaxed"
-                style={{ color: rebuilding ? "var(--accent)" : "var(--danger)" }}
+                style={{ color: rebuilding ? "var(--accent-text, var(--accent))" : "var(--danger)" }}
               >
                 {rebuildMessage}
               </p>

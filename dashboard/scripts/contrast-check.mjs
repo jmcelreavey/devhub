@@ -47,7 +47,7 @@ function contrast(a, b) {
 function resolve(name, vars, seen = new Set()) {
   if (seen.has(name)) return null;
   seen.add(name);
-  const raw = vars[name];
+  const raw = vars[name] ?? (name === "--accent-text" ? vars["--accent"] : undefined);
   if (raw === undefined) return null;
   const ref = raw.match(/^var\((--[\w-]+)\)/);
   if (ref) return resolve(ref[1], vars, seen);
@@ -87,7 +87,7 @@ const REQUIRED = [
 
 const WARNED = [
   ["subtle / surface (hints)", "--text-subtle", "--bg-surface", 4.5],
-  ["accent / surface (links)", "--accent", "--bg-surface", 4.5],
+  ["accent text / surface (links)", "--accent-text", "--bg-surface", 4.5],
   ["success / surface", "--success", "--bg-surface", 3.0],
   ["warning / surface", "--warning", "--bg-surface", 3.0],
   ["danger / surface", "--danger", "--bg-surface", 3.0],

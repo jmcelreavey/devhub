@@ -166,7 +166,7 @@ export function VaultFilesSidebar({
                 type="button"
                 onClick={onNew}
                 className="text-xs px-1.5 py-0.5 rounded"
-                style={{ color: "var(--accent)", background: "var(--bg-elevated)" }}
+                style={{ color: "var(--accent-text, var(--accent))", background: "var(--bg-elevated)" }}
                 title={`New ${itemLabel}`}
               >
                 <Plus size={12} aria-hidden />

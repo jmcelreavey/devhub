@@ -8,6 +8,8 @@ import {
   type ThemeModeSetting,
   applyThemeSelection,
 } from "@/lib/theme-presets";
+import { HOLLOW_PRESET_ID } from "@/lib/hollow-theme";
+import { HollowEffectToggles } from "@/components/hollow/HollowEffectToggles";
 
 const MODES: { id: ThemeModeSetting; label: string; Icon: LucideIcon }[] = [
   { id: "system", label: "System", Icon: Monitor },
@@ -207,6 +209,7 @@ export function AccentPicker() {
               </span>
             </button>
           ))}
+          {selection.preset === HOLLOW_PRESET_ID ? <HollowEffectToggles /> : null}
         </div>
       )}
     </div>

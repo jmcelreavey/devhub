@@ -15,7 +15,7 @@ function highlightSearchText(text: string, query: string) {
   return (
     <>
       {text.slice(0, range.start)}
-      <mark className="rounded-sm px-0.5" style={{ background: "var(--accent-dim)", color: "var(--accent)" }}>
+      <mark className="rounded-sm px-0.5" style={{ background: "var(--accent-dim)", color: "var(--accent-text, var(--accent))" }}>
         {text.slice(range.start, range.end)}
       </mark>
       {text.slice(range.end)}

@@ -29,7 +29,7 @@ const STATS: { key: keyof WeeklyReview["totals"]; label: string; color: string }
   { key: "completed", label: "Completed", color: "var(--success)" },
   { key: "created", label: "Created", color: "var(--text)" },
   { key: "abandoned", label: "Abandoned", color: "var(--text-subtle)" },
-  { key: "moved", label: "Rolled over", color: "var(--accent)" },
+  { key: "moved", label: "Rolled over", color: "var(--accent-text, var(--accent))" },
 ];
 
 export default function ReviewPage() {
@@ -157,7 +157,7 @@ export default function ReviewPage() {
                         type="button"
                         onClick={() => void openInBrowser(jiraBrowseUrl(s.jiraKey!))}
                         className="shrink-0 font-mono text-xs px-1.5 py-0.5 rounded inline-flex items-center gap-1"
-                        style={{ background: "var(--accent-dim)", color: "var(--accent)" }}
+                        style={{ background: "var(--accent-dim)", color: "var(--accent-text, var(--accent))" }}
                       >
                         {s.jiraKey}
                         <ExternalLink size={10} aria-hidden />

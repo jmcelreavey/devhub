@@ -77,7 +77,7 @@ export function JiraKeyChip({ jiraKey, done = false, label, title, quiet = false
         onContextMenu={(e) => menu.openAt(e, ref)}
         style={{
           // The quiet variant takes its colours from CSS so :hover can win.
-          ...(quiet ? {} : { background: "var(--accent-dim)", color: "var(--accent)", border: "none" }),
+          ...(quiet ? {} : { background: "var(--accent-dim)", color: "var(--accent-text, var(--accent))", border: "none" }),
           textDecoration: done ? "line-through" : "none",
           opacity: done ? 0.5 : 1,
         }}

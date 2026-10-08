@@ -593,7 +593,7 @@ export function IconPicker({
                     Seasonal
                   </span>
                   {seasonalEntry && (
-                    <span style={{ fontSize: "11px", color: "var(--accent)" }}>
+                    <span style={{ fontSize: "11px", color: "var(--accent-text, var(--accent))" }}>
                       Now: {seasonalEntry.label}
                     </span>
                   )}
@@ -619,7 +619,7 @@ export function IconPicker({
                       borderRadius: "6px",
                       border: seasonalActive ? "2px solid var(--accent)" : "2px solid transparent",
                       background: seasonalActive ? "var(--accent-dim)" : "var(--bg-surface)",
-                      color: seasonalActive ? "var(--accent)" : "var(--text-subtle)",
+                      color: seasonalActive ? "var(--accent-text, var(--accent))" : "var(--text-subtle)",
                       cursor: "pointer",
                       padding: 0,
                       flexShrink: 0,
@@ -660,7 +660,7 @@ export function IconPicker({
                           borderRadius: "6px",
                           border: pinnedSel ? "2px solid var(--accent)" : "2px solid transparent",
                           background: pinnedSel ? "var(--accent-dim)" : "var(--bg-surface)",
-                          color: pinnedSel ? "var(--accent)" : "var(--text-subtle)",
+                          color: pinnedSel ? "var(--accent-text, var(--accent))" : "var(--text-subtle)",
                           cursor: "pointer",
                           padding: 0,
                           flexShrink: 0,
@@ -762,7 +762,7 @@ export function IconPicker({
                       borderRadius: "6px",
                       border: isSelected ? "2px solid var(--accent)" : "2px solid transparent",
                       background: isSelected ? "var(--accent-dim)" : "transparent",
-                      color: isSelected ? "var(--accent)" : "var(--text-subtle)",
+                      color: isSelected ? "var(--accent-text, var(--accent))" : "var(--text-subtle)",
                       cursor: "pointer",
                       padding: 0,
                       transition: "all 0.15s ease",

@@ -35,7 +35,7 @@ function renderInline(text: string, fileBase?: string): ReactNode[] {
         <code
           key={key++}
           className="text-[11px] px-1 rounded"
-          style={{ background: "var(--bg-elevated)", color: "var(--accent)" }}
+          style={{ background: "var(--bg-elevated)", color: "var(--accent-text, var(--accent))" }}
         >
           {token}
         </code>
@@ -88,7 +88,7 @@ function CodeBlock({ code, lang }: { code: string; lang: string }) {
           type="button"
           onClick={() => void copy()}
           className="flex items-center gap-1 text-[10px] lab-evidence-link"
-          style={{ color: copied ? "var(--accent)" : "var(--text-subtle)" }}
+          style={{ color: copied ? "var(--accent-text, var(--accent))" : "var(--text-subtle)" }}
         >
           {copied ? <Check size={10} /> : <Copy size={10} />}
           {copied ? "Copied" : "Copy"}

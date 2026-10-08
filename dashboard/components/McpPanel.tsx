@@ -444,7 +444,7 @@ export function McpPanel() {
                   onClick={() => toggleServer(server)}
                   aria-expanded={isOpen}
                 >
-                  <Link2 size={12} style={{ color: "var(--accent)", flexShrink: 0 }} aria-hidden />
+                  <Link2 size={12} style={{ color: "var(--accent-text, var(--accent))", flexShrink: 0 }} aria-hidden />
                   {isRenaming ? (
                     <input
                       className="input font-medium text-sm font-mono"
@@ -495,7 +495,7 @@ export function McpPanel() {
                   className="btn btn-ghost shrink-0"
                   style={{
                     padding: "4px 6px",
-                    color: excludedFromSync[server.name] ? "var(--accent)" : "var(--text-subtle)",
+                    color: excludedFromSync[server.name] ? "var(--accent-text, var(--accent))" : "var(--text-subtle)",
                   }}
                   title={
                     excludedFromSync[server.name]

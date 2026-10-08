@@ -257,7 +257,7 @@ export function OpencodeConfigPanel() {
           {unresolved.length ? (
             <AlertTriangle size={14} style={{ color: "var(--danger)", flexShrink: 0, marginTop: 2 }} aria-hidden />
           ) : (
-            <CheckCircle2 size={14} style={{ color: "var(--accent)", flexShrink: 0, marginTop: 2 }} aria-hidden />
+            <CheckCircle2 size={14} style={{ color: "var(--accent-text, var(--accent))", flexShrink: 0, marginTop: 2 }} aria-hidden />
           )}
           <div className="text-xs" style={{ color: "var(--text-muted)", lineHeight: 1.5 }}>
             {envNames.length === 0 ? (

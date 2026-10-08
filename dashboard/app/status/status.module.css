@@ -9,7 +9,7 @@
 .issues { margin-top: 16px; border-top: 1px solid var(--border-muted); }
 .issues li { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 0; font-size: 13px; border-bottom: 1px solid var(--border-muted); }
 .issues li:last-child { border-bottom: 0; padding-bottom: 0; }
-.issues button { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; color: var(--accent); cursor: pointer; min-height: 32px; }
+.issues button { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; color: var(--accent-text, var(--accent)); cursor: pointer; min-height: 32px; }
 .issues button:hover { text-decoration: underline; text-underline-offset: 3px; }
 .unavailable { display: flex; align-items: center; gap: 16px; justify-content: space-between; margin-top: 16px; border-top: 1px solid var(--border-muted); padding-top: 16px; }
 .unavailable p { color: var(--text-subtle); font-size: 13px; line-height: 1.5; }
