@@ -6,6 +6,7 @@ import {
   applyThemeSelection,
   sanitizeModeSetting,
   sanitizePreset,
+  syncSeasonalTheme,
 } from "@/lib/theme-presets";
 
 /**
@@ -15,6 +16,30 @@ import {
  * "system"). The initial value is set by the inline bootstrap script in `layout.tsx`.
  */
 export function ThemeSystemSync() {
+  useEffect(() => {
+    let midnight = 0;
+    function sync() {
+      syncSeasonalTheme();
+      window.clearTimeout(midnight);
+      const now = new Date();
+      const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      midnight = window.setTimeout(sync, next.getTime() - now.getTime() + 50);
+    }
+    function resumed() { if (!document.hidden) sync(); }
+    function stored(event: StorageEvent) {
+      if (event.key === null || ["devhub:theme", "devhub:theme-preset", "devhub:hollow-season"].includes(event.key)) sync();
+    }
+    sync();
+    document.addEventListener("visibilitychange", resumed);
+    window.addEventListener("focus", sync);
+    window.addEventListener("storage", stored);
+    return () => {
+      window.clearTimeout(midnight);
+      document.removeEventListener("visibilitychange", resumed);
+      window.removeEventListener("focus", sync);
+      window.removeEventListener("storage", stored);
+    };
+  }, []);
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");

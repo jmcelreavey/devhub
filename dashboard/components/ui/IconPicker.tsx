@@ -852,6 +852,7 @@ export function LogoIcon({
     return (
       <Image
         src={brandSrc}
+        className="theme-brand-image"
         alt=""
         aria-hidden
         unoptimized

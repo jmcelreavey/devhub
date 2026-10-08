@@ -1,13 +1,12 @@
 /**
  * Hollow — horror preset. Palette tokens live in globals.css; this module is
- * the toggle state, the October nudge, and the rules for what is allowed to
+ * the toggle state, the October default, and the rules for what is allowed to
  * move. The effects bundle mounts only when the preset is actually selected.
  */
 
 export const HOLLOW_PRESET_ID = "hollow";
 
 export const HOLLOW_EFFECTS_KEY = "devhub:hollow-effects";
-export const HOLLOW_NUDGE_KEY = "devhub:hollow-nudge-year";
 export const HOLLOW_PREVIEW_KEY = "devhub:hollow-preview";
 export const HOLLOW_EFFECTS_EVENT = "devhub:hollow-effects";
 export const HOLLOW_SOUND_GESTURE = "devhub:hollow-sound-gesture";
@@ -24,6 +23,7 @@ export interface HollowEffects {
   atmosphere: boolean;
   creatures: boolean;
   interaction: boolean;
+  rareEvents: boolean;
   jumpScares: boolean;
   sound: boolean;
 }
@@ -33,6 +33,7 @@ export const HOLLOW_EFFECT_DEFAULTS: HollowEffects = {
   atmosphere: true,
   creatures: true,
   interaction: true,
+  rareEvents: true,
   jumpScares: false,
   sound: false,
 };
@@ -62,6 +63,7 @@ export function parseHollowEffects(raw: string | null | undefined): HollowEffect
       atmosphere: bool(parsed.atmosphere, HOLLOW_EFFECT_DEFAULTS.atmosphere),
       creatures: bool(parsed.creatures, HOLLOW_EFFECT_DEFAULTS.creatures),
       interaction: bool(parsed.interaction, HOLLOW_EFFECT_DEFAULTS.interaction),
+      rareEvents: bool(parsed.rareEvents, HOLLOW_EFFECT_DEFAULTS.rareEvents),
       jumpScares: bool(parsed.jumpScares, HOLLOW_EFFECT_DEFAULTS.jumpScares),
       sound: bool(parsed.sound, HOLLOW_EFFECT_DEFAULTS.sound),
     };
@@ -106,6 +108,7 @@ export interface HollowRuntimePlan {
   glitch: boolean;
   buttonGlow: boolean;
   cursorTrail: boolean;
+  rareEvents: boolean;
   jumpScares: boolean;
   sound: boolean;
 }
@@ -131,6 +134,7 @@ export function hollowRuntimePlan(effects: HollowEffects, motion: boolean): Holl
     glitch: interaction && motion,
     buttonGlow: interaction && motion,
     cursorTrail: interaction && motion,
+    rareEvents: atmosphere && creatures && effects.rareEvents,
     jumpScares,
     sound,
   };
@@ -184,25 +188,68 @@ export function advanceBoo(index: number, key: string): number | "trigger" {
   return next >= BOO.length ? "trigger" : next;
 }
 
-/** October 20–31 inclusive. `date` is local time. */
-export function isHollowSeason(date: Date): boolean {
-  return date.getMonth() === 9 && date.getDate() >= 20 && date.getDate() <= 31;
+export const HOLLOW_SEASON_KEY = "devhub:hollow-season";
+
+export interface HollowSeasonSelection {
+  preset: string;
+  mode: "dark" | "light" | "system";
 }
 
-export function readDismissedNudgeYear(raw: string | null | undefined): number | null {
-  if (!raw || !/^\d{4}$/.test(raw)) return null;
-  return Number(raw);
+export interface HollowSeasonState {
+  year: number;
+  previous: HollowSeasonSelection | null;
+  overridden: boolean;
+  restored: boolean;
 }
 
-export function shouldShowHollowNudge(
+/** Validate persisted data before either bootstrap or React uses it. */
+export function parseHollowSeason(raw: string | null, presets: readonly string[]): HollowSeasonState | null {
+  try {
+    const value = JSON.parse(raw ?? "null") as HollowSeasonState | null;
+    if (!value || !Number.isInteger(value.year) || value.year < 1 || value.year > 9999
+      || typeof value.overridden !== "boolean" || typeof value.restored !== "boolean") return null;
+    const previous = value.previous;
+    if (previous !== null && (!previous || !presets.includes(previous.preset)
+      || !["dark", "light", "system"].includes(previous.mode))) return null;
+    return { year: value.year, previous, overridden: value.overridden, restored: value.restored };
+  } catch {
+    return null;
+  }
+}
+
+/** Local calendar policy. Kept self-contained so the same function runs before paint. */
+export function resolveHollowSeason(
   date: Date,
-  preset: string,
-  dismissedYear: number | null,
-): boolean {
-  if (preset === HOLLOW_PRESET_ID) return false;
-  if (!isHollowSeason(date)) return false;
-  if (dismissedYear === date.getFullYear()) return false;
-  return true;
+  current: HollowSeasonSelection,
+  saved: HollowSeasonState | null,
+): { selection: HollowSeasonSelection; state: HollowSeasonState | null } {
+  const year = date.getFullYear();
+  const october = date.getMonth() === 9;
+  let selection = current;
+  let state = saved;
+  if (state && (!october || state.year !== year) && !state.restored) {
+    const stillAutomatic = selection.preset === "hollow";
+    if (state.previous && !state.overridden && stillAutomatic) {
+      selection = { ...selection, preset: state.previous.preset };
+    }
+    state = { ...state, restored: true };
+  }
+  if (october && (!state || state.year !== year)) {
+    state = { year, previous: selection.preset === "hollow" ? null : { ...selection },
+      overridden: false, restored: false };
+    selection = { ...selection, preset: "hollow" };
+  }
+  return { selection, state };
+}
+
+export function overrideHollowSeason(date: Date, state: HollowSeasonState | null): HollowSeasonState | null {
+  return state && state.year === date.getFullYear() && date.getMonth() === 9
+    ? { ...state, overridden: true } : state;
+}
+
+/** Embedded into the theme bootstrap with its already-sanitised preset and mode. */
+export function getHollowSeasonBootstrapScript(presets: readonly string[]): string {
+  return `var seasonal=(${resolveHollowSeason.toString()})((${parseHollowNow.toString()})(window.location.search,new Date()),{preset:preset,mode:setting},(${parseHollowSeason.toString()})(localStorage.getItem("${HOLLOW_SEASON_KEY}"),${JSON.stringify(presets)}));preset=seasonal.selection.preset;setting=seasonal.selection.mode;try{if(seasonal.state)localStorage.setItem("${HOLLOW_SEASON_KEY}",JSON.stringify(seasonal.state));localStorage.setItem(p,preset);localStorage.setItem(m,setting);}catch(e){}`;
 }
 
 /** `YYYY-MM-DD` in local time, for the `?hollowNow=` screenshot/test hook. */

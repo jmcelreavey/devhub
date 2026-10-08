@@ -9,9 +9,10 @@ const TOGGLES: {
   hint?: string;
 }[] = [
   { key: "master", label: "Effects" },
-  { key: "atmosphere", label: "Atmosphere", hint: "Grain, vignette, fog, edge shadows" },
-  { key: "creatures", label: "Creatures", hint: "Eyes in the corners. Spiders on threads." },
-  { key: "interaction", label: "Interaction", hint: "Cracks, heading glitch, button glow, cursor" },
+  { key: "atmosphere", label: "Atmosphere", hint: "Layered fog, guttering light, grain and bottle wisps" },
+  { key: "creatures", label: "Creatures", hint: "Watching eyes, spiders and a shadow passing through the fog." },
+  { key: "rareEvents", label: "Rare events", hint: "A passing presence every few minutes. Requires Atmosphere, Creatures and motion." },
+  { key: "interaction", label: "Interaction", hint: "Spectral trails, cobweb sway, cracks and heading glitch" },
   { key: "jumpScares", label: "Jump scares", hint: "Off unless you ask. Type boo outside a text field." },
   { key: "sound", label: "Sound", hint: "A low drone. Starts on this click. Stops when the tab hides." },
 ];
@@ -24,7 +25,8 @@ export function HollowEffectToggles() {
       <div className="hollow-effects-label">Hollow</div>
       {TOGGLES.map(({ key, label, hint }) => {
         const on = effects[key];
-        const dim = key !== "master" && !effects.master;
+        const dim = key !== "master" && (!effects.master
+          || (key === "rareEvents" && (!effects.atmosphere || !effects.creatures)));
         return (
           <button
             key={key}

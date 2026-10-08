@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useClientMounted } from "@/lib/hooks/use-client-mounted";
 import Image from "next/image";
 import {
   BRAND_BOTTLE_IMAGE_SRC,
@@ -86,7 +87,48 @@ const HOLLOW_BOOT_LINES = [
  * Full-screen branded boot moment. Brand mark with an orbiting ring, a dry
  * rotating status line, and a shimmer bar. Fades out as one unit.
  */
+type BootRequest = (id: string, state: BootState | null) => void;
+const BootRequests = createContext<BootRequest | null>(null);
+
+/**
+ * Suspense may stream its hidden page while its fallback is still mounted.
+ * Both can request a loader; only this shell host owns the visible/live mark.
+ */
+export function BootScreenProvider({ children }: { children: React.ReactNode }) {
+  const mounted = useClientMounted();
+  const [requests, setRequests] = useState<ReadonlyMap<string, BootState>>(() => new Map());
+  const update = useCallback<BootRequest>((id, state) => {
+    setRequests(previous => {
+      if (previous.get(id) === state || (state === null && !previous.has(id))) return previous;
+      const next = new Map(previous);
+      if (state === null) next.delete(id);
+      else next.set(id, state);
+      return next;
+    });
+  }, []);
+  const states = [...requests.values()];
+  const state = !mounted || states.includes("loading") ? "loading"
+    : states.includes("leaving") ? "leaving" : "done";
+  return (
+    <BootRequests.Provider value={update}>
+      {children}
+      <BootScreenVisual state={state} />
+    </BootRequests.Provider>
+  );
+}
+
 export function TodayBootScreen({ state }: { state: BootState }) {
+  const update = useContext(BootRequests);
+  const id = useId();
+  useLayoutEffect(() => {
+    if (!update) return;
+    update(id, state);
+    return () => update(id, null);
+  }, [id, state, update]);
+  return update ? null : <BootScreenVisual state={state} />;
+}
+
+function BootScreenVisual({ state }: { state: BootState }) {
   const [lineIdx, setLineIdx] = useState(0);
 
   useEffect(() => {

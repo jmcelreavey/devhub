@@ -1,12 +1,32 @@
 /** Geometry is read only when a creature opens or the page layout changes. */
-export const HOLLOW_BLOCKED =
-  "a, button, input, textarea, select, label, nav, header, h1, h2, h3, h4, p, li, [role='button'], [role='tab'], [role='dialog'], [role='menu'], .terminal-dock, .cm-editor, .xterm, .monaco-editor, .bn-root, .hub-topbar, .accent-picker-pop, .task-row, .hub-card, .card, .react-grid-item";
+export const HOLLOW_MASKED_SURFACES =
+  "a, button, input, textarea, select, label, [role='button'], [role='tab'], [role='progressbar'], [role='dialog'], [role='menu'], .terminal-dock, .cm-editor, .xterm, .monaco-editor, .bn-root, .accent-picker-pop, .task-row, .hub-card, .card, .react-grid-item";
+export const HOLLOW_BLOCKED = `${HOLLOW_MASKED_SURFACES}, nav, header, h1, h2, h3, h4, p, li, .hub-topbar`;
 
 export interface HollowRect {
   left: number;
   top: number;
   right: number;
   bottom: number;
+}
+
+/** The opaque cores protect glyphs; the outward feather avoids rectangular
+ * gaps in the brighter fog. Bake luminance subtraction into image alpha so
+ * CSS masking has the same semantics in Chromium and WebKit. */
+export function hollowContentMask(rects: readonly HollowRect[], width: number, height: number): string {
+  const holes = (padding: number) => rects.map(r =>
+    `<rect x="${r.left - padding}" y="${r.top - padding}" width="${r.right - r.left + padding * 2}" height="${r.bottom - r.top + padding * 2}" fill="black"/>`).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+    <defs>
+      <filter id="feather" filterUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}"><feGaussianBlur stdDeviation="6"/></filter>
+      <mask id="readable" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}">
+        <rect width="100%" height="100%" fill="white"/>
+        <g filter="url(#feather)">${holes(14)}</g>
+        ${holes(2)}
+      </mask>
+    </defs>
+    <rect width="100%" height="100%" fill="white" mask="url(#readable)"/>
+  </svg>`;
 }
 
 export function hollowSlotFits(
@@ -32,8 +52,8 @@ function contentAt(x: number, y: number): Element | null {
   return document.elementsFromPoint(x, y).find((el) => !el.closest(".hollow-fx")) ?? null;
 }
 
-function occupiedRects(): HollowRect[] {
-  const rects: HollowRect[] = [...document.querySelectorAll(HOLLOW_BLOCKED)]
+export function occupiedRects(surfaces = HOLLOW_BLOCKED): HollowRect[] {
+  const rects: HollowRect[] = [...document.querySelectorAll(surfaces)]
     .map((el) => el.getBoundingClientRect()).filter((r) => r.width && r.height);
   // Text can live in unclassified spans. Rect intersection catches even a
   // short link between the five hit-test points, and every visible text run.

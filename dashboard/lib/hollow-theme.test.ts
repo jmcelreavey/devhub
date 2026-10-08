@@ -15,13 +15,10 @@ import {
   hollowRuntimePlan,
   isHollowFaceShot,
   isHollowPreview,
-  isHollowSeason,
   parseHollowEffects,
   parseHollowNow,
-  readDismissedNudgeYear,
   readHollowEffects,
   shouldMountHollowRuntime,
-  shouldShowHollowNudge,
   writeHollowEffects,
 } from "@/lib/hollow-theme";
 
@@ -66,6 +63,7 @@ describe("hollow effects state", () => {
       atmosphere: true,
       creatures: true,
       interaction: true,
+      rareEvents: true,
       jumpScares: false,
       sound: false,
     });
@@ -84,6 +82,15 @@ describe("hollow effects state", () => {
     writeHollowEffects(storage, { ...HOLLOW_EFFECT_DEFAULTS, master: false, sound: true });
     expect(storage.getItem(HOLLOW_EFFECTS_KEY)).toContain('"sound":true');
     expect(readHollowEffects(storage)).toMatchObject({ master: false, sound: true, jumpScares: false });
+  });
+
+  it("requires Atmosphere, Creatures and motion for rare events, including old saved preferences", () => {
+    expect(parseHollowEffects('{"atmosphere":true,"creatures":true}').rareEvents).toBe(true);
+    expect(parseHollowEffects('{"rareEvents":false}').rareEvents).toBe(false);
+    expect(hollowRuntimePlan(HOLLOW_EFFECT_DEFAULTS, true).rareEvents).toBe(true);
+    for (const key of ["master", "atmosphere", "creatures", "rareEvents"] as const) {
+      expect(hollowRuntimePlan({ ...HOLLOW_EFFECT_DEFAULTS, [key]: false }, true).rareEvents).toBe(false);
+    }
   });
 
   it("forces every layer off when the master switch is off", () => {
@@ -117,6 +124,7 @@ describe("hollow effects state", () => {
     expect(plan.cursorTrail).toBe(false);
     expect(plan.buttonGlow).toBe(false);
     expect(plan.jumpScares).toBe(false);
+    expect(plan.rareEvents).toBe(false);
     expect(plan.cracks).toBe(true);
     expect(plan.sound).toBe(true);
   });
@@ -141,20 +149,7 @@ describe("hollow effects state", () => {
   });
 });
 
-describe("hollow nudge and triggers", () => {
-  it("only suggests Hollow from 20 to 31 October, once a year", () => {
-    expect(isHollowSeason(new Date(2026, 9, 19))).toBe(false);
-    expect(isHollowSeason(new Date(2026, 9, 20))).toBe(true);
-    expect(isHollowSeason(new Date(2026, 9, 31))).toBe(true);
-    expect(isHollowSeason(new Date(2026, 10, 1))).toBe(false);
-    const inSeason = new Date(2026, 9, 25);
-    expect(shouldShowHollowNudge(inSeason, "graphite", null)).toBe(true);
-    expect(shouldShowHollowNudge(inSeason, HOLLOW_PRESET_ID, null)).toBe(false);
-    expect(shouldShowHollowNudge(inSeason, "graphite", 2026)).toBe(false);
-    expect(shouldShowHollowNudge(new Date(2027, 9, 25), "graphite", 2026)).toBe(true);
-    expect(readDismissedNudgeYear("2026")).toBe(2026);
-    expect(readDismissedNudgeYear("nope")).toBeNull();
-  });
+describe("hollow preview and triggers", () => {
 
   it("reads an injectable local date", () => {
     const fallback = new Date(2026, 0, 2);
@@ -191,10 +186,10 @@ describe("hollow contrast", () => {
   const foregrounds = ["--text", "--text-muted", "--text-subtle", "--accent-text", "--accent-text-hover", "--success", "--warning", "--danger"] as const;
 
   it.each(["dark", "light"] as const)("%s text stays at 4.5:1 with the content veil on", (mode) => {
-    for (const light of [0, 255]) for (const foreground of foregrounds) {
+    for (const alpha of [0, HOLLOW_CONTENT_VEIL / 2, HOLLOW_CONTENT_VEIL]) for (const light of [0, 255]) for (const foreground of foregrounds) {
       for (const background of backgrounds) {
-        const fg = veiled(tokenFor(mode, foreground), HOLLOW_CONTENT_VEIL, light);
-        const bg = veiled(tokenFor(mode, background), HOLLOW_CONTENT_VEIL, light);
+        const fg = veiled(tokenFor(mode, foreground), alpha, light);
+        const bg = veiled(tokenFor(mode, background), alpha, light);
         expect(contrast(fg, bg), `${mode} ${foreground} on ${background}`).toBeGreaterThanOrEqual(4.5);
       }
     }
@@ -205,6 +200,24 @@ describe("hollow contrast", () => {
       );
       expect(ratio, `${mode} accent-fg on ${background}`).toBeGreaterThanOrEqual(4.5);
     }
+  });
+
+  it.each(["dark", "light"] as const)("%s keeps AA at the rare-event peak, including a pessimistic unmasked edge", (mode) => {
+    const preview = hollowCss.match(/\.hollow-fx\.is-rare-preview \.hollow-rare-dim\s*\{([^}]+)\}/)?.[1];
+    const peak = Number(preview?.match(/opacity:\s*([\d.]+)/)?.[1]);
+    expect(peak).toBe(.85);
+    expect(hollowCss).toMatch(/30%, 60% \{ opacity: \.85;/);
+    // Runtime coverage tests require zero exposure at all four corners of
+    // each readable box. Even just outside the mask, dim + key light remain
+    // inside one composite, never an extra veil over the 18% atmosphere.
+    for (const alpha of [0, HOLLOW_CONTENT_VEIL * peak, HOLLOW_CONTENT_VEIL]) {
+      for (const light of [0, 255]) for (const foreground of foregrounds) for (const background of backgrounds) {
+        expect(contrast(veiled(tokenFor(mode, foreground), alpha, light), veiled(tokenFor(mode, background), alpha, light)),
+          `${mode} rare-event peak: ${foreground} on ${background}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    const dim = hollowCss.match(/\.hollow-atmosphere > \.hollow-rare-dim\s*\{([^}]+)\}/)?.[1];
+    expect(dim).toContain("ellipse farthest-side at 50% 50%, transparent 60%");
   });
 
   it("keeps the composited atmosphere within the tested veil budget", () => {

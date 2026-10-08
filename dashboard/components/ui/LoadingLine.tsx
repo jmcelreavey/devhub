@@ -14,7 +14,7 @@ export function LoadingLine({
   rows?: number;
 }) {
   return (
-    <div role="status" aria-label={message} className="py-2">
+    <div role="status" aria-label={message} className="py-2 inline-loading">
       <SkeletonRows count={rows} height={28} variant="list" />
       <span className="sr-only">{message}</span>
     </div>

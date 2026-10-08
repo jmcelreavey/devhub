@@ -3,13 +3,14 @@
 import { useEffect, useRef } from "react";
 import { isTypingTarget } from "@/lib/konami-sequence";
 import { advanceBoo, type HollowRuntimePlan } from "@/lib/hollow-theme";
-import { HOLLOW_BLOCKED, quietApparitionSlot, quietHollowSlots, quietSpiderColumn } from "./hollow-placement";
+import { HOLLOW_BLOCKED, HOLLOW_MASKED_SURFACES, hollowContentMask, occupiedRects, quietApparitionSlot, quietHollowSlots, quietSpiderColumn } from "./hollow-placement";
+import { HollowRoom } from "./HollowRoom";
 import { cancelScheduledHollowStop, resumeHollowSound, scheduleStopHollowSound,
   startHollowSound, suspendHollowSound } from "./hollow-audio";
 
 const EDITOR = ".xterm, .cm-editor, .monaco-editor, .bn-root";
 const TEXT_TARGET = `input, textarea, select, [contenteditable="true"], ${EDITOR}`;
-const PROTECTED = `${EDITOR}, .terminal-dock, [role="dialog"], [role="menu"], .toast, .command-palette`;
+const PROTECTED = `${EDITOR}, .boot-screen, .page-loading, .inline-loading, .terminal-dock, [role="dialog"], [role="menu"], .toast, .command-palette`;
 
 function SpiderMark() {
   return (
@@ -43,14 +44,14 @@ export function HollowEffects({ plan, preview, faceShot }: {
     const protectedResize = new ResizeObserver(scroll);
     function mask() {
       if (!root || document.hidden) return;
-      const elements = new Set(document.querySelectorAll(PROTECTED));
+      const elements = new Set(document.querySelectorAll(`${PROTECTED}, ${HOLLOW_BLOCKED}, #main-content`));
       for (const el of observed) {
         if (!elements.has(el)) { protectedResize.unobserve(el); observed.delete(el); }
       }
       const holes = [...elements].flatMap((el) => {
         if (!observed.has(el)) { protectedResize.observe(el); observed.add(el); }
         const r = el.getBoundingClientRect();
-        return r.width && r.height
+        return el.matches(PROTECTED) && r.width && r.height
           ? [`<rect x="${r.left - 1}" y="${r.top - 1}" width="${r.width + 2}" height="${r.height + 2}" fill="black"/>`] : [];
       }).join("");
       // Protect editors inside transformed panes without changing their stacking.
@@ -58,12 +59,43 @@ export function HollowEffects({ plan, preview, faceShot }: {
         `<svg xmlns="http://www.w3.org/2000/svg" width="${innerWidth}" height="${innerHeight}"><rect width="100%" height="100%" fill="white"/>${holes}</svg>`,
       )}")` : "none";
       root.style.maskMode = "luminance";
+      const scenery = root.querySelector<HTMLElement>(".hollow-scenery");
+      const room = root.querySelector<HTMLElement>(".hollow-room");
+      const content = document.getElementById("main-content");
+      const main = content?.getBoundingClientRect();
+      if (scenery && room && main?.width && main.height) {
+        const moving = content?.getAnimations?.({ subtree: true }).some(animation =>
+          animation.playState === "running" && animation.effect instanceof KeyframeEffect
+          && animation.effect.target instanceof Element
+          && animation.effect.target.matches(".page-wrapper, .hub-page, .react-grid-item, .workspace-tab-panel"));
+        if (moving || document.querySelector(".react-draggable-dragging, .react-resizable-resizing")) {
+          scenery.style.visibility = "hidden";
+          return;
+        }
+        // Every exposure shares protection, including the rare-event dim that
+        // used to sit outside the room mask. Use glyph runs for headings and
+        // navigation: their block boxes can span an entire otherwise empty row.
+        const contentMask = `url("data:image/svg+xml,${encodeURIComponent(hollowContentMask(occupiedRects(HOLLOW_MASKED_SURFACES), innerWidth, innerHeight))}")`;
+        scenery.style.maskImage = contentMask;
+        scenery.style.webkitMaskImage = contentMask;
+        // Bake subtraction into SVG alpha: identical mask semantics in WebKit/Chromium.
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${innerWidth}" height="${innerHeight}"><defs><linearGradient id="x"><stop stop-color="black"/><stop offset=".04" stop-color="white"/><stop offset=".96" stop-color="white"/><stop offset="1" stop-color="black"/></linearGradient><linearGradient id="y" x2="0" y2="1"><stop stop-color="black"/><stop offset=".04" stop-color="white"/><stop offset=".96" stop-color="white"/><stop offset="1" stop-color="black"/></linearGradient><mask id="vertical"><rect x="${main.left}" y="${main.top}" width="${main.width}" height="${main.height}" fill="url(#y)"/></mask><mask id="space"><rect x="${main.left}" y="${main.top}" width="${main.width}" height="${main.height}" fill="url(#x)" mask="url(#vertical)"/></mask></defs><rect width="100%" height="100%" fill="white" mask="url(#space)"/></svg>`;
+        const url = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+        room.style.maskImage = url;
+        room.style.webkitMaskImage = url;
+        scenery.style.visibility = "visible";
+        room.style.setProperty("--room-left", `${main.left + 8}px`);
+        room.style.setProperty("--room-top", `${main.top + 8}px`);
+        room.style.setProperty("--room-right", `${innerWidth - main.right + 8}px`);
+      }
     }
     function queueMask() {
       window.clearTimeout(timer);
       timer = window.setTimeout(mask, 80);
     }
     function scroll() {
+      const scenery = root?.querySelector<HTMLElement>(".hollow-scenery");
+      if (scenery) scenery.style.visibility = "hidden";
       pairRefs.current.forEach((pair) => pair?.classList.remove("is-open"));
       spiderRef.current?.classList.remove("is-dropping", "is-hung");
       fractureRef.current?.classList.remove("is-visible");
@@ -74,8 +106,17 @@ export function HollowEffects({ plan, preview, faceShot }: {
       document.documentElement.toggleAttribute("data-hollow-paused", document.hidden);
       if (!document.hidden) queueMask();
     }
-    const observer = new MutationObserver(scroll);
-    observer.observe(document.body, { childList: true, subtree: true });
+    const observer = new MutationObserver(records => {
+      if (records.some(record => record.type === "childList"
+        || (record.target instanceof Element && record.target.matches(".react-grid-item")))) scroll();
+      // Clock/progress text can change without childList or size notifications.
+      // Refresh before paint, rather than blinking the scenery for every tick.
+      else if (records.some(record => record.type === "characterData"
+        && !record.target.parentElement?.closest(`${EDITOR}, .hollow-fx`))) mask();
+    });
+    observer.observe(document.body, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
+    const settledEvents = ["animationend", "animationcancel", "transitionend", "transitioncancel"];
+    for (const event of settledEvents) document.addEventListener(event, queueMask, true);
     document.addEventListener("scroll", scroll, { capture: true, passive: true });
     document.addEventListener("visibilitychange", visibility);
     window.addEventListener("resize", scroll);
@@ -85,6 +126,7 @@ export function HollowEffects({ plan, preview, faceShot }: {
       window.clearTimeout(timer);
       observer.disconnect();
       protectedResize.disconnect();
+      for (const event of settledEvents) document.removeEventListener(event, queueMask, true);
       document.removeEventListener("scroll", scroll, true);
       document.removeEventListener("visibilitychange", visibility);
       window.removeEventListener("resize", scroll);
@@ -111,6 +153,20 @@ export function HollowEffects({ plan, preview, faceShot }: {
           if (iris) iris.style.transform = `translate(${dx * reach}px, ${dy * reach}px)`;
         }
       });
+      if (plan.grainMotion && plan.cursorTrail) {
+        const room = rootRef.current?.querySelector<HTMLElement>(".hollow-room");
+        if (room) {
+          const left = parseFloat(room.style.getPropertyValue("--room-left"));
+          const top = parseFloat(room.style.getPropertyValue("--room-top"));
+          const right = innerWidth - parseFloat(room.style.getPropertyValue("--room-right"));
+          for (const [side, x] of [["left", left], ["right", right]] as const) {
+            const web = room.querySelector<HTMLElement>(`.hollow-cobweb-${side} i`);
+            if (!web) continue;
+            const near = Math.max(0, 1 - Math.hypot(mouse.x - x, mouse.y - top) / 260);
+            web.style.transform = `rotate(${near * (side === "left" ? 2.8 : -2.8)}deg) translateY(${near * 3}px)`;
+          }
+        }
+      }
       const trail = trailRef.current;
       if (trail) {
         trail.style.transform = `translate3d(${mouse.x}px, ${mouse.y}px, 0)`;
@@ -139,7 +195,7 @@ export function HollowEffects({ plan, preview, faceShot }: {
       document.removeEventListener("visibilitychange", hide);
       document.removeEventListener("pointerleave", hide);
     };
-  }, [plan.creatures, plan.cursorTrail]);
+  }, [plan.creatures, plan.cursorTrail, plan.grainMotion]);
 
   useEffect(() => {
     if (!plan.creatures) return;
@@ -323,19 +379,21 @@ export function HollowEffects({ plan, preview, faceShot }: {
       )) : null}
       {plan.creatures ? <div className="hollow-spider" ref={spiderRef}><SpiderMark /></div> : null}
       {plan.jumpScares ? <div className="hollow-face" /> : null}
-      {plan.grain ? (
-        <div className="hollow-atmosphere">
-          <div className="hollow-keylight" />
-          <div className="hollow-fog hollow-fog-far" />
-          <div className="hollow-fog hollow-fog-near" />
-          <div className="hollow-vignette" />
-          <div className="hollow-fog-edge" />
-          <div className="hollow-patina" />
-          <div className="hollow-grain" />
-          <div className="hollow-scan" />
-          <div className="hollow-roll" />
-        </div>
-      ) : null}
+      {plan.grain || plan.cursorTrail ? <div className="hollow-scenery">
+        <HollowRoom plan={plan} />
+        {plan.grain ? (
+          <div className="hollow-atmosphere">
+            <div className="hollow-keylight" />
+            {plan.rareEvents ? <div className="hollow-rare-dim" /> : null}
+            <div className="hollow-vignette" />
+            <div className="hollow-fog-edge" />
+            <div className="hollow-patina" />
+            <div className="hollow-grain" />
+            <div className="hollow-scan" />
+            <div className="hollow-roll" />
+          </div>
+        ) : null}
+      </div> : null}
       {plan.cracks ? <div className="hollow-fracture" ref={fractureRef}><span /></div> : null}
       {plan.cursorTrail ? <div className="hollow-cursor-trail" ref={trailRef} /> : null}
     </div>

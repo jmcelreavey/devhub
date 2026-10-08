@@ -35,7 +35,7 @@ import { TerminalDock } from "@/components/shell/TerminalDock";
 import { TerminalTranscriptModal } from "@/components/shell/TerminalTranscriptModal";
 import { ThemeSystemSync } from "@/components/shell/ThemeSystemSync";
 import { HollowGate } from "@/components/hollow/HollowGate";
-import { HollowNudge } from "@/components/hollow/HollowNudge";
+import { BootScreenProvider } from "@/components/today/TodayBootScreen";
 import { ToastProvider } from "@/components/shell/ToastProvider";
 import { UiPrefsBootstrap } from "@/components/shell/UiPrefsBootstrap";
 import { WorkspaceTabPanels,WorkspaceTabsProvider,WorkspaceTabStrip } from "@/components/shell/WorkspaceTabs";
@@ -172,7 +172,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <Suspense fallback={null}>
                 <HubTopBar />
               </Suspense>
-              <HollowNudge />
               <WorkspaceTabStrip />
 
               {/* Renders nothing outside the packaged desktop app. Placed above
@@ -182,7 +181,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <PackagedCheckoutBanner />
 
               <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto relative">
-                  <WorkspaceTabPanels>{children}</WorkspaceTabPanels>
+                  <BootScreenProvider>
+                    <WorkspaceTabPanels>{children}</WorkspaceTabPanels>
+                  </BootScreenProvider>
                   <PersistentAgents />
               </main>
             </div>

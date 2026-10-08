@@ -16,7 +16,7 @@ interface PageSkeletonProps {
  */
 export function PageSkeleton({ titleWidth = 140, rows = 4, rowHeight = 56, variant = "block" }: PageSkeletonProps) {
   return (
-    <div className="page-wrapper" aria-busy="true" aria-label="Loading page">
+    <div className="page-wrapper page-loading" aria-busy="true" aria-label="Loading page">
       <div className="page-header">
         <span className="skeleton" style={{ width: titleWidth, height: 22, borderRadius: 6 }} />
       </div>

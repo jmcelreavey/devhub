@@ -4,7 +4,10 @@ import {
   PLUGIN_DEFAULT_PRESET,
   PLUGIN_DEFAULT_MODE,
 } from "./plugin-branding.generated";
-import { getHollowAttributeBootstrapScript, HOLLOW_PRESET_ID } from "./hollow-theme";
+import {
+  getHollowAttributeBootstrapScript, getHollowSeasonBootstrapScript, HOLLOW_PRESET_ID,
+  HOLLOW_SEASON_KEY, overrideHollowSeason, parseHollowNow, parseHollowSeason, resolveHollowSeason,
+} from "./hollow-theme";
 
 export type { ThemeMode } from "./theme-presets-types";
 
@@ -202,7 +205,30 @@ export function getThemeBootstrapInlineScript(): string {
   const presetKey = JSON.stringify(THEME_PRESET_KEY);
   const defaultPreset = JSON.stringify(DEFAULT_THEME_PRESET_ID);
   const defaultMode = JSON.stringify(DEFAULT_THEME_MODE_SETTING);
-  return `(function(){try{var m=${modeKey};var p=${presetKey};var setting=localStorage.getItem(m)||${defaultMode};if(setting!=="dark"&&setting!=="light"&&setting!=="system"){setting=${defaultMode};}var resolved=setting;if(setting==="system"){resolved=(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";}var preset=localStorage.getItem(p)||${defaultPreset};var root=document.documentElement;root.setAttribute("data-theme",resolved);root.setAttribute("data-theme-mode",setting);root.setAttribute("data-theme-preset",preset);}catch(e){document.documentElement.setAttribute("data-theme","dark");document.documentElement.setAttribute("data-theme-mode",${defaultMode});document.documentElement.setAttribute("data-theme-preset",${defaultPreset});}})();${getHollowAttributeBootstrapScript()}`;
+  return `(function(){try{var m=${modeKey};var p=${presetKey};var setting=localStorage.getItem(m)||${defaultMode};if(setting!=="dark"&&setting!=="light"&&setting!=="system"){setting=${defaultMode};}var preset=localStorage.getItem(p)||${defaultPreset};if(!${JSON.stringify([...VALID_PRESET_IDS])}.includes(preset))preset=${defaultPreset};${getHollowSeasonBootstrapScript([...VALID_PRESET_IDS])}var resolved=setting;if(setting==="system"){resolved=(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";}var root=document.documentElement;root.setAttribute("data-theme",resolved);root.setAttribute("data-theme-mode",setting);root.setAttribute("data-theme-preset",preset);}catch(e){document.documentElement.setAttribute("data-theme","dark");document.documentElement.setAttribute("data-theme-mode",${defaultMode});document.documentElement.setAttribute("data-theme-preset",${defaultPreset});}})();${getHollowAttributeBootstrapScript()}`;
+}
+
+/** Reconcile a tab left open across midnight, resumed, or changed in another tab. */
+export function syncSeasonalTheme(): void {
+  try {
+    const current = {
+      preset: sanitizePreset(localStorage.getItem(THEME_PRESET_KEY)),
+      mode: sanitizeModeSetting(localStorage.getItem(THEME_MODE_KEY)),
+    };
+    const result = resolveHollowSeason(
+      parseHollowNow(window.location.search, new Date()), current,
+      parseHollowSeason(localStorage.getItem(HOLLOW_SEASON_KEY), [...VALID_PRESET_IDS]),
+    );
+    if (result.state) localStorage.setItem(HOLLOW_SEASON_KEY, JSON.stringify(result.state));
+    localStorage.setItem(THEME_PRESET_KEY, result.selection.preset);
+    localStorage.setItem(THEME_MODE_KEY, result.selection.mode);
+    const active = getThemeSelectionFromDom();
+    if (active.preset !== result.selection.preset || active.mode !== result.selection.mode) {
+      applyThemeSelection(result.selection, { persist: false });
+    }
+  } catch {
+    // Storage can be unavailable in a private WebView; keep the applied theme.
+  }
 }
 
 export interface ThemeSelection {
@@ -266,12 +292,18 @@ export function applyThemeSelection(
   const persist = options?.persist !== false;
   const notify = options?.notify !== false;
   const root = document.documentElement;
+  const presetChanged = root.getAttribute("data-theme-preset") !== preset;
   flashThemeTransition(root);
   root.setAttribute("data-theme", resolvedMode);
   root.setAttribute("data-theme-mode", mode);
   root.setAttribute("data-theme-preset", preset);
   if (persist) {
     try {
+      const savedSeason = parseHollowSeason(localStorage.getItem(HOLLOW_SEASON_KEY), [...VALID_PRESET_IDS]);
+      const seasonal = presetChanged
+        ? overrideHollowSeason(parseHollowNow(window.location.search, new Date()), savedSeason)
+        : savedSeason;
+      if (seasonal) localStorage.setItem(HOLLOW_SEASON_KEY, JSON.stringify(seasonal));
       localStorage.setItem(THEME_MODE_KEY, mode);
       localStorage.setItem(THEME_PRESET_KEY, preset);
     } catch {
