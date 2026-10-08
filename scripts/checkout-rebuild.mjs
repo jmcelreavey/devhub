@@ -242,7 +242,13 @@ export async function runRebuild(options, deps) {
   const log = (line) => fsx.appendFileSync(logFile, `${line}\n`);
   const run = (cmd, args, opts = {}) => runRaw(cmd, args, { ...opts, env: { ...baseEnv, ...(opts.env ?? {}) }, log: opts.log ?? log });
   const save = () => fsx.writeFileSync(statusFile, `${JSON.stringify(status, null, 2)}\n`);
-  fsx.writeFileSync(logFile, `[${now()}] rebuild started (${mode}, ${status.launcher}) in ${checkout}\n`);
+  if (options.afterPull) {
+    // The parent script already logged its pull output and the hand-over line to this
+    // file; truncating it here would lose the evidence that the hand-over happened.
+    log(`[${now()}] rebuild continued by the checkout script (${mode}, ${status.launcher}) in ${checkout}`);
+  } else {
+    fsx.writeFileSync(logFile, `[${now()}] rebuild started (${mode}, ${status.launcher}) in ${checkout}\n`);
+  }
   save();
 
   const phase = (id) => status.phases.find((p) => p.id === id);

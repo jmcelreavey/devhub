@@ -293,6 +293,10 @@ The bits that didn't get their own section but earn their keep.
 
 ## Quick start
 
+Just want the app? Install the Mac or Windows build and skip Git, forks and GitHub entirely: [Getting started without Git](docs/getting-started/guided-setup.md) · [FAQ](docs/getting-started/faq.md).
+
+Running from source instead:
+
 Requires Node 22 (npm 10) and Git on macOS, Linux, or WSL2. The full bootstrap and plugins that declare it also require [Aikido Safe-Chain](docs/getting-started/installation.md#safe-chain). A core-only `npm install` doesn't require it.
 
 ```bash

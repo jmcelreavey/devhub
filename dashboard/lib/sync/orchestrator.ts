@@ -13,6 +13,7 @@ import { githubCliErrorInfo } from "@/lib/gh-exec";
 import { detectGitHookFailure, type GitHookPhase } from "@/lib/git/hook-failure";
 import { withPersistedLog } from "@/lib/git/hook-failure-persist";
 import { runGitRepo } from "@/lib/git/repo-local";
+import { redactSecrets } from "@/lib/terminal-search";
 import { syncSkills, verifySync } from "@/lib/sync/skills";
 import { syncAgents } from "@/lib/sync/agents";
 import { buildCoworkPlugin, verifyCoworkPlugin } from "@/lib/sync/cowork";
@@ -77,7 +78,8 @@ const CONTENT_PUSH_ENV = { DEVHUB_PREPUSH: "content" };
 const GIT_FAIL_TAIL_LINES = 40;
 
 function emitOutputTail(emit: (line: string) => void, text: string): void {
-  const lines = text
+  // Push output can echo the remote URL, which may carry a token.
+  const lines = redactSecrets(text)
     .replace(/\r\n/g, "\n")
     .trim()
     .split("\n")
@@ -97,7 +99,7 @@ function emitGitFailure(
 ): void {
   emit(prefix);
   const mapped = githubCliErrorInfo(new Error(result.stderr || result.stdout || prefix), prefix);
-  if (mapped.message !== prefix) emit(mapped.message);
+  if (mapped.message !== prefix) emit(redactSecrets(mapped.message));
   // Pre-push hooks (verify, leak scan) often write the real reason to stdout while
   // git only puts "failed to push some refs" on stderr — surface both.
   const out = result.stdout.trim();
@@ -139,6 +141,9 @@ function pushOriginBranch(
     emitGitFailure(emit, "WARNING: Push failed — check remote connection and auth.", p, repoRoot);
     return false;
   }
+  // Hooks (leak scan, "skipping verify") and the push summary go to stderr; without
+  // this a successful sync's run log shows no evidence of what the hooks did.
+  emitOutputTail(emit, [p.stdout, p.stderr].map((s) => s.trim()).filter(Boolean).join("\n"));
   return true;
 }
 

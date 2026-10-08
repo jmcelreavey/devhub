@@ -158,33 +158,46 @@ impl WslBackend {
     /// (`next start` there) or `<repo>` (`npm start` at the root); a directory
     /// that is not a DevHub checkout is no answer.
     pub fn running_service_repo(&self) -> Option<String> {
-        let dir = self
-            .exec(
+        match self.service_unit() {
+            ServiceUnit::Checkout(repo) => Some(repo),
+            ServiceUnit::NotInstalled | ServiceUnit::Unknown => None,
+        }
+    }
+
+    /// What `devhub.service` is, whether or not it is running right now.
+    ///
+    /// `systemctl show` reads the unit file, so an installed service that is
+    /// stopped (or that lost the ports to something else) still names its
+    /// checkout. A failure to ask is `Unknown`, never `NotInstalled`.
+    pub fn service_unit(&self) -> ServiceUnit {
+        let Ok(show) = self.exec(
+            &[
+                "/bin/systemctl",
+                "--user",
+                "show",
+                "devhub.service",
+                "-p",
+                "LoadState",
+                "-p",
+                "WorkingDirectory",
+            ],
+            QUICK_TIMEOUT,
+        ) else {
+            return ServiceUnit::Unknown;
+        };
+        parse_service_unit(&show, |repo| {
+            self.exec(
                 &[
-                    "/bin/systemctl",
-                    "--user",
-                    "show",
-                    "devhub.service",
-                    "-p",
-                    "WorkingDirectory",
-                    "--value",
+                    "/bin/sh",
+                    "-c",
+                    r#"[ -f "$1/package.json" ] && [ -d "$1/dashboard" ]"#,
+                    "devhub-checkout",
+                    repo,
                 ],
                 QUICK_TIMEOUT,
             )
-            .ok()?;
-        let repo = service_repo_root(&dir)?;
-        self.exec(
-            &[
-                "/bin/sh",
-                "-c",
-                r#"[ -f "$1/package.json" ] && [ -d "$1/dashboard" ]"#,
-                "devhub-checkout",
-                &repo,
-            ],
-            QUICK_TIMEOUT,
-        )
-        .ok()
-        .map(|_| repo)
+            .is_ok()
+        })
     }
 
     /// The DevHub git checkout to run against, if there is one.
@@ -494,6 +507,109 @@ pub fn content_sharing(
         }
         (Some(_), Some(_)) => (false, "the running service uses a different checkout"),
     }
+}
+
+/// `devhub.service` as seen from the shell.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ServiceUnit {
+    /// systemd says the unit does not exist: this machine has no other DevHub.
+    NotInstalled,
+    /// Installed, and running against this checkout (started or not).
+    Checkout(String),
+    /// Something is installed or the query failed, but we cannot name a checkout.
+    Unknown,
+}
+
+/// Read `systemctl --user show devhub.service -p LoadState -p WorkingDirectory`.
+/// `is_checkout` confirms the working directory really is a DevHub checkout.
+pub fn parse_service_unit(show: &str, is_checkout: impl Fn(&str) -> bool) -> ServiceUnit {
+    let value = |key: &str| {
+        show.lines()
+            .find_map(|line| line.strip_prefix(key)?.strip_prefix('='))
+            .map(str::trim)
+    };
+    match value("LoadState") {
+        Some("not-found") => ServiceUnit::NotInstalled,
+        Some("loaded") => value("WorkingDirectory")
+            .and_then(service_repo_root)
+            .filter(|repo| is_checkout(repo))
+            .map_or(ServiceUnit::Unknown, ServiceUnit::Checkout),
+        _ => ServiceUnit::Unknown,
+    }
+}
+
+/// Whether this app instance shares the live DevHub's run history and run logs
+/// (`~/.local/state/devhub`), and if not, the profile id that keeps them apart.
+///
+/// On Windows every profile's WSL app data is the same `~/.local/share/devhub`,
+/// so the WSL side cannot tell a scratch profile from the main one; only the
+/// shell knows (`%APPDATA%\DevHub` and what it is linked to).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StateScope {
+    /// `Some` only when the state is NOT shared; passed as `DEVHUB_STATE_PROFILE`.
+    pub profile: Option<String>,
+    pub reason: &'static str,
+}
+
+/// - a service with a known checkout: shared only when it is our content
+///   (the same rule `secondary` uses; an unlinked profile is never shared)
+/// - no service installed: shared only on the default Windows app data, so a
+///   user's only DevHub keeps its history and a scratch profile does not
+/// - undetermined: shared. Hiding the user's history is worse than a scratch
+///   profile briefly writing to it, and it matches `content_sharing`.
+pub fn state_scope(
+    own_content_root: Option<&str>,
+    unit: &ServiceUnit,
+    windows_app_data: &str,
+    default_windows_app_data: &str,
+) -> StateScope {
+    let (shared, reason) = match unit {
+        ServiceUnit::Checkout(repo) => content_sharing(own_content_root, Some(repo)),
+        ServiceUnit::NotInstalled => {
+            if same_windows_path(windows_app_data, default_windows_app_data) {
+                (true, "no devhub.service and the default app data")
+            } else {
+                (
+                    false,
+                    "no devhub.service, and the app data is not the default",
+                )
+            }
+        }
+        ServiceUnit::Unknown => (true, "could not tell what devhub.service uses"),
+    };
+    StateScope {
+        profile: (!shared).then(|| state_profile_id(windows_app_data, own_content_root)),
+        reason,
+    }
+}
+
+fn same_windows_path(a: &str, b: &str) -> bool {
+    normalise_windows_path(a) == normalise_windows_path(b)
+}
+
+fn normalise_windows_path(path: &str) -> String {
+    path.trim()
+        .replace('\\', "/")
+        .trim_end_matches('/')
+        .to_lowercase()
+}
+
+/// Stable per (Windows app data, linked content): the first 16 hex chars of the
+/// sha256 of `<app data>\n<linked checkout or "unlinked">`.
+pub fn state_profile_id(windows_app_data: &str, own_content_root: Option<&str>) -> String {
+    use sha2::{Digest, Sha256};
+    let linked = own_content_root
+        .map(|root| root.trim().trim_end_matches('/'))
+        .unwrap_or("unlinked");
+    let digest = Sha256::digest(format!(
+        "{}\n{linked}",
+        normalise_windows_path(windows_app_data)
+    ));
+    digest
+        .iter()
+        .take(8)
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 /// A payload assembled from the user's checkout (`config/local-payload.json`).
@@ -1848,5 +1964,192 @@ mod tests {
         assert!(prune_keeps_payload("local-abc123def456", "pay123"));
         assert!(!prune_keeps_payload("oldpay", "pay123"));
         assert!(!prune_keeps_payload("pay123.partial", "pay123"));
+    }
+
+    const WIN_DEFAULT: &str = r"C:\Users\me\AppData\Roaming\DevHub";
+    const WIN_SCRATCH: &str = r"C:\Users\me\AppData\Roaming\DevHubScratch";
+
+    fn scope(own: Option<&str>, unit: ServiceUnit, app_data: &str) -> StateScope {
+        state_scope(own, &unit, app_data, WIN_DEFAULT)
+    }
+
+    fn service(repo: &str) -> ServiceUnit {
+        ServiceUnit::Checkout(repo.into())
+    }
+
+    #[test]
+    fn a_windows_profile_linked_elsewhere_gets_its_own_state_even_on_the_default_app_data() {
+        // The retest: the scratch profile was a fresh %APPDATA%\DevHub on the same
+        // default WSL paths, linked to a different checkout than devhub.service.
+        let result = scope(
+            Some("/home/me/scratch/devhub"),
+            service("/home/me/dev/devhub-private"),
+            WIN_DEFAULT,
+        );
+        let id = result
+            .profile
+            .expect("a different checkout must not share state");
+        assert_eq!(id.len(), 16);
+        assert!(
+            id.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f')),
+            "{id}"
+        );
+        assert!(result.reason.contains("different checkout"));
+        // Stable across launches.
+        let again = scope(
+            Some("/home/me/scratch/devhub/"),
+            service("/home/me/dev/devhub-private"),
+            WIN_DEFAULT,
+        );
+        assert_eq!(again.profile.as_deref(), Some(id.as_str()));
+    }
+
+    #[test]
+    fn the_same_checkout_shares_the_live_state() {
+        let result = scope(
+            Some("/home/me/dev/devhub-private/"),
+            service("/home/me/dev/devhub-private"),
+            WIN_DEFAULT,
+        );
+        assert_eq!(result.profile, None);
+        assert!(result.reason.contains("same checkout"));
+    }
+
+    #[test]
+    fn an_unlinked_profile_never_shares_with_an_installed_service() {
+        let result = scope(None, service("/home/me/dev/devhub-private"), WIN_DEFAULT);
+        assert!(result.profile.is_some());
+    }
+
+    #[test]
+    fn without_a_service_only_the_default_app_data_is_the_live_profile() {
+        assert_eq!(
+            scope(None, ServiceUnit::NotInstalled, WIN_DEFAULT).profile,
+            None
+        );
+        assert_eq!(
+            scope(
+                Some("/home/me/dev/devhub"),
+                ServiceUnit::NotInstalled,
+                WIN_DEFAULT
+            )
+            .profile,
+            None
+        );
+        // Windows paths: case and separators do not make a different profile.
+        assert_eq!(
+            scope(
+                None,
+                ServiceUnit::NotInstalled,
+                r"c:/users/ME/appdata/roaming/devhub/"
+            )
+            .profile,
+            None
+        );
+        assert!(scope(None, ServiceUnit::NotInstalled, WIN_SCRATCH)
+            .profile
+            .is_some());
+    }
+
+    #[test]
+    fn an_undetermined_service_is_treated_as_shared() {
+        for own in [Some("/home/me/dev/devhub"), None] {
+            for app_data in [WIN_DEFAULT, WIN_SCRATCH] {
+                let result = scope(own, ServiceUnit::Unknown, app_data);
+                assert_eq!(result.profile, None, "{own:?} {app_data}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_profile_id_depends_on_the_app_data_and_what_it_is_linked_to() {
+        let a = state_profile_id(WIN_SCRATCH, Some("/home/me/a"));
+        assert_ne!(a, state_profile_id(WIN_SCRATCH, Some("/home/me/b")));
+        assert_ne!(a, state_profile_id(WIN_SCRATCH, None));
+        assert_ne!(a, state_profile_id(WIN_DEFAULT, Some("/home/me/a")));
+        assert_eq!(
+            a,
+            state_profile_id(&WIN_SCRATCH.to_uppercase(), Some("/home/me/a/"))
+        );
+        // Pinned, so a refactor cannot silently orphan existing scratch state.
+        assert_eq!(
+            state_profile_id(r"C:\Users\me\AppData\Roaming\DevHub", None),
+            state_profile_id("c:/users/me/appdata/roaming/devhub", None)
+        );
+    }
+
+    #[test]
+    fn the_wsl_sidecar_env_carries_the_state_profile_only_when_not_shared() {
+        use crate::paths::{sidecar_env_for, SidecarDirs};
+        let env_for = |scope: &StateScope| {
+            sidecar_env_for(
+                &SidecarDirs {
+                    app_data: "/home/me/.local/share/devhub".into(),
+                    resource_root: "/rt/resources".into(),
+                    server_dir: "/rt/server".into(),
+                    checkout: Some("/home/me/scratch/devhub".into()),
+                    state_profile: scope.profile.clone(),
+                },
+                1337,
+                1339,
+                "t",
+            )
+        };
+        let shared = scope(
+            Some("/home/me/scratch/devhub"),
+            service("/home/me/scratch/devhub"),
+            WIN_DEFAULT,
+        );
+        assert!(!env_for(&shared).contains_key("DEVHUB_STATE_PROFILE"));
+
+        let separate = scope(
+            Some("/home/me/scratch/devhub"),
+            service("/home/me/dev/devhub-private"),
+            WIN_DEFAULT,
+        );
+        let env = env_for(&separate);
+        assert_eq!(
+            Some(&env["DEVHUB_STATE_PROFILE"]),
+            separate.profile.as_ref()
+        );
+        // The profile is carried across the boundary like every other variable.
+        assert!(wslenv(env.keys().map(String::as_str)).contains("DEVHUB_STATE_PROFILE"));
+    }
+
+    #[test]
+    fn reads_the_service_unit_whether_or_not_it_is_running() {
+        let is_checkout = |repo: &str| repo == "/home/me/dev/devhub-private";
+        assert_eq!(
+            parse_service_unit("LoadState=not-found\nWorkingDirectory=\n", is_checkout),
+            ServiceUnit::NotInstalled
+        );
+        // Installed but stopped (ActiveState is not asked for, and does not matter).
+        assert_eq!(
+            parse_service_unit(
+                "LoadState=loaded\nWorkingDirectory=/home/me/dev/devhub-private\n",
+                is_checkout
+            ),
+            service("/home/me/dev/devhub-private")
+        );
+        assert_eq!(
+            parse_service_unit(
+                "LoadState=loaded\nWorkingDirectory=/home/me/dev/devhub-private/dashboard\n",
+                is_checkout
+            ),
+            service("/home/me/dev/devhub-private")
+        );
+        // Installed, but not pointing at a DevHub checkout, or unreadable.
+        assert_eq!(
+            parse_service_unit(
+                "LoadState=loaded\nWorkingDirectory=/srv/other\n",
+                is_checkout
+            ),
+            ServiceUnit::Unknown
+        );
+        assert_eq!(
+            parse_service_unit("LoadState=masked\n", is_checkout),
+            ServiceUnit::Unknown
+        );
+        assert_eq!(parse_service_unit("", is_checkout), ServiceUnit::Unknown);
     }
 }

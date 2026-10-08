@@ -13,6 +13,8 @@ export interface GitHookFailurePayload {
   summary?: string;
   /** Relative path under the repo where full output was written (if persisted). */
   logPath?: string;
+  /** The hook ran on the remote (pre-receive/update), so nothing local can fix it. */
+  remote?: boolean;
 }
 
 export const HOOK_FAILURE_LOG_REL = ".git/devhub-hook-failure.log";
@@ -118,6 +120,21 @@ export function formatHookOutput(raw: string, maxLines = 120): string {
   return body.join("\n");
 }
 
+/**
+ * A push the remote refused. Git prints `! [remote rejected] a -> a (pre-receive hook declined)`
+ * after the local pre-push already passed, so local `[pre-push]` lines must not decide the
+ * attribution. `hook` is null when the rejection was not a hook (e.g. a checked-out branch).
+ */
+function detectRemoteRejection(text: string): { hook: string | null } | null {
+  const rejected = /\[remote rejected\][^\n]*/i.exec(text);
+  const remoteHookLine = /^remote:[^\n]*\bpre-receive\b/im.test(text);
+  if (!rejected && !remoteHookLine) return null;
+  const declined = rejected && /\(([^()\n]*?)\s*hook declined\)/i.exec(rejected[0]);
+  if (declined) return { hook: declined[1].toLowerCase() === "update" ? "update" : "pre-receive" };
+  if (remoteHookLine) return { hook: "pre-receive" };
+  return { hook: null };
+}
+
 export function detectGitHookFailure(
   stdout: string,
   stderr: string,
@@ -125,6 +142,18 @@ export function detectGitHookFailure(
 ): GitHookFailurePayload | null {
   const combined = combineGitStreams(stdout, stderr);
   if (!combined.trim()) return null;
+  const remote = detectRemoteRejection(combined);
+  if (remote) {
+    if (!remote.hook) return null;
+    return {
+      code: "hook_failed",
+      hook: remote.hook,
+      phase,
+      output: formatHookOutput(combined),
+      summary: summarizeHookFailure(combined, remote.hook),
+      remote: true,
+    };
+  }
   if (!looksLikeHookFailure(combined, phase)) return null;
   const hook =
     detectHookName(combined) ??
@@ -156,6 +185,7 @@ export function parseHookFailurePayload(body: string): GitHookFailurePayload | n
       output: json.output,
       summary: typeof json.summary === "string" ? json.summary : undefined,
       logPath: typeof json.logPath === "string" ? json.logPath : undefined,
+      ...(json.remote === true ? { remote: true } : {}),
     };
   } catch {
     return null;

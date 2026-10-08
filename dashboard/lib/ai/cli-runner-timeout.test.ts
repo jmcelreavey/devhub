@@ -6,6 +6,10 @@ import {
   looksComplete,
 } from "./cli-runner";
 
+/**
+ * Idle/ceiling timer behaviour lives in cli-runner-idle.test.ts (fake timers);
+ * these use real processes only where no timer budget is involved.
+ */
 /** A stand-in CLI: `sh -c <script>` behaves however the test needs. */
 const sh = (script: string) => ["-c", script];
 const CWD = "/tmp";
@@ -44,29 +48,6 @@ describe("describeCliTimeout", () => {
 describe("execCapture", () => {
   it("returns output from a CLI that exits cleanly", async () => {
     await expect(execCapture("/bin/sh", sh("printf done"), 5_000, CWD)).resolves.toBe("done");
-  });
-
-  it("keeps waiting while output is still arriving", async () => {
-    // Three chunks 150ms apart with a 400ms idle budget: total run exceeds the
-    // idle window, but no single gap does, so it must not be killed.
-    const script = "printf a; sleep 0.15; printf b; sleep 0.15; printf c";
-    await expect(execCapture("/bin/sh", sh(script), 5_000, CWD, undefined, 400)).resolves.toBe("abc");
-  });
-
-  it("gives up once the CLI goes quiet, and says how far it got", async () => {
-    const script = "printf partial; sleep 30";
-    await expect(
-      execCapture("/bin/sh", sh(script), 10_000, CWD, undefined, 300),
-    ).rejects.toThrow(/went quiet .* 7 bytes/);
-  });
-
-  it("keeps a finished document even when the CLI then hangs", async () => {
-    // The regression that lost work: output was complete, the process lingered,
-    // and the old total-time kill discarded the whole buffer.
-    const script = "printf '<html><body>ok</body></html>'; sleep 30";
-    await expect(
-      execCapture("/bin/sh", sh(script), 10_000, CWD, undefined, 300),
-    ).resolves.toContain("</html>");
   });
 
   it("surfaces a missing binary clearly", async () => {
@@ -118,17 +99,5 @@ describe("extractCursorStreamText", () => {
 
   it("passes plain text through untouched", () => {
     expect(extractCursorStreamText("just text, no json")).toBe("just text, no json");
-  });
-});
-
-describe("first-byte grace", () => {
-  it("does not kill a CLI that is silent while thinking", async () => {
-    // Silent for 400ms with a 150ms idle budget, then answers. The idle timer
-    // must not start until output actually begins, or a buffering CLI like
-    // cursor-agent's plain --print mode is killed while still working.
-    const script = "sleep 0.4; printf late";
-    await expect(
-      execCapture("/bin/sh", ["-c", script], 5_000, "/tmp", undefined, 150),
-    ).resolves.toBe("late");
   });
 });

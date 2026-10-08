@@ -143,15 +143,17 @@ export function GitHookFailureDialog({
             <Copy size={12} aria-hidden />
             {copied ? "Copied" : "Copy log"}
           </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={launching}
-            onClick={() => void resolveWithAi()}
-          >
-            <Bot size={13} aria-hidden />
-            {launching ? "Opening…" : "Resolve with AI"}
-          </button>
+          {failure.remote ? null : (
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={launching}
+              onClick={() => void resolveWithAi()}
+            >
+              <Bot size={13} aria-hidden />
+              {launching ? "Opening…" : "Resolve with AI"}
+            </button>
+          )}
         </footer>
       </div>
     </dialog>

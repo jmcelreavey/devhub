@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { runHistoryFile } from "@/lib/run-history-path";
+import { runLogsDir } from "@/lib/profile-state";
 import { getRepoRoot, getHome, getCheckoutRoot } from "@/lib/content/dirs";
 import { syncSkills, verifySync } from "@/lib/sync/skills";
 import { syncAgents } from "@/lib/sync/agents";
@@ -523,10 +524,11 @@ export function writeAuditLog(run: Pick<RunState, "runId" | "script" | "startedA
   }
 }
 
-function persistRunLogToDisk(run: RunState): void {
+export function persistRunLogToDisk(
+  run: Pick<RunState, "runId" | "script" | "startedAt" | "finishedAt" | "exitCode" | "lines">,
+): void {
   try {
-    const stateDir = path.join(/*turbopackIgnore: true*/ getHome(), ".local/state/devhub");
-    const logsDir = path.join(stateDir, "run-logs");
+    const logsDir = runLogsDir(process.env, getHome());
     fs.mkdirSync(logsDir, { recursive: true });
     let lines = run.lines;
     if (lines.length > MAX_PERSISTED_LINES) {
@@ -547,7 +549,7 @@ function persistRunLogToDisk(run: RunState): void {
   }
 }
 
-/** Live buffer or persisted JSON under ~/.local/state/devhub/run-logs/<runId>.json */
+/** Live buffer or persisted JSON under ~/.local/state/devhub/run-logs/<runId>.json (per profile when scoped). */
 export function getRunLogPayload(runId: string): RunLogPayload | null {
   const live = runs.get(runId);
   if (live) {
@@ -560,7 +562,7 @@ export function getRunLogPayload(runId: string): RunLogPayload | null {
       lines: live.lines,
     };
   }
-  const filePath = path.join(/*turbopackIgnore: true*/ getHome(), ".local/state/devhub/run-logs", `${runId}.json`);
+  const filePath = path.join(/*turbopackIgnore: true*/ runLogsDir(process.env, getHome()), `${runId}.json`);
   if (!fs.existsSync(/*turbopackIgnore: true*/ filePath)) return null;
   try {
     const raw = JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ filePath, "utf-8")) as unknown;

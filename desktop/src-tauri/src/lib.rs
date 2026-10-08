@@ -1715,6 +1715,37 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
         },
     );
 
+    // Does this app share the live DevHub's run history and run logs? Decided
+    // here, not by the dashboard: in WSL every Windows profile has the same app
+    // data, so only the shell can tell a scratch profile from the main one.
+    let state_scope = {
+        let home = app
+            .path()
+            .home_dir()
+            .map_err(|e| format!("No home directory: {e}"))?;
+        let unit = backend.service_unit();
+        let scope = wsl::state_scope(
+            checkout.as_deref().or(content_link.as_deref()),
+            &unit,
+            &state.paths.app_data.to_string_lossy(),
+            &default_app_data(&home).to_string_lossy(),
+        );
+        log.write_line(
+            "shell:wsl",
+            &match &scope.profile {
+                Some(id) => format!(
+                    "[wsl] run history and logs: separate profile {id} ({}; service: {unit:?})",
+                    scope.reason
+                ),
+                None => format!(
+                    "[wsl] run history and logs: shared with the live DevHub ({}; service: {unit:?})",
+                    scope.reason
+                ),
+            },
+        );
+        scope
+    };
+
     // A checkout's already-unpacked payload, for iterating on the shell without
     // rebuilding and re-extracting the whole bundle.
     let payload_started = Instant::now();
@@ -1866,7 +1897,10 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
                         &backend,
                         dir,
                         checkout.as_deref(),
-                        secondary,
+                        sidecar::Coexistence {
+                            secondary,
+                            state_profile: state_scope.profile.as_deref(),
+                        },
                         sidecar::BasePayload {
                             dir: &base_payload_dir,
                             id: &base_payload_id,

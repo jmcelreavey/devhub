@@ -82,6 +82,8 @@ const REDACTIONS: { re: RegExp; replace: string }[] = [
   { re: /\bey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, replace: "[redacted-jwt]" },
   // Credentials embedded in a URL: scheme://user:pass@host
   { re: /\b([a-z][a-z0-9+.-]*:\/\/[^\s:@/]+):([^\s@/]+)@/gi, replace: "$1:[redacted]@" },
+  // ...or a bare token as the whole userinfo: https://<token>@github.com (git push prints these).
+  { re: /\b(https?:\/\/)[^\s:@/]+@/gi, replace: "$1[redacted]@" },
   // PEM private key body.
   { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, replace: "[redacted-private-key]" },
   // CLI flags that take a secret inline.

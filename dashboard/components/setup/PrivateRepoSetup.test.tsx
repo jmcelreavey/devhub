@@ -35,7 +35,7 @@ describe("private repository onboarding", () => {
   it("is optional and says DevHub works without it, even before signing in", async () => {
     renderRepo(<PrivateRepoSetup connected={false} onLinked={vi.fn()} />);
     expect(screen.getByText("Optional")).toBeTruthy();
-    expect(screen.getByText(/works fully on this PC without it/)).toBeTruthy();
+    expect(screen.getByText(/works fully on this computer without it/)).toBeTruthy();
     expect(screen.getByText(/Sign in with GitHub above to connect a private repo/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Create my private DevHub repo" })).toBeNull();
     expect(fetch).not.toHaveBeenCalledWith("/api/setup/private-repo");

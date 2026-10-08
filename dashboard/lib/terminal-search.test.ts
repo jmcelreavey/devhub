@@ -129,3 +129,13 @@ describe("getSessionTranscript / readSessionLogTail", () => {
     expect(view!.lines[2]).toBe("bye");
   });
 });
+
+describe("redactSecrets URL userinfo", () => {
+  it("masks a bare token used as the https userinfo", () => {
+    expect(redactSecrets("To https://opaquetoken123@github.com/x/y.git")).toBe("To https://[redacted]@github.com/x/y.git");
+  });
+  it("leaves ssh remotes and plain https URLs alone", () => {
+    expect(redactSecrets("To git@github.com:x/y.git")).toBe("To git@github.com:x/y.git");
+    expect(redactSecrets("curl https://api.example.com/a@b")).toBe("curl https://api.example.com/a@b");
+  });
+});

@@ -105,6 +105,7 @@ pub fn sidecar_env(
             resource_root: path_string(&paths.resource_root),
             server_dir: path_string(&paths.server_dir),
             checkout: None,
+            state_profile: None,
         },
         port,
         terminal_port,
@@ -127,6 +128,12 @@ pub struct SidecarDirs {
     /// become the live data, exactly as `npm run dev` in that checkout would
     /// see them. `None` is a fresh, self-contained install.
     pub checkout: Option<String>,
+    /// Keeps run history, run logs and the dashboard record apart from the live
+    /// DevHub's. Only the Windows shell sets it, and only for a profile that does
+    /// not share the live service's state (see `wsl::state_scope`): inside WSL
+    /// every Windows profile has the same app data, so the dashboard cannot
+    /// derive this itself.
+    pub state_profile: Option<String>,
 }
 
 pub fn sidecar_env_for(
@@ -175,6 +182,10 @@ pub fn sidecar_env_for(
         set("UPSTARTS_DIR", under_repo("upstarts"));
         set("DOCS_DIR", under_repo("docs"));
         set("DEVHUB_IDENTITY_FILE", under_repo("persona/identity.txt"));
+    }
+
+    if let Some(profile) = dirs.state_profile.as_deref() {
+        set("DEVHUB_STATE_PROFILE", profile.to_string());
     }
 
     set("PORT", port.to_string());
@@ -276,6 +287,7 @@ mod tests {
             resource_root: "/rt/resources".into(),
             server_dir: "/rt/server".into(),
             checkout: checkout.map(str::to_string),
+            state_profile: None,
         }
     }
 
@@ -303,6 +315,24 @@ mod tests {
             env["DEVHUB_ENV_FILE"],
             "/home/me/.local/share/devhub/config/.env.local"
         );
+    }
+
+    #[test]
+    fn the_state_profile_reaches_the_sidecar_env_only_when_set() {
+        let unscoped = sidecar_env_for(&dirs(None), 1337, 1339, "t");
+        assert!(!unscoped.contains_key("DEVHUB_STATE_PROFILE"));
+
+        let mut scoped = dirs(Some("/home/me/dev/devhub"));
+        scoped.state_profile = Some("0123456789abcdef".into());
+        let env = sidecar_env_for(&scoped, 1337, 1339, "t");
+        assert_eq!(env["DEVHUB_STATE_PROFILE"], "0123456789abcdef");
+    }
+
+    #[test]
+    fn the_native_env_never_sets_a_state_profile() {
+        let tmp = tempfile::tempdir().unwrap();
+        let env = sidecar_env(&fixture(tmp.path()), 1337, 1339, "t");
+        assert!(!env.contains_key("DEVHUB_STATE_PROFILE"));
     }
 
     #[test]

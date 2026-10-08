@@ -75,6 +75,71 @@ describe("detectGitHookFailure", () => {
   });
 });
 
+// Local pre-push passed (leak scan + skipped verify), then the remote's pre-receive refused the ref.
+const REMOTE_PRE_RECEIVE_REJECTION = `
+[pre-push] Scanning for internal-name / secret leaks…
+[pre-push] Leak scan passed
+[pre-push] every pushed commit is content-only - skipping verify
+remote: error: GH006: Protected branch update failed for refs/heads/main.
+To github.com:example/devhub-private.git
+ ! [remote rejected] main -> main (pre-receive hook declined)
+error: failed to push some refs to 'github.com:example/devhub-private.git'
+`;
+
+describe("detectGitHookFailure remote rejections", () => {
+  it("blames the remote pre-receive hook even when local pre-push lines are present", () => {
+    const failure = detectGitHookFailure("", REMOTE_PRE_RECEIVE_REJECTION, "push");
+    expect(failure?.hook).toBe("pre-receive");
+    expect(failure?.remote).toBe(true);
+    expect(failure?.summary).toContain("pre-receive hook declined");
+    expect(hookFailureTitle(failure!)).toBe("pre-receive failed during push");
+  });
+
+  it("titles the same rejection identically without any local hook output", () => {
+    const failure = detectGitHookFailure(
+      "",
+      " ! [remote rejected] main -> main (pre-receive hook declined)\nerror: failed to push some refs",
+      "push",
+    );
+    expect(hookFailureTitle(failure!)).toBe("pre-receive failed during push");
+  });
+
+  it("recognises a bare remote: pre-receive line", () => {
+    const failure = detectGitHookFailure(
+      "[pre-push] Leak scan passed",
+      "remote: pre-receive hook failed\nerror: failed to push some refs",
+      "push",
+    );
+    expect(failure).toMatchObject({ hook: "pre-receive", remote: true });
+  });
+
+  it("names the update hook when the remote says so", () => {
+    const failure = detectGitHookFailure("", " ! [remote rejected] main -> main (update hook declined)", "push");
+    expect(failure).toMatchObject({ hook: "update", remote: true });
+  });
+
+  it("does not blame the local pre-push for a remote rejection that was not a hook", () => {
+    expect(
+      detectGitHookFailure(
+        "[pre-push] Leak scan passed",
+        " ! [remote rejected] main -> main (branch is currently checked out)",
+        "push",
+      ),
+    ).toBeNull();
+  });
+
+  it("still attributes a real local pre-push failure to pre-push", () => {
+    const failure = detectGitHookFailure(PRE_PUSH_VERIFY, "", "push");
+    expect(failure?.hook).toBe("pre-push");
+    expect(failure?.remote).toBeUndefined();
+  });
+
+  it("keeps the remote flag through parseHookFailurePayload", () => {
+    const failure = detectGitHookFailure("", REMOTE_PRE_RECEIVE_REJECTION, "push")!;
+    expect(parseHookFailurePayload(JSON.stringify(failure))?.remote).toBe(true);
+  });
+});
+
 describe("formatHookOutput / helpers", () => {
   it("strips ansi and caps long logs", () => {
     expect(stripAnsi("\u001b[31mred\u001b[0m")).toBe("red");

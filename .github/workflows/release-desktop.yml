@@ -209,7 +209,33 @@ jobs:
           policies may block it. See docs/getting-started/desktop-app.md. \
           Apple signing credentials are optional."
 
+      # DMG creation is the one step that talks to macOS's DiskArbitration
+      # daemon: `hdiutil create` formats a scratch image, attaches it, copies the
+      # app in and detaches it again. On a shared runner that daemon can stall
+      # for minutes, and hdiutil then dies with "Operation timed out" /
+      # "Resource busy" through no fault of ours. Two things make it stall more:
+      # Spotlight (mds) indexing the freshly mounted volume while hdiutil is
+      # trying to eject it, and a volume or `diskimages-helper` left mounted by an
+      # earlier attempt. Remove both before bundling. All best-effort: none of this
+      # can fail the build, it only takes away avoidable contention.
+      - name: Quiet DiskArbitration before DMG bundling
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          sudo mdutil -a -i off || true
+          for vol in /Volumes/DevHub*; do
+            [ -d "$vol" ] || continue
+            echo "Detaching stale volume $vol"
+            hdiutil detach "$vol" -force || true
+          done
+          find /Volumes -maxdepth 1 -name 'dmg.*' -exec hdiutil detach {} -force \; 2>/dev/null || true
+
       - name: Build, sign, and bundle
+        id: build
+        # macOS only: the DMG step has a known infrastructure flake (see the retry
+        # step below). The outcome is re-checked after the retry, so this never
+        # lets a failing build through.
+        continue-on-error: ${{ runner.os == 'macOS' }}
         uses: tauri-apps/tauri-action@v0
         env:
           # Updater signing. Mandatory: Tauri will not install an unsigned
@@ -239,6 +265,63 @@ jobs:
           # No releaseId here: the publish job below does it once, after every
           # platform has passed its own self-test. Publishing per-matrix-leg
           # would put a half-finished release in front of users.
+
+      # Retry exactly once, and only on macOS. A DiskArbitration stall is
+      # transient, so a clean second attempt passes; a real failure (compile
+      # error, bad signature, leaked name in staging) fails identically twice and
+      # is reported by the gate below, with both attempts' logs in the run.
+      - name: Reset DMG state before retry
+        if: runner.os == 'macOS' && steps.build.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "::warning::macOS bundle failed on the first attempt; retrying once. If this was an hdiutil/DiskArbitration timeout it is a runner flake."
+          for vol in /Volumes/DevHub* /Volumes/dmg.*; do
+            [ -d "$vol" ] || continue
+            hdiutil detach "$vol" -force || true
+          done
+          find desktop/src-tauri/target -type d -path '*release/bundle/dmg' -exec rm -rf {} + 2>/dev/null || true
+
+      - name: Build, sign, and bundle (retry)
+        id: build_retry
+        if: runner.os == 'macOS' && steps.build.outcome == 'failure'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          # Updater signing. Mandatory: Tauri will not install an unsigned
+          # update, and an update that installs without a signature check is
+          # a remote code execution channel, not a convenience.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Finder styling works on the Apple Silicon runner. Intel keeps Tauri's
+          # CI-safe layout; its app and volume icons are still included.
+          TAURI_BUNDLER_DMG_IGNORE_CI: ${{ matrix.target == 'aarch64-apple-darwin' && 'true' || 'false' }}
+          # AppImage packaging on a GitHub runner, both of which are required:
+          #
+          # linuxdeploy ships as an AppImage and mounts itself with FUSE, which
+          # the runner does not provide — APPIMAGE_EXTRACT_AND_RUN makes it
+          # unpack to a temp dir instead.
+          #
+          # NO_STRIP because linuxdeploy's bundled `strip` is older than the
+          # binaries it is handed and errors out on the debug sections Rust
+          # emits. Nothing downstream needs a stripped AppImage; the .sig is
+          # computed after packaging either way.
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          NO_STRIP: "true"
+        with:
+          projectPath: desktop
+          configPath: src-tauri/tauri.conf.json
+          args: ${{ matrix.args }}
+          # No releaseId here: the publish job below does it once, after every
+          # platform has passed its own self-test. Publishing per-matrix-leg
+          # would put a half-finished release in front of users.
+
+      # Fails the job if the retry did not rescue it. Without this the
+      # continue-on-error above would turn a real build failure into a pass.
+      - name: Fail if the macOS bundle never succeeded
+        if: runner.os == 'macOS' && steps.build.outcome == 'failure' && steps.build_retry.outcome != 'success'
+        shell: bash
+        run: |
+          echo "::error::macOS bundle failed on both attempts."
+          exit 1
 
       # Proves the thing that was just built actually runs, on the machine that
       # built it, against a temporary data directory. This is the check that
@@ -323,6 +406,8 @@ jobs:
     name: Windows (x64, WSL2)
     needs: wsl-payload
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -418,6 +503,51 @@ jobs:
           path: |
             desktop/src-tauri/target/**/release/bundle/nsis/*-setup.exe
             desktop/src-tauri/target/**/release/bundle/nsis/*-setup.exe.sig
+
+  # Installs the installer the `windows` job just built - the same artifact that
+  # `publish` ships, not a second build - into a throwaway directory and starts
+  # it once. See desktop/scripts/windows-install-smoke.ps1 for the checks and
+  # docs/architecture/desktop-windows-wsl.md for what this does and does not cover.
+  #
+  # Cheap on purpose: no Rust, no Node, no payload build, no dependency install,
+  # and only the smoke script is checked out. It runs beside `build` and is
+  # deliberately not in publish's `needs`, so a smoke failure turns the run red
+  # without stalling the release.
+  windows-smoke:
+    name: Windows installer smoke
+    needs: windows
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: desktop/scripts/windows-install-smoke.ps1
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: devhub-x86_64-pc-windows-msvc
+          path: installer
+
+      - name: Install and start
+        shell: pwsh
+        env:
+          EXPECTED_VERSION: ${{ needs.windows.outputs.version }}
+          SMOKE_WORK_DIR: ${{ runner.temp }}\devhub-smoke
+        run: >
+          ./desktop/scripts/windows-install-smoke.ps1
+          -Installer installer
+          -ExpectedVersion $env:EXPECTED_VERSION
+          -WorkDir $env:SMOKE_WORK_DIR
+
+      # Only the app's own logs, written to the temporary app-data directory.
+      - name: Upload smoke logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-smoke-logs
+          path: ${{ runner.temp }}\devhub-smoke\app-data\logs\
+          if-no-files-found: ignore
 
   publish:
     name: Publish release

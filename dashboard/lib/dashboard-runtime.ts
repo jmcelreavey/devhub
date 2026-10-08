@@ -19,6 +19,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { profileConfigDir } from "@/lib/profile-state";
 
 /**
  * Capability tags, not a version number.
@@ -42,8 +43,23 @@ export interface DashboardRuntimeInfo {
   features: DashboardFeature[];
 }
 
+/** The shared record. Every reader (MCP discovery, sync, the poller) uses this one. */
 export function dashboardRuntimePath(home: string = os.homedir()): string {
   return path.join(home, ".config", "devhub", "dashboard.json");
+}
+
+/**
+ * Where THIS process records itself. A scratch profile (DEVHUB_STATE_PROFILE,
+ * set by the Windows shell) writes under `profiles/<id>/` so it never rewrites
+ * the main profile's record with a port that goes stale; readers keep following
+ * the shared file, so tools still find the main profile. Nothing removes either
+ * file on shutdown (a dead pid is how a stale record is recognised).
+ */
+export function dashboardRuntimeWritePath(
+  home: string = os.homedir(),
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string {
+  return path.join(profileConfigDir(env, home), "dashboard.json");
 }
 
 function currentPort(): number {
@@ -83,7 +99,7 @@ export function buildRuntimeInfo(): DashboardRuntimeInfo {
  * `DEVHUB_SCHEDULER=0` secondary beside the desktop app never takes agents
  * away from the one the user has open.
  */
-export function writeDashboardRuntime(file = dashboardRuntimePath()): void {
+export function writeDashboardRuntime(file = dashboardRuntimeWritePath()): void {
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, `${JSON.stringify(buildRuntimeInfo(), null, 2)}\n`);

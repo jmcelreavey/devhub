@@ -17,6 +17,19 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
+/**
+ * The iframe appears in the DOM as soon as the origin state commits, but the
+ * component attaches its window "message" listener in a passive effect that
+ * React may not have flushed yet. A message dispatched in that gap is dropped,
+ * which only happens when the machine is slow. Flushing effects inside act()
+ * makes "frame is visible" imply "listener is attached".
+ */
+async function findReadyFrame() {
+  const frame = await screen.findByTitle("Agents — Paseo") as HTMLIFrameElement;
+  await act(async () => {});
+  return frame;
+}
+
 describe("persistent Agents", () => {
   it("does not connect to Paseo when opening Usage directly", () => {
     route.query = "view=usage";
@@ -43,7 +56,7 @@ describe("persistent Agents", () => {
     route.query = "";
     vi.mocked(fetch).mockImplementation(async (url: string | URL | Request) => ({ ok: true, json: async () => String(url).includes("/bootstrap") ? { serverId: "srv_test", password: "test-secret" } : { connected: true, origin: "http://127.0.0.1:6767" } } as Response));
     render(<PersistentAgents />);
-    const frame = await screen.findByTitle("Agents — Paseo") as HTMLIFrameElement;
+    const frame = await findReadyFrame();
     const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
     await act(async () => window.dispatchEvent(new MessageEvent("message", { origin: "http://localhost:6767", source: frame.contentWindow, data: { type: "devhub:paseo:ready" } })));
     await waitFor(() => expect(postMessage).toHaveBeenCalledWith({ type: "devhub:paseo:credentials", serverId: "srv_test", password: "test-secret", bridgeConfirm: false }, "http://localhost:6767"));
@@ -54,7 +67,7 @@ describe("persistent Agents", () => {
     const confirm = vi.fn(() => true);
     vi.stubGlobal("confirm", confirm);
     render(<PersistentAgents />);
-    const frame = await screen.findByTitle("Agents — Paseo") as HTMLIFrameElement;
+    const frame = await findReadyFrame();
     const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
     const data = { type: "devhub:paseo:confirm", id: 7, message: "Archive project?\n\nIts worktrees will be removed." };
     await act(async () => window.dispatchEvent(new MessageEvent("message", { origin: "http://attacker.test", source: frame.contentWindow, data })));
@@ -66,7 +79,7 @@ describe("persistent Agents", () => {
   it("opens links from the Paseo frame in the system browser, and nobody else's", async () => {
     route.query = "";
     render(<PersistentAgents />);
-    const frame = await screen.findByTitle("Agents — Paseo") as HTMLIFrameElement;
+    const frame = await findReadyFrame();
     const send = (init: { origin: string; source?: MessageEventSource | null; url?: unknown }) =>
       act(async () => window.dispatchEvent(new MessageEvent("message", { origin: init.origin, source: init.source ?? frame.contentWindow, data: { type: "devhub:paseo:open-link", url: init.url } })));
     await send({ origin: "http://attacker.test", url: "https://example.com/a" });

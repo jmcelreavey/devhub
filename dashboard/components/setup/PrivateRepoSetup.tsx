@@ -115,7 +115,7 @@ export function PrivateRepoSetup({ connected, onLinked, onLater }: { connected: 
         <span className="badge badge-muted">Optional</span>
       </div>
       <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-        DevHub works fully on this PC without it: notes, tasks and diagrams are saved in DevHub&apos;s data folder.
+        DevHub works fully on this computer without it: notes, tasks and diagrams are saved in DevHub&apos;s data folder.
         A private repo adds a backup, history, and a way to use the same content on another machine.
         You don&apos;t fork anything. DevHub makes a private copy in your own GitHub account (a fork of a public repo would
         stay public), and app updates still come from DevHub releases.

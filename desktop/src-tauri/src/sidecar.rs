@@ -153,6 +153,14 @@ pub(crate) struct BasePayload<'a> {
     pub id: &'a str,
 }
 
+/// How this instance relates to a DevHub already running in the distro.
+pub(crate) struct Coexistence<'a> {
+    /// Another service owns the same scheduled jobs, so ours stay off.
+    pub secondary: bool,
+    /// `DEVHUB_STATE_PROFILE`, when run history and logs must not be shared.
+    pub state_profile: Option<&'a str>,
+}
+
 impl Sidecar {
     pub fn new(port: u16, terminal_port: u16, token: String, log: DesktopLog) -> Self {
         Self {
@@ -274,7 +282,7 @@ impl Sidecar {
         backend: &WslBackend,
         payload: &str,
         checkout: Option<&str>,
-        secondary: bool,
+        coexistence: Coexistence<'_>,
         base: BasePayload<'_>,
         on_event: F,
     ) -> std::io::Result<()>
@@ -288,6 +296,7 @@ impl Sidecar {
                 resource_root: format!("{payload}/resources"),
                 server_dir: format!("{payload}/server"),
                 checkout: checkout.map(str::to_string),
+                state_profile: coexistence.state_profile.map(str::to_string),
             },
             port,
             terminal_port,
@@ -301,7 +310,7 @@ impl Sidecar {
             env.insert("DEVHUB_BASE_PAYLOAD_DIR".into(), base.dir.to_string());
             env.insert("DEVHUB_BASE_PAYLOAD_ID".into(), base.id.to_string());
         }
-        if secondary {
+        if coexistence.secondary {
             // The existing dev service may already own the same scheduled jobs.
             env.insert("DEVHUB_SCHEDULER".into(), "0".into());
         }

@@ -5,6 +5,8 @@ order: 3
 icon: Monitor
 tags: [setup, desktop]
 related:
+  - getting-started/guided-setup
+  - getting-started/faq
   - architecture/desktop-shell
   - guides/desktop-recovery
   - guides/macos-permissions

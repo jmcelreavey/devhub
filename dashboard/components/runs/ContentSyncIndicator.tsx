@@ -76,6 +76,12 @@ async function loadGitSyncState(): Promise<GitSyncState> {
   };
 }
 
+/** " (rejected by the remote's pre-receive hook)" for a remote hook rejection, else "". */
+function pushFailureReason(lines: string[]): string {
+  const failure = detectGitHookFailureFromLog(lines.join("\n"), "push");
+  return failure?.remote ? ` (rejected by the remote's ${failure.hook} hook)` : "";
+}
+
 async function loadRebuildAvailable(): Promise<boolean> {
   const response = await fetch("/api/rebuild");
   if (!response.ok) return false;
@@ -194,7 +200,9 @@ export function ContentSyncIndicator() {
 
   function offerHookFailureFromLog(lines: string[], phase: "push" | "commit" = "push"): boolean {
     const failure = detectGitHookFailureFromLog(lines.join("\n"), phase);
-    if (!failure) return false;
+    // A remote pre-receive rejection can't be fixed by the local hook dialog or by AI, so
+    // leave it to the caller's toast (which also says how many commits are still unpushed).
+    if (!failure || failure.remote) return false;
     setHookFailure({
       ...failure,
       logPath: failure.logPath ?? HOOK_FAILURE_LOG_REL,
@@ -219,7 +227,7 @@ export function ContentSyncIndicator() {
       if (code === 2 || (nextContent === 0 && next.ahead > 0)) {
         if (offerHookFailureFromLog(lines, "push")) return;
         toast.error(
-          `Committed locally, but push failed (exit ${code}). ${next.ahead} unpushed commit${next.ahead !== 1 ? "s remain" : " remains"}.`,
+          `Committed locally, but push failed${pushFailureReason(lines)} (exit ${code}). ${next.ahead} unpushed commit${next.ahead !== 1 ? "s remain" : " remains"}.`,
         );
         return;
       }
@@ -248,7 +256,7 @@ export function ContentSyncIndicator() {
       if (offerHookFailureFromLog(lines, "push")) return;
       toast.error(
         next.ahead > 0
-          ? `Push failed (exit ${code}). ${next.ahead} unpushed commit${next.ahead !== 1 ? "s remain" : " remains"}.`
+          ? `Push failed${pushFailureReason(lines)} (exit ${code}). ${next.ahead} unpushed commit${next.ahead !== 1 ? "s remain" : " remains"}.`
           : `Push failed (exit ${code}).`,
       );
     } catch (error) {

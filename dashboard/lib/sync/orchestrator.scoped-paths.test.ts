@@ -70,6 +70,49 @@ describe("content sync with folders that don't exist yet", () => {
   });
 });
 
+describe("hook output on a successful push", () => {
+  const TOKEN = `ghp_${"a1B2".repeat(9)}`;
+  const HOOK_STDERR = [
+    "[pre-push] Leak scan passed",
+    "[pre-push] every pushed commit is content-only - skipping verify",
+    `To https://${TOKEN}@github.com/example/devhub-private.git`,
+    "   abc1234..def5678  main -> main",
+  ].join("\n");
+  // Layer the push result over the default git mock from beforeEach.
+  const pushResult = (result: { status: number; stdout: string; stderr: string }) => {
+    const base = mocks.git.getMockImplementation()!;
+    mocks.git.mockImplementation((cwd: string, args: string[], opts?: unknown) => (args[0] === "push" ? result : base(cwd, args, opts)));
+  };
+  const pushing = (stderr: string) => pushResult({ status: 0, stdout: "", stderr });
+
+  it("puts the hook lines and push summary in the run log, with the remote URL's token redacted", async () => {
+    mkdirs("notes");
+    pushing(HOOK_STDERR);
+    expect(await commitAndPushPaths({ repoRoot: repo, emit, paths: CONTENT, commitMessage: "chore: sync" })).toBe(0);
+    const log = emitted.join("\n");
+    expect(log).toContain("Leak scan passed");
+    expect(log).toContain("skipping verify");
+    expect(log).toContain("main -> main");
+    expect(log).not.toContain(TOKEN);
+    expect(log).toContain("https://[redacted]@github.com/example/devhub-private.git");
+    expect(emitted.indexOf("Scoped changes committed and pushed.")).toBeGreaterThan(emitted.findIndex((l) => l.includes("Leak scan passed")));
+  });
+
+  it("emits nothing extra when git push printed nothing", async () => {
+    mkdirs("notes");
+    pushing("");
+    await commitAndPushPaths({ repoRoot: repo, emit, paths: CONTENT, commitMessage: "chore: sync" });
+    expect(emitted.at(-2)).toBe("Pushing to origin/main...");
+  });
+
+  it("also redacts tokens in a failed push's output", async () => {
+    mkdirs("notes");
+    pushResult({ status: 1, stdout: "", stderr: "fatal: unable to access 'https://sometoken123@github.com/x/y.git/': 403" });
+    await commitAndPushPaths({ repoRoot: repo, emit, paths: CONTENT, commitMessage: "chore: sync" });
+    expect(emitted.join("\n")).not.toContain("sometoken123");
+  });
+});
+
 describe("pre-push content switch", () => {
   const pushOpts = () => mocks.git.mock.calls.filter(([, args]) => args[0] === "push").map(([, , opts]) => opts);
   it("is set on the content sync's push, so the hook can skip verify for content-only commits", async () => {

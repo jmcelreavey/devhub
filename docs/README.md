@@ -5,6 +5,7 @@ order: 0
 icon: BookOpen
 tags: [overview]
 related:
+  - getting-started/guided-setup
   - getting-started/installation
   - architecture/overview
   - architecture/database-client
@@ -40,7 +41,9 @@ Read [Architecture Overview](architecture/overview.md) for the full picture.
 
 | If you want to…                    | Start at                                          |
 | ---------------------------------- | ------------------------------------------------- |
-| Get it running                     | [Installation](getting-started/installation.md)   |
+| Try the desktop app, no Git needed | [Getting started without Git](getting-started/guided-setup.md) |
+| Get it running from source         | [Installation](getting-started/installation.md)   |
+| Quick answers (GitHub? fork?)      | [FAQ](getting-started/faq.md)                     |
 | Understand how it works            | [Architecture Overview](architecture/overview.md) |
 | Do a specific task                 | [Skills](guides/skills.md) and the other guides   |
 | Look something up                  | [API Routes](reference/api-routes.md)             |

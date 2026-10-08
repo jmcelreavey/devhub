@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { collapseRows, rowsFromJson } from "./chains.ts";
 import { todayISO } from "./dates.ts";
 import { clearMigrationState, migrateDirectory, migrateTasksRoot, planTaskDirs } from "./migrate.ts";
@@ -363,7 +363,7 @@ describe("item store", () => {
     expect(back.jiraKey).toBe("PTF-1");
   });
 
-  it("reads a few thousand items from a warm cache", () => {
+  it("serves a few thousand items from a warm cache without re-reading them", () => {
     const dir = tmp("tasks-perf-");
     const root = path.join(dir, "items");
     fs.mkdirSync(root, { recursive: true });
@@ -373,17 +373,25 @@ describe("item store", () => {
       fs.writeFileSync(path.join(root, `${id}.json`), serializeTask(task));
     }
     invalidateTaskCache(dir);
-    const coldStart = performance.now();
-    expect(readItems(dir)).toHaveLength(5000);
-    const cold = performance.now() - coldStart;
-    const warmStart = performance.now();
-    expect(readItems(dir)).toHaveLength(5000);
-    const warm = performance.now() - warmStart;
-    expect(cold).toBeLessThan(3000);
-    // Signature check is 5000 stats: ~20ms alone, ~130ms inside the full suite.
-    // A cache miss re-parses and lands near the cold read, so warm stays under it.
-    expect(warm).toBeLessThan(400);
-    expect(warm).toBeLessThan(cold);
+    // Count work, not wall-clock: a warm read must not touch item files again.
+    // Timing the read made this a load-flake (5000 stats vary ~20-400ms by CPU
+    // contention), while the property it protects is exact.
+    const reads = vi.spyOn(fs, "readFileSync");
+    try {
+      const cold = readItems(dir);
+      expect(cold).toHaveLength(5000);
+      expect(reads).toHaveBeenCalledTimes(5000);
+      reads.mockClear();
+      const warm = readItems(dir);
+      expect(warm).toBe(cold);
+      expect(reads).not.toHaveBeenCalled();
+      // Changing a file (new size) must still miss the cache.
+      fs.writeFileSync(path.join(root, "t0000.json"), serializeTask(base("t0000", "Task 0 edited", { startDate: "2026-10-01", rank: "000000" })));
+      expect(readItems(dir)).not.toBe(cold);
+      expect(reads).toHaveBeenCalledTimes(5000);
+    } finally {
+      reads.mockRestore();
+    }
   });
 });
 

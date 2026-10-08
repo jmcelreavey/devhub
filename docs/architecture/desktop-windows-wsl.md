@@ -390,6 +390,46 @@ waits on a repo.
 
 Linking changes the content root, so DevHub asks to quit and reopen afterwards.
 
+## Installer smoke test (CI)
+
+The `windows-smoke` job in `release-desktop.yml` downloads the
+`devhub-x86_64-pc-windows-msvc` artifact the `windows` job just built (the same
+file `publish` ships; nothing is rebuilt) and runs
+`desktop/scripts/windows-install-smoke.ps1` on a clean `windows-latest` runner.
+It runs on tag pushes and on `workflow_dispatch` (including **windows_only**),
+beside the other builds, and is not in `publish`'s `needs`: a failure turns the
+run red without holding the release.
+
+What it checks:
+
+- The silent installer (`/S /D=<temp>\install`) exits 0 within five minutes. The
+  install is per-user, so it needs no elevation.
+- `devhub-desktop.exe`, `uninstall.exe`, `wsl/devhub-payload.tar.gz` and
+  `wsl/payload-id.txt` are on disk, and the per-user uninstall entry exists
+  under `HKCU`.
+- The installed exe starts with a temporary `DEVHUB_APP_DATA`, writes
+  `[startup] DevHub <version> starting` to `logs/shell.log`, reports the version
+  the workflow built, and is still running five seconds later.
+
+What it does not cover:
+
+- **WSL and the server.** The runner has no distro, so the WSL discovery,
+  payload unpack, sidecar start and dashboard load never run. The startup line
+  is written before any of that; the app is expected to sit on its "WSL
+  missing" screen. `--self-test` is not used because Windows bundles no server.
+- **A real user session**: setup wizard, repo linking, tray, window rendering,
+  WebView2 bootstrap on a machine without it, SmartScreen, Authenticode.
+- **Upgrade, uninstall and reinstall.** Only a fresh install is exercised, and
+  the pre-install hook's WSL `pkill` has nothing to stop. Uninstall runs only as
+  best-effort cleanup and is not a check.
+- **Updates**: signing, `latest.json` and the in-app updater.
+- **Elevation, per-machine installs and other Windows versions.**
+
+It passes on a machine where DevHub is unusable for a WSL reason, so it
+complements the manual retest below rather than replacing it. Run it outside CI
+only with `-Force`, and never on a machine with a DevHub you are using: the
+installer's pre-install hook stops DevHub's own WSL supervisor.
+
 ## Next installer retest
 
 These changes have local regression coverage; they still need a new CI

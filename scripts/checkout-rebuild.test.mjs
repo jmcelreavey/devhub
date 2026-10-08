@@ -127,6 +127,34 @@ test("updated rebuild code re-execs once in the same runner with lock and launch
   }
 });
 
+test("handover keeps the parent's pull output and hand-over line in rebuild.log", async (context) => {
+  const w = world();
+  context.after(() => fs.rmSync(w.root, { recursive: true, force: true }));
+  const base = runner(gitState({ counts: "2\t0", changedCode: REBUILD_CODE[0] }), { onBuild: () => wroteRebuild(w.dashboard) });
+  const run = async (cmd, args, opts) => {
+    if (args[0] === path.join(w.checkout, "scripts", "checkout-rebuild.mjs")) {
+      const child = await runRebuild(optionsFromArgs(args.slice(1)), serviceDeps(base.run, { pid: 999002 }));
+      assert.equal(child.state, "succeeded");
+      assert.equal(child.phases.find((phase) => phase.id === "pull").state, "done");
+      return { code: 0, stdout: "", stderr: "" };
+    }
+    if (cmd === "git" && args[0] === "pull") opts.log("Updating abc123..pulledcommit12 (Fast-forward)");
+    return base.run(cmd, args, opts);
+  };
+  const status = await runRebuild({ mode: "service", checkout: w.checkout, stateDir: w.stateDir, pull: true }, serviceDeps(run));
+  assert.equal(status.state, "succeeded");
+  const log = fs.readFileSync(path.join(w.stateDir, "rebuild.log"), "utf8");
+  const order = [
+    "rebuild started (service",
+    "Updating abc123..pulledcommit12 (Fast-forward)",
+    "Handing over to the checkout's own rebuild script after the pull.",
+    "rebuild continued by the checkout script (service",
+    "--- Build",
+  ].map((needle) => log.indexOf(needle));
+  assert.ok(order.every((index) => index >= 0), `missing a line in rebuild.log:\n${log}`);
+  assert.deepEqual([...order].sort((a, b) => a - b), order, `rebuild.log lines out of order:\n${log}`);
+});
+
 test("the installed bundle's copy hands over to the checkout script even when nothing was pulled", async (context) => {
   const w = world();
   context.after(() => fs.rmSync(w.root, { recursive: true, force: true }));

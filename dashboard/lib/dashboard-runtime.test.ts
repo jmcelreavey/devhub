@@ -1,11 +1,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildRuntimeInfo,
   DASHBOARD_FEATURES,
   dashboardRuntimePath,
+  dashboardRuntimeWritePath,
   isAdvertisedDashboard,
   isRuntimeAlive,
   readDashboardRuntime,
@@ -123,5 +124,54 @@ describe("isAdvertisedDashboard", () => {
   it("takes over from a dead advertiser", () => {
     advertise(0);
     expect(isAdvertisedDashboard(file)).toBe(true);
+  });
+});
+
+describe("scratch profiles (DEVHUB_STATE_PROFILE)", () => {
+  const ID = "0123456789abcdef";
+  const shared = () => path.join(dir, ".config/devhub/dashboard.json");
+  const scoped = () => path.join(dir, ".config/devhub/profiles", ID, "dashboard.json");
+
+  beforeEach(() => {
+    vi.stubEnv("HOME", dir);
+    vi.stubEnv("DEVHUB_DESKTOP", "1");
+    vi.stubEnv("DEVHUB_STATE_PROFILE", "");
+    vi.stubEnv("PORT", "1342");
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("writes the shared file exactly as before when unscoped", () => {
+    expect(dashboardRuntimeWritePath(dir)).toBe(dashboardRuntimePath(dir));
+    writeDashboardRuntime();
+    expect(readDashboardRuntime(shared())?.port).toBe(1342);
+    expect(fs.existsSync(path.join(dir, ".config/devhub/profiles"))).toBe(false);
+  });
+
+  it("writes only under profiles/<id> and leaves the shared file byte-identical", () => {
+    fs.mkdirSync(path.dirname(shared()), { recursive: true });
+    fs.writeFileSync(shared(), `${JSON.stringify({ ...buildRuntimeInfo(), port: 1337, baseUrl: "http://127.0.0.1:1337" }, null, 2)}\n`);
+    const before = fs.readFileSync(shared());
+
+    vi.stubEnv("DEVHUB_STATE_PROFILE", ID);
+    expect(dashboardRuntimeWritePath(dir)).toBe(scoped());
+    writeDashboardRuntime();
+
+    expect(fs.readFileSync(shared()).equals(before)).toBe(true);
+    expect(readDashboardRuntime(scoped())?.port).toBe(1342);
+    // Readers keep following the shared record, so tools still find the main profile.
+    expect(readDashboardRuntime()?.port).toBe(1337);
+    expect(isAdvertisedDashboard(dashboardRuntimePath(dir), process.pid + 1)).toBe(false);
+  });
+
+  it("does not create the shared file when only a scratch profile has run", () => {
+    vi.stubEnv("DEVHUB_STATE_PROFILE", ID);
+    writeDashboardRuntime();
+    expect(fs.existsSync(shared())).toBe(false);
+    expect(fs.existsSync(scoped())).toBe(true);
+  });
+
+  it("falls back to the shared file for an invalid id", () => {
+    vi.stubEnv("DEVHUB_STATE_PROFILE", "../escape");
+    expect(dashboardRuntimeWritePath(dir)).toBe(dashboardRuntimePath(dir));
   });
 });
