@@ -152,6 +152,17 @@ describe("draftJiraTicket", () => {
     vi.stubEnv("JIRA_DRAFT_PROVIDER", "api");
     await draftJiraTicket(task, "2026-10-01");
     expect(vi.mocked(generateAiText).mock.calls[1]![0].prefer).toBe("api");
+    expect(vi.mocked(generateAiText).mock.calls[1]![0].reasoningEffort).toBeUndefined();
+  });
+
+  it("passes a valid draft reasoning effort and ignores an unknown one", async () => {
+    vi.stubEnv("JIRA_DRAFT_REASONING_EFFORT", "LOW");
+    await draftJiraTicket(task, "2026-10-01");
+    expect(vi.mocked(generateAiText).mock.calls[0]![0].reasoningEffort).toBe("low");
+
+    vi.stubEnv("JIRA_DRAFT_REASONING_EFFORT", "fastest");
+    await draftJiraTicket(task, "2026-10-01");
+    expect(vi.mocked(generateAiText).mock.calls[1]![0].reasoningEffort).toBeUndefined();
   });
 
   it("reports missing sources while drafting from the remaining material", async () => {

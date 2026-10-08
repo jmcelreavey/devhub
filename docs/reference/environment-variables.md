@@ -124,6 +124,18 @@ For OpenAI chat, set `AI_BASE_URL=https://api.openai.com/v1` and `AI_MODEL=gpt-4
 
 Copy the commented block from `dashboard/.env.example` into `.env.local`, set `AI_API_KEY`, and restart the dev server.
 
+### Generate Jira ticket overrides
+
+**Generate Jira ticket** uses the provider chosen under **Setup → AI Provider** unless these are set. They affect that one action only.
+
+| Variable                      | Default | Purpose |
+| ----------------------------- | ------- | ------- |
+| `JIRA_DRAFT_PROVIDER`         | —       | Provider for drafts: `api` (HTTP, uses `AI_API_KEY` / `AI_BASE_URL`), `cursor`, `codex`, `opencode`, `antigravity` |
+| `JIRA_DRAFT_MODEL`            | —       | Model id for drafts (for `api`, an id your `AI_BASE_URL` serves) |
+| `JIRA_DRAFT_REASONING_EFFORT` | —       | OpenAI endpoints only: `none`, `minimal`, `low`, `medium`, `high`, `xhigh` or `max`. Ignored elsewhere |
+
+A CLI agent can take 30–60 seconds per draft. A small model over the HTTP API with a low reasoning effort usually answers in a few seconds. In a packaged app, put these in the env file the app reads (the linked checkout's `dashboard/.env.local`, or `config/.env.local` in the app data folder) and restart DevHub.
+
 Without an HTTP key, notes still work but in-editor AI is unavailable. Repo Learning and briefing generation can use a configured CLI. When no AI provider is available, deterministic repo facts and RSS/weather/event content still load; generated actions report configuration errors or fall back to deterministic content.
 
 ## Last30Days research (optional)

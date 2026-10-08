@@ -49,6 +49,15 @@ export function getNotesAiModel(activity?: AiActivityOptions, modelOverride?: st
   return wrapLanguageModel({ model, middleware: aiActivityMiddleware(activity) });
 }
 
+/** Values OpenAI accepts for `reasoning.effort` across the gpt-5 / gpt-6 families. */
+export const REASONING_EFFORTS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
+
+export function normalizeReasoningEffort(raw: string | undefined | null): ReasoningEffort | null {
+  const value = raw?.trim().toLowerCase();
+  return value && (REASONING_EFFORTS as readonly string[]).includes(value) ? (value as ReasoningEffort) : null;
+}
+
 const DISABLE_THINKING = {
   providerOptions: { [PROVIDER_NAME]: { thinking: { type: "disabled" as const } } },
 } as const;
@@ -59,8 +68,14 @@ const DISABLE_THINKING = {
  * …) reject unknown body fields, so it's only emitted when pointed at a GLM model
  * on z.ai. For any other provider this returns an empty object.
  */
-export function getNotesAiCallOptions(modelOverride?: string): typeof DISABLE_THINKING | Record<string, never> {
+export function getNotesAiCallOptions(
+  modelOverride?: string,
+  reasoningEffort?: ReasoningEffort | null,
+): typeof DISABLE_THINKING | { providerOptions: { openai: { reasoningEffort: ReasoningEffort } } } | Record<string, never> {
   const { baseURL, modelId } = resolveProviderConfig(modelOverride);
   const isGlm = /z\.ai/i.test(baseURL) || /glm/i.test(modelId);
-  return isGlm ? DISABLE_THINKING : {};
+  if (isGlm) return DISABLE_THINKING;
+  // Only OpenAI proper gets the effort: other compatible endpoints may reject the field.
+  if (reasoningEffort && isOpenAiEndpoint(baseURL)) return { providerOptions: { openai: { reasoningEffort } } };
+  return {};
 }

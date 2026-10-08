@@ -5,7 +5,7 @@
 
 import { generateText, streamText } from "ai";
 import { generateTextViaCli } from "@/lib/ai/cli-runner";
-import { getNotesAiCallOptions, getNotesAiModel } from "@/lib/ai/provider";
+import { getNotesAiCallOptions, getNotesAiModel, type ReasoningEffort } from "@/lib/ai/provider";
 import { startGenerationActivity, type AiActivityOptions } from "@/lib/ai/activity";
 import {
   isAiConfigured,
@@ -22,6 +22,8 @@ export interface GenerateAiTextOptions {
   prefer?: AiProviderId | null;
   /** Model for this call only; blank keeps the provider's configured default. */
   model?: string;
+  /** HTTP API on OpenAI only: `reasoning.effort` for this call. Blank keeps the model's default. */
+  reasoningEffort?: ReasoningEffort | null;
   /** CLI timeout override (ignored for API). */
   timeoutMs?: number;
   /** CLI only — give up after this long with no output at all. */
@@ -65,7 +67,7 @@ export async function generateAiText(
     if (!model) {
       throw new Error("AI_API_KEY is not set.");
     }
-    const callOptions = { ...getNotesAiCallOptions(opts.model), abortSignal: opts.abortSignal };
+    const callOptions = { ...getNotesAiCallOptions(opts.model, opts.reasoningEffort), abortSignal: opts.abortSignal };
     const images = (opts.images ?? []).filter((img) => img.dataUrl.startsWith("data:image/"));
     const tokenOpts =
       opts.maxOutputTokens !== undefined ? { maxOutputTokens: opts.maxOutputTokens } : {};

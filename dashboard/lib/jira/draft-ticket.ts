@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { z } from "zod";
 import { generateAiText } from "@/lib/ai/generate";
 import { normalizeAiProvider, type AiProviderId } from "@/lib/ai/preference";
+import { normalizeReasoningEffort, type ReasoningEffort } from "@/lib/ai/provider";
 import { getWritingVoicePrompt } from "@/lib/ai/writing-voice";
 import { getResourceRoot } from "@/lib/desktop/runtime-paths";
 import { mergeEntityRefs } from "@/lib/entity-note";
@@ -39,12 +40,14 @@ const JIRA_READ_LIMIT = 10;
  * Blank keeps the provider and model from setup. A faster draft model is a
  * local choice — overriding the default here would ignore that configuration.
  */
-export function draftModelOverride(): { prefer?: AiProviderId; model?: string } {
+export function draftModelOverride(): { prefer?: AiProviderId; model?: string; reasoningEffort?: ReasoningEffort } {
   const prefer = normalizeAiProvider(process.env.JIRA_DRAFT_PROVIDER);
   const model = process.env.JIRA_DRAFT_MODEL?.trim();
+  const reasoningEffort = normalizeReasoningEffort(process.env.JIRA_DRAFT_REASONING_EFFORT);
   return {
     ...(prefer ? { prefer } : {}),
     ...(model ? { model } : {}),
+    ...(reasoningEffort ? { reasoningEffort } : {}),
   };
 }
 
