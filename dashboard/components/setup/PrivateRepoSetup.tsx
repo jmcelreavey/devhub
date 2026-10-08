@@ -16,7 +16,7 @@ interface RepoStatus {
   suggestion?: { name: string; directory: string };
 }
 
-type Plan = "create" | "clone" | "link" | "blocked";
+type Plan = "create" | "clone" | "link" | "blocked" | "public";
 
 /**
  * What the one-click default can do here. The create button only appears when
@@ -26,7 +26,10 @@ type Plan = "create" | "clone" | "link" | "blocked";
 export function planFor(status: RepoStatus | undefined): Plan {
   if (status?.existing) return "link";
   if (status?.folderExists) return "blocked";
-  if (status?.remote?.exists && !status.remote.empty) return "clone";
+  const remote = status?.remote;
+  // Content never goes into, or is cloned from, a public repo; an empty private one is reusable.
+  if (remote?.exists && !remote.isPrivate) return "public";
+  if (remote?.exists && !remote.empty) return "clone";
   return "create";
 }
 
@@ -166,7 +169,13 @@ export function PrivateRepoSetup({ connected, onLinked, onLater }: { connected: 
               Choose another folder below, or move that one aside.
             </p>
           )}
-          {(plan === "clone" || plan === "blocked") && data?.suggestion && (
+          {plan === "public" && data?.remote && (
+            <p className="tone-panel tone-panel--warning p-3 text-sm" role="status">
+              <code>{data.remote.repository}</code> already exists on GitHub and is public, so DevHub won&apos;t put your content in it.
+              Rename or delete it on GitHub, or use a different name.
+            </p>
+          )}
+          {(plan === "clone" || plan === "blocked" || plan === "public") && data?.suggestion && (
             <button
               type="button" className="btn btn-ghost self-start" disabled={busy}
               onClick={() => void submit({ action: "create", directory: data.suggestion!.directory, name: data.suggestion!.name })}

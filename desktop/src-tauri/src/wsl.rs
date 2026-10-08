@@ -304,21 +304,11 @@ fi
             INSTALL_TIMEOUT,
         )
         .map_err(|err| format!("Could not keep Paseo's Node runtime: {err}"))?;
-        // The running daemon still has the old unit's environment. The marker
-        // tells the dashboard to apply it once Paseo is idle.
-        let write = r#"
-set -e
-printf '%s\n' "$2" > "$1.next"
-mv "$1.next" "$1"
-mkdir -p "$(dirname "$3")"
-: > "$3"
-systemctl --user daemon-reload || true
-"#;
         self.exec(
             &[
                 "/bin/sh",
                 "-c",
-                write,
+                PASEO_UNIT_WRITE_SCRIPT,
                 "devhub-paseo-unit",
                 &unit_path,
                 rewritten.trim_end(),
@@ -459,6 +449,20 @@ pub enum PaseoUnitRepair {
 }
 
 const PASEO_UNIT: &str = "devhub-paseo.service";
+
+/// Writes the rewritten unit and leaves the restart marker. The running daemon
+/// still has the old unit's environment; the marker tells the dashboard to apply
+/// it once Paseo is idle. Only `repair_paseo_unit` runs this, and only after
+/// `rewrite_paseo_unit` produced a change, so `NoUnit` and `Unchanged` never
+/// leave a marker.
+const PASEO_UNIT_WRITE_SCRIPT: &str = r#"
+set -e
+printf '%s\n' "$2" > "$1.next"
+mv "$1.next" "$1"
+mkdir -p "$(dirname "$3")"
+: > "$3"
+systemctl --user daemon-reload || true
+"#;
 
 pub fn paseo_unit_path(home: &str) -> String {
     format!(
@@ -1386,6 +1390,18 @@ mod tests {
         );
         assert!(moved.starts_with("[paseo] moved the Paseo service off "));
         assert!(moved.contains("runtime/abc"));
+    }
+
+    #[test]
+    fn the_restart_marker_is_written_with_the_unit_and_only_for_a_real_rewrite() {
+        assert!(PASEO_UNIT_WRITE_SCRIPT.contains(r#": > "$3""#));
+        // No change means no rewrite, so no script and no marker.
+        let fixed = rewrite_paseo_unit(&old_unit(), APP_DATA, DURABLE).unwrap();
+        assert_eq!(rewrite_paseo_unit(&fixed, APP_DATA, DURABLE), None);
+        assert_eq!(
+            rewrite_paseo_unit("[Service]\nRestart=no\n", APP_DATA, DURABLE),
+            None
+        );
     }
 
     #[test]

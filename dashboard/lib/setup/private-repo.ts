@@ -278,7 +278,11 @@ export async function setupPrivateRepo(input: z.infer<typeof PrivateRepoSetupSch
     const remote = await remoteRepoState(repository);
     if (remoteBlocksCreate(remote)) {
       const free = await suggestFreeRepoName(user.login, directory);
-      throw new Error(`${repository} already exists on GitHub. ${remote.empty ? "It is public, so DevHub will not put your content in it. " : ""}Clone it with "Clone my private repo", link a checkout you already have${free ? `, or create a new one named ${free.name}` : ", or choose another name"}.`);
+      const elsewhere = free ? `create a new one named ${free.name}` : "choose another name";
+      // A public repo is never a place for personal content, so it is never offered as a clone target.
+      throw new Error(remote.isPrivate
+        ? `${repository} already exists on GitHub. Clone it with "Clone my private repo", link a checkout you already have, or ${elsewhere}.`
+        : `${repository} already exists on GitHub and is public, so DevHub will not put your content in it. Rename or delete it on GitHub, or ${elsewhere}.`);
     }
     reusedRemote = remote.exists;
     await execGh(["auth", "setup-git", "--hostname", "github.com"]);

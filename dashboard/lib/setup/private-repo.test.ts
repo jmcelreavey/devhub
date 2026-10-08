@@ -206,6 +206,15 @@ describe("a name or folder that is already taken", () => {
     await expect(fs.access(directory)).rejects.toThrow();
     await expect(fs.access(path.dirname(directory))).rejects.toThrow();
   });
+  it("does not tell the user to clone a public repo, and never uses it", async () => {
+    mocks.remotes["test-user/devhub-private"] = { isPrivate: false, isEmpty: false };
+    const directory = path.join(tmp, "dev", "devhub-private");
+    const failure = setupPrivateRepo({ action: "create", name: "devhub-private", directory });
+    await expect(failure).rejects.toThrow(/already exists on GitHub and is public[\s\S]*devhub-private-2/);
+    await expect(failure).rejects.not.toThrow(/Clone my private repo/);
+    expect(cloneCalls()).toHaveLength(0);
+    expect(mocks.exec.mock.calls.some(([, args]) => args[0] === "push")).toBe(false);
+  });
   it("skips names taken on GitHub or on disk when suggesting one", async () => {
     mocks.remotes["test-user/devhub-private"] = { isPrivate: true, isEmpty: false };
     mocks.remotes["test-user/devhub-private-2"] = { isPrivate: true, isEmpty: false };

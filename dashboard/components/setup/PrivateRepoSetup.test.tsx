@@ -96,6 +96,14 @@ describe("when the defaults are already taken", () => {
     await screen.findByText(/Quit and reopen DevHub/);
     expect(JSON.parse(String(post.mock.calls[0][1].body))).toEqual({ action: "clone", directory: "/code/devhub-private", repository: "test-user/devhub-private" });
   });
+  it("never offers to clone a public repo; it explains and suggests a free name", async () => {
+    repoStatus = { directory: "/code/devhub-private", linked: false, remote: { ...remote, isPrivate: false }, suggestion };
+    renderRepo(<PrivateRepoSetup connected onLinked={vi.fn()} />);
+    expect((await screen.findByRole("status")).textContent).toMatch(/is public, so DevHub won.t put your content in it/);
+    expect(primary("Clone my private repo")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Create my private DevHub repo" })).toBeNull();
+    expect(screen.getByRole("button", { name: /named devhub-private-2 instead/ })).toBeTruthy();
+  });
   it("pre-selects the clone form in the alternatives too", async () => {
     repoStatus = { directory: "/code/devhub-private", linked: false, remote, suggestion };
     renderRepo(<PrivateRepoSetup connected onLinked={vi.fn()} />);

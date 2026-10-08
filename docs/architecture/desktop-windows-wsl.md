@@ -214,8 +214,21 @@ A daemon installed from the app keeps its own Node executable
 payloads are removed, the shell reads `devhub-paseo.service`; if it still runs a
 node from `runtime/<payload-id>/`, that binary is copied to the durable path,
 the unit is rewritten (and stripped of the old npm prefix and payload `PATH`
-entries) and `systemd --user daemon-reload` runs. The daemon is not restarted.
-If that fails the old payloads are kept. A unit whose executable is missing is
+entries) and `systemd --user daemon-reload` runs. The shell never restarts the
+daemon itself, because it cannot see whether a chat is running. The shell log
+says what changed: "moved the Paseo service off …" when the node binary moved,
+"cleaned the Paseo service environment (npm prefix, payload PATH)" when the unit
+already ran the durable node and only its env/PATH was cleaned. If that fails the
+old payloads are kept.
+
+When (and only when) a unit was rewritten, the shell leaves
+`~/.local/share/devhub/paseo/restart-pending`. On start the dashboard reads it:
+if Paseo is up and idle (the same active-work check Restart uses) it runs
+`systemctl --user try-restart devhub-paseo.service` and clears the marker; if
+chats are running, or activity can't be verified, it leaves the marker and
+Agents → Connection shows **Restart Paseo to apply the update**. A manual
+Restart clears the marker once the daemon is healthy. If the daemon never comes
+up it is cleared too, since it starts on the new unit anyway. A unit whose executable is missing is
 logged by the shell and flagged in Agents → Connection, where **Reinstall**
 repairs it with the existing password.
 
@@ -252,7 +265,13 @@ stays in the server log.
 - If a `systemd --user` DevHub service already holds the default ports, it stays
   running. The app uses free ports. It disables its own scheduler only when that
   service works on the same content (its checkout is the app's linked repo); a
-  fresh profile with its own data keeps its jobs. The fallback ports are
+  fresh profile with its own data keeps its jobs. The service's checkout is its
+  `WorkingDirectory`, read as `<repo>` (`npm start` at the root) or
+  `<repo>/dashboard`, and accepted only if it has `package.json` and `dashboard/`.
+  If it can't be determined the app assumes the content is shared, which is the
+  safe side (no duplicate jobs). The startup log records the decision and why, for
+  example `secondary=false (the running service uses a different checkout
+  (service checkout: /home/me/dev/devhub-private))`. The fallback ports are
   remembered in `%APPDATA%\DevHub\config\fallback-ports.txt` and reused while the
   defaults stay taken, because WebView settings (Focus vs Dashboard, terminal
   history) are keyed by origin. Native commands are permitted at
@@ -261,7 +280,16 @@ stays in the server log.
   terminal prompt bar's ask chord is Ctrl+Shift+Enter there. The window is
   un-minimized when it first shows, so a saved off-screen state cannot hide it.
 - Setup's folder fields: an empty optional code folder is not an error, and
-  `\\server\share` paths say network shares are unsupported.
+  `\\server\share` and `//server/share` paths say network shares are
+  unsupported (`//wsl.localhost/…` and `//wsl$/…` are translated like their
+  backslash forms).
+- The Today view (Focus or Dashboard) is saved on the machine in
+  `~/.config/devhub/ui-prefs.json` (`/api/ui-prefs/today-view`), not only in
+  browser storage, so it survives a change of port. localStorage stays as a fast
+  cache and fallback; a choice made before the server copy existed is uploaded
+  once. The file is per Linux user, so a `devhub.service` running under the same
+  user (and a checkout dev server) reads and writes the same choice: changing it
+  in one changes it in the others.
 - Release builds hide checkout rebuild notices. Linking a private content repo
   does not mean the bundled application needs a developer rebuild.
 
@@ -282,6 +310,27 @@ waits on a repo.
   tasks and diagrams in, commits with a noreply identity and pushes. Tokens stay in `gh`'s credential store and
   are never committed. *Clone my private repo* and *Link existing checkout* sit
   under the same disclosure and reuse the same code (`setupPrivateRepo`).
+- **The one-click defaults are checked first.** The default is always
+  `<login>/devhub-private` in `~/dev/devhub-private` (`~/Developer/…` on macOS).
+  `GET /api/setup/private-repo` looks at the local folder and runs
+  `gh repo view <login>/<name>` before the UI picks the leading action, and
+  `setupPrivateRepo` repeats the GitHub check before cloning anything:
+  - a git checkout is already there → **Link my existing checkout** leads;
+  - the repo exists, is private and has content → **Clone my private repo**
+    leads, pre-filled;
+  - the repo exists and is public → DevHub says so and never offers to clone it
+    or put content in it;
+  - a non-checkout folder is in the way → create is hidden, with the reason;
+  - in the last three cases a free name is suggested (`devhub-private-2`…, free
+    on GitHub and as a sibling folder) as **Create a new private repo named … instead**;
+  - an *empty private* repo (an interrupted earlier attempt) counts as free and
+    is reused: origin is pointed at it instead of calling `gh repo create`.
+  
+  If a run fails before the first push, it removes only the folder it created
+  (it checked the path did not exist first), so a retry works; a pre-existing
+  folder is never touched, and after a successful push the folder is kept. The
+  error says which of these happened. If `gh` can't be asked (signed out,
+  offline) the form still works and the create attempt reports the problem.
 - **Sign-in is DevHub's own device flow** (the same thing `gh auth login --web`
   does): a one-time code and the GitHub URL, then the token is handed to the
   bundled `gh`. The bundled `gh` is only used for create, clone and the check that
