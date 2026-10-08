@@ -27,6 +27,8 @@ beforeEach(() => {
   }));
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+/** The leading action, not the same-named choices inside the alternatives disclosure. */
+const primary = (name: string | RegExp) => screen.queryAllByRole("button", { name }).filter((button) => !button.closest("details"))[0] ?? null;
 const openAlternatives = () => fireEvent.click(screen.getByText(/Use a different name or folder/));
 
 describe("private repository onboarding", () => {
@@ -65,16 +67,79 @@ describe("private repository onboarding", () => {
     expect(screen.getByRole("button", { name: "Clone and connect" })).toBeDisabled();
   });
   it("keeps the options available and shows an error when privacy validation fails", async () => {
-    repoStatus = { directory: "/code/existing", existing: true, linked: false };
+    repoStatus = { directory: "/code/existing", existing: true, folderExists: true, linked: false };
     post.mockResolvedValue({ ok: false, json: async () => ({ error: "This repository is public." }) } as Response);
     const onLinked = vi.fn();
     renderRepo(<PrivateRepoSetup connected onLinked={onLinked} />);
-    await screen.findByRole("button", { name: "Create my private DevHub repo" });
-    openAlternatives();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Connect private repo" })).not.toBeDisabled());
-    fireEvent.click(screen.getByRole("button", { name: "Connect private repo" }));
+    const link = await screen.findByRole("button", { name: "Link my existing checkout" });
+    await waitFor(() => expect(link).not.toBeDisabled());
+    fireEvent.click(link);
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", "This repository is public.");
     expect(onLinked).not.toHaveBeenCalled();
+    expect(JSON.parse(String(post.mock.calls[0][1].body))).toEqual({ action: "link", directory: "/code/existing" });
+  });
+});
+
+describe("when the defaults are already taken", () => {
+  const remote = { repository: "test-user/devhub-private", exists: true, isPrivate: true, empty: false };
+  const suggestion = { name: "devhub-private-2", directory: "/code/devhub-private-2" };
+
+  it("makes cloning the primary action, pre-filled, when the repo exists on GitHub", async () => {
+    repoStatus = { directory: "/code/devhub-private", linked: false, folderExists: false, existing: false, remote, suggestion };
+    post.mockResolvedValue({ ok: true, json: async () => ({ directory: "/code/devhub-private", url: "https://github.com/test-user/devhub-private" }) } as Response);
+    renderRepo(<PrivateRepoSetup connected onLinked={vi.fn()} />);
+    await waitFor(() => expect(primary("Clone my private repo")).not.toBeNull());
+    const clone = primary("Clone my private repo")!;
+    expect(screen.queryByRole("button", { name: "Create my private DevHub repo" })).toBeNull();
+    expect(screen.getByText(/You already have/)).toBeTruthy();
+    fireEvent.click(clone);
+    await screen.findByText(/Quit and reopen DevHub/);
+    expect(JSON.parse(String(post.mock.calls[0][1].body))).toEqual({ action: "clone", directory: "/code/devhub-private", repository: "test-user/devhub-private" });
+  });
+  it("pre-selects the clone form in the alternatives too", async () => {
+    repoStatus = { directory: "/code/devhub-private", linked: false, remote, suggestion };
+    renderRepo(<PrivateRepoSetup connected onLinked={vi.fn()} />);
+    await waitFor(() => expect(primary("Clone my private repo")).not.toBeNull());
+    openAlternatives();
+    expect((screen.getByLabelText("Private GitHub repository") as HTMLInputElement).value).toBe("test-user/devhub-private");
+  });
+  it("offers a free name that creates a new repo in its own folder", async () => {
+    repoStatus = { directory: "/code/devhub-private", linked: false, remote, suggestion };
+    post.mockResolvedValue({ ok: true, json: async () => ({ directory: suggestion.directory, url: "https://github.com/test-user/devhub-private-2" }) } as Response);
+    renderRepo(<PrivateRepoSetup connected onLinked={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Create a new private repo named devhub-private-2 instead" }));
+    await screen.findByText(/Quit and reopen DevHub/);
+    expect(JSON.parse(String(post.mock.calls[0][1].body))).toEqual({ action: "create", directory: suggestion.directory, name: "devhub-private-2" });
+  });
+  it("hides the one-click create when a folder is in the way, and says why", async () => {
+    repoStatus = { directory: "/code/devhub-private", linked: false, folderExists: true, existing: false, remote: { ...remote, exists: false }, suggestion };
+    renderRepo(<PrivateRepoSetup connected onLinked={vi.fn()} />);
+    expect((await screen.findByRole("status")).textContent).toMatch(/folder already exists at \/code\/devhub-private/);
+    expect(screen.queryByRole("button", { name: "Create my private DevHub repo" })).toBeNull();
+    expect(primary("Clone my private repo")).toBeNull();
+    expect(screen.getByRole("button", { name: /named devhub-private-2 instead/ })).toBeTruthy();
+  });
+  it("leads with Link when a checkout exists, even if the repo is also on GitHub", async () => {
+    repoStatus = { directory: "/code/devhub-private", linked: false, folderExists: true, existing: true, remote, suggestion };
+    renderRepo(<PrivateRepoSetup connected onLinked={vi.fn()} />);
+    await screen.findByRole("button", { name: "Link my existing checkout" });
+    expect(screen.queryByRole("button", { name: "Create my private DevHub repo" })).toBeNull();
+    expect(primary("Clone my private repo")).toBeNull();
+  });
+  it("switches the primary action after Re-check sees the repo", async () => {
+    repoStatus = { directory: "/code/devhub-private", linked: false };
+    renderRepo(<PrivateRepoSetup connected onLinked={vi.fn()} />);
+    await screen.findByRole("button", { name: "Create my private DevHub repo" });
+    repoStatus = { directory: "/code/devhub-private", linked: false, remote };
+    openAlternatives();
+    fireEvent.click(screen.getByRole("button", { name: /Re-check$/ }));
+    await waitFor(() => expect(primary("Clone my private repo")).not.toBeNull());
+    expect(screen.queryByRole("button", { name: "Create my private DevHub repo" })).toBeNull();
+  });
+  it("treats an empty private repo as free, so the one-click create still works", async () => {
+    repoStatus = { directory: "/code/devhub-private", linked: false, remote: { ...remote, empty: true } };
+    renderRepo(<PrivateRepoSetup connected onLinked={vi.fn()} />);
+    await screen.findByRole("button", { name: "Create my private DevHub repo" });
   });
 });
 

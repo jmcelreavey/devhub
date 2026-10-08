@@ -15,6 +15,7 @@ import { EmptyState, FetchError, LoadingLine, SearchInput } from "@/components";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
 import { formatShortDate } from "@/lib/format-date";
+import { useModifierKey } from "@/lib/hooks/use-modifier-key";
 import {
   RECALL_EVENT_KINDS,
   RECALL_SOURCE_KINDS,
@@ -66,6 +67,7 @@ function scoreBar(value: number, max: number): string {
 }
 
 export default function RecallPage() {
+  const modifier = useModifierKey();
   const [input, setInput] = useState("");
   const [budget, setBudget] = useState(2000);
   const [alpha, setAlpha] = useState(0.5);
@@ -336,7 +338,7 @@ export default function RecallPage() {
         <EmptyState
           icon={<BrainCircuit size={32} />}
           title="Ask it something"
-          subtitle="Whole questions rank better here than single keywords — this is not the ⌘K palette."
+          subtitle={`Whole questions rank better here than single keywords — this is not the ${modifier}K palette.`}
           action={
             <div className="flex flex-col gap-1.5 items-start">
               {EXAMPLES.map((example) => (

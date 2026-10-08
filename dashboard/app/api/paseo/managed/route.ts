@@ -10,6 +10,7 @@ import { disablePaseoRelay, PASEO_DAEMON_LABEL, PASEO_SYSTEMD_UNIT, paseoCli, pa
 import { defaultPaseoProvider, listPaseoProviders } from "@/lib/paseo/providers";
 
 import { checkPaseoUpdate, hasActivePaseoWork } from "@/lib/paseo/update";
+import { clearPaseoRestartPending, paseoHealthy as healthy, paseoRestartPending } from "@/lib/paseo/pending-restart";
 import { missingPaseoUnitBinary } from "@/lib/paseo/unit-health";
 import { paseoUserMessage } from "@/lib/paseo/user-message";
 import { withPaseo } from "@/lib/paseo/client";
@@ -29,10 +30,6 @@ function fromLocalBrowser(req: NextRequest): boolean {
   try { return LOOPBACK.includes(new URL(`http://${host}`).hostname); } catch { return false; }
 }
 
-async function healthy(): Promise<boolean> {
-  try { return (await fetch(`${paseoWebOrigin()}/api/health`, { cache: "no-store", signal: AbortSignal.timeout(3_000) })).ok; } catch { return false; }
-}
-
 /** Daemon status for the Connection tab. Provider errors are shown, not thrown. */
 export async function GET(req: NextRequest) {
   const auth = requireDashboardAuth(req);
@@ -47,6 +44,7 @@ export async function GET(req: NextRequest) {
       providers, defaultProvider: providers ? defaultPaseoProvider(providers) ?? null : null,
       authFailed: running && providers === null,
       unitBinaryMissing: managed ? missingPaseoUnitBinary() : null,
+      restartPending: running && Boolean(managed) && paseoRestartPending(),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not read Paseo's status." }, { status: 503 });
@@ -74,7 +72,7 @@ async function restart(): Promise<void> {
   }
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
-    if (await healthy()) return;
+    if (await healthy()) { clearPaseoRestartPending(); return; }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   throw new Error("Paseo did not become healthy after restarting.");

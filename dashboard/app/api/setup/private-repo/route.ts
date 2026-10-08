@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import path from "node:path";
 import os from "node:os";
-import fs from "node:fs";
 import { parseBody, requireDashboardAuth } from "@/lib/api-utils";
 import { getCheckoutRoot, isDesktopRuntime } from "@/lib/desktop/runtime-paths";
 import { readDashboardEnvLocalFile } from "@/lib/dashboard-env-local";
-import { PrivateRepoSetupSchema, setupPrivateRepo, assertPrivateRepo, suggestedPrivateRepoDirectory } from "@/lib/setup/private-repo";
+import { PrivateRepoSetupSchema, setupPrivateRepo, assertPrivateRepo, suggestedPrivateRepoDirectory, describePrivateRepoTarget } from "@/lib/setup/private-repo";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +13,7 @@ export async function GET(req: NextRequest) {
   if (!isDesktopRuntime()) return NextResponse.json({ error: "Desktop app required." }, { status: 400 });
   const directory = getCheckoutRoot();
   if (!directory) {
-    const suggested = suggestedPrivateRepoDirectory(os.homedir());
-    return NextResponse.json({ directory: suggested, existing: fs.existsSync(path.join(suggested, ".git")), linked: false });
+    return NextResponse.json({ ...await describePrivateRepoTarget(suggestedPrivateRepoDirectory(os.homedir())), linked: false });
   }
   try {
     const url = await assertPrivateRepo(directory);

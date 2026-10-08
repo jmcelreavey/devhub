@@ -32,6 +32,7 @@ import { AiSqlBar } from "./AiSqlBar";
 import { EditBar } from "./EditBar";
 import { useRowEdits } from "./useRowEdits";
 import { objectMenuGroups, quoteIdent } from "./menus";
+import { useShortcutLabel } from "@/lib/hooks/use-modifier-key";
 import type { DbConnectionRow } from "./shared";
 import {
   dbApi,
@@ -75,6 +76,7 @@ const TAB_IDS: readonly DbTabId[] = TABS.map(([id]) => id);
  */
 export function DbWorkspace() {
   const toast = useToast();
+  const shortcutLabel = useShortcutLabel();
   const confirm = useConfirm();
   const runSequence = useRef(0);
 
@@ -768,7 +770,7 @@ export function DbWorkspace() {
                             disabled={running || !statement.trim() || Boolean(activePlan?.refusal)}
                           >
                             {running ? "Running…" : "Run"}
-                            <kbd>⌘↵</kbd>
+                            <kbd>{shortcutLabel("↵")}</kbd>
                           </button>
                           {running && (
                             <button

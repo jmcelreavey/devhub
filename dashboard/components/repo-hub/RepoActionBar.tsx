@@ -7,6 +7,7 @@ import { repoShortcutFromEvent } from "@/lib/app-shortcuts";
 import { isTypingTarget } from "@/lib/konami-sequence";
 import { Bot,Code2,Loader2,Rocket,TerminalSquare } from "lucide-react";
 import { useEffect,useLayoutEffect,useRef } from "react";
+import { useShortcutLabel } from "@/lib/hooks/use-modifier-key";
 
 function isKeepAliveHidden(node: HTMLElement | null): boolean {
   const panel = node?.closest("[data-workspace-tab-panel]");
@@ -21,6 +22,7 @@ export function RepoActionBar({
   repo: RepoInfo;
   actions: ReturnType<typeof useReposActions>;
 }) {
+  const label = useShortcutLabel();
   const rootRef = useRef<HTMLDivElement>(null);
   const repoRef = useRef(repo);
   const openUpstartRef = useRef(actions.openUpstart);
@@ -50,7 +52,7 @@ export function RepoActionBar({
 
   return (
     <div ref={rootRef} className="flex flex-wrap items-center gap-1.5">
-      <button type="button" className="btn btn-ghost text-xs" title="Terminal ⌘⇧T" onClick={() => actions.openInTerminal(repo)}><TerminalSquare size={13} />Terminal</button>
+      <button type="button" className="btn btn-ghost text-xs" title={`Terminal ${label("T", true)}`} onClick={() => actions.openInTerminal(repo)}><TerminalSquare size={13} />Terminal</button>
       <button type="button" className="btn btn-ghost text-xs" onClick={() => void actions.openInCursor(repo.name)}><Code2 size={13} />Editor</button>
       <button type="button" className="btn btn-ghost text-xs" onClick={() => openAgentHandoff({ title: "Ask Agent · " + repo.name, cwd: repo.path, repoName: repo.name, worktree: false })}><Bot size={13} />Agents</button>
       <button
@@ -59,7 +61,7 @@ export function RepoActionBar({
         disabled={actions.upstarting !== null}
         onClick={() => void actions.openUpstart(repo)}
         aria-label="Run upstart"
-        title="Upstart ⌘⏎"
+        title={`Upstart ${label("↵")}`}
       >
         {actions.upstarting === repo.name ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <Rocket size={13} aria-hidden />}
         {actions.upstarting === repo.name ? "Preparing…" : "Upstart"}

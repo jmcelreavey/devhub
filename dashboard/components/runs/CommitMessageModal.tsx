@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useShortcutLabel } from "@/lib/hooks/use-modifier-key";
 import { X, FileText, StickyNote, ListChecks, PenTool, GitMerge, type LucideIcon } from "lucide-react";
 
 export function defaultCommitCheckpointMessage(): string {
@@ -49,6 +50,7 @@ export function CommitMessageModal({
   variant = "default",
   fileStats,
 }: CommitMessageModalProps) {
+  const shortcutLabel = useShortcutLabel();
   const titleId = "commit-message-modal-title";
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
@@ -168,7 +170,7 @@ export function CommitMessageModal({
           }}
         />
         <p className="mt-1 text-xs text-text-subtle">
-          ⌘/Ctrl+Enter to confirm
+          {shortcutLabel("Enter")} to confirm
         </p>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button type="button" className="btn btn-ghost" onClick={handleClose}>

@@ -8,6 +8,7 @@ import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 import { formatShortDate } from "@/lib/format-date";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
+import { useShortcutLabel } from "@/lib/hooks/use-modifier-key";
 import {
   MAX_ANSWER_CHARS,
   type VoiceApplyResult,
@@ -27,6 +28,7 @@ async function postJson<T>(url: string, method: "POST" | "PUT", body?: unknown):
 }
 
 export default function VoicePage() {
+  const shortcutLabel = useShortcutLabel();
   const { data, error, mutate } = useLive<VoiceState>("/api/voice");
   const boot = useBootGate(data !== undefined || !!error);
   const toast = useToast();
@@ -219,7 +221,7 @@ export default function VoicePage() {
                 Skip
               </button>
               <span className="ml-auto text-xs text-text-subtle">
-                ⌘↵ to save · {text.length}/{MAX_ANSWER_CHARS}
+                {shortcutLabel("↵")} to save · {text.length}/{MAX_ANSWER_CHARS}
               </span>
             </div>
           </div>

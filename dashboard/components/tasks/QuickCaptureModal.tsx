@@ -7,6 +7,7 @@ import { textToBlocks } from "@/lib/markdown-convert";
 import { slugify } from "@/lib/entity-note";
 import { todayISO } from "@/lib/utils";
 import { useToast } from "@/lib/hooks/use-toast";
+import { useShortcutLabel } from "@/lib/hooks/use-modifier-key";
 
 type CaptureKind = "task" | "note" | "learning";
 
@@ -24,6 +25,7 @@ const KINDS: { id: CaptureKind; label: string; Icon: typeof ListTodo }[] = [
 
 export function QuickCaptureModal({ open, onClose, defaultKind = "task" }: QuickCaptureModalProps) {
   const toast = useToast();
+  const label = useShortcutLabel();
   const [kind, setKind] = useState<CaptureKind>(defaultKind);
   const [text, setText] = useState("");
   const [path, setPath] = useState("");
@@ -83,7 +85,7 @@ export function QuickCaptureModal({ open, onClose, defaultKind = "task" }: Quick
       align="top"
       footer={
         <div className="flex justify-between items-center">
-          <span className="text-[11px] text-text-subtle">⌘⇧C to open · ⌘↵ to save</span>
+          <span className="text-[11px] text-text-subtle">{label("C", true)} to open · {label("↵")} to save</span>
           <div className="flex gap-2">
             <button type="button" className="btn btn-ghost text-xs" onClick={resetAndClose}>Cancel</button>
             <button type="button" className="btn btn-primary text-xs" disabled={saving || !text.trim()} onClick={() => void save()}>

@@ -16,6 +16,11 @@ describe("windowsPathToWsl", () => {
     expect(windowsPathToWsl("\\\\WSL.LOCALHOST\\Ubuntu")).toBe("/");
   });
 
+  it("accepts the forward-slash spelling of the distro share", () => {
+    expect(windowsPathToWsl("//wsl.localhost/Ubuntu/home/me/dev")).toBe("/home/me/dev");
+    expect(windowsPathToWsl("//wsl$/Ubuntu/home/me")).toBe("/home/me");
+  });
+
   it("rejects shapes with no Linux equivalent", () => {
     expect(windowsPathToWsl("\\\\fileserver\\share\\x")).toBeNull();
     expect(windowsPathToWsl("relative\\path")).toBeNull();
@@ -51,6 +56,18 @@ describe("unsupportedPathMessage", () => {
   const wsl = { home: "/home/me", wsl: true };
   it("says network shares are unsupported instead of 'Path must be absolute'", () => {
     expect(unsupportedPathMessage("\\\\fileserver\\team\\code", wsl)).toMatch(/Network shares/);
+  });
+  it("treats //server/share like \\\\server\\share", () => {
+    expect(unsupportedPathMessage("//fileserver/team/code", wsl)).toMatch(/Network shares/);
+    expect(unsupportedPathMessage("  //fileserver/share  ", { home: "/Users/me", wsl: false })).toMatch(/Network shares/);
+  });
+  it("does not mistake the WSL share or ordinary absolute paths for a network share", () => {
+    expect(unsupportedPathMessage("//wsl.localhost/Ubuntu/home/me", wsl)).toBeNull();
+    expect(unsupportedPathMessage("//wsl$/Ubuntu/home/me", wsl)).toBeNull();
+    expect(unsupportedPathMessage("//WSL.LOCALHOST/Ubuntu", wsl)).toBeNull();
+    expect(unsupportedPathMessage("///home/me", wsl)).toBeNull();
+    expect(unsupportedPathMessage("/home/me//dev", wsl)).toBeNull();
+    expect(resolveSetupPath("//wsl.localhost/Ubuntu/home/me/dev", wsl)).toBe("/home/me/dev");
   });
   it("leaves WSL paths, drive paths and ordinary input alone", () => {
     expect(unsupportedPathMessage("\\\\wsl.localhost\\Ubuntu\\home\\me", wsl)).toBeNull();

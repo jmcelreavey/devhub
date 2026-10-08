@@ -1,6 +1,7 @@
 "use client";
 
 import { ModalShell } from "@/components/shell/ModalShell";
+import { useModifierKey } from "@/lib/hooks/use-modifier-key";
 import type { RepoGitTabId } from "./shared";
 
 interface Shortcut {
@@ -61,6 +62,7 @@ export function ShortcutsOverlay({
   onClose: () => void;
   activeTab: RepoGitTabId;
 }) {
+  const modifier = useModifierKey();
   return (
     <ModalShell
       open={open}
@@ -80,7 +82,7 @@ export function ShortcutsOverlay({
                 <div key={`${section.group}:${s.what}`} className="repo-git-shortcuts-row">
                   <span className="repo-git-shortcuts-keys">
                     {s.keys.map((k) => (
-                      <kbd key={k}>{k}</kbd>
+                      <kbd key={k}>{k === "⌘" ? modifier.replace("+", "") : k}</kbd>
                     ))}
                   </span>
                   <span>{s.what}</span>

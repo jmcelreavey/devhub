@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
@@ -13,7 +16,7 @@ vi.mock("@/lib/content/dirs", () => ({
 }));
 vi.mock("@/lib/paseo/update", () => ({ hasActivePaseoWork: async () => false, checkPaseoUpdate: vi.fn() }));
 vi.mock("@/lib/paseo/providers", () => ({ defaultPaseoProvider: vi.fn(), listPaseoProviders: vi.fn() }));
-vi.mock("@/lib/paseo/managed", () => ({ PASEO_DAEMON_LABEL: "test", readPaseoManaged: vi.fn() }));
+vi.mock("@/lib/paseo/managed", () => ({ PASEO_DAEMON_LABEL: "test", readPaseoManaged: vi.fn(() => ({ home: "/p" })) }));
 import { POST } from "./route";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
@@ -26,5 +29,24 @@ describe("packaged Paseo updates", () => {
     });
     expect((await POST(req)).status).toBe(200);
     expect(mock.exec).toHaveBeenCalledWith(process.execPath, ["/app/Resources/resources/scripts/install-paseo.mjs", "--update"], expect.any(Object));
+  });
+});
+
+describe("restart after the shell rewrote the Paseo unit", () => {
+  it("clears the pending marker once the restarted daemon is healthy", async () => {
+    const appData = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-restart-"));
+    vi.stubEnv("DEVHUB_APP_DATA", appData);
+    const marker = path.join(appData, "paseo", "restart-pending");
+    fs.mkdirSync(path.dirname(marker), { recursive: true });
+    fs.writeFileSync(marker, "");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+    const req = new NextRequest("http://localhost:1337/api/paseo/managed", {
+      method: "POST", headers: { host: "localhost:1337", "content-type": "application/json" },
+      body: JSON.stringify({ action: "restart" }),
+    });
+    expect((await POST(req)).status).toBe(200);
+    expect(fs.existsSync(marker)).toBe(false);
+    vi.unstubAllEnvs();
+    fs.rmSync(appData, { recursive: true, force: true });
   });
 });

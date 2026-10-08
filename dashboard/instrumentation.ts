@@ -19,6 +19,8 @@ export async function register() {
     startAgentReconciliation();
     const { startAgentCliUpdates } = await import("./lib/paseo/agent-cli-updates");
     startAgentCliUpdates();
+    const { startPendingPaseoRestart } = await import("./lib/paseo/pending-restart");
+    startPendingPaseoRestart();
     const { startScheduler } = await import("./lib/scheduler");
     startScheduler();
     // Same single-owner rule: it writes the shared task sidecars.

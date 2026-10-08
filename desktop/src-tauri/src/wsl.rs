@@ -139,23 +139,38 @@ impl WslBackend {
         .filter(|path| !path.is_empty())
     }
 
-    /// The checkout the user's own `devhub.service` runs against (its working
-    /// directory is `<repo>/dashboard`), when that service exists.
+    /// The checkout the user's own `devhub.service` runs against, when that
+    /// service exists. Its working directory is either `<repo>/dashboard`
+    /// (`next start` there) or `<repo>` (`npm start` at the root); a directory
+    /// that is not a DevHub checkout is no answer.
     pub fn running_service_repo(&self) -> Option<String> {
+        let dir = self
+            .exec(
+                &[
+                    "/bin/systemctl",
+                    "--user",
+                    "show",
+                    "devhub.service",
+                    "-p",
+                    "WorkingDirectory",
+                    "--value",
+                ],
+                QUICK_TIMEOUT,
+            )
+            .ok()?;
+        let repo = service_repo_root(&dir)?;
         self.exec(
             &[
-                "/bin/systemctl",
-                "--user",
-                "show",
-                "devhub.service",
-                "-p",
-                "WorkingDirectory",
-                "--value",
+                "/bin/sh",
+                "-c",
+                r#"[ -f "$1/package.json" ] && [ -d "$1/dashboard" ]"#,
+                "devhub-checkout",
+                &repo,
             ],
             QUICK_TIMEOUT,
         )
         .ok()
-        .and_then(|dir| service_repo_root(&dir))
+        .map(|_| repo)
     }
 
     /// The DevHub git checkout to run against, if there is one.
@@ -289,10 +304,14 @@ fi
             INSTALL_TIMEOUT,
         )
         .map_err(|err| format!("Could not keep Paseo's Node runtime: {err}"))?;
+        // The running daemon still has the old unit's environment. The marker
+        // tells the dashboard to apply it once Paseo is idle.
         let write = r#"
 set -e
 printf '%s\n' "$2" > "$1.next"
 mv "$1.next" "$1"
+mkdir -p "$(dirname "$3")"
+: > "$3"
 systemctl --user daemon-reload || true
 "#;
         self.exec(
@@ -303,6 +322,7 @@ systemctl --user daemon-reload || true
                 "devhub-paseo-unit",
                 &unit_path,
                 rewritten.trim_end(),
+                &paseo_restart_marker(&self.app_data),
             ],
             QUICK_TIMEOUT,
         )
@@ -394,12 +414,13 @@ pub fn parse_listening_ports(table: &str) -> Vec<u16> {
         .collect()
 }
 
-/// `<repo>/dashboard` → `<repo>`. Anything else is not a dev checkout service.
+/// The checkout a service's working directory points at: `<repo>/dashboard`
+/// and `<repo>` both name `<repo>`. This is only the path; the caller checks it
+/// really is a DevHub checkout.
 pub fn service_repo_root(working_directory: &str) -> Option<String> {
     let dir = working_directory.trim().trim_end_matches('/');
-    dir.strip_suffix("/dashboard")
-        .filter(|repo| repo.starts_with('/'))
-        .map(str::to_string)
+    let repo = dir.strip_suffix("/dashboard").unwrap_or(dir);
+    (repo.starts_with('/') && repo.len() > 1).then(|| repo.to_string())
 }
 
 /// Should this app defer scheduled jobs to a service already holding the
@@ -407,12 +428,22 @@ pub fn service_repo_root(working_directory: &str) -> Option<String> {
 /// profile, or one linked to a different repo, has jobs of its own that nothing
 /// else will run. With no way to tell what the running service uses, assume it
 /// shares our content (the safe side: no duplicate jobs).
-pub fn shares_content(own_content_root: Option<&str>, service_repo: Option<&str>) -> bool {
+/// Returns the decision with its reason, for the shell log.
+pub fn content_sharing(
+    own_content_root: Option<&str>,
+    service_repo: Option<&str>,
+) -> (bool, &'static str) {
     let normalise = |path: &str| path.trim_end_matches('/').to_string();
     match (own_content_root, service_repo) {
-        (None, _) => false,
-        (Some(_), None) => true,
-        (Some(own), Some(service)) => normalise(own) == normalise(service),
+        (None, _) => (false, "this profile uses its own app data"),
+        (Some(_), None) => (
+            true,
+            "could not tell which checkout the running service uses",
+        ),
+        (Some(own), Some(service)) if normalise(own) == normalise(service) => {
+            (true, "the running service uses the same checkout")
+        }
+        (Some(_), Some(_)) => (false, "the running service uses a different checkout"),
     }
 }
 
@@ -434,6 +465,23 @@ pub fn paseo_unit_path(home: &str) -> String {
         "{}/.config/systemd/user/{PASEO_UNIT}",
         home.trim_end_matches('/')
     )
+}
+
+/// Left after a unit rewrite; the dashboard restarts Paseo (when idle) and clears it.
+/// Keep in step with `pendingRestartMarker` in `dashboard/lib/paseo/pending-restart.ts`.
+pub fn paseo_restart_marker(app_data: &str) -> String {
+    format!("{app_data}/paseo/restart-pending")
+}
+
+/// The shell-log line for a rewritten unit. A unit that already ran the durable
+/// node was only cleaned up; saying it was "moved" would send a reader looking
+/// for a node binary that never changed.
+pub fn describe_paseo_repair(old_binary: &str, durable_node: &str) -> String {
+    if old_binary == durable_node {
+        "[paseo] cleaned the Paseo service environment (npm prefix, payload PATH)".to_string()
+    } else {
+        format!("[paseo] moved the Paseo service off {old_binary} to its own node runtime")
+    }
 }
 
 /// The copy of node the Paseo daemon owns, outside every versioned payload.
@@ -1254,6 +1302,10 @@ mod tests {
         assert_eq!(parse_saved_ports("0 5"), None);
     }
 
+    fn shares_content(own: Option<&str>, service: Option<&str>) -> bool {
+        content_sharing(own, service).0
+    }
+
     #[test]
     fn only_defers_scheduled_jobs_when_the_content_is_shared() {
         assert!(
@@ -1277,12 +1329,71 @@ mod tests {
 
     #[test]
     fn finds_the_checkout_behind_a_dev_service() {
+        // `next start` inside dashboard/
         assert_eq!(
             service_repo_root("/home/me/dev/devhub/dashboard\n").as_deref(),
             Some("/home/me/dev/devhub")
         );
-        assert_eq!(service_repo_root("/opt/other"), None);
+        // `npm start` at the repo root
+        assert_eq!(
+            service_repo_root("/home/me/dev/devhub-private\n").as_deref(),
+            Some("/home/me/dev/devhub-private")
+        );
+        assert_eq!(
+            service_repo_root("/home/me/dev/devhub/").as_deref(),
+            Some("/home/me/dev/devhub")
+        );
         assert_eq!(service_repo_root(""), None);
+        assert_eq!(service_repo_root("/"), None);
+        assert_eq!(service_repo_root("relative/dir"), None);
+    }
+
+    #[test]
+    fn a_root_layout_service_on_another_repo_does_not_disable_the_scheduler() {
+        // The real unit: WorkingDirectory=<repo>, ExecStart=npm start.
+        let service = service_repo_root("/home/me/dev/devhub-private");
+        let linked = Some("/home/me/devhub-wizard/create");
+        let (shared, reason) = content_sharing(linked, service.as_deref());
+        assert!(!shared, "a different repo has its own jobs");
+        assert!(reason.contains("different"));
+    }
+
+    #[test]
+    fn both_service_layouts_defer_only_for_the_same_repo() {
+        for working_directory in ["/home/me/dev/devhub", "/home/me/dev/devhub/dashboard"] {
+            let service = service_repo_root(working_directory);
+            assert!(shares_content(
+                Some("/home/me/dev/devhub"),
+                service.as_deref()
+            ));
+            assert!(!shares_content(
+                Some("/home/me/dev/other"),
+                service.as_deref()
+            ));
+        }
+    }
+
+    #[test]
+    fn paseo_log_says_what_actually_changed() {
+        let durable = paseo_durable_node("/home/me/.local/share/devhub");
+        assert_eq!(
+            describe_paseo_repair(&durable, &durable),
+            "[paseo] cleaned the Paseo service environment (npm prefix, payload PATH)"
+        );
+        let moved = describe_paseo_repair(
+            "/home/me/.local/share/devhub/runtime/abc/runtime/node",
+            &durable,
+        );
+        assert!(moved.starts_with("[paseo] moved the Paseo service off "));
+        assert!(moved.contains("runtime/abc"));
+    }
+
+    #[test]
+    fn paseo_restart_marker_matches_the_dashboard() {
+        assert_eq!(
+            paseo_restart_marker("/home/me/.local/share/devhub"),
+            "/home/me/.local/share/devhub/paseo/restart-pending"
+        );
     }
 
     #[test]

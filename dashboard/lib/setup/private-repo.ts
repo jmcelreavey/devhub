@@ -139,7 +139,90 @@ export function suggestedPrivateRepoDirectory(home: string, platform: NodeJS.Pla
   return path.join(home, platform === "darwin" ? "Developer" : "dev", "devhub-private");
 }
 
+export const DEFAULT_PRIVATE_REPO_NAME = "devhub-private";
+const remoteInfoSchema = z.object({ isPrivate: z.boolean(), isEmpty: z.boolean().optional(), url: z.string().url() });
+
+export interface RemoteRepoState { exists: boolean; isPrivate: boolean; empty: boolean; url?: string }
+
+/** Does `<login>/<name>` exist on GitHub? "Not found" is an answer; any other failure is not. */
+export async function remoteRepoState(repository: string): Promise<RemoteRepoState> {
+  try {
+    const { stdout } = await execGh(["repo", "view", repository, "--json", "isPrivate,isEmpty,url"]);
+    const info = remoteInfoSchema.parse(JSON.parse(stdout));
+    return { exists: true, isPrivate: info.isPrivate, empty: info.isEmpty ?? false, url: info.url };
+  } catch (err) {
+    const text = `${err instanceof Error ? err.message : ""} ${(err as { stderr?: unknown }).stderr ?? ""}`;
+    if (/could not resolve to a repository|http 404|not found/i.test(text)) return { exists: false, isPrivate: false, empty: false };
+    throw err;
+  }
+}
+
+/**
+ * A repo that is already there and holds content cannot be created again; an
+ * empty private one is what an earlier, interrupted attempt left behind, so a
+ * retry reuses it.
+ */
+function remoteBlocksCreate(remote: RemoteRepoState): boolean {
+  return remote.exists && !(remote.empty && remote.isPrivate);
+}
+
+async function pathExists(target: string): Promise<boolean> {
+  try { await fs.access(target); return true; }
+  catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") return false; throw err; }
+}
+
+/** `devhub-private-2`, `-3`…: free both on GitHub and as a sibling folder. */
+export async function suggestFreeRepoName(login: string, directory: string, base = DEFAULT_PRIVATE_REPO_NAME): Promise<{ name: string; directory: string } | undefined> {
+  const parent = path.dirname(directory);
+  for (let n = 2; n <= 9; n++) {
+    const name = `${base}-${n}`;
+    const candidate = path.join(parent, name);
+    if (await pathExists(candidate)) continue;
+    if ((await remoteRepoState(`${login}/${name}`)).exists) continue;
+    return { name, directory: candidate };
+  }
+  return undefined;
+}
+
+export interface PrivateRepoTarget {
+  directory: string;
+  /** A git checkout is already there: link it. */
+  existing: boolean;
+  /** Something is at the folder (a checkout or not); the one-click create cannot use it. */
+  folderExists: boolean;
+  /** The default-named repo in the signed-in account, when GitHub could be asked. */
+  remote?: { repository: string; exists: boolean; isPrivate: boolean; empty: boolean };
+  /** A free name and folder when the defaults are taken. */
+  suggestion?: { name: string; directory: string };
+}
+
+/** What the one-click defaults would hit, found out before anything is cloned. */
+export async function describePrivateRepoTarget(directory: string, name = DEFAULT_PRIVATE_REPO_NAME): Promise<PrivateRepoTarget> {
+  const target: PrivateRepoTarget = {
+    directory,
+    existing: await pathExists(path.join(directory, ".git")),
+    folderExists: await pathExists(directory),
+  };
+  try {
+    const user = userSchema.parse(JSON.parse((await execGh(["api", "user"])).stdout));
+    const repository = `${user.login}/${name}`;
+    const state = await remoteRepoState(repository);
+    target.remote = { repository, exists: state.exists, isPrivate: state.isPrivate, empty: state.empty };
+    if (target.folderExists || remoteBlocksCreate(state)) target.suggestion = await suggestFreeRepoName(user.login, directory, name);
+  } catch {
+    // Signed out, offline or no gh: the create attempt reports it; the form still works.
+  }
+  return target;
+}
+
 let setupRunning = false;
+
+/** Never the filesystem root or the home folder, whatever the caller thinks it created. */
+async function removeCreatedFolder(directory: string): Promise<boolean> {
+  if (directory === path.parse(directory).root || directory === path.resolve(process.env.HOME ?? "/")) return false;
+  try { await fs.rm(directory, { recursive: true, force: true }); return true; }
+  catch { return false; }
+}
 
 export async function setupPrivateRepo(input: z.infer<typeof PrivateRepoSetupSchema>): Promise<{ directory: string; url: string }> {
   if (!isDesktopRuntime()) throw new Error("Private-repo onboarding is for the installed desktop app.");
@@ -148,8 +231,14 @@ export async function setupPrivateRepo(input: z.infer<typeof PrivateRepoSetupSch
   assertGhAvailable();
   if (setupRunning) throw new Error("Private repository setup is already running.");
   setupRunning = true;
+  const directory = path.resolve(input.directory.replace(/^~(?=\/|$)/, process.env.HOME ?? ""));
+  // The folder this run created, until its content is safely on GitHub. Only that
+  // one is ever removed on failure: a folder that was there before is the user's.
+  let createdFolder = false;
+  let contentPublished = false;
+  let reusedRemote = false;
+  let remoteCreated = false;
   try {
-    const directory = path.resolve(input.directory.replace(/^~(?=\/|$)/, process.env.HOME ?? ""));
     if (input.action === "link") {
       await assertDevHubCheckout(directory);
       const url = await assertPrivateRepo(directory);
@@ -170,6 +259,7 @@ export async function setupPrivateRepo(input: z.infer<typeof PrivateRepoSetupSch
       const url = await privateRepoUrl(input.repository);
       await execGh(["auth", "setup-git", "--hostname", "github.com"]);
       await fs.mkdir(path.dirname(directory), { recursive: true });
+      createdFolder = true;
       await execExternal("git", ["clone", "--", `${url}.git`, directory], {
         env: { ...ghEnv(), GIT_TERMINAL_PROMPT: "0" }, timeoutMs: 180_000, label: "setup:clone-private",
       });
@@ -183,14 +273,29 @@ export async function setupPrivateRepo(input: z.infer<typeof PrivateRepoSetupSch
     }
     const { stdout } = await execGh(["api", "user"]);
     const user = userSchema.parse(JSON.parse(stdout));
+    // Ask GitHub before cloning anything, so a taken name costs nothing.
+    const repository = `${user.login}/${input.name}`;
+    const remote = await remoteRepoState(repository);
+    if (remoteBlocksCreate(remote)) {
+      const free = await suggestFreeRepoName(user.login, directory);
+      throw new Error(`${repository} already exists on GitHub. ${remote.empty ? "It is public, so DevHub will not put your content in it. " : ""}Clone it with "Clone my private repo", link a checkout you already have${free ? `, or create a new one named ${free.name}` : ", or choose another name"}.`);
+    }
+    reusedRemote = remote.exists;
     await execGh(["auth", "setup-git", "--hostname", "github.com"]);
     await fs.mkdir(path.dirname(directory), { recursive: true });
+    createdFolder = true;
     await execExternal("git", ["clone", "--", PUBLIC_REPO, directory], {
       env: { ...ghEnv(), GIT_TERMINAL_PROMPT: "0" }, timeoutMs: 180_000, label: "setup:clone-public-core",
     });
     await git(directory, ["remote", "rename", "origin", "upstream"]);
-    // --private creates an independent copy; GitHub public forks stay public.
-    await execGh(["repo", "create", `${user.login}/${input.name}`, "--private", "--source", directory, "--remote", "origin"], { timeoutMs: 60_000 });
+    if (reusedRemote) {
+      // An empty private repo from an interrupted attempt: point origin at it.
+      await git(directory, ["remote", "add", "origin", `${remote.url}.git`]);
+    } else {
+      // --private creates an independent copy; GitHub public forks stay public.
+      await execGh(["repo", "create", repository, "--private", "--source", directory, "--remote", "origin"], { timeoutMs: 60_000 });
+      remoteCreated = true;
+    }
     const url = await assertPrivateRepo(directory);
     const sources = [
       ["notes", getNotesDir()], ["tasks", getTasksDir()],
@@ -209,10 +314,16 @@ export async function setupPrivateRepo(input: z.infer<typeof PrivateRepoSetupSch
     // Recheck immediately before publishing any personal content.
     await assertPrivateRepo(directory);
     await git(directory, ["push", "-u", "origin", "HEAD"]);
+    contentPublished = true;
     await linkContent(directory);
     return { directory, url };
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
+    // Before the first push the folder holds only public code (or a clone of the
+    // user's own repo), and leaving it makes every retry fail with "already exists".
+    if (createdFolder && !contentPublished && await removeCreatedFolder(directory)) {
+      throw new Error(`${detail}\nThe new local folder was removed, so you can try again.${remoteCreated ? " The private repo on GitHub is still empty and will be reused." : ""}`);
+    }
     throw new Error(`${detail}\nSetup leaves existing content and any created repo in place. If creation partly finished, link that private checkout to continue.`);
   } finally { setupRunning = false; }
 }

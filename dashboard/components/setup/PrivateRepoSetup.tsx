@@ -8,7 +8,27 @@ import { FolderOpen, RotateCcw } from "lucide-react";
 import { pickFolder, isDesktop } from "@/lib/desktop/bridge";
 import type { GitCheck } from "@/lib/setup/git-check";
 
-interface RepoStatus { directory: string; linked: boolean; url?: string; error?: string; existing?: boolean }
+interface RepoStatus {
+  directory: string; linked: boolean; url?: string; error?: string; existing?: boolean;
+  /** Something is already at `directory` (a checkout or not). */
+  folderExists?: boolean;
+  remote?: { repository: string; exists: boolean; isPrivate: boolean; empty: boolean };
+  suggestion?: { name: string; directory: string };
+}
+
+type Plan = "create" | "clone" | "link" | "blocked";
+
+/**
+ * What the one-click default can do here. The create button only appears when
+ * it can succeed; otherwise the matching action leads, instead of a button that
+ * fails with "already exists".
+ */
+export function planFor(status: RepoStatus | undefined): Plan {
+  if (status?.existing) return "link";
+  if (status?.folderExists) return "blocked";
+  if (status?.remote?.exists && !status.remote.empty) return "clone";
+  return "create";
+}
 
 const DEFAULT_REPO_NAME = "devhub-private";
 
@@ -44,10 +64,12 @@ export function PrivateRepoSetup({ connected, onLinked, onLater }: { connected: 
   const { data, error: fetchError, isLoading: checking, mutate } = useLive<RepoStatus>(
     connected ? "/api/setup/private-repo" : null, { refreshInterval: 0 },
   );
+  const plan = planFor(data);
   const [chosenAction, setAction] = useState<"create" | "clone" | "link" | null>(null);
-  const action = chosenAction ?? (data?.existing ? "link" : "create");
+  const action = chosenAction ?? (plan === "link" || plan === "clone" ? plan : "create");
   const [name, setName] = useState(DEFAULT_REPO_NAME);
-  const [repository, setRepository] = useState("");
+  const [chosenRepository, setRepository] = useState<string | null>(null);
+  const repository = chosenRepository ?? (plan === "clone" ? data?.remote?.repository : undefined) ?? "";
   const [chosenDirectory, setDirectory] = useState<string | null>(null);
   const directory = chosenDirectory ?? data?.directory ?? "";
   const [busy, setBusy] = useState(false);
@@ -102,18 +124,56 @@ export function PrivateRepoSetup({ connected, onLinked, onLater }: { connected: 
         </div>
       ) : ready && (
         <>
-          <button
-            type="button" className="btn btn-primary self-start"
-            disabled={busy || !directory.trim()}
-            onClick={() => void submit({ action: "create", directory, name: DEFAULT_REPO_NAME })}
-          >
-            {busy && action === "create" ? "Creating your private repo…" : "Create my private DevHub repo"}
-          </button>
-          <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
-            Creates a private repo named <code>{DEFAULT_REPO_NAME}</code> in your GitHub account, copies your current notes, tasks and diagrams
-            into <code className="break-all">{directory || "a new folder"}</code>, and pushes them. <code>origin</code> is your private repo and
-            <code> upstream</code> is the public DevHub code. No passwords or tokens are committed.
-          </p>
+          {plan === "create" && <>
+            <button
+              type="button" className="btn btn-primary self-start"
+              disabled={busy || !directory.trim()}
+              onClick={() => void submit({ action: "create", directory, name: DEFAULT_REPO_NAME })}
+            >
+              {busy ? "Creating your private repo…" : "Create my private DevHub repo"}
+            </button>
+            <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
+              Creates a private repo named <code>{DEFAULT_REPO_NAME}</code> in your GitHub account, copies your current notes, tasks and diagrams
+              into <code className="break-all">{directory || "a new folder"}</code>, and pushes them. <code>origin</code> is your private repo and
+              <code> upstream</code> is the public DevHub code. No passwords or tokens are committed.
+            </p>
+          </>}
+          {plan === "link" && <>
+            <p className="text-sm">There is already a DevHub checkout at <code className="break-all">{data?.directory}</code>.</p>
+            <button
+              type="button" className="btn btn-primary self-start" disabled={busy || !directory.trim()}
+              onClick={() => void submit({ action: "link", directory })}
+            >
+              {busy ? "Linking your private repo…" : "Link my existing checkout"}
+            </button>
+            <p className="text-xs" style={{ color: "var(--text-subtle)" }}>Uses the notes and tasks already in it. Its origin must be a private repo. Current local content is kept where it is.</p>
+          </>}
+          {plan === "clone" && data?.remote && <>
+            <p className="text-sm">You already have <code>{data.remote.repository}</code> on GitHub.</p>
+            <button
+              type="button" className="btn btn-primary self-start" disabled={busy || !directory.trim()}
+              onClick={() => void submit({ action: "clone", directory, repository: data.remote!.repository })}
+            >
+              {busy ? "Cloning your private repo…" : "Clone my private repo"}
+            </button>
+            <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
+              Downloads it into <code className="break-all">{directory}</code> and uses its content. Current local content is kept where it is.
+            </p>
+          </>}
+          {plan === "blocked" && (
+            <p className="tone-panel tone-panel--warning p-3 text-sm" role="status">
+              A folder already exists at <code className="break-all">{data?.directory}</code> and it isn&apos;t a DevHub checkout, so DevHub won&apos;t create a repo there.
+              Choose another folder below, or move that one aside.
+            </p>
+          )}
+          {(plan === "clone" || plan === "blocked") && data?.suggestion && (
+            <button
+              type="button" className="btn btn-ghost self-start" disabled={busy}
+              onClick={() => void submit({ action: "create", directory: data.suggestion!.directory, name: data.suggestion!.name })}
+            >
+              Create a new private repo named {data.suggestion.name} instead
+            </button>
+          )}
           <details className="text-sm">
             <summary className="cursor-pointer" style={{ color: "var(--text-muted)" }}>Use a different name or folder, or a repo I already have</summary>
             <div className="mt-3 flex flex-col gap-3">

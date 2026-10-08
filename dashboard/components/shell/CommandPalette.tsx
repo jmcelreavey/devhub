@@ -13,6 +13,7 @@ import type { DocSearchHit } from "@/lib/docs/doc-search-types";
 import { clearFocusSession,readFocusSession,writeFocusSession } from "@/lib/focus-session-storage";
 import { useSetupStatus } from "@/lib/hooks/use-setup-status";
 import { useIsMobile } from "@/lib/hooks/use-is-mobile";
+import { useShortcutLabel } from "@/lib/hooks/use-modifier-key";
 import { useToast } from "@/lib/hooks/use-toast";
 import { ALL_NAV_DESTINATIONS,filterNavBySetup } from "@/lib/nav";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
@@ -104,6 +105,7 @@ interface ProjectEntry {
 }
 
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const shortcutLabel = useShortcutLabel();
   const [query, setQuery] = useState("");
   const [notes, setNotes] = useState<NoteFile[]>([]);
   const [diagrams, setDiagrams] = useState<NoteFile[]>([]);
@@ -501,7 +503,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         id: "action:sidebar",
         kind: "action",
         label: "Toggle sidebar",
-        hint: "⌘\\",
+        hint: shortcutLabel("\\"),
         perform: () => {
           window.dispatchEvent(new CustomEvent("sidebar:toggle"));
         },
@@ -568,7 +570,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         id: "action:capture",
         kind: "action",
         label: "Quick capture (task, note, or learning)",
-        hint: "⌘⇧C",
+        hint: shortcutLabel("C", true),
         perform: () => window.dispatchEvent(new CustomEvent("devhub:capture-open")),
       },
       {
@@ -629,7 +631,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       ...noteCmds,
       ...diagramCmds,
     ]);
-  }, [notes, diagrams, tasks, tickets, repos, projects, router, toggleTaskDone, toast, setup, onClose]);
+  }, [notes, diagrams, tasks, tickets, repos, projects, router, toggleTaskDone, toast, setup, onClose, shortcutLabel]);
 
   const filtered = useMemo(() => {
     // History records every visit, so a page you keep coming back to (Today,

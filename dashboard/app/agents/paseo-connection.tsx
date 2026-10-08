@@ -14,7 +14,7 @@ import Link from "next/link";
 interface ProviderRow { id: string; label: string; ready: boolean; error?: string }
 interface PaseoStatus {
   installed: boolean; running: boolean; version: string | null; web: string; relayEnabled: boolean;
-  providers: ProviderRow[] | null; defaultProvider: string | null; authFailed: boolean; unitBinaryMissing?: string | null; error?: string;
+  providers: ProviderRow[] | null; defaultProvider: string | null; authFailed: boolean; unitBinaryMissing?: string | null; restartPending?: boolean; error?: string;
 }
 async function post(body: Record<string, string>): Promise<Record<string, unknown>> {
   const response = await fetch("/api/paseo/managed", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -65,6 +65,7 @@ export function PaseoConnection({ setup = false }: { setup?: boolean }) {
       </div>
       {data.authFailed && <p className="tone-panel tone-panel--warning text-sm">Paseo is already running, but DevHub could not connect. Enter its existing Agents password in <Link href="/setup" className="underline">Setup</Link>, then restart DevHub and retry. Reinstalling is not required.</p>}
       {data.unitBinaryMissing && <p className="tone-panel tone-panel--warning text-sm" role="alert">Paseo&apos;s service points at a Node runtime that no longer exists, so it will not start after a restart. Choose <strong>Reinstall</strong> to repair it; your password and chats are kept.</p>}
+      {data.restartPending && <p className="tone-panel tone-panel--warning text-sm" role="status">Restart Paseo to apply the update. DevHub refreshed Paseo&apos;s service, but chats are running, so it was left alone. Your chats and password are kept.</p>}
       {update?.available && <p className="text-sm">Paseo {update.latest} has been published. {updateReady ? "Updating restarts Paseo; finish active chats first." : "It is waiting for Safe-Chain’s package safety window. DevHub will keep checking."}</p>}
       {update?.error && <p className="text-sm text-text-muted">{update.error}</p>}
       <div className="flex gap-3 flex-wrap">

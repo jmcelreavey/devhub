@@ -14,7 +14,10 @@ import path from "node:path";
  * for paths chosen through the native folder picker.
  */
 export function windowsPathToWsl(input: string): string | null {
-  const value = input.startsWith("\\\\?\\") ? input.slice(4) : input;
+  // Explorer and browsers also hand out `//wsl.localhost/Ubuntu/...`.
+  const forwardSlashShare = /^\/\/wsl(?:\.localhost|\$)\//i.test(input);
+  const slashed = forwardSlashShare ? input.replace(/\//g, "\\") : input;
+  const value = slashed.startsWith("\\\\?\\") ? slashed.slice(4) : slashed;
 
   for (const prefix of ["\\\\wsl.localhost\\", "\\\\wsl$\\"]) {
     if (value.slice(0, prefix.length).toLowerCase() === prefix) {
@@ -60,13 +63,18 @@ export function resolveSetupPath(raw: string, ctx: SetupPathContext = defaultCon
   return path.isAbsolute(value) ? path.resolve(value) : value;
 }
 
+/** `//server/share`, but not `///x` (just `/x`) and not the WSL shares, which translate. */
+const FORWARD_SLASH_UNC = /^\/\/(?!\/)(?!wsl(?:\.localhost|\$)(?:\/|$))/i;
+
 /**
- * Why a typed path can never work, or null. `\\server\share` has no WSL
- * equivalent, and "Path must be absolute" sends people hunting for a typo.
+ * Why a typed path can never work, or null. `\\server\share` (or
+ * `//server/share`) has no WSL equivalent, and "Path must be absolute" or
+ * "Path does not exist" sends people hunting for a typo.
  */
 export function unsupportedPathMessage(raw: string, ctx: SetupPathContext = defaultContext()): string | null {
   const value = raw.trim();
-  if (!value.startsWith("\\\\") || value.startsWith("\\\\?\\")) return null;
+  const unc = value.startsWith("\\\\") && !value.startsWith("\\\\?\\");
+  if (!unc && !FORWARD_SLASH_UNC.test(value)) return null;
   if (ctx.wsl && windowsPathToWsl(value)) return null;
   return "Network shares (\\\\server\\share) aren't supported. Choose a folder on this PC or inside Ubuntu.";
 }

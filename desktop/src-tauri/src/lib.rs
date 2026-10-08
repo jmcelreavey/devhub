@@ -1463,8 +1463,9 @@ fn keep_paseo_runnable_then_prune(log: &DesktopLog, backend: &wsl::WslBackend, i
             if let wsl::PaseoUnitRepair::Repaired { old_binary } = &repair {
                 log.write_line(
                     "shell:wsl",
-                    &format!(
-                        "[paseo] moved the Paseo service off {old_binary} to its own node runtime"
+                    &wsl::describe_paseo_repair(
+                        old_binary,
+                        &wsl::paseo_durable_node(&backend.app_data),
                     ),
                 );
             }
@@ -1629,14 +1630,28 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
             || dev_server_responds(&format!("http://127.0.0.1:{}", sidecar.preferred_ports[0]))
                 .is_ok());
     // Defer scheduled jobs only to a service that runs the same content.
-    let secondary = service_holds_default_ports
-        && wsl::shares_content(
+    let (secondary, secondary_reason) = if service_holds_default_ports {
+        let service_repo = backend.running_service_repo();
+        let (shared, why) = wsl::content_sharing(
             checkout.as_deref().or(content_link.as_deref()),
-            backend.running_service_repo().as_deref(),
+            service_repo.as_deref(),
         );
+        (
+            shared,
+            format!(
+                "{why} (service checkout: {})",
+                service_repo.as_deref().unwrap_or("unknown")
+            ),
+        )
+    } else {
+        (
+            false,
+            "no other DevHub service holds the default ports".to_string(),
+        )
+    };
     if ports != sidecar.preferred_ports {
         log.write_line("shell:startup", &format!(
-            "[startup] requested ports {:?} unavailable; using dashboard={} terminal={}; secondary={secondary}. Existing services keep running.",
+            "[startup] requested ports {:?} unavailable; using dashboard={} terminal={}; secondary={secondary} ({secondary_reason}). Existing services keep running.",
             sidecar.preferred_ports, ports[0], ports[1]
         ));
     }
