@@ -1,11 +1,12 @@
-export function todayISO(): string {
-  return new Date().toISOString().split("T")[0];
-}
+import { todayISO } from "@shared/tasks/dates.ts";
 
-export function yesterdayISO(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().split("T")[0];
+/** The local calendar day. One implementation, shared with the task store and the MCP server. */
+export { todayISO };
+
+export function yesterdayISO(now = new Date()): string {
+  const previous = new Date(now);
+  previous.setDate(previous.getDate() - 1);
+  return todayISO(previous);
 }
 
 /** Vault slug for a daily note (`daily/YYYY-MM-DD`). */

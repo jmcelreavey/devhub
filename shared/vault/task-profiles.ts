@@ -1,5 +1,5 @@
 /**
- * Task profiles: `tasks/<profile>/YYYY-MM-DD.json`.
+ * Task profiles: `tasks/<profile>/items/<id>.json`.
  *
  * A profile (home, work, …) is a subdirectory of the tasks root. The whole tree
  * lives in one git repo, but each machine only ever WRITES to its own active
@@ -9,8 +9,7 @@
  * Which profile is active is per-machine and deliberately NOT in the repo:
  * `DEVHUB_PROFILE`, else `~/.config/devhub/profile.json`.
  *
- * Legacy layout (day-files directly in the root, no profile dirs) keeps working
- * untouched until a profile is created.
+ * Legacy layout (no profile dirs) keeps tasks in `tasks/items/`.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -19,10 +18,12 @@ import path from "node:path";
 const PROFILE_ID_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_FILE_RE = /^\d{4}-\d{2}-\d{2}\.json$/;
+/** Item storage, delete tombstones and the imported day-file archive. Not profile names. */
+const RESERVED_DIRS = new Set(["items", "legacy", "deleted"]);
 
 export function isValidProfileId(id: string): boolean {
   // A date-shaped directory name would be indistinguishable from a day.
-  return PROFILE_ID_RE.test(id) && !DAY_RE.test(id);
+  return PROFILE_ID_RE.test(id) && !DAY_RE.test(id) && !RESERVED_DIRS.has(id);
 }
 
 function configDir(): string {
@@ -79,7 +80,7 @@ export function resolveActiveProfileId(tasksRoot: string): string | null {
   return chosen ?? profiles[0]!;
 }
 
-/** Directory holding the active profile's day-files (the root itself when legacy). */
+/** Directory holding the active profile's items (the root itself when there are no profiles). */
 export function resolveActiveTasksDir(tasksRoot: string): string {
   const id = resolveActiveProfileId(tasksRoot);
   return id ? path.join(tasksRoot, id) : tasksRoot;
@@ -108,17 +109,39 @@ export function createTaskProfile(tasksRoot: string, id: string): { adopted: num
   return { adopted: adoptLegacyDayFiles(tasksRoot, id) };
 }
 
-/** Move root-level day-files into a profile. Never overwrites an existing file. */
+function moveUnique(source: string, target: string): boolean {
+  if (!fs.existsSync(source) || fs.existsSync(target)) return false;
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.renameSync(source, target);
+  return true;
+}
+
+/**
+ * Move root-level day-files, imported items, and the legacy archive into a profile.
+ * Never overwrites an existing file.
+ */
 export function adoptLegacyDayFiles(tasksRoot: string, id: string): number {
   if (!isValidProfileId(id)) throw new Error(`Invalid profile id: ${id}`);
   const profileDir = path.join(tasksRoot, id);
   fs.mkdirSync(profileDir, { recursive: true });
   let adopted = 0;
-  for (const name of listLegacyDayFiles(tasksRoot)) {
-    const target = path.join(profileDir, name);
-    if (fs.existsSync(target)) continue;
-    fs.renameSync(path.join(tasksRoot, name), target);
-    adopted++;
+  let names: string[] = [];
+  try {
+    names = fs.readdirSync(tasksRoot);
+  } catch {
+    return 0;
+  }
+  for (const name of names) {
+    if (/^\d{4}-\d{2}-\d{2}(?:\.local)?\.json$/.test(name) && moveUnique(path.join(tasksRoot, name), path.join(profileDir, name))) {
+      adopted += 1;
+    }
+  }
+  for (const bucket of ["items", "legacy", "deleted"] as const) {
+    const from = path.join(tasksRoot, bucket);
+    if (!fs.existsSync(from)) continue;
+    for (const name of fs.readdirSync(from)) {
+      if (moveUnique(path.join(from, name), path.join(profileDir, bucket, name))) adopted += 1;
+    }
   }
   return adopted;
 }

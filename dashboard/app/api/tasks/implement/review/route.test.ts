@@ -21,7 +21,7 @@ vi.mock("@/lib/agent-runs/dispatch", () => ({
 }));
 vi.mock("@/lib/agent-runs/store", () => ({ toAgentRunSummary: (run: { id: string }) => ({ id: run.id, state: "running" }) }));
 vi.mock("@/lib/tasks/implement-review-prefs", () => ({ readImplementReviewPrefs: mocks.readImplementReviewPrefs }));
-vi.mock("@/lib/tasks/storage", () => ({ getTasks: mocks.getTasks }));
+vi.mock("@/lib/tasks/storage", () => ({ getTasks: mocks.getTasks, ensureTasksMigrated: async () => {} }));
 
 import { AgentDispatchError } from "@/lib/agent-runs/dispatch";
 import { POST } from "./route";

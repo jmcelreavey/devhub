@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listTaskDays } from "@/lib/tasks/storage";
+import { ensureTasksMigrated, listTaskDays } from "@/lib/tasks/storage";
 import { buildWeeklyReview } from "@/lib/tasks/weekly";
 import { localCalendarDateISO } from "@/lib/local/calendar-date";
 import { withErrorHandler } from "@/lib/api-utils";
@@ -12,6 +12,7 @@ export const GET = withErrorHandler(async (request: Request) => {
   const url = new URL(request.url);
   const endParam = url.searchParams.get("end");
   const end = endParam && DATE_RE.test(endParam) ? endParam : localCalendarDateISO();
+  await ensureTasksMigrated();
   const review = buildWeeklyReview(listTaskDays(), end);
   return NextResponse.json(review);
 }, "tasks.weekly");

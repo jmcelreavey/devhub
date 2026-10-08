@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getTasksDir } from "@/lib/notes/dir";
-import { safeReadJSON } from "@/lib/atomic-write";
 import {
   adoptLegacyDayFiles,
   createTaskProfile,
@@ -10,26 +9,26 @@ import {
   resolveActiveProfileId,
   writeActiveProfileId,
 } from "@shared/vault/task-profiles.ts";
+import { todayISO } from "@/lib/utils";
 import { isTaskOpen, type Task } from "@/lib/tasks/types";
+import { readItems } from "@shared/tasks/store.ts";
 import type { ProfileOverlay, TaskProfileOverview } from "@/lib/tasks/profile-types";
 
-const DAY_FILE_RE = /^\d{4}-\d{2}-\d{2}\.json$/;
-
 /**
- * A profile's open tasks, from its newest day-file. Rollover carries open work
- * forward, so the newest file is the whole open set — no need to walk history.
+ * A profile's open tasks. An open item stays visible until it ends, so the
+ * overlay is the open set rather than whatever the newest day file happened to hold.
  */
 function readOverlay(root: string, profileId: string): ProfileOverlay | null {
   const dir = path.join(root, profileId);
-  let newest: string | undefined;
+  if (!fs.existsSync(dir)) return null;
+  let tasks: Task[] = [];
   try {
-    newest = fs.readdirSync(dir).filter((name) => DAY_FILE_RE.test(name)).sort().pop();
+    tasks = readItems(dir).filter(isTaskOpen);
   } catch {
     return null;
   }
-  if (!newest) return null;
-  const tasks = safeReadJSON<Task[]>(path.join(dir, newest), []).filter(isTaskOpen);
-  return { profileId, date: newest.replace(/\.json$/, ""), tasks };
+  if (tasks.length === 0) return null;
+  return { profileId, date: todayISO(), tasks };
 }
 
 export function getTaskProfileOverview(): TaskProfileOverview {

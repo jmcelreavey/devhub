@@ -7,8 +7,9 @@ function task(partial: Partial<Task> & { text: string }): Task {
     id: Math.random().toString(36).slice(2),
     done: false,
     createdAt: "2026-05-25T09:00:00.000Z",
+    rank: "1",
     ...partial,
-  };
+  } as Task;
 }
 
 function day(date: string, tasks: Task[]): TaskDay {

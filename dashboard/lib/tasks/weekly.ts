@@ -50,19 +50,23 @@ function emptyDayStat(date: string): WeeklyDayStat {
   return { date, created: 0, completed: 0, abandoned: 0, moved: 0 };
 }
 
+function isStillOpen(task: Task): boolean {
+  return !task.done && !task.abandonedAt && !task.endDate;
+}
+
 function statForTasks(date: string, tasks: Task[]): WeeklyDayStat {
   return {
     date,
-    created: tasks.length,
-    completed: tasks.filter((t) => t.done).length,
-    abandoned: tasks.filter((t) => !!t.abandonedAt).length,
-    moved: tasks.filter((t) => !!t.movedAt).length,
+    created: tasks.filter((task) => (task.startDate || date) === date).length,
+    completed: tasks.filter((task) => task.done && (task.endDate ?? date) === date).length,
+    abandoned: tasks.filter((task) => !!task.abandonedAt && (task.endDate ?? date) === date).length,
+    moved: tasks.filter((task) => !!task.movedAt || (!!task.startDate && task.startDate < date && isStillOpen(task))).length,
   };
 }
 
 /**
- * Aggregate a 7-day task window. Rollover mints a new id each day, so a slipping
- * task is detected by its (normalised) text appearing as `moved` across days.
+ * Aggregate a 7-day task window. A slipping task is still open with an earlier
+ * startDate. The same normalised text on enough days in the window is listed.
  */
 export function buildWeeklyReview(days: TaskDay[], end: string): WeeklyReview {
   const window = weekWindow(end);
@@ -87,7 +91,8 @@ export function buildWeeklyReview(days: TaskDay[], end: string): WeeklyReview {
   for (const date of window) {
     const tasks = byDate.get(date)?.tasks ?? [];
     for (const t of tasks) {
-      if (!t.movedAt) continue;
+      const slipped = !!t.movedAt || (!!t.startDate && t.startDate < date && isStillOpen(t));
+      if (!slipped) continue;
       const normalized = t.text.trim().toLowerCase();
       if (!normalized) continue;
       const entry = movedByText.get(normalized) ?? { text: t.text.trim(), jiraKey: t.jiraKey, days: new Set<string>() };

@@ -56,6 +56,7 @@ export default defineConfig({
       "../shared/pr-note/**/*.test.ts",
       "../shared/entity-note/**/*.test.ts",
       "../shared/task-note/**/*.test.ts",
+      "../shared/tasks/**/*.test.ts",
       "../shared/mcp-history/**/*.test.ts",
       "../mcp-servers/devhub-server/src/**/*.test.ts",
     ],

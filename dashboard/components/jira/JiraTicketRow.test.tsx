@@ -51,7 +51,7 @@ const ticket: JiraTicket = {
 };
 const task: Task = {
   id: "created-task", text: "TEST-123 Add ticket actions", jiraKey: "TEST-123",
-  done: false, createdAt: "2026-10-01T12:00:00Z",
+  done: false, createdAt: "2026-10-01T12:00:00Z", startDate: "2026-10-01", rank: "1",
 };
 
 beforeEach(() => {

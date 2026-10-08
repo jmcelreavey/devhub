@@ -110,3 +110,7 @@ notes/.config/agent-runs/run-*/
 .tmp-pr*/
 # QA walk recordings (local only)
 .tmp-qa-videos/
+
+# Task timers are per machine. The task items themselves stay synced.
+tasks/.local/
+tasks/*/.local/

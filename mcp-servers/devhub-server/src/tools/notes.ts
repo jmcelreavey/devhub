@@ -374,8 +374,9 @@ export function registerNotesTools(server: McpServer, ctx: Context): void {
       },
     },
     async ({ id, text, date, jiraKey, jiraUrl, overwrite }) => {
-      const task = ctx.tasksStorage.getDay(date).tasks.find((t) => t.id === id)
-        ?? { id, text, done: false, createdAt: date };
+      await ctx.tasksStorage.ready();
+      const task = ctx.tasksStorage.getDay(date).tasks.find((t) => t.id === id || t.legacyIds?.includes(id))
+        ?? { id, text, done: false, createdAt: date, startDate: date, rank: "0" };
       const notePath = ctx.tasksStorage.resolveNotePath(task, date);
       const source: TaskNoteSource = { id, text, date, jiraKey, jiraUrl, notePath };
       const path = taskNotePath(source);

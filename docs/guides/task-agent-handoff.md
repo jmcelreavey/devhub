@@ -31,11 +31,11 @@ PR watcher fields (see [Plan loop](plan-loop.md)): `prState` (`open` | `merged` 
 
 `updatedAt` only moves when a record actually changes — reading a finished run must not make it the task's "latest".
 
-**Rollover.** Open tasks keep their ID and original `createdAt`. The daily `tasks/YYYY-MM-DD.json` files are history snapshots: the previous row is marked moved, and today's row keeps the links, timer state, note path, and agent sidecar identity. Running / Resume / PR state therefore stays attached without moving sidecar files each morning.
+**Identity.** A task keeps one id. Import collapses older day-file copies onto the earliest id and rewrites agent-run sidecars onto that id, so Running / Resume / PR state stays attached. `legacyIds` on the item still resolve.
 
-**Task notes.** `notePath` identifies the companion plan across days. For older tasks without that field, readers follow `rolledFromId` / `rolledFromDate` and reuse the most recent existing note. Older notes remain available as previous notes; their contents and filenames are preserved. The resolved path is saved on the next task write or rollover. No bulk rewrite of historical tasks or notes is required.
+**Task notes.** `notePath` identifies the companion plan. For older tasks without that field, readers try the view date, then `rolledFromId` / `rolledFromDate`, then `startDate` and each legacy id, and prefer a file that exists. Older notes stay as previous notes. No bulk rewrite of historical notes is required.
 
-**Legacy links.** Old UUIDs still resolve to the latest task snapshot, including prerequisite checks and live checkboxes embedded in notes. `GET /api/tasks?taskId=<id>` returns that current task and its date. Rollover writes today's snapshot before marking its source moved, so a retry can repair an interrupted write without creating another task.
+**Legacy links.** An old UUID resolves to the surviving item, including prerequisite checks and live checkboxes embedded in notes. `GET /api/tasks?taskId=<id>` returns that item.
 
 ## Automatic handoff snapshot
 

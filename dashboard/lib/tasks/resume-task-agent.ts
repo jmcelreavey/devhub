@@ -9,7 +9,7 @@ import { defaultPaseoProvider, listPaseoProviders } from "@/lib/paseo/providers"
 import { resolveLocalGithubRepos } from "@/lib/repos/resolution";
 import { selectTaskImplementationRepo } from "@/lib/tasks/implement-repo";
 import { reconcileTaskAgentRunSidecar } from "@/lib/tasks/reconcile-task-agent-sidecar";
-import { getTasks } from "@/lib/tasks/storage";
+import { getTasks, ensureTasksMigrated } from "@/lib/tasks/storage";
 import {
 buildTaskAgentResumePrompt,
 canResumeTaskAgentRun,
@@ -100,6 +100,7 @@ export async function resumeTaskAgent(input: ResumeTaskAgentInput): Promise<Resu
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) {
     throw new TaskAgentResumeError("date must be YYYY-MM-DD", 400);
   }
+  await ensureTasksMigrated();
   const task = getTasks(input.date).find((t) => t.id === input.taskId);
   if (!task) throw new TaskAgentResumeError(`Task ${input.taskId} not found on ${input.date}`, 404);
 

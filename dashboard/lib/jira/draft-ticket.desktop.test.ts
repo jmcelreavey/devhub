@@ -22,7 +22,7 @@ vi.mock("@/lib/tasks/implement-ready-gather", () => ({
 
 const task: Task = {
   id: "test-task", text: "Preserve renewal event ordering", done: false,
-  createdAt: "2026-10-07T09:00:00Z",
+  createdAt: "2026-10-07T09:00:00Z", startDate: "2026-10-07", rank: "1",
 };
 const draft = {
   summary: "Preserve renewal event ordering during retries",

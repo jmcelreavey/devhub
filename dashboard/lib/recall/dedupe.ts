@@ -7,7 +7,7 @@
  * *could* have been found. A query for a ticket key returned five hits that
  * were all the same rolled-over task — "Address BI Jobs Feedback [PTF-4484]" —
  * on five consecutive dates. The per-source cap in `recall()` cannot see it:
- * rollover writes each day to its own `tasks/YYYY-MM-DD.json`, so the index is
+ * the same open task is projected onto each day it spans, so the index is
  * correct in reporting five distinct sources. They just say the same thing.
  *
  * ## Why not cosine

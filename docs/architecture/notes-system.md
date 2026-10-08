@@ -347,7 +347,7 @@ Notes and docs editors show a **history** chip (`VaultFileHistory`) with the fil
 
 ### Content sync workflow
 
-Content sync is the low-friction path for personal content that changes while using the dashboard. It is intentionally scoped: `dashboard/lib/content/sync-paths.ts` defines `notes/`, `collections/`, `tasks/`, `docs/`, and `upstarts/` as the paths staged by the `sync_notes_tasks_push` action.
+Content sync is the low-friction path for personal content that changes while using the dashboard. It is intentionally scoped: `dashboard/lib/content/sync-paths.ts` defines `notes/`, `collections/`, `tasks/`, `docs/`, and `upstarts/` as the paths staged by the `sync_notes_tasks_push` action. Under `tasks/`, `items/`, `legacy/`, and `deleted/` are included (including `tasks/<profile>/items/`). `tasks/.local/` and `tasks/<profile>/.local/` hold timers and are gitignored, so they are not staged.
 
 | Surface                  | Behavior                                                                                                                                                                                                                                                                                                               |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

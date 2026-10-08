@@ -8,7 +8,7 @@ import { getRepoRoot } from "@/lib/content/dirs";
 import { devhubSharedSkillsDir, listSkillDirNames } from "@/lib/skills/shared";
 import { skillUsageFor, type SkillUsage } from "@/lib/skills/usage";
 import { listAgentRuns } from "@/lib/agent-runs/store";
-import { listTaskDays } from "@/lib/tasks/storage";
+import { ensureTasksMigrated, listTaskDays } from "@/lib/tasks/storage";
 import { getTaskAgentRuns, listTaskAgentRuns } from "@/lib/tasks/task-agent-runs";
 import { mcpHistoryDir, readMcpHistoryWindow } from "@shared/mcp-history/index.ts";
 
@@ -44,6 +44,7 @@ function inWindow(iso: string | undefined, sinceMs: number): boolean {
 }
 
 export async function buildRetroInputs(days = 7, now = Date.now()): Promise<RetroInputs> {
+  await ensureTasksMigrated();
   const sinceMs = now - Math.max(1, Math.min(days, 31)) * DAY_MS;
 
   const tasks: RetroTask[] = [];

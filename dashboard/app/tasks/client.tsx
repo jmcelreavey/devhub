@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { TaskItem } from "@/components/tasks/TaskList";
+import type { Task } from "@/lib/tasks/types";
 import { FetchError, InlineSearch, SkeletonRows } from "@/components";
 import { paletteCommandScore } from "@/lib/command-palette-score";
 import { useToast } from "@/lib/hooks/use-toast";
@@ -11,20 +12,6 @@ import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
 
 const PAGE_SIZE = 50;
 const FILTERS = ["all", "open", "done", "abandoned", "moved"] as const;
-
-interface Task {
-  id: string;
-  text: string;
-  done: boolean;
-  jiraKey?: string;
-  due?: string;
-  createdAt: string;
-  completedAt?: string;
-  abandonedAt?: string;
-  abandonReason?: string;
-  movedAt?: string;
-  movedToDate?: string;
-}
 
 interface TaskDay {
   date: string;
@@ -58,7 +45,7 @@ function formatDateKey(dateStr: string): string {
 }
 
 function taskStatus(task: Task): TaskRecord["status"] {
-  if (task.movedAt) return "moved";
+  if (task.movedAt || task.endReason === "legacy-moved") return "moved";
   if (task.abandonedAt) return "abandoned";
   if (task.done) return "done";
   return "open";
@@ -148,6 +135,9 @@ function TaskRow({
           <span className="text-xs text-text-muted">
             Continued on {formatMovedToDate(task.movedToDate)}
           </span>
+        ) : null}
+        {status === "moved" && task.endReason === "legacy-moved" ? (
+          <span className="text-xs text-text-muted">Ended when the later copy was removed</span>
         ) : null}
       <TaskItem
         task={task}

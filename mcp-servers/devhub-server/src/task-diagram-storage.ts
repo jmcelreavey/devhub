@@ -14,6 +14,9 @@ import type { EntityRef } from "../../../shared/entity-note/index.ts";
 export type { EntityRef };
 
 import type { Task } from "../../../shared/tasks/types.ts";
+import { todayISO } from "../../../shared/tasks/dates.ts";
+import { migrateDirectory } from "../../../shared/tasks/migrate.ts";
+import { createTask, deleteTask, listDays, patchTask, readItems, tasksOnDay } from "../../../shared/tasks/store.ts";
 export type { Task } from "../../../shared/tasks/types.ts";
 
 export interface TaskDaySummary {
@@ -35,9 +38,14 @@ export class TasksStorage {
     this.dir = path.resolve(tasksDir);
   }
 
+  /** Import legacy day files. Concurrent callers share one in-flight run. */
+  ready(): Promise<void> {
+    return migrateDirectory(this.dir, { runsDir: path.join(this.notesDir, ".config", "task-agent-runs") }).then(() => undefined);
+  }
+
   resolveNotePath(task: Task, date: string): string {
     return resolveStoredTaskNotes(task, date, {
-      readTask: (sourceDate, id) => this.read(sourceDate).find((t) => t.id === id),
+      readTask: (_sourceDate, id) => readItems(this.dir).find((item) => item.id === id || item.legacyIds?.includes(id)),
       noteExists: (notePath) => fs.existsSync(path.join(this.notesDir, `${notePath}.json`)),
     }).notePath;
   }
@@ -46,91 +54,37 @@ export class TasksStorage {
     return { ...task, notePath: this.resolveNotePath(task, date) };
   }
 
-  private file(date: string): string {
-    return path.join(this.dir, `${date}.json`);
-  }
-
-  /**
-   * Reads are verbatim.
-   *
-   * This used to run `normalizeTaskLinkState` over every task on every read,
-   * so callers saw a `text`/`jiraKey` that was never on disk — a migration
-   * that never migrated, and one any later write would have persisted by
-   * accident. Normalisation belongs on the write path (`update`), which is
-   * where it now happens exclusively.
-   */
-  private read(date: string): Task[] {
-    const fp = this.file(date);
-    if (!fs.existsSync(fp)) return [];
-    try {
-      return JSON.parse(fs.readFileSync(fp, "utf-8")) as Task[];
-    } catch {
-      return [];
-    }
-  }
-
-  private write(date: string, tasks: Task[]): void {
-    if (!fs.existsSync(this.dir)) {
-      fs.mkdirSync(this.dir, { recursive: true });
-    }
-    const tmp = `${this.file(date)}.${process.pid}.${Date.now()}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(tasks, null, 2));
-    fs.renameSync(tmp, this.file(date));
-  }
-
-  list(): TaskDaySummary[] {
-    if (!fs.existsSync(this.dir)) return [];
-    return fs
-      .readdirSync(this.dir)
-      .filter((f) => f.endsWith(".json"))
-      .sort()
-      .reverse()
-      .map((f) => {
-        const date = f.replace(".json", "");
-        const tasks = this.read(date);
-        return {
-          date,
-          total: tasks.length,
-          completed: tasks.filter((t) => t.done).length,
-          abandoned: tasks.filter((t) => !!t.abandonedAt).length,
-          moved: tasks.filter((t) => !!t.movedAt).length,
-        };
-      });
-  }
-
-  getDay(date: string): TaskDay {
-    const tasks = this.read(date).map((task) => this.withNotePath(task, date));
+  private summarize(date: string, tasks: Task[]): TaskDaySummary {
     return {
       date,
       total: tasks.length,
-      completed: tasks.filter((t) => t.done).length,
-      abandoned: tasks.filter((t) => !!t.abandonedAt).length,
-      moved: tasks.filter((t) => !!t.movedAt).length,
-      tasks,
+      completed: tasks.filter((task) => task.done).length,
+      abandoned: tasks.filter((task) => !!task.abandonedAt).length,
+      moved: tasks.filter((task) => task.endReason === "legacy-moved" && task.endDate === date).length,
     };
+  }
+
+  private canonical(id: string): Task | undefined {
+    return readItems(this.dir).find((task) => task.id === id || task.legacyIds?.includes(id));
+  }
+
+  list(): TaskDaySummary[] {
+    return listDays(this.dir, todayISO()).map(({ date, tasks }) => this.summarize(date, tasks));
+  }
+
+  getDay(date: string): TaskDay {
+    const tasks = tasksOnDay(this.dir, date, todayISO()).map((task) => this.withNotePath(task, date));
+    return { ...this.summarize(date, tasks), tasks };
   }
 
   getToday(): Task[] {
-    return this.getDay(this.todayISO()).tasks;
+    return this.getDay(todayISO()).tasks;
   }
 
   add(text: string, date?: string, due?: string, stage?: "draft"): Task {
-    const target = date || this.todayISO();
-    const tasks = this.read(target);
-    const jiraKey = text.match(/\b([A-Z][A-Z0-9]+-\d+)\b/)?.[1];
-    const task: Task = {
-      id: randomUUID(),
-      text,
-      done: false,
-      jiraKey,
-      due,
-      createdAt: new Date().toISOString(),
-      ...(stage ? { stage } : {}),
-    };
-    task.notePath = taskNotePath({ ...task, date: target });
-    tasks.push(task);
-    this.write(target, tasks);
-    return task;
+    const startDate = date || todayISO();
+    const task = createTask(this.dir, { text, startDate, due, stage });
+    return this.withNotePath(task, startDate);
   }
 
   update(
@@ -146,72 +100,33 @@ export class TasksStorage {
     },
     date?: string,
   ): Task | null {
-    const target = date || this.todayISO();
-    const tasks = this.read(target);
-    const task = tasks.find((t) => t.id === taskId);
-    if (!task) return null;
-
-    if (typeof patch.text === "string") {
-      task.text = patch.text;
-      task.jiraKey = patch.text.match(/\b([A-Z][A-Z0-9]+-\d+)\b/)?.[1];
-    }
-    if (typeof patch.done === "boolean") {
-      task.done = patch.done;
-      task.completedAt = patch.done ? new Date().toISOString() : undefined;
-      if (patch.done) {
-        task.abandonedAt = undefined;
-        task.abandonReason = undefined;
-      }
-    }
-    if (patch.stage === "draft") task.stage = "draft";
-    else if (patch.stage === "ready") delete task.stage;
-    if (patch.due === null) {
-      task.due = undefined;
-    } else if (typeof patch.due === "string") {
-      task.due = patch.due;
-    }
+    const target = date || todayISO();
+    const existing = this.canonical(taskId);
+    if (!existing || !tasksOnDay(this.dir, target, todayISO()).some((task) => task.id === existing.id)) return null;
+    const next: Parameters<typeof patchTask>[2] = {};
+    if (typeof patch.text === "string") next.text = patch.text;
+    if (patch.due !== undefined) next.due = patch.due;
+    if (patch.stage) next.stage = patch.stage;
     if (patch.links !== undefined) {
-      const normalized = normalizeTaskLinkState(task.text, task.jiraKey, patch.links);
-      task.text = normalized.text;
-      task.jiraKey = normalized.jiraKey;
-      task.links = normalized.links;
+      const normalized = normalizeTaskLinkState(next.text ?? existing.text, existing.jiraKey, patch.links);
+      next.text = normalized.text;
+      next.links = normalized.links?.length ? normalized.links : [];
+      if (normalized.jiraKey) next.jiraKey = normalized.jiraKey;
     }
-    if (patch.status === "complete") {
-      task.done = true;
-      task.completedAt = new Date().toISOString();
-      task.abandonedAt = undefined;
-      task.abandonReason = undefined;
-    }
-    if (patch.status === "abandon") {
-      task.done = false;
-      task.completedAt = undefined;
-      task.abandonedAt = new Date().toISOString();
-      task.abandonReason = patch.abandonReason || undefined;
-    }
-    if (patch.status === "reactivate") {
-      task.done = false;
-      task.completedAt = undefined;
-      task.abandonedAt = undefined;
-      task.abandonReason = undefined;
-    }
-
-    task.notePath = this.resolveNotePath(task, target);
-    this.write(target, tasks);
-    return task;
+    if (patch.status === "complete" || patch.done === true) next.status = "complete";
+    else if (patch.status === "abandon") {
+      next.status = "abandon";
+      next.abandonReason = patch.abandonReason;
+    } else if (patch.status === "reactivate" || patch.done === false) next.status = "reactivate";
+    const task = patchTask(this.dir, existing.id, next);
+    return task ? this.withNotePath(task, target) : null;
   }
 
   delete(taskId: string, date?: string): boolean {
-    const target = date || this.todayISO();
-    const tasks = this.read(target);
-    const idx = tasks.findIndex((t) => t.id === taskId);
-    if (idx === -1) return false;
-    tasks.splice(idx, 1);
-    this.write(target, tasks);
-    return true;
-  }
-
-  private todayISO(): string {
-    return new Date().toISOString().split("T")[0];
+    const target = date || todayISO();
+    const existing = tasksOnDay(this.dir, target, todayISO()).find((task) => task.id === taskId || task.legacyIds?.includes(taskId));
+    if (!existing) return false;
+    return deleteTask(this.dir, existing.id);
   }
 }
 

@@ -29,20 +29,24 @@ function writeNote(relPath: string, paragraphs: string[]): void {
 }
 
 function writeTasks(date: string, tasks: Array<{ text: string; jiraKey?: string }>): void {
-  const dir = path.join(tmp, "tasks");
+  const dir = path.join(tmp, "tasks", "items");
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(
-    path.join(dir, `${date}.json`),
-    JSON.stringify(
-      tasks.map((task, i) => ({
-        id: `t${i}`,
+  for (const [i, task] of tasks.entries()) {
+    const id = `${date}-${i}`;
+    fs.writeFileSync(
+      path.join(dir, `${id}.json`),
+      JSON.stringify({
+        id,
         text: task.text,
         done: false,
         jiraKey: task.jiraKey,
         createdAt: `${date}T09:00:00.000Z`,
-      })),
-    ),
-  );
+        startDate: date,
+        endDate: date,
+        rank: id,
+      }),
+    );
+  }
 }
 
 beforeEach(() => {

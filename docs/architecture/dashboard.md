@@ -168,19 +168,19 @@ This keeps the app understandable and makes most features independent.
 
 ## Tasks
 
-Daily tasks default to repo-root `tasks/YYYY-MM-DD.json` (one file per calendar day). [Task profiles](../guides/task-profiles.md) can select another folder. The **Today** and **Tasks** views read and mutate them through `/api/tasks`.
+A task is one file under `tasks/items/` (or `tasks/<profile>/items/`). It stays visible from `startDate` through `endDate`, or through today while it is open. [Task profiles](../guides/task-profiles.md) select the directory. The model, import, and two-machine update order are in [Tasks](tasks.md). **Today** and **Tasks** read and mutate items through `/api/tasks`.
 
-| Behavior | Detail                                                                                                                                                                                                       |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Rollover | Open tasks from earlier days move into today on first load, keeping their id and creation time; previous entries get `movedAt` / `movedToDate`                                                                                                     |
-| Reorder  | Drag open tasks in the list (or use arrow keys on the drag handle). Only **open** tasks reorder; done, abandoned, and moved tasks keep their relative slots. Order is array position in the day's JSON file. |
-| API      | See table below                                                                                                                                                                                              |
+| Behavior | Detail |
+| -------- | ------ |
+| Open work | An unfinished task stays on today without being copied. Slip is `startDate` before today while the task is still open. |
+| Reorder | Drag open tasks (or use arrow keys on the drag handle). Only **open** tasks reorder. Order is a fractional `rank` on that item. |
+| API | See table below |
 
-Completed and abandoned tasks stay in the file for history and standup; they are not included in reorder requests.
+Completed, abandoned, and ended tasks stay in history and standup. They are not part of a reorder.
 
 | Method              | Body                                          | Purpose                                              |
 | ------------------- | --------------------------------------------- | ---------------------------------------------------- |
-| `GET /api/tasks`    | —                                             | Runs rollover, returns `{ date, tasks[] }` for today |
+| `GET /api/tasks`    | —                                             | Imports leftover day files, returns `{ date, tasks[], migrationNotice? }` for today |
 | `POST /api/tasks`   | `{ text, date?, due? }`                       | Creates a task (`201`)                               |
 | `PATCH /api/tasks`  | `{ ids[], date? }`                            | Reorders open tasks — every open id exactly once     |
 | `PATCH /api/tasks`  | `{ id, done }`                                | Toggle complete                                      |
@@ -188,7 +188,7 @@ Completed and abandoned tasks stay in the file for history and standup; they are
 | `PATCH /api/tasks`  | `{ id, status: "abandoned", abandonReason? }` | Abandon                                              |
 | `PATCH /api/tasks`  | `{ id, status: "active" }`                    | Reactivate abandoned task                            |
 | `PATCH /api/tasks`  | `{ id, timer: "start" \| "stop", date? }`     | Focus timer (see below)                              |
-| `DELETE /api/tasks` | `{ id, date? }`                               | Remove task from the day file                        |
+| `DELETE /api/tasks` | `{ id, date? }`                               | Remove the item. A legacy-backed task leaves `tasks/deleted/<id>.json` |
 
 ### Add to Jira
 
@@ -206,7 +206,7 @@ The agent must ask before commit, PR, Jira transition, or completing the task. S
 
 ### Focus timer
 
-Each task can track focused work time via `timerStartedAt` (ISO start) and `timeSpentMs` (accumulated). Only **one** timer runs per calendar day — starting a timer on a new task stops any other running timer that day and folds elapsed time into `timeSpentMs`.
+Focused time is `timeSpentMs` on the item, plus a running start in gitignored `tasks/.local/timers.json`. Only **one** timer runs in that directory — starting another stops the current one and folds the elapsed time into `timeSpentMs`.
 
 | Action      | API                                                     |
 | ----------- | ------------------------------------------------------- |
@@ -217,7 +217,7 @@ Completing, abandoning, or deleting a task settles any running timer into `timeS
 
 ### History
 
-`GET /api/tasks/history` returns per-day summaries (`total`, `completed`, `abandoned`, `moved`, `modified`). Add `?date=YYYY-MM-DD` for one day's tasks, or `?includeTasks=1` for summaries plus full task arrays.
+`GET /api/tasks/history` projects items onto each day from `startDate` through `endDate` (today, if the task is still open). Summaries are `total`, `completed`, `abandoned`, `moved`, `modified`. Add `?date=YYYY-MM-DD` for one day, or `?includeTasks=1` for the tasks as well.
 
 ## Weekly Review
 
@@ -229,7 +229,7 @@ The **Review** page (`/review`, desktop nav) is a retrospective view over the la
 | API         | `GET /api/tasks/weekly?end=YYYY-MM-DD` | Same data as JSON; `end` defaults to today                                            |
 | MCP         | `tasks_weekly`                         | Dashboard-backed proxy of the weekly route                                            |
 
-**Slipped tasks** are detected when the same normalised task text appears as rolled over (`moved`) on three or more distinct days within the window (`SLIP_THRESHOLD = 3`). Detection compares text across daily snapshots, including older files where rollover changed ids. Separate tasks with identical text can therefore be grouped together.
+**Slipped tasks** are still open with a `startDate` before that day. The same normalised text on three or more days in the window is listed (`SLIP_THRESHOLD = 3`). Two different tasks with the same text are grouped.
 
 Pair with [Standup](../guides/standup.md) for daily forward-looking summaries; Review is the backward-looking complement.
 

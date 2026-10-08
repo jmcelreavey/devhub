@@ -101,7 +101,7 @@ generic defaults for these paths:
 | ---------------------- | ---------------------------------------------- | ----------------- |
 | `notes/`               | Notes, daily logs, learnings                   | `NOTES_DIR`       |
 | `diagrams/`            | Personal root diagrams                        | Content root     |
-| `tasks/`               | Daily task lists                               | `TASKS_DIR`       |
+| `tasks/`               | One JSON file per task (`items/`), plus import leftovers | `TASKS_DIR`       |
 | `reps/`                | Daily review-rep JSON (`YYYY-MM-DD.json`)      | `REPS_DIR`        |
 | `collections/`         | Checklist collections                          | `COLLECTIONS_DIR` |
 | `upstarts/`            | Per-repo Upstart scripts (`<repo>/upstart.sh`) | `UPSTARTS_DIR`    |

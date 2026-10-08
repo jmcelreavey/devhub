@@ -40,7 +40,7 @@ errors. Tool **descriptions** are the source of truth for args; this skill carri
 **Docs** — `docs_*` over the full `docs/` Markdown tree (list/search cover everything,
 unlike the filtered notes slice).
 
-**Tasks** — `tasks_list/create/update/delete/history`. Jira keys in text (e.g. `DAD-1234`)
+**Tasks** — `tasks_list/create/update/delete/history`. One file per task under `tasks/items/`; a task is visible from `startDate` through `endDate` or today. The first call imports any leftover `tasks/YYYY-MM-DD.json` day files. Pass an old id and the surviving item is used. Jira keys in text (e.g. `DAD-1234`)
 are auto-detected. **Appraisal** —
 `appraisal_record/set_goal/list_goals/read/list/people/summarize/delete` for performance
 review notes.

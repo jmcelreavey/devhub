@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireDashboardAuth, withErrorHandler } from "@/lib/api-utils";
-import { getTasks } from "@/lib/tasks/storage";
+import { getTasks, ensureTasksMigrated } from "@/lib/tasks/storage";
+import { todayISO } from "@/lib/utils";
 import { readImplementReadyPrefs } from "@/lib/tasks/implement-ready-prefs";
 import { checkTaskImplementReady } from "@/lib/tasks/implement-ready-gather";
 
@@ -25,8 +26,9 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   if (requestedDate && !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
     return NextResponse.json({ error: "date must be YYYY-MM-DD" }, { status: 400 });
   }
-  const date = requestedDate ?? new Date().toISOString().slice(0, 10);
+  const date = requestedDate ?? todayISO();
 
+  await ensureTasksMigrated();
   const task = getTasks(date).find((t) => t.id === taskId);
   if (!task) return NextResponse.json({ error: `Task ${taskId} not found` }, { status: 404 });
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTasks } from "@/lib/tasks/storage";
+import { getTasks, ensureTasksMigrated } from "@/lib/tasks/storage";
+import { todayISO } from "@/lib/utils";
 import { resolveTaskNotePath } from "@/lib/tasks/task-notes";
 import { getTicket } from "@/lib/jira/client";
 import { resolveEntityContext } from "@/lib/entity-links/resolve";
@@ -17,8 +18,9 @@ export async function GET(req: NextRequest) {
   if (requestedDate && !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
     return NextResponse.json({ error: "date must be YYYY-MM-DD" }, { status: 400 });
   }
-  const date = requestedDate ?? new Date().toISOString().slice(0, 10);
+  const date = requestedDate ?? todayISO();
 
+  await ensureTasksMigrated();
   const task = getTasks(date).find((t) => t.id === taskId);
   if (!task) return NextResponse.json({ error: `Task ${taskId} not found` }, { status: 404 });
 

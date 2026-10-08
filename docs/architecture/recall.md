@@ -103,11 +103,11 @@ Three caps, each added in response to a specific failure seen against the real
 vault rather than reasoned about in advance:
 
 - **Three chunks per file.** Without it a single long note wins every slot.
-- **Near-duplicate suppression.** A rolled-over task lands in a different
-  `tasks/YYYY-MM-DD.json` every day, so the per-file cap cannot see it. Detected
-  by Jaccard over *non-numeric* vocabulary — dates and ids are exactly the
-  volatile part — gated on identical entity refs so two different tickets
-  described identically are never collapsed.
+- **Near-duplicate suppression.** The same open task is projected onto each day
+  it spans, so the per-file cap cannot see the copies. Detected by Jaccard over
+  *non-numeric* vocabulary — dates and ids are exactly the volatile part — gated
+  on identical entity refs so two different tickets described identically are
+  never collapsed.
 - **40% per source kind.** Even after deduplication, a ticket query filled most
   of its slots with daily task files, because each day carries a different mix
   of other tasks and those chunks are legitimately distinct. "This ticket was

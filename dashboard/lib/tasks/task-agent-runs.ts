@@ -229,39 +229,6 @@ export async function patchTaskAgentRun(
   });
 }
 
-/**
- * Rollover gives a task a new id each day; move its run history along so the
- * Running / Resume state survives the night. Merges when both ids have files.
- */
-export async function relinkTaskAgentRuns(fromId: string, toId: string, notesDir = getNotesDir()): Promise<boolean> {
-  if (fromId === toId || !isValidTaskAgentTaskId(fromId) || !isValidTaskAgentTaskId(toId)) return false;
-  const fromPath = taskAgentRunsPath(fromId, notesDir);
-  if (!fs.existsSync(fromPath)) return false;
-  const toPath = taskAgentRunsPath(toId, notesDir);
-  const moved = await withMutex(toPath, async () => {
-    const from = readFile(fromId, notesDir);
-    const to = readFile(toId, notesDir);
-    const known = new Set(to.runs.map((r) => r.runId));
-    const merged: TaskAgentRunsFile = {
-      version: 1,
-      taskId: toId,
-      handoff: mergeHandoff(from.handoff, to.handoff, "append").handoff,
-      handoffUpdatedAt: to.handoffUpdatedAt ?? from.handoffUpdatedAt,
-      runs: [...to.runs, ...from.runs.filter((r) => !known.has(r.runId))],
-    };
-    await writeFileUnlocked(merged, notesDir);
-    fs.rmSync(fromPath, { force: true });
-    return merged.runs.map((r) => r.runId);
-  });
-  const index = indexPath(notesDir);
-  await withMutex(index, async () => {
-    const current = readIndex(notesDir);
-    for (const runId of moved) current.byRunId[runId] = toId;
-    await writeAtomic(index, JSON.stringify(current, null, 2));
-  });
-  return true;
-}
-
 /** `GET /api/tasks/agent-runs/summary` body, keyed by task id. */
 export type TaskAgentRunSummaries = Record<string, { handoff: string; latestRun: TaskAgentRunRecord | null }>;
 
@@ -274,7 +241,7 @@ export function listTaskAgentRunTaskIds(notesDir = getNotesDir()): string[] {
     return [];
   }
   return names
-    .filter((name) => name.endsWith(".json") && name !== "_index.json")
+    .filter((name) => name.endsWith(".json") && !name.startsWith("_index"))
     .map((name) => name.slice(0, -".json".length))
     .filter(isValidTaskAgentTaskId);
 }

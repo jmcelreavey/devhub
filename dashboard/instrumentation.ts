@@ -1,6 +1,13 @@
 // Next.js calls this once on server start (Node runtime).
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  const { ensureTasksMigrated } = await import("./lib/tasks/storage");
+  // Awaited: Next holds requests until register() settles, so the first Today
+  // render sees migrated items rather than an empty list. A failure must not
+  // keep the server down; readers still serve whatever items exist.
+  await ensureTasksMigrated().catch((err: unknown) => {
+    console.error("[tasks] migration failed:", err);
+  });
   // DEVHUB_SCHEDULER=0 marks a second dashboard (a dev server beside the
   // desktop app, the installer's self-test): both read the same jobs.json,
   // and one process should own the background work.

@@ -323,9 +323,11 @@ stays in the server log.
   in one changes it in the others.
 - Release builds hide the stale-bundle checkout notice. That notice is separate
   from Rebuild from Checkout, which a linked source checkout can still run.
-- Two machines writing the flat `tasks/YYYY-MM-DD.json` files can conflict on
-  sync. Task profiles (`docs/guides/task-profiles.md`) already split those
-  writes; the active profile is per machine (`~/.config/devhub/profile.json` or
+- Two machines that both import tasks before either has pulled can conflict on
+  `tasks/items/<id>.json` or a run sidecar. Update one machine, let it import
+  and sync, then pull on the other before updating. See [Tasks](tasks.md).
+  Task profiles (`docs/guides/task-profiles.md`) still split writes by profile;
+  the active profile is per machine (`~/.config/devhub/profile.json` or
   `DEVHUB_PROFILE`) and is not committed. A prompt that notices the other
   machine and suggests a profile is not built.
 

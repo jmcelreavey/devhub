@@ -26,12 +26,19 @@ describe("resolveEntityLinks", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  function writeItems(tasks: Array<Record<string, unknown> & { id: string }>): void {
+    const dir = path.join(root, "tasks", "items");
+    fs.mkdirSync(dir, { recursive: true });
+    for (const task of tasks) {
+      const id = String(task.id);
+      fs.writeFileSync(path.join(dir, id + ".json"), JSON.stringify(task));
+    }
+  }
+
   it("finds a task note and task.links", () => {
     const date = "2026-07-28";
     const id = "abc-1";
-    fs.writeFileSync(
-      path.join(root, "tasks", `${date}.json`),
-      JSON.stringify([
+    writeItems([
         {
           id,
           text: "Ship linking",
@@ -46,8 +53,7 @@ describe("resolveEntityLinks", () => {
             },
           ],
         },
-      ]),
-    );
+      ]);
     fs.writeFileSync(
       path.join(root, "notes", "task-notes", `${date}-${id}.json`),
       JSON.stringify({
@@ -69,9 +75,7 @@ describe("resolveEntityLinks", () => {
   it("does not auto-emit the task's own jiraKey as a related chip", () => {
     const date = "2026-07-28";
     const id = "abc-2";
-    fs.writeFileSync(
-      path.join(root, "tasks", `${date}.json`),
-      JSON.stringify([
+    writeItems([
         {
           id,
           text: "PTF-99 Do the thing",
@@ -83,8 +87,7 @@ describe("resolveEntityLinks", () => {
             { kind: "jira", id: "PTF-100", label: "PTF-100" },
           ],
         },
-      ]),
-    );
+      ]);
 
     const result = resolveEntityLinks("task", id, { date });
     expect(result.related.some((r) => r.kind === "jira" && r.id === "PTF-99")).toBe(false);
@@ -128,9 +131,7 @@ describe("resolveEntityLinks", () => {
   });
 
   it("doesn't double up a linking task across a rollover (stale copy left behind + fresh id today)", () => {
-    fs.writeFileSync(
-      path.join(root, "tasks", "2026-08-25.json"),
-      JSON.stringify([
+    writeItems([
         {
           id: "yesterday-id",
           text: "Chase PTF-4791",
@@ -140,11 +141,8 @@ describe("resolveEntityLinks", () => {
           movedAt: "2026-08-26T00:00:37.174Z",
           movedToDate: "2026-08-26",
         },
-      ]),
-    );
-    fs.writeFileSync(
-      path.join(root, "tasks", "2026-08-26.json"),
-      JSON.stringify([
+      ]);
+    writeItems([
         {
           id: "today-id",
           text: "Chase PTF-4791",
@@ -154,8 +152,7 @@ describe("resolveEntityLinks", () => {
           rolledFromId: "yesterday-id",
           rolledFromDate: "2026-08-25",
         },
-      ]),
-    );
+      ]);
 
     const result = resolveEntityLinks("jira", "PTF-4791");
     const linkingTasks = result.related.filter((r) => r.kind === "task");
@@ -175,11 +172,8 @@ describe("resolveEntityLinks", () => {
   });
 
   describe("two-way task links", () => {
-    const writeDay = (date: string, tasks: unknown[]) =>
-      fs.writeFileSync(path.join(root, "tasks", `${date}.json`), JSON.stringify(tasks));
-
     it("shows a back-link on the task that was linked to", () => {
-      writeDay("2026-08-28", [
+      writeItems([
         { id: "pr5", text: "PR 5: Bookmark backend", done: false, createdAt: "2026-08-28T06:00:00.000Z" },
         {
           id: "pr6",
@@ -200,67 +194,45 @@ describe("resolveEntityLinks", () => {
       expect(pr5?.href).toBe("/work?date=2026-08-28");
     });
 
-    it("survives rollover: a link naming yesterday's uuid resolves to today's copy", () => {
-      writeDay("2026-08-27", [
+    it("resolves a link that names an older id to the surviving item", () => {
+      writeItems([
         {
           id: "pr5-day1",
           text: "PR 5: Bookmark backend",
           done: false,
           createdAt: "2026-08-27T06:00:00.000Z",
-          movedAt: "2026-08-28T00:00:00.000Z",
-          movedToDate: "2026-08-28",
-        },
-      ]);
-      writeDay("2026-08-28", [
-        {
-          id: "pr5-day2",
-          text: "PR 5: Bookmark backend",
-          done: false,
-          createdAt: "2026-08-28T00:00:00.000Z",
-          rolledFromId: "pr5-day1",
-          rolledFromDate: "2026-08-27",
+          startDate: "2026-08-27",
+          legacyThrough: "2026-08-28",
+          legacyIds: ["pr5-day1", "pr5-day2"],
         },
         {
           id: "pr6",
           text: "PR 6: Bookmark API",
           done: false,
           createdAt: "2026-08-28T00:00:00.000Z",
-          // Stored yesterday, so it still names yesterday's uuid.
+          startDate: "2026-08-28",
           links: [{ kind: "task", id: "pr5-day1", label: "PR 5: Bookmark backend" }],
         },
       ]);
 
-      // Reverse: today's PR 5 still knows PR 6 points at it.
       const back = resolveEntityLinks("task", "pr5-day2", { date: "2026-08-28" });
       expect(back.related.filter((r) => r.kind === "task").map((r) => r.id)).toEqual(["pr6"]);
 
-      // Outbound: the stale ref is re-pointed at the live copy.
       const forward = resolveEntityLinks("task", "pr6", { date: "2026-08-28" });
       const pr5 = forward.related.find((r) => r.kind === "task");
-      expect(pr5?.id).toBe("pr5-day2");
+      expect(pr5?.id).toBe("pr5-day1");
       expect(pr5?.href).toBe("/work?date=2026-08-28");
     });
 
     it("never lists any id in its own lineage as related", () => {
-      writeDay("2026-08-27", [
+      writeItems([
         {
           id: "a-day1",
           text: "Self",
           done: false,
           createdAt: "2026-08-27T06:00:00.000Z",
-          movedAt: "2026-08-28T00:00:00.000Z",
-          movedToDate: "2026-08-28",
-          links: [{ kind: "task", id: "a-day1", label: "Self" }],
-        },
-      ]);
-      writeDay("2026-08-28", [
-        {
-          id: "a-day2",
-          text: "Self",
-          done: false,
-          createdAt: "2026-08-28T00:00:00.000Z",
-          rolledFromId: "a-day1",
-          rolledFromDate: "2026-08-27",
+          startDate: "2026-08-27",
+          legacyIds: ["a-day1", "a-day2"],
           links: [{ kind: "task", id: "a-day1", label: "Self" }],
         },
       ]);
@@ -288,9 +260,7 @@ describe("resolveEntityLinks", () => {
           },
         ]),
       );
-      fs.writeFileSync(
-        path.join(root, "tasks", "2026-08-28.json"),
-        JSON.stringify([
+      writeItems([
           {
             id: "pr6",
             text: "PR 6: Bookmark API",
@@ -305,8 +275,7 @@ describe("resolveEntityLinks", () => {
             createdAt: "2026-08-28T06:00:00.000Z",
             links: [{ kind: "note", id: "projects/webview-plan", label: "WebView implementation plan" }],
           },
-        ]),
-      );
+        ]);
     };
 
     it("reaches a linked task's own note, which depth 1 does not", () => {
@@ -329,9 +298,7 @@ describe("resolveEntityLinks", () => {
     });
 
     it("does not expand repo or tag refs — that is a listing, not context", () => {
-      fs.writeFileSync(
-        path.join(root, "tasks", "2026-08-28.json"),
-        JSON.stringify([
+      writeItems([
           {
             id: "target",
             text: "Do a thing #shared",
@@ -346,8 +313,7 @@ describe("resolveEntityLinks", () => {
             createdAt: "2026-08-28T06:00:00.000Z",
             links: [{ kind: "repo", id: "app-poc", label: "app-poc" }],
           },
-        ]),
-      );
+        ]);
 
       const deep = resolveEntityContext("task", "target", { date: "2026-08-28", depth: 2 });
       expect(deep.related.some((r) => r.kind === "repo")).toBe(true);
@@ -362,13 +328,10 @@ describe("resolveEntityLinks", () => {
         createdAt: "2026-08-28T06:00:00.000Z",
         links: [{ kind: "task", id: "hub", label: "Hub" }],
       }));
-      fs.writeFileSync(
-        path.join(root, "tasks", "2026-08-28.json"),
-        JSON.stringify([
+      writeItems([
           { id: "hub", text: "Hub", done: false, createdAt: "2026-08-28T06:00:00.000Z" },
           ...many,
-        ]),
-      );
+        ]);
 
       const deep = resolveEntityContext("task", "hub", { date: "2026-08-28", depth: 2, maxRefs: 3 });
       expect(deep.expanded.length).toBeLessThanOrEqual(3);

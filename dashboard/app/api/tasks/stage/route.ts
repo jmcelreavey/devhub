@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { parseBody, requireDashboardAuth, withErrorHandler } from "@/lib/api-utils";
-import { getTasks, updateTask } from "@/lib/tasks/storage";
+import { getTasks, updateTask, ensureTasksMigrated } from "@/lib/tasks/storage";
 import { checkTaskImplementReady } from "@/lib/tasks/implement-ready-gather";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +26,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   if (!parsed.ok) return parsed.response;
   const { taskId, date, stage, force } = parsed.data;
 
+  await ensureTasksMigrated();
   const task = getTasks(date).find((t) => t.id === taskId);
   if (!task) return NextResponse.json({ error: `Task ${taskId} not found on ${date}` }, { status: 404 });
 

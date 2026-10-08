@@ -4,7 +4,7 @@ import { reconcileManagedRun } from "@/lib/paseo/lifecycle";
 import { ensureConventionsFresh } from "@/lib/conventions/fresh";
 import { parseGithubPrUrl } from "@/lib/entity-links/parse-pr";
 import { parseBody,requireDashboardAuth,withErrorHandler } from "@/lib/api-utils";
-import { getTasks } from "@/lib/tasks/storage";
+import { getTasks, ensureTasksMigrated } from "@/lib/tasks/storage";
 import { listPaseoProviders } from "@/lib/paseo/providers";
 import { NextRequest,NextResponse } from "next/server";
 import { z } from "zod";
@@ -71,6 +71,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   if (!parsed.ok) return parsed.response;
   try {
     const { taskId, taskDate, action, repoName, notePath, prUrl, headSha, ...input } = parsed.data;
+    await ensureTasksMigrated();
     if (taskId && (!taskDate || !getTasks(taskDate).some((task) => task.id === taskId))) {
       return NextResponse.json({ error: "The linked task could not be found." }, { status: 404 });
     }

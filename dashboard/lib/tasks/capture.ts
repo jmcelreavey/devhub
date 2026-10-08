@@ -16,7 +16,7 @@ import { loadRecentAlerts } from "@/lib/datadog/recent-server";
 import { datadogAppOrigin } from "@/lib/datadog/links";
 import { buildTaskNoteMarkdown, taskNotePath } from "@/lib/task-note";
 import { JIRA_KEY_RE, todayISO } from "@/lib/utils";
-import { addTask, listTaskDays } from "@/lib/tasks/storage";
+import { addTask, ensureTasksMigrated, listTaskDays } from "@/lib/tasks/storage";
 import type { EntityRef, Task } from "@/lib/tasks/types";
 
 const MAX_PER_KIND = 5;
@@ -75,6 +75,7 @@ async function recentAlerts(keywords: string[]): Promise<CaptureContext["alerts"
 export async function gatherCaptureContext(text: string, excludeTaskId?: string): Promise<CaptureContext> {
   const keywords = captureKeywords(text);
   if (keywords.length === 0) return { notes: [], prs: [], tasks: [], alerts: [] };
+  await ensureTasksMigrated();
 
   // Notes matching more of the keywords rank first; one generic hit is weak evidence.
   const notesRoot = getNotesDir();

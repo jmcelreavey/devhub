@@ -3,7 +3,7 @@ import { agentBudgets,costRefusalMessage,spentToday } from "@/lib/agent-runs/bud
 import { createRunWorktree,gitHead,type AgentWorktreeLabel } from "@/lib/agent-runs/git";
 import { agentRunTitle } from "./title";
 import { parseJiraIssueKey } from "@/lib/entity-note";
-import { getTasks } from "@/lib/tasks/storage";
+import { ensureTasksMigrated, getTasks } from "@/lib/tasks/storage";
 import { isActiveAgentRunState,writeRunSpec,type AgentActivityContext,type AgentRunWorktree } from "@/lib/agent-runs/run-files";
 import {
 agentRunDir,
@@ -143,6 +143,7 @@ export function mcpServersForActivity(action: string | undefined): readonly stri
 const PASEO_DEFAULT_MCP = ["devhub"] as const;
 
 export async function dispatchAgentRun(input: AgentDispatchInput): Promise<AgentRun> {
+  await ensureTasksMigrated();
   if (!input.prompt.trim() || input.prompt.length > 32_000) throw new AgentDispatchError("A prompt between 1 and 32,000 characters is required.", 400);
   const maxDepth = envInt("DEVHUB_AGENT_MAX_DEPTH", 1) + (input.reviewRun ? 1 : 0);
   if (input.depth >= maxDepth) {

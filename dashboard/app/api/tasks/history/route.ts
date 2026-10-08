@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { getTasks, listTaskDays, listTaskFiles } from "@/lib/tasks/storage";
+import { ensureTasksMigrated, getTasks, listTaskDays, listTaskFiles } from "@/lib/tasks/storage";
 import { withErrorHandler } from "@/lib/api-utils";
 
 export const GET = withErrorHandler(async (req: Request) => {
+  await ensureTasksMigrated();
   const url = new URL(req.url);
   const date = url.searchParams.get("date");
 

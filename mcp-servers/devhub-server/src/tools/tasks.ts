@@ -1,3 +1,4 @@
+import { todayISO } from "../../../../shared/tasks/dates.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Context } from "../context.ts";
@@ -51,13 +52,14 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
       },
     },
     async ({ date }) => {
-      const target = date || new Date().toISOString().split("T")[0];
+      await tasksStorage.ready();
+      const target = date || todayISO();
       const day = tasksStorage.getDay(target);
       if (day.tasks.length === 0) {
         return { content: [{ type: "text", text: `No tasks for ${target}` }] };
       }
       const lines = day.tasks.map((t) => {
-        const status = t.done ? "x" : t.movedAt ? ">" : t.abandonedAt ? "~" : " ";
+        const status = t.done ? "x" : t.movedAt || t.endReason === "legacy-moved" ? ">" : t.abandonedAt ? "~" : " ";
         const due = t.due ? ` (due ${t.due})` : "";
         const jira = t.jiraKey ? ` [${t.jiraKey}]` : "";
         return `- [${status}] ${t.text}${jira}${due}`;
@@ -114,6 +116,7 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
       },
     },
     async ({ text, date, due, withNote, links, draft }) => {
+      await tasksStorage.ready();
       let task = tasksStorage.add(text, date, due, draft ? "draft" : undefined);
       if (links?.length) {
         task = tasksStorage.update(task.id, { links }, date) ?? task;
@@ -124,7 +127,7 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
           "../../../../shared/task-note/index.ts"
         );
         const { textToBlocks } = await import("../convert.ts");
-        const day = date || new Date().toISOString().split("T")[0];
+        const day = date || todayISO();
         const source = { ...task, date: day };
         const notePath = taskNotePath(source);
         ctx.storage.write(notePath, textToBlocks(buildTaskNoteMarkdown(source)));
@@ -172,6 +175,7 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
       },
     },
     async ({ id, text, done, due, status, abandonReason, date, links, stage }) => {
+      await tasksStorage.ready();
       const task = tasksStorage.update(id, { text, done, due, status, abandonReason, links, stage }, date);
       if (!task) {
         return { content: [{ type: "text", text: `Task not found: ${id}` }] };
@@ -190,6 +194,7 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
       },
     },
     async ({ id, date }) => {
+      await tasksStorage.ready();
       const deleted = tasksStorage.delete(id, date);
       return { content: [{ type: "text", text: deleted ? `Deleted task: ${id}` : `Task not found: ${id}` }] };
     },
@@ -220,16 +225,19 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
       },
     },
     async ({ includeTasks, date, query, days: dayLimit }) => {
+      await tasksStorage.ready();
       if (query) {
         // Full history is ~120 days of tasks; callers looking for one Jira key
         // were pulling all of it (70k+ chars) to scan it themselves.
         const needle = query.toLowerCase();
         const dates = date ? [date] : tasksStorage.list().map((d) => d.date);
         const matches: string[] = [];
+        const seen = new Set<string>();
         for (const d of dates) {
           for (const task of tasksStorage.getDay(d).tasks) {
-            const haystack = `${task.text}\n${task.id}\n${task.jiraKey ?? ""}`.toLowerCase();
-            if (!haystack.includes(needle)) continue;
+            const haystack = `${task.text}\n${task.id}\n${(task.legacyIds ?? []).join("\n")}\n${task.jiraKey ?? ""}`.toLowerCase();
+            if (!haystack.includes(needle) || seen.has(task.id)) continue;
+            seen.add(task.id);
             const note = task.notePath ? ` (note: ${task.notePath})` : "";
             matches.push(`${d} ${taskHistoryLine(task).slice(2)}${note}`);
           }
@@ -323,8 +331,9 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
       },
     },
     async ({ id, date, links, noteSummary, noteSummaryKey }) => {
-      const target = date || new Date().toISOString().split("T")[0];
-      const task = tasksStorage.getDay(target).tasks.find((t) => t.id === id);
+      await tasksStorage.ready();
+      const target = date || todayISO();
+      const task = tasksStorage.getDay(target).tasks.find((t) => t.id === id || t.legacyIds?.includes(id));
       if (!task) {
         return { content: [{ type: "text", text: `Task not found: ${id}` }] };
       }

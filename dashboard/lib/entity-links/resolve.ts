@@ -111,8 +111,11 @@ function readNoteMarkdown(relPath: string): string | null {
 function findLinkingTasks(idx: TaskIndex, kind: EntityKind, ids: ReadonlySet<string>): EntityRef[] {
   const jiraKeys = kind === "jira" ? new Set([...ids].map((i) => i.toUpperCase())) : null;
   const out: EntityRef[] = [];
+  const seen = new Set<string>();
   for (const { task, date } of idx.byId.values()) {
-    // Ignore historical aliases, including an unmarked source left by a failed write.
+    // Legacy ids share a node. Count the surviving item once.
+    if (seen.has(task.id)) continue;
+    seen.add(task.id);
     if (task.movedAt || currentTaskNode(idx, task.id)?.task.id !== task.id) continue;
     const jiraMatch =
       jiraKeys != null && typeof task.jiraKey === "string" && jiraKeys.has(task.jiraKey.toUpperCase());
@@ -195,7 +198,7 @@ function resolveWithIndex(
     const text = found?.task.text ?? opts?.label ?? id;
     suppressJiraKey = found?.task.jiraKey;
     // Companion note chip sits under the task title — don't re-echo the title.
-    const source = found?.task ?? { id, text, done: false, createdAt: date };
+    const source = found?.task ?? { id, text, done: false, createdAt: date, startDate: date, rank: "1" };
     const resolved = createTaskNoteResolver()(source, date);
     pushNote(resolved.notePath, "Note");
     for (const previous of resolved.previousNotePaths) pushNote(previous, "Previous note");

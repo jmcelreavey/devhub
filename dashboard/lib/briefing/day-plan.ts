@@ -14,7 +14,7 @@
  * duplicated, contradicted, or both.
  */
 import { getTodayEvents, type CalendarEvent } from "@/lib/google-calendar";
-import { getTasks, isTaskOpen, type Task } from "@/lib/tasks/storage";
+import { getTasks, isTaskOpen, type Task, ensureTasksMigrated } from "@/lib/tasks/storage";
 import { listRecentFailures, type RunHistoryRow } from "@/lib/run-history";
 
 /** Working day bounds, local time, used to bound "free" time. */
@@ -152,6 +152,7 @@ export async function buildDayPlan(date?: string): Promise<DayPlan> {
   const events = await getTodayEvents().catch(() => [] as CalendarEvent[]);
   let tasks: Task[] = [];
   try {
+    await ensureTasksMigrated();
     tasks = getTasks(date);
   } catch {
     tasks = [];

@@ -21,6 +21,7 @@ import { syncOpencodeConfig } from "@/lib/sync/opencode-config";
 import { collectSkills } from "@/lib/collect/skills";
 import { collectAgents } from "@/lib/collect/agents";
 import { collectOpencodeConfig } from "@/lib/collect/opencode-config";
+import { isTaskTimerOverlay } from "@/lib/content/sync-paths";
 
 export interface OrchestratorOptions {
   push?: boolean;
@@ -166,7 +167,7 @@ function listChangedFilesForPaths(repoRoot: string, paths: string[]): string[] {
     if (g.status !== 0) continue;
     for (const line of g.stdout.split("\n")) {
       const file = line.trim();
-      if (file) files.add(file);
+      if (file && !isTaskTimerOverlay(file)) files.add(file);
     }
   }
   return [...files].sort();

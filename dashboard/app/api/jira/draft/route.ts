@@ -5,7 +5,7 @@ import { isAiConfigured } from "@/lib/ai/preference";
 import { notConfigured, parseBody, requireDashboardAuth, withErrorHandler } from "@/lib/api-utils";
 import { DRAFT_NDJSON_TYPE, DraftStepError, type DraftEvent } from "@/lib/jira/draft-events";
 import { draftJiraTicket, JIRA_DRAFT_TIMEOUT_MS } from "@/lib/jira/draft-ticket";
-import { getTasks } from "@/lib/tasks/storage";
+import { getTasks, ensureTasksMigrated } from "@/lib/tasks/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +34,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   if (!parsed.ok) return parsed.response;
 
   const { taskId, date } = parsed.data;
+  await ensureTasksMigrated();
   const task = getTasks(date).find((candidate) => candidate.id === taskId);
   if (!task) return NextResponse.json({ error: "Task not found." }, { status: 404 });
   if (!isAiConfigured()) return notConfigured("AI");

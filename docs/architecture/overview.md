@@ -66,7 +66,7 @@ DevHub stores most user-owned data as files:
 | ---------------- | ---------------------------------------- |
 | Notes            | BlockNote JSON files                     |
 | Diagrams         | tldraw JSON files                    |
-| Tasks            | Daily JSON task files                    |
+| Tasks            | One JSON file per task (`tasks/items/`). See [Tasks](tasks.md). |
 | Skills           | Markdown files in shared skill folders   |
 | Persona          | Plain text and Markdown files            |
 | Config templates | JSON files with environment placeholders |

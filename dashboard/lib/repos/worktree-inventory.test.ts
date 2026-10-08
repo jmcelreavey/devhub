@@ -26,7 +26,7 @@ beforeEach(async () => {
 afterEach(() => { removeTerminalSession(987654); fs.rmSync(root, { recursive: true, force: true }); });
 function context(cwd = linked): WorktreeContext {
   return { ...empty, tasks: [{ date: "2026-09-24",
-    task: { id: "task-1", text: "Analytics debug overlay #analytics", done: true, jiraKey: "PTF-5014", createdAt: "2026-09-24" },
+    task: { id: "task-1", text: "Analytics debug overlay #analytics", done: true, jiraKey: "PTF-5014", createdAt: "2026-09-24", startDate: "2026-09-24", rank: "1" },
     runs: [{ runId: "run-abcdef-12345678", status: "done", cwd, startedAt: "2026-09-24", updatedAt: "2026-09-24" }],
   }] };
 }

@@ -29,19 +29,18 @@ exist yet (fresh clone), it's used anyway — DevHub will not fall back to anoth
 ## Setup
 
 1. Top bar → the person icon → name your first profile (default `home`) → **Enable**.
-   Existing `tasks/*.json` are moved into `tasks/home/` (a plain rename, so git keeps history).
+   Existing day files are moved into `tasks/home/` (a plain rename, so git keeps history). The next tasks read imports them into `tasks/home/items/`.
 2. On the other machine: pull, open the same menu, **Add** `work`. It becomes that machine's active profile.
 
-Until step 1, nothing changes: the flat `tasks/*.json` layout keeps working.
+Until step 1, tasks live in `tasks/items/`.
 
 ## What is and isn't per-profile
 
 | Per-profile (active only) | Shared |
 | --- | --- |
-| Task day-files, rollover, task history/weekly, MCP `tasks_*`, recall's task index | Notes, collections, docs, diagrams, agent runs |
+| Task items, history/weekly, MCP `tasks_*`, recall's task index | Notes, collections, docs, diagrams, agent runs |
 
-Overlay shows the *newest* day-file's open tasks for each other profile (rollover carries open work
-forward, so that is the whole open set).
+Overlay shows every open item in each other profile, including one that has been open for a long time.
 
 ## Known limits
 

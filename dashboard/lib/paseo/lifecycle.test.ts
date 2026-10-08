@@ -86,7 +86,7 @@ describe("task workspace pins", () => {
     status: { connectionId: "ws://127.0.0.1:6767/ws", conversationId: "agent", pinnedWorkspaceId: "ws", ...status },
   }) as unknown as AgentRun;
   const index = (task?: Partial<Task>): TaskIndex => ({
-    byId: new Map(task ? [["task-1", { date: "2026-09-25", task: { id: "task-1", text: "Ship it", done: false, createdAt: "", ...task } }]] : []),
+    byId: new Map(task ? [["task-1", { date: "2026-09-25", task: { id: "task-1", text: "Ship it", done: false, createdAt: "", startDate: "2026-09-25", rank: "1", ...task } }]] : []),
     aliases: new Map(),
   });
   const plan = taskRun("plan", 1);

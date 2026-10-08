@@ -56,7 +56,7 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | Sidebar                    | Nav badge counts and activity signatures                                                                                                                                                        |
 | Status                     | Health checks for Git, Agents (Paseo), MCP, sync health, LAN access, and in-flight external commands (`GET /api/status/exec`)                                                                    |
 | Sync preview               | Preview repo → local sync without applying                                                                                                                                                      |
-| Tasks                      | Task CRUD, open-task reorder (`PATCH` with `{ ids }`), rollover, timers, weekly review, and history                                                                                             |
+| Tasks                      | Task CRUD, open-task reorder (`PATCH` with `{ ids }`), timers, weekly review, and history                                                                                             |
 | Reps                       | Daily AI-free PR review practice (`GET`/`POST /api/reps`; diff via `GET /api/reps/diff`)                                                                                                        |
 | Terminal                   | Dock session registry, propose-then-confirm command queue, PTY logs/search/transcript                                                                                                           |
 | Tree                       | Notes file tree listing                                                                                                                                                                         |
@@ -362,7 +362,7 @@ The long tail, grouped by the surface that calls it.
 | `GET /api/voice`, `PUT /api/voice` | `/voice` page | `GET` returns the scenarios, your saved answers, whether the `my-voice` skill was found (and is read-only), and whether an AI provider is configured. `PUT` body `{ scenarioId, answer }` saves one answer; a blank answer clears it. Dashboard auth. |
 | `POST /api/voice/train`, `GET /api/voice/train`, `DELETE /api/voice/train` | `/voice` page | `POST` drafts a new `learned-voice.md` from answers not yet learned and writes nothing. It waits for the draft by default; `{ wait: false }` returns `202` and you poll `GET` (`idle`, `running`, `ready` with the draft, or `failed`). `DELETE` discards a finished draft. Dashboard auth. |
 | `POST /api/voice/apply` | `/voice` page | Body (both optional, falling back to the held draft): `{ content, answers }`. Saves the reviewed draft into the skill and syncs the skill out to your agent tools. `409` when there is no draft to apply. Dashboard auth. |
-| `GET /api/tasks` | Today, Work → Tasks | Runs rollover, returns `{ date, tasks[] }`. |
+| `GET /api/tasks` | Today, Work → Tasks | Imports leftover day files, returns `{ date, tasks[], migrationNotice? }`. |
 | `POST /api/tasks` | Task create | Body `{ text, date?, due? }` → `201` with the new task. |
 | `GET /api/share` | Editor **Share**, `/shared` live links | Returns `{ shares[] }` with stale/missing flags per gist registry entry. |
 | `POST /api/share` | Editor **Share**, `/shared` **Update** | Body: `{ vault: "notes" \| "docs", path }` (vault-relative, no extension). Creates or updates a secret gist; returns `{ share }`. Empty source → `400`; missing note → `404`; `gh` errors mapped from `mapGithubCliError`. |
@@ -374,7 +374,7 @@ The long tail, grouped by the surface that calls it.
 | `GET /api/entity-links` | Entity link chips, note relations panel | Query: `kind` (`task` \| `meeting` \| `pr` \| `note` \| `calendar` \| `jira`), `id` (required), plus optional `date`, `label`, `href`, `meetingTitle`, `prRepo`, `prNumber`. Returns `{ entity, notes[], related[] }` — stable note paths, parsed `## Links` refs, and `Task.links` hop-around edges. See [Notes System — Cross-entity linking](../architecture/notes-system.md#cross-entity-linking). |
 | `PATCH /api/tasks` | Task mutations | Branches: `{ ids[], date? }` reorder; `{ id, done }` toggle; `{ id, text?, due?, links? }` edit (`links` replaces hop-around `EntityRef[]`); `{ id, status: "abandoned" }` / `{ status: "active" }`; `{ id, timer: "start" \| "stop", date? }` focus timer (only one running timer per day). |
 | `DELETE /api/tasks` | Task delete | Body `{ id, date? }`. Settles any running timer before removal. |
-| `GET /api/tasks/history` | Task history views | Default: `{ date, total, completed, abandoned, moved, modified }[]` per day file, newest first. `?date=YYYY-MM-DD`: `{ date, tasks }` for one day. `?includeTasks=1`: same summaries plus full `tasks[]` per day. |
+| `GET /api/tasks/history` | Task history views | Default: `{ date, total, completed, abandoned, moved, modified }[]` per projected day, newest first. `?date=YYYY-MM-DD`: `{ date, tasks }` for one day. `?includeTasks=1`: same summaries plus full `tasks[]` per day. |
 
 ## Content Sync Actions
 

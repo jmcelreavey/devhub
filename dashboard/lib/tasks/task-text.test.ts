@@ -20,6 +20,8 @@ const task = (over: Partial<Task> = {}): Task => ({
   text: "do the thing",
   done: false,
   createdAt: "2026-07-01T00:00:00.000Z",
+  startDate: "2026-07-01",
+  rank: "1",
   ...over,
 });
 

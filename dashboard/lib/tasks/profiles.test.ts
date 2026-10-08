@@ -88,6 +88,27 @@ describe("task profile resolution", () => {
     expect(m.listTaskProfiles(tasksRoot)).toEqual(["home", "work"]);
   });
 
+  it("reserves deleted and adopts tombstones into the first profile", async () => {
+    fs.mkdirSync(path.join(tasksRoot, "deleted"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tasksRoot, "deleted", "gone.json"),
+      JSON.stringify({ id: "gone", deleted: true, legacyIds: ["gone"] }),
+    );
+    fs.mkdirSync(path.join(tasksRoot, "items"), { recursive: true });
+    fs.writeFileSync(path.join(tasksRoot, "items", "a.json"), JSON.stringify(task("a", "kept")));
+    const m = await fresh<typeof import("@shared/vault/task-profiles")>("../../../shared/vault/task-profiles.ts");
+    expect(m.isValidProfileId("deleted")).toBe(false);
+    expect(m.isValidProfileId("items")).toBe(false);
+    expect(m.isValidProfileId("legacy")).toBe(false);
+    expect(m.listTaskProfiles(tasksRoot)).toEqual([]);
+    expect(() => m.createTaskProfile(tasksRoot, "deleted")).toThrow();
+    expect(m.createTaskProfile(tasksRoot, "home")).toEqual({ adopted: 2 });
+    expect(fs.existsSync(path.join(tasksRoot, "home", "deleted", "gone.json"))).toBe(true);
+    expect(fs.existsSync(path.join(tasksRoot, "home", "items", "a.json"))).toBe(true);
+    expect(fs.existsSync(path.join(tasksRoot, "deleted", "gone.json"))).toBe(false);
+    expect(m.listTaskProfiles(tasksRoot)).toEqual(["home"]);
+  });
+
   it("adopt never overwrites an existing profile file", async () => {
     writeDay("home", "2026-09-29", [task("keep", "keep me")]);
     writeDay(null, "2026-09-29", [task("stray", "stray")]);
@@ -108,25 +129,28 @@ describe("profile-scoped storage", () => {
     const added = await storage.addTask("work task", "2026-09-29");
     expect(storage.getTasks("2026-09-29").map((t) => t.id)).toEqual([added.id]);
 
-    const homeFile = JSON.parse(fs.readFileSync(path.join(tasksRoot, "home", "2026-09-29.json"), "utf-8"));
-    expect(homeFile.map((t: { id: string }) => t.id)).toEqual(["h1"]);
+    expect(fs.existsSync(path.join(tasksRoot, "home", "2026-09-29.json"))).toBe(false);
+    const homeItems = fs.readdirSync(path.join(tasksRoot, "home", "items")).filter((name) => name.endsWith(".json"));
+    const homeTexts = homeItems.map((name) => JSON.parse(fs.readFileSync(path.join(tasksRoot, "home", "items", name), "utf-8")).text);
+    expect(homeTexts).toEqual(["home task"]);
   });
 
-  it("rollover in one profile ignores the other profile's open tasks", async () => {
+  it("keeps each profile's open tasks separate", async () => {
     writeDay("home", "2026-09-01", [task("h1", "home old")]);
     writeDay("work", "2026-09-01", [task("w1", "work old")]);
     process.env.DEVHUB_PROFILE = "work";
     const storage = await fresh<typeof import("./storage")>("./storage.ts");
+    await storage.ensureTasksMigrated();
+    expect(storage.getTasks().map((item) => item.text)).toEqual(["work old"]);
 
-    const rolled = await storage.rolloverTasks();
-    expect(rolled.map((t) => t.text)).toEqual(["work old"]);
-    const homeOld = JSON.parse(fs.readFileSync(path.join(tasksRoot, "home", "2026-09-01.json"), "utf-8"));
-    expect(homeOld[0].movedAt).toBeUndefined();
+    process.env.DEVHUB_PROFILE = "home";
+    const home = await fresh<typeof import("./storage")>("./storage.ts");
+    expect(home.getTasks().map((item) => item.text)).toEqual(["home old"]);
   });
 });
 
 describe("profile overview", () => {
-  it("overlays the other profile's open tasks from its newest day", async () => {
+  it("overlays the other profile's open tasks", async () => {
     writeDay("home", "2026-09-20", [task("old", "ancient")]);
     writeDay("home", "2026-09-29", [
       task("open", "buy filament"),
@@ -135,14 +159,16 @@ describe("profile overview", () => {
     ]);
     writeDay("work", "2026-09-29", [task("w", "ship it")]);
     process.env.DEVHUB_PROFILE = "work";
+    const storage = await fresh<typeof import("./storage")>("./storage.ts");
+    await storage.ensureTasksMigrated();
     const { getTaskProfileOverview } = await fresh<typeof import("./profiles")>("./profiles.ts");
 
     const overview = getTaskProfileOverview();
     expect(overview.mode).toBe("profiles");
     expect(overview.active).toBe("work");
     expect(overview.overlay).toHaveLength(1);
-    expect(overview.overlay[0]).toMatchObject({ profileId: "home", date: "2026-09-29" });
-    expect(overview.overlay[0]!.tasks.map((t) => t.id)).toEqual(["open"]);
+    expect(overview.overlay[0]).toMatchObject({ profileId: "home" });
+    expect(overview.overlay[0]!.tasks.map((t) => t.id).sort()).toEqual(["old", "open"]);
   });
 
   it("omits profiles with nothing open and reports legacy mode with no profiles", async () => {

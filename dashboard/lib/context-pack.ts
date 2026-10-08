@@ -38,7 +38,7 @@ import path from "node:path";
 import { blocksToText } from "./markdown-convert";
 import { listLearningEntries } from "./learnings-index";
 import { getRepoRoot, getNotesDir } from "@/lib/notes/dir";
-import { getTasks, isTaskOpen, type Task } from "@/lib/tasks/storage";
+import { getTasks, isTaskOpen, type Task, ensureTasksMigrated } from "@/lib/tasks/storage";
 import { recall } from "@/lib/recall/recall";
 import { dailyNotePath, todayISO } from "./utils";
 
@@ -173,6 +173,7 @@ function selectLearnings(
 export async function buildContextPack(fetchStandup: () => Promise<string | null>): Promise<ContextPack> {
   const today = todayISO();
   const repoRoot = getRepoRoot();
+  await ensureTasksMigrated();
   const tasks = getTasks(today).filter(isTaskOpen);
   const dailyNotePreview = readDailyNotePreview(getNotesDir(), today);
   const learnings = selectLearnings(repoRoot, buildLearningQuery(tasks, dailyNotePreview));

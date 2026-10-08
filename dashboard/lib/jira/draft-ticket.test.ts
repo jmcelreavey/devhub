@@ -22,7 +22,7 @@ vi.mock("./client", () => ({ getTicketWithDescription: vi.fn() }));
 
 const task: Task = {
   id: "task-1", text: "TEST-7 Fix renewal events", jiraKey: "TEST-7",
-  done: false, createdAt: "2026-10-01T12:00:00Z",
+  done: false, createdAt: "2026-10-01T12:00:00Z", startDate: "2026-10-01", rank: "1",
   links: [{ kind: "note", id: "reference/renewals", label: "Renewal behaviour" }],
 };
 const draft = { summary: "Handle renewal events in order", description: "Renewal events can arrive out of order.\n\n- Keep the most recent subscription state." };

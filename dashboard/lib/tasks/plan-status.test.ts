@@ -3,7 +3,7 @@ import { planStatusBucket } from "@/lib/tasks/plan-status";
 import type { Task } from "@/lib/tasks/types";
 import type { TaskAgentRunRecord } from "@/lib/tasks/task-agent-runs";
 
-const task = (extra: Partial<Task> = {}): Task => ({ id: "t1", text: "Do it", done: false, createdAt: "x", ...extra });
+const task = (extra: Partial<Task> = {}): Task => ({ id: "t1", text: "Do it", done: false, createdAt: "x", startDate: "2026-05-25", rank: "1", ...extra });
 const run = (extra: Partial<TaskAgentRunRecord>): TaskAgentRunRecord => ({
   runId: "run-m1abc2-deadbeef",
   status: "done",

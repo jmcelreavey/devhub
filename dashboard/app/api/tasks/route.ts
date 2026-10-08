@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getTasks, addTask, toggleTask, deleteTask, updateTask, abandonTask, reactivateTask, reorderOpenTasks, rolloverTasks, startTaskTimer, stopTaskTimer } from "@/lib/tasks/storage";
+import { getTasks, addTask, toggleTask, deleteTask, updateTask, abandonTask, reactivateTask, reorderOpenTasks, ensureTasksMigrated, taskMigrationNotice, startTaskTimer, stopTaskTimer } from "@/lib/tasks/storage";
+import { todayISO } from "@/lib/utils";
 import {
   TaskCreateSchema,
   TaskPatchSchema,
@@ -15,14 +16,16 @@ export const GET = withErrorHandler(async (req: Request) => {
   if (taskId !== null && !/^[a-zA-Z0-9_-]{1,200}$/.test(taskId)) {
     return NextResponse.json({ error: "Invalid taskId" }, { status: 400 });
   }
-  const tasks = await rolloverTasks();
-  const date = new Date().toISOString().split("T")[0];
+  await ensureTasksMigrated();
+  const tasks = getTasks();
+  const date = todayISO();
+  const migrationNotice = taskMigrationNotice();
   if (taskId) {
     const node = currentTaskNode(loadTaskIndex(), taskId);
     const current = node ? getTasks(node.date).filter((task) => task.id === node.task.id) : [];
-    return NextResponse.json({ date: node?.date ?? date, tasks: current });
+    return NextResponse.json({ date: node?.date ?? date, tasks: current, migrationNotice });
   }
-  return NextResponse.json({ date, tasks });
+  return NextResponse.json({ date, tasks, migrationNotice });
 }, "tasks.get");
 
 export const POST = withErrorHandler(async (req: Request) => {
@@ -102,7 +105,7 @@ export const DELETE = withErrorHandler(async (req: Request) => {
   if (!parsed.success) {
     return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
   }
-  const ok = await deleteTask(parsed.data.id, parsed.data.date);
+  const ok = await deleteTask(parsed.data.id);
   return ok
     ? NextResponse.json({ ok: true })
     : NextResponse.json({ error: "Not found" }, { status: 404 });

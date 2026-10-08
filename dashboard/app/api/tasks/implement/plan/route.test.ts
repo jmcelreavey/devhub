@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ readImplementReviewPrefs: vi.fn() }));
 
 vi.mock("@/lib/tasks/storage", () => ({
+  ensureTasksMigrated: async () => {},
   getTasks: () => [{ id: "task-1", text: "Cap webhook retries", done: false, links: [{ kind: "repo", id: "acme/payments-api" }] }],
 }));
 vi.mock("@/lib/tasks/task-notes", () => ({ resolveTaskNotePath: () => "task-notes/2026-10-07-task-1" }));

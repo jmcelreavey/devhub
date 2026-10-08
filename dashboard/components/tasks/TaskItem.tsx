@@ -128,7 +128,8 @@ export function TaskItem({
   const [justCompleted, setJustCompleted] = useState(false);
   const editRef = useRef<HTMLInputElement>(null);
   const isAbandoned = !!task.abandonedAt;
-  const isMoved = !!task.movedAt;
+  const isMoved = !!task.movedAt || task.endReason === "legacy-moved";
+  const slipped = !isMoved && !task.done && !task.abandonedAt && !!task.startDate && task.startDate < taskDate;
   const isInactive = isAbandoned || isMoved || readOnly;
   const agent = useTaskAgentActions({
     task,
@@ -484,6 +485,7 @@ export function TaskItem({
           ) : (
             <span className="task-row-title text-sm leading-snug" style={textStyle}>
               <TaskTextContent text={task.jiraKey && !isAbandoned ? displayText : task.text} />
+              {slipped ? <span className="ml-2 text-[11px] font-mono text-text-subtle">slipped</span> : null}
             </span>
           )}
 
@@ -498,6 +500,11 @@ export function TaskItem({
               - {task.abandonReason}
             </span>
           )}
+          {task.endReason === "legacy-moved" ? (
+            <span className="text-xs min-w-0 basis-full break-words leading-snug" style={{ color: "var(--text-subtle)", opacity: 0.6 }}>
+              Ended when the later copy was removed
+            </span>
+          ) : null}
 
         </div>
 

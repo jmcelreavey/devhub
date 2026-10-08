@@ -1,24 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getNotesDir, getTasksDir } from "@/lib/content/dirs";
-import { safeReadJSON } from "@/lib/atomic-write";
+import { getActiveTasksDir, getNotesDir } from "@/lib/content/dirs";
+import { readItems } from "@shared/tasks/store.ts";
 import { resolveStoredTaskNotes } from "@shared/task-note/resolve";
 import type { Task } from "./types";
 
 /** One cache per read operation, so a day's tasks can share their ancestry reads. */
 export function createTaskNoteResolver() {
-  const tasksDir = getTasksDir();
+  const tasksDir = getActiveTasksDir();
   const notesDir = getNotesDir();
-  const days = new Map<string, Task[]>();
   return (task: Task, date: string) => resolveStoredTaskNotes(task, date, {
-    readTask: (sourceDate, id) => {
-      let tasks = days.get(sourceDate);
-      if (!tasks) {
-        tasks = safeReadJSON<Task[]>(path.join(tasksDir, `${sourceDate}.json`), []);
-        days.set(sourceDate, tasks);
-      }
-      return tasks.find((t) => t.id === id);
-    },
+    readTask: (_sourceDate, id) => readItems(tasksDir).find((item) => item.id === id || item.legacyIds?.includes(id)),
     noteExists: (notePath) => fs.existsSync(path.join(notesDir, `${notePath}.json`)),
   });
 }

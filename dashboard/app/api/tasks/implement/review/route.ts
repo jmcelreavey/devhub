@@ -5,7 +5,7 @@ import { toAgentRunSummary } from "@/lib/agent-runs/store";
 import { parseBody, requireDashboardAuth, withErrorHandler } from "@/lib/api-utils";
 import { readImplementReviewPrefs } from "@/lib/tasks/implement-review-prefs";
 import { buildImplementReviewPrompt } from "@/lib/tasks/implement-review-prompt";
-import { getTasks } from "@/lib/tasks/storage";
+import { getTasks, ensureTasksMigrated } from "@/lib/tasks/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +56,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       { status: 409 },
     );
   }
+  await ensureTasksMigrated();
   const task = getTasks(body.date).find((item) => item.id === body.taskId);
   if (!task) return NextResponse.json({ error: "The task could not be found." }, { status: 404 });
 

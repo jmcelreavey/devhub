@@ -16,6 +16,7 @@ import {
 } from "@shared/notes-search/extract.ts";
 import { getReposDir } from "@/lib/desktop/runtime-paths";
 import { getDocsDir, getNotesDir, getActiveTasksDir } from "@/lib/notes/dir";
+import { listDays } from "@shared/tasks/store.ts";
 import { entityKey } from "@/lib/entity-note";
 import { conventionRecallDocs, conventionsNewestMtime } from "@/lib/conventions/recall";
 import { chunkText } from "./chunk";
@@ -153,61 +154,35 @@ function readDocs(): RawDoc[] {
 }
 
 /**
- * Daily task files.
- *
- * One doc per *day* rather than per task: a single task ("fix the cache purge")
- * is too short to rank on its own, and the day's other tasks are genuine
- * context for it — that's what you were doing at the time.
+ * One doc per day of tasks visible that day. A single task is too short to
+ * rank on its own, and the day's other tasks are genuine context for it.
  */
 function readTasks(): RawDoc[] {
-  const root = getActiveTasksDir();
-  if (!fs.existsSync(root)) return [];
-
-  const files = fs
-    .readdirSync(root)
-    .filter((name) => /^\d{4}-\d{2}-\d{2}\.json$/.test(name))
-    .sort((a, b) => b.localeCompare(a))
-    .slice(0, TASK_DAYS);
-
   const docs: RawDoc[] = [];
-  for (const name of files) {
-    const date = name.replace(/\.json$/, "");
-    try {
-      const raw = JSON.parse(fs.readFileSync(path.join(root, name), "utf-8")) as unknown;
-      if (!Array.isArray(raw) || raw.length === 0) continue;
-      const mtime = fs.statSync(path.join(root, name)).mtimeMs;
-
-      const refs = new Set<string>();
-      const lines: string[] = [];
-      for (const entry of raw as Array<Record<string, unknown>>) {
-        if (typeof entry.text !== "string") continue;
-        const status = entry.done === true ? "done" : entry.abandonedAt ? "abandoned" : "open";
-        const jira = typeof entry.jiraKey === "string" ? ` [${entry.jiraKey}]` : "";
-        lines.push(`- (${status}) ${entry.text}${jira}`);
-        if (Array.isArray(entry.links)) {
-          for (const link of entry.links as Array<{ kind?: string; id?: string }>) {
-            if (typeof link?.kind === "string" && typeof link?.id === "string") {
-              refs.add(entityKey({ kind: link.kind as never, id: link.id }));
-            }
-          }
-        }
+  for (const day of listDays(getActiveTasksDir()).slice(0, TASK_DAYS)) {
+    const refs = new Set<string>();
+    const lines: string[] = [];
+    let newest = 0;
+    for (const entry of day.tasks) {
+      const status = entry.done ? "done" : entry.abandonedAt ? "abandoned" : entry.endDate ? "ended" : "open";
+      const jira = entry.jiraKey ? ` [${entry.jiraKey}]` : "";
+      lines.push(`- (${status}) ${entry.text}${jira}`);
+      newest = Math.max(newest, Date.parse(entry.completedAt ?? entry.createdAt) || 0);
+      for (const link of entry.links ?? []) {
+        refs.add(entityKey({ kind: link.kind, id: link.id }));
       }
-      if (lines.length === 0) continue;
-
-      docs.push({
-        sourceKind: "task",
-        sourceId: date,
-        title: `Tasks — ${date}`,
-        text: `# Tasks ${date}\n${lines.join("\n")}`,
-        href: `/work?date=${date}`,
-        ts: mtime,
-        refs: [...refs],
-      });
-    } catch {
-      continue;
     }
+    if (lines.length === 0) continue;
+    docs.push({
+      sourceKind: "task",
+      sourceId: day.date,
+      title: `Tasks — ${day.date}`,
+      text: `# Tasks ${day.date}\n${lines.join("\n")}`,
+      href: `/work?date=${day.date}`,
+      ts: newest,
+      refs: [...refs],
+    });
   }
-
   return docs;
 }
 
@@ -302,10 +277,10 @@ export function sourcesNewestMtime(): number {
   for (const file of walkFiles(getNotesDir(), (name) => name.endsWith(".json"))) consider(file);
   for (const file of walkFiles(getDocsDir(), (name) => name.endsWith(".md"))) consider(file);
 
-  const tasksRoot = getActiveTasksDir();
-  if (fs.existsSync(tasksRoot)) {
-    for (const name of fs.readdirSync(tasksRoot)) {
-      if (/^\d{4}-\d{2}-\d{2}\.json$/.test(name)) consider(path.join(tasksRoot, name));
+  const itemsDir = path.join(getActiveTasksDir(), "items");
+  if (fs.existsSync(itemsDir)) {
+    for (const name of fs.readdirSync(itemsDir)) {
+      if (name.endsWith(".json")) consider(path.join(itemsDir, name));
     }
   }
 

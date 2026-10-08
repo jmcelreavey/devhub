@@ -19,7 +19,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 function setup(enabled = true, linked = true) {
   return renderHook(() => useTaskAgentActions({
-    task: { id: "task-1", text: "Analytics overlay", done: false, createdAt: "",
+    task: { id: "task-1", text: "Analytics overlay", done: false, createdAt: "", startDate: "2026-10-01", rank: "1",
       links: linked ? [{ kind: "repo", id: "acme/app", label: "app" }] : [] },
     date: "2026-09-24", enabled, onComplete: vi.fn(), onAbandon: vi.fn(),
   }));

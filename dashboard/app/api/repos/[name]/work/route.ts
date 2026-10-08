@@ -19,7 +19,7 @@ import {
   type WorkHubTask,
 } from "@/lib/repos/work-hub";
 import { resolveScannedRepo } from "@/lib/scanned-repo";
-import { isTaskOpen, listTaskDays, rolloverTasks } from "@/lib/tasks/storage";
+import { getTasks, isTaskOpen, listTaskDays, ensureTasksMigrated } from "@/lib/tasks/storage";
 import type { Task } from "@/lib/tasks/types";
 import { todayISO } from "@/lib/utils";
 
@@ -77,7 +77,7 @@ function finishedTasksForRepo(name: string, fullName: string | null): WorkHubTas
   const out: WorkHubTask[] = [];
   for (const day of listTaskDays()) {
     for (const task of day.tasks) {
-      if (isTaskOpen(task) || task.movedAt) continue;
+      if (isTaskOpen(task) || task.movedAt || task.endReason) continue;
       if (!taskBelongsToRepo(task, name, fullName)) continue;
       out.push(asFinishedTask(task, day.date));
       if (out.length >= DONE_TASK_LIMIT) return out;
@@ -168,14 +168,14 @@ export const GET = withErrorHandler(
     // Tasks are local; Jira, Calendar and GitHub are independent network calls.
     // Awaiting them in sequence made this route cost the sum of all four on the
     // repo page's critical path.
-    const [rolled, ticketsResult, eventsResult, prsResult] = await Promise.all([
-      rolloverTasks(),
+    const [, ticketsResult, eventsResult, prsResult] = await Promise.all([
+      ensureTasksMigrated(),
       settle(getMyTicketsCached()),
       settle(getEventsInRange(HUB_CALENDAR_WINDOW_DAYS, HUB_CALENDAR_WINDOW_DAYS)),
       settle(openPrsForRepo(fullName)),
     ]);
     const openPrs = prsResult.data?.rows ?? [];
-    const tasks = rolled.filter(isTaskOpen).map((task) => ({
+    const tasks = getTasks().filter(isTaskOpen).map((task) => ({
       ...task,
       date,
     }));

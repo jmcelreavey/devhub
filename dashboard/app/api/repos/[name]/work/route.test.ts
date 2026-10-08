@@ -17,7 +17,7 @@ vi.mock("@/lib/github/prs", () => ({
 }));
 vi.mock("@/lib/tasks/storage", async () => {
   const { isTaskOpen } = await import("@/lib/tasks/types");
-  return { isTaskOpen, rolloverTasks: sources.tasks, listTaskDays: () => [] };
+  return { isTaskOpen, ensureTasksMigrated: async () => {}, getTasks: sources.tasks, listTaskDays: () => [] };
 });
 vi.mock("@/lib/entity-links/resolve", () => ({
   resolveEntityLinks: (kind: string) => ({
@@ -43,7 +43,7 @@ beforeEach(() => {
   sources.calendar.mockResolvedValue([]);
   sources.jira.mockResolvedValue([ticket]);
   sources.prs.mockResolvedValue([pullRequest]);
-  sources.tasks.mockResolvedValue([task]);
+  sources.tasks.mockReturnValue([task]);
 });
 
 describe("GET /api/repos/[name]/work partial integration failures", () => {

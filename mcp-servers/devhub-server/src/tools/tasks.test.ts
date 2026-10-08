@@ -242,11 +242,12 @@ describe("tasks_history query", () => {
     expect(await history({ query: "nope" })).toBe('No tasks matching "nope"');
   });
 
-  it("still returns every day by default, and trims only when days is passed", async () => {
-    fs.writeFileSync(path.join(env.tasksDir, "2026-08-20.json"), JSON.stringify([]));
-    expect(await history({ includeTasks: true })).toContain("2026-08-20");
+  it("returns the open task across the days it spans, and trims when days is passed", async () => {
+    const full = await history({ includeTasks: true });
+    expect(full).toContain(DAY);
+    expect(full).toContain(TASK_ID);
     const trimmed = await history({ includeTasks: true, days: 1 });
-    expect(trimmed).toContain(DAY);
-    expect(trimmed).toContain("1 older day(s) not shown");
+    expect(trimmed).toContain("older day(s) not shown");
+    expect(trimmed).not.toContain(DAY);
   });
 });

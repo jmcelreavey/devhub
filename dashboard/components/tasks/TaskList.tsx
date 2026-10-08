@@ -51,7 +51,7 @@ export interface TaskListProps {
 }
 
 export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }: TaskListProps) {
-  const { data, error, isLoading, mutate } = useLive<{ tasks?: Task[] }>("/api/tasks");
+  const { data, error, isLoading, mutate } = useLive<{ tasks?: Task[]; migrationNotice?: string }>("/api/tasks");
   const gridSize = useGridSize("main");
   const tasks = data?.tasks ?? EMPTY_TASKS;
   const [exitingIds, setExitingIds] = useState<Set<string>>(() => new Set());
@@ -67,7 +67,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
   const toast = useToast();
   const today = todayISO();
 
-  const hasCompletedToday = tasks.some((t) => t.done && t.completedAt?.startsWith(today));
+  const hasCompletedToday = tasks.some((t) => t.done && (t.endDate === today || t.completedAt?.startsWith(today)));
   const hasAbandonedToday = tasks.some((t) => t.abandonedAt?.startsWith(today));
   const [showCompleted, setShowCompleted] = useState(hasCompletedToday);
   const [showAbandoned, setShowAbandoned] = useState(hasAbandonedToday);
@@ -661,6 +661,9 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
 
   return (
     <div className="space-y-3">
+      {data?.migrationNotice ? (
+        <p className="text-[12px] leading-snug text-text-muted">{data.migrationNotice}</p>
+      ) : null}
       {(pending.length + completed.length + abandoned.length) > 0 && (
         <SegmentedProgressBar open={pending.length} done={completed.length} abandoned={abandoned.length}>
           {(hasParents || groupMode === "parent") && (

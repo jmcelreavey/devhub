@@ -25,7 +25,7 @@ import { getNotesDir } from "@/lib/notes/dir";
 import { getReposScanDir } from "@/lib/repos";
 import { safeReadJSON, writeAtomic } from "@/lib/atomic-write";
 import { blocksToText } from "@/lib/markdown-convert";
-import { addTask, getTasks, toggleTask } from "@/lib/tasks/storage";
+import { addTask, getTasks, toggleTask, ensureTasksMigrated } from "@/lib/tasks/storage";
 import { todayISO } from "@/lib/utils";
 import { gitLog } from "./git";
 import { capabilityCacheDir, safeSegment } from "./paths";
@@ -296,6 +296,7 @@ export async function markLabComplete(category: string, done = true): Promise<La
   await writeLabRecord(rec);
   if (rec.taskId) {
     try {
+      await ensureTasksMigrated();
       const task = getTasks(rec.taskDate).find((t) => t.id === rec.taskId);
       if (task && task.done !== done) await toggleTask(rec.taskId, rec.taskDate);
     } catch {

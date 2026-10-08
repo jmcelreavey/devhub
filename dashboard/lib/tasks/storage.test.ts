@@ -29,6 +29,14 @@ afterEach(() => {
   else process.env.TASKS_DIR = originalTasksDir;
 });
 
+
+function localDay(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 describe("tasks-storage", () => {
   it("addTask + getTasks round trip", async () => {
     const m = await freshTaskModule();
@@ -122,8 +130,8 @@ describe("tasks-storage", () => {
     await m.toggleTask(two.id);
 
     const reordered = await m.reorderOpenTasks([three.id, one.id]);
-    expect(reordered.map((t: { text: string }) => t.text)).toEqual(["three", "two", "one"]);
-    expect(m.getTasks().map((t: { text: string }) => t.text)).toEqual(["three", "two", "one"]);
+    expect(reordered.map((t: { text: string }) => t.text)).toEqual(["three", "one", "two"]);
+    expect(m.getTasks().map((t: { text: string }) => t.text)).toEqual(["three", "one", "two"]);
   });
 
   it("reorderOpenTasks rejects incomplete open task orders", async () => {
@@ -168,164 +176,70 @@ describe("tasks-storage", () => {
     expect(toggled.abandonReason).toBeUndefined();
   });
 
-  it("rollover excludes abandoned tasks", async () => {
+  it("keeps an open task on today and leaves an abandoned one behind", async () => {
     const m = await freshTaskModule();
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    const yDate = yesterday.toISOString().split("T")[0];
-    const a = await m.addTask("active task", yDate);
-    await m.addTask("will abandon", yDate);
-    const tasks = m.getTasks(yDate);
-    const toAbandon = tasks.find((t: { id: string }) => t.id !== a.id);
-    await m.abandonTask(toAbandon.id, "skip", yDate);
-    const rolled = await m.rolloverTasks();
-    expect(rolled).toHaveLength(1);
-    expect(rolled[0].text).toBe("active task");
+    const yDate = localDay(yesterday);
+    const active = await m.addTask("active task", yDate);
+    const dropped = await m.addTask("will abandon", yDate);
+    await m.abandonTask(dropped.id, "skip");
+    const today = m.getTasks();
+    const abandoned = today.find((task: { id: string }) => task.id === dropped.id);
+    const stillOpen = today.find((task: { id: string }) => task.id === active.id);
+    expect(m.isTaskOpen(stillOpen)).toBe(true);
+    expect(abandoned?.abandonedAt).toBeTruthy();
+    expect(m.isTaskOpen(abandoned)).toBe(false);
+    expect(m.getTasks(yDate).map((task: { id: string }) => task.id).sort()).toEqual([active.id, dropped.id].sort());
   });
 
-  it("rollover catches up open tasks from days before yesterday", async () => {
+  it("still shows a task that started before yesterday", async () => {
     const m = await freshTaskModule();
     const stale = new Date();
     stale.setDate(stale.getDate() - 3);
-    const staleDate = stale.toISOString().split("T")[0];
+    const staleDate = localDay(stale);
     await m.addTask("stale open task", staleDate);
     await m.addTask("another stale task", staleDate);
-
-    const rolled = await m.rolloverTasks();
-    expect(rolled).toHaveLength(2);
-    expect(rolled.map((t: { text: string }) => t.text).sort()).toEqual(
-      ["another stale task", "stale open task"].sort(),
-    );
-
-    const staleTasks = m.getTasks(staleDate);
-    expect(staleTasks.every((t: { movedAt?: string }) => !!t.movedAt)).toBe(true);
-    expect(m.isTaskOpen(staleTasks[0]!)).toBe(false);
+    expect(m.getTasks().map((task: { text: string }) => task.text).sort()).toEqual(["another stale task", "stale open task"]);
+    const earlier = m.getTasks(staleDate);
+    expect(earlier).toHaveLength(2);
+    expect(earlier.every((task: { done: boolean; endDate?: string }) => m.isTaskOpen(task))).toBe(true);
   });
 
-  it("rollover marks yesterday tasks moved and copies to today", async () => {
+  it("keeps the same task when it is still open the next day", async () => {
     const m = await freshTaskModule();
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    const yDate = yesterday.toISOString().split("T")[0];
-    const source = await m.addTask("carry over", yDate);
-    const rolled = await m.rolloverTasks();
-    expect(rolled).toHaveLength(1);
-    expect(rolled[0].text).toBe("carry over");
-    expect(rolled[0].id).toBe(source.id);
-    expect(rolled[0].createdAt).toBe(source.createdAt);
-    expect(rolled[0].notePath).toBe(source.notePath);
-    expect(rolled[0].movedAt).toBeUndefined();
-    expect(rolled[0].movedToDate).toBeUndefined();
-
-    const yesterdayTasks = m.getTasks(yDate);
-    const movedSource = yesterdayTasks.find((t: { id: string }) => t.id === source.id);
-    expect(movedSource?.movedAt).toBeDefined();
-    expect(movedSource?.movedToDate).toBeDefined();
-    expect(m.isTaskOpen(movedSource!)).toBe(false);
+    const source = await m.addTask("carry over", localDay(yesterday));
+    const today = m.getTasks();
+    expect(today).toHaveLength(1);
+    expect(today[0]).toMatchObject({ id: source.id, text: "carry over", createdAt: source.createdAt, notePath: source.notePath });
+    expect(m.isTaskOpen(today[0])).toBe(true);
   });
 
-  it("rollover merges into today when today's file already exists", async () => {
+  it("shows an older open task beside one added today", async () => {
     const m = await freshTaskModule();
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    const yDate = yesterday.toISOString().split("T")[0];
-    await m.addTask("carry over", yDate);
-    await m.addTask("added before rollover");
-
-    const rolled = await m.rolloverTasks();
-    const today = new Date().toISOString().split("T")[0];
-    const todayTasks = m.getTasks(today);
-
-    expect(rolled).toHaveLength(2);
-    expect(todayTasks).toHaveLength(2);
-    expect(todayTasks.map((t: { text: string }) => t.text).sort()).toEqual(
-      ["added before rollover", "carry over"].sort(),
-    );
+    await m.addTask("carry over", localDay(yesterday));
+    await m.addTask("added today");
+    expect(m.getTasks().map((task: { text: string }) => task.text).sort()).toEqual(["added today", "carry over"]);
   });
 
-  it("rollover does not duplicate tasks after a partial write (crash recovery)", async () => {
+  it("does not bring a deleted task back", async () => {
     const m = await freshTaskModule();
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yDate = yesterday.toISOString().split("T")[0];
-    const today = new Date().toISOString().split("T")[0];
-    const source = await m.addTask("carry over", yDate);
-
-    const rolledId = crypto.randomUUID();
-    const now = new Date().toISOString();
-    await m.saveTasks(today, [
-      {
-        id: rolledId,
-        text: "carry over",
-        done: false,
-        createdAt: now,
-        rolledFromId: source.id,
-        rolledFromDate: yDate,
-      },
-    ]);
-
-    const rolled = await m.rolloverTasks();
-    expect(rolled).toHaveLength(1);
-    expect(rolled[0].id).toBe(rolledId);
-    expect(m.getTasks(today)).toHaveLength(1);
-
-    const movedSource = m.getTasks(yDate).find((t: { id: string }) => t.id === source.id);
-    expect(m.isTaskOpen(movedSource!)).toBe(false);
+    const task = await m.addTask("gone");
+    expect(await m.deleteTask(task.id)).toBe(true);
+    expect(m.getTasks()).toEqual([]);
+    expect(await m.deleteTask(task.id)).toBe(false);
   });
 
-  it("rollover leaves yesterday tasks open when today's save fails", async () => {
+  it("isTaskOpen excludes done, abandoned, and ended tasks", async () => {
     const m = await freshTaskModule();
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yDate = yesterday.toISOString().split("T")[0];
-    const source = await m.addTask("carry over", yDate);
-
-    const tasksDir = path.join(tmpRepo, "tasks");
-    fs.chmodSync(tasksDir, 0o555);
-
-    await expect(m.rolloverTasks()).rejects.toThrow();
-    fs.chmodSync(tasksDir, 0o755);
-
-    const yesterdayTasks = m.getTasks(yDate);
-    const openSource = yesterdayTasks.find((t: { id: string }) => t.id === source.id);
-    expect(m.isTaskOpen(openSource!)).toBe(true);
-    expect(openSource?.movedAt).toBeUndefined();
-
-    const today = new Date().toISOString().split("T")[0];
-    expect(m.getTasks(today)).toHaveLength(0);
-
-    const rolled = await m.rolloverTasks();
-    expect(rolled).toHaveLength(1);
-    expect(rolled[0].text).toBe("carry over");
-    expect(m.isTaskOpen(m.getTasks(yDate).find((t: { id: string }) => t.id === source.id)!)).toBe(
-      false,
-    );
-  });
-
-  it("concurrent rolloverTasks does not overwrite today's file", async () => {
-    const m = await freshTaskModule();
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yDate = yesterday.toISOString().split("T")[0];
-    await m.addTask("one", yDate);
-    await m.addTask("two", yDate);
-    await m.addTask("three", yDate);
-
-    const [a, b] = await Promise.all([m.rolloverTasks(), m.rolloverTasks()]);
-    expect(a).toHaveLength(3);
-    expect(b).toHaveLength(3);
-    expect(b).toEqual(a);
-    const today = new Date().toISOString().split("T")[0];
-    const todayTasks = m.getTasks(today);
-    expect(todayTasks).toHaveLength(3);
-    expect(todayTasks).toEqual(a);
-  });
-
-  it("isTaskOpen excludes done, abandoned, and moved", async () => {
-    const m = await freshTaskModule();
-    expect(m.isTaskOpen({ id: "1", text: "x", done: false, createdAt: "" })).toBe(true);
-    expect(m.isTaskOpen({ id: "1", text: "x", done: true, createdAt: "" })).toBe(false);
-    expect(m.isTaskOpen({ id: "1", text: "x", done: false, createdAt: "", abandonedAt: "t" })).toBe(false);
-    expect(m.isTaskOpen({ id: "1", text: "x", done: false, createdAt: "", movedAt: "t" })).toBe(false);
+    const base = { id: "1", text: "x", done: false, startDate: "2026-10-01", rank: "1", createdAt: "" };
+    expect(m.isTaskOpen(base)).toBe(true);
+    expect(m.isTaskOpen({ ...base, done: true })).toBe(false);
+    expect(m.isTaskOpen({ ...base, abandonedAt: "t" })).toBe(false);
+    expect(m.isTaskOpen({ ...base, endDate: "2026-10-02" })).toBe(false);
   });
 });

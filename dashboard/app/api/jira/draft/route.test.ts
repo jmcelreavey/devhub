@@ -9,9 +9,9 @@ import { POST } from "./route";
 vi.mock("@/lib/ai/preference", () => ({ isAiConfigured: vi.fn() }));
 vi.mock("@/lib/ai/generate", () => ({ formatGenerateError: (error: Error) => error.message }));
 vi.mock("@/lib/jira/draft-ticket", () => ({ draftJiraTicket: vi.fn(), JIRA_DRAFT_TIMEOUT_MS: 180_000 }));
-vi.mock("@/lib/tasks/storage", () => ({ getTasks: vi.fn() }));
+vi.mock("@/lib/tasks/storage", () => ({ getTasks: vi.fn(), ensureTasksMigrated: async () => {} }));
 
-const task = { id: "task-1", text: "Fix event ordering", done: false, createdAt: "2026-10-01T12:00:00Z" };
+const task = { id: "task-1", text: "Fix event ordering", done: false, createdAt: "2026-10-01T12:00:00Z", startDate: "2026-10-01", rank: "1" };
 const draft = { summary: "Handle renewal events in order", description: "Keep the most recent state.", warnings: [] };
 function request(body: unknown, origin = "http://localhost:1342", accept = "application/json") {
   return new NextRequest("http://localhost:1342/api/jira/draft", {

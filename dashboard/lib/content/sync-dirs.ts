@@ -17,6 +17,7 @@ import {
   getUpstartsDir,
 } from "@/lib/notes/dir";
 import { DIAGRAMS_DIR } from "@/lib/diagram-utils";
+import { isTaskTimerOverlay } from "@/lib/content/sync-paths";
 
 export type ContentBucket = "notes" | "tasks" | "docs" | "diagrams";
 
@@ -85,5 +86,6 @@ export function matchContentBucket(
   buckets: ContentPrefix[],
   filePath: string,
 ): ContentBucket | null {
+  if (isTaskTimerOverlay(filePath)) return null;
   return buckets.find((b) => filePath.startsWith(b.prefix))?.bucket ?? null;
 }

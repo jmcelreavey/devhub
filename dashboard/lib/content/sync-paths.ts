@@ -3,7 +3,14 @@ export const CONTENT_SYNC_PATHS = ["notes", "collections", "tasks", "docs", "dia
 
 export type ContentSyncPath = (typeof CONTENT_SYNC_PATHS)[number];
 
+/** Timers live in `tasks/.local/` and `tasks/<profile>/.local/`. They stay on this machine. */
+export function isTaskTimerOverlay(filePath: string): boolean {
+  const normalized = filePath.replaceAll("\\", "/");
+  return /(^|\/)tasks\/(\.local(\/|$)|[^/]+\/\.local(\/|$))/.test(normalized);
+}
+
 export function isContentSyncPath(filePath: string): boolean {
+  if (isTaskTimerOverlay(filePath)) return false;
   return CONTENT_SYNC_PATHS.some(
     (prefix) => filePath === prefix || filePath.startsWith(`${prefix}/`),
   );

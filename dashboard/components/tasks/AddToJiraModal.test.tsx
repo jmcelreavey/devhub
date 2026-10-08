@@ -31,7 +31,7 @@ vi.mock("@/components/jira/JiraKeyChip", () => ({ JiraKeyChip: ({ jiraKey }: { j
 
 const task = {
   id: "task-1", text: "TEST-7 Fix renewal events", jiraKey: "TEST-7",
-  done: false, createdAt: "2026-10-01T12:00:00Z",
+  done: false, createdAt: "2026-10-01T12:00:00Z", startDate: "2026-10-01", rank: "1",
 };
 const parent = { key: "TEST-7", summary: "Renewals", issuetype: "Sub-task", parent: { key: "TEST-1", summary: "Subscriptions", issuetype: "Story" } };
 const meta = { configured: true, sprint: { id: 12, name: "Sprint 12" }, me: { displayName: "Developer" }, teamLabel: "Team" };

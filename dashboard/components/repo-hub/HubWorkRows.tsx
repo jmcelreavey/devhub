@@ -24,6 +24,8 @@ export function asHubTask(task: WorkHubTask): Task {
     abandonReason: task.abandonReason,
     jiraKey: task.jiraKey,
     createdAt: task.createdAt ?? "",
+    startDate: task.date,
+    rank: "1",
     notePath: task.notePath,
     links: task.links,
   };
