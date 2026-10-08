@@ -75,9 +75,18 @@ export function HollowEffects({ plan, preview, faceShot }: {
         // Every exposure shares protection, including the rare-event dim that
         // used to sit outside the room mask. Use glyph runs for headings and
         // navigation: their block boxes can span an entire otherwise empty row.
-        const contentMask = `url("data:image/svg+xml,${encodeURIComponent(hollowContentMask(occupiedRects(HOLLOW_MASKED_SURFACES), innerWidth, innerHeight))}")`;
+        const occupied = occupiedRects(HOLLOW_MASKED_SURFACES);
+        const contentMask = `url("data:image/svg+xml,${encodeURIComponent(hollowContentMask(occupied, innerWidth, innerHeight))}")`;
         scenery.style.maskImage = contentMask;
         scenery.style.webkitMaskImage = contentMask;
+        // A stationary, rounded envelope prevents moving fog from exposing
+        // the main viewport's straight edges or outlining empty grid cells.
+        const mist = room.querySelector<HTMLElement>(".hollow-room-mist");
+        if (mist) {
+          const mistMask = `url("data:image/svg+xml,${encodeURIComponent(hollowContentMask(occupied, innerWidth, innerHeight, main))}")`;
+          mist.style.maskImage = mistMask;
+          mist.style.webkitMaskImage = mistMask;
+        }
         // Bake subtraction into SVG alpha: identical mask semantics in WebKit/Chromium.
         const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${innerWidth}" height="${innerHeight}"><defs><linearGradient id="x"><stop stop-color="black"/><stop offset=".04" stop-color="white"/><stop offset=".96" stop-color="white"/><stop offset="1" stop-color="black"/></linearGradient><linearGradient id="y" x2="0" y2="1"><stop stop-color="black"/><stop offset=".04" stop-color="white"/><stop offset=".96" stop-color="white"/><stop offset="1" stop-color="black"/></linearGradient><mask id="vertical"><rect x="${main.left}" y="${main.top}" width="${main.width}" height="${main.height}" fill="url(#y)"/></mask><mask id="space"><rect x="${main.left}" y="${main.top}" width="${main.width}" height="${main.height}" fill="url(#x)" mask="url(#vertical)"/></mask></defs><rect width="100%" height="100%" fill="white" mask="url(#space)"/></svg>`;
         const url = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;

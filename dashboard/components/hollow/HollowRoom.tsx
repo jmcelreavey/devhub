@@ -67,11 +67,13 @@ export function HollowRoom({ plan }: { plan: HollowRuntimePlan }) {
 
   return <div className="hollow-room" ref={roomRef}>
     {plan.grain ? <>
-      <div className="hollow-room-backlight" />
-      {plan.rareEvents ? <div className="hollow-passing-shadow" /> : null}
-      <div className="hollow-fog hollow-fog-far" />
-      <div className="hollow-fog hollow-fog-near" />
-      <div className="hollow-fog hollow-fog-mid" />
+      <div className="hollow-room-mist">
+        <div className="hollow-room-backlight" />
+        {plan.rareEvents ? <div className="hollow-passing-shadow" /> : null}
+        <div className="hollow-fog hollow-fog-far" />
+        <div className="hollow-fog hollow-fog-near" />
+        <div className="hollow-fog hollow-fog-mid" />
+      </div>
       <div className="hollow-cobweb hollow-cobweb-left"><i /></div>
       <div className="hollow-cobweb hollow-cobweb-right"><i /></div>
     </> : null}

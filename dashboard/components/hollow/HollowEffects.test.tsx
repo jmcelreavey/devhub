@@ -79,6 +79,13 @@ describe("Hollow runtime lifecycle", () => {
     const scenery = document.querySelector(".hollow-scenery") as HTMLElement;
     const mask = decodeURIComponent(scenery.style.maskImage);
     expect(mask).toContain('x="298" y="248" width="554" height="454" fill="black"');
+    const mist = document.querySelector(".hollow-room-mist") as HTMLElement;
+    expect(mist.style.webkitMaskImage).toBe(mist.style.maskImage);
+    expect(decodeURIComponent(mist.style.maskImage)).toContain('id="murk"');
+    for (const selector of [".hollow-room-backlight", ".hollow-fog-far", ".hollow-fog-near", ".hollow-fog-mid", ".hollow-passing-shadow"]) {
+      expect(document.querySelector(selector)?.parentElement).toBe(mist);
+    }
+    expect(document.querySelector(".hollow-cobweb")?.parentElement).not.toBe(mist);
     expect(scenery.style.visibility).toBe("visible");
     act(() => { document.dispatchEvent(new Event("scroll")); });
     expect(scenery.style.visibility).toBe("hidden");

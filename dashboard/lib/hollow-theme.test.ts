@@ -227,6 +227,18 @@ describe("hollow contrast", () => {
 });
 
 describe("hollow stylesheet scope", () => {
+  it("keeps mist viewport-sized and stationary, without backdrop filtering or pale fog", () => {
+    const envelope = hollowCss.match(/\.hollow-room-mist\s*\{([^}]+)\}/)?.[1];
+    expect(envelope).toContain("inset: 0");
+    expect(envelope).not.toMatch(/transform|animation|width|height/);
+    for (const match of hollowCss.matchAll(/(?:\.hollow-room-backlight|\.hollow-room-mist > \.hollow-fog(?:-near|-mid)?)\s*\{([^}]+)\}/g)) {
+      for (const colour of match[1].matchAll(/#([\da-f]{6})(?:[\da-f]{2})?\b/gi)) {
+        expect(luminance(`#${colour[1]}`), "room fog must stay close to the dark background").toBeLessThan(.11);
+      }
+    }
+    for (const match of hollowCss.matchAll(/backdrop-filter:\s*([^;]+);/g)) expect(match[1]).toBe("none");
+  });
+
   it("scopes every rule to the preset and keeps motion inside no-preference", () => {
     const noComments = hollowCss.replace(/\/\*[\s\S]*?\*\//g, "");
     const noKeyframes = stripKeyframes(noComments);

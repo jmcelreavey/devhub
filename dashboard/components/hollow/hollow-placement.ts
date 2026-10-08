@@ -10,22 +10,30 @@ export interface HollowRect {
   bottom: number;
 }
 
-/** The opaque cores protect glyphs; the outward feather avoids rectangular
- * gaps in the brighter fog. Bake luminance subtraction into image alpha so
- * CSS masking has the same semantics in Chromium and WebKit. */
-export function hollowContentMask(rects: readonly HollowRect[], width: number, height: number): string {
+/** Bake subtraction into alpha for identical WebKit/Chromium masking. The
+ * mist gets a broad falloff and an oval envelope inside the main viewport;
+ * its moving plates must never reveal the rectangular content cutouts. */
+export function hollowContentMask(rects: readonly HollowRect[], width: number, height: number, room?: HollowRect): string {
   const holes = (padding: number) => rects.map(r =>
     `<rect x="${r.left - padding}" y="${r.top - padding}" width="${r.right - r.left + padding * 2}" height="${r.bottom - r.top + padding * 2}" fill="black"/>`).join("");
+  const roomWidth = room ? room.right - room.left : 0;
+  const roomHeight = room ? room.bottom - room.top : 0;
+  const envelope = room ? `<radialGradient id="murk" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1"
+    gradientTransform="translate(${room.left + roomWidth * .56} ${room.top + roomHeight * .55}) scale(${roomWidth * .44} ${roomHeight * .45})">
+    <stop stop-color="white"/><stop offset=".4" stop-color="white" stop-opacity=".85"/>
+    <stop offset=".7" stop-color="white" stop-opacity=".3"/><stop offset=".94" stop-color="white" stop-opacity="0"/>
+  </radialGradient>` : "";
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
     <defs>
-      <filter id="feather" filterUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}"><feGaussianBlur stdDeviation="6"/></filter>
+      ${envelope}
+      <filter id="feather" filterUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}"><feGaussianBlur stdDeviation="${room ? 18 : 6}"/></filter>
       <mask id="readable" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}">
         <rect width="100%" height="100%" fill="white"/>
-        <g filter="url(#feather)">${holes(14)}</g>
+        <g filter="url(#feather)">${holes(room ? 56 : 14)}</g>
         ${holes(2)}
       </mask>
     </defs>
-    <rect width="100%" height="100%" fill="white" mask="url(#readable)"/>
+    <rect width="100%" height="100%" fill="${room ? "url(#murk)" : "white"}" mask="url(#readable)"/>
   </svg>`;
 }
 

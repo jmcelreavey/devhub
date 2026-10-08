@@ -108,21 +108,20 @@
     conic-gradient(from 158deg at 53% -30%, transparent 0deg, #9ba4b438 24deg, transparent 51deg);
   opacity: 0.85;
 }
-:root[data-theme-preset="hollow"] .hollow-room > .hollow-fog {
+:root[data-theme-preset="hollow"] .hollow-room-mist > .hollow-fog {
   inset: auto -24% -12% -24%; height: 52%;
   -webkit-mask: url("/hollow/fog-density.webp") center / 100% 100% no-repeat;
   mask: url("/hollow/fog-density.webp") center / 100% 100% no-repeat;
   background:
-    radial-gradient(ellipse at 28% 58%, #dae0d0, transparent 64%),
-    radial-gradient(ellipse at 76% 66%, #b8c2c8, transparent 66%),
-    radial-gradient(ellipse at 50% 100%, #a6b397, transparent 85%);
+    radial-gradient(ellipse at 28% 58%, #39443e, transparent 64%),
+    radial-gradient(ellipse at 76% 66%, #414a50, transparent 66%),
+    radial-gradient(ellipse at 50% 100%, #30292d, transparent 85%);
 }
-:root[data-theme-preset="hollow"] .hollow-room > .hollow-fog-near {
+:root[data-theme-preset="hollow"] .hollow-room-mist > .hollow-fog-near {
   inset: auto -30% -12% -30%; height: 39%;
   background:
-    radial-gradient(ellipse at 62% 62%, #e1e2c8, transparent 68%),
-    radial-gradient(ellipse at 16% 72%, #b4bfc8, transparent 64%);
-  opacity: 0.95;
+    radial-gradient(ellipse at 62% 62%, #4a554a, transparent 68%),
+    radial-gradient(ellipse at 16% 72%, #39444c, transparent 64%);
 }
 /* The shared scenery mask subtracts cards, controls and text runs from both
  * the room fog and atmosphere. This inner mask only feathers the room edges. */
@@ -130,14 +129,18 @@
   position: absolute; inset: 0; pointer-events: none;
 }
 :root[data-theme-preset="hollow"] .hollow-room > div { position: absolute; }
+/* Full-viewport, stationary alpha envelope; only the density inside drifts.
+ * Keep this separate so the v5 cobwebs and interaction trails stay unchanged. */
+:root[data-theme-preset="hollow"] .hollow-room-mist { inset: 0; }
+:root[data-theme-preset="hollow"] .hollow-room-mist > div { position: absolute; }
 :root[data-theme-preset="hollow"] .hollow-room-backlight {
   inset: 0;
-  background: radial-gradient(ellipse 24% 65% at 88% 75%, #849d8b70, transparent),
-    radial-gradient(ellipse 70% 30% at 65% 110%, #889eb06b, transparent);
+  background: radial-gradient(ellipse 24% 65% at 88% 75%, #46594f70, transparent),
+    radial-gradient(ellipse 70% 30% at 65% 110%, #3429306b, transparent);
 }
-:root[data-theme-preset="hollow"] .hollow-room .hollow-fog { opacity: .62; }
-:root[data-theme-preset="hollow"] .hollow-room .hollow-fog-near { opacity: .72; }
-:root[data-theme-preset="hollow"] .hollow-room .hollow-fog-mid { opacity: .52; }
+:root[data-theme-preset="hollow"] .hollow-room .hollow-fog { opacity: .5; }
+:root[data-theme-preset="hollow"] .hollow-room .hollow-fog-near { opacity: .56; }
+:root[data-theme-preset="hollow"] .hollow-room .hollow-fog-mid { opacity: .42; }
 :root[data-theme-preset="hollow"] .hollow-cobweb {
   top: var(--room-top); width: 210px; height: 160px; opacity: .62;
 }
@@ -184,13 +187,13 @@
   -webkit-mask: url("/hollow/mist.webp") center / 100% 100% no-repeat;
   mask: url("/hollow/mist.webp") center / 100% 100% no-repeat;
 }
-:root[data-theme-preset="hollow"] .hollow-room > .hollow-fog-mid {
-  inset: auto -18% -15%; height: 65%; opacity: .8;
+:root[data-theme-preset="hollow"] .hollow-room-mist > .hollow-fog-mid {
+  inset: auto -18% -15%; height: 65%;
   background:
-    radial-gradient(ellipse 30% 18% at 20% 73%, #bcccb5, transparent),
-    radial-gradient(ellipse 36% 20% at 77% 63%, #a9b8c9, transparent);
+    radial-gradient(ellipse 30% 18% at 20% 73%, #405043, transparent),
+    radial-gradient(ellipse 36% 20% at 77% 63%, #46525e, transparent);
 }
-:root[data-theme-preset="hollow"] .hollow-room > .hollow-passing-shadow {
+:root[data-theme-preset="hollow"] .hollow-room-mist > .hollow-passing-shadow {
   inset: auto -2% 0 auto; width: min(320px, 26vw); height: 65%;
   background: url("/hollow/passing-shadow.webp") center / 100% 100% no-repeat;
   opacity: 0;
