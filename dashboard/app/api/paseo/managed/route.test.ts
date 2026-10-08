@@ -16,7 +16,7 @@ vi.mock("@/lib/content/dirs", () => ({
 }));
 vi.mock("@/lib/paseo/update", () => ({ hasActivePaseoWork: async () => false, checkPaseoUpdate: vi.fn() }));
 vi.mock("@/lib/paseo/providers", () => ({ defaultPaseoProvider: vi.fn(), listPaseoProviders: vi.fn() }));
-vi.mock("@/lib/paseo/managed", () => ({ PASEO_DAEMON_LABEL: "test", readPaseoManaged: vi.fn(() => ({ home: "/p" })) }));
+vi.mock("@/lib/paseo/managed", () => ({ PASEO_DAEMON_LABEL: "test", PASEO_SYSTEMD_UNIT: "devhub-paseo.service", readPaseoManaged: vi.fn(() => ({ home: "/p" })) }));
 import { POST } from "./route";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
@@ -32,8 +32,11 @@ describe("packaged Paseo updates", () => {
   });
 });
 
+// The systemd branch is the one the WSL backend takes.
+const realPlatform = process.platform;
 describe("restart after the shell rewrote the Paseo unit", () => {
   it("clears the pending marker once the restarted daemon is healthy", async () => {
+    Object.defineProperty(process, "platform", { value: "linux" });
     const appData = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-restart-"));
     vi.stubEnv("DEVHUB_APP_DATA", appData);
     const marker = path.join(appData, "paseo", "restart-pending");
@@ -45,7 +48,9 @@ describe("restart after the shell rewrote the Paseo unit", () => {
       body: JSON.stringify({ action: "restart" }),
     });
     expect((await POST(req)).status).toBe(200);
+    expect(mock.exec).toHaveBeenCalledWith("/usr/bin/systemctl", ["--user", "restart", "devhub-paseo.service"], expect.any(Object));
     expect(fs.existsSync(marker)).toBe(false);
+    Object.defineProperty(process, "platform", { value: realPlatform });
     vi.unstubAllEnvs();
     fs.rmSync(appData, { recursive: true, force: true });
   });
