@@ -35,9 +35,12 @@ export const POST = withErrorHandler(async (req: Request) => {
   if (!parsed.ok) return parsed.response;
   const pull = parsed.data.pull === true;
   const offer = await loadRebuildOffer();
-  const started = startCheckoutRebuild(offer, pull);
+  const started = await startCheckoutRebuild(offer, pull);
   if (!started.ok) {
-    return NextResponse.json({ error: started.error }, { status: started.status });
+    return NextResponse.json(
+      { ok: false, started: false, reason: started.error, error: started.error },
+      { status: started.status },
+    );
   }
   return NextResponse.json({
     ok: true,

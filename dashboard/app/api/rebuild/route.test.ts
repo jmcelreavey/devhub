@@ -18,7 +18,7 @@ function request(body: string) {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(loadRebuildOffer).mockResolvedValue({ available: true, mode: "service" } as never);
-  vi.mocked(startCheckoutRebuild).mockReturnValue({ ok: true });
+  vi.mocked(startCheckoutRebuild).mockResolvedValue({ ok: true, launcher: "detached" });
 });
 
 describe("POST /api/rebuild", () => {
@@ -42,9 +42,14 @@ describe("POST /api/rebuild", () => {
   });
 
   it("passes a refusal through with its status", async () => {
-    vi.mocked(startCheckoutRebuild).mockReturnValue({ ok: false, status: 409, error: "A rebuild is already running." });
+    vi.mocked(startCheckoutRebuild).mockResolvedValue({ ok: false, status: 409, error: "A rebuild is already running." });
     const res = await POST(request(JSON.stringify({ pull: true })));
     expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ error: "A rebuild is already running." });
+    expect(await res.json()).toEqual({
+      ok: false,
+      started: false,
+      reason: "A rebuild is already running.",
+      error: "A rebuild is already running.",
+    });
   });
 });

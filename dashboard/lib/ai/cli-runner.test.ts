@@ -147,11 +147,14 @@ describe("createCursorDeltaParser", () => {
 describe("execCapture progress", () => {
   it("hands stdout to the listener while the process is still running", async () => {
     const chunks: string[] = [];
+    let sawPartial = false;
     const script = 'process.stdout.write("one"); setTimeout(() => process.stdout.write("two"), 150);';
-    const done = execCapture(process.execPath, ["-e", script], 5_000, tmp, undefined, 1_000, undefined, (chunk) => chunks.push(chunk));
-    await new Promise((resolve) => setTimeout(resolve, 75));
-    expect(chunks.join("")).toBe("one");
+    const done = execCapture(process.execPath, ["-e", script], 5_000, tmp, undefined, 1_000, undefined, (chunk) => {
+      chunks.push(chunk);
+      if (chunks.join("") === "one") sawPartial = true;
+    });
     await expect(done).resolves.toBe("onetwo");
+    expect(sawPartial).toBe(true);
     expect(chunks.join("")).toBe("onetwo");
   });
 

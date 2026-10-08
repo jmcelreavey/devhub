@@ -70,11 +70,15 @@ export function PrivateRepoSetup({ connected, onLinked, onLater }: { connected: 
   const plan = planFor(data);
   const [chosenAction, setAction] = useState<"create" | "clone" | "link" | null>(null);
   const action = chosenAction ?? (plan === "link" || plan === "clone" ? plan : "create");
-  const [name, setName] = useState(DEFAULT_REPO_NAME);
+  const [nameOverride, setName] = useState<string | null>(null);
+  // The create form uses the free name and an unused folder. Clone and link
+  // keep the folder the status check already picked.
+  const suggested = action === "create" ? data?.suggestion : undefined;
+  const name = nameOverride ?? suggested?.name ?? DEFAULT_REPO_NAME;
   const [chosenRepository, setRepository] = useState<string | null>(null);
   const repository = chosenRepository ?? (plan === "clone" ? data?.remote?.repository : undefined) ?? "";
   const [chosenDirectory, setDirectory] = useState<string | null>(null);
-  const directory = chosenDirectory ?? data?.directory ?? "";
+  const directory = chosenDirectory ?? (action === "create" ? suggested?.directory ?? data?.directory : data?.directory) ?? "";
   const [busy, setBusy] = useState(false);
   const [actionError, setError] = useState("");
   const error = actionError || fetchError?.message || data?.error || "";
@@ -131,7 +135,7 @@ export function PrivateRepoSetup({ connected, onLinked, onLater }: { connected: 
             <button
               type="button" className="btn btn-primary self-start"
               disabled={busy || !directory.trim()}
-              onClick={() => void submit({ action: "create", directory, name: DEFAULT_REPO_NAME })}
+              onClick={() => void submit({ action: "create", directory, name })}
             >
               {busy ? "Creating your private repo…" : "Create my private DevHub repo"}
             </button>
@@ -205,7 +209,7 @@ export function PrivateRepoSetup({ connected, onLinked, onLater }: { connected: 
               )}
               <label className="flex flex-col gap-1 text-sm">
                 {action === "link" ? "Existing DevHub folder" : "New local folder"}
-                <input className="input w-full" value={directory} disabled={busy} onChange={(event) => setDirectory(event.target.value)} autoComplete="off" />
+                <input className="input w-full" value={directory} disabled={busy} aria-label={action === "link" ? "Existing DevHub folder" : "New local folder"} onChange={(event) => setDirectory(event.target.value)} autoComplete="off" />
               </label>
               {action === "link" && isDesktop() && (
                 <button type="button" className="btn btn-ghost self-start" disabled={busy} onClick={async () => {

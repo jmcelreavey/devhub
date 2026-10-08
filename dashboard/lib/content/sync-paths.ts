@@ -8,3 +8,26 @@ export function isContentSyncPath(filePath: string): boolean {
     (prefix) => filePath === prefix || filePath.startsWith(`${prefix}/`),
   );
 }
+
+const CONTENT_SYNC_LABEL: Record<ContentSyncPath, string> = {
+  notes: "notes",
+  collections: "checklists",
+  tasks: "tasks",
+  docs: "docs",
+  diagrams: "diagrams",
+  upstarts: "upstarts",
+};
+
+/** Commit subject naming only the folders that actually have staged files. */
+export function contentSyncCommitMessage(files: string[], date = new Date().toISOString().slice(0, 10)): string {
+  const present = new Set(files.map((file) => file.split("/")[0]));
+  const labels = CONTENT_SYNC_PATHS.filter((folder) => present.has(folder)).map((folder) => CONTENT_SYNC_LABEL[folder]);
+  const list = labels.length === 0
+    ? "content"
+    : labels.length === 1
+      ? labels[0]
+      : labels.length === 2
+        ? `${labels[0]} and ${labels[1]}`
+        : `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
+  return `chore(content): sync ${list} ${date}`;
+}

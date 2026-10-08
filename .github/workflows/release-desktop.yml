@@ -19,6 +19,10 @@ on:
         required: false
         default: false
         type: boolean
+      source_commit:
+        description: "Private-repo SHA this public build was cut from. Recorded so Check for Updates can see a linked checkout is ahead."
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -149,6 +153,7 @@ jobs:
         run: node desktop/scripts/stage-all.mjs
         env:
           NODE_OPTIONS: --max-old-space-size=4096
+          DEVHUB_SOURCE_COMMIT: ${{ inputs.source_commit }}
 
       # The gate. Runs before signing, because a signed leak cannot be recalled.
       - name: Verify staged bundle
@@ -306,6 +311,7 @@ jobs:
         run: node desktop/scripts/stage-wsl-payload.mjs
         env:
           NODE_OPTIONS: --max-old-space-size=4096
+          DEVHUB_SOURCE_COMMIT: ${{ inputs.source_commit }}
 
       - uses: actions/upload-artifact@v4
         with:

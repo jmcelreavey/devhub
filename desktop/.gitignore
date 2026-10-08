@@ -31,3 +31,5 @@ src-tauri/gen/
 # and "reproducible build" becomes a phrase rather than a property.
 !src-tauri/Cargo.lock
 !wake-helper/Cargo.lock
+# npm 10 lock for the desktop scripts the payload rebuild installs.
+!package-lock.json

@@ -27,6 +27,7 @@ import { stageDashboard } from "./stage-dashboard.mjs";
 import { stageNodeRuntime } from "./stage-node-runtime.mjs";
 import { stageGithubCli } from "./stage-github-cli.mjs";
 import { stageResources } from "./stage-resources.mjs";
+import { installPayloadNpmShims } from "../../dashboard/lib/desktop/build-env.mjs";
 
 const wslDir = path.join(stagingDir, "wsl");
 const payloadDir = path.join(wslDir, "payload");
@@ -73,6 +74,16 @@ export async function stageWslPayload({ build = true } = {}) {
   fs.mkdirSync(payloadDir, { recursive: true });
 
   copyTree(path.join(binariesDir, nodeBinary), path.join(payloadDir, "runtime", "node"));
+  const npmSrc = path.join(stagingDir, "npm");
+  if (!fs.existsSync(path.join(npmSrc, "bin", "npm-cli.js"))) {
+    throw new Error(
+      `No staged npm in ${npmSrc}. The payload Node has no npm, so a checkout rebuild would pick up whatever npm is on the login PATH.`,
+    );
+  }
+  copyTree(npmSrc, path.join(payloadDir, "runtime", "lib", "node_modules", "npm"));
+  // npm and npx stay out of runtime/ itself. That directory is on the PATH of
+  // the packaged server, its terminals, and agent lookups.
+  installPayloadNpmShims(path.join(payloadDir, "runtime"));
   copyTree(path.join(binariesDir, "gh"), path.join(payloadDir, "runtime", "gh"));
   copyTree(path.join(binariesDir, "gh-LICENSE"), path.join(payloadDir, "runtime", "gh-LICENSE"));
   copyTree(serverDir, path.join(payloadDir, "server"));

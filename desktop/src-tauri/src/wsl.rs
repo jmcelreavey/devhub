@@ -501,7 +501,14 @@ pub fn choose_startup_payload(
     bundled_dir: &str,
     record: Option<&LocalPayload>,
     complete: bool,
+    checkout_linked: bool,
 ) -> (String, &'static str) {
+    if !checkout_linked {
+        return (
+            bundled_dir.to_string(),
+            "no linked checkout, using the installed payload",
+        );
+    }
     let Some(record) = record else {
         return (bundled_dir.to_string(), "installed payload");
     };
@@ -695,6 +702,41 @@ pub fn rewrite_paseo_unit(unit: &str, app_data: &str, durable_node: &str) -> Opt
     changed.then(|| format!("{}\n", out.join("\n")))
 }
 
+/// Ports that already belong to a DevHub service. A fallback pair must not
+/// land on them: 1337/1339 are the primary dashboard and terminal, 1340 is
+/// MCP HTTP, 6767 is Paseo.
+pub const RESERVED_PORTS: [u16; 4] = [1337, 1339, 1340, 6767];
+
+pub fn is_reserved_port(port: u16) -> bool {
+    RESERVED_PORTS.contains(&port)
+}
+
+pub fn pair_has_reserved(ports: [u16; 2]) -> bool {
+    ports.iter().copied().any(is_reserved_port)
+}
+
+/// Re-probe after a holder is killed. wslrelay can keep the Windows bind for
+/// a moment after the Linux listener is gone. `attempts` includes the first
+/// look; `wait` runs between looks, not after the last miss.
+pub fn retry_until_clear(
+    attempts: u32,
+    mut probe: impl FnMut() -> bool,
+    mut wait: impl FnMut(),
+) -> bool {
+    if attempts == 0 {
+        return false;
+    }
+    for index in 0..attempts {
+        if probe() {
+            return true;
+        }
+        if index + 1 < attempts {
+            wait();
+        }
+    }
+    false
+}
+
 /// Probe both requested ports before choosing alternatives, so a pinned-port
 /// failure reports every conflict in one pass.
 pub fn select_ports(
@@ -731,7 +773,7 @@ pub fn select_ports(
             continue;
         }
         selected[index] = (1..=128).filter_map(|offset| preferred[index].checked_add(offset))
-            .find(|port| *port != selected[1 - index] && available(*port))
+            .find(|port| *port != selected[1 - index] && !is_reserved_port(*port) && available(*port))
             .ok_or_else(|| format!("Could not find free dashboard and terminal ports. Occupied: {conflicts}. Close an unused service and Retry."))?;
     }
     Ok(selected)
@@ -753,6 +795,7 @@ pub fn select_ports_preferring(
             && automatic == [true, true]
             && previous[0] != previous[1]
             && !previous.contains(&0)
+            && !pair_has_reserved(previous)
             && previous.iter().all(|port| available(*port))
         {
             return Ok(previous);
@@ -765,7 +808,11 @@ pub fn select_ports_preferring(
 pub fn parse_saved_ports(text: &str) -> Option<[u16; 2]> {
     let mut parts = text.split_whitespace().map(str::parse::<u16>);
     let ports = [parts.next()?.ok()?, parts.next()?.ok()?];
-    (parts.next().is_none() && ports[0] != ports[1] && !ports.contains(&0)).then_some(ports)
+    (parts.next().is_none()
+        && ports[0] != ports[1]
+        && !ports.contains(&0)
+        && !pair_has_reserved(ports))
+    .then_some(ports)
 }
 
 fn wsl_command() -> Command {
@@ -1107,11 +1154,11 @@ mod tests {
     fn chooses_distinct_free_ports_without_stopping_existing_services() {
         assert_eq!(
             select_ports([1337, 1339], [true, true], |p| ![1337, 1339].contains(&p)).unwrap(),
-            [1338, 1340]
+            [1338, 1341]
         );
         assert_eq!(
             select_ports([1337, 1338], [true, true], |p| p != 1337).unwrap(),
-            [1339, 1338]
+            [1341, 1338]
         );
         assert_eq!(
             select_ports([1337, 1339], [true, true], |_| true).unwrap(),
@@ -1377,9 +1424,16 @@ mod tests {
         // The remembered ports are taken too: fall back to a fresh search.
         assert_eq!(
             select_ports_preferring([1337, 1339], Some([1338, 1341]), [true, true], |port| port
-                == 1340
+                == 1341
                 || port == 1342),
-            Ok([1340, 1342])
+            Ok([1341, 1342])
+        );
+        // A saved pair that includes MCP's port is ignored, and 1340 is never chosen.
+        assert_eq!(
+            select_ports_preferring([1337, 1339], Some([1338, 1340]), [true, true], |port| {
+                port != 1337 && port != 1339
+            }),
+            Ok([1338, 1341])
         );
         // Pinned ports are never second-guessed.
         assert!(
@@ -1395,6 +1449,35 @@ mod tests {
         assert_eq!(parse_saved_ports("1338 1341 9"), None);
         assert_eq!(parse_saved_ports("abc def"), None);
         assert_eq!(parse_saved_ports("0 5"), None);
+        assert_eq!(parse_saved_ports("1338 1340"), None);
+        assert_eq!(parse_saved_ports("1338 6767"), None);
+    }
+
+    #[test]
+    fn a_freed_port_is_rechecked_until_the_relay_lets_go() {
+        let mut seen = 0;
+        let mut waits = 0;
+        let cleared = retry_until_clear(
+            12,
+            || {
+                seen += 1;
+                seen == 3
+            },
+            || waits += 1,
+        );
+        assert!(cleared);
+        assert_eq!(seen, 3);
+        assert_eq!(waits, 2);
+        let mut misses = 0;
+        assert!(!retry_until_clear(
+            3,
+            || {
+                misses += 1;
+                false
+            },
+            || {}
+        ));
+        assert_eq!(misses, 3);
     }
 
     fn shares_content(own: Option<&str>, service: Option<&str>) -> bool {
@@ -1526,21 +1609,26 @@ mod tests {
         let local = format!("{app}/runtime/local-abc123def456");
         let record = sample_local(&local, "pay123");
         assert_eq!(
-            choose_startup_payload(app, "pay123", &bundled, Some(&record), true),
+            choose_startup_payload(app, "pay123", &bundled, Some(&record), true, true),
             (local, "checkout build")
         );
         assert_eq!(
-            choose_startup_payload(app, "pay999", &bundled, Some(&record), true).0,
+            choose_startup_payload(app, "pay999", &bundled, Some(&record), true, true).0,
             bundled,
             "a new installer id invalidates the checkout build"
         );
         assert_eq!(
-            choose_startup_payload(app, "pay123", &bundled, Some(&record), false).0,
+            choose_startup_payload(app, "pay123", &bundled, Some(&record), false, true).0,
             bundled
         );
         assert_eq!(
-            choose_startup_payload(app, "pay123", &bundled, None, true).0,
+            choose_startup_payload(app, "pay123", &bundled, None, true, true).0,
             bundled
+        );
+        assert_eq!(
+            choose_startup_payload(app, "pay123", &bundled, Some(&record), true, false).0,
+            bundled,
+            "no linked checkout ignores a leftover local payload"
         );
     }
 
@@ -1557,7 +1645,7 @@ mod tests {
         for dir in dirs {
             let record = sample_local(&dir, "pay123");
             assert_eq!(
-                choose_startup_payload(app, "pay123", &bundled, Some(&record), true).0,
+                choose_startup_payload(app, "pay123", &bundled, Some(&record), true, true).0,
                 bundled,
                 "{dir}"
             );

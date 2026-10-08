@@ -28,17 +28,38 @@ function resolveServerDir(): string | null {
   return null;
 }
 
+export interface BundleSource {
+  commit: string | null;
+  sourceCommit: string | null;
+  builtAtMs: number | null;
+}
+
+/** Commit, private source SHA, and build time recorded beside server.js. */
+export function readBundleSource(serverDir: string = resolveServerDir() ?? ""): BundleSource {
+  const empty: BundleSource = { commit: null, sourceCommit: null, builtAtMs: null };
+  if (!serverDir) return empty;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(path.join(serverDir, "bundle-source.json"), "utf8")) as {
+      commit?: unknown;
+      sourceCommit?: unknown;
+      builtAt?: unknown;
+    };
+    const commit = typeof parsed.commit === "string" ? parsed.commit.trim() : "";
+    const sourceCommit = typeof parsed.sourceCommit === "string" ? parsed.sourceCommit.trim() : "";
+    const builtAtMs = typeof parsed.builtAt === "string" ? Date.parse(parsed.builtAt) : Number.NaN;
+    return {
+      commit: commit || null,
+      sourceCommit: sourceCommit || null,
+      builtAtMs: Number.isFinite(builtAtMs) ? builtAtMs : null,
+    };
+  } catch {
+    return empty;
+  }
+}
+
 /** Git commit recorded at staging time (`bundle-source.json` beside `server.js`). */
 export function readBundleSourceCommit(serverDir: string = resolveServerDir() ?? ""): string | null {
-  if (!serverDir) return null;
-  try {
-    const raw = fs.readFileSync(path.join(serverDir, "bundle-source.json"), "utf8");
-    const parsed = JSON.parse(raw) as { commit?: unknown };
-    const commit = typeof parsed.commit === "string" ? parsed.commit.trim() : "";
-    return commit || null;
-  } catch {
-    return null;
-  }
+  return readBundleSource(serverDir).commit;
 }
 
 function isReleaseBundle(): boolean {

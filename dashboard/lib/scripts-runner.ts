@@ -17,7 +17,7 @@ import { collectMcpServers } from "@/lib/collect/mcp";
 import { syncOpencodeConfig } from "@/lib/sync/opencode-config";
 import { collectOpencodeConfig } from "@/lib/collect/opencode-config";
 import { collectPersona, type PersonaSource } from "@/lib/collect/persona";
-import { CONTENT_SYNC_PATHS } from "@/lib/content/sync-paths";
+import { CONTENT_SYNC_PATHS, contentSyncCommitMessage } from "@/lib/content/sync-paths";
 import {
   commitAndPushDirty,
   commitAndPushPaths,
@@ -188,7 +188,7 @@ const ACTIONS: Record<string, ActionDef> = {
         emit,
         repoRoot,
         paths: [...CONTENT_SYNC_PATHS],
-        commitMessage: `chore(content): sync notes, checklists, tasks, docs, diagrams, and upstarts ${new Date().toISOString().slice(0, 10)}`,
+        commitMessage: contentSyncCommitMessage,
       }),
   },
   dry_run_scoped_sync: {
@@ -207,7 +207,7 @@ const ACTIONS: Record<string, ActionDef> = {
         emit,
         repoRoot,
         paths: [...CONTENT_SYNC_PATHS],
-        commitMessage: `chore(content): sync notes, checklists, tasks, docs, diagrams, and upstarts ${new Date().toISOString().slice(0, 10)}`,
+        commitMessage: contentSyncCommitMessage,
       }),
   },
   push_unpushed_commits: {

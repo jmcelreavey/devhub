@@ -29,6 +29,7 @@ import {
   stagingDir,
 } from "./staging-paths.mjs";
 import { NATIVE_BINARY_PATTERN, foreignBinaryReason } from "./native-binaries.mjs";
+import { cleanBuildEnv } from "../../dashboard/lib/desktop/build-env.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -65,9 +66,16 @@ function writeBundleSourceMarker() {
   }
   const commit = res.stdout.trim();
   if (!commit) return;
+  const source = process.env.DEVHUB_SOURCE_COMMIT?.trim() || "";
+  const marker = {
+    commit,
+    builtAt: new Date().toISOString(),
+    release: process.env.GITHUB_ACTIONS === "true",
+  };
+  if (/^[0-9a-f]{7,40}$/i.test(source)) marker.sourceCommit = source;
   fs.writeFileSync(
     path.join(serverDir, "bundle-source.json"),
-    `${JSON.stringify({ commit, builtAt: new Date().toISOString(), release: process.env.GITHUB_ACTIONS === "true" }, null, 2)}\n`,
+    `${JSON.stringify(marker, null, 2)}\n`,
   );
   log(`recorded bundle source ${commit.slice(0, 7)}`);
 }
@@ -118,12 +126,11 @@ async function buildNext() {
         {
           cwd: dashboardDir,
           env: {
-            ...process.env,
+            ...cleanBuildEnv(process.env),
             DEVHUB_DESKTOP_BUILD: "1",
             // tsc already ran in `verify`; Next's second full-program pass is the
             // one that OOMs CI at the default heap size.
             DEVHUB_SKIP_NEXT_TYPECHECK: "true",
-            NODE_ENV: undefined,
             NODE_OPTIONS:
               "--max-old-space-size=4096 --no-deprecation --disable-warning=ExperimentalWarning",
             // Prerender against nothing. See emptyContentTree().
@@ -168,6 +175,43 @@ async function buildNext() {
   }
 }
 
+/**
+ * Next names the standalone tree after distDir. The runtime always looks for
+ * `.next` next to server.js, so a rebuild into `.next-rebuild` is flattened
+ * back to that shape and the recorded distDir is rewritten to match.
+ */
+export function rewriteDistDirText(text, fromDir, toDir) {
+  if (!fromDir || fromDir === toDir) return text;
+  const pairs = [
+    [`"distDir":"${fromDir}"`, `"distDir":"${toDir}"`],
+    [`"distDir": "${fromDir}"`, `"distDir": "${toDir}"`],
+    [`'distDir':'${fromDir}'`, `'distDir':'${toDir}'`],
+    [`distDir:"${fromDir}"`, `distDir:"${toDir}"`],
+    [`distDir: "${fromDir}"`, `distDir: "${toDir}"`],
+  ];
+  let out = text;
+  for (const [from, to] of pairs) out = out.split(from).join(to);
+  return out;
+}
+
+export function normalizeStagedDist(serverRoot, distDir, fsx = fs) {
+  if (!distDir || distDir === ".next") return;
+  const from = path.join(serverRoot, distDir);
+  const to = path.join(serverRoot, ".next");
+  if (!fsx.existsSync(from)) {
+    throw new Error(
+      `Standalone output has no ${distDir} directory; the staged server would have no .next/server.`,
+    );
+  }
+  fsx.mkdirSync(to, { recursive: true });
+  fsx.cpSync(from, to, { recursive: true, force: true });
+  fsx.rmSync(from, { recursive: true, force: true });
+  for (const file of [path.join(to, "required-server-files.json"), path.join(serverRoot, "server.js")]) {
+    if (!fsx.existsSync(file)) continue;
+    fsx.writeFileSync(file, rewriteDistDirText(fsx.readFileSync(file, "utf8"), distDir, ".next"));
+  }
+}
+
 function stageServer() {
   const distDir = nextDistDir();
   const standalone = path.join(dashboardDir, distDir, "standalone");
@@ -190,6 +234,10 @@ function stageServer() {
   const nested = path.join(standalone, "dashboard");
   const root = fs.existsSync(path.join(nested, "server.js")) ? nested : standalone;
   copyDir(root, serverDir);
+  // Flatten a custom dist dir onto .next before anything looks for
+  // .next/node_modules or .next/static. Otherwise external-package links stay
+  // under .next-rebuild and ship as dangling symlinks.
+  normalizeStagedDist(serverDir, distDir);
 
   // Traced output deliberately excludes these two — they are served, not
   // required, so nothing in the graph points at them.

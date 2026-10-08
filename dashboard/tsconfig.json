@@ -40,6 +40,8 @@
     ".next/dev/types/**/*.ts",
     ".next-verify/types/**/*.ts",
     ".next-verify/dev/types/**/*.ts",
+    ".next-rebuild/types/**/*.ts",
+    ".next-rebuild/dev/types/**/*.ts",
     "**/*.mts",
     "../shared/notes-search/extract.ts",
     "../shared/notes-search/scope.ts",

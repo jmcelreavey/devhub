@@ -28,6 +28,7 @@ import { copyTextToClipboard,readTextFromClipboard } from "@/lib/clipboard";
 import { notify,notifyPermission,requestNotifyPermission } from "@/lib/desktop/bridge";
 import { clampSize,startDragResize } from "@/lib/drag-resize";
 import { useToast } from "@/lib/hooks/use-toast";
+import { useControlShortcutLabel } from "@/lib/hooks/use-modifier-key";
 import {
 capBlockOutput,
 formatBlockForAgent,
@@ -192,7 +193,8 @@ function syncSessionRegistry(tab: DockTab, remove = false): void {
 }
 
 /**
- * Global terminal drawer — toggled from anywhere (⌃` or the top-bar button),
+ * Global terminal drawer — toggled from anywhere with Control-backtick
+ * (⌃` on a Mac, Ctrl+` elsewhere) or the top-bar button,
  * any number of tabs, sessions persist across route changes and while the
  * dock is hidden. Repos rows open tabs cwd'd at the repo via
  * `devhub:terminal-open`.
@@ -203,6 +205,7 @@ function syncSessionRegistry(tab: DockTab, remove = false): void {
  */
 export function TerminalDock() {
   const toast = useToast();
+  const shortcut = useControlShortcutLabel()("`");
   const [open, setOpen] = useState(false);
   const [tabs, setTabs] = useState<DockTab[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -1979,7 +1982,7 @@ export function TerminalDock() {
               setDockFrame(dockFrame === "popout" ? "dock" : "popout");
             }}
           />
-          <HoverTip label="Hide (⌃`)" pos="top-end">
+          <HoverTip label={`Hide (${shortcut})`} pos="top-end">
             <button
               type="button"
               className="hub-icon-btn terminal-dock-btn"
@@ -2192,7 +2195,7 @@ export function TerminalDock() {
 export function TerminalDockButton() {
   const [activeCount, setActiveCount] = useState(latestTerminalSummary.activeCount);
   const [unread, setUnread] = useState(latestTerminalSummary.unread);
-  const shortcut = "⌃`";
+  const shortcut = useControlShortcutLabel()("`");
   const terminalLabel = unread
     ? `Terminal has new activity (${shortcut})`
     : activeCount > 0

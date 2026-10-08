@@ -3,7 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { runRebuild } from "./checkout-rebuild.mjs";
+import { runRebuild, assertNpm10, acquireLock } from "./checkout-rebuild.mjs";
+import { lockfilesMatchIgnoringLibc, shouldRestoreTsconfig } from "../dashboard/lib/desktop/build-env.mjs";
 
 const FORBIDDEN_GIT = new Set(["reset", "stash", "clean", "rebase"]);
 
@@ -47,14 +48,21 @@ function runner(git, { fail = {}, onBuild } = {}) {
     if (cmd === "git" && args[0] === "rev-parse") return { code: 0, stdout: `${git.head}\n`, stderr: "" };
     if (cmd === "git" && args[0] === "checkout") {
       assert.equal(args[1], "--");
-      assert.match(String(args[2]), /package-lock\.json$/);
+      assert.match(String(args[2]), /package-lock\.json$|tsconfig\.json$/);
       git.restored = args[2];
       return { code: 0, stdout: "", stderr: "" };
+    }
+    if (cmd === "git" && args[0] === "show") {
+      const spec = String(args[1] ?? "").replace(/^HEAD:/, "");
+      if (!git.show || git.show[spec] === undefined) return { code: 1, stdout: "", stderr: "" };
+      return { code: 0, stdout: git.show[spec], stderr: "" };
     }
     if (cmd === "git" && args[0] === "status") {
       const spec = args.indexOf("--");
       if (spec !== -1) {
-        return { code: 0, stdout: git.lockfiles?.[args[spec + 1]] ?? "", stderr: "" };
+        const file = args[spec + 1];
+        if (String(file).endsWith("tsconfig.json")) return { code: 0, stdout: git.tsconfigDirty ?? "", stderr: "" };
+        return { code: 0, stdout: git.lockfiles?.[file] ?? "", stderr: "" };
       }
       return { code: 0, stdout: git.dirty, stderr: "" };
     }
@@ -67,6 +75,7 @@ function runner(git, { fail = {}, onBuild } = {}) {
       git.head = "pulledcommit12abcdef";
       return { code: 0, stdout: "", stderr: "" };
     }
+    if (cmd === "npm" && args.includes("--ignore-scripts")) return { code: 0, stdout: "", stderr: "" };
     if (cmd === "npm" && (args[0] === "install" || args[0] === "ci")) return { code: fail.install ?? 0, stdout: "", stderr: "" };
     if (cmd === "npm" && args[0] === "run" && args[1] === "build") {
       if (fail.build) return { code: fail.build, stdout: "", stderr: "build broke\n" };
@@ -98,6 +107,7 @@ function serviceDeps(run, extra = {}) {
     sleep: async () => {},
     pid: 999001,
     alive: () => false,
+    npmInvoke: { cmd: "npm", prefix: [] },
     ...extra,
   };
 }
@@ -155,7 +165,7 @@ test("a clean service rebuild switches to the new build and does not rewrite git
   assert.equal(buildCall.env.DEVHUB_VERIFY_BUILD, "");
   assert.deepEqual(
     calls.filter((call) => call.cmd === "npm" && call.args[0] === "install").map((call) => call.args),
-    [["install", "--no-audit", "--no-fund"]],
+    [["install", "--include=dev", "--no-audit", "--no-fund"]],
   );
   assert.equal(calls.some((call) => call.args.includes("--no-package-lock") || call.args[0] === "ci"), false);
   assert.equal(calls.some((call) => call.cmd === "git" && call.args[0] === "checkout"), false);
@@ -268,8 +278,8 @@ test("a payload rebuild records a local payload and does not build into the live
   assert.deepEqual(
     calls.filter((call) => call.cmd === "npm" && call.args[0] === "ci").map((call) => call.args),
     [
-      ["ci", "--no-audit", "--no-fund"],
-      ["ci", "--no-audit", "--no-fund"],
+      ["ci", "--include=dev", "--no-audit", "--no-fund"],
+      ["ci", "--include=dev", "--no-audit", "--no-fund"],
     ],
   );
   assert.equal(calls.some((call) => call.cmd === "npm" && call.args[0] === "install"), false);
@@ -306,4 +316,156 @@ test("a payload rebuild fails closed when the installed Node runtime is missing"
   assert.match(status.error, /Node runtime/);
   assert.equal(fs.existsSync(path.join(w.appData, "config", "local-payload.json")), false);
   fs.rmSync(w.root, { recursive: true, force: true });
+});
+
+const DIRTY = {
+  NODE_ENV: "production",
+  __NEXT_PRIVATE_STANDALONE_CONFIG: "x",
+  NEXT_RUNTIME: "nodejs",
+  npm_config_omit: "dev",
+  NPM_CONFIG_PREFIX: "/bad",
+  PORT: "1337",
+  PATH: "/usr/bin",
+  HOME: "/home/me",
+};
+
+test("install and build children do not inherit the running server's env", async () => {
+  const w = world();
+  const git = gitState();
+  const { run, calls } = runner(git, { onBuild: () => wroteRebuild(w.dashboard) });
+  const status = await runRebuild(
+    { mode: "service", checkout: w.checkout, stateDir: w.stateDir, pull: false },
+    serviceDeps(run, { env: DIRTY, execPath: "/opt/node22/bin/node" }),
+  );
+  assert.equal(status.state, "succeeded");
+  for (const call of calls.filter((item) => item.cmd === "npm")) {
+    assert.equal(call.env.NODE_ENV, undefined);
+    assert.equal(call.env.__NEXT_PRIVATE_STANDALONE_CONFIG, undefined);
+    assert.equal(call.env.NEXT_RUNTIME, undefined);
+    assert.equal(call.env.npm_config_omit, undefined);
+    assert.equal(call.env.NPM_CONFIG_PREFIX, undefined);
+    assert.equal(call.env.PORT, undefined);
+    assert.equal(call.env.HOME, "/home/me");
+    assert.ok(call.env.PATH.startsWith("/opt/node22/bin"), call.env.PATH);
+  }
+  fs.rmSync(w.root, { recursive: true, force: true });
+});
+
+test("a failed service install restores the lockfile, puts devDependencies back, and does not restart", async () => {
+  const w = world();
+  const git = gitState();
+  const { run, calls } = runner(git, { fail: { install: 1 } });
+  const status = await runRebuild(
+    { mode: "service", checkout: w.checkout, stateDir: w.stateDir, pull: false },
+    serviceDeps(run),
+  );
+  assert.equal(status.state, "failed");
+  assert.match(status.error, /npm install failed/);
+  assert.equal(calls.some((call) => call.cmd === "systemctl"), false);
+  assert.equal(calls.some((call) => call.cmd === "npm" && call.args[1] === "build"), false);
+  assert.ok(calls.some((call) => call.cmd === "git" && call.args[0] === "checkout"));
+  assert.ok(calls.some((call) => call.cmd === "npm" && call.args.includes("--ignore-scripts")));
+  assert.equal(fs.readFileSync(path.join(w.dashboard, ".next", "BUILD_ID"), "utf8"), "old\n");
+  fs.rmSync(w.root, { recursive: true, force: true });
+});
+
+test("a libc-only lockfile rewrite is in sync; a version change is not", async () => {
+  const before = JSON.stringify({ name: "d", packages: { "": { version: "1.0.0", libc: ["glibc"] } } });
+  const libcOnly = JSON.stringify({ name: "d", packages: { "": { version: "1.0.0" } } });
+  const versionChanged = JSON.stringify({ name: "d", packages: { "": { version: "2.0.0", libc: ["glibc"] } } });
+  assert.equal(lockfilesMatchIgnoringLibc(before, libcOnly), true);
+  assert.equal(lockfilesMatchIgnoringLibc(before, versionChanged), false);
+  assert.equal(shouldRestoreTsconfig(true, " M dashboard/tsconfig.json\n"), true);
+  assert.equal(shouldRestoreTsconfig(false, " M dashboard/tsconfig.json\n"), false);
+  assert.equal(shouldRestoreTsconfig(true, ""), false);
+
+  const w = world();
+  fs.writeFileSync(path.join(w.dashboard, "package-lock.json"), `${libcOnly}\n`);
+  const git = gitState({
+    lockfiles: { "dashboard/package-lock.json": " M dashboard/package-lock.json\n" },
+    show: { "dashboard/package-lock.json": `${before}\n` },
+  });
+  const { run, calls } = runner(git, { onBuild: () => wroteRebuild(w.dashboard) });
+  const status = await runRebuild(
+    { mode: "service", checkout: w.checkout, stateDir: w.stateDir, pull: false },
+    serviceDeps(run),
+  );
+  assert.equal(status.state, "succeeded", status.error);
+  assert.ok(calls.some((call) => call.cmd === "git" && call.args[0] === "checkout"));
+  assert.equal(calls.some((call) => call.cmd === "systemctl"), true);
+  fs.rmSync(w.root, { recursive: true, force: true });
+});
+
+test("a resolved change in the lockfile still stops the rebuild", async () => {
+  const before = JSON.stringify({ packages: { "node_modules/leftpad": { version: "1.0.0", resolved: "https://example/a.tgz", integrity: "sha512-aaa" } } });
+  const after = JSON.stringify({ packages: { "node_modules/leftpad": { version: "1.0.0", resolved: "https://example/b.tgz", integrity: "sha512-bbb" } } });
+  assert.equal(lockfilesMatchIgnoringLibc(before, after), false);
+  const w = world();
+  fs.writeFileSync(path.join(w.dashboard, "package-lock.json"), after);
+  const git = gitState({
+    lockfiles: { "dashboard/package-lock.json": " M dashboard/package-lock.json\n" },
+    show: { "dashboard/package-lock.json": before },
+  });
+  const { run, calls } = runner(git);
+  const status = await runRebuild(
+    { mode: "service", checkout: w.checkout, stateDir: w.stateDir, pull: false },
+    serviceDeps(run),
+  );
+  assert.equal(status.state, "failed");
+  assert.match(status.error, /out of sync/);
+  assert.equal(calls.some((call) => call.cmd === "systemctl"), false);
+  fs.rmSync(w.root, { recursive: true, force: true });
+});
+
+test("a build that rewrites tsconfig.json is restored when the file was clean", async () => {
+  const w = world();
+  const git = gitState();
+  const { run, calls } = runner(git, {
+    onBuild: () => {
+      wroteRebuild(w.dashboard);
+      git.tsconfigDirty = " M dashboard/tsconfig.json\n";
+    },
+  });
+  const status = await runRebuild(
+    { mode: "service", checkout: w.checkout, stateDir: w.stateDir, pull: false },
+    serviceDeps(run),
+  );
+  assert.equal(status.state, "succeeded", status.error);
+  assert.ok(calls.some((call) => call.args[2] === "dashboard/tsconfig.json"));
+  fs.rmSync(w.root, { recursive: true, force: true });
+});
+
+test("assertNpm10 accepts the npm next to this node and rejects another major", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-npm-"));
+  const prefix = path.join(root, "node");
+  const cli = path.join(prefix, "lib", "node_modules", "npm", "bin", "npm-cli.js");
+  fs.mkdirSync(path.dirname(cli), { recursive: true });
+  fs.writeFileSync(cli, "");
+  const execPath = path.join(prefix, "bin", "node");
+  const ok = await assertNpm10(execPath, async () => ({ code: 0, stdout: "10.9.8\n", stderr: "" }));
+  assert.deepEqual(ok, { cmd: execPath, prefix: [cli] });
+  await assert.rejects(
+    () => assertNpm10(execPath, async () => ({ code: 0, stdout: "11.6.0\n", stderr: "" })),
+    /npm 10/,
+  );
+  await assert.rejects(
+    () => assertNpm10(path.join(root, "other", "bin", "node"), async () => ({ code: 0, stdout: "10.9.8\n", stderr: "" })),
+    /not found next to node/,
+  );
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("a stale lock whose pid is dead is replaced", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-rebuild-dead-lock-"));
+  const file = path.join(dir, "rebuild.lock");
+  fs.writeFileSync(file, JSON.stringify({ pid: 4242, startedAt: "then" }));
+  const held = acquireLock(file, { alive: () => true, pid: 7, now: () => "now" });
+  assert.equal(held.ok, false);
+  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).pid, 4242);
+  const replaced = acquireLock(file, { alive: () => false, pid: 7, now: () => "now" });
+  assert.equal(replaced.ok, true);
+  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).pid, 7);
+  replaced.release();
+  assert.equal(fs.existsSync(file), false);
+  fs.rmSync(dir, { recursive: true, force: true });
 });

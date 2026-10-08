@@ -29,7 +29,14 @@ function phaseWord(state: string): string {
   if (state === "skipped") return "Skipped";
   if (state === "failed") return "Failed";
   if (state === "running") return "Now";
+  if (state === "interrupted") return "Stopped";
   return "Waiting";
+}
+
+/** A phase left "running" when the whole rebuild was interrupted is not still going. */
+function shownPhaseState(phaseState: string, overall: string | undefined): string {
+  if (overall === "interrupted" && phaseState === "running") return "interrupted";
+  return phaseState;
 }
 
 /**
@@ -112,6 +119,7 @@ export function CheckoutRebuildCard({
     );
   }
 
+  const interrupted = data.status?.state === "interrupted";
   const running = data.status?.state === "running" || posting;
   const restartRequired = data.restartRequired === true || data.status?.restartRequired === true;
 
@@ -131,15 +139,23 @@ export function CheckoutRebuildCard({
       <div className="card-body flex flex-col gap-3" style={{ padding: "12px 16px" }}>
         {data.status && data.status.phases.length > 0 && (
           <ol className="flex flex-col gap-1">
-            {data.status.phases.map((phase) => (
-              <li key={phase.id} className="flex items-center gap-2 text-xs">
-                <span className={phaseTone(phase.state)}>{phaseWord(phase.state)}</span>
-                <span>{phase.label}</span>
-              </li>
-            ))}
+            {data.status.phases.map((phase) => {
+              const shown = shownPhaseState(phase.state, data.status?.state);
+              return (
+                <li key={phase.id} className="flex items-center gap-2 text-xs">
+                  <span className={phaseTone(shown)}>{phaseWord(shown)}</span>
+                  <span>{phase.label}</span>
+                </li>
+              );
+            })}
           </ol>
         )}
-        {data.status?.error && (
+        {interrupted && (
+          <p className="text-xs text-text-muted">
+            {data.status?.error ?? "The last rebuild was interrupted before it finished."} You can run it again.
+          </p>
+        )}
+        {data.status?.error && !interrupted && (
           <p className="text-xs" role="alert" style={{ color: "var(--danger)" }}>{data.status.error}</p>
         )}
         {data.status?.rolledBack && (

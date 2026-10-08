@@ -323,6 +323,11 @@ export async function setupPrivateRepo(input: z.infer<typeof PrivateRepoSetupSch
     return { directory, url };
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
+    // A refusal before anything was created (the name is taken, the folder is
+    // not a checkout) should say that and nothing about a half-finished setup.
+    if (!createdFolder && !remoteCreated) {
+      throw err instanceof Error ? err : new Error(detail);
+    }
     // Before the first push the folder holds only public code (or a clone of the
     // user's own repo), and leaving it makes every retry fail with "already exists".
     if (createdFolder && !contentPublished && await removeCreatedFolder(directory)) {

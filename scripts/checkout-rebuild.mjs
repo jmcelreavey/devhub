@@ -18,8 +18,8 @@
  *
  * Rules that hold in both modes:
  *   - never stash, reset, or check out the user's work: a dirty or diverged
- *     checkout is refused. The only checkout is restoring a package-lock.json
- *     that npm rewrote after the tree was verified clean;
+ *     checkout is refused. The only checkouts are restoring a package-lock.json
+ *     or tsconfig.json that the build rewrote after the tree was verified clean;
  *   - one rebuild at a time (a lock file whose owner must still be alive);
  *   - progress is a status file the UI polls, output is a log it can show.
  *
@@ -31,6 +31,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import {
+  cleanBuildEnv,
+  lockfilesMatchIgnoringLibc,
+  resolveNpmCli,
+  shouldRestoreTsconfig,
+  withNodeToolchain,
+} from "../dashboard/lib/desktop/build-env.mjs";
+
+export const NPM_MAJOR = 10;
 
 export const PHASE_LABELS = {
   preflight: "Check the checkout",
@@ -60,10 +69,11 @@ export class RebuildError extends Error {
   }
 }
 
-export function initialStatus(mode, now) {
+export function initialStatus(mode, now, launcher = "direct") {
   return {
     state: "running",
     mode,
+    launcher,
     phase: null,
     phases: MODE_PHASES[mode].map((id) => ({ id, label: PHASE_LABELS[id], state: "pending" })),
     startedAt: now,
@@ -169,12 +179,36 @@ function buildEnv(extra) {
 }
 
 /**
+ * npm from the Node that is running this script. A login shell's nvm default
+ * is a different toolchain (often npm 11) and must not be consulted.
+ */
+export async function assertNpm10(execPath, run, existsSync = fs.existsSync, env = process.env) {
+  const cli = resolveNpmCli(execPath, existsSync);
+  if (!cli) {
+    throw new RebuildError(
+      `npm was not found next to node (${execPath}). DevHub's rebuild runs the npm that ships with that Node, not whatever \`npm\` is first on PATH.`,
+    );
+  }
+  const result = await run(execPath, [cli, "--version"], { env: cleanBuildEnv(env) });
+  const raw = `${result.stdout ?? ""}`.trim();
+  const major = Number(raw.split(".")[0]);
+  if (result.code !== 0 || major !== NPM_MAJOR) {
+    throw new RebuildError(
+      `DevHub's rebuild needs npm ${NPM_MAJOR} (the Node at ${execPath} reported ${raw || "unknown"}). Install Node 22, which ships npm 10.`,
+    );
+  }
+  return { cmd: execPath, prefix: [cli] };
+}
+
+/**
  * Run a rebuild. Resolves with the final status; never throws for an expected
  * failure (the status carries it), so the caller always has something to show.
  */
 export async function runRebuild(options, deps) {
   const { mode, checkout, stateDir } = options;
-  const { fs: fsx = fs, run, now = () => new Date().toISOString(), sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = deps;
+  const { fs: fsx = fs, run: runRaw, now = () => new Date().toISOString(), sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = deps;
+  const execPath = deps.execPath ?? process.execPath;
+  const baseEnv = withNodeToolchain(cleanBuildEnv(deps.env ?? process.env), execPath);
   if (!MODE_PHASES[mode]) throw new Error(`Unknown rebuild mode: ${mode}`);
 
   const statusFile = path.join(stateDir, "rebuild-status.json");
@@ -192,10 +226,11 @@ export async function runRebuild(options, deps) {
     return { state: "refused", error: "A rebuild is already running.", owner: lock.owner };
   }
 
-  const status = initialStatus(mode, now());
+  const status = initialStatus(mode, now(), options.launcher ?? "direct");
   const log = (line) => fsx.appendFileSync(logFile, `${line}\n`);
+  const run = (cmd, args, opts = {}) => runRaw(cmd, args, { ...opts, env: { ...baseEnv, ...(opts.env ?? {}) }, log: opts.log ?? log });
   const save = () => fsx.writeFileSync(statusFile, `${JSON.stringify(status, null, 2)}\n`);
-  fsx.writeFileSync(logFile, `[${now()}] rebuild started (${mode}) in ${checkout}\n`);
+  fsx.writeFileSync(logFile, `[${now()}] rebuild started (${mode}, ${status.launcher}) in ${checkout}\n`);
   save();
 
   const phase = (id) => status.phases.find((p) => p.id === id);
@@ -250,27 +285,68 @@ export async function runRebuild(options, deps) {
     const lockHash = lockDirs.map((dir) => sha256(path.join(dir, "package-lock.json"), fsx) ?? "none").join(":");
     const buildRecordFile = mode === "service" ? path.join(dashboard, ".next", "devhub-build.json") : path.join(options.appData ?? "", "config", "local-payload.json");
     const previousBuild = readJson(buildRecordFile, fsx);
+    let npmInvoke = deps.npmInvoke ?? null;
+    const npm = async () => {
+      if (!npmInvoke) npmInvoke = await assertNpm10(execPath, run, deps.npmExists ?? fs.existsSync, baseEnv);
+      return npmInvoke;
+    };
+    const restoreTsconfig = async () => {
+      const rel = "dashboard/tsconfig.json";
+      const wasClean = !state.dirty.some((line) => line.includes("tsconfig.json"));
+      const after = await git(["status", "--porcelain", "--", rel]);
+      if (after.code !== 0) throw new RebuildError("Could not check whether tsconfig.json changed.");
+      if (!shouldRestoreTsconfig(wasClean, after.stdout ?? "")) return;
+      await mustRun("git", ["checkout", "--", rel], { cwd: checkout }, "Restoring tsconfig.json");
+      log("Restored dashboard/tsconfig.json (the build had added a dist-dir include).");
+    };
 
     await step("install", async () => {
       const installed = lockDirs.every((dir) => fsx.existsSync(path.join(dir, "node_modules")));
       // Installing rewrites node_modules under whatever is running from it, so it
       // only happens when the lockfiles changed or the modules are missing.
       if (installed && previousBuild?.lockHash === lockHash) return "skipped";
+      const invocation = await npm();
       for (const dir of lockDirs) {
         // ci for a payload: nothing is running from these modules, and ci
         // installs the lockfile exactly. install for the service: ci would
         // delete the node_modules the live unit is using. install still
         // honours the lockfile; --no-package-lock would not.
+        // --include=dev: a leaked NODE_ENV=production must not prune tsx.
         const npmArgs = mode === "payload"
-          ? ["ci", "--no-audit", "--no-fund"]
-          : ["install", "--no-audit", "--no-fund"];
-        await mustRun("npm", npmArgs, { cwd: dir }, mode === "payload" ? "npm ci" : "npm install");
+          ? ["ci", "--include=dev", "--no-audit", "--no-fund"]
+          : ["install", "--include=dev", "--no-audit", "--no-fund"];
+        const what = mode === "payload" ? "npm ci" : "npm install";
+        const result = await run(invocation.cmd, [...invocation.prefix, ...npmArgs], { cwd: dir, log });
+        if (result.code !== 0) {
+          const lockRel = path.relative(checkout, path.join(dir, "package-lock.json"));
+          const restored = await run("git", ["checkout", "--", lockRel], { cwd: checkout, log });
+          if (restored.code !== 0) log(`Could not restore ${lockRel} (exit ${restored.code}).`);
+          if (mode === "service") {
+            log(restored.code === 0
+              ? "Install failed. Restored package-lock.json and putting devDependencies back. The service was not restarted."
+              : "Install failed. The service was not restarted.");
+            const recover = await run(invocation.cmd, [...invocation.prefix, "install", "--include=dev", "--no-audit", "--no-fund", "--ignore-scripts"], { cwd: dir, log });
+            // The recovery install can rewrite the lockfile we just restored.
+            const relock = await run("git", ["checkout", "--", lockRel], { cwd: checkout, log });
+            if (relock.code !== 0) log(`Could not restore ${lockRel} after putting devDependencies back.`);
+            if (recover.code !== 0) log("Could not restore node_modules after the failed install.");
+          }
+          throw new RebuildError(`${what} failed (exit ${result.code}). See the log for the output.`);
+        }
         if (mode !== "service") continue;
         const lockRel = path.relative(checkout, path.join(dir, "package-lock.json"));
         const after = await git(["status", "--porcelain", "--", lockRel]);
         if (after.code !== 0) throw new RebuildError("Could not check whether package-lock.json changed.");
         if (!after.stdout.trim()) continue;
+        const headCopy = await git(["show", `HEAD:${lockRel}`]);
+        let working = "";
+        try { working = fsx.readFileSync(path.join(dir, "package-lock.json"), "utf8"); } catch { working = ""; }
+        const libcOnly = headCopy.code === 0 && lockfilesMatchIgnoringLibc(headCopy.stdout ?? "", working);
         await mustRun("git", ["checkout", "--", lockRel], { cwd: checkout }, "Restoring package-lock.json");
+        if (libcOnly) {
+          log(`${lockRel} only differed by npm libc metadata; restored the committed lockfile.`);
+          continue;
+        }
         throw new RebuildError("package-lock.json is out of sync with package.json; commit a regenerated lockfile");
       }
     });
@@ -283,9 +359,14 @@ export async function runRebuild(options, deps) {
 
       try {
         await step("build", async () => {
-          await mustRun("npm", ["run", "build"], { cwd: dashboard, env: buildEnv({ DEVHUB_DIST_DIR: REBUILD_DIST }) }, "The build");
-          if (!fsx.existsSync(path.join(rebuildDist, "BUILD_ID"))) throw new RebuildError("The build finished but produced no output.");
-          fsx.writeFileSync(path.join(rebuildDist, "devhub-build.json"), `${JSON.stringify({ commit: state.head, lockHash, builtAt: now() })}\n`);
+          try {
+            const invocation = await npm();
+            await mustRun(invocation.cmd, [...invocation.prefix, "run", "build"], { cwd: dashboard, env: buildEnv({ DEVHUB_DIST_DIR: REBUILD_DIST }) }, "The build");
+            if (!fsx.existsSync(path.join(rebuildDist, "BUILD_ID"))) throw new RebuildError("The build finished but produced no output.");
+            fsx.writeFileSync(path.join(rebuildDist, "devhub-build.json"), `${JSON.stringify({ commit: state.head, lockHash, builtAt: now() })}\n`);
+          } finally {
+            await restoreTsconfig();
+          }
         });
       } catch (error) {
         // The running build was never touched.
@@ -335,10 +416,14 @@ export async function runRebuild(options, deps) {
       }
     } else {
       await step("build", async () => {
-        await mustRun(process.execPath, [path.join(checkout, "desktop", "scripts", "stage-resources.mjs")], { cwd: checkout }, "Staging resources");
-        // .next-rebuild, not .next: a devhub.service on this checkout is running
-        // from .next, and the stage script deletes the dist dir it builds into.
-        await mustRun(process.execPath, [path.join(checkout, "desktop", "scripts", "stage-dashboard.mjs")], { cwd: checkout, env: buildEnv({ DEVHUB_DIST_DIR: REBUILD_DIST }) }, "The build");
+        try {
+          await mustRun(process.execPath, [path.join(checkout, "desktop", "scripts", "stage-resources.mjs")], { cwd: checkout }, "Staging resources");
+          // .next-rebuild, not .next: a devhub.service on this checkout is running
+          // from .next, and the stage script deletes the dist dir it builds into.
+          await mustRun(process.execPath, [path.join(checkout, "desktop", "scripts", "stage-dashboard.mjs")], { cwd: checkout, env: buildEnv({ DEVHUB_DIST_DIR: REBUILD_DIST }) }, "The build");
+        } finally {
+          await restoreTsconfig();
+        }
       });
       await step("assemble", async () => {
         const base = options.basePayloadDir;
@@ -394,7 +479,8 @@ export async function runRebuild(options, deps) {
 /** Real subprocess runner: output goes to the log line by line. */
 export function spawnRun(cmd, args, { cwd, env, log } = {}) {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { cwd, env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] });
+    const childEnv = withNodeToolchain(cleanBuildEnv({ ...process.env, ...(env ?? {}) }), process.execPath);
+    const child = spawn(cmd, args, { cwd, env: childEnv, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     const pump = (chunk, sink) => {

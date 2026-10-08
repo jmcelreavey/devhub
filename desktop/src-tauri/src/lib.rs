@@ -1550,33 +1550,76 @@ fn resolve_ports(
     }
     holders.dedup_by_key(|holder| (holder.port, holder.pid));
     let plan = ports::plan_clash(holders);
+    let mut user_chose_other_ports = false;
 
-    if !plan.stoppable.is_empty() && ask_to_free_ports(app, &plan.stoppable) {
-        let stopped = ports::stop_own_holders(backend, &install_dir, &plan.stoppable);
-        log.write_line(
-            "shell:startup",
-            &format!("[startup] asked DevHub's own leftover processes to stop: {stopped:?}"),
+    if !plan.stoppable.is_empty() {
+        // The boot clock keeps counting while a dialog is up unless this says so.
+        set_boot(
+            app,
+            BootState::Starting {
+                service: "wsl-wait".into(),
+            },
         );
-        // Give the supervisor time to take its children down.
-        let deadline = Instant::now() + Duration::from_secs(15);
-        loop {
-            occupied = backend.listening_ports()?;
-            if plan.stoppable.iter().all(|h| !occupied.contains(&h.port))
-                || Instant::now() > deadline
-            {
-                break;
+        let freed = ask_to_free_ports(app, &plan.stoppable);
+        set_boot(
+            app,
+            BootState::Starting {
+                service: "wsl".into(),
+            },
+        );
+        if freed {
+            let stopped = ports::stop_own_holders(backend, &install_dir, &plan.stoppable);
+            log.write_line(
+                "shell:startup",
+                &format!("[startup] asked DevHub's own leftover processes to stop: {stopped:?}"),
+            );
+            // Give the supervisor time to take its children down.
+            let deadline = Instant::now() + Duration::from_secs(15);
+            loop {
+                occupied = backend.listening_ports()?;
+                if plan.stoppable.iter().all(|h| !occupied.contains(&h.port))
+                    || Instant::now() > deadline
+                {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(500));
             }
-            std::thread::sleep(Duration::from_millis(500));
+            // wslrelay can keep the Windows bind after the Linux listener is gone.
+            let freed_ports: Vec<u16> = plan.stoppable.iter().map(|holder| holder.port).collect();
+            let windows_clear = wsl::retry_until_clear(
+                12,
+                || {
+                    freed_ports
+                        .iter()
+                        .all(|port| std::net::TcpListener::bind(("127.0.0.1", *port)).is_ok())
+                },
+                || std::thread::sleep(Duration::from_millis(250)),
+            );
+            if !windows_clear {
+                log.write_line(
+                    "shell:startup",
+                    "[startup] a freed port is still busy on Windows; picking another",
+                );
+            }
+            occupied = backend.listening_ports()?;
+        } else {
+            user_chose_other_ports = true;
         }
     }
 
     match pick(&occupied) {
         Ok(ports) => {
-            if !plan.others.is_empty() {
+            let left = ports::foreign_left_running(&plan.others, user_chose_other_ports);
+            if !left.is_empty() {
+                let names = left
+                    .iter()
+                    .map(|holder| ports::describe(holder))
+                    .collect::<Vec<_>>()
+                    .join("; ");
                 log.write_line(
                     "shell:startup",
                     &format!(
-                        "[startup] not DevHub's own process, so it was left running; using ports {ports:?}"
+                        "[startup] left running (not this app's leftover): {names}; using ports {ports:?}"
                     ),
                 );
             }
@@ -1702,6 +1745,7 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
                 &bundled_dir,
                 record.as_ref(),
                 complete,
+                checkout.is_some(),
             );
             log.write_line("shell:wsl", &format!("[wsl] {why}"));
             (dir, bundled_dir, id)
@@ -1726,7 +1770,7 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
     let ports = startup_phase(&log, "ports", || {
         resolve_ports(app, &backend, &log, &sidecar, previous_ports)
     })?;
-    if ports != sidecar.preferred_ports {
+    if ports != sidecar.preferred_ports && !wsl::pair_has_reserved(ports) {
         // Remembered so the next launch gets the same origin (and its saved settings).
         if let Some(dir) = ports_file.parent() {
             let _ = std::fs::create_dir_all(dir);

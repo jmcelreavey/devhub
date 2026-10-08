@@ -277,6 +277,7 @@
         "stopping-dev-server": "Stopping development server…",
         "packaged-server": "Starting packaged server…",
         wsl: "Starting WSL…",
+        "wsl-wait": "Starting WSL…",
         "wsl-install": "Installing DevHub into WSL (first run only)…",
         rebuild: "Rebuilding the dashboard…",
         next: "Starting the dashboard…",
@@ -293,7 +294,20 @@
        * changed in two minutes is how a slow start becomes a bug report.
        */
       const startedAt = Date.now();
-      const elapsedSeconds = () => Math.floor((Date.now() - startedAt) / 1000);
+      let pauseStartedAt = null;
+      let pausedMs = 0;
+      function notePause(service) {
+        const waiting = service === "wsl-wait";
+        if (waiting && pauseStartedAt == null) pauseStartedAt = Date.now();
+        if (!waiting && pauseStartedAt != null) {
+          pausedMs += Date.now() - pauseStartedAt;
+          pauseStartedAt = null;
+        }
+      }
+      const elapsedSeconds = () => {
+        const frozen = pauseStartedAt == null ? 0 : Date.now() - pauseStartedAt;
+        return Math.max(0, Math.floor((Date.now() - startedAt - pausedMs - frozen) / 1000));
+      };
 
       /** Only worth showing once the wait is long enough to be in doubt. */
       function withElapsed(label, phaseSeconds) {
@@ -350,6 +364,7 @@
           // server takes minutes, and a label that never changes for minutes
           // is how a working startup gets read as a hang.
           const [service, phase] = String(state.service ?? "").split(":");
+          notePause(service);
           const label = SERVICE_LABEL[service] ?? "Starting services…";
           const phaseSeconds = phase ? Number(phase) : null;
           detail.textContent = withElapsed(label, Number.isFinite(phaseSeconds) ? phaseSeconds : null);

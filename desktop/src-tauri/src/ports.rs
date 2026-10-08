@@ -281,6 +281,25 @@ pub fn pinned_conflict_message(base: &str, plan: &ClashPlan) -> String {
     }
 }
 
+/// A stop counts when either signal landed. pkill often reaps the pid, so the
+/// follow-up kill then fails even though the process is gone.
+pub fn stop_signalled(pkill_ok: bool, kill_ok: bool) -> bool {
+    pkill_ok || kill_ok
+}
+
+/// Holders worth a "left running" log line. `devhub.service` is the expected
+/// occupant of the default ports. A user who already chose other ports does
+/// not need the line either.
+pub fn foreign_left_running(others: &[Holder], user_chose_other_ports: bool) -> Vec<&Holder> {
+    if user_chose_other_ports {
+        return Vec::new();
+    }
+    others
+        .iter()
+        .filter(|holder| holder.kind != HolderKind::DevhubService)
+        .collect()
+}
+
 /// Stop DevHub's own holders, and only those.
 ///
 /// Every holder is looked up again immediately before it is signalled, so a pid
@@ -309,13 +328,16 @@ pub fn stop_own_holders(backend: &WslBackend, install_dir: &str, planned: &[Hold
                     "{}/runtime/[^ /]+/services/supervisor\\.mjs",
                     backend.app_data.trim_end_matches('/').replace('.', "\\.")
                 );
-                let _ = backend.exec(
-                    &["/usr/bin/pkill", "-TERM", "-f", &pattern],
-                    Duration::from_secs(10),
-                );
-                backend
+                let pkill_ok = backend
+                    .exec(
+                        &["/usr/bin/pkill", "-TERM", "-f", &pattern],
+                        Duration::from_secs(10),
+                    )
+                    .is_ok();
+                let kill_ok = backend
                     .exec(&["/bin/kill", "-TERM", &pid], Duration::from_secs(10))
-                    .is_ok()
+                    .is_ok();
+                stop_signalled(pkill_ok, kill_ok)
             }
             Side::Windows => stop_windows_process(current.pid),
         };
@@ -572,6 +594,22 @@ mod tests {
             pinned_conflict_message("base", &plan_clash(Vec::new())),
             "base"
         );
+    }
+
+    #[test]
+    fn a_stop_counts_when_pkill_already_reaped_the_pid() {
+        assert!(stop_signalled(true, false));
+        assert!(stop_signalled(false, true));
+        assert!(!stop_signalled(false, false));
+    }
+
+    #[test]
+    fn the_left_running_log_skips_the_service_and_a_declined_dialog() {
+        let service = holder(HolderKind::DevhubService, 77);
+        let other = holder(HolderKind::Other, 9);
+        assert!(foreign_left_running(std::slice::from_ref(&service), false).is_empty());
+        assert!(foreign_left_running(&[service.clone(), other.clone()], true).is_empty());
+        assert_eq!(foreign_left_running(&[service, other], false).len(), 1);
     }
 
     #[test]

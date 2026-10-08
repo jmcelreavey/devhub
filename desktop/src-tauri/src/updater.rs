@@ -218,14 +218,11 @@ pub async fn check_update(app: AppHandle) -> Result<UpdateInfo, String> {
     }
 }
 
-/// The manual check: always answers. `check_update` stays for the background
-/// loop and the canary, which want the raw error.
-///
-/// Signature verification is untouched: this only reads the manifest.
-#[tauri::command]
-pub async fn check_update_outcome(app: AppHandle) -> CheckOutcome {
+/// The check itself, without the "manual check" log line. The menu and the
+/// background loop both use this so a missing release is classified the same way.
+async fn check_outcome(app: &AppHandle) -> CheckOutcome {
     let current = app.package_info().version.to_string();
-    let result = match updater_for(&app) {
+    let result = match updater_for(app) {
         Err(message) => Err(CheckFailure::Other(message)),
         Ok(updater) => match updater.check().await {
             Ok(Some(update)) => Ok(Some(UpdateInfo {
@@ -239,7 +236,26 @@ pub async fn check_update_outcome(app: AppHandle) -> CheckOutcome {
             Err(err) => Err(CheckFailure::from_error(&err)),
         },
     };
-    let outcome = outcome_for(&current, result);
+    outcome_for(&current, result)
+}
+
+/// What the background loop writes. A repo with no published release is not a
+/// failed check; everything else that is not an update stays quiet or says it failed.
+pub fn background_check_log(outcome: &CheckOutcome) -> Option<String> {
+    match outcome {
+        CheckOutcome::Available { .. } | CheckOutcome::UpToDate { .. } => None,
+        CheckOutcome::NoRelease { .. } => Some(describe_outcome(outcome)),
+        CheckOutcome::Failed { .. } => Some(format!("check failed: {}", describe_outcome(outcome))),
+    }
+}
+
+/// The manual check: always answers. `check_update` stays for the canary, which
+/// wants the raw error.
+///
+/// Signature verification is untouched: this only reads the manifest.
+#[tauri::command]
+pub async fn check_update_outcome(app: AppHandle) -> CheckOutcome {
+    let outcome = check_outcome(&app).await;
     if let Some(state) = app.try_state::<crate::AppState>() {
         state.log.write_line(
             "updater",
@@ -341,21 +357,34 @@ pub fn check_in_background(app: &AppHandle) {
         std::thread::sleep(std::time::Duration::from_secs(5));
         let mut announced: Option<String> = None;
         loop {
-            match tauri::async_runtime::block_on(check_update(handle.clone())) {
-                Ok(info) if info.available => {
+            match tauri::async_runtime::block_on(check_outcome(&handle)) {
+                CheckOutcome::Available {
+                    current_version,
+                    version,
+                    notes,
+                    date,
+                } => {
                     // Once per version: re-announcing the same one every few
                     // hours would keep reopening a banner the user dismissed.
-                    if announced != info.version {
-                        announced = info.version.clone();
-                        let _ = handle.emit("devhub://update-available", info);
+                    if announced.as_ref() != Some(&version) {
+                        announced = Some(version.clone());
+                        let _ = handle.emit(
+                            "devhub://update-available",
+                            UpdateInfo {
+                                available: true,
+                                current_version,
+                                version: Some(version),
+                                notes,
+                                date,
+                            },
+                        );
                     }
                 }
-                Ok(_) => {}
-                Err(err) => {
-                    if let Some(state) = handle.try_state::<crate::AppState>() {
-                        state
-                            .log
-                            .write_line("updater", &format!("check failed: {err}"));
+                other => {
+                    if let Some(line) = background_check_log(&other) {
+                        if let Some(state) = handle.try_state::<crate::AppState>() {
+                            state.log.write_line("updater", &line);
+                        }
                     }
                 }
             }
@@ -460,6 +489,10 @@ mod tests {
         let outcome = outcome_for("2.0.0", Err(failure));
         assert!(matches!(outcome, CheckOutcome::NoRelease { .. }));
         assert!(describe_outcome(&outcome).starts_with("No published release yet."));
+        let line = background_check_log(&outcome).expect("a missing release is logged");
+        assert!(line.starts_with("No published release yet."));
+        assert!(!line.contains("check failed"));
+        assert!(background_check_log(&outcome_for("2.0.0", Ok(None))).is_none());
     }
 
     #[test]

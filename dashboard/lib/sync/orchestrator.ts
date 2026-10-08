@@ -36,23 +36,29 @@ export interface CommitAndPushDirtyOptions {
   commitMessage?: string;
 }
 
+export type ScopedCommitMessage = string | ((files: string[]) => string);
+
 export interface CommitAndPushPathsOptions {
   emit: (line: string) => void;
   repoRoot: string;
   paths: string[];
-  commitMessage: string;
+  commitMessage: ScopedCommitMessage;
 }
 
 export interface DryRunScopedSyncOptions {
   emit: (line: string) => void;
   repoRoot: string;
   paths: string[];
-  commitMessage: string;
+  commitMessage: ScopedCommitMessage;
 }
 
 export interface PushUnpushedCommitsOptions {
   emit: (line: string) => void;
   repoRoot: string;
+}
+
+function resolveCommitMessage(message: ScopedCommitMessage, files: string[]): string {
+  return (typeof message === "function" ? message(files) : message).trim();
 }
 
 function runGit(repoRoot: string, args: string[]) {
@@ -262,7 +268,8 @@ export async function commitAndPushPaths(opts: CommitAndPushPathsOptions): Promi
     return 0;
   }
 
-  const commitMessage = opts.commitMessage.trim();
+  const files = staged.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+  const commitMessage = resolveCommitMessage(opts.commitMessage, files);
   emit(`Committing scoped changes with message: ${commitMessage}`);
   const commit = runGit(repoRoot, ["commit", "-m", commitMessage]);
   if (commit.status !== 0) {
@@ -300,13 +307,15 @@ export async function dryRunScopedSync(opts: DryRunScopedSyncOptions): Promise<n
   }
 
   emit(`[DRY-RUN] Scope: ${scoped.join(", ")}`);
-  emit(`[DRY-RUN] Commit message: ${opts.commitMessage.trim()}`);
 
   const files = listChangedFilesForPaths(repoRoot, scoped);
   if (files.length === 0) {
     emit("[DRY-RUN] No changed files in scope.");
     return 0;
   }
+
+  const commitMessage = resolveCommitMessage(opts.commitMessage, files);
+  emit(`[DRY-RUN] Commit message: ${commitMessage}`);
 
   emit(`[DRY-RUN] ${files.length} file(s) would be committed:`);
   for (const f of files) emit(`  - ${f}`);

@@ -19,7 +19,8 @@ import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { binariesDir, desktopDir } from "./staging-paths.mjs";
+import { auditPayloadNpm } from "./payload-npm-audit.mjs";
+import { binariesDir, desktopDir, stagingDir } from "./staging-paths.mjs";
 
 const manifest = JSON.parse(fs.readFileSync(path.join(desktopDir, "node-runtime.json"), "utf8"));
 const cacheDir = path.join(desktopDir, ".cache", "node-runtime");
@@ -47,11 +48,10 @@ async function download(url, dest) {
 }
 
 /**
- * Extract just the `bin/node` binary.
- *
- * npm, npx, corepack, and the bundled headers are all things the app never
- * runs and would otherwise have to be signed, notarised, and shipped. The
- * sidecar uses this binary directly; project tooling is installed separately.
+ * Extract the `bin/node` binary. On Linux, also keep the npm that ships in
+ * the same archive: a checkout rebuild must run that npm, not one from the
+ * login shell. macOS and the Windows window do not ship npm inside the app
+ * bundle (binaries/ is packed wholesale).
  */
 function extractNodeBinary(archive, key, into) {
   fs.mkdirSync(into, { recursive: true });
@@ -130,6 +130,26 @@ export async function stageNodeRuntime({ platform = os.platform(), arch = os.arc
   // Re-sign before the smoke test; the finished app is signed again after bundling.
   if (platform === "darwin") {
     execFileSync("codesign", ["--force", "--sign", "-", "--timestamp=none", dest]);
+  }
+  if (platform === "linux") {
+    const prefix = path.dirname(path.dirname(nodeBin));
+    const npmSrc = path.join(prefix, "lib", "node_modules", "npm");
+    const cli = path.join(npmSrc, "bin", "npm-cli.js");
+    if (!fs.existsSync(cli)) {
+      throw new Error(
+        `Node archive ${artifact.file} has no npm at ${cli}. The WSL payload needs that npm so a checkout rebuild does not use the login shell's npm.`,
+      );
+    }
+    const npmProblems = auditPayloadNpm(npmSrc);
+    if (npmProblems.length > 0) {
+      throw new Error(
+        `Staged npm from ${artifact.file} fails the payload scan:\n  ${npmProblems.slice(0, 10).join("\n  ")}`,
+      );
+    }
+    const npmDest = path.join(stagingDir, "npm");
+    fs.rmSync(npmDest, { recursive: true, force: true });
+    fs.cpSync(npmSrc, npmDest, { recursive: true, dereference: true });
+    log("staged the npm that ships with this Node");
   }
   fs.rmSync(extractDir, { recursive: true, force: true });
 

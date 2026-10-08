@@ -19,3 +19,18 @@ export function useShortcutLabel(): (key: string, shift?: boolean) => string {
   const modifier = useModifierKey();
   return (key, shift = false) => shortcutLabel(modifier, key, shift);
 }
+
+/**
+ * Labels a chord that listens for Control on every platform.
+ * A Mac shows ⌃; other platforms spell Ctrl+.
+ */
+export function controlShortcutLabel(mac: boolean, key: string): string {
+  return mac ? `⌃${key}` : `Ctrl+${key}`;
+}
+
+/** `useControlShortcutLabel()("`")` is Control-backtick for the platform showing the UI. */
+export function useControlShortcutLabel(): (key: string) => string {
+  const mounted = useClientMounted();
+  const mac = mounted && /Macintosh|Mac OS X/.test(navigator.userAgent);
+  return (key) => controlShortcutLabel(mac, key);
+}
