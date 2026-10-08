@@ -220,6 +220,23 @@ git tag v2.1.0 && git push origin v2.1.0
 injection, staging, the pre-signing gate, Rust checks, build + sign + notarise,
 self-test, signature verification, and `latest.json` generation.
 
+### Proving a macOS Intel DMG change without a release
+
+`Actions → Release desktop → Run workflow`, tick **macos_intel_only**, and give any
+`version` (for example `0.0.0-dmgtest`). Only the `macOS (Intel)` job runs; Linux,
+Windows and Apple Silicon are skipped and `publish` cannot run, even on a tag ref.
+It is mutually exclusive with **windows_only**. Download the
+`devhub-x86_64-apple-darwin` artifact for the DMG, and `hdiutil-diagnostics-x86_64-apple-darwin`
+for the wrapper's log (create/convert timings and every detach attempt).
+
+Why the Intel job carries an `hdiutil` wrapper: Tauri's bundled `bundle_dmg.sh`
+retries `hdiutil detach` only on exit code 16, but the Intel runner fails with exit 1
+(`detach: timeout for DiskArbitration expired`). The script is regenerated on every
+build, so the workflow puts `desktop/scripts/hdiutil-resilient.sh` first on `PATH` as
+`hdiutil` for that job. It retries the detach with escalation and logs timings; the
+header of that file has the details. Apple Silicon keeps the stock tool and its
+Finder-styled layout.
+
 ### Secrets
 
 | Secret                               | Purpose                                   |
