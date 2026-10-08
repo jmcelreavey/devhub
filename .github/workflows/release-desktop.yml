@@ -4,6 +4,16 @@ name: Release desktop
 # else. `workflow_dispatch` builds the same artifacts without publishing, which
 # is what you want when validating a signing change — a dry run that produces a
 # real installer beats a release you have to delete.
+#
+# Dispatch inputs that narrow what a dispatch builds (none of them publish):
+#   windows_only     - only the Windows installer (wsl-payload + windows + smoke).
+#   macos_intel_only - only the macOS (Intel) job, via the `plan` job's matrix.
+#                      Use it to prove a change to the Intel DMG step - the
+#                      hdiutil shim, runner image, bundler args - without paying
+#                      for a full release or cutting a tag. Linux, Windows and
+#                      Apple Silicon are skipped, and `publish` cannot run.
+#                      `version` is still required; any value works, e.g.
+#                      0.0.0-dmgtest. Mutually exclusive with windows_only.
 on:
   push:
     tags:
@@ -16,6 +26,11 @@ on:
         type: string
       windows_only:
         description: "Skip the macOS/Linux builds; build only the Windows installer."
+        required: false
+        default: false
+        type: boolean
+      macos_intel_only:
+        description: "Build only the macOS (Intel) job; skip Linux, Windows, Apple Silicon. Publishes nothing."
         required: false
         default: false
         type: boolean
@@ -32,31 +47,54 @@ env:
   DEVHUB_SKIP_NEXT_TYPECHECK: "true"
 
 jobs:
+  # The build matrix lives here, not in `build`, because a job-level `if:` cannot
+  # read `matrix` and a dispatch has to be able to drop legs (macos_intel_only).
+  # Add or edit a platform in the ALL list below; `build` consumes the result.
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - name: Select build matrix
+        id: plan
+        shell: bash
+        env:
+          WINDOWS_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.windows_only }}
+          MACOS_INTEL_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.macos_intel_only }}
+        run: |
+          if [ "$WINDOWS_ONLY" = "true" ] && [ "$MACOS_INTEL_ONLY" = "true" ]; then
+            echo "::error::windows_only and macos_intel_only are mutually exclusive."
+            exit 1
+          fi
+          # Not fail-fast (see `build`): every platform's failure in one run.
+          #
+          # Linux args: --verbose because Tauri reports AppImage failures as the
+          # bare string "failed to run linuxdeploy" and swallows linuxdeploy's own
+          # stderr. Without it a failure there is undiagnosable from the log.
+          ALL='[
+            {"os": "macos-14", "label": "macOS (Apple Silicon)", "target": "aarch64-apple-darwin", "args": "--target aarch64-apple-darwin"},
+            {"os": "macos-15-intel", "label": "macOS (Intel)", "target": "x86_64-apple-darwin", "args": "--verbose --target x86_64-apple-darwin"},
+            {"os": "ubuntu-22.04", "label": "Linux (x64)", "target": "x86_64-unknown-linux-gnu", "args": "--verbose"}
+          ]'
+          if [ "$MACOS_INTEL_ONLY" = "true" ]; then
+            matrix=$(jq -c '{include: map(select(.target == "x86_64-apple-darwin"))}' <<<"$ALL")
+          else
+            matrix=$(jq -c '{include: .}' <<<"$ALL")
+          fi
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "Build matrix: $matrix"
+
   build:
     name: ${{ matrix.label }}
+    needs: plan
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.windows_only) }}
     runs-on: ${{ matrix.os }}
     strategy:
       # Not fail-fast: one platform's signing problem should not hide another
       # platform's build problem. You want every failure in one run.
       fail-fast: false
-      matrix:
-        include:
-          - os: macos-14
-            label: macOS (Apple Silicon)
-            target: aarch64-apple-darwin
-            args: "--target aarch64-apple-darwin"
-          - os: macos-15-intel
-            label: macOS (Intel)
-            target: x86_64-apple-darwin
-            args: "--verbose --target x86_64-apple-darwin"
-          - os: ubuntu-22.04
-            label: Linux (x64)
-            target: x86_64-unknown-linux-gnu
-            # --verbose because Tauri reports AppImage failures as the bare
-            # string "failed to run linuxdeploy" and swallows linuxdeploy's own
-            # stderr. Without it a failure here is undiagnosable from the log.
-            args: "--verbose"
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
 
     # Job level, not step level, so `if:` conditions can read it. `secrets` is
     # not a context that step conditions can see; `env` is, and a job-level
@@ -218,6 +256,38 @@ jobs:
       # trying to eject it, and a volume or `diskimages-helper` left mounted by an
       # earlier attempt. Remove both before bundling. All best-effort: none of this
       # can fail the build, it only takes away avoidable contention.
+      # Intel only. Tauri's bundled bundle_dmg.sh (create-dmg) detaches its scratch
+      # image with `hdiutil detach`, and its retry fires only on exit code 16
+      # (EBUSY). The Intel runner instead fails with exit 1, "detach: timeout for
+      # DiskArbitration expired", so the script gives up on the first attempt and
+      # leaves the image mounted. The script is regenerated into target/ on every
+      # build, so it cannot be patched; but it finds `hdiutil` through PATH. This
+      # puts a wrapper first on PATH that retries the detach with escalation
+      # (mitigate, diskutil eject, detach -force) and logs timings. See
+      # desktop/scripts/hdiutil-resilient.sh. Apple Silicon keeps the stock tool.
+      - name: Install resilient hdiutil (Intel DMG)
+        if: matrix.target == 'x86_64-apple-darwin'
+        shell: bash
+        run: |
+          shim_dir="$RUNNER_TEMP/devhub-hdiutil-shim"
+          mkdir -p "$shim_dir"
+          install -m 0755 desktop/scripts/hdiutil-resilient.sh "$shim_dir/hdiutil"
+          echo "$shim_dir" >> "$GITHUB_PATH"
+          echo "DEVHUB_DMG_LOG=$shim_dir/hdiutil-shim.log" >> "$GITHUB_ENV"
+          echo "DEVHUB_HDIUTIL_SHIM=$shim_dir/hdiutil" >> "$GITHUB_ENV"
+
+      # PATH from $GITHUB_PATH only applies to later steps, so prove it took effect
+      # here rather than finding out from a 10-minute DMG build.
+      - name: Check hdiutil shim is first on PATH
+        if: matrix.target == 'x86_64-apple-darwin'
+        shell: bash
+        run: |
+          resolved=$(command -v hdiutil)
+          echo "hdiutil resolves to $resolved"
+          [ "$resolved" = "$DEVHUB_HDIUTIL_SHIM" ] || { echo "::error::hdiutil shim is not first on PATH"; exit 1; }
+          # A passthrough call must reach the real tool.
+          hdiutil info > /dev/null
+
       - name: Quiet DiskArbitration before DMG bundling
         if: runner.os == 'macOS'
         shell: bash
@@ -275,11 +345,17 @@ jobs:
         shell: bash
         run: |
           echo "::warning::macOS bundle failed on the first attempt; retrying once. If this was an hdiutil/DiskArbitration timeout it is a runner flake."
+          # Intel: the shim's ladder (the failed attempt left its image attached).
+          if [ -n "${DEVHUB_HDIUTIL_SHIM:-}" ]; then
+            "$DEVHUB_HDIUTIL_SHIM" --cleanup || true
+          fi
           for vol in /Volumes/DevHub* /Volumes/dmg.*; do
             [ -d "$vol" ] || continue
             hdiutil detach "$vol" -force || true
           done
           find desktop/src-tauri/target -type d -path '*release/bundle/dmg' -exec rm -rf {} + 2>/dev/null || true
+          # create-dmg's scratch image, left beside the .app when it dies mid-way.
+          find desktop/src-tauri/target -path '*release/bundle/macos/rw.*.dmg' -delete 2>/dev/null || true
 
       - name: Build, sign, and bundle (retry)
         id: build_retry
@@ -349,6 +425,31 @@ jobs:
             spctl -a -vv -t exec "$APP"
           fi
 
+      # The shim can fall back to `detach -force`. Check the finished image is
+      # intact before it is uploaded; `verify` reads and checksums it without
+      # mounting, so it does not touch DiskArbitration.
+      - name: Verify DMG integrity (Intel)
+        if: matrix.target == 'x86_64-apple-darwin'
+        shell: bash
+        run: |
+          dmgs=$(find desktop/src-tauri/target -path '*release/bundle/dmg/*.dmg')
+          [ -n "$dmgs" ] || { echo "::error::no DMG was produced"; exit 1; }
+          echo "$dmgs" | while IFS= read -r dmg; do
+            echo "Verifying $dmg"
+            hdiutil verify "$dmg"
+          done
+
+      # What the shim saw: timings of create/convert and every detach step. Small,
+      # and the only way to learn why a runner was slow after the fact.
+      - name: Upload hdiutil diagnostics (Intel)
+        if: always() && matrix.target == 'x86_64-apple-darwin'
+        uses: actions/upload-artifact@v4
+        with:
+          name: hdiutil-diagnostics-${{ matrix.target }}
+          path: ${{ runner.temp }}/devhub-hdiutil-shim/hdiutil-shim.log
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -367,6 +468,9 @@ jobs:
   # is built on Linux and handed to the Windows job as a tarball.
   wsl-payload:
     name: Windows app - Linux payload
+    # `windows` and `windows-smoke` hang off this job, so skipping it skips the
+    # whole Windows leg of a macos_intel_only dispatch.
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.macos_intel_only) }}
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -552,7 +656,8 @@ jobs:
   publish:
     name: Publish release
     needs: [build, windows]
-    if: startsWith(github.ref, 'refs/tags/v')
+    # A macos_intel_only dispatch must never publish, even when run on a tag ref.
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && !(github.event_name == 'workflow_dispatch' && inputs.macos_intel_only) }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
