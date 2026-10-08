@@ -36,6 +36,23 @@ function log(msg) {
   process.stdout.write(`[stage-dashboard] ${msg}\n`);
 }
 
+/**
+ * Where `next build` writes. Defaults to `.next`.
+ *
+ * A relative `.next-*` name (DEVHUB_DIST_DIR) keeps a rebuild off the checkout's
+ * live `.next`, which `devhub.service` may be serving. Anything else is refused
+ * so a bad value cannot point the build at an absolute path.
+ */
+export function nextDistDir(env = process.env) {
+  const raw = typeof env.DEVHUB_DIST_DIR === "string" ? env.DEVHUB_DIST_DIR.trim() : "";
+  if (!raw || raw === ".next") return ".next";
+  if (!/^\.next-[A-Za-z0-9._-]+$/.test(raw)) {
+    throw new Error(`DEVHUB_DIST_DIR must look like .next-rebuild, not ${raw}`);
+  }
+  return raw;
+}
+
+
 /** Git commit the bundle is built from — compared at runtime to the linked checkout. */
 function writeBundleSourceMarker() {
   const res = spawnSync("git", ["rev-parse", "HEAD"], {
@@ -90,7 +107,8 @@ async function buildNext() {
   // session can reuse cached CSS from before the last edit — the installed app
   // then ships a stylesheet missing rules its JS references. Start clean: the
   // desktop build is a full build anyway.
-  fs.rmSync(path.join(dashboardDir, ".next"), { recursive: true, force: true });
+  const distDir = nextDistDir();
+  fs.rmSync(path.join(dashboardDir, distDir), { recursive: true, force: true });
   const content = emptyContentTree();
   try {
     await new Promise((resolve, reject) => {
@@ -151,7 +169,8 @@ async function buildNext() {
 }
 
 function stageServer() {
-  const standalone = path.join(dashboardDir, ".next", "standalone");
+  const distDir = nextDistDir();
+  const standalone = path.join(dashboardDir, distDir, "standalone");
   if (!fs.existsSync(standalone)) {
     throw new Error(
       `Next produced no standalone output at ${standalone}. ` +
@@ -174,7 +193,7 @@ function stageServer() {
 
   // Traced output deliberately excludes these two — they are served, not
   // required, so nothing in the graph points at them.
-  if (!copyDir(path.join(dashboardDir, ".next", "static"), path.join(serverDir, ".next", "static"))) {
+  if (!copyDir(path.join(dashboardDir, distDir, "static"), path.join(serverDir, ".next", "static"))) {
     throw new Error("Missing .next/static — the app would render unstyled with no client JS.");
   }
   copyDir(path.join(dashboardDir, "public"), path.join(serverDir, "public"));

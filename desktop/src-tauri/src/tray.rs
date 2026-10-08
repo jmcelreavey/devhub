@@ -33,19 +33,33 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
         None::<&str>,
     )?;
     let quit = MenuItem::with_id(app, "tray-quit-devhub", "Quit DevHub", true, None::<&str>)?;
-    Menu::with_items(
-        app,
-        &[
-            &show,
-            &hide,
-            &PredefinedMenuItem::separator(app)?,
-            &restart,
-            &logs,
-            &updates,
-            &PredefinedMenuItem::separator(app)?,
-            &quit,
-        ],
-    )
+    let sep_a = PredefinedMenuItem::separator(app)?;
+    let sep_b = PredefinedMenuItem::separator(app)?;
+    #[cfg(windows)]
+    {
+        let rebuild = MenuItem::with_id(
+            app,
+            "rebuild-from-checkout",
+            "Rebuild from Checkout…",
+            true,
+            None::<&str>,
+        )?;
+        return Menu::with_items(
+            app,
+            &[
+                &show, &hide, &sep_a, &restart, &rebuild, &logs, &updates, &sep_b, &quit,
+            ],
+        );
+    }
+    #[cfg(not(windows))]
+    {
+        Menu::with_items(
+            app,
+            &[
+                &show, &hide, &sep_a, &restart, &logs, &updates, &sep_b, &quit,
+            ],
+        )
+    }
 }
 
 #[cfg(target_os = "macos")]

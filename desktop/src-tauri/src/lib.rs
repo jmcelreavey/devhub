@@ -17,6 +17,7 @@ mod background;
 mod icon;
 mod logging;
 mod paths;
+mod ports;
 mod selftest;
 mod sidecar;
 mod tray;
@@ -1489,6 +1490,120 @@ fn keep_paseo_runnable_then_prune(log: &DesktopLog, backend: &wsl::WslBackend, i
     }
 }
 
+/// Pick the dashboard and terminal ports, naming whoever holds the ones we want.
+///
+/// A leftover DevHub server from an earlier start (a reinstall can orphan it
+/// inside the distro) is the one holder we may stop, and only after the user
+/// agrees. Every other holder is logged and left alone; DevHub then uses the
+/// ports it used last time, or free ones.
+fn resolve_ports(
+    app: &tauri::AppHandle,
+    backend: &wsl::WslBackend,
+    log: &DesktopLog,
+    sidecar: &Sidecar,
+    previous_ports: Option<[u16; 2]>,
+) -> Result<[u16; 2], String> {
+    let automatic = [
+        std::env::var_os("DEVHUB_PORT").is_none(),
+        std::env::var_os("DEVHUB_TERMINAL_PORT").is_none(),
+    ];
+    let install_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.display().to_string()))
+        .unwrap_or_default();
+    let pick = |occupied: &[u16]| {
+        wsl::select_ports_preferring(sidecar.preferred_ports, previous_ports, automatic, |port| {
+            !occupied.contains(&port) && std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()
+        })
+    };
+
+    let mut occupied = backend.listening_ports()?;
+    // Ports we care about: the defaults, and last time's fallbacks.
+    let wanted: Vec<u16> = sidecar
+        .preferred_ports
+        .iter()
+        .chain(previous_ports.iter().flatten())
+        .copied()
+        .filter(|port| {
+            occupied.contains(port) || std::net::TcpListener::bind(("127.0.0.1", *port)).is_err()
+        })
+        .collect();
+    let mut holders = Vec::new();
+    for port in &wanted {
+        let mut found = ports::wsl_holders(backend, *port);
+        if found.is_empty() && !occupied.contains(port) {
+            found = ports::windows_holders(*port, &install_dir);
+        }
+        for holder in &found {
+            log.write_line(
+                "shell:startup",
+                &format!(
+                    "[startup] {} (kind={:?}, side={:?}, command={})",
+                    ports::describe(holder),
+                    holder.kind,
+                    holder.side,
+                    holder.command
+                ),
+            );
+        }
+        holders.extend(found);
+    }
+    holders.dedup_by_key(|holder| (holder.port, holder.pid));
+    let plan = ports::plan_clash(holders);
+
+    if !plan.stoppable.is_empty() && ask_to_free_ports(app, &plan.stoppable) {
+        let stopped = ports::stop_own_holders(backend, &install_dir, &plan.stoppable);
+        log.write_line(
+            "shell:startup",
+            &format!("[startup] asked DevHub's own leftover processes to stop: {stopped:?}"),
+        );
+        // Give the supervisor time to take its children down.
+        let deadline = Instant::now() + Duration::from_secs(15);
+        loop {
+            occupied = backend.listening_ports()?;
+            if plan.stoppable.iter().all(|h| !occupied.contains(&h.port))
+                || Instant::now() > deadline
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        }
+    }
+
+    match pick(&occupied) {
+        Ok(ports) => {
+            if !plan.others.is_empty() {
+                log.write_line(
+                    "shell:startup",
+                    &format!(
+                        "[startup] not DevHub's own process, so it was left running; using ports {ports:?}"
+                    ),
+                );
+            }
+            Ok(ports)
+        }
+        Err(message) => Err(ports::pinned_conflict_message(&message, &plan)),
+    }
+}
+
+/// Ask whether to stop DevHub's own leftover process. `false` on any failure
+/// to ask: the safe answer is to leave it and use other ports.
+fn ask_to_free_ports(app: &tauri::AppHandle, stoppable: &[ports::Holder]) -> bool {
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.dialog()
+        .message(ports::free_the_port_prompt(stoppable))
+        .title("DevHub is already running")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Free the port".into(),
+            "Use other ports".into(),
+        ))
+        .show(move |confirmed| {
+            let _ = tx.send(confirmed);
+        });
+    rx.recv_timeout(Duration::from_secs(300)).unwrap_or(false)
+}
+
 fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     let sidecar = state.sidecar.clone();
@@ -1542,8 +1657,12 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
     // A checkout's already-unpacked payload, for iterating on the shell without
     // rebuilding and re-extracting the whole bundle.
     let payload_started = Instant::now();
-    let payload = match std::env::var("DEVHUB_WSL_PAYLOAD_DIR") {
-        Ok(dir) if !dir.trim().is_empty() => dir.trim().to_string(),
+    let (payload, base_payload_dir, base_payload_id) = match std::env::var("DEVHUB_WSL_PAYLOAD_DIR")
+    {
+        Ok(dir) if !dir.trim().is_empty() => {
+            let dir = dir.trim().to_string();
+            (dir.clone(), dir, String::new())
+        }
         _ => {
             let resource_dir = app
                 .path()
@@ -1557,7 +1676,7 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
                 })?
                 .trim()
                 .to_string();
-            let dir = backend.payload_dir(&id);
+            let bundled_dir = backend.payload_dir(&id);
             if !backend.payload_installed(&id) {
                 set_boot(
                     app,
@@ -1573,7 +1692,19 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
                 log.write_line("shell:wsl", &format!("[wsl] reusing cached payload {id}"));
             }
             keep_paseo_runnable_then_prune(&log, &backend, &id);
-            dir
+            let record = backend.local_payload();
+            let complete = record
+                .as_ref()
+                .is_some_and(|item| backend.payload_dir_complete(&item.dir));
+            let (dir, why) = wsl::choose_startup_payload(
+                &backend.app_data,
+                &id,
+                &bundled_dir,
+                record.as_ref(),
+                complete,
+            );
+            log.write_line("shell:wsl", &format!("[wsl] {why}"));
+            (dir, bundled_dir, id)
         }
     };
     log.write_line(
@@ -1593,19 +1724,7 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
         .ok()
         .and_then(|text| wsl::parse_saved_ports(&text));
     let ports = startup_phase(&log, "ports", || {
-        let occupied = backend.listening_ports()?;
-        wsl::select_ports_preferring(
-            sidecar.preferred_ports,
-            previous_ports,
-            [
-                std::env::var_os("DEVHUB_PORT").is_none(),
-                std::env::var_os("DEVHUB_TERMINAL_PORT").is_none(),
-            ],
-            |port| {
-                !occupied.contains(&port)
-                    && std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()
-            },
-        )
+        resolve_ports(app, &backend, &log, &sidecar, previous_ports)
     })?;
     if ports != sidecar.preferred_ports {
         // Remembered so the next launch gets the same origin (and its saved settings).
@@ -1676,6 +1795,10 @@ fn run_wsl_startup(app: &tauri::AppHandle) -> Result<(), String> {
             &payload,
             checkout.as_deref(),
             secondary,
+            sidecar::BasePayload {
+                dir: &base_payload_dir,
+                id: &base_payload_id,
+            },
             move |event| set_boot(&events, event),
         )
     })
@@ -1906,6 +2029,63 @@ fn show_main_window(app: &tauri::AppHandle) {
     }
     #[cfg(target_os = "macos")]
     tray::set_visible(app, false);
+}
+
+/// Windows View / tray: open the dashboard page that rebuilds inside WSL.
+/// The shell does not run npm itself.
+fn open_checkout_rebuild(app: &tauri::AppHandle) {
+    menu_log(app, "[menu] rebuild-from-checkout");
+    show_main_window(app);
+    if let Some(base) = current_dashboard_origin(app) {
+        if let Some(window) = app.get_webview_window("main") {
+            let target = format!("{}/status?tab=maintenance", base.trim_end_matches('/'));
+            if let Ok(url) = target.parse() {
+                let _ = window.navigate(url);
+                return;
+            }
+        }
+    }
+    app.dialog()
+        .message("DevHub is still starting. When the dashboard is up, open System \u{2192} Maintenance and use Pull and rebuild.")
+        .title("Rebuild from Checkout")
+        .kind(MessageDialogKind::Info)
+        .show(|_| {});
+}
+
+/// Tray / menu "Check for Updates…": the dashboard shows the result in its
+/// banner. If it isn't loaded (still booting, or failed to start) nothing
+/// would be listening, so answer in a native dialog instead of in silence.
+fn check_for_updates_from_menu(app: &tauri::AppHandle) {
+    let dashboard_loaded = app
+        .try_state::<AppState>()
+        .and_then(|state| {
+            state
+                .boot
+                .lock()
+                .ok()
+                .map(|boot| matches!(*boot, BootState::Ready { .. }))
+        })
+        .unwrap_or(false);
+    if dashboard_loaded {
+        let _ = app.emit("devhub://check-updates", ());
+        return;
+    }
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let outcome = updater::check_update_outcome(handle.clone()).await;
+        let (title, kind) = match &outcome {
+            updater::CheckOutcome::Failed { .. } => {
+                ("Update check failed", MessageDialogKind::Warning)
+            }
+            _ => ("Check for Updates", MessageDialogKind::Info),
+        };
+        handle
+            .dialog()
+            .message(updater::describe_outcome(&outcome))
+            .title(title)
+            .kind(kind)
+            .show(|_| {});
+    });
 }
 
 fn menu_log(app: &tauri::AppHandle, message: &str) {
@@ -2189,9 +2369,22 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     // Status page, not here. A desktop-only menu that grows a parallel set of
     // product actions is how two divergent UIs happen.
     // Rebuild and Attach both run a native `npm` from a checkout, which on
-    // Windows would be the wrong machine — the server lives in WSL.
+    // Windows would be the wrong machine — the server lives in WSL. The Windows
+    // item only opens the dashboard page that rebuilds inside the distro.
     let view_menu = if cfg!(windows) {
-        Submenu::with_items(app, "View", true, &[&reload, &show_logs, &open_logs_folder])?
+        let rebuild_checkout = MenuItem::with_id(
+            app,
+            "rebuild-from-checkout",
+            "Rebuild from Checkout…",
+            true,
+            None::<&str>,
+        )?;
+        Submenu::with_items(
+            app,
+            "View",
+            true,
+            &[&reload, &rebuild_checkout, &show_logs, &open_logs_folder],
+        )?
     } else {
         Submenu::with_items(
             app,
@@ -2333,6 +2526,7 @@ pub fn run() {
             background::login_item_set,
             updater::current_version,
             updater::check_update,
+            updater::check_update_outcome,
             updater::install_update,
             updater::relaunch
         ])
@@ -2564,9 +2758,11 @@ pub fn run() {
                 }
             }
             "rebuild-dashboard" => rebuild_dashboard(app),
+            "rebuild-from-checkout" => open_checkout_rebuild(app),
             "check-updates" => {
+                menu_log(app, "[menu] check-updates requested");
                 show_main_window(app);
-                let _ = app.emit("devhub://check-updates", ());
+                check_for_updates_from_menu(app);
             }
             /*
              * Toggle between the packaged server and a checkout server.
@@ -2825,20 +3021,44 @@ mod tests {
         assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
     }
 
+    /// Answer one request, then close without ever resetting the connection.
+    ///
+    /// Reading until the blank line means the whole request is consumed, so
+    /// dropping the socket cannot turn unread bytes into an RST that races the
+    /// client's read of the response (what made these tests flake on Windows).
+    /// `shutdown(Write)` sends a clean FIN first, then the thread drains until
+    /// the client closes.
+    fn serve_one(listener: std::net::TcpListener, response: &'static [u8]) {
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0_u8; 1024];
+            while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                match stream.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(read) => request.extend_from_slice(&chunk[..read]),
+                }
+            }
+            assert!(
+                String::from_utf8_lossy(&request).starts_with("GET /api/desktop/health HTTP/1.1")
+            );
+            stream.write_all(response).unwrap();
+            let _ = stream.shutdown(std::net::Shutdown::Write);
+            while matches!(stream.read(&mut chunk), Ok(read) if read > 0) {}
+        });
+    }
+
     #[test]
     fn attach_requires_a_healthy_http_server() {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
-        std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let mut request = [0_u8; 1024];
-            let size = stream.read(&mut request).unwrap();
-            let request = String::from_utf8_lossy(&request[..size]);
-            assert!(request.starts_with("GET /api/desktop/health HTTP/1.1"));
-            stream
-                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 15\r\n\r\n{\"devhub\":true}")
-                .unwrap();
-        });
+        serve_one(
+            listener,
+            b"HTTP/1.1 200 OK\r\nContent-Length: 15\r\n\r\n{\"devhub\":true}",
+        );
 
         assert!(dev_server_responds(&format!("http://127.0.0.1:{port}")).is_ok());
     }
@@ -2847,27 +3067,16 @@ mod tests {
     fn attach_rejects_an_unhealthy_or_non_devhub_http_server() {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
-        std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let mut request = [0_u8; 1024];
-            let _ = stream.read(&mut request).unwrap();
-            stream
-                .write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n")
-                .unwrap();
-        });
+        serve_one(
+            listener,
+            b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n",
+        );
 
         assert!(dev_server_responds(&format!("http://127.0.0.1:{port}")).is_err());
 
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
-        std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let mut request = [0_u8; 1024];
-            let _ = stream.read(&mut request).unwrap();
-            stream
-                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}")
-                .unwrap();
-        });
+        serve_one(listener, b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}");
 
         assert!(dev_server_responds(&format!("http://127.0.0.1:{port}")).is_err());
     }

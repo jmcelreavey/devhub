@@ -146,6 +146,13 @@ pub fn health_check(port: u16, token: &str) -> bool {
     }
 }
 
+/// The installed payload a checkout rebuild copies its Node runtime from.
+/// Empty `id` means there is no installed payload to build against.
+pub(crate) struct BasePayload<'a> {
+    pub dir: &'a str,
+    pub id: &'a str,
+}
+
 impl Sidecar {
     pub fn new(port: u16, terminal_port: u16, token: String, log: DesktopLog) -> Self {
         Self {
@@ -268,6 +275,7 @@ impl Sidecar {
         payload: &str,
         checkout: Option<&str>,
         secondary: bool,
+        base: BasePayload<'_>,
         on_event: F,
     ) -> std::io::Result<()>
     where
@@ -289,6 +297,10 @@ impl Sidecar {
         // either, and the health route reports `null` there. Cheap to have
         // right here, where the shell and the server are versioned separately.
         env.insert("DEVHUB_VERSION".into(), env!("CARGO_PKG_VERSION").into());
+        if !base.id.is_empty() {
+            env.insert("DEVHUB_BASE_PAYLOAD_DIR".into(), base.dir.to_string());
+            env.insert("DEVHUB_BASE_PAYLOAD_ID".into(), base.id.to_string());
+        }
         if secondary {
             // The existing dev service may already own the same scheduled jobs.
             env.insert("DEVHUB_SCHEDULER".into(), "0".into());

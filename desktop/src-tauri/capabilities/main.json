@@ -19,6 +19,7 @@
     "allow-set-desktop-icon",
     "allow-current-version",
     "allow-check-update",
+    "allow-check-update-outcome",
     "allow-install-update",
     "allow-relaunch",
     "allow-wake-helper-install",

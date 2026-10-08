@@ -9,6 +9,7 @@ import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { useSearchParams } from "next/navigation";
 import { fetchStatusRows, type StatusSnapshot, type ServiceInfo, type ServicesStatus, type GitStatus, type McpRuntimeEntry } from "./status-data";
 import styles from "./status.module.css";
+import { CheckoutRebuildCard } from "@/components/desktop/CheckoutRebuildCard";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { copyTextToClipboard } from "@/lib/clipboard";
@@ -247,6 +248,7 @@ export default function StatusPage() {
   const [rebuildInfo, setRebuildInfo] = useState<RebuildCapability | null>(null);
   const [rebuilding, setRebuilding] = useState(false);
   const [rebuildMessage, setRebuildMessage] = useState<string | null>(null);
+  const [checkoutRebuild, setCheckoutRebuild] = useState<boolean | null>(null);
   const rebuildWatch = useRef<{ poll: number; timeout: number } | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncDirtyModal, setSyncDirtyModal] = useState<{ dirtyCount: number } | null>(null);
@@ -972,6 +974,11 @@ export default function StatusPage() {
           actual status — the reason anyone opens this page — below the fold.
         */}
         <SectionLabel>Maintenance</SectionLabel>
+        <CheckoutRebuildCard
+          onAvailability={setCheckoutRebuild}
+          autoStart={params.get("rebuild") === "1"}
+        />
+        {checkoutRebuild === false && (
         <div className="card min-w-0">
           <div className="card-header">
             <span className="flex items-center gap-1.5"><Hammer size={12} />Rebuild dashboard</span>
@@ -1030,6 +1037,7 @@ export default function StatusPage() {
             </div>
           </div>
         </div>
+        )}
         </>
         )}
 

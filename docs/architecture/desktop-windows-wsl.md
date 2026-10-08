@@ -69,9 +69,17 @@ filesystem, not `/mnt/c` — 9P is far too slow for `git` and `node_modules`.
 3. Create the app-data tree, `0700`.
 4. If `runtime/<payload-id>/.complete` is missing, extract the bundled
    `devhub-payload.tar.gz` into it (`.partial` + rename; older builds removed).
-5. Check the dashboard and terminal ports on both Windows and WSL. If the
-   defaults are occupied, choose distinct free ports. Explicit `DEVHUB_PORT`
-   and `DEVHUB_TERMINAL_PORT` settings remain pinned; a failure lists all clashes.
+5. Check the dashboard and terminal ports on both Windows and WSL. A holder is
+   classified from its command line, working directory and cgroup (`ports.rs`):
+   DevHub's own leftover sidecar or app, `devhub.service`, Paseo, or something
+   else. Only DevHub's own leftover gets a **Free the port** stop. The service,
+   Paseo and anything else are named and left running. If the defaults are taken
+   and both ports are automatic, saved fallback ports are reused when they are
+   free; otherwise free ports are chosen. Explicit `DEVHUB_PORT` and
+   `DEVHUB_TERMINAL_PORT` stay pinned, and a failure lists every clash. Reinstall
+   stops DevHub.exe and the WSL supervisor under this install's runtime before
+   replacing files (`DevHubStopOwnProcesses`). It does not stop `devhub.service`
+   or Paseo, and a missing WSL does not fail the install.
 6. Start `bin/devhub-wsl-launch`, which execs the supervisor under your login
    shell (`$SHELL -lic`) so `claude`, `codex`, nvm/volta tools resolve as in
    your terminal.
@@ -255,10 +263,33 @@ stays in the server log.
 
 - Closing the window **hides** it to a notification-area icon; the server, agents
   and scheduled jobs keep running until "Quit DevHub" in the tray menu.
-- The tray also offers Open, Hide, Restart Backend, Open Logs Folder and Check
-  for Updates. Restart Backend relaunches the shell and its owned backend.
-- "Attach to Dev Server" and "Rebuild Dashboard" are hidden — they spawn a
-  native `npm`.
+- The tray offers Open, Hide, Restart Backend, Rebuild from Checkout…, Open
+  Logs Folder and Check for Updates. Restart Backend relaunches the shell and
+  its owned backend. Rebuild from Checkout opens System → Maintenance; it does
+  not run `npm` on Windows.
+- View → Rebuild Dashboard (native `npm`) and Attach to Dev Server stay hidden.
+  **Rebuild from checkout** (Maintenance, and the same tray item) is the Windows
+  path. It runs inside WSL when the server is the packaged app, or on the
+  machine when `devhub.service` is what is answering. A checkout dev server
+  keeps Rebuild & restart. Pull is `--ff-only`. Uncommitted changes, a
+  merge/rebase in progress, and a diverged branch are refused; nothing is
+  stashed or reset. Install follows the lockfile (`npm ci` for a new payload,
+  `npm install` for the live service). If the service install rewrites
+  `package-lock.json`, that file is restored and the rebuild stops; the running
+  build stays up. The service builds into `dashboard/.next-rebuild` and swaps
+  it in only after the new build answers, putting the previous build back if
+  the restart fails. The packaged app assembles `runtime/local-<commit>` beside
+  the installed payload and asks for a restart; the next launch uses it when it
+  matches this install and is complete. Pruning old payloads keeps `local-*`.
+  Review sync offers **Pull and rebuild** when the checkout is behind, clean,
+  and this rebuild can run. Check for Updates offers it when the checkout is
+  ahead of the running build (the running commit is an ancestor of HEAD, so an
+  unrelated public history is not treated as ahead).
+- Check for Updates always reports a result: an update, up to date, no published
+  release yet, or the error. A missing release is not silence. Signature checks
+  stay required.
+- Scoped content sync skips a folder that is not in the checkout unless that
+  folder is still tracked. A missing `diagrams/` does not fail `git add`.
 - The dashboard's offline service worker is not used in the desktop shell and
   is unregistered there. On Windows a registered worker held the bootstrap
   navigation for ~60s on every launch after the first (0.5s without it).
@@ -290,8 +321,13 @@ stays in the server log.
   once. The file is per Linux user, so a `devhub.service` running under the same
   user (and a checkout dev server) reads and writes the same choice: changing it
   in one changes it in the others.
-- Release builds hide checkout rebuild notices. Linking a private content repo
-  does not mean the bundled application needs a developer rebuild.
+- Release builds hide the stale-bundle checkout notice. That notice is separate
+  from Rebuild from Checkout, which a linked source checkout can still run.
+- Two machines writing the flat `tasks/YYYY-MM-DD.json` files can conflict on
+  sync. Task profiles (`docs/guides/task-profiles.md`) already split those
+  writes; the active profile is per machine (`~/.config/devhub/profile.json` or
+  `DEVHUB_PROFILE`) and is not committed. A prompt that notices the other
+  machine and suggests a profile is not built.
 
 ## No fork, no GitHub, no Git
 

@@ -1,0 +1,456 @@
+#!/usr/bin/env node
+/**
+ * Rebuild DevHub from the user's own checkout, on Linux and in WSL.
+ *
+ * The Mac app has View → Rebuild Dashboard; the Windows app runs its server in
+ * WSL2, where that menu item (a native `npm` on the wrong machine) can't work.
+ * This is the Linux-side equivalent, run by the dashboard in two situations:
+ *
+ *   mode "service"  the always-on `devhub.service` that runs from a checkout
+ *                   (WorkingDirectory=<repo> or <repo>/dashboard). Pull, build
+ *                   into a separate dist dir, swap it in, restart the unit,
+ *                   check it answers. A failed build never touches the running
+ *                   one; a failed restart or health check swaps the old build back.
+ *   mode "payload"  the packaged Windows app with a linked checkout. Pull, stage
+ *                   the dashboard from the checkout, and assemble a new
+ *                   payload under <app-data>/runtime/local-<commit>. The shell
+ *                   picks it on the next start (the page offers the restart).
+ *
+ * Rules that hold in both modes:
+ *   - never stash, reset, or check out the user's work: a dirty or diverged
+ *     checkout is refused. The only checkout is restoring a package-lock.json
+ *     that npm rewrote after the tree was verified clean;
+ *   - one rebuild at a time (a lock file whose owner must still be alive);
+ *   - progress is a status file the UI polls, output is a log it can show.
+ *
+ * All side effects go through `deps` so the phases, the failure handling and
+ * the lock are unit-tested without a git repo, npm or systemd.
+ */
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+export const PHASE_LABELS = {
+  preflight: "Check the checkout",
+  pull: "Pull new commits",
+  install: "Install dependencies",
+  build: "Build",
+  switch: "Switch to the new build",
+  restart: "Restart devhub.service",
+  verify: "Check it came back",
+  assemble: "Assemble the new app payload",
+};
+
+export const MODE_PHASES = {
+  service: ["preflight", "pull", "install", "build", "switch", "restart", "verify"],
+  payload: ["preflight", "pull", "install", "build", "assemble"],
+};
+
+export const UNIT = "devhub.service";
+export const REBUILD_DIST = ".next-rebuild";
+export const PREVIOUS_DIST = ".next-previous";
+
+export class RebuildError extends Error {
+  constructor(message, { rolledBack = false } = {}) {
+    super(message);
+    this.name = "RebuildError";
+    this.rolledBack = rolledBack;
+  }
+}
+
+export function initialStatus(mode, now) {
+  return {
+    state: "running",
+    mode,
+    phase: null,
+    phases: MODE_PHASES[mode].map((id) => ({ id, label: PHASE_LABELS[id], state: "pending" })),
+    startedAt: now,
+    finishedAt: null,
+    error: null,
+    rolledBack: false,
+    restartRequired: false,
+    commit: null,
+  };
+}
+
+/** Whether a process with this pid is alive (signal 0 probes without signalling). */
+export function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === "EPERM";
+  }
+}
+
+/**
+ * Take the rebuild lock, or say who has it. A lock whose owner is gone (a crash,
+ * a reboot) is stale and replaced, so one bad run can never block rebuilds forever.
+ */
+export function acquireLock(lockFile, { fs: fsx = fs, alive = pidAlive, pid = process.pid, now = () => new Date().toISOString() } = {}) {
+  fsx.mkdirSync(path.dirname(lockFile), { recursive: true });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const fd = fsx.openSync(lockFile, "wx");
+      fsx.writeSync(fd, JSON.stringify({ pid, startedAt: now() }));
+      fsx.closeSync(fd);
+      return { ok: true, release: () => fsx.rmSync(lockFile, { force: true }) };
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+      let owner = null;
+      try {
+        owner = JSON.parse(fsx.readFileSync(lockFile, "utf8"));
+      } catch {
+        // unreadable: treat as stale
+      }
+      if (owner && Number.isInteger(owner.pid) && alive(owner.pid)) {
+        return { ok: false, owner };
+      }
+      fsx.rmSync(lockFile, { force: true });
+    }
+  }
+  return { ok: false, owner: null };
+}
+
+/** What git says about the checkout, from the same few commands the preflight uses. */
+export async function inspectCheckout(git, checkout, fsx = fs) {
+  const branch = (await git(["branch", "--show-current"])).stdout.trim();
+  const head = (await git(["rev-parse", "HEAD"])).stdout.trim();
+  const status = await git(["status", "--porcelain", "--untracked-files=no"]);
+  const dirty = status.stdout.split("\n").map((line) => line.trimEnd()).filter(Boolean);
+  const gitDir = path.join(checkout, ".git");
+  const inProgress = ["MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply"].some((name) => fsx.existsSync(path.join(gitDir, name)));
+  const counts = await git(["rev-list", "--left-right", "--count", "@{upstream}...HEAD"]);
+  let ahead = 0;
+  let behind = 0;
+  const hasUpstream = counts.code === 0;
+  if (hasUpstream) {
+    const [b, a] = counts.stdout.trim().split(/\s+/).map((n) => Number.parseInt(n, 10) || 0);
+    behind = b;
+    ahead = a;
+  }
+  return { branch, head, dirty, inProgress, hasUpstream, ahead, behind };
+}
+
+/** Why a rebuild must not start, or null. The user's uncommitted work is never touched. */
+export function refusalReason(state, { pull }) {
+  if (state.inProgress) return "A merge, rebase or cherry-pick is in progress. Finish or abort it first.";
+  if (state.dirty.length > 0) {
+    const shown = state.dirty.slice(0, 5).join("\n  ");
+    return `You have uncommitted changes in the checkout (${state.dirty.length}). Commit or stash them first; DevHub will not touch them.\n  ${shown}`;
+  }
+  if (!state.branch) return "The checkout is on a detached HEAD. Check out a branch first.";
+  if (pull && state.hasUpstream && state.ahead > 0 && state.behind > 0) {
+    return `The branch has diverged from its upstream (${state.ahead} ahead, ${state.behind} behind). Rebase or merge it yourself first.`;
+  }
+  return null;
+}
+
+function sha256(file, fsx) {
+  try {
+    return crypto.createHash("sha256").update(fsx.readFileSync(file)).digest("hex");
+  } catch {
+    return null;
+  }
+}
+
+function readJson(file, fsx) {
+  try {
+    return JSON.parse(fsx.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function buildEnv(extra) {
+  return { DEVHUB_VERIFY_BUILD: "", ...extra };
+}
+
+/**
+ * Run a rebuild. Resolves with the final status; never throws for an expected
+ * failure (the status carries it), so the caller always has something to show.
+ */
+export async function runRebuild(options, deps) {
+  const { mode, checkout, stateDir } = options;
+  const { fs: fsx = fs, run, now = () => new Date().toISOString(), sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = deps;
+  if (!MODE_PHASES[mode]) throw new Error(`Unknown rebuild mode: ${mode}`);
+
+  const statusFile = path.join(stateDir, "rebuild-status.json");
+  const logFile = path.join(stateDir, "rebuild.log");
+  fsx.mkdirSync(stateDir, { recursive: true });
+
+  const lock = acquireLock(path.join(stateDir, "rebuild.lock"), {
+    fs: fsx,
+    alive: deps.alive ?? pidAlive,
+    pid: deps.pid ?? process.pid,
+    now,
+  });
+  if (!lock.ok) {
+    // Deliberately does not touch the status file: it describes the run that owns the lock.
+    return { state: "refused", error: "A rebuild is already running.", owner: lock.owner };
+  }
+
+  const status = initialStatus(mode, now());
+  const log = (line) => fsx.appendFileSync(logFile, `${line}\n`);
+  const save = () => fsx.writeFileSync(statusFile, `${JSON.stringify(status, null, 2)}\n`);
+  fsx.writeFileSync(logFile, `[${now()}] rebuild started (${mode}) in ${checkout}\n`);
+  save();
+
+  const phase = (id) => status.phases.find((p) => p.id === id);
+  const git = (args) => run("git", args, { cwd: checkout, log });
+  const step = async (id, work) => {
+    const entry = phase(id);
+    status.phase = id;
+    entry.state = "running";
+    save();
+    log(`--- ${entry.label}`);
+    try {
+      const outcome = await work();
+      entry.state = outcome === "skipped" ? "skipped" : "done";
+      save();
+    } catch (error) {
+      entry.state = "failed";
+      throw error;
+    }
+  };
+  const mustRun = async (cmd, args, opts, what) => {
+    const result = await run(cmd, args, { ...opts, log });
+    if (result.code !== 0) throw new RebuildError(`${what} failed (exit ${result.code}). See the log for the output.`);
+    return result;
+  };
+
+  try {
+    if (mode === "payload" && !options.appData) {
+      throw new RebuildError("The app data directory was not passed, so a new payload cannot be assembled.");
+    }
+    let state;
+    await step("preflight", async () => {
+      state = await inspectCheckout(git, checkout, fsx);
+      const refusal = refusalReason(state, { pull: options.pull });
+      if (refusal) throw new RebuildError(refusal);
+    });
+
+    await step("pull", async () => {
+      if (!options.pull) return "skipped";
+      await mustRun("git", ["fetch", "--quiet"], { cwd: checkout }, "git fetch");
+      state = await inspectCheckout(git, checkout, fsx);
+      const refusal = refusalReason(state, { pull: true });
+      if (refusal) throw new RebuildError(refusal);
+      if (!state.hasUpstream || state.behind === 0) return "skipped";
+      // --ff-only: a fast-forward cannot overwrite anything of the user's.
+      await mustRun("git", ["pull", "--ff-only"], { cwd: checkout }, "git pull");
+      state = await inspectCheckout(git, checkout, fsx);
+    });
+    status.commit = state.head;
+
+    const dashboard = path.join(checkout, "dashboard");
+    const lockDirs = mode === "payload" ? [dashboard, path.join(checkout, "desktop")] : [dashboard];
+    const lockHash = lockDirs.map((dir) => sha256(path.join(dir, "package-lock.json"), fsx) ?? "none").join(":");
+    const buildRecordFile = mode === "service" ? path.join(dashboard, ".next", "devhub-build.json") : path.join(options.appData ?? "", "config", "local-payload.json");
+    const previousBuild = readJson(buildRecordFile, fsx);
+
+    await step("install", async () => {
+      const installed = lockDirs.every((dir) => fsx.existsSync(path.join(dir, "node_modules")));
+      // Installing rewrites node_modules under whatever is running from it, so it
+      // only happens when the lockfiles changed or the modules are missing.
+      if (installed && previousBuild?.lockHash === lockHash) return "skipped";
+      for (const dir of lockDirs) {
+        // ci for a payload: nothing is running from these modules, and ci
+        // installs the lockfile exactly. install for the service: ci would
+        // delete the node_modules the live unit is using. install still
+        // honours the lockfile; --no-package-lock would not.
+        const npmArgs = mode === "payload"
+          ? ["ci", "--no-audit", "--no-fund"]
+          : ["install", "--no-audit", "--no-fund"];
+        await mustRun("npm", npmArgs, { cwd: dir }, mode === "payload" ? "npm ci" : "npm install");
+        if (mode !== "service") continue;
+        const lockRel = path.relative(checkout, path.join(dir, "package-lock.json"));
+        const after = await git(["status", "--porcelain", "--", lockRel]);
+        if (after.code !== 0) throw new RebuildError("Could not check whether package-lock.json changed.");
+        if (!after.stdout.trim()) continue;
+        await mustRun("git", ["checkout", "--", lockRel], { cwd: checkout }, "Restoring package-lock.json");
+        throw new RebuildError("package-lock.json is out of sync with package.json; commit a regenerated lockfile");
+      }
+    });
+
+    if (mode === "service") {
+      const rebuildDist = path.join(dashboard, REBUILD_DIST);
+      const liveDist = path.join(dashboard, ".next");
+      const previousDist = path.join(dashboard, PREVIOUS_DIST);
+      fsx.rmSync(rebuildDist, { recursive: true, force: true });
+
+      try {
+        await step("build", async () => {
+          await mustRun("npm", ["run", "build"], { cwd: dashboard, env: buildEnv({ DEVHUB_DIST_DIR: REBUILD_DIST }) }, "The build");
+          if (!fsx.existsSync(path.join(rebuildDist, "BUILD_ID"))) throw new RebuildError("The build finished but produced no output.");
+          fsx.writeFileSync(path.join(rebuildDist, "devhub-build.json"), `${JSON.stringify({ commit: state.head, lockHash, builtAt: now() })}\n`);
+        });
+      } catch (error) {
+        // The running build was never touched.
+        fsx.rmSync(rebuildDist, { recursive: true, force: true });
+        throw error;
+      }
+
+      const swapBack = () => {
+        fsx.rmSync(liveDist, { recursive: true, force: true });
+        if (fsx.existsSync(previousDist)) fsx.renameSync(previousDist, liveDist);
+      };
+      await step("switch", async () => {
+        fsx.rmSync(previousDist, { recursive: true, force: true });
+        if (fsx.existsSync(liveDist)) fsx.renameSync(liveDist, previousDist);
+        fsx.renameSync(rebuildDist, liveDist);
+      });
+
+      const restart = async () => {
+        const result = await run("systemctl", ["--user", "restart", UNIT], { cwd: checkout, log });
+        if (result.code !== 0) throw new RebuildError(`systemctl restart ${UNIT} failed (exit ${result.code}).`);
+      };
+      const healthy = async () => {
+        const deadline = Date.now() + (options.healthTimeoutMs ?? 90_000);
+        while (Date.now() < deadline) {
+          if (await deps.healthy()) return true;
+          await sleep(1000);
+        }
+        return false;
+      };
+      try {
+        await step("restart", restart);
+        await step("verify", async () => {
+          if (!(await healthy())) throw new RebuildError(`${UNIT} did not answer after the restart.`);
+        });
+      } catch (error) {
+        log(`!!! ${error.message} Restoring the previous build.`);
+        swapBack();
+        status.rolledBack = true;
+        try {
+          await restart();
+          const back = await healthy();
+          log(back ? "Previous build restored and answering." : "Previous build restored but not answering yet; check `systemctl --user status devhub.service`.");
+        } catch (restoreError) {
+          log(`Could not restart after restoring: ${restoreError.message}`);
+        }
+        throw new RebuildError(`${error.message} The previous build was restored.`, { rolledBack: true });
+      }
+    } else {
+      await step("build", async () => {
+        await mustRun(process.execPath, [path.join(checkout, "desktop", "scripts", "stage-resources.mjs")], { cwd: checkout }, "Staging resources");
+        // .next-rebuild, not .next: a devhub.service on this checkout is running
+        // from .next, and the stage script deletes the dist dir it builds into.
+        await mustRun(process.execPath, [path.join(checkout, "desktop", "scripts", "stage-dashboard.mjs")], { cwd: checkout, env: buildEnv({ DEVHUB_DIST_DIR: REBUILD_DIST }) }, "The build");
+      });
+      await step("assemble", async () => {
+        const base = options.basePayloadDir;
+        if (!base || !fsx.existsSync(path.join(base, "runtime", "node"))) {
+          throw new RebuildError("The installed app payload (its Node runtime) was not found, so a new one can't be assembled.");
+        }
+        const staging = path.join(checkout, "desktop", "staging");
+        const target = path.join(options.appData, "runtime", `local-${state.head.slice(0, 12)}`);
+        const partial = `${target}.partial`;
+        fsx.rmSync(partial, { recursive: true, force: true });
+        fsx.mkdirSync(partial, { recursive: true });
+        const copy = (from, to) => fsx.cpSync(from, path.join(partial, to), { recursive: true, dereference: true, force: true });
+        copy(path.join(base, "runtime"), "runtime");
+        copy(path.join(staging, "server"), "server");
+        copy(path.join(staging, "services"), "services");
+        copy(path.join(staging, "resources"), "resources");
+        const launcher = path.join(partial, "bin", "devhub-wsl-launch");
+        fsx.mkdirSync(path.dirname(launcher), { recursive: true });
+        fsx.copyFileSync(path.join(checkout, "desktop", "wsl", "devhub-wsl-launch.sh"), launcher);
+        fsx.chmodSync(launcher, 0o755);
+        fsx.writeFileSync(path.join(partial, ".complete"), "");
+        fsx.rmSync(target, { recursive: true, force: true });
+        fsx.renameSync(partial, target);
+        // Recorded last: until this exists the shell keeps using the installed payload.
+        fsx.mkdirSync(path.dirname(buildRecordFile), { recursive: true });
+        fsx.writeFileSync(buildRecordFile, `${JSON.stringify({ dir: target, commit: state.head, lockHash, basePayloadId: options.basePayloadId ?? null, builtAt: now() }, null, 2)}\n`);
+        // Older local builds, except the one running right now.
+        const runtime = path.join(options.appData, "runtime");
+        for (const name of fsx.readdirSync(runtime)) {
+          const dir = path.join(runtime, name);
+          if (name.startsWith("local-") && dir !== target && dir !== base) fsx.rmSync(dir, { recursive: true, force: true });
+        }
+        status.restartRequired = true;
+      });
+    }
+
+    status.state = "succeeded";
+    status.phase = null;
+    log(`[${now()}] rebuild finished`);
+  } catch (error) {
+    status.state = "failed";
+    status.error = error instanceof Error ? error.message : String(error);
+    if (error instanceof RebuildError && error.rolledBack) status.rolledBack = true;
+    log(`[${now()}] rebuild failed: ${status.error}`);
+  } finally {
+    status.finishedAt = now();
+    save();
+    lock.release();
+  }
+  return status;
+}
+
+/** Real subprocess runner: output goes to the log line by line. */
+export function spawnRun(cmd, args, { cwd, env, log } = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args, { cwd, env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    const pump = (chunk, sink) => {
+      const text = chunk.toString();
+      if (sink === "out") stdout += text;
+      else stderr += text;
+      for (const line of text.split("\n")) if (line.trim()) log?.(line);
+    };
+    log?.(`$ ${cmd} ${args.join(" ")}`);
+    child.stdout.on("data", (chunk) => pump(chunk, "out"));
+    child.stderr.on("data", (chunk) => pump(chunk, "err"));
+    child.on("error", (error) => {
+      log?.(`could not start ${cmd}: ${error.message}`);
+      resolve({ code: 127, stdout, stderr: `${stderr}${error.message}` });
+    });
+    child.on("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
+  });
+}
+
+async function healthy(url) {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(3000) });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+function parseArgs(argv) {
+  const out = { pull: false };
+  for (const arg of argv) {
+    if (arg === "--pull") out.pull = true;
+    else if (arg.startsWith("--") && arg.includes("=")) {
+      const [key, ...rest] = arg.slice(2).split("=");
+      out[key] = rest.join("=");
+    }
+  }
+  return out;
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  const args = parseArgs(process.argv.slice(2));
+  const port = args.port ?? "1337";
+  const options = {
+    mode: args.mode,
+    checkout: args.checkout,
+    stateDir: args.state,
+    appData: args["app-data"],
+    basePayloadDir: args["base-payload"],
+    basePayloadId: args["base-payload-id"],
+    pull: args.pull,
+  };
+  if (!options.mode || !options.checkout || !options.stateDir) {
+    process.stderr.write("usage: checkout-rebuild.mjs --mode=service|payload --checkout=DIR --state=DIR [--pull] [--app-data=DIR --base-payload=DIR] [--port=N]\n");
+    process.exit(2);
+  }
+  const result = await runRebuild(options, { run: spawnRun, healthy: () => healthy(`http://127.0.0.1:${port}/api/status/dashboard/rebuild`) });
+  process.exit(result.state === "succeeded" ? 0 : 1);
+}

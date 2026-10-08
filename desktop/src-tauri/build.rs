@@ -21,6 +21,7 @@ fn main() {
             "login_item_set",
             "current_version",
             "check_update",
+            "check_update_outcome",
             "install_update",
             "relaunch",
         ]),

@@ -2,7 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Download, RefreshCw, X } from "lucide-react";
+import Link from "next/link";
 import { isDesktop, onDesktopEvent } from "@/lib/desktop/bridge";
+import { copyTextToClipboard } from "@/lib/clipboard";
+import {
+  CHECKING_NOTICE,
+  describeCheck,
+  type CheckOutcome,
+  type CheckoutRebuildHint,
+  type UpdateNotice,
+} from "@/lib/desktop/update-result";
 
 /**
  * The update banner.
@@ -50,6 +59,35 @@ export function UpdateBanner() {
   const [progress, setProgress] = useState<Progress | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Result of a check the user asked for. Always shown, even when there is
+  // nothing to install: a menu item that ends in silence reads as broken.
+  const [notice, setNotice] = useState<UpdateNotice | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
+
+  const runManualCheck = useCallback(async () => {
+    setNotice(CHECKING_NOTICE);
+    setShowDetails(false);
+    setDismissed(false);
+    let outcome: CheckOutcome;
+    try {
+      outcome = await invoke<CheckOutcome>("check_update_outcome");
+    } catch (error) {
+      outcome = {
+        status: "failed",
+        currentVersion: "this version",
+        message: "The update check could not run.",
+        details: error instanceof Error ? error.message : String(error),
+      };
+    }
+    // The user's own checkout is a second source of "newer".
+    const rebuild = await fetch("/api/rebuild", { cache: "no-store" })
+      .then((response) => (response.ok ? (response.json() as Promise<CheckoutRebuildHint>) : null))
+      .catch(() => null);
+    if (outcome.status === "available") {
+      setUpdate({ available: true, currentVersion: outcome.currentVersion, version: outcome.version, notes: outcome.notes ?? undefined });
+    }
+    setNotice(describeCheck(outcome, rebuild));
+  }, []);
 
   useEffect(() => {
     if (!isDesktop()) return;
@@ -72,21 +110,14 @@ export function UpdateBanner() {
     // The menu's "Check for Updates…" routes through the same banner, so
     // there is one place updates are presented rather than two.
     void onDesktopEvent("devhub://check-updates", () => {
-      void invoke<UpdateInfo>("check_update")
-        .then((info) => {
-          setUpdate(info);
-          setDismissed(false);
-        })
-        .catch(() => {
-          /* the menu item is fire-and-forget; failures show on next check */
-        });
+      void runManualCheck();
     });
 
     return () => {
       cleanupAvailable?.();
       cleanupProgress?.();
     };
-  }, []);
+  }, [runManualCheck]);
 
   const download = useCallback(async () => {
     setBusy(true);
@@ -109,6 +140,55 @@ export function UpdateBanner() {
   }, []);
 
   if (!isDesktop() || dismissed) return null;
+  const transferring = progress?.phase === "started" || progress?.phase === "downloading" || progress?.phase === "installing" || progress?.phase === "done";
+  if (notice && !transferring && progress?.phase !== "failed") {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        className="update-banner"
+        style={{ padding: "10px 14px", borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)", fontSize: "13px" }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: "220px" }}>
+            <strong style={{ color: notice.tone === "warning" ? "var(--warning, inherit)" : undefined }}>{notice.title}</strong>
+            {notice.body && <span style={{ color: "var(--text-subtle)" }}> {notice.body}</span>}
+          </div>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            {notice.actions.includes("install") && (
+              <button type="button" className="btn btn-primary" onClick={() => void download()} disabled={busy}>
+                <Download size={13} /> Install
+              </button>
+            )}
+            {notice.actions.includes("rebuild") && (
+              <Link className="btn" href="/status?tab=maintenance&rebuild=1">Rebuild from my checkout</Link>
+            )}
+            {notice.actions.includes("retry") && (
+              <button type="button" className="btn" onClick={() => void runManualCheck()}>
+                <RefreshCw size={13} /> Try again
+              </button>
+            )}
+            {notice.details && (
+              <button type="button" className="btn btn-ghost" aria-expanded={showDetails} onClick={() => setShowDetails((open) => !open)}>
+                Details
+              </button>
+            )}
+            {notice !== CHECKING_NOTICE && (
+              <button type="button" className="hub-icon-btn" aria-label="Dismiss" onClick={() => setDismissed(true)}>
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+        {showDetails && notice.details && (
+          <div style={{ marginTop: "8px", display: "flex", gap: "8px", alignItems: "flex-start" }}>
+            <pre style={{ flex: 1, margin: 0, whiteSpace: "pre-wrap", fontSize: "12px", color: "var(--text-subtle)" }}>{notice.details}</pre>
+            <button type="button" className="btn btn-ghost" onClick={() => void copyTextToClipboard(notice.details ?? "")}>Copy</button>
+          </div>
+        )}
+      </div>
+    );
+  }
   if (!update?.available && progress?.phase !== "failed") return null;
 
   const failed = progress?.phase === "failed";

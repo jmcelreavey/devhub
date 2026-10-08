@@ -29,6 +29,108 @@ pub struct UpdateInfo {
     pub date: Option<String>,
 }
 
+/// Why a check failed, in the terms a person can act on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CheckFailure {
+    /// The endpoint answered, but with no release manifest: a 404 or an empty
+    /// body. Until a release is published, that is what every install sees.
+    NoRelease,
+    /// The server could not be reached (offline, DNS, timeout, TLS).
+    Unreachable(String),
+    /// Anything else, kept verbatim for the Details view.
+    Other(String),
+}
+
+impl CheckFailure {
+    pub fn from_error(err: &tauri_plugin_updater::Error) -> Self {
+        use tauri_plugin_updater::Error;
+        match err {
+            // `Updater::check` returns this when no endpoint produced a release:
+            // a non-success status such as 404 never becomes `last_error`.
+            Error::ReleaseNotFound => CheckFailure::NoRelease,
+            Error::Reqwest(inner)
+                if inner.is_connect() || inner.is_timeout() || inner.is_request() =>
+            {
+                CheckFailure::Unreachable(err.to_string())
+            }
+            other => CheckFailure::Other(other.to_string()),
+        }
+    }
+}
+
+/// Everything a manual "Check for updates" can end in. Never an error value, so
+/// the caller always has something to show.
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub enum CheckOutcome {
+    #[serde(rename_all = "camelCase")]
+    UpToDate { current_version: String },
+    #[serde(rename_all = "camelCase")]
+    Available {
+        current_version: String,
+        version: String,
+        notes: Option<String>,
+        date: Option<String>,
+    },
+    /// No release has been published yet. Not an error: there is nothing newer.
+    #[serde(rename_all = "camelCase")]
+    NoRelease { current_version: String },
+    #[serde(rename_all = "camelCase")]
+    Failed {
+        current_version: String,
+        message: String,
+        details: String,
+    },
+}
+
+pub fn outcome_for(
+    current: &str,
+    result: Result<Option<UpdateInfo>, CheckFailure>,
+) -> CheckOutcome {
+    let current_version = current.to_string();
+    match result {
+        Ok(Some(info)) if info.available => CheckOutcome::Available {
+            current_version,
+            version: info.version.unwrap_or_default(),
+            notes: info.notes,
+            date: info.date,
+        },
+        Ok(_) => CheckOutcome::UpToDate { current_version },
+        Err(CheckFailure::NoRelease) => CheckOutcome::NoRelease { current_version },
+        Err(CheckFailure::Unreachable(details)) => CheckOutcome::Failed {
+            current_version,
+            message: "Couldn't reach the update server. Check your connection and try again."
+                .into(),
+            details,
+        },
+        Err(CheckFailure::Other(details)) => CheckOutcome::Failed {
+            current_version,
+            message: "The update check failed.".into(),
+            details,
+        },
+    }
+}
+
+/// One line for the shell log and for the native fallback dialog.
+pub fn describe_outcome(outcome: &CheckOutcome) -> String {
+    match outcome {
+        CheckOutcome::UpToDate { current_version } => {
+            format!("You're up to date ({current_version}).")
+        }
+        CheckOutcome::Available {
+            current_version,
+            version,
+            ..
+        } => format!("DevHub {version} is available. You're on {current_version}."),
+        CheckOutcome::NoRelease { current_version } => format!(
+            "No published release yet. You're on {current_version}, the latest build there is."
+        ),
+        CheckOutcome::Failed {
+            message, details, ..
+        } => format!("{message} ({details})"),
+    }
+}
+
 #[derive(Serialize, Clone)]
 #[serde(tag = "phase", rename_all = "camelCase")]
 pub enum UpdateProgress {
@@ -114,6 +216,37 @@ pub async fn check_update(app: AppHandle) -> Result<UpdateInfo, String> {
         }),
         Err(err) => Err(err.to_string()),
     }
+}
+
+/// The manual check: always answers. `check_update` stays for the background
+/// loop and the canary, which want the raw error.
+///
+/// Signature verification is untouched: this only reads the manifest.
+#[tauri::command]
+pub async fn check_update_outcome(app: AppHandle) -> CheckOutcome {
+    let current = app.package_info().version.to_string();
+    let result = match updater_for(&app) {
+        Err(message) => Err(CheckFailure::Other(message)),
+        Ok(updater) => match updater.check().await {
+            Ok(Some(update)) => Ok(Some(UpdateInfo {
+                available: true,
+                current_version: current.clone(),
+                version: Some(update.version.clone()),
+                notes: update.body.clone(),
+                date: update.date.map(|d| d.to_string()),
+            })),
+            Ok(None) => Ok(None),
+            Err(err) => Err(CheckFailure::from_error(&err)),
+        },
+    };
+    let outcome = outcome_for(&current, result);
+    if let Some(state) = app.try_state::<crate::AppState>() {
+        state.log.write_line(
+            "updater",
+            &format!("manual check: {}", describe_outcome(&outcome)),
+        );
+    }
+    outcome
 }
 
 /// Download and install, emitting progress.
@@ -275,5 +408,99 @@ pub async fn run_canary(app: AppHandle) -> i32 {
             eprintln!("FAIL  install: {err}");
             1
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn info(version: &str) -> UpdateInfo {
+        UpdateInfo {
+            available: true,
+            current_version: "2.0.0".into(),
+            version: Some(version.into()),
+            notes: Some("notes".into()),
+            date: None,
+        }
+    }
+
+    #[test]
+    fn up_to_date_says_so_with_the_version() {
+        let outcome = outcome_for("2.0.0", Ok(None));
+        assert_eq!(
+            outcome,
+            CheckOutcome::UpToDate {
+                current_version: "2.0.0".into()
+            }
+        );
+        assert_eq!(describe_outcome(&outcome), "You're up to date (2.0.0).");
+    }
+
+    #[test]
+    fn an_available_update_carries_its_version_and_notes() {
+        let outcome = outcome_for("2.0.0", Ok(Some(info("2.1.0"))));
+        assert_eq!(
+            outcome,
+            CheckOutcome::Available {
+                current_version: "2.0.0".into(),
+                version: "2.1.0".into(),
+                notes: Some("notes".into()),
+                date: None
+            }
+        );
+        assert!(describe_outcome(&outcome).contains("2.1.0 is available"));
+    }
+
+    #[test]
+    fn a_missing_release_is_not_an_error() {
+        // 404 / nothing published: the plugin returns ReleaseNotFound.
+        let failure = CheckFailure::from_error(&tauri_plugin_updater::Error::ReleaseNotFound);
+        assert_eq!(failure, CheckFailure::NoRelease);
+        let outcome = outcome_for("2.0.0", Err(failure));
+        assert!(matches!(outcome, CheckOutcome::NoRelease { .. }));
+        assert!(describe_outcome(&outcome).starts_with("No published release yet."));
+    }
+
+    #[test]
+    fn an_unreachable_server_is_a_readable_failure_with_details() {
+        let outcome = outcome_for(
+            "2.0.0",
+            Err(CheckFailure::Unreachable("dns error: no such host".into())),
+        );
+        let CheckOutcome::Failed {
+            message, details, ..
+        } = outcome
+        else {
+            panic!("expected a failure");
+        };
+        assert!(message.contains("Couldn't reach the update server"));
+        assert_eq!(details, "dns error: no such host");
+    }
+
+    #[test]
+    fn any_other_failure_keeps_the_raw_text_for_details() {
+        let failure = CheckFailure::from_error(&tauri_plugin_updater::Error::Network(
+            "Download request failed with status: 500".into(),
+        ));
+        assert!(matches!(&failure, CheckFailure::Other(text) if text.contains("500")));
+        let CheckOutcome::Failed {
+            message, details, ..
+        } = outcome_for("2.0.0", Err(failure))
+        else {
+            panic!("expected a failure");
+        };
+        assert_eq!(message, "The update check failed.");
+        assert!(details.contains("500"));
+    }
+
+    #[test]
+    fn outcomes_serialise_with_a_status_tag_the_banner_switches_on() {
+        let json = serde_json::to_value(outcome_for("2.0.0", Ok(None))).unwrap();
+        assert_eq!(json["status"], "upToDate");
+        assert_eq!(json["currentVersion"], "2.0.0");
+        let json =
+            serde_json::to_value(outcome_for("2.0.0", Err(CheckFailure::NoRelease))).unwrap();
+        assert_eq!(json["status"], "noRelease");
     }
 }

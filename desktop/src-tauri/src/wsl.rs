@@ -218,6 +218,23 @@ exit 1"#;
             .is_ok()
     }
 
+    /// The checkout-built payload recorded by a rebuild, if the file parses.
+    pub fn local_payload(&self) -> Option<LocalPayload> {
+        let path = format!("{}/config/local-payload.json", self.app_data);
+        let text = self.exec(&["/bin/cat", &path], QUICK_TIMEOUT).ok()?;
+        parse_local_payload(&text)
+    }
+
+    /// `.complete` exists, and only for a path a rebuild is allowed to name.
+    pub fn payload_dir_complete(&self, dir: &str) -> bool {
+        if !local_payload_path_ok(&self.app_data, dir) {
+            return false;
+        }
+        let marker = format!("{dir}/.complete");
+        self.exec(&["/usr/bin/test", "-f", &marker], QUICK_TIMEOUT)
+            .is_ok()
+    }
+
     /// Unpack the bundled payload into the distro. Older builds are removed
     /// separately by `prune_old_payloads`, after `repair_paseo_unit` has made
     /// sure no service still runs a binary from one of them.
@@ -338,7 +355,12 @@ fi
 root="$1"; id="$2"
 for old in "$root"/*; do
   [ -e "$old" ] || continue
-  [ "$old" = "$root/$id" ] || rm -rf "$old"
+  name=$(basename "$old")
+  [ "$name" = "$id" ] && continue
+  case "$name" in
+    local-*) continue ;;
+  esac
+  rm -rf "$old"
 done
 "#;
         let root = format!("{}/runtime", self.app_data);
@@ -435,6 +457,75 @@ pub fn content_sharing(
         }
         (Some(_), Some(_)) => (false, "the running service uses a different checkout"),
     }
+}
+
+/// A payload assembled from the user's checkout (`config/local-payload.json`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocalPayload {
+    pub dir: String,
+    pub commit: String,
+    pub base_payload_id: String,
+}
+
+pub fn parse_local_payload(text: &str) -> Option<LocalPayload> {
+    let value: serde_json::Value = serde_json::from_str(text).ok()?;
+    let dir = value.get("dir")?.as_str()?.trim().to_string();
+    let commit = value.get("commit")?.as_str()?.trim().to_string();
+    let base_payload_id = value.get("basePayloadId")?.as_str()?.trim().to_string();
+    if dir.is_empty() || commit.is_empty() || base_payload_id.is_empty() {
+        return None;
+    }
+    Some(LocalPayload {
+        dir,
+        commit,
+        base_payload_id,
+    })
+}
+
+/// A rebuild may only name `<app-data>/runtime/local-<id>`.
+pub fn local_payload_path_ok(app_data: &str, dir: &str) -> bool {
+    let root = app_data.trim_end_matches('/');
+    let prefix = format!("{root}/runtime/local-");
+    if !dir.starts_with(&prefix) || dir.contains("..") || dir.contains('\0') {
+        return false;
+    }
+    dir[prefix.len()..]
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric())
+}
+
+/// Installed payload, unless a complete checkout build was made for this exact install.
+pub fn choose_startup_payload(
+    app_data: &str,
+    bundled_id: &str,
+    bundled_dir: &str,
+    record: Option<&LocalPayload>,
+    complete: bool,
+) -> (String, &'static str) {
+    let Some(record) = record else {
+        return (bundled_dir.to_string(), "installed payload");
+    };
+    if record.base_payload_id != bundled_id {
+        return (
+            bundled_dir.to_string(),
+            "checkout build is for a different install, using the installed payload",
+        );
+    }
+    if !complete || !local_payload_path_ok(app_data, &record.dir) {
+        return (
+            bundled_dir.to_string(),
+            "checkout build is incomplete, using the installed payload",
+        );
+    }
+    (record.dir.clone(), "checkout build")
+}
+
+/// What `prune_old_payloads` keeps. Checkout builds (`local-*`) are owned by
+/// the rebuild script; deleting them here would throw away the server the next
+/// launch is about to select.
+#[cfg(test)]
+pub(crate) fn prune_keeps_payload(name: &str, current_id: &str) -> bool {
+    name == current_id || name.starts_with("local-")
 }
 
 /// What `repair_paseo_unit` found.
@@ -1418,5 +1509,78 @@ mod tests {
             paseo_unit_path("/home/me/"),
             "/home/me/.config/systemd/user/devhub-paseo.service"
         );
+    }
+
+    fn sample_local(dir: &str, base: &str) -> LocalPayload {
+        LocalPayload {
+            dir: dir.to_string(),
+            commit: "abc123def456".into(),
+            base_payload_id: base.to_string(),
+        }
+    }
+
+    #[test]
+    fn a_checkout_build_is_used_only_when_it_matches_this_install() {
+        let app = "/home/me/.local/share/devhub";
+        let bundled = format!("{app}/runtime/pay123");
+        let local = format!("{app}/runtime/local-abc123def456");
+        let record = sample_local(&local, "pay123");
+        assert_eq!(
+            choose_startup_payload(app, "pay123", &bundled, Some(&record), true),
+            (local, "checkout build")
+        );
+        assert_eq!(
+            choose_startup_payload(app, "pay999", &bundled, Some(&record), true).0,
+            bundled,
+            "a new installer id invalidates the checkout build"
+        );
+        assert_eq!(
+            choose_startup_payload(app, "pay123", &bundled, Some(&record), false).0,
+            bundled
+        );
+        assert_eq!(
+            choose_startup_payload(app, "pay123", &bundled, None, true).0,
+            bundled
+        );
+    }
+
+    #[test]
+    fn a_checkout_build_cannot_point_outside_the_runtime_dir() {
+        let app = "/home/me/.local/share/devhub";
+        let bundled = format!("{app}/runtime/pay123");
+        let dirs = [
+            "/tmp/local-abc".to_string(),
+            format!("{app}/runtime/local-abc/../../etc"),
+            format!("{app}/runtime/local-abc/extra"),
+            format!("{app}/runtime/pay123"),
+        ];
+        for dir in dirs {
+            let record = sample_local(&dir, "pay123");
+            assert_eq!(
+                choose_startup_payload(app, "pay123", &bundled, Some(&record), true).0,
+                bundled,
+                "{dir}"
+            );
+        }
+    }
+
+    #[test]
+    fn local_payload_json_needs_dir_commit_and_base() {
+        let parsed = parse_local_payload(
+            r#"{"dir":"/home/me/.local/share/devhub/runtime/local-abc","commit":"abc","basePayloadId":"pay"}"#,
+        )
+        .unwrap();
+        assert_eq!(parsed.commit, "abc");
+        assert_eq!(parsed.base_payload_id, "pay");
+        assert!(parse_local_payload("{").is_none());
+        assert!(parse_local_payload(r#"{"dir":"/x","commit":"abc"}"#).is_none());
+    }
+
+    #[test]
+    fn pruning_keeps_the_installed_payload_and_checkout_builds() {
+        assert!(prune_keeps_payload("pay123", "pay123"));
+        assert!(prune_keeps_payload("local-abc123def456", "pay123"));
+        assert!(!prune_keeps_payload("oldpay", "pay123"));
+        assert!(!prune_keeps_payload("pay123.partial", "pay123"));
     }
 }

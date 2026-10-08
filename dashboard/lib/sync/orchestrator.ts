@@ -5,6 +5,7 @@
  * tree git operations and collect skip; skill+persona sync still run since
  * they don't touch tracked files.
  */
+import fs from "node:fs";
 import path from "node:path";
 import { assertPrivateRepo } from "@/lib/setup/private-repo";
 import { isDesktopRuntime } from "@/lib/desktop/runtime-paths";
@@ -133,6 +134,21 @@ function countCommitsAheadOfOrigin(repoRoot: string, branch: string): string {
   return n && n !== "" ? n : "0";
 }
 
+/**
+ * The scoped folders git can be asked about. `git add -- diagrams` fails with
+ * "pathspec 'diagrams' did not match any files" when the folder was never
+ * created (a fresh private repo has no diagrams/ until the first one is drawn),
+ * and one missing folder used to fail the whole content sync. A folder that was
+ * tracked and then deleted still has to be passed so the deletion is staged.
+ */
+export function existingScopedPaths(repoRoot: string, paths: string[]): string[] {
+  return paths.filter((p) => {
+    if (fs.existsSync(path.join(repoRoot, p))) return true;
+    const tracked = runGit(repoRoot, ["ls-files", "--", p]);
+    return tracked.status === 0 && tracked.stdout.trim() !== "";
+  });
+}
+
 function listChangedFilesForPaths(repoRoot: string, paths: string[]): string[] {
   const groups = [
     runGit(repoRoot, ["diff", "--name-only", "--", ...paths]),
@@ -203,10 +219,17 @@ export async function commitAndPushPaths(opts: CommitAndPushPathsOptions): Promi
     return 1;
   }
 
-  const scoped = opts.paths.map((p) => p.trim()).filter(Boolean);
-  if (scoped.length === 0) {
+  const requested = opts.paths.map((p) => p.trim()).filter(Boolean);
+  if (requested.length === 0) {
     emit("ERROR: No paths were provided for scoped commit.");
     return 1;
+  }
+  const scoped = existingScopedPaths(repoRoot, requested);
+  const missing = requested.filter((p) => !scoped.includes(p));
+  if (missing.length > 0) emit(`Skipping folders that don't exist yet: ${missing.join(", ")}`);
+  if (scoped.length === 0) {
+    emit(`Nothing to sync yet: none of ${requested.join(", ")} exist in this repo.`);
+    return 0;
   }
 
   const changes = runGit(repoRoot, ["status", "--porcelain", "--", ...scoped]);
@@ -265,10 +288,15 @@ export async function dryRunScopedSync(opts: DryRunScopedSyncOptions): Promise<n
     return 1;
   }
 
-  const scoped = opts.paths.map((p) => p.trim()).filter(Boolean);
-  if (scoped.length === 0) {
+  const requested = opts.paths.map((p) => p.trim()).filter(Boolean);
+  if (requested.length === 0) {
     emit("ERROR: No paths were provided for dry-run scoped sync.");
     return 1;
+  }
+  const scoped = existingScopedPaths(repoRoot, requested);
+  if (scoped.length === 0) {
+    emit(`[DRY-RUN] Nothing to sync yet: none of ${requested.join(", ")} exist in this repo.`);
+    return 0;
   }
 
   emit(`[DRY-RUN] Scope: ${scoped.join(", ")}`);

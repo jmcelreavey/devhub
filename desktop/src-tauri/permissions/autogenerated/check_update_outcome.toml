@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-check-update-outcome"
+description = "Enables the check_update_outcome command without any pre-configured scope."
+commands.allow = ["check_update_outcome"]
+
+[[permission]]
+identifier = "deny-check-update-outcome"
+description = "Denies the check_update_outcome command without any pre-configured scope."
+commands.deny = ["check_update_outcome"]

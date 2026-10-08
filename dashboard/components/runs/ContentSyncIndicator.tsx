@@ -15,6 +15,7 @@ import { HoverTip } from "@/components/ui/HoverTip";
 import { GitHookFailureDialog } from "@/components/repo-git/GitHookFailureDialog";
 import { RepoGitWorkspace } from "@/components/repo-git/RepoGitWorkspace";
 import type { RepoGitTabId } from "@/components/repo-git/shared";
+import { reviewSyncGitAction } from "@/lib/sync/review-sync-offer";
 
 interface GitSyncState {
   dirtyCount: number;
@@ -75,6 +76,13 @@ async function loadGitSyncState(): Promise<GitSyncState> {
   };
 }
 
+async function loadRebuildAvailable(): Promise<boolean> {
+  const response = await fetch("/api/rebuild");
+  if (!response.ok) return false;
+  const body = (await response.json()) as { available?: boolean };
+  return body.available === true;
+}
+
 /**
  * Pending-changes indicator: a one-tap "sync notes/tasks/diagrams" button
  * plus a warning control that opens the DevHub Git workspace for non-content
@@ -90,6 +98,9 @@ export function ContentSyncIndicator() {
   // the poll goes through SWR: one shared request per key, paused while the
   // tab is hidden, refreshed on focus.
   const { data: gitData, mutate: mutateGit } = useSWR(GIT_SYNC_KEY, loadGitSyncState, {
+    refreshInterval: 30_000,
+  });
+  const { data: rebuildAvailable } = useSWR("rebuild-available", loadRebuildAvailable, {
     refreshInterval: 30_000,
   });
   const gitDirty = gitData ?? EMPTY_GIT_SYNC;
@@ -112,6 +123,13 @@ export function ContentSyncIndicator() {
   const hasConflicts = (gitDirty.conflictCount ?? 0) > 0;
   const hasUnpushed = gitDirty.ahead > 0;
   const gitActionPending = otherDirty > 0 || gitDirty.behind > 0 || hasConflicts;
+  const gitAction = reviewSyncGitAction({
+    behind: gitDirty.behind,
+    dirtyCount: gitDirty.dirtyCount,
+    conflictCount: gitDirty.conflictCount ?? 0,
+    otherDirty,
+    rebuildAvailable: rebuildAvailable === true,
+  });
   const canOpenWorkspace = Boolean(gitDirty.repoName && gitDirty.repoPath);
   // Cloud button: sync dirty content, or retry push when only unpushed commits remain.
   // Stay visible while a push/sync is in flight so phase labels don't vanish mid-hook.
@@ -130,6 +148,9 @@ export function ContentSyncIndicator() {
     }
     if (gitDirty.dirtyCount > 0) {
       return `${gitDirty.behind} upstream commit${gitDirty.behind !== 1 ? "s" : ""} waiting. Sync content or open Git before pulling.`;
+    }
+    if (gitAction === "pull-and-rebuild") {
+      return `${gitDirty.behind} upstream commit${gitDirty.behind !== 1 ? "s" : ""} waiting.${updating ? " Updating…" : " Click to pull and rebuild."}`;
     }
     return `${gitDirty.behind} upstream commit${gitDirty.behind !== 1 ? "s" : ""} waiting.${updating ? " Updating…" : " Click to pull and sync."}`;
   })();
@@ -262,6 +283,33 @@ export function ContentSyncIndicator() {
     }
   }
 
+  async function pullAndRebuild() {
+    if (gitDirty.behind < 1 || updating) return;
+    if (gitDirty.dirtyCount > 0) {
+      toast.error("Commit or stash local changes before pulling upstream commits.");
+      return;
+    }
+    setUpdating(true);
+    try {
+      const res = await fetch("/api/rebuild", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pull: true }),
+      });
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        toast.error(body?.error ?? "Couldn't start the rebuild.");
+        return;
+      }
+      toast.success("Pull and rebuild started. Progress is on System → Maintenance.");
+      window.location.assign("/status?tab=maintenance");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't start the rebuild.");
+    } finally {
+      setUpdating(false);
+    }
+  }
+
   function openGitWorkspace(tab: RepoGitTabId = "changes") {
     if (!canOpenWorkspace) {
       toast.error("Could not resolve this DevHub checkout for Git.");
@@ -272,12 +320,16 @@ export function ContentSyncIndicator() {
   }
 
   function handleGitAction() {
-    if (hasConflicts) {
+    if (gitAction === "conflicts") {
       openGitWorkspace("conflicts");
       return;
     }
-    if (otherDirty > 0) {
+    if (gitAction === "open-git") {
       openGitWorkspace("changes");
+      return;
+    }
+    if (gitAction === "pull-and-rebuild") {
+      void pullAndRebuild();
       return;
     }
     void updateAndSync();
@@ -379,9 +431,11 @@ export function ContentSyncIndicator() {
               aria-label={
                 updating
                   ? "Updating…"
-                  : otherDirty > 0 || hasConflicts
+                  : gitAction === "conflicts" || gitAction === "open-git"
                     ? "Open Git workspace"
-                    : "Pull and sync upstream commits"
+                    : gitAction === "pull-and-rebuild"
+                      ? "Pull and rebuild"
+                      : "Pull and sync upstream commits"
               }
               aria-busy={updating}
               disabled={updating}
