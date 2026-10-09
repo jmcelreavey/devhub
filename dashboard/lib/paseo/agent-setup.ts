@@ -14,5 +14,5 @@ export function describeAgentSetup(paseoRunning: boolean): ReturnType<typeof age
     safeChain: present("safe-chain"),
     paseoRunning,
   };
-  return { ...agentSetupMessage(input, { checkout: !isDesktopRuntime() }), blocker: agentBlocker(input) };
+  return { ...agentSetupMessage(input, { checkout: !isDesktopRuntime(), packaged: isDesktopRuntime() }), blocker: agentBlocker(input) };
 }

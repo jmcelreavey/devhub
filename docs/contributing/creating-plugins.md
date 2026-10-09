@@ -20,6 +20,16 @@ from scratch. For the design/reference, see [Plugins](../architecture/plugins.md
 
 ## 1. Scaffold the repo
 
+For installation in a packaged app without rebuilding, start with [`templates/runtime-plugin`](../../templates/runtime-plugin/README.md). It contains a page, API route and stateless MCP server. The checkout instructions below remain supported for source plugins.
+
+The runtime manifest declares `api`, `transport`, `entry`, `sha256`, `lockfile: { path, sha256 }`, `pages`, `routes`, `mcp` and `permissions: { env, network, exec }`. All file paths are relative, cannot traverse directories and cannot use symlinks. Bundle dependencies ahead of time and commit the prebuilt entry and npm lockfile. `requires.dashboardPackages` still describes checkout dependencies; runtime code cannot import packages from DevHub. Required commands are checked but never installed from manifest hints.
+
+Use stdin/stdout JSON as shown in the example. Do not import core modules. Return HTML for pages, JSON for APIs and JSON-RPC for MCP requests. Each request has a fresh process and must finish within 30 seconds. Background work, SSE and WebSockets need a future server transport. Keep legacy `dashboard` and `branding` fields only for checkout compatibility; packaged installs use only the explicit runtime declarations.
+
+Optional runtime branding contains a label, `dark` and `light` maps with six-digit hex values for `bg`, `text`, `accent` and `border`, and hashed `logo`/`font` assets. Logos must be PNG or WebP; fonts must be WOFF2. Test colour contrast in both modes. Users choose the preset on the plugin page and can restore the default.
+
+Every bundle change needs a fresh review. Permission widening, changed hashes and route changes invalidate the accepted snapshot. The current update flow is remove and reinstall; existing data is kept. Publish only code the user can reasonably trust with their account. The preview describes declared access, not a complete OS sandbox.
+
 ```bash
 mkdir -p ~/dev/devhub-myplugin && cd ~/dev/devhub-myplugin
 git init
@@ -51,7 +61,7 @@ That writes the manifest, a skill, an agent, an inert MCP example under
 `examples/mcp/`, and a README. It does not initialise git, register the plugin,
 or publish it. It refuses a destination that already exists. Add `--dry-run` to
 print the file list without writing. Add `--branding` only when you want a theme
-in the manifest; the GitHub installer will not enable a branded plugin yet.
+in a checkout manifest. Packaged runtime branding uses the data contract above.
 
 ## 2. Add tier-1 assets (skills, agents, MCP)
 
@@ -136,9 +146,9 @@ npm run plugins -- add-from-url https://github.com/acme/team-tools
 
 `add-from-url` reviews the default branch and does not enable the plugin. The
 Plugins page is also linked from Setup and from an empty Skills or Agents catalog.
-The current installer enables plugins that contribute skills and agents. MCP
-servers, dashboard modules, branding, and overlays are listed in the review and
-block activation.
+The installer enables skills and agents as before. With a valid runtime bundle it
+also enables the explicitly declared runtime pages, APIs, MCP endpoints and branding.
+Source-only MCP servers, dashboard modules, branding and overlays still block activation.
 
 ## 4. Sync and verify
 

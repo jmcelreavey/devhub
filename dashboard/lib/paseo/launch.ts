@@ -5,6 +5,7 @@ import { getCheckoutRoot, getResourceRoot } from "@/lib/content/dirs";
 import { readSharedMcpServer, substituteRepoRoot, type Json, type SharedMcpServer } from "@/lib/sync/mcp";
 import { applyCursorAcpServerOverlay } from "@/lib/mcp/cursor-acp-surface";
 import type { PaseoAgentConfig } from "@getpaseo/client";
+import { runtimeMcpServers } from "@/lib/plugins/runtime-mcp";
 
 type McpServers = NonNullable<PaseoAgentConfig["mcpServers"]>;
 
@@ -100,8 +101,8 @@ function toPaseoMcp(server: SharedMcpServer): McpServers[string] | null {
  * MCP config (Claude reads user settings), so re-injecting everything would
  * duplicate servers and push Cursor past its tool cap.
  */
-export function paseoMcpServers(names: readonly string[], repoRoot = getCheckoutRoot() ?? getResourceRoot()): McpServers {
-  const out: McpServers = {};
+export function paseoMcpServers(names: readonly string[], repoRoot = getCheckoutRoot() ?? getResourceRoot(), includeRuntime = false): McpServers {
+  const out: McpServers = includeRuntime ? runtimeMcpServers() : {};
   for (const name of names) {
     const raw = readSharedMcpServer(repoRoot, name);
     if (!raw || raw.enabled === false) continue;
@@ -111,7 +112,7 @@ export function paseoMcpServers(names: readonly string[], repoRoot = getCheckout
   return out;
 }
 
-export function resolvePaseoLaunch(input: { provider: string; model?: string; mcpNames: readonly string[]; depth: number; env?: Env }): PaseoLaunch {
+export function resolvePaseoLaunch(input: { provider: string; model?: string; mcpNames: readonly string[]; depth: number; env?: Env; runtimePlugins?: boolean }): PaseoLaunch {
   const env = input.env ?? process.env;
   const requested = input.provider.trim().toLowerCase();
   const provider = requested === "chatgpt" ? "codex" : requested;
@@ -121,7 +122,7 @@ export function resolvePaseoLaunch(input: { provider: string; model?: string; mc
   const split = model ? splitParameterizedModel(model) : undefined;
   // The DevHub MCP refuses nested dispatch past DEVHUB_AGENT_MAX_DEPTH; it reads this from its env.
   const depthEnv = { DEVHUB_AGENT_DEPTH: String(input.depth + 1) };
-  const mcpServers = Object.fromEntries(Object.entries(paseoMcpServers(input.mcpNames)).map(([name, server]) => {
+  const mcpServers = Object.fromEntries(Object.entries(paseoMcpServers(input.mcpNames, undefined, input.runtimePlugins)).map(([name, server]) => {
     if (server.type !== "stdio") return [name, server];
     // Cursor drops tools past ~190; it gets the same slimmed DevHub catalog as its synced mcp.json.
     const shaped = provider === "cursor" ? applyCursorAcpServerOverlay(name, server as unknown as Json) as typeof server : server;

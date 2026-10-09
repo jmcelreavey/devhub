@@ -38,20 +38,24 @@ function sha256(file) {
   return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 }
 
-async function download(url, dest) {
+export async function downloadVerified(url, dest, expected, fetcher = fetch) {
   log(`downloading ${url}`);
-  const res = await fetch(url);
+  const res = await fetcher(url, { signal: AbortSignal.timeout(120_000), redirect: "error" });
   if (!res.ok) throw new Error(`Download failed (${res.status} ${res.statusText}): ${url}`);
   const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > 150 * 1024 * 1024 || crypto.createHash("sha256").update(buf).digest("hex") !== expected) {
+    throw new Error("Node archive checksum mismatch. Refusing to stage unverified bytes.");
+  }
   fs.mkdirSync(path.dirname(dest), { recursive: true });
-  fs.writeFileSync(dest, buf);
+  const temporary = `${dest}.${process.pid}.tmp`;
+  fs.writeFileSync(temporary, buf);
+  fs.renameSync(temporary, dest);
 }
 
 /**
- * Extract the `bin/node` binary. On Linux, also keep the npm that ships in
- * the same archive: a checkout rebuild must run that npm, not one from the
- * login shell. macOS and the Windows window do not ship npm inside the app
- * bundle (binaries/ is packed wholesale).
+ * Extract the runtime from the verified archive. macOS and Linux also stage
+ * its npm below, so managed agent tools use the same distribution as Node.
+ * Windows agent tools run in the Linux/WSL service payload.
  */
 function extractNodeBinary(archive, key, into) {
   fs.mkdirSync(into, { recursive: true });
@@ -88,7 +92,7 @@ export async function stageNodeRuntime({ platform = os.platform(), arch = os.arc
   if (fs.existsSync(archive) && sha256(archive) === artifact.sha256) {
     log(`cached ${artifact.file} (digest matches)`);
   } else {
-    await download(url, archive);
+    await downloadVerified(url, archive, artifact.sha256);
     const actual = sha256(archive);
     if (actual !== artifact.sha256) {
       fs.rmSync(archive, { force: true });
@@ -131,13 +135,13 @@ export async function stageNodeRuntime({ platform = os.platform(), arch = os.arc
   if (platform === "darwin") {
     execFileSync("codesign", ["--force", "--sign", "-", "--timestamp=none", dest]);
   }
-  if (platform === "linux") {
+  if (platform === "linux" || platform === "darwin") {
     const prefix = path.dirname(path.dirname(nodeBin));
     const npmSrc = path.join(prefix, "lib", "node_modules", "npm");
     const cli = path.join(npmSrc, "bin", "npm-cli.js");
     if (!fs.existsSync(cli)) {
       throw new Error(
-        `Node archive ${artifact.file} has no npm at ${cli}. The WSL payload needs that npm so a checkout rebuild does not use the login shell's npm.`,
+        `Node archive ${artifact.file} has no npm at ${cli}. Managed agent tools require the npm shipped with this runtime.`,
       );
     }
     const npmProblems = auditPayloadNpm(npmSrc);
@@ -149,6 +153,9 @@ export async function stageNodeRuntime({ platform = os.platform(), arch = os.arc
     const npmDest = path.join(stagingDir, "npm");
     fs.rmSync(npmDest, { recursive: true, force: true });
     fs.cpSync(npmSrc, npmDest, { recursive: true, dereference: true });
+    const bundledNpm = path.join(binariesDir, "npm");
+    fs.rmSync(bundledNpm, { recursive: true, force: true });
+    fs.cpSync(npmSrc, bundledNpm, { recursive: true, dereference: true });
     log("staged the npm that ships with this Node");
   }
   fs.rmSync(extractDir, { recursive: true, force: true });

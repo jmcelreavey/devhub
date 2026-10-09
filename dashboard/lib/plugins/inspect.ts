@@ -9,6 +9,8 @@ import { parseAgentMarkdown } from "@/lib/agent/sync-format";
 import { descriptionFromFrontmatter } from "@/lib/skills/shared";
 import { readManifestDetailed, type ManifestIssue } from "./manifest";
 import type { PluginManifest } from "./types";
+import { runtimeInventory } from "./runtime-contract";
+import { verifyRuntimeFiles } from "./runtime-files";
 import { PLUGIN_LIMITS, assertRepoRelative } from "./source";
 import { commandOnPath } from "./runtime";
 import { assessGitAvailabilitySync } from "@/lib/setup/git-availability";
@@ -427,15 +429,21 @@ export function inspectPluginDir(root: string, opts: InspectOptions = {}): Inspe
 
   const packages = mcpPackageNames(root);
   const unsupported: string[] = [];
-  if (manifest.contributes.mcp || packages.length) unsupported.push("MCP servers");
-  if (manifest.dashboard) unsupported.push("dashboard modules");
-  if (manifest.dashboard?.overlays?.length) unsupported.push("overlays");
-  if (manifest.branding) unsupported.push("branding");
+  if (!manifest.runtime) {
+    if (manifest.contributes.mcp || packages.length) unsupported.push("MCP servers");
+    if (manifest.dashboard) unsupported.push("dashboard modules");
+    if (manifest.dashboard?.overlays?.length) unsupported.push("overlays");
+    if (manifest.branding) unsupported.push("branding");
+  }
   const declaredIgnored: string[] = [];
   if (manifest.contributes.docs) declaredIgnored.push("docs");
   if (manifest.contributes.personaModes) declaredIgnored.push("persona modes");
 
   const blockers: PreviewIssue[] = [];
+  if (manifest.runtime) {
+    try { verifyRuntimeFiles(root, manifest.runtime); }
+    catch { blockers.push({ code: "RUNTIME_FILES", message: "Runtime files failed verification. Ask the publisher for a prebuilt bundle and matching dependency lockfile. Nothing was run." }); }
+  }
   const unapplied = [...unsupported, ...declaredIgnored];
   if (unapplied.length) {
     blockers.push({
@@ -443,7 +451,7 @@ export function inspectPluginDir(root: string, opts: InspectOptions = {}): Inspe
       message: `It includes ${formatList(unapplied)}. You can inspect them below, but this version can only enable plugins containing skills and agents.`,
     });
   }
-  for (const pkg of manifest.requires?.dashboardPackages ?? []) {
+  for (const pkg of manifest.runtime ? [] : manifest.requires?.dashboardPackages ?? []) {
     blockers.push({
       code: "DASHBOARD_PACKAGE",
       message: `This plugin needs the dashboard package ${clip(pkg.package)}. Adding it requires a compatible app build.`,
@@ -470,7 +478,7 @@ export function inspectPluginDir(root: string, opts: InspectOptions = {}): Inspe
     requirements,
     requirementsMet: requirements.every((item) => item.available),
     unsupported,
-    inventory: buildInventory(root, manifest, packages),
+    inventory: manifest.runtime ? runtimeInventory(manifest.runtime) : buildInventory(root, manifest, packages),
     blockers,
     declaredIgnored,
     manifestHash,

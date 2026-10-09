@@ -158,6 +158,7 @@ export async function dispatchAgentRun(input: AgentDispatchInput): Promise<Agent
     launch = resolvePaseoLaunch({
       provider: input.provider?.trim() || preferredPaseoProvider(), model: input.model, depth: input.depth,
       mcpNames: mcpServersForActivity(input.activity?.action) ?? PASEO_DEFAULT_MCP,
+      runtimePlugins: mcpServersForActivity(input.activity?.action) == null,
     });
   } catch (error) { throw new AgentDispatchError(error instanceof Error ? error.message : String(error), 400); }
   let connectionId: string;

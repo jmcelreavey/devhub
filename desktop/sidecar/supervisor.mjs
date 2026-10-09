@@ -21,6 +21,7 @@ import path from "node:path";
 import net from "node:net";
 import { fork, spawn } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { prepareManagedTools } from "./managed-tools.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -178,8 +179,15 @@ export function managedEnv() {
   // payload. Agent-installed tools must survive app updates.
   const prefix = path.join(os.homedir(), ".local", "share", "devhub", "tools");
   fs.mkdirSync(prefix, { recursive: true, mode: 0o700 });
+  let managedNode = "";
+  try {
+    managedNode = prepareManagedTools({ dataDir: process.env.DEVHUB_APP_DATA || path.dirname(prefix) });
+  } catch (err) {
+    log(err instanceof Error ? err.message : "Bundled tools are unavailable");
+  }
   return { ...process.env, NPM_CONFIG_PREFIX: prefix, npm_config_prefix: prefix,
-    PATH: `${path.join(prefix, "bin")}${path.delimiter}${repairedPath()}` };
+    DEVHUB_MANAGED_NODE_BIN: managedNode,
+    PATH: [managedNode, path.join(prefix, "bin"), repairedPath()].filter(Boolean).join(path.delimiter) };
 }
 
 /**

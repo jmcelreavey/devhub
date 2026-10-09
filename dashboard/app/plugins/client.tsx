@@ -466,7 +466,7 @@ export function PluginsPage() {
     <div className="page-wrapper plugins-page">
       <PageHeader
         title="Plugins"
-        subtitle="Install shared skills and agents from a GitHub repo."
+        subtitle="Add skills, agents and runtime plugins from GitHub."
         actions={<button type="button" ref={addButtonRef} className="btn btn-primary text-xs" onClick={openAdd}>Add from GitHub</button>}
       />
 

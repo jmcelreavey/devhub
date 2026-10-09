@@ -1,0 +1,54 @@
+{
+  "name": "sample-tools",
+  "version": "1.0.0",
+  "devhubApi": "1",
+  "contributes": {},
+  "runtime": {
+    "api": "1",
+    "transport": "request-worker",
+    "entry": "worker.mjs",
+    "sha256": "7d496ce9d8aafb553601fc11ee120b2241f2bd8ff989b80bbc31c934a20d93e3",
+    "lockfile": {
+      "path": "package-lock.json",
+      "sha256": "2df03de2b491417a1d4ee7d04b029f3b61e23a1831e6ccad136aba1fed9cfa62"
+    },
+    "pages": [
+      {
+        "path": "/",
+        "label": "Sample tools"
+      }
+    ],
+    "routes": [
+      {
+        "path": "/status",
+        "method": "GET"
+      }
+    ],
+    "mcp": [
+      {
+        "name": "sample",
+        "description": "Read sample status"
+      }
+    ],
+    "permissions": {
+      "env": [],
+      "network": [],
+      "exec": false
+    },
+    "branding": {
+      "label": "Sample palette",
+      "dark": {
+        "bg": "#151a22",
+        "text": "#e7ecf4",
+        "accent": "#8eb9ff",
+        "border": "#354257"
+      },
+      "light": {
+        "bg": "#f7f8fa",
+        "text": "#17202a",
+        "accent": "#2358a8",
+        "border": "#b6c2d2"
+      }
+    }
+  }
+}

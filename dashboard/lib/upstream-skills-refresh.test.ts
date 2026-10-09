@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { GH_AUTH_REQUIRED_MESSAGE } from "./gh-exec";
+vi.mock("node:os", async () => (await import("@/lib/test-home")).isolatedOs());
 
 vi.mock("./gh-exec", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./gh-exec")>();

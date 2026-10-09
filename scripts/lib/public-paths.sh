@@ -14,7 +14,7 @@
 # skills/vendor/NOTICE.md); public docs, demos and verify-vendor depend on it.
 PUBLIC_PATHS=(.gitattributes .githooks .github .gitignore .nvmrc AGENTS.md
               CONTRIBUTING.md LICENSE README.md ROADMAP.md package.json
-              agents/shared dashboard desktop docs mcp/shared mcp-servers
+              agents/shared dashboard desktop docs templates/runtime-plugin mcp/shared mcp-servers
               opencode/shared persona/shared-persona.md scripts shared skills/shared skills/vendor
               ':!dashboard/.env.local' ':!scripts/make-public-seed.sh'
               ':!skills/shared/my-voice/writing-style.md' ':!skills/shared/my-voice/learned-voice.md')

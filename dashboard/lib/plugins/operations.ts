@@ -7,6 +7,7 @@
  * leaves the registry as it was.
  */
 import fs from "node:fs";
+import { stopRuntimeWorkers } from "./runtime-host";
 import path from "node:path";
 import { assessGitAvailability } from "@/lib/setup/git-availability";
 import { GIT_MISSING_PLUGIN_MESSAGE } from "@/lib/setup/git-copy";
@@ -737,6 +738,9 @@ async function applyInstall(ctx: PluginContext, stored: StoredOperation, selecte
     mark(stored, "sync", "running");
     save(ctx, stored);
 
+    if (inspected.manifest?.runtime && inspected.manifestHash && inspected.treeHash) {
+      receipt.runtime = { manifestHash: inspected.manifestHash, treeHash: inspected.treeHash };
+    }
     // Refuse to start copying if the journal cannot be persisted.
     writeReceipt(ctx, receipt);
 
@@ -823,7 +827,7 @@ async function applyInstall(ctx: PluginContext, stored: StoredOperation, selecte
       agentCount,
       targets: applied.targets,
       kept: [],
-      summary: addedSummary(skillCount, agentCount),
+      summary: inspected.manifest?.runtime ? "Runtime pages and MCP endpoints are enabled. Code runs when you open a page or call an endpoint." : addedSummary(skillCount, agentCount),
       syncSummary: applied.targets.length ? syncSummary(applied.targets) : NOT_COPIED,
     };
     stored.view.cancellable = false;
@@ -893,6 +897,8 @@ async function disableAndClean(
   mark(stored, "sync", "running");
   save(ctx, stored);
   await patchPluginEntry(id, { enabled: false, lastOperation: { kind: "disable", at: new Date().toISOString() } }, ctx.home, ctx.env);
+  const disabled = findEntry(ctx, id);
+  if (disabled) stopRuntimeWorkers(disabled.name);
   mark(stored, "sync", "complete");
   mark(stored, "copies", "running");
   save(ctx, stored);

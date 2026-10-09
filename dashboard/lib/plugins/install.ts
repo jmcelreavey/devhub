@@ -47,6 +47,7 @@ export interface ReceiptFile {
 }
 
 export interface InstallReceipt {
+  runtime?: { manifestHash: string; treeHash: string };
   pluginId: string;
   sha: string | null;
   planDigest: string;

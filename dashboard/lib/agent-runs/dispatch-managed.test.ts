@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("node:os", async () => (await import("@/lib/test-home")).isolatedOs());
 
 const paseo = vi.hoisted(() => ({ startPaseoAgent: vi.fn() }));
 const providers = vi.hoisted(() => ({ listPaseoProviders: vi.fn() }));

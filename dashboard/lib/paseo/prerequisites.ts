@@ -32,7 +32,7 @@ export function safeChainRowState(npmPresent: boolean): { enabled: boolean; hint
 const ORDER = "Agents need Node.js, then Safe-Chain, then Paseo.";
 const CHECKOUT_DETAIL = "Developer detail: the dashboard looks for the daemon at DEVHUB_PASEO_URL (default ws://127.0.0.1:6767).";
 
-export function agentSetupMessage(input: AgentPrerequisites, opts?: { checkout?: boolean }): {
+export function agentSetupMessage(input: AgentPrerequisites, opts?: { checkout?: boolean; packaged?: boolean }): {
   message: string;
   detail: string | null;
   setupHref: string;
@@ -41,7 +41,7 @@ export function agentSetupMessage(input: AgentPrerequisites, opts?: { checkout?:
   const blocker = agentBlocker(input);
   if (blocker === "node" || blocker === "npm") {
     return {
-      message: `Install Node.js first. ${ORDER} Download the LTS installer, then come back and click Re-check.`,
+      message: opts?.packaged ? "Bundled tools are unavailable. Update or reinstall DevHub, then click Re-check." : `Install Node.js first. ${ORDER} Download the LTS installer, then come back and click Re-check.`,
       detail,
       setupHref: SETUP_TOOLS_HREF,
     };

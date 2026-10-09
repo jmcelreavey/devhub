@@ -43,6 +43,20 @@ graph TD
 
 ## Tiers
 
+### Packaged runtime plugins
+
+An optional `runtime` manifest field adds a separate delivery path. `runtime.api: "1"` and `transport: "request-worker"` identify a prebuilt `.mjs` bundle committed alongside its dependency lockfile. Both have SHA-256 pins. The GitHub installer reviews the exact commit, permissions and files before **Trust and enable**. It never builds the plugin or installs its dependencies.
+
+Core ships fixed dynamic host routes once. Each request launches the bundled Node through `execExternal`, with a 30-second deadline, a 64 KB request limit and a 2 MB response limit. Only declared pages, API methods/paths and MCP server names are reachable. Pages render in a sandboxed frame with an opaque origin; a small message bridge can invoke only that plugin's declared APIs. MCP is stateless HTTP, registered for new DevHub-managed Paseo sessions. Existing sessions must be restarted to acquire new servers.
+
+Managed runtime installs bypass checkout materialisation. Their approval receipt holds manifest and source-tree hashes outside the plugin directory. Changed files refuse execution. Disable blocks new work and cancels active workers; remove keeps downloads and plugin data, matching existing removal behaviour. Updates currently require remove, add and fresh consent.
+
+The child receives only declared environment variables, its own HOME/temp folder and a controlled PATH. Node filesystem permissions confine ordinary file access to the plugin and its data. Exec is separately declared. This is **not a sandbox against hostile code**: server network declarations are disclosures, and permitted child processes can escape Node's restrictions. All runtime plugins are labelled high risk. Checksums do not verify publisher identity.
+
+Runtime branding supports dark/light colour presets, PNG/WebP logos and WOFF2 fonts. Choose **Use {label} branding** on the plugin page. It does not replace signed app icons or inject arbitrary CSS. Disabling removes the active contribution within the next refresh (up to ten seconds), without overwriting the saved core theme.
+
+Source-only Next.js modules, overlays, native addons, streaming and database-provider hooks retain the checkout path below. See the [runtime plan](../plans/runtime-plugins-and-node.md) for migration limits and the [portable example](../../templates/runtime-plugin/README.md) for the executable contract.
+
 | Tier | Contributes | Status |
 | ---- | ----------- | ------ |
 | 1 — file-copy assets | `skills/`, `agents/`, `mcp/`, optional MCP packages | **implemented** |

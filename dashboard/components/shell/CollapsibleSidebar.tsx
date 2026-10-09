@@ -3,6 +3,8 @@
 import { NavLink } from "@/components/shell/NavLink";
 import { IconPicker } from "@/components/ui/IconPicker";
 import { BRAND_LABEL } from "@/lib/brand-mark";
+import { useRuntimeBrand } from "./RuntimeBrandProvider";
+import Image from "next/image";
 import { useClientMounted } from "@/lib/hooks/use-client-mounted";
 import { useIsDesktopPointer } from "@/lib/hooks/use-is-mobile";
 import { useSetupStatus } from "@/lib/hooks/use-setup-status";
@@ -25,6 +27,7 @@ const STORAGE_KEY = "sidebar-collapsed";
 const usePersistedBool = createPersistedBoolStore("devhub:sidebar-storage");
 
 export function CollapsibleSidebar() {
+  const { brand } = useRuntimeBrand();
   const [collapsed, setCollapsed] = usePersistedBool(STORAGE_KEY);
   const isDesktop = useIsDesktopPointer();
   const pathname = usePathname();
@@ -81,13 +84,13 @@ export function CollapsibleSidebar() {
     >
       {/* Brand */}
       <div className="flex items-center px-3 py-3 shrink-0 gap-1">
-        <IconPicker sidebarCollapsed={collapsed} />
-        {!collapsed && BRAND_LABEL && (
+        {brand?.logo ? <Image src={brand.logo} alt={brand.label} width={28} height={28} unoptimized /> : <IconPicker sidebarCollapsed={collapsed} />}
+        {!collapsed && (brand?.label || BRAND_LABEL) && (
           <span
             className="font-semibold text-sm truncate"
             style={{ color: "var(--text)", letterSpacing: "-0.01em" }}
           >
-            {BRAND_LABEL}
+            {brand?.label || BRAND_LABEL}
           </span>
         )}
       </div>

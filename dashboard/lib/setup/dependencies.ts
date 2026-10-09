@@ -76,6 +76,7 @@ export interface DependencySpec {
 }
 
 export interface DependencyStatus {
+  bundled?: boolean;
   id: DependencyId;
   label: string;
   required: boolean;
@@ -117,7 +118,7 @@ export const DEPENDENCIES: DependencySpec[] = [
     id: "npm",
     label: "npm",
     required: false,
-    unlocks: "Installing the optional Agents daemon — included with a separate Node.js install",
+    unlocks: "Installing agent tools — included with the packaged DevHub runtime",
     bin: "npm",
     versionArgs: ["--version"],
     installCommand: "brew install node",
@@ -240,15 +241,17 @@ export function probeDependency(spec: DependencySpec, timeoutMs = 2500): Depende
   if (!present && spec.id === "cursor" && findInstalledApp("Cursor", "cursor")) {
     present = true;
   }
+  const bundled = present && (spec.id === "node" || spec.id === "npm") && Boolean(process.env.DEVHUB_MANAGED_NODE_BIN);
   return {
     id: spec.id,
     label: spec.label,
     required: spec.required,
-    unlocks: spec.unlocks,
+    unlocks: bundled ? "Included with DevHub for Agents" : spec.unlocks,
     present,
+    bundled,
     version,
-    installCommand: spec.installCommand,
-    installUrl: spec.installUrl,
+    installCommand: bundled ? undefined : spec.installCommand,
+    installUrl: bundled ? undefined : spec.installUrl,
     macGitInstall: spec.id === "git" && (spec.bin === "git" || spec.bin === "git.exe") && process.platform === "darwin" && !present,
   };
 }
@@ -307,7 +310,7 @@ export function applyRuntimeRequirements(
       return {
         ...tool,
         required: false,
-        unlocks: "Running your own projects — DevHub itself uses its bundled runtime",
+        unlocks: tool.bundled ? "Included with DevHub for Agents" : "Running your own projects — DevHub itself uses its bundled runtime",
       };
     }
     if (tool.id === "git") {
@@ -351,6 +354,13 @@ export function withInstallHints(spec: DependencySpec, ctx: InstallContext): Dep
   }
   if (spec.id === "safe-chain" && (ctx.platform === "darwin" || ctx.platform === "linux")) {
     installCommand = 'npm install -g @aikidosec/safe-chain@1.1.10 --prefix "$HOME/.local" && "$HOME/.local/bin/safe-chain" setup';
+    const managedBin = process.env.DEVHUB_MANAGED_NODE_BIN;
+    if (managedBin) {
+      const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+      const prefix = path.join(os.homedir(), ".local", "share", "devhub", "tools");
+      const commandPath = `PATH=${quote(`${managedBin}:${path.join(prefix, "bin")}`)}:"$PATH"`;
+      installCommand = `${commandPath} ${quote(path.join(managedBin, "npm"))} install -g @aikidosec/safe-chain@1.1.10 --prefix ${quote(prefix)} && ${commandPath} ${quote(path.join(prefix, "bin", "safe-chain"))} setup`;
+    }
   }
   if (spec.id === "claude") {
     installCommand = ctx.platform === "win32"

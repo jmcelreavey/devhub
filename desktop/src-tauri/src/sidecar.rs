@@ -589,6 +589,20 @@ mod tests {
         );
     }
 
+    fn read_health_request(stream: &mut TcpStream) {
+        stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        let mut reader = BufReader::new(stream);
+        loop {
+            let mut line = String::new();
+            assert!(reader.read_line(&mut line).unwrap() > 0);
+            if line == "\r\n" {
+                break;
+            }
+        }
+        // Closing a socket with unread request bytes can reset it on Linux,
+        // discarding the fragmented response before the client receives it.
+    }
+
     #[test]
     fn health_check_rejects_a_non_devhub_listener() {
         // The whole point: something answering on the port is not DevHub.
@@ -596,12 +610,11 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         std::thread::spawn(move || {
             for mut s in listener.incoming().take(1).flatten() {
+                read_health_request(&mut s);
                 use std::io::Write;
                 let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi");
             }
         });
-        std::thread::sleep(Duration::from_millis(100));
-        assert!(port_in_use(port), "the fake listener should be up");
         assert!(
             !health_check(port, "token"),
             "an arbitrary HTTP server must not pass as DevHub"
@@ -614,6 +627,7 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         std::thread::spawn(move || {
             for mut stream in listener.incoming().take(1).flatten() {
+                read_health_request(&mut stream);
                 use std::io::Write;
                 let _ = stream.write_all(
                     b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: keep-alive\r\n\r\n1e\r\n{\"devhub\":true,\"desktop\":true}\r\n",
@@ -633,15 +647,8 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         std::thread::spawn(move || {
             for mut stream in listener.incoming().take(1).flatten() {
-                use std::io::{BufRead, Write};
-                stream
-                    .set_read_timeout(Some(Duration::from_secs(2)))
-                    .unwrap();
-                let mut request = std::io::BufReader::new(&stream);
-                let mut headers = Vec::new();
-                while !headers.ends_with(b"\r\n\r\n") {
-                    assert!(request.read_until(b'\n', &mut headers).unwrap() > 0);
-                }
+                read_health_request(&mut stream);
+                use std::io::Write;
                 stream.write_all(b"HTTP/1.").unwrap();
                 std::thread::sleep(Duration::from_millis(20));
                 let _ = stream.write_all(
@@ -661,6 +668,7 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         std::thread::spawn(move || {
             for mut stream in listener.incoming().take(1).flatten() {
+                read_health_request(&mut stream);
                 use std::io::Write;
                 let _ = stream.write_all(
                     b"HTTP/1.1 200 OK\r\nContent-Length: 52\r\n\r\n{\"devhub\":true,\"desktop\":false,\"status\":\"browser\"}",
@@ -680,6 +688,7 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         std::thread::spawn(move || {
             for mut stream in listener.incoming().take(1).flatten() {
+                read_health_request(&mut stream);
                 use std::io::Write;
                 let _ = stream.write_all(b"{\"devhub\":true,\"desktop\":true}");
             }

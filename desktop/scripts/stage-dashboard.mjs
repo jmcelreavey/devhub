@@ -586,6 +586,7 @@ async function stageServices() {
     path.join(servicesDir, "supervisor.mjs"),
   );
   log("staged supervisor.mjs");
+  fs.copyFileSync(path.join(desktopDir, "sidecar", "managed-tools.mjs"), path.join(servicesDir, "managed-tools.mjs"));
 }
 
 /**
@@ -603,6 +604,7 @@ function assertStaged() {
     [path.join(serverDir, ".next", "static"), "client assets"],
     [path.join(serverDir, ".next", "server"), "server chunks"],
     [path.join(servicesDir, "supervisor.mjs"), "sidecar supervisor"],
+    [path.join(servicesDir, "managed-tools.mjs"), "managed Node launchers"],
     [path.join(servicesDir, "start-peer-services.mjs"), "peer boot (free pinned OpenCode ports)"],
     [path.join(servicesDir, "terminal-pty-server.cjs"), "terminal server"],
     [path.join(servicesDir, "agent-run.cjs"), "agent runner"],

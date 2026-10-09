@@ -145,6 +145,7 @@ export function packagedToolDirs(
   return [
     path.dirname(executablePath),
     path.join(home, ".local", "share", "devhub", "tools", "bin"),
+    ...(source.DEVHUB_MANAGED_NODE_BIN ? [source.DEVHUB_MANAGED_NODE_BIN] : []),
     ...(source.DEVHUB_BASE_PAYLOAD_DIR ? [path.join(source.DEVHUB_BASE_PAYLOAD_DIR, "runtime")] : []),
   ];
 }

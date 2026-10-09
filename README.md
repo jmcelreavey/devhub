@@ -103,7 +103,7 @@ There's more: Repos with a git client, Databases (SQLite, Postgres and MongoDB) 
 
 A plugin is a separate repo that adds skills, agents, MCP servers, dashboard pages or database connections to DevHub without living in the core. That's how company-specific things stay out of the shared code. It's just a folder with a `devhub-plugin.json` in it.
 
-In the app: **Plugins** (the top bar when you're on System, or the **Plugins** button on Skills) → **Add from GitHub**, paste the repo URL, review what it adds, then enable. Needs Git (on a Mac: **Install Git** / `xcode-select --install`). Skills and agents only for now; MCP servers and dashboard pages still need a checkout.
+In the app: **Plugins** (the top bar when you're on System, or the **Plugins** button on Skills) → **Add from GitHub**, paste the repo URL, review what it adds, then enable. Needs Git (on a Mac: **Install Git** / `xcode-select --install`). Plugins with a prebuilt `runtime` bundle can add pages, APIs, stateless MCP servers and branding without a checkout or rebuild. Existing source-only dashboard plugins still need a checkout. See the [portable example](templates/runtime-plugin/README.md).
 
 From a DevHub checkout, the same install is:
 
@@ -129,7 +129,7 @@ You can also check yourself with **DevHub → Check for Updates…**, which is i
 - **"Port 1337 is in use".** Another program, or a second DevHub, has the port. DevHub only offers to stop a leftover DevHub development server of its own (**Stop it and continue**). Otherwise quit the other program, then click **Try again**.
 - **A start-up error.** The window shows the last few log lines and an **Open logs** button.
 - **Closing the window didn't quit DevHub.** It keeps running from the tray or menu-bar icon so scheduled jobs carry on. Choose **Quit DevHub** there.
-- **Agents shows a connection error.** Paseo isn't set up yet. Install Node.js, then Safe-Chain, then Paseo from **Setup → Tools**. On Windows, WSL needs `systemd=true` in `/etc/wsl.conf` first.
+- **Agents shows a connection error.** Set up Safe-Chain, then Paseo from **Setup → Tools**. Packaged DevHub includes Node.js and npm for Agents, without changing your shell PATH. If bundled tools are unavailable, update or reinstall DevHub. Checkout users need their own Node.js. On Windows, WSL needs `systemd=true` in `/etc/wsl.conf` first.
 - **An update failed.** Nothing changed. Click **Try again** or **Open release page**.
 
 More in [Desktop recovery](docs/guides/desktop-recovery.md) and the [FAQ](docs/getting-started/faq.md).

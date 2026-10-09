@@ -437,7 +437,7 @@ function InventoryBlock({ groups }: { groups: InventoryGroup[] }) {
   return (
     <div className="mt-4">
       <p className="text-xs font-semibold text-text">What it declares</p>
-      <p className="mt-1 text-xs text-text-subtle">These are names and paths from the plugin. Nothing here has been opened or run.</p>
+          <p className="mt-1 text-xs text-text-subtle">These are names and paths from the plugin. Nothing here has been run.</p>
       <div className="mt-2 space-y-3">
         {groups.map((group) => (
           <section key={group.kind} className="rounded-md border border-border-muted p-3" aria-label={group.kind}>
@@ -546,6 +546,16 @@ export function PreviewBody(props: {
           {otherBlockers.map((item) => (
             <div key={item.code} className="tone-panel tone-panel--warning mt-4" role="status"><p className="text-xs">{item.message}</p></div>
           ))}
+          {preview.runtime ? <>
+            <div className="tone-panel tone-panel--warning mt-4">
+              <span className="badge badge-danger">High risk · Runs local code</span>
+              <p className="mt-2">Only enable plugins you trust. These permissions describe the plugin; they are not a security sandbox.</p>
+              <p className="mt-2 text-xs">Publisher signature not verified. Nothing has run yet.</p>
+              <p className="mt-2 break-all font-mono text-xs">Commit: {source.sha ?? "Local snapshot"}</p>
+              <p className="mt-2 text-xs">Runtime features below replace checkout-only declarations. Core overlays and database providers are not loaded.</p>
+            </div>
+            <InventoryBlock groups={preview.inventory} />
+          </> : null}
           <p className="mt-4 text-xs font-semibold text-text">Adds to DevHub</p>
           <dl className="mt-1 grid grid-cols-[9rem_1fr] gap-x-3 gap-y-0.5 text-xs">
             <dt className="text-text-muted">Skills</dt><dd>{preview.contributions.skills.filter((asset) => asset.status === "add").length}</dd>

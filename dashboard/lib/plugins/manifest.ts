@@ -7,6 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { runtimeSchema } from "./runtime-contract";
 import { CONTRIBUTE_KINDS, SUPPORTED_DEVHUB_API, type PluginManifest } from "./types";
 
 export const PLUGIN_MANIFEST_FILE = "devhub-plugin.json";
@@ -106,6 +107,7 @@ const manifestSchema = z
     dashboard: dashboardSchema.optional(),
     branding: brandingSchema.optional(),
     requires: requiresSchema.optional(),
+    runtime: runtimeSchema.optional(),
   })
   .strict();
 

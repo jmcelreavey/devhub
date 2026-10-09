@@ -33,6 +33,7 @@ export function expandHome(p: string, home = os.homedir()): string {
 }
 
 interface RawRegistryEntry {
+  managed?: unknown;
   name?: unknown;
   path?: unknown;
   enabled?: unknown;
@@ -101,7 +102,10 @@ export function listEnabledPlugins(home = os.homedir(), warn?: LoadWarn): Regist
       path: dir,
       enabled: true,
       gitRefresh: entry.gitRefresh === true,
-      manifest,
+      manifest: entry.managed === true && manifest.runtime ? {
+        ...manifest, dashboard: undefined, branding: undefined,
+        contributes: { skills: manifest.contributes.skills, agents: manifest.contributes.agents },
+      } : manifest,
     });
   }
 

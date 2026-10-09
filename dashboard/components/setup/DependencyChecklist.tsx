@@ -49,7 +49,7 @@ export function DependencyChecklist({ goals = [] }: { goals?: readonly GoalId[] 
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-          For Agents, install Node.js, then Safe-Chain, then set up Paseo.{" "}
+          {data.tools.some((tool) => tool.bundled) ? "DevHub includes Node.js and npm for Agents. Install Safe-Chain, then set up Paseo." : "For Agents, install Node.js, then Safe-Chain, then set up Paseo."}{" "}
           {data.availableCount} of {data.totalCount} tools available.
           {data.ready
             ? " Everything DevHub needs is installed."

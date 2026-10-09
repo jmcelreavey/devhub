@@ -71,6 +71,7 @@ export interface InventoryGroup {
 }
 
 export interface PluginPreview {
+  runtime?: import("./runtime-contract").RuntimeContribution;
   operationId: string;
   revision: number;
   planDigest: string;
@@ -189,6 +190,7 @@ export interface AccessView {
 }
 
 export interface PluginListItem {
+  runtime?: boolean;
   id: string;
   name: string;
   state: "enabled" | "disabled" | "needs_attention" | "local";

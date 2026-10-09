@@ -170,6 +170,8 @@ export interface PluginRequiredPackage {
 
 /** Parsed `devhub-plugin.json` from a plugin repo root. */
 export interface PluginManifest {
+  /** Portable prebuilt execution contract; checkout contributions remain independent. */
+  runtime?: import("./runtime-contract").RuntimeContribution;
   name: string;
   version: string;
   devhubApi: DevhubApiVersion;

@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("node:os", async () => (await import("@/lib/test-home")).isolatedOs());
 import { pruneGitRevisionCache } from "./open-at-revision";
 
 const CACHE_ROOT = path.join(os.homedir(), ".cache", "devhub", "git-revisions");

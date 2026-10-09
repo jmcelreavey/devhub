@@ -62,6 +62,7 @@ export function DetailFooter(props: {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="flex flex-wrap gap-2">
+        {detail.runtime && detail.state === "enabled" ? <Link className={GHOST} href={`/plugins/runtime/${name}`}>Open plugin</Link> : null}
         {detail.skills > 0 ? <Link className={GHOST} href={`/skills?plugin=${name}`}>View skills</Link> : null}
         {detail.agents > 0 ? <Link className={GHOST} href={`/skills?tab=agents&plugin=${name}`}>View agents</Link> : null}
       </div>
@@ -150,6 +151,7 @@ export function OperationFooter(props: { operation: PluginOperationView } & Oper
     return (
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
+          {installing && op.preview?.runtime ? <Link className={GHOST} href={`/plugins/runtime/${name}`}>Open plugin</Link> : null}
           {installing && result && result.skillCount > 0 ? <Link className={GHOST} href={`/skills?plugin=${name}`}>View skills</Link> : null}
           {installing && result && result.agentCount > 0 ? <Link className={GHOST} href={`/skills?tab=agents&plugin=${name}`}>View agents</Link> : null}
         </div>
@@ -192,7 +194,7 @@ export function OperationFooter(props: { operation: PluginOperationView } & Oper
       <div className="flex flex-wrap items-center justify-end gap-2">
         <button type="button" className={GHOST} onClick={props.onBack}>Back</button>
         <button type="button" className={PRIMARY} disabled={submitting} onClick={props.onConfirm}>
-          {busy} {props.selectedCount === 0 ? "Enable in DevHub" : "Enable and sync"}
+          {busy} {preview.runtime ? "Trust and enable" : props.selectedCount === 0 ? "Enable in DevHub" : "Enable and sync"}
         </button>
       </div>
     );

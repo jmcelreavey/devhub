@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { Search } from "lucide-react";
 import { BRAND_BOTTLE_IMAGE_SRC, BRAND_LABEL } from "@/lib/brand-mark";
+import { useRuntimeBrand } from "./RuntimeBrandProvider";
 import { MobileNav } from "@/components/shell/MobileNav";
 import { MobileQuickActionsMenu } from "@/components/shell/MobileQuickActionsMenu";
 import { ContentSyncIndicator } from "@/components/runs/ContentSyncIndicator";
@@ -13,6 +14,7 @@ import { ContentSyncIndicator } from "@/components/runs/ContentSyncIndicator";
  * (kept off the bar itself to avoid crowding a phone-width row).
  */
 export function MobileTopBar() {
+  const { brand } = useRuntimeBrand();
   return (
     <header
       className="md:hidden flex items-center gap-3 px-4 py-3"
@@ -25,7 +27,7 @@ export function MobileTopBar() {
       <div className="flex items-center gap-1.5 min-w-0">
         <span aria-hidden className="mobile-brand-logo">
           <Image
-            src={BRAND_BOTTLE_IMAGE_SRC}
+            src={brand?.logo || BRAND_BOTTLE_IMAGE_SRC}
             alt=""
             className="mobile-brand-logo-img"
             unoptimized
@@ -33,9 +35,9 @@ export function MobileTopBar() {
             height={34}
           />
         </span>
-        {BRAND_LABEL && (
+        {(brand?.label || BRAND_LABEL) && (
           <span className="font-semibold text-sm truncate text-text">
-            {BRAND_LABEL}
+            {brand?.label || BRAND_LABEL}
           </span>
         )}
       </div>

@@ -133,6 +133,7 @@ function summarise(ctx: PluginContext, row: RegistryRow, duplicates: Set<string>
   return {
     item: {
       id: row.id,
+      runtime: Boolean(folder.manifest?.runtime),
       name: row.name || folder.manifest?.name || "(unnamed)",
       state,
       stateLabel,
@@ -209,7 +210,7 @@ export function getRegistration(ctx: PluginContext, idOrName: string): PluginDet
     githubUrl: row.url && githubSlug(row.url) ? row.url : null,
     syncedTo,
     localNote: row.managed ? null : "This plugin is registered from a folder you manage. DevHub won’t move, update or delete that folder.",
-    dashboardNote: hasDashboard
+    dashboardNote: hasDashboard && !(row.managed && item.runtime)
       ? "This plugin’s dashboard features are part of the current build. Registry changes alone won’t remove code already compiled into the app."
       : null,
     lastOperation: last ? { label: LAST_OPERATION_LABEL[last.kind] ?? "Updated", at: last.at } : null,

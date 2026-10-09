@@ -221,6 +221,7 @@ export function toPreview(
   return {
     operationId,
     revision,
+    runtime: inspected.manifest?.runtime,
     planDigest: digest,
     expiresAt: new Date(Date.now() + PREVIEW_TTL_MS).toISOString(),
     plugin: inspected.manifest ? { name: inspected.manifest.name, version: inspected.manifest.version, devhubApi: "1" } : null,

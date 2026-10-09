@@ -1,4 +1,5 @@
 import { getLogoBootstrapInlineScript } from "@/lib/brand-mark";
+import { RuntimeBrandProvider } from "@/components/shell/RuntimeBrandProvider";
 import {
 DEFAULT_THEME_MODE_SETTING,
 DEFAULT_THEME_PRESET_ID,
@@ -142,6 +143,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <a href="#main-content" className="skip-link" tabIndex={0}>
           Skip to main content
         </a>
+        <RuntimeBrandProvider>
         <ServiceWorkerRegister />
         <Suspense fallback={null}>
           <RouteUsageRecorder />
@@ -199,6 +201,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </Suspense>
           </ConfirmProvider>
         </ToastProvider>
+        </RuntimeBrandProvider>
       </body>
     </html>
   );
