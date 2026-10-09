@@ -118,6 +118,11 @@ Manager. The Plugins page shows the distro name and the commands to run. Skill
 and agent copies are written in the distro home (for example `~/.claude`), not
 in the Windows user profile.
 
+Plugin path overrides must be absolute Linux paths inside that distro.
+Windows drive paths, UNC paths and `/mnt/<drive>` locations are rejected for
+plugin storage and targets. After changing Git credentials or PATH, restart
+the DevHub service if its access check still differs from the distro terminal.
+
 ## Getting an installer without building it
 
 `Actions → Release desktop → Run workflow`, tick **windows_only**, then download

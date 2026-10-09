@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { PluginBusyError, withPluginMutationLock } from "./lock";
+import { execExternal } from "../exec-external";
 
 const roots: string[] = [];
 
@@ -19,6 +20,22 @@ afterEach(() => {
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe("withPluginMutationLock", () => {
+  it("serializes independent processes competing to recover a stale owner", async () => {
+    const home = scratchHome();
+    const lock = path.join(home, "locks", "mutation.lock");
+    fs.mkdirSync(lock, { recursive: true });
+    fs.writeFileSync(path.join(lock, "dead"), JSON.stringify({ pid: 2_147_483_646 }));
+    const modulePath = path.resolve("lib/plugins/lock.ts");
+    const worker = `const fs = require('node:fs'); const { withPluginMutationLock } = require(${JSON.stringify(modulePath)});
+      withPluginMutationLock(${JSON.stringify(home)}, async () => {
+        const marker = ${JSON.stringify(path.join(home, "inside"))};
+        fs.writeFileSync(marker, 'inside', { flag: 'wx' });
+        await new Promise(resolve => setTimeout(resolve, 40));
+        fs.unlinkSync(marker);
+      }).catch(err => { console.error(err); process.exitCode = 1; });`;
+    await Promise.all(Array.from({ length: 5 }, () => execExternal(process.execPath, ["--import", "tsx", "--eval", worker], { timeoutMs: 15_000 })));
+    expect(fs.existsSync(lock)).toBe(false);
+  });
   it("runs concurrent callers one at a time", async () => {
     const home = scratchHome();
     let inside = 0;
@@ -40,6 +57,28 @@ describe("withPluginMutationLock", () => {
     const home = scratchHome();
     const result = await withPluginMutationLock(home, async () => withPluginMutationLock(home, async () => "inner"), { waitMs: 200 });
     expect(result).toBe("inner");
+  });
+
+  it("does not inherit a released ancestor lock in detached async work", async () => {
+    const a = scratchHome();
+    const b = scratchHome();
+    let resume!: () => void;
+    const gate = new Promise<void>((resolve) => { resume = resolve; });
+    let later!: Promise<string>;
+    await withPluginMutationLock(a, () => withPluginMutationLock(b, async () => {
+      later = gate.then(() => withPluginMutationLock(a, async () => "wrong owner", { waitMs: 80 }));
+    }));
+    let release!: () => void;
+    let entered!: () => void;
+    const ready = new Promise<void>((resolve) => { entered = resolve; });
+    const current = withPluginMutationLock(a, async () => {
+      entered();
+      await new Promise<void>((resolve) => { release = resolve; });
+    });
+    await ready;
+    resume();
+    try { await expect(later).rejects.toBeInstanceOf(PluginBusyError); }
+    finally { release(); await current; }
   });
 
   it("does not let an unrelated concurrent call slip in as if it were nested", async () => {
@@ -66,7 +105,8 @@ describe("withPluginMutationLock", () => {
     const dir = path.join(home, "locks");
     fs.mkdirSync(dir, { recursive: true });
     // A pid that cannot belong to a live process.
-    fs.writeFileSync(path.join(dir, "mutation.lock"), JSON.stringify({ pid: 2_147_483_646, createdAt: new Date().toISOString(), token: "dead" }));
+    fs.mkdirSync(path.join(dir, "mutation.lock"));
+    fs.writeFileSync(path.join(dir, "mutation.lock", "dead"), JSON.stringify({ pid: 2_147_483_646, createdAt: new Date().toISOString(), token: "dead" }));
     await expect(withPluginMutationLock(home, async () => "recovered", { waitMs: 500 })).resolves.toBe("recovered");
   });
 
@@ -74,9 +114,10 @@ describe("withPluginMutationLock", () => {
     const home = scratchHome();
     const dir = path.join(home, "locks");
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, "mutation.lock"), JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString(), token: "someone-else" }));
+    fs.mkdirSync(path.join(dir, "mutation.lock"));
+    fs.writeFileSync(path.join(dir, "mutation.lock", "someone-else"), JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString(), token: "someone-else" }));
     await expect(withPluginMutationLock(home, async () => "stolen", { waitMs: 100 })).rejects.toBeInstanceOf(PluginBusyError);
-    expect(fs.readFileSync(path.join(dir, "mutation.lock"), "utf8")).toContain("someone-else");
+    expect(fs.readFileSync(path.join(dir, "mutation.lock", "someone-else"), "utf8")).toContain("someone-else");
   });
 
   it("does not treat a lock file that is still being written as stale", async () => {
@@ -88,7 +129,7 @@ describe("withPluginMutationLock", () => {
     await expect(withPluginMutationLock(home, async () => "stolen", { waitMs: 100 })).rejects.toBeInstanceOf(PluginBusyError);
   });
 
-  it("clears an unreadable lock file once it is clearly abandoned", async () => {
+  it("does not infer a dead owner from an unreadable lock's age", async () => {
     const home = scratchHome();
     const dir = path.join(home, "locks");
     fs.mkdirSync(dir, { recursive: true });
@@ -96,7 +137,7 @@ describe("withPluginMutationLock", () => {
     fs.writeFileSync(file, "not json");
     const old = new Date(Date.now() - 60_000);
     fs.utimesSync(file, old, old);
-    await expect(withPluginMutationLock(home, async () => "recovered", { waitMs: 500 })).resolves.toBe("recovered");
+    await expect(withPluginMutationLock(home, async () => "stolen", { waitMs: 100 })).rejects.toBeInstanceOf(PluginBusyError);
   });
 
   it("keeps different plugin homes independent", async () => {

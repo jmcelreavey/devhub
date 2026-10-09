@@ -308,10 +308,13 @@ export function AccessBody(props: {
   const mac = access.runtimeLabel === "This Mac";
   const distro = wsl ? access.runtimeLabel.replace(/ \(WSL\)$/, "") : access.runtimeLabel;
   const terminal = wsl ? `Open ${distro} from the Windows Start menu.` : mac ? "Open Terminal on this Mac." : "Open a terminal on this computer.";
+  const tabId = useId();
+  const tabs = ["gh", "git"] as const;
   return (
     <div className="text-sm">
       <p className="font-mono text-xs text-text-muted">{access.owner}/{access.repo}</p>
       <p className="mt-2">It may be private, unavailable, or the address may be wrong.</p>
+      {wsl ? <p className="mt-2">GitHub access is checked in {distro}, using the account that runs DevHub.</p> : null}
       {access.signedInDenied && access.login ? (
         <p className="mt-2">{access.login} is signed in, but Git couldn’t access this repository. Check the URL, repository membership and any organisation SSO requirement.</p>
       ) : null}
@@ -328,11 +331,20 @@ export function AccessBody(props: {
         </div>
       ) : null}
       <div className="hub-tabs mt-4" role="tablist" aria-label="Ways to give DevHub access">
-        <button type="button" role="tab" aria-selected={props.tab === "gh"} className={`hub-tab ${props.tab === "gh" ? "active" : ""}`} onClick={() => props.onTab("gh")}>GitHub CLI</button>
-        <button type="button" role="tab" aria-selected={props.tab === "git"} className={`hub-tab ${props.tab === "git" ? "active" : ""}`} onClick={() => props.onTab("git")}>Existing Git credentials</button>
+        {tabs.map((tab, index) => (
+          <button key={tab} id={`${tabId}-${tab}`} type="button" role="tab" aria-controls={`${tabId}-panel`} tabIndex={props.tab === tab ? 0 : -1}
+            aria-selected={props.tab === tab} className={`hub-tab ${props.tab === tab ? "active" : ""}`}
+            onClick={() => props.onTab(tab)} onKeyDown={(event) => {
+              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+              event.preventDefault();
+              const next = event.key === "Home" ? "gh" : event.key === "End" ? "git" : tabs[1 - index];
+              props.onTab(next);
+              document.getElementById(`${tabId}-${next}`)?.focus();
+            }}>{tab === "gh" ? "GitHub CLI" : "Existing Git credentials"}</button>
+        ))}
       </div>
       {props.tab === "gh" ? (
-        <div className="mt-3 text-xs" role="tabpanel">
+        <div id={`${tabId}-panel`} aria-labelledby={`${tabId}-gh`} className="mt-3 text-sm" role="tabpanel">
           <p className="text-sm font-semibold text-text">{wsl ? `Sign in inside ${distro}` : "Sign in with GitHub CLI"}</p>
           <ol className="ml-4 mt-2 list-decimal space-y-1">
             <li>{terminal}</li>
@@ -345,7 +357,7 @@ export function AccessBody(props: {
           <p className="mt-2 text-text-muted">GitHub CLI manages your sign-in.</p>
         </div>
       ) : (
-        <div className="mt-3 text-xs" role="tabpanel">
+        <div id={`${tabId}-panel`} aria-labelledby={`${tabId}-git`} className="mt-3 text-sm" role="tabpanel">
           <p className="text-sm font-semibold text-text">{wsl ? "Use Git Credential Manager from Windows" : "Use your existing Git credentials"}</p>
           {wsl ? (
             <>
@@ -371,6 +383,7 @@ export function AccessBody(props: {
           )}
         </div>
       )}
+      <p className="mt-3 text-sm text-text-muted">Git works in your terminal, but the DevHub service still can’t access this repository? Restart the service after changing its credential or PATH configuration, then check again.</p>
     </div>
   );
 }
@@ -483,7 +496,7 @@ export function PreviewBody(props: {
   const labels = new Map(preview.targets.map((target) => [target.id, target.label]));
   const source = preview.source;
   const slug = source.owner && source.repo ? `${source.owner}/${source.repo}` : props.operation.subject;
-  const line = [slug, preview.plugin?.version, source.ref, source.shortSha].filter(Boolean).join(" · ");
+  const line = [source.url ?? slug, preview.plugin?.version, source.ref, source.shortSha].filter(Boolean).join(" · ");
   const blocked = unsupported || Boolean(nameBlocked) || otherBlockers.length > 0;
 
   return (
@@ -508,6 +521,8 @@ export function PreviewBody(props: {
             <p className="mt-1 text-xs">{preview.body}</p>
           </div>
           <InventoryBlock groups={preview.inventory} />
+          <AssetList title="Skills" assets={preview.contributions.skills} labels={labels} />
+          <AssetList title="Agents" assets={preview.contributions.agents} labels={labels} />
           <p className="mt-4 text-xs text-text-subtle">Nothing has been enabled. {NO_CODE_HAS_RUN}</p>
         </>
       ) : nameBlocked ? (
@@ -521,8 +536,8 @@ export function PreviewBody(props: {
           ))}
           <p className="mt-4 text-xs font-semibold text-text">Adds to DevHub</p>
           <dl className="mt-1 grid grid-cols-[9rem_1fr] gap-x-3 gap-y-0.5 text-xs">
-            <dt className="text-text-muted">Skills</dt><dd>{preview.contributions.skills.length}</dd>
-            <dt className="text-text-muted">Agents</dt><dd>{preview.contributions.agents.length}</dd>
+            <dt className="text-text-muted">Skills</dt><dd>{preview.contributions.skills.filter((asset) => asset.status === "add").length}</dd>
+            <dt className="text-text-muted">Agents</dt><dd>{preview.contributions.agents.filter((asset) => asset.status === "add").length}</dd>
           </dl>
           <AssetList title="Skills" assets={preview.contributions.skills} labels={labels} />
           <AssetList title="Agents" assets={preview.contributions.agents} labels={labels} />

@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     if ("ref" in (body as object)) {
       throw new PluginApiError(400, "REF_UNSUPPORTED", URL_MESSAGES.refUnsupported);
     }
-    const view = startPrepare(serverPluginContext(), (body as { url: string }).url, req.headers.get("idempotency-key"));
+    const view = await startPrepare(serverPluginContext(), (body as { url: string }).url, req.headers.get("idempotency-key"));
     return pluginJson({
       operationId: view.id,
       state: view.state,

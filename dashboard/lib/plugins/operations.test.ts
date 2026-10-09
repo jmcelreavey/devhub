@@ -316,7 +316,7 @@ describe("review safety", () => {
     expect(invalid.message).toBe("This plugin contains an unsafe file path");
   });
 
-  it("rolls back an unfinished copy and keeps unrelated files", async () => {
+  it("rejects a changed target parent before copying and keeps unrelated files", async () => {
     const { root, ctx } = scratch();
     const source = path.join(root, "source");
     writePluginTemplate(source, { name: "team-tools" });
@@ -326,8 +326,7 @@ describe("review safety", () => {
     fs.writeFileSync(path.join(kept, "SKILL.md"), "keep me");
     fs.mkdirSync(ctx.paths.targetHome, { recursive: true });
     fs.writeFileSync(path.join(ctx.paths.targetHome, ".codex"), "not a directory");
-    const failed = await confirmOperation(ctx, preview.id, body);
-    expect(failed.state).toBe("failed");
+    await expect(confirmOperation(ctx, preview.id, body)).rejects.toMatchObject({ code: "PREVIEW_STALE" });
     expect(fs.existsSync(path.join(ctx.paths.targetHome, ".claude", "skills", "team-tools-example"))).toBe(false);
     expect(fs.readFileSync(path.join(kept, "SKILL.md"), "utf8")).toBe("keep me");
     expect(listRegistrations(ctx).plugins).toEqual([]);
@@ -372,7 +371,7 @@ describe("review safety", () => {
     save(ctx, applying);
     const view = await waitForOperation(ctx, applying.view.id);
     expect(view.state).toBe("needs_attention");
-    expect(view.message).toBe("The plugin couldn’t be enabled.");
+    expect(view.message).toBe("Plugin changes need attention");
   });
 });
 
@@ -388,17 +387,17 @@ describe("url prepare", () => {
       },
     };
     ctx.runner = runner;
-    const started = startPrepare(ctx, "https://github.com/acme/widgets", "idempotency-key");
-    const again = startPrepare(ctx, "https://github.com/acme/widgets", "idempotency-key");
+    const started = await startPrepare(ctx, "https://github.com/acme/widgets", "idempotency-key");
+    const again = await startPrepare(ctx, "https://github.com/acme/widgets", "idempotency-key");
     expect(again.id).toBe(started.id);
-    expect(() => startPrepare(ctx, "https://github.com/acme/other", "idempotency-key")).toThrow(/different request/);
+    await expect(startPrepare(ctx, "https://github.com/acme/other", "idempotency-key")).rejects.toThrow(/different request/);
     const view = await waitForOperation(ctx, started.id);
     expect(view.state).toBe("needs_access");
     expect(view.message).toBe("We couldn’t access this repository");
     expect(JSON.stringify(view)).not.toMatch(/secret-token/);
     expect(listRegistrations(ctx).plugins).toEqual([]);
     const settled = calls;
-    expect(startPrepare(ctx, "https://github.com/acme/widgets", "idempotency-key").id).toBe(started.id);
+    expect((await startPrepare(ctx, "https://github.com/acme/widgets", "idempotency-key")).id).toBe(started.id);
     expect(calls).toBe(settled);
     const diagnostic = diagnosticsFor(ctx, started.id);
     expect(diagnostic).toMatchObject({
@@ -425,7 +424,7 @@ describe("url prepare", () => {
         });
       },
     };
-    const started = startPrepare(ctx, "https://github.com/acme/widgets");
+    const started = await startPrepare(ctx, "https://github.com/acme/widgets");
     await cancelOperation(ctx, started.id);
     await operationSettled(started.id);
     const view = await waitForOperation(ctx, started.id);

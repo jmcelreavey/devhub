@@ -20,7 +20,7 @@ export function pluginError(err: unknown): NextResponse {
   if (err instanceof PluginApiError) return envelope(err.code, err.message, err.retryable, err.operationId ?? null, err.status);
   if (err instanceof PluginBusyError) return envelope("BUSY", err.message, true, null, 409);
   // Anything else may carry paths or command output; none of it is passed on.
-  return envelope("INTERNAL", "Something went wrong with plugin settings. Nothing was changed.", true, null, 500);
+  return envelope("INTERNAL", "Couldn’t finish updating plugin settings. Check Plugins for the current state.", true, null, 500);
 }
 
 export function assertPluginManagement(req: NextRequest): { ok: true } | { ok: false; response: NextResponse } {
@@ -37,12 +37,27 @@ export async function readJson(req: NextRequest): Promise<unknown> {
   const declared = Number(req.headers.get("content-length") ?? 0);
   if (declared > MAX_BODY_BYTES) throw new PluginApiError(413, "BODY_TOO_LARGE", "The request is too large.");
   let text: string;
+  const reader = req.body?.getReader();
   try {
-    text = await req.text();
-  } catch {
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    if (reader) for (;;) {
+      const next = await reader.read();
+      if (next.done) break;
+      bytes += next.value.byteLength;
+      if (bytes > MAX_BODY_BYTES) {
+        await reader.cancel();
+        throw new PluginApiError(413, "BODY_TOO_LARGE", "The request is too large.");
+      }
+      chunks.push(next.value);
+    }
+    text = Buffer.concat(chunks).toString("utf8");
+  } catch (err) {
+    if (err instanceof PluginApiError) throw err;
     throw new PluginApiError(400, "INVALID_JSON", "The request body must be JSON.");
+  } finally {
+    reader?.releaseLock();
   }
-  if (text.length > MAX_BODY_BYTES) throw new PluginApiError(413, "BODY_TOO_LARGE", "The request is too large.");
   try {
     return JSON.parse(text);
   } catch {

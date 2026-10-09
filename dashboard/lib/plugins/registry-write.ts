@@ -6,7 +6,7 @@ import os from "node:os";
 import { z } from "zod";
 import { withMutex, writeAtomic } from "../atomic-write";
 import { readManifest, PLUGIN_NAME_SLUG } from "./manifest";
-import { withPluginMutationLock } from "./lock";
+import { withPluginPathsLock } from "./lock";
 import { resolvePluginPaths } from "./paths";
 import { secureFile } from "./runtime";
 import { expandHome } from "./registry";
@@ -54,8 +54,8 @@ async function withRegistry<T>(
   env: NodeJS.ProcessEnv | undefined,
   change: (file: string) => Promise<T>,
 ): Promise<T> {
-  const { pluginHome, registryPath } = resolvePluginPaths(env ? { home, env } : { home });
-  return withPluginMutationLock(pluginHome, () => withMutex(registryPath, () => change(registryPath)));
+  const paths = resolvePluginPaths(env ? { home, env } : { home });
+  return withPluginPathsLock(paths, () => withMutex(paths.registryPath, () => change(paths.registryPath)));
 }
 
 export interface PluginRegistration {
@@ -75,6 +75,7 @@ export async function registerPlugin(pluginPath: string, home = os.homedir(), en
     const registry = readRegistry(file);
     const index = registry.plugins.findIndex(entry =>
       entry.name === name || fs.existsSync(expandHome(entry.path, home)) && fs.realpathSync(expandHome(entry.path, home)) === dir);
+    if (index >= 0 && registry.plugins[index].managed === true) throw new Error("Remove this managed registration in Plugins before registering a local folder with its name.");
     const entry = { ...(index >= 0 ? registry.plugins[index] : {}), name, path: dir, enabled: true };
     if (index >= 0) registry.plugins[index] = entry; else registry.plugins.push(entry);
     await writeRegistry(file, registry);
@@ -88,6 +89,7 @@ export async function setPluginEnabled(name: string, enabled: boolean, home = os
     const registry = readRegistry(file);
     const entry = registry.plugins.find(plugin => plugin.name === name);
     if (!entry) throw new Error(`Plugin "${name}" is not registered`);
+    if (entry.managed === true) throw new Error("Use Plugins to review and change this managed installation.");
     if (enabled) {
       const manifest = readManifest(expandHome(entry.path, home));
       if (!manifest.ok) throw new Error(manifest.error);

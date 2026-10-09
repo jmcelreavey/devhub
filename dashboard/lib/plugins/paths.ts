@@ -45,7 +45,8 @@ function resolvePluginHome(env: NodeJS.ProcessEnv, home: string, configDir: stri
   if (configDir) return path.join(configDir, "plugins");
   const appData = env.DEVHUB_APP_DATA?.trim();
   if (appData) return path.join(path.resolve(appData), "plugins");
-  return path.join(defaultAppDataDir(home, env), "plugins");
+  const appRoot = env.WSL_DISTRO_NAME ? path.join(env.XDG_DATA_HOME?.trim() || path.join(home, ".local", "share"), "devhub") : defaultAppDataDir(home, env);
+  return path.join(appRoot, "plugins");
 }
 
 function resolveTargetHome(env: NodeJS.ProcessEnv, home: string): string {
@@ -56,6 +57,17 @@ function resolveTargetHome(env: NodeJS.ProcessEnv, home: string): string {
 export function resolvePluginPaths(opts: ResolvePluginPathsOptions = {}): PluginPaths {
   const home = opts.home ?? os.homedir();
   const env = envFor(home, opts.env);
+  if (env.WSL_DISTRO_NAME) {
+    const candidates = [home, env.DEVHUB_CONFIG_DIR, env.DEVHUB_PLUGIN_HOME, env.DEVHUB_PLUGIN_TARGET_HOME, env.DEVHUB_APP_DATA, env.XDG_CONFIG_HOME, env.XDG_DATA_HOME];
+    for (const candidate of candidates) {
+      if (!candidate?.trim()) continue;
+      if (!path.posix.isAbsolute(candidate) || candidate.includes("\\") || /^\/mnt\/[a-z](?:\/|$)/i.test(candidate)) throw new Error("Plugin paths must use the Linux filesystem inside the DevHub WSL distro.");
+      // Catch existing parent aliases into a Windows mount as well.
+      let ancestor = candidate;
+      while (!fs.existsSync(ancestor) && path.dirname(ancestor) !== ancestor) ancestor = path.dirname(ancestor);
+      if (/^\/mnt\/[a-z](?:\/|$)/i.test(fs.realpathSync(ancestor))) throw new Error("Plugin paths must stay inside the DevHub WSL distro.");
+    }
+  }
   const explicit = env.DEVHUB_CONFIG_DIR?.trim();
   if (explicit) {
     const configDir = path.resolve(explicit);

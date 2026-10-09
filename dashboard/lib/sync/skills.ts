@@ -29,7 +29,9 @@ import {
   SKILL_MD,
 } from "@/lib/skills/shared";
 import { copyTreeSync, safeRemovePath } from "@/lib/server-utils";
-import { pluginOriginGuard } from "@/lib/plugins/origin-guard";
+import { pluginOriginGuard, managedTargetPaths } from "@/lib/plugins/origin-guard";
+import { withPluginPathsLock } from "@/lib/plugins/lock";
+import { resolvePluginPaths } from "@/lib/plugins/paths";
 
 export interface SyncSkillsOptions {
   prune?: boolean;
@@ -252,6 +254,11 @@ const DEFAULT_SYNC_EXCLUDE_SKILLS = [
 ] as const;
 
 export async function syncSkills(opts: SyncSkillsOptions): Promise<number> {
+  return withPluginPathsLock(resolvePluginPaths(), () => syncSkillsLocked(opts));
+}
+
+async function syncSkillsLocked(opts: SyncSkillsOptions): Promise<number> {
+  const protectedPaths = managedTargetPaths();
   const { emit, repoRoot } = opts;
   const devhubSkillsDir = devhubSharedSkillsDir(/*turbopackIgnore: true*/ repoRoot);
   if (!fs.existsSync(/*turbopackIgnore: true*/ devhubSkillsDir)) {
@@ -323,13 +330,17 @@ export async function syncSkills(opts: SyncSkillsOptions): Promise<number> {
     for (const entry of catalog) {
       const dst = path.join(targetRoot, entry.name);
       const tag = originSyncTag(entry.origin);
-      if (opts.dryRun) {
-        emit(`  WOULD [${tag}]: ${entry.name} -> ${dst}`);
-        syncedTotal++;
+      if (protectedPaths.has(path.resolve(dst))) {
+        emit(`  KEPT [${tag}]: ${entry.name} is managed in Plugins`);
         continue;
       }
       if (!(await originGuard(entry.origin))) {
-        emit(`  SKIPPED [${tag}]: ${entry.name} is not enabled`);
+        emit(`  SKIPPED [${tag}]: ${entry.name} is disabled or managed in Plugins`);
+        continue;
+      }
+      if (opts.dryRun) {
+        emit(`  WOULD [${tag}]: ${entry.name} -> ${dst}`);
+        syncedTotal++;
         continue;
       }
       try {
@@ -352,6 +363,7 @@ export async function syncSkills(opts: SyncSkillsOptions): Promise<number> {
     for (const parkedEntry of parkedEntries) {
       const { name } = parkedEntry;
       const parked = path.join(targetRoot, name);
+      if (protectedPaths.has(path.resolve(parked))) continue;
       if (!fs.existsSync(parked)) continue;
       if (!skillTreesEqualForSync(parkedEntry, parked)) {
         emit(`  KEPT PARKED (differs from skills/parked copy): ${name}`);
@@ -375,6 +387,7 @@ export async function syncSkills(opts: SyncSkillsOptions): Promise<number> {
         if (pruneKeepNames.has(existing.name)) continue;
         if (eyeExcluded.has(existing.name)) continue;
         const stale = path.join(targetRoot, existing.name);
+        if (protectedPaths.has(path.resolve(stale))) continue;
         if (opts.dryRun) {
           emit(`  WOULD PRUNE: ${existing.name}`);
           continue;

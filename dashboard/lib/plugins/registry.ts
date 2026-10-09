@@ -61,7 +61,7 @@ export function listEnabledPlugins(home = os.homedir(), warn?: LoadWarn): Regist
     return [];
   }
 
-  const entries = Array.isArray(raw.plugins) ? raw.plugins : [];
+  const entries = Array.isArray(raw?.plugins) ? raw.plugins : [];
   const seen = new Set<string>();
   const out: RegisteredPlugin[] = [];
 

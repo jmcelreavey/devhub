@@ -5,7 +5,9 @@ import { formatAgentForTool } from "@/lib/agent/sync-format";
 import { agentDirEntries, TOOL_DIRS } from "@/lib/sync/skills";
 import { safeRemovePath } from "@/lib/server-utils";
 import { pluginAssetDirs } from "@/lib/plugins/registry";
-import { pluginOriginGuard } from "@/lib/plugins/origin-guard";
+import { pluginOriginGuard, managedTargetPaths } from "@/lib/plugins/origin-guard";
+import { withPluginPathsLock } from "@/lib/plugins/lock";
+import { resolvePluginPaths } from "@/lib/plugins/paths";
 import type { AssetOrigin } from "@/lib/plugins/types";
 
 export interface SyncAgentsOptions {
@@ -57,6 +59,11 @@ export function resolveAgentSources(
 }
 
 export async function syncAgents(opts: SyncAgentsOptions): Promise<number> {
+  return withPluginPathsLock(resolvePluginPaths(), () => syncAgentsLocked(opts));
+}
+
+async function syncAgentsLocked(opts: SyncAgentsOptions): Promise<number> {
+  const protectedPaths = managedTargetPaths();
   const { emit, repoRoot } = opts;
   const sourceDir = path.join(repoRoot, "agents", "shared");
   if (!fs.existsSync(sourceDir)) {
@@ -94,13 +101,17 @@ export async function syncAgents(opts: SyncAgentsOptions): Promise<number> {
       const src = agentSources.get(agent)?.file;
       if (!src) continue;
       const dst = path.join(targetRoot, `${agent}.md`);
-      if (opts.dryRun) {
-        emit(`  WOULD: ${agent} -> ${dst}`);
-        synced++;
+      if (protectedPaths.has(path.resolve(dst))) {
+        emit(`  KEPT: ${agent} is managed in Plugins`);
         continue;
       }
       if (!(await originGuard(agentSources.get(agent)?.origin ?? "core"))) {
-        emit(`  SKIPPED: ${agent} is not enabled`);
+        emit(`  SKIPPED: ${agent} is disabled or managed in Plugins`);
+        continue;
+      }
+      if (opts.dryRun) {
+        emit(`  WOULD: ${agent} -> ${dst}`);
+        synced++;
         continue;
       }
       try {
@@ -126,6 +137,7 @@ export async function syncAgents(opts: SyncAgentsOptions): Promise<number> {
         if (pruneKeepAgents.includes(name)) continue;
         if (excluded.has(name)) continue;
         const stale = path.join(targetRoot, existing.name);
+        if (protectedPaths.has(path.resolve(stale))) continue;
         if (opts.dryRun) {
           emit(`  WOULD PRUNE: ${name}`);
           continue;

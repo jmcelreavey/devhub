@@ -66,7 +66,7 @@ export async function execExternal(
   const id = beginExternalCall({ file, args, cwd: opts.cwd, label: opts.label, timeoutMs });
   const env = isGit(file) ? (terminalShellEnv(opts.env ?? process.env) as NodeJS.ProcessEnv) : opts.env;
   try {
-    if (opts.binary || opts.input !== undefined) {
+    if (opts.binary || opts.input !== undefined || opts.signal) {
       const captured = await spawnCollected(file, [...args], {
         cwd: opts.cwd,
         env,
@@ -124,19 +124,30 @@ function spawnCollected(file: string, args: string[], opts: SpawnCollectedOption
       reject(abortError());
       return;
     }
-    const child = spawn(file, args, { cwd: opts.cwd, env: opts.env, stdio: ["pipe", "pipe", "pipe"] });
+    const grouped = process.platform !== "win32";
+    const child = spawn(file, args, { cwd: opts.cwd, env: opts.env, stdio: ["pipe", "pipe", "pipe"], detached: grouped });
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
     let stdoutLen = 0;
     let stderrLen = 0;
     let settled = false;
+    let stopped: Error | null = null;
+    const stop = (err: Error) => {
+      if (stopped) return;
+      stopped = err;
+      // Git helpers share the process group. Wait for close before callers
+      // remove staging; rejecting on abort lets the child race that cleanup.
+      try {
+        if (grouped && child.pid) process.kill(-child.pid, "SIGKILL");
+        else child.kill("SIGKILL");
+      } catch { child.kill("SIGKILL"); }
+    };
     const timer = setTimeout(() => {
-      child.kill("SIGKILL");
+      stop(Object.assign(new Error("Command timed out"), { killed: true, signal: "SIGKILL" }));
     }, opts.timeoutMs);
 
     const onAbort = () => {
-      child.kill("SIGKILL");
-      fail(abortError());
+      stop(abortError());
     };
     const fail = (err: Error) => {
       if (settled) return;
@@ -150,8 +161,7 @@ function spawnCollected(file: string, args: string[], opts: SpawnCollectedOption
     child.stdout?.on("data", (chunk: Buffer) => {
       stdoutLen += chunk.length;
       if (stdoutLen > opts.maxBuffer) {
-        child.kill("SIGKILL");
-        fail(Object.assign(new Error("stdout exceeded maxBuffer"), { code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" }));
+        stop(Object.assign(new Error("stdout exceeded maxBuffer"), { code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" }));
         return;
       }
       stdoutChunks.push(chunk);
@@ -159,8 +169,7 @@ function spawnCollected(file: string, args: string[], opts: SpawnCollectedOption
     child.stderr?.on("data", (chunk: Buffer) => {
       stderrLen += chunk.length;
       if (stderrLen > opts.maxBuffer) {
-        child.kill("SIGKILL");
-        fail(Object.assign(new Error("stderr exceeded maxBuffer"), { code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" }));
+        stop(Object.assign(new Error("stderr exceeded maxBuffer"), { code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" }));
         return;
       }
       stderrChunks.push(chunk);
@@ -174,6 +183,7 @@ function spawnCollected(file: string, args: string[], opts: SpawnCollectedOption
       settled = true;
       clearTimeout(timer);
       opts.signal?.removeEventListener("abort", onAbort);
+      if (stopped) { reject(stopped); return; }
       const stdoutBuffer = Buffer.concat(stdoutChunks);
       const stderr = Buffer.concat(stderrChunks).toString("utf8");
       if (code === 0 && !signal) {

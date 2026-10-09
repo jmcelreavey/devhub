@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { envTrimOrDefault, resolveDashboardBindHost } from "./load-env-local-into-process";
 import { loadEnvWithOnePasswordFallback } from "./op-secrets";
 import { augmentedPathEnv } from "../lib/process-env";
+import { listenerHost } from "../lib/plugins/listener";
 
 const dashboardRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -35,7 +36,7 @@ async function main(): Promise<void> {
   const sub = args[0];
   const rest = args.slice(1);
   const hasPortFlag = rest.includes("-p") || rest.includes("--port");
-  const hasHostFlag = rest.includes("-H") || rest.includes("--hostname");
+  const hasHostFlag = rest.some((arg) => arg === "--hostname" || arg.startsWith("--hostname=") || arg.startsWith("-H"));
 
   const injected: string[] = [];
   if (sub === "dev" || sub === "start") {
@@ -62,7 +63,11 @@ async function main(): Promise<void> {
 
   const child = spawn(process.execPath, [nextCli, sub, ...injected, ...rest], {
     stdio: "inherit",
-    env: augmentedPathEnv(),
+    env: {
+      ...augmentedPathEnv(),
+      DEVHUB_BIND_HOST: listenerHost(rest, bindHost),
+      DEVHUB_LAN_PROXY_HOST: process.env.DEVHUB_LAN_PROXY_HOST || (["auto", "lan"].includes(rawHostLower) ? rawHostLower : ""),
+    },
     cwd: dashboardRoot,
   });
 

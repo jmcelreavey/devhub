@@ -47,6 +47,7 @@ export interface InspectResult {
   /** Accepted by the manifest schema but not delivered as plugin features. */
   declaredIgnored: string[];
   manifestHash: string | null;
+  treeHash: string | null;
 }
 
 const UNSAFE_MESSAGE = "A declared file points outside the plugin, or uses a file type DevHub won’t install.";
@@ -78,13 +79,18 @@ export function hashSkillDir(dir: string): string {
       const child = path.join(abs, name);
       const next = rel ? `${rel}/${name}` : name;
       const stat = fs.lstatSync(child);
-      if (stat.isSymbolicLink()) continue;
-      if (stat.isDirectory()) walk(child, next);
+      if (stat.isSymbolicLink()) {
+        field(`link:${next}`);
+        field(fs.readlinkSync(child));
+      } else if (stat.isDirectory()) {
+        field(`dir:${next}`);
+        walk(child, next);
+      }
       else if (stat.isFile()) {
         field(next);
         field(String(stat.mode & 0o777));
         field(fs.readFileSync(child));
-      }
+      } else field(`special:${next}:${stat.mode}`);
     }
   };
   walk(dir, "");
@@ -94,11 +100,17 @@ export function hashSkillDir(dir: string): string {
 export function walkPluginRoot(root: string): InspectIssue[] {
   const issues: InspectIssue[] = [];
   let files = 0;
+  let entries = 0;
   let total = 0;
   const seen = new Set<string>();
 
   function visit(abs: string, rel: string): void {
-    if (rel === ".git") return;
+    if (issues.some((issue) => issue.code === "LIMIT")) return;
+    entries += 1;
+    if (entries > PLUGIN_LIMITS.maxFiles * 2 || rel.split("/").length > 64) {
+      issues.push({ code: "LIMIT", file: rel, field: "", message: "This plugin has too many files or nested folders to review." });
+      return;
+    }
     let stat: fs.Stats;
     try {
       stat = fs.lstatSync(abs);
@@ -241,7 +253,7 @@ function listSkills(root: string, manifest: PluginManifest): InspectedAsset[] {
     const skillDir = path.join(dir, name);
     if (!fs.statSync(skillDir).isDirectory()) continue;
     const skillMd = path.join(skillDir, "SKILL.md");
-    if (!fs.existsSync(skillMd)) continue;
+    if (!fs.existsSync(skillMd) || !fs.lstatSync(skillMd).isFile()) continue;
     let supporting = 0;
     let executable = false;
     const walk = (abs: string) => {
@@ -323,6 +335,7 @@ function markProvidedElsewhere(
 }
 
 const EMPTY: Omit<InspectResult, "fatal" | "heading" | "body" | "issues" | "manifest" | "manifestHash"> = {
+  treeHash: null,
   skills: [],
   agents: [],
   requirements: [],
@@ -350,12 +363,18 @@ function fromManifestIssues(code: string, issues: ManifestIssue[]): InspectIssue
 export interface InspectOptions {
   coreSkills?: Set<string>;
   coreAgents?: Set<string>;
-  otherPlugins?: Map<string, string>;
+  otherSkills?: Map<string, string>;
+  otherAgents?: Map<string, string>;
   env?: NodeJS.ProcessEnv;
 }
 
 /** Full review of a downloaded candidate. Folders registered by path never go through this. */
 export function inspectPluginDir(root: string, opts: InspectOptions = {}): InspectResult {
+  const treeIssues = walkPluginRoot(root);
+  if (treeIssues.length) {
+    const limited = treeIssues.some((issue) => issue.code === "LIMIT");
+    return fatal(limited ? "This plugin is larger than DevHub will download for review." : "This plugin contains an unsafe file path", limited ? null : UNSAFE_MESSAGE, treeIssues, null, null);
+  }
   const read = readManifestDetailed(root);
   if (!read.ok) {
     if (read.kind === "missing") {
@@ -381,7 +400,6 @@ export function inspectPluginDir(root: string, opts: InspectOptions = {}): Inspe
 
   const manifest = read.manifest;
   const manifestHash = hashFile(path.join(root, "devhub-plugin.json"));
-  const treeIssues = walkPluginRoot(root);
   if (treeIssues.some((issue) => issue.code === "LIMIT")) {
     return fatal("This plugin is larger than DevHub will download for review.", null, treeIssues, manifest, manifestHash);
   }
@@ -394,6 +412,7 @@ export function inspectPluginDir(root: string, opts: InspectOptions = {}): Inspe
     const abs = contained(root, rel);
     if (!abs) issues.push({ code: "UNSAFE", file: "devhub-plugin.json", field: `contributes.${kind}`, message: "points outside the plugin" });
     else if (!fs.existsSync(abs)) issues.push({ code: "MISSING", file: "devhub-plugin.json", field: `contributes.${kind}`, message: `folder “${rel}” was not found` });
+    else if (!fs.statSync(abs).isDirectory()) issues.push({ code: "UNSAFE", file: "devhub-plugin.json", field: `contributes.${kind}`, message: "must name a folder" });
   }
   if (issues.some((issue) => issue.code === "UNSAFE")) {
     return fatal("This plugin contains an unsafe file path", UNSAFE_MESSAGE, issues, manifest, manifestHash);
@@ -402,8 +421,8 @@ export function inspectPluginDir(root: string, opts: InspectOptions = {}): Inspe
 
   const skills = listSkills(root, manifest);
   const agents = listAgents(root, manifest);
-  markProvidedElsewhere(skills, opts.coreSkills, opts.otherPlugins);
-  markProvidedElsewhere(agents, opts.coreAgents, opts.otherPlugins);
+  markProvidedElsewhere(skills, opts.coreSkills, opts.otherSkills);
+  markProvidedElsewhere(agents, opts.coreAgents, opts.otherAgents);
 
   const packages = mcpPackageNames(root);
   const unsupported: string[] = [];
@@ -452,6 +471,7 @@ export function inspectPluginDir(root: string, opts: InspectOptions = {}): Inspe
     blockers,
     declaredIgnored,
     manifestHash,
+    treeHash: hashSkillDir(root),
   };
 }
 

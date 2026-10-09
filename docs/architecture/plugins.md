@@ -325,7 +325,8 @@ repository's default branch.
 and prints the review. It does not enable the plugin. Confirming an install is an
 in-app step. A folder you already have is still registered with
 `npm run plugins -- add <path>`, which enables it immediately and can replace an
-entry of the same name.
+local entry of the same name. It cannot replace a managed registration; use
+Plugins to review, enable, disable or remove managed installations.
 
 A GitHub install will not replace a plugin that is already registered under that
 name from another path.
@@ -340,6 +341,18 @@ does not rewrite older entries just to add those fields.
 Managed downloads live in the app-data plugins directory, or in `DEVHUB_PLUGIN_HOME` when that is set. Skill and agent copies are written under the account home unless `DEVHUB_PLUGIN_TARGET_HOME` is set. `DEVHUB_CONFIG_DIR` selects only the registry directory; it does not retarget `~/.claude` or the other tool folders.
 
 Disabling a managed plugin removes the unchanged copies it installed and keeps the download. Removing it drops the registry entry and also keeps the download. A copy edited after install is left in place and listed in the result. On Windows the service runs in WSL, so the download, Git credentials and tool copies are inside that distribution, not in a Windows-only GitHub CLI login.
+
+General Skills/Agents sync leaves managed copies alone, including edited copies
+kept after removal. Only the targets selected in Plugins receive those assets.
+Install writes are journaled before copying. After an interrupted apply, Plugins
+shows the recorded locations and offers **Retry cleanup**. It removes unchanged
+copies only; an already enabled plugin must first be disabled from its details.
+
+Plugin API routes require the desktop session and same-origin proof, a valid
+`X-DevHub-Secret`, or a browser session on a known loopback-only listener. The
+LAN dashboard proxy refuses plugin API requests even if they carry credentials.
+Start checkout dashboards through the provided launcher so the API knows the
+actual listener address. An unknown listener fails closed for browser access.
 
 ```bash
 npm run plugins -- list            # enabled plugins, as before

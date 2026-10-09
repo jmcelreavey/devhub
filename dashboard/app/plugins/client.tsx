@@ -42,6 +42,7 @@ const DECISION = new Set(["ready", "needs_access", "invalid", "succeeded", "fail
 interface ListBody {
   ok: boolean;
   plugins: PluginListItem[];
+  operations?: PluginOperationView[];
   diagnostic: string | null;
   malformed: boolean;
   storageLine: string;
@@ -63,7 +64,7 @@ function titleFor(dialog: Dialog, operation: PluginOperationView | null, detail:
   switch (operation.state) {
     case "needs_access": return "We couldn’t access this repository";
     case "invalid": return operation.message || "This repository isn’t a valid DevHub plugin";
-    case "ready": return `Review ${name}`;
+    case "ready": return operation.kind === "disable" ? `Disable ${name}?` : operation.kind === "remove" ? `Remove ${name} from DevHub?` : `Review ${name}`;
     case "applying":
       return operation.kind === "remove" ? `Removing ${name}` : operation.kind === "disable" ? `Disabling ${name}` : `Enabling ${name}`;
     case "succeeded":
@@ -121,11 +122,13 @@ export function PluginsPage() {
   const [selection, setSelection] = useState<{ key: string; ids: string[] }>({ key: "", ids: [] });
   const [diagnosticsText, setDiagnosticsText] = useState<string | null>(null);
   const [accessTab, setAccessTab] = useState<"gh" | "git">("gh");
+  const [actionError, setActionError] = useState<string | null>(null);
   const toasted = useRef<string | null>(null);
   const urlRef = useRef<HTMLInputElement>(null);
   const addButtonRef = useRef<HTMLButtonElement>(null);
   const firstDetailsRef = useRef<HTMLButtonElement>(null);
   const focusAfterClose = useRef(false);
+  const reviewSequence = useRef(0);
 
   const list = listState.data ?? null;
   const loading = listState.isLoading && !list;
@@ -188,6 +191,7 @@ export function PluginsPage() {
     setCancellingId(null);
     setHiddenOp(null);
     setDiagnosticsText(null);
+    setActionError(null);
   }
 
   function openAdd() {
@@ -205,13 +209,19 @@ export function PluginsPage() {
   async function cancelCurrent(view: PluginOperationView) {
     setCancellingId(view.id);
     try {
-      await postJson(`/api/plugins/operations/${view.id}/cancel`);
-    } catch {
-      // The registry is unchanged either way; the record keeps the real state.
+      const cancelled = await postJson<PluginOperationView>(`/api/plugins/operations/${view.id}/cancel`);
+      await opState.mutate(cancelled, { revalidate: false });
+      return cancelled;
+    } catch (err) {
+      setCancellingId(null);
+      setActionError(asFailure(err).message);
+      await opState.mutate();
+      return null;
     }
   }
 
   async function closeDialog() {
+    reviewSequence.current += 1;
     if (confirmKind) {
       setConfirmKind(null);
       return;
@@ -221,7 +231,10 @@ export function PluginsPage() {
       setHiddenOp(operationParam);
       return;
     }
-    if (dialog === "op" && view?.cancellable) await cancelCurrent(view);
+    if (dialog === "op" && view?.cancellable) {
+      const cancelled = await cancelCurrent(view);
+      if (!cancelled || !SETTLED.has(cancelled.state)) return;
+    }
     resetTransient();
     writeQuery({ add: null, plugin: null, operation: null });
   }
@@ -246,12 +259,18 @@ export function PluginsPage() {
   }
 
   async function startReview(address: string) {
+    const sequence = ++reviewSequence.current;
     const started = await postJson<{ operationId: string }>("/api/plugins/prepare", { url: address }, crypto.randomUUID());
+    if (sequence !== reviewSequence.current) {
+      await postJson(`/api/plugins/operations/${started.operationId}/cancel`);
+      return;
+    }
     resetTransient();
     writeQuery({ add: null, plugin: null, operation: started.operationId });
   }
 
   async function reviewPlugin() {
+    if (submitting) return;
     const parsed = parseGitHubRepoUrl(url);
     setUrlTouched(true);
     if (!parsed.ok) {
@@ -281,27 +300,29 @@ export function PluginsPage() {
     try {
       await startReview(address);
     } catch (err) {
-      toast.error(asFailure(err).message);
+      setActionError(asFailure(err).message);
     } finally {
       setSubmitting(false);
     }
   }
 
   async function confirmCurrent() {
-    if (!operation || !operation.preview) return;
+    if (!operation || !operation.preview || submitting) return;
     const reviewed = operation.preview;
     setSubmitting(true);
+    setActionError(null);
+    await opState.mutate({ ...operation, state: "applying", cancellable: false, phase: ["disable", "remove"].includes(operation.kind) ? operation.steps[0]?.label ?? "Updating plugin settings" : "Verify reviewed files" }, { revalidate: false });
     try {
       const view = await postJson<PluginOperationView>(
         `/api/plugins/operations/${operation.id}/confirm`,
-        { revision: reviewed.revision, planDigest: reviewed.planDigest, selectedTargets: selected, accepted: true },
+        { revision: reviewed.revision, planDigest: reviewed.planDigest, selectedTargets: ["disable", "remove"].includes(operation.kind) ? [] : selected, accepted: true },
         crypto.randomUUID(),
       );
       await opState.mutate(view, { revalidate: false });
     } catch (err) {
       const failure = asFailure(err);
       await opState.mutate();
-      if (failure.code !== "PREVIEW_STALE" && failure.code !== "PREVIEW_EXPIRED") toast.error(failure.message);
+      setActionError(failure.message);
     } finally {
       setSubmitting(false);
     }
@@ -313,7 +334,7 @@ export function PluginsPage() {
     try {
       await opState.mutate(await postJson<PluginOperationView>(`/api/plugins/operations/${operation.id}/recheck`), { revalidate: false });
     } catch (err) {
-      toast.error(asFailure(err).message);
+      setActionError(asFailure(err).message);
     } finally {
       setSubmitting(false);
     }
@@ -335,23 +356,15 @@ export function PluginsPage() {
     }
   }
 
-  /** Disable or remove: the review is created and confirmed together, because the person already confirmed in the dialog. */
+  /** Display the server's cleanup plan before confirming its digest. */
   async function runLifecycle(kind: "disable" | "remove", pluginId: string) {
     setSubmitting(true);
     try {
       const started = await postJson<{ operationId: string }>(`/api/plugins/${encodeURIComponent(pluginId)}/${kind}-preview`);
-      const view = await getJson<PluginOperationView>(`/api/plugins/operations/${started.operationId}`);
-      if (!view.preview) throw { status: 409, code: "NOT_READY", message: "Review the plugin again before changing it." };
-      const confirmed = await postJson<PluginOperationView>(
-        `/api/plugins/operations/${view.id}/confirm`,
-        { revision: view.preview.revision, planDigest: view.preview.planDigest, selectedTargets: [], accepted: true },
-        crypto.randomUUID(),
-      );
       resetTransient();
-      writeQuery({ operation: confirmed.id, plugin: null, add: null });
-      await opState.mutate(confirmed, { revalidate: false });
+      writeQuery({ operation: started.operationId, plugin: null, add: null });
     } catch (err) {
-      toast.error(asFailure(err).message);
+      setActionError(asFailure(err).message);
     } finally {
       setSubmitting(false);
     }
@@ -364,7 +377,7 @@ export function PluginsPage() {
       resetTransient();
       writeQuery({ operation: started.operationId, plugin: null, add: null });
     } catch (err) {
-      toast.error(asFailure(err).message);
+      setActionError(asFailure(err).message);
     } finally {
       setSubmitting(false);
     }
@@ -373,6 +386,16 @@ export function PluginsPage() {
   /** Try again means the same thing the person did last: review the address again, or redo the change. */
   async function retry() {
     if (!operation) return;
+    if (operation.error?.code === "INTERRUPTED") {
+      setSubmitting(true);
+      try {
+        await opState.mutate(await postJson<PluginOperationView>(`/api/plugins/operations/${operation.id}/retry-cleanup`), { revalidate: false });
+        await listState.mutate();
+        setActionError(null);
+      } catch (err) { setActionError(asFailure(err).message); }
+      finally { setSubmitting(false); }
+      return;
+    }
     if ((operation.kind === "disable" || operation.kind === "remove") && operation.pluginId) {
       await runLifecycle(operation.kind, operation.pluginId);
     } else if (operation.kind === "enable" && operation.pluginId) {
@@ -430,15 +453,15 @@ export function PluginsPage() {
             detail={detail}
             submitting={submitting}
             onClose={() => void closeDialog()}
-            onAskDisable={() => setConfirmKind("disable")}
-            onAskRemove={() => setConfirmKind("remove")}
+            onAskDisable={() => detail && void runLifecycle("disable", detail.id)}
+            onAskRemove={() => detail && void runLifecycle("remove", detail.id)}
             onEnable={() => detail && void startEnable(detail.id)}
           />
         )
         : dialog === "op" ? operationFooter : null;
 
   return (
-    <div className="page-wrapper">
+    <div className="page-wrapper plugins-page">
       <PageHeader
         title="Plugins"
         subtitle="Install shared skills and agents from a GitHub repo."
@@ -446,10 +469,16 @@ export function PluginsPage() {
       />
 
       <div className="max-w-[1040px]">
-        {operation && opHidden && !SETTLED.has(operation.state) ? (
+        {list?.operations?.filter((item) => item.id !== operationParam).map((item) => (
+          <div key={item.id} className="card card-body mb-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm">{item.subject ?? "Plugin"}: {item.message ?? item.phase}</p>
+            <button type="button" className="btn btn-ghost text-xs" onClick={() => { resetTransient(); writeQuery({ operation: item.id, plugin: null, add: null }); }}>View progress</button>
+          </div>
+        ))}
+        {operation && opHidden ? (
           <div className="card card-body mb-4 flex items-center justify-between gap-3" role="status">
-            <p className="text-sm text-text">{operation.phase || "Working…"}</p>
-            <button type="button" className="btn btn-ghost text-xs" onClick={() => setHiddenOp(null)}>View progress</button>
+            <p className="text-sm text-text">{SETTLED.has(operation.state) ? operation.message ?? "Operation finished" : operation.phase || "Working…"}</p>
+            <button type="button" className="btn btn-ghost text-xs" onClick={() => setHiddenOp(null)}>{SETTLED.has(operation.state) ? "View result" : "View progress"}</button>
           </div>
         ) : null}
 
@@ -501,11 +530,13 @@ export function PluginsPage() {
         description={subtitle}
         wrapTitle
         maxWidth={dialog === "detail" || (dialog === "op" && operation?.state === "ready") ? "max-w-4xl" : "max-w-xl"}
-        focusTitle={dialog === "op" && Boolean(operation && DECISION.has(operation.state))}
+        focusTitle={dialog === "op" && Boolean(operation && DECISION.has(operation.state) && !(operation.state === "ready" && ["disable", "remove"].includes(operation.kind)))}
         focusToken={operation ? `${operation.id}:${operation.state}:${operation.preview?.revision ?? 0}` : dialog ?? ""}
         dismissOnBackdrop={operation?.state !== "applying"}
-        footer={footer}
+        footer={<div className="plugin-content">{footer}</div>}
       >
+        <div className="plugin-content">
+        {actionError ? <p className="tone-panel tone-panel--danger mb-4 text-sm" role="alert">{actionError}</p> : null}
         {dialog === "op" ? <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcementFor(operation)}</p> : null}
 
         {dialog === "add" ? (
@@ -528,6 +559,7 @@ export function PluginsPage() {
         ) : null}
 
         {dialog === "detail" && detailError ? <p className="text-sm" role="alert">{detailError}</p> : null}
+        {dialog === "detail" && !detail && !detailError ? <SkeletonRows count={3} /> : null}
         {dialog === "detail" && detail ? <DetailBody detail={detail} onCopyDiagnostics={() => void copyDiagnostics("registry")} /> : null}
         {dialog === "detail" && diagnosticsText ? <DiagnosticsFallback text={diagnosticsText} /> : null}
 
@@ -558,6 +590,13 @@ export function PluginsPage() {
               <InvalidBody operation={operation} />
               {diagnosticsText ? <DiagnosticsFallback text={diagnosticsText} /> : null}
             </>
+          ) : operation.state === "ready" && preview && (operation.kind === "disable" || operation.kind === "remove") ? (
+            <div className="text-sm">
+              <p>{operation.kind === "remove" ? "This disables the plugin and removes its registration." : `DevHub will stop including this plugin${preview.targets.length ? ` and remove the copies it installed in ${joinAnd(preview.targets.map((target) => target.label))}` : ""}.`}</p>
+              <p className="mt-3">The downloaded repository will be kept at:</p>
+              <p className="mt-2 break-all font-mono text-xs">{preview.source.destination}</p>
+              <p className="mt-3">Open AI sessions may keep using content already loaded.</p>
+            </div>
           ) : operation.state === "ready" && preview ? (
             <PreviewBody
               operation={operation}
@@ -579,9 +618,15 @@ export function PluginsPage() {
           ) : (
             <PrepareBody operation={operation} />
           )
+        ) : dialog === "op" && opState.error ? (
+          <div role="alert" className="tone-panel tone-panel--danger text-sm">
+            <p>Couldn’t load this operation. Its progress hasn’t been cancelled.</p>
+            <button type="button" className="btn btn-ghost mt-3" onClick={() => void opState.mutate()}>Try again</button>
+          </div>
         ) : dialog === "op" ? (
           <SkeletonRows count={2} height={24} />
         ) : null}
+        </div>
       </ModalShell>
     </div>
   );

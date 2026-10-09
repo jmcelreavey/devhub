@@ -3,7 +3,6 @@
  * the digest that binds a confirmation to exactly this plan.
  */
 import crypto from "node:crypto";
-import fs from "node:fs";
 import path from "node:path";
 import { getResourceRoot } from "@/lib/desktop/runtime-paths";
 import { toolEnv, type PluginContext } from "./context";
@@ -15,8 +14,9 @@ import { expandHome } from "./registry";
 import { registryRevision } from "./registry-write";
 import { serviceRuntime, shortSha, tildePath, commandOnPath } from "./runtime";
 import { accessCommands, type ParsedGitHubRepo } from "./source";
-import { PREVIEW_TTL_MS, type AssetHash, type StoredOperation } from "./store";
+import { PREVIEW_TTL_MS, readReceipt, type AssetHash, type StoredOperation } from "./store";
 import { rows } from "./views";
+import { pathExists, safePath } from "./filesystem";
 
 export interface SourceFacts {
   url: string | null;
@@ -58,8 +58,8 @@ function coreNames(ctx: PluginContext): { skills: Set<string>; agents: Set<strin
 }
 
 /** Skill and agent names other enabled plugins already provide. */
-function otherPluginNames(ctx: PluginContext, allowName: string | null): Map<string, string> {
-  const map = new Map<string, string>();
+function otherPluginNames(ctx: PluginContext, allowName: string | null): { skills: Map<string, string>; agents: Map<string, string> } {
+  const maps = { skills: new Map<string, string>(), agents: new Map<string, string>() };
   for (const row of rows(ctx)) {
     if (!row.enabled || !row.name || row.name === allowName) continue;
     const dir = expandHome(row.path, ctx.home);
@@ -69,18 +69,21 @@ function otherPluginNames(ctx: PluginContext, allowName: string | null): Map<str
       if (!rel) continue;
       const abs = path.resolve(dir, rel);
       if (abs !== dir && !abs.startsWith(dir + path.sep)) continue;
+      const map = kind === "skill" ? maps.skills : maps.agents;
       for (const name of namesOnDisk(abs, kind)) if (!map.has(name)) map.set(name, row.name);
     }
   }
-  return map;
+  return maps;
 }
 
 export function inspectTree(ctx: PluginContext, root: string, allowName: string | null): InspectResult {
   const core = coreNames(ctx);
+  const others = otherPluginNames(ctx, allowName);
   return inspectPluginDir(root, {
     coreSkills: core.skills,
     coreAgents: core.agents,
-    otherPlugins: otherPluginNames(ctx, allowName),
+    otherSkills: others.skills,
+    otherAgents: others.agents,
     env: toolEnv(ctx),
   });
 }
@@ -111,13 +114,13 @@ export function targetRows(ctx: PluginContext, inspected: InspectResult): Target
   for (const target of targets) {
     for (const skill of inspected.skills) {
       const dest = skillDestination(target, skill);
-      if (skill.preview.status === "add" && dest && fs.existsSync(dest)) {
+      if (skill.preview.status === "add" && dest && (!safePath(ctx.paths.targetHome, dest) || pathExists(dest))) {
         skill.preview.conflictTargets.push(target.id);
         conflicted.add(target.id);
       }
     }
     for (const agent of inspected.agents) {
-      if (agent.preview.status === "add" && agentDestinations(target, agent).some((dest) => fs.existsSync(dest))) {
+      if (agent.preview.status === "add" && agentDestinations(target, agent).some((dest) => !safePath(ctx.paths.targetHome, dest) || pathExists(dest))) {
         agent.preview.conflictTargets.push(target.id);
         conflicted.add(target.id);
       }
@@ -126,7 +129,7 @@ export function targetRows(ctx: PluginContext, inspected: InspectResult): Target
   return targets.map((target) => ({
     id: target.id,
     label: target.label,
-    pathLabel: tildePath(target.skillDir ?? target.agentDirs[0] ?? ctx.paths.targetHome, ctx.paths.targetHome),
+    pathLabel: [...(inspected.skills.some((asset) => asset.preview.status === "add") && target.skillDir ? [target.skillDir] : []), ...(inspected.agents.some((asset) => asset.preview.status === "add") ? target.agentDirs : [])].map((dir) => tildePath(dir, ctx.paths.targetHome)).join(" · ") || "No compatible assets",
     selectedByDefault: target.selectedByDefault && !conflicted.has(target.id),
     conflict: conflicted.has(target.id) ? "Conflicts with a local copy" : null,
   }));
@@ -138,11 +141,11 @@ export function fingerprintMap(ctx: PluginContext, inspected: InspectResult): Re
   for (const target of visibleSyncTargets(ctx.paths.targetHome)) {
     for (const skill of inspected.skills) {
       const dest = skillDestination(target, skill);
-      if (skill.preview.status === "add" && dest) map[`${target.id}:skill:${skill.preview.name}`] = destinationFingerprint(dest, "skill");
+      if (skill.preview.status === "add" && dest) map[`${target.id}:skill:${skill.preview.name}`] = safePath(ctx.paths.targetHome, dest) ? destinationFingerprint(dest, "skill") : "unsafe";
     }
     for (const agent of inspected.agents) {
       if (agent.preview.status !== "add") continue;
-      for (const dest of agentDestinations(target, agent)) map[`${target.id}:agent:${agent.preview.name}:${dest}`] = destinationFingerprint(dest, "agent");
+      for (const dest of agentDestinations(target, agent)) map[`${target.id}:agent:${agent.preview.name}:${dest}`] = safePath(ctx.paths.targetHome, dest) ? destinationFingerprint(dest, "agent") : "unsafe";
     }
   }
   return map;
@@ -156,9 +159,10 @@ export function assetHashes(inspected: InspectResult): AssetHash[] {
 }
 
 /** Do the files under `root` still hash to what was reviewed? */
-export function hashesMatch(ctx: PluginContext, root: string, hashes: AssetHash[]): boolean {
+export function hashesMatch(ctx: PluginContext, root: string, hashes: AssetHash[], sourceHash?: string | null): boolean {
   const inspected = inspectPluginDir(root, { env: toolEnv(ctx) });
   if (inspected.fatal) return false;
+  if (sourceHash !== undefined && inspected.treeHash !== sourceHash) return false;
   for (const asset of hashes) {
     const pool = asset.kind === "skill" ? inspected.skills : inspected.agents;
     const found = pool.find((item) => item.preview.name === asset.name);
@@ -172,12 +176,13 @@ export function fingerprintsMatch(ctx: PluginContext, stored: StoredOperation, s
   if (!root) return false;
   const inspected = inspectTree(ctx, root, stored.view.kind === "enable" ? stored.view.preview?.plugin?.name ?? null : null);
   if (inspected.fatal) return false;
+  if (inspected.manifestHash !== stored.internal.manifestHash || !inspected.requirementsMet || inspected.blockers.length > 0) return false;
   const current = fingerprintMap(ctx, inspected);
   for (const [key, value] of Object.entries(stored.internal.fingerprints)) {
     if (!selected.includes(key.split(":")[0])) continue;
     if (current[key] !== value) return false;
   }
-  return hashesMatch(ctx, root, stored.internal.assetHashes);
+  return hashesMatch(ctx, root, stored.internal.assetHashes, stored.internal.sourceHash ?? null);
 }
 
 export function toPreview(
@@ -206,6 +211,7 @@ export function toPreview(
   const digest = sha256(stable({
     sha: source.sha,
     manifestHash: inspected.manifestHash,
+    treeHash: inspected.treeHash,
     assets: [...inspected.skills, ...inspected.agents].map((asset) => ({ name: asset.preview.name, status: asset.preview.status, hash: asset.bytesHash })),
     requirements: inspected.requirements.map((item) => ({ command: item.command, available: item.available })),
     unsupported: inspected.unsupported,
@@ -250,10 +256,11 @@ export function toPreview(
 
 /** The preview for disabling or removing: no contributions, only what would be touched. */
 export function lifecyclePreview(ctx: PluginContext, stored: StoredOperation, entry: { id: string; name: string; url: string | null; sha: string | null; ref: string | null; managed: boolean; path: string }, version: string): PluginPreview {
-  const targets: TargetPreview[] = visibleSyncTargets(ctx.paths.targetHome).map((target) => ({
+  const receipt = readReceipt(ctx, entry.id);
+  const targets: TargetPreview[] = visibleSyncTargets(ctx.paths.targetHome).filter((target) => receipt?.files.some((file) => file.tool === target.id)).map((target) => ({
     id: target.id,
     label: target.label,
-    pathLabel: tildePath(target.skillDir ?? target.agentDirs[0] ?? ctx.paths.targetHome, ctx.paths.targetHome),
+    pathLabel: [...new Set(receipt?.files.filter((file) => file.tool === target.id).map((file) => path.dirname(file.destination)))].map((dir) => tildePath(dir, ctx.paths.targetHome)).join(" · "),
     selectedByDefault: false,
     conflict: null,
   }));
@@ -261,7 +268,7 @@ export function lifecyclePreview(ctx: PluginContext, stored: StoredOperation, en
   return {
     operationId: stored.view.id,
     revision: 1,
-    planDigest: sha256(stable({ kind: stored.view.kind, id: entry.id, registry: revision })),
+    planDigest: sha256(stable({ kind: stored.view.kind, id: entry.id, registry: revision, receipt })),
     expiresAt: new Date(Date.now() + PREVIEW_TTL_MS).toISOString(),
     plugin: { name: entry.name, version, devhubApi: "1" },
     source: {

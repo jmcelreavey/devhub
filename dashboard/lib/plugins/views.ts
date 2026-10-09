@@ -12,6 +12,7 @@ import type { PluginDetail, PluginListItem } from "./model";
 import { expandHome } from "./registry";
 import { readReceipt } from "./store";
 import { tildePath, shortSha } from "./runtime";
+import { parseGitHubRepoUrl } from "./github-url";
 
 export interface RegistryRow {
   id: string;
@@ -38,6 +39,8 @@ export function rowFrom(entry: RawEntry): RegistryRow {
   const name = text(entry.name) ?? "";
   const operation = entry.lastOperation as { kind?: unknown; at?: unknown } | undefined;
   const ref = text(source.ref);
+  const sourceUrl = text(source.url);
+  const parsedUrl = sourceUrl ? parseGitHubRepoUrl(sourceUrl) : null;
   return {
     // Entries written before ids existed are addressed by name; an entry with
     // neither gets a stable id derived from its folder, never the folder itself.
@@ -46,7 +49,7 @@ export function rowFrom(entry: RawEntry): RegistryRow {
     path: rawPath,
     enabled: entry.enabled !== false,
     managed: entry.managed === true,
-    url: text(source.url),
+    url: parsedUrl?.ok ? parsedUrl.repo.url : null,
     sha: text(entry.approvedSha) ?? text(source.sha),
     ref: ref ? ref.replace(/^refs\/heads\//, "") : null,
     installedAt: text(entry.installedAt),
@@ -75,6 +78,7 @@ export function readRawRegistry(ctx: PluginContext): RawRegistry {
     return { entries: [], problem: REGISTRY_UNREADABLE };
   }
   const list = parsed && typeof parsed === "object" ? (parsed as { plugins?: unknown }).plugins : undefined;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { entries: [], problem: REGISTRY_UNREADABLE };
   if (list === undefined) return { entries: [], problem: null };
   if (!Array.isArray(list)) return { entries: [], problem: REGISTRY_UNREADABLE };
   const entries = list.filter((item): item is RawEntry => Boolean(item) && typeof item === "object" && text((item as RawEntry).path) !== null);
@@ -114,12 +118,15 @@ interface Summary {
 
 function summarise(ctx: PluginContext, row: RegistryRow, duplicates: Set<string>): Summary {
   const abs = expandHome(row.path, ctx.home);
-  const folder = summarisePluginDir(abs);
+  let folder: ReturnType<typeof summarisePluginDir>;
+  try { folder = summarisePluginDir(abs); }
+  catch { folder = { problem: "manifest_invalid", manifest: null, skills: 0, agents: 0 }; }
   let attention: string | null = null;
   if (folder.problem === "folder_missing") attention = "Plugin folder not found";
   else if (folder.problem === "manifest_invalid") attention = "Manifest is invalid";
   else if (row.name && folder.manifest && folder.manifest.name !== row.name) attention = "Registry name does not match the manifest";
   else if (row.name && duplicates.has(row.name)) attention = "Duplicate plugin name";
+  else if (row.managed && !readReceipt(ctx, row.id)) attention = "Installation record is missing or unreadable";
   const state = attention ? "needs_attention" : !row.enabled ? "disabled" : row.managed ? "enabled" : "local";
   const stateLabel = { needs_attention: "Needs attention", disabled: "Disabled", local: "Local folder", enabled: "Enabled" }[state];
   const slug = row.url ? githubSlug(row.url) : null;
@@ -207,8 +214,8 @@ export function getRegistration(ctx: PluginContext, idOrName: string): PluginDet
       : null,
     lastOperation: last ? { label: LAST_OPERATION_LABEL[last.kind] ?? "Updated", at: last.at } : null,
     // Folders registered by path stay observational until reviewed adoption exists.
-    canDisable: row.managed && item.state === "enabled",
-    canRemove: row.managed,
-    canEnable: row.managed && !row.enabled && item.attention !== "Plugin folder not found",
+    canDisable: row.managed && Boolean(receipt) && (row.enabled || Boolean(receipt?.files.length)),
+    canRemove: row.managed && Boolean(receipt),
+    canEnable: row.managed && Boolean(receipt) && !row.enabled && !item.attention && !receipt?.files.length,
   };
 }

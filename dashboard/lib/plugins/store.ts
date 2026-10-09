@@ -8,9 +8,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { writeAtomicNow } from "@/lib/atomic-write";
 import { PluginApiError, toolEnv, type PluginContext } from "./context";
-import type { InstallReceipt } from "./install";
+import { destinationFingerprint, type InstallReceipt } from "./install";
 import type { PluginOperationKind, PluginOperationState, PluginOperationView, PluginStep } from "./model";
-import { commandOnPath, ensureSecureDir, secureFile } from "./runtime";
+import { commandOnPath, ensureSecureDir, secureFile, tildePath } from "./runtime";
+import { assertSafePath, safePath } from "./filesystem";
 
 export const PREVIEW_TTL_MS = 15 * 60 * 1000;
 /** Staging for a cancelled, expired or abandoned review is kept this long, then removed. */
@@ -46,6 +47,7 @@ export interface Internal {
   pluginRecordId: string | null;
   cancelRequested: boolean;
   manifestHash: string | null;
+  sourceHash: string | null;
   assetHashes: AssetHash[];
   fingerprints: Record<string, string>;
   confirmKey: string | null;
@@ -133,6 +135,7 @@ export function blank(ctx: PluginContext, kind: PluginOperationKind, steps: Plug
       pluginRecordId: null,
       cancelRequested: false,
       manifestHash: null,
+      sourceHash: null,
       assetHashes: [],
       fingerprints: {},
       confirmKey: null,
@@ -155,7 +158,18 @@ export function terminal(state: PluginOperationState): boolean {
 
 export function save(ctx: PluginContext, stored: StoredOperation): void {
   const dir = path.join(ctx.paths.pluginHome, "operations");
+  assertSafePath(ctx.paths.pluginHome, dir);
   ensureSecureDir(dir);
+  // A separate marker cannot be overwritten by a preparing worker's stale
+  // progress snapshot when cancellation arrives from another process.
+  if (fs.existsSync(path.join(dir, `${stored.view.id}.cancel`))) {
+    stored.internal.cancelRequested = true;
+    if (["ready", "invalid"].includes(stored.view.state)) {
+      stored.view.state = "cancelled";
+      stored.view.message = "Cancelled. No plugin was enabled.";
+      stored.view.cancellable = false;
+    }
+  }
   const file = path.join(dir, `${stored.view.id}.json`);
   writeAtomicNow(file, JSON.stringify(stored));
   secureFile(file);
@@ -165,6 +179,7 @@ export function readStored(ctx: PluginContext, id: string): StoredOperation {
   const gone = () => new PluginApiError(404, "NOT_FOUND", "That review is no longer available.");
   if (!ID_RE.test(id)) throw gone();
   const file = path.join(ctx.paths.pluginHome, "operations", `${id}.json`);
+  assertSafePath(ctx.paths.pluginHome, file);
   let parsed: StoredOperation;
   try {
     parsed = JSON.parse(fs.readFileSync(file, "utf8")) as StoredOperation;
@@ -172,7 +187,16 @@ export function readStored(ctx: PluginContext, id: string): StoredOperation {
     throw gone();
   }
   if (!parsed?.view?.id || parsed.view.id !== id) throw gone();
+  if (fs.existsSync(path.join(ctx.paths.pluginHome, "operations", `${id}.cancel`))) parsed.internal.cancelRequested = true;
   return parsed;
+}
+
+export function requestCancellation(ctx: PluginContext, id: string): void {
+  if (!ID_RE.test(id)) throw new Error("Invalid operation identifier");
+  const file = path.join(ctx.paths.pluginHome, "operations", `${id}.cancel`);
+  assertSafePath(ctx.paths.pluginHome, file);
+  writeAtomicNow(file, "cancel\n");
+  secureFile(file);
 }
 
 function pidAlive(pid: number): boolean {
@@ -194,21 +218,33 @@ export function reconcile(ctx: PluginContext, stored: StoredOperation): StoredOp
   if (!pidAlive(stored.internal.pid) && !terminal(stored.view.state)) {
     const applying = stored.view.state === "applying";
     stored.view.state = applying ? "needs_attention" : "expired";
-    stored.view.message = applying ? "The plugin couldn’t be enabled." : "Review expired";
+    stored.view.message = applying ? "Plugin changes need attention" : "Review expired";
     stored.view.cancellable = false;
-    save(ctx, stored);
+    if (applying) {
+      const receipt = readReceipt(ctx, stored.internal.pluginRecordId ?? stored.view.id);
+      const files = receipt?.files.filter((file) => !safePath(ctx.paths.targetHome, file.destination) || destinationFingerprint(file.destination, file.kind) !== "absent") ?? [];
+      const unchanged = files.filter((file) => safePath(ctx.paths.targetHome, file.destination) && destinationFingerprint(file.destination, file.kind) === `${file.kind === "skill" ? "dir" : "file"}:${file.hash}`).length;
+      stored.view.error = {
+        code: "INTERRUPTED", message: "Plugin changes were interrupted. Review the recorded copies before continuing.", retryable: false,
+        consequences: [`${unchanged} recorded copies are unchanged; ${files.length - unchanged} need manual review.`, "No changes were resumed automatically. Retry cleanup removes unchanged copies only; an enabled plugin must be disabled from its details first."],
+        paths: files.map((file) => tildePath(file.destination, ctx.home)),
+      };
+    }
+    // Polling is read-only: it must not overwrite another process that has
+    // just acquired the mutation lock to confirm or recover this operation.
     return stored;
   }
   if (stored.view.state === "ready" && stored.view.preview && Date.parse(stored.view.preview.expiresAt) < Date.now()) {
     stored.view.state = "expired";
     stored.view.message = "Review expired";
-    save(ctx, stored);
   }
   return stored;
 }
 
 export function writeReceipt(ctx: PluginContext, receipt: InstallReceipt): void {
   const dir = path.join(ctx.paths.pluginHome, "receipts");
+  if (!ID_RE.test(receipt.pluginId)) throw new Error("Invalid plugin record identifier");
+  assertSafePath(ctx.paths.pluginHome, dir);
   ensureSecureDir(dir);
   const file = path.join(dir, `${receipt.pluginId}.json`);
   writeAtomicNow(file, JSON.stringify(receipt, null, 2) + "\n");
@@ -218,7 +254,12 @@ export function writeReceipt(ctx: PluginContext, receipt: InstallReceipt): void 
 export function readReceipt(ctx: PluginContext, id: string): InstallReceipt | null {
   if (!ID_RE.test(id)) return null;
   try {
-    return JSON.parse(fs.readFileSync(path.join(ctx.paths.pluginHome, "receipts", `${id}.json`), "utf8")) as InstallReceipt;
+    const file = path.join(ctx.paths.pluginHome, "receipts", `${id}.json`);
+    assertSafePath(ctx.paths.pluginHome, file);
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as InstallReceipt;
+    if (parsed.pluginId !== id || !Array.isArray(parsed.files) || parsed.files.some((item) => !item || !["skill", "agent"].includes(item.kind) || typeof item.destination !== "string" || typeof item.hash !== "string")) return null;
+    if (parsed.retainedPaths && (!Array.isArray(parsed.retainedPaths) || parsed.retainedPaths.some((item) => typeof item !== "string"))) return null;
+    return parsed;
   } catch {
     return null;
   }
@@ -226,6 +267,7 @@ export function readReceipt(ctx: PluginContext, id: string): InstallReceipt | nu
 
 export function removeReceipt(ctx: PluginContext, id: string): void {
   if (!ID_RE.test(id)) return;
+  assertSafePath(ctx.paths.pluginHome, path.join(ctx.paths.pluginHome, "receipts", `${id}.json`));
   fs.rmSync(path.join(ctx.paths.pluginHome, "receipts", `${id}.json`), { force: true });
 }
 
@@ -274,6 +316,7 @@ export function sweepOldWork(ctx: PluginContext, busy: (id: string) => boolean):
   const clean = (dir: string, maxAge: number, removeRecursive: boolean) => {
     let names: string[];
     try {
+      assertSafePath(ctx.paths.pluginHome, dir);
       names = fs.readdirSync(dir);
     } catch {
       return;
@@ -283,7 +326,15 @@ export function sweepOldWork(ctx: PluginContext, busy: (id: string) => boolean):
       if (!ID_RE.test(id) || busy(id)) continue;
       const target = path.join(dir, name);
       try {
-        if (now - fs.statSync(target).mtimeMs > maxAge) fs.rmSync(target, { recursive: removeRecursive, force: true });
+        const record = readStored(ctx, id);
+        if (!terminal(record.view.state) && pidAlive(record.internal.pid)) continue;
+        // An interrupted apply's journal remains available for explicit recovery.
+        if (record.view.state === "applying" || record.view.state === "needs_attention") continue;
+        assertSafePath(ctx.paths.pluginHome, target);
+        if (now - fs.lstatSync(target).mtimeMs > maxAge) {
+          fs.rmSync(target, { recursive: removeRecursive, force: true });
+          if (!removeRecursive) fs.rmSync(path.join(dir, `${id}.cancel`), { force: true });
+        }
       } catch {
         // Gone already, or not ours to remove.
       }

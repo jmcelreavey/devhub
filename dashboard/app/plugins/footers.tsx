@@ -125,13 +125,15 @@ export function OperationFooter(props: { operation: PluginOperationView } & Oper
   }
 
   if (op.state === "failed" || op.state === "needs_attention" || op.state === "expired") {
-    const stale = op.state === "expired" || op.error?.code === "PREVIEW_STALE" || op.error?.code === "TARGET_CONFLICT";
+    const stale = op.state === "expired" || op.error?.code === "PREVIEW_STALE" || op.error?.code === "TARGET_CONFLICT" || op.error?.code === "CLEANED";
     return (
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button type="button" className={GHOST} onClick={props.onCopyDiagnostics}>Copy diagnostics</button>
         <div className="flex flex-wrap gap-2">
           <button type="button" className={GHOST} onClick={props.onClose}>Close</button>
-          {stale ? (
+          {op.error?.code === "INTERRUPTED" ? (
+            <button type="button" className={PRIMARY} disabled={submitting} onClick={props.onRetry}>{busy} Retry cleanup</button>
+          ) : stale ? (
             <button type="button" className={PRIMARY} disabled={submitting} onClick={props.onReviewAgain}>{busy} Review again</button>
           ) : op.error?.retryable ? (
             <button type="button" className={PRIMARY} disabled={submitting} onClick={props.onRetry}>{busy} Try again</button>
@@ -161,6 +163,7 @@ export function OperationFooter(props: { operation: PluginOperationView } & Oper
   }
 
   if (op.state === "ready" && op.preview) {
+    if (op.kind === "disable" || op.kind === "remove") return <ConfirmFooter kind={op.kind} submitting={submitting} onCancel={props.onClose} onConfirm={props.onConfirm} />;
     const preview = op.preview;
     const guide = <Link className={GHOST} href={PLUGIN_GUIDE_HREF}>Open plugin guide</Link>;
     if (preview.blockers.some((item) => item.code === "UNSUPPORTED")) {

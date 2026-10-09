@@ -64,6 +64,9 @@ describe("hardening flags", () => {
       "core.fsmonitor=false",
       "core.hooksPath=/tmp/hooks",
       "transfer.fsckObjects=true",
+      "core.askPass=",
+      "credential.interactive=false",
+      "trace2.eventTarget=0",
     ]));
     // `-c` always precedes its value; nothing is glued into one shell string.
     expect(flags.every((value, i) => (i % 2 === 0 ? value === "-c" : value !== "-c"))).toBe(true);
@@ -79,13 +82,17 @@ describe("hardening flags", () => {
   });
 
   it("never lets Git prompt, and drops trace output that could print credentials", () => {
-    const env = gitChildEnv(testEnv({ PATH: "/bin", GIT_TRACE: "1", GIT_CURL_VERBOSE: "1", GIT_TRACE_PACKET: "1" }));
+    const env = gitChildEnv(testEnv({ PATH: "/bin", GIT_TRACE: "1", GIT_CURL_VERBOSE: "1", GIT_TRACE_PACKET: "1", GIT_TRACE2_EVENT: "/tmp/trace", GH_DEBUG: "api", GIT_ASKPASS: "unsafe", GIT_WORK_TREE: "/tmp/other" }));
     expect(env.GIT_TERMINAL_PROMPT).toBe("0");
     expect(env.GCM_INTERACTIVE).toBe("never");
     expect(env.GIT_ALLOW_PROTOCOL).toBe("https");
     expect(env.GIT_TRACE).toBeUndefined();
     expect(env.GIT_CURL_VERBOSE).toBeUndefined();
     expect(env.GIT_TRACE_PACKET).toBeUndefined();
+    expect(env.GIT_TRACE2_EVENT).toBeUndefined();
+    expect(env.GH_DEBUG).toBeUndefined();
+    expect(env.GIT_ASKPASS).toBeUndefined();
+    expect(env.GIT_WORK_TREE).toBeUndefined();
   });
 });
 
@@ -188,7 +195,7 @@ describe("accessCommands", () => {
 
   it("names a bundled gh on WSL when an ordinary terminal would not find it", () => {
     const dir = scratchDir();
-    const bin = path.join(dir, "bundled", "bin");
+    const bin = path.join(dir, "bundled tools", "bin");
     fs.mkdirSync(bin, { recursive: true });
     fs.writeFileSync(path.join(bin, "gh"), "#!/bin/sh\n", { mode: 0o755 });
     const commands = accessCommands(repo, "wsl", testEnv({ PATH: bin }));
@@ -206,15 +213,15 @@ describe("downloadRepository with scripted Git", () => {
   const staging = () => path.join(scratchDir(), "stage");
 
   it("classifies denied access, timeouts and cancellation without keeping Git's text", async () => {
-    const denied = scripted(() => failed("remote: Repository not found.\nfatal: Authentication failed for 'https://github.com/acme/team-tools.git/' ghp_SECRET"));
+    const denied = scripted((_file, args) => args.includes("--get-url") ? ok(repo.cloneUrl) : failed("remote: Repository not found.\nfatal: Authentication failed for 'https://github.com/acme/team-tools.git/' ghp_SECRET"));
     const result = await downloadRepository(denied.runner, repo, staging(), testEnv(), "configured-helper");
     expect(result).toMatchObject({ ok: false, code: "ACCESS" });
     expect(JSON.stringify(result)).not.toContain("ghp_SECRET");
 
-    const slow = scripted(() => ({ code: 1, stdout: "", stderr: "", timedOut: true }));
+    const slow = scripted((_file, args) => args.includes("--get-url") ? ok(repo.cloneUrl) : ({ code: 1, stdout: "", stderr: "", timedOut: true }));
     expect(await downloadRepository(slow.runner, repo, staging(), testEnv(), null)).toMatchObject({ ok: false, code: "TIMEOUT", timedOut: true });
 
-    const other = scripted(() => failed("fatal: unable to access: Could not resolve host"));
+    const other = scripted((_file, args) => args.includes("--get-url") ? ok(repo.cloneUrl) : failed("fatal: unable to access: Could not resolve host"));
     expect(await downloadRepository(other.runner, repo, staging(), testEnv(), null)).toMatchObject({ ok: false, code: "GIT" });
   });
 
@@ -222,7 +229,7 @@ describe("downloadRepository with scripted Git", () => {
     const controller = new AbortController();
     const runner: CommandRunner = {
       run: (_file, args, opts) => new Promise((resolve) => {
-        if (!args.includes("clone")) return resolve(ok());
+        if (!args.includes("clone")) return resolve(ok(repo.cloneUrl));
         opts.signal?.addEventListener("abort", () => resolve({ code: 1, stdout: "", stderr: "", timedOut: false, aborted: true }));
       }),
     };
@@ -235,7 +242,7 @@ describe("downloadRepository with scripted Git", () => {
     const dir = staging();
     const runner: CommandRunner = {
       run: (_file, args, opts) => new Promise((resolve) => {
-        if (!args.includes("clone")) return resolve(ok());
+        if (!args.includes("clone")) return resolve(ok(repo.cloneUrl));
         const dest = args[args.length - 1];
         fs.mkdirSync(dest, { recursive: true });
         fs.writeFileSync(path.join(dest, "pack"), Buffer.alloc(4096));
@@ -252,6 +259,7 @@ describe("downloadRepository with scripted Git", () => {
   function listing(output: string) {
     return scripted((_file, args) => {
       const flat = args.join(" ");
+      if (args.includes("--get-url")) return ok(repo.cloneUrl);
       if (flat.includes("ls-tree")) return ok(output);
       if (flat.includes("rev-parse")) return ok(`${"b".repeat(40)}\n`);
       if (flat.includes("symbolic-ref")) return ok("main\n");
@@ -272,6 +280,7 @@ describe("downloadRepository with scripted Git", () => {
     ["a .GIT path in another case", lsTree(blob("100644", 10, "devhub-plugin.json"), blob("100644", 3, ".GIT/hooks/post-checkout"))],
     ["a .gitmodules file", lsTree(blob("100644", 10, "devhub-plugin.json"), blob("100644", 30, ".gitmodules"))],
     ["names that differ only by case", lsTree(blob("100644", 10, "devhub-plugin.json"), blob("100644", 3, "Skills/a.md"), blob("100644", 3, "skills/a.md"))],
+    ["directory names that differ by case", lsTree(blob("100644", 10, "devhub-plugin.json"), blob("100644", 3, "Skills/a.md"), blob("100644", 3, "skills/b.md"))],
     ["names that differ only by Unicode form", lsTree(blob("100644", 10, "devhub-plugin.json"), blob("100644", 3, "caf\u00e9.md"), blob("100644", 3, "cafe\u0301.md"))],
     ["an executable that is not a regular mode", lsTree(blob("100644", 10, "devhub-plugin.json"), blob("100664", 3, "x"))],
     ["a record without a path", `100644 blob ${"a".repeat(40)}       3\t\0`],
@@ -302,7 +311,7 @@ describe("downloadRepository with scripted Git", () => {
   });
 
   it("rejects a clone whose origin is not the validated address", async () => {
-    const runner = scripted((_file, args) => (args.join(" ").includes("remote get-url") ? ok("https://elsewhere.example/acme/team-tools.git\n") : ok())).runner;
+    const runner = scripted((_file, args) => args.includes("--get-url") ? ok(repo.cloneUrl) : (args.join(" ").includes("remote get-url") ? ok("https://elsewhere.example/acme/team-tools.git\n") : ok())).runner;
     expect(await downloadRepository(runner, repo, staging(), testEnv(), null)).toMatchObject({ ok: false, code: "UNSAFE" });
   });
 });
@@ -351,6 +360,13 @@ describe.skipIf(!hasGit)("downloadRepository with real Git", () => {
     expect(args.find((arg) => arg.startsWith("core.hooksPath="))).toMatch(/git-template\/hooks$/);
     expect(args).toContain("--no-checkout");
     expect(args).toContain("--no-recurse-submodules");
+  });
+
+  it("preserves committed line endings rather than applying checkout conversion", async () => {
+    const bytes = Buffer.from("first\r\nsecond\r\n");
+    const { result } = await download([...VALID_PLUGIN, { path: ".gitattributes", content: "* text eol=lf\n" }, { path: "skills/team-review/data.txt", content: bytes }]);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(fs.readFileSync(path.join(result.workTree, "skills/team-review/data.txt"))).toEqual(bytes);
   });
 
   it("runs no hook, template or filter from the machine's Git configuration", async () => {

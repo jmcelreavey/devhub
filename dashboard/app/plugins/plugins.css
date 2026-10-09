@@ -1,0 +1,25 @@
+/* Keep status meaning in text; fill tokens do not all meet text contrast. */
+:is(.plugins-page, .plugin-content) :is(.text-success, .text-warning) { color: var(--text); }
+:is(.plugins-page, .plugin-content) .text-text-subtle { color: var(--text-muted); }
+:is(.plugins-page, .plugin-content) :is(.badge-success, .badge-warning, .text-danger, .btn-danger-ghost) { color: var(--text); }
+.plugin-content summary { display: list-item; align-content: center; }
+.plugin-content .hub-tabs { flex-wrap: wrap; }
+.plugin-content :is(dd, pre) { min-width: 0; }
+/* 44px touch targets where the pointer is a finger; desktop keeps the app's compact controls. */
+@media (pointer: coarse) {
+  :is(.plugins-page, .plugin-content) :is(.btn, .hub-tab, summary) { min-height: 44px; }
+  .plugins-page .hub-icon-btn { min-height: 44px; min-width: 44px; }
+  .plugin-content label:has(input[type="checkbox"]) { min-height: 44px; }
+}
+/* When a footer wraps, its primary action stays on the right. */
+.plugin-content > .justify-between > :last-child { margin-left: auto; }
+.plugin-content .input { border-color: var(--text-muted); }
+@media (prefers-reduced-motion: reduce) {
+  :is(.plugins-page, .plugin-content) *,
+  :is(.plugins-page, .plugin-content) *::before,
+  :is(.plugins-page, .plugin-content) *::after { animation: none !important; transition: none !important; }
+}
+@media (max-width: 480px) {
+  .plugin-content dl { grid-template-columns: minmax(0, 1fr); }
+  .plugin-content dd + dt { margin-top: 8px; }
+}

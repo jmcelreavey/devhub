@@ -9,6 +9,7 @@ import net from "node:net";
 import process from "node:process";
 import { isCgnat, resolveBindHost } from "./load-env-local-into-process";
 import { loadEnvWithOnePasswordFallback } from "./op-secrets";
+import { dashboardLanProxy } from "../lib/plugins/lan-proxy";
 
 interface PortProxy {
   label: string;
@@ -29,7 +30,7 @@ function parsePort(key: string, fallback: number): number {
 }
 
 function startProxy({ label, port }: PortProxy, host: string): net.Server {
-  const server = net.createServer((client) => {
+  const server = label === "dashboard" ? dashboardLanProxy(port) : net.createServer((client) => {
     const upstream = net.connect({ host: "127.0.0.1", port });
     client.pipe(upstream).pipe(client);
 

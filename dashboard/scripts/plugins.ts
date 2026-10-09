@@ -131,7 +131,7 @@ async function urlCommand(rest: string[], io: CliIo, env: NodeJS.ProcessEnv): Pr
   const url = rest[0];
   if (!url || rest.length !== 1) throw new Error(usage);
   const ctx: PluginContext = pluginContext({ env });
-  const started = startPrepare(ctx, url);
+  const started = await startPrepare(ctx, url);
   const view = await waitForOperation(ctx, started.id, 120_000);
   try {
     if (view.message) io.stdout(`${view.message}\n`);

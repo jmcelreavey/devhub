@@ -11,6 +11,7 @@ import type { SkillCatalogEntry } from "@/lib/skill-catalog";
 import { AGENT_TOOL_DIRS, TOOL_DIRS, copySkillForSync, skillTreesEqualForSync } from "@/lib/sync/skills";
 import { hashFile, hashSkillDir, type InspectedAsset } from "./inspect";
 import type { TargetProgress } from "./model";
+import { pathExists, safePath } from "./filesystem";
 
 const TOOL_LABELS: Record<string, string> = {
   claude: "Claude Code",
@@ -50,6 +51,8 @@ export interface InstallReceipt {
   sha: string | null;
   planDigest: string;
   files: ReceiptFile[];
+  /** Edited copies remain protected from general catalog pruning. */
+  retainedPaths?: string[];
 }
 
 /**
@@ -102,9 +105,13 @@ function sha256(text: string): string {
 }
 
 export function destinationFingerprint(fileOrDir: string, kind: "skill" | "agent"): string {
-  if (!fs.existsSync(fileOrDir)) return "absent";
-  if (kind === "agent") return `file:${hashFile(fileOrDir)}`;
-  return `dir:${hashSkillDir(fileOrDir)}`;
+  try {
+    if (!pathExists(fileOrDir)) return "absent";
+    const stat = fs.lstatSync(fileOrDir);
+    if (stat.isSymbolicLink() || (kind === "agent" ? !stat.isFile() : !stat.isDirectory())) return "conflict";
+    if (kind === "agent") return `file:${hashFile(fileOrDir)}`;
+    return `dir:${hashSkillDir(fileOrDir)}`;
+  } catch { return "unreadable"; }
 }
 
 export interface ApplyResult {
@@ -136,6 +143,8 @@ export async function applyReviewedAssets(opts: {
   agents: InspectedAsset[];
   /** Called after every item, so progress shows work that really happened. */
   onProgress?: (rows: TargetProgress[]) => void;
+  /** Persist the expected destination before its first write, including crash recovery. */
+  onWrite?: (file: ReceiptFile) => void;
 }): Promise<ApplyResult> {
   const targets = visibleSyncTargets(opts.targetHome).filter((target) => opts.selected.includes(target.id));
   const skills = opts.skills.filter((skill) => skill.preview.status === "add" && skill.sourceDir);
@@ -160,19 +169,24 @@ export async function applyReviewedAssets(opts: {
         for (const skill of skills) {
           const sourceDir = skill.sourceDir as string;
           const dest = path.join(target.skillDir, skill.preview.name);
-          if (fs.existsSync(dest)) throw new ApplyError("TARGET_CONFLICT", `${target.label} already has an item named ${skill.preview.name}.`);
+          if (!safePath(opts.targetHome, dest) || pathExists(dest)) throw new ApplyError("TARGET_CONFLICT", `${target.label} already has an item named ${skill.preview.name}, or its folder is unsafe.`);
           if (hashSkillDir(sourceDir) !== skill.bytesHash) throw new ApplyError("VERIFY", `Couldn’t verify ${skill.preview.name}.`);
           const entry: SkillCatalogEntry = { name: skill.preview.name, origin: `plugin:${opts.pluginName}`, dir: sourceDir };
+          const intent: ReceiptFile = { kind: "skill", name: skill.preview.name, tool: target.id, destination: dest, hash: skill.bytesHash };
+          opts.onWrite?.(intent);
+          let created = false;
           try {
             fs.mkdirSync(target.skillDir, { recursive: true });
+            if (!safePath(opts.targetHome, dest)) throw new Error("unsafe target");
+            fs.mkdirSync(dest);
+            created = true;
             copySkillForSync(entry, dest);
           } catch {
-            // Whatever was half-copied is ours, so it is rolled back with the rest.
-            written.push({ kind: "skill", name: skill.preview.name, tool: target.id, destination: dest, hash: "" });
+            if (created) written.push(intent);
             throw new ApplyError("TARGET_WRITE", `${target.label}’s skills folder couldn’t be written.`);
           }
           if (!skillTreesEqualForSync(entry, dest)) {
-            written.push({ kind: "skill", name: skill.preview.name, tool: target.id, destination: dest, hash: "" });
+            written.push(intent);
             throw new ApplyError("VERIFY", `Couldn’t verify ${skill.preview.name} in ${target.label}.`);
           }
           written.push({ kind: "skill", name: skill.preview.name, tool: target.id, destination: dest, hash: hashSkillDir(dest) });
@@ -190,11 +204,18 @@ export async function applyReviewedAssets(opts: {
           const hash = sha256(formatted);
           for (const dir of target.agentDirs) {
             const dest = path.join(dir, `${agent.preview.name}.md`);
-            if (fs.existsSync(dest)) throw new ApplyError("TARGET_CONFLICT", `${target.label} already has an item named ${agent.preview.name}.`);
+            if (!safePath(opts.targetHome, dest) || pathExists(dest)) throw new ApplyError("TARGET_CONFLICT", `${target.label} already has an item named ${agent.preview.name}, or its folder is unsafe.`);
+            const intent: ReceiptFile = { kind: "agent", name: agent.preview.name, tool: target.id, destination: dest, hash };
+            opts.onWrite?.(intent);
+            let created = false;
             try {
               fs.mkdirSync(dir, { recursive: true });
-              fs.writeFileSync(dest, formatted, { flag: "wx" });
+              if (!safePath(opts.targetHome, dest)) throw new Error("unsafe target");
+              const fd = fs.openSync(dest, "wx");
+              created = true;
+              try { fs.writeFileSync(fd, formatted); } finally { fs.closeSync(fd); }
             } catch {
+              if (created) written.push(intent);
               throw new ApplyError("TARGET_WRITE", `${target.label}’s agents folder couldn’t be written.`);
             }
             written.push({ kind: "agent", name: agent.preview.name, tool: target.id, destination: dest, hash });
@@ -219,7 +240,7 @@ export async function applyReviewedAssets(opts: {
       ok: false,
       files: [],
       targets: [],
-      message: err instanceof Error ? err.message : "Couldn’t copy plugin files.",
+      message: err instanceof ApplyError ? err.message : "Couldn’t copy plugin files.",
       code: err instanceof ApplyError ? err.code : "TARGET_WRITE",
       rolledBack: undone.removed,
       leftover: undone.leftover,
@@ -243,17 +264,19 @@ function insideHome(destination: string, targetHome: string): boolean {
 }
 
 /**
- * Undo this attempt's own writes. A file with no recorded hash was only
- * partly written by us, so it is removed; anything else is removed only while
- * it still matches what was written.
+ * Undo only unchanged writes. Partial or edited files need manual review.
  */
 function rollbackWritten(files: ReceiptFile[], targetHome: string): { removed: number; leftover: string[] } {
   let removed = 0;
   const leftover: string[] = [];
   for (const file of [...files].reverse()) {
     try {
-      if (!fs.existsSync(file.destination) || !insideHome(file.destination, targetHome)) continue;
-      if (file.hash === "" || currentHash(file) === file.hash) {
+      if (!insideHome(file.destination, targetHome) || !safePath(targetHome, file.destination)) {
+        leftover.push(file.destination);
+        continue;
+      }
+      if (!pathExists(file.destination)) continue;
+      if (file.hash !== "" && currentHash(file) === file.hash) {
         fs.rmSync(file.destination, { recursive: true, force: true });
         removed += 1;
       } else {
@@ -270,8 +293,12 @@ export function cleanupReceipt(receipt: InstallReceipt, targetHome: string): { r
   const removed: string[] = [];
   const kept: string[] = [];
   for (const file of receipt.files) {
-    if (!fs.existsSync(file.destination) && !isDanglingLink(file.destination)) continue;
-    if (!insideHome(file.destination, targetHome) || currentHash(file) !== file.hash) {
+    if (!insideHome(file.destination, targetHome) || !safePath(targetHome, file.destination)) {
+      kept.push(file.destination);
+      continue;
+    }
+    if (!pathExists(file.destination)) continue;
+    if (currentHash(file) !== file.hash) {
       kept.push(file.destination);
       continue;
     }
@@ -279,12 +306,4 @@ export function cleanupReceipt(receipt: InstallReceipt, targetHome: string): { r
     removed.push(file.destination);
   }
   return { removed, kept };
-}
-
-function isDanglingLink(file: string): boolean {
-  try {
-    return fs.lstatSync(file).isSymbolicLink();
-  } catch {
-    return false;
-  }
 }

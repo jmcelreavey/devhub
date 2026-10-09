@@ -59,6 +59,7 @@ export function parseGitHubRepoUrl(raw: string): UrlParseResult {
   // HTTPS rather than to remove a username that SSH requires.
   if (url.protocol !== "https:" || url.hostname !== "github.com") return fail(URL_MESSAGES.hostOrScheme);
   if (authority.includes("@") || url.username || url.password) return fail(URL_MESSAGES.credentials);
+  if (!/^github\.com$/i.test(authority)) return fail(URL_MESSAGES.hostOrScheme);
   // An explicit port, including the default one, is never part of a repository link.
   if (authority.includes(":") || url.port) return fail(URL_MESSAGES.hostOrScheme);
   if (url.search || url.hash || /[?#]/.test(afterScheme)) return fail(URL_MESSAGES.queryOrFragment);

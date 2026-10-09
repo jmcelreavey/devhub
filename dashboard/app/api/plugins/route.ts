@@ -1,6 +1,6 @@
 import { type NextRequest } from "next/server";
 import { assertPluginManagement, pluginError, pluginJson, serverPluginContext } from "@/lib/plugins/http";
-import { listRegistrations } from "@/lib/plugins/operations";
+import { listRegistrations, unfinishedOperations } from "@/lib/plugins/operations";
 import { aliasHome, serviceRuntime, tildePath } from "@/lib/plugins/runtime";
 
 export const runtime = "nodejs";
@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
     const where = serviceRuntime(ctx.env);
     return pluginJson({
       ...listRegistrations(ctx),
+      operations: unfinishedOperations(ctx),
       storageLine: where.storageLine,
       syncHeading: where.syncHeading,
       syncNote: where.syncNote,

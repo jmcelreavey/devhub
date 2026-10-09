@@ -27,7 +27,7 @@ function secretMatches(candidate: string | null, expected: string | undefined): 
 /** The dashboard was started listening on loopback only, with nothing forwarding the LAN to it. */
 export function loopbackOnly(env: NodeJS.ProcessEnv): boolean {
   if (env.DEVHUB_LAN_PROXY_HOST?.trim()) return false;
-  const bind = (env.DEVHUB_BIND_HOST ?? "127.0.0.1").trim().toLowerCase();
+  const bind = (env.DEVHUB_BIND_HOST ?? "").trim().toLowerCase();
   return bind === "127.0.0.1" || bind === "::1" || bind === "localhost";
 }
 
@@ -55,7 +55,7 @@ export function decideManagement(req: NextRequest, env: NodeJS.ProcessEnv = proc
   const mutating = !SAFE_METHODS.has(req.method.toUpperCase());
   const sameOrigin = isSameOriginStrict(req) || (!mutating && isSameOriginReferer(req));
   if (isAuthenticatedDesktopRequest(req)) {
-    return !mutating || isSameOriginStrict(req) ? { ok: true } : { ok: false, status: 403 };
+    return hostIsLoopback(req) && sameOrigin ? { ok: true } : { ok: false, status: 403 };
   }
   if (desktopToken() === null && loopbackOnly(env) && hostIsLoopback(req) && sameOrigin) return { ok: true };
   return { ok: false, status: 403 };

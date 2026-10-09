@@ -79,6 +79,11 @@ export function gitHardeningConfig(hooksPath: string): string[] {
     "filter.lfs.smudge=",
     "filter.lfs.clean=",
     "filter.lfs.process=",
+    "core.askPass=",
+    "credential.interactive=false",
+    "trace2.normalTarget=0",
+    "trace2.eventTarget=0",
+    "trace2.perfTarget=0",
     `core.hooksPath=${hooksPath}`,
   ];
   return flags.flatMap((value) => ["-c", value]);
@@ -105,9 +110,12 @@ export function gitChildEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.Proce
     GIT_TERMINAL_PROMPT: "0",
     GCM_INTERACTIVE: "never",
     GIT_ALLOW_PROTOCOL: "https",
+    GIT_LFS_SKIP_SMUDGE: "1",
+    GH_PROMPT_DISABLED: "1",
   };
-  for (const key of ["GIT_TRACE", "GIT_TRACE_PACKET", "GIT_TRACE_PERFORMANCE", "GIT_TRACE_SETUP", "GIT_CURL_VERBOSE", "GIT_TRACE_CURL"]) {
-    delete env[key];
+  for (const key of Object.keys(env)) {
+    if (key.startsWith("GIT_TRACE") || key === "GIT_CURL_VERBOSE" || key === "GH_DEBUG"
+      || ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_ASKPASS", "SSH_ASKPASS"].includes(key)) delete env[key];
   }
   return env;
 }
@@ -179,6 +187,7 @@ async function effectiveUrlMatches(
   signal?: AbortSignal,
 ): Promise<EffectiveUrl> {
   const result = await runner.run("git", [...gitHardeningConfig(hooksPath), "ls-remote", "--get-url", repo.cloneUrl], {
+    cwd: hooksPath,
     env: gitChildEnv(env),
     timeoutMs: 10_000,
     label: "git:get-url",
@@ -216,6 +225,7 @@ export async function checkRepositoryAccess(
   if (effective !== "match") return base;
 
   const probe = (args: string[]) => runner.run("git", [...args, "ls-remote", repo.cloneUrl, "HEAD"], {
+    cwd: hooksPath,
     env: gitChildEnv(env),
     timeoutMs: 20_000,
     label: "git:ls-remote",
@@ -301,11 +311,11 @@ function parseLsTree(stdout: string): TreeEntry[] | null {
 }
 
 export function assertRepoRelative(filePath: string): boolean {
-  if (!filePath || filePath.includes("\0") || filePath.includes("\\")) return false;
+  if (!filePath || /[\u0000-\u001f\u007f\\:]/.test(filePath)) return false;
   if (path.isAbsolute(filePath) || /^[A-Za-z]:/.test(filePath) || filePath.startsWith("//")) return false;
   for (const part of filePath.split("/")) {
     if (!part || part === "." || part === "..") return false;
-    if (part.toLowerCase() === ".git") return false;
+    if (part.toLowerCase() === ".git" || /[. ]$/.test(part) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part)) return false;
   }
   return true;
 }
@@ -399,11 +409,16 @@ export async function downloadRepository(
       ...extra,
     });
 
+  // Git configuration can change while an access check is in flight.
+  const effective = await effectiveUrlMatches(runner, repo, hooks, env, opts.signal);
+  if (effective !== "match") return failure(effective === "aborted" ? "ABORTED" : effective === "timeout" ? "TIMEOUT" : "UNSAFE", null, effective === "timeout");
+
   // The pack arrives before we can inspect it, so size is watched while Git
   // runs and the process is stopped the moment it passes the ceiling.
   const stopper = new AbortController();
   const relay = () => stopper.abort();
   opts.signal?.addEventListener("abort", relay, { once: true });
+  if (opts.signal?.aborted) stopper.abort();
   let oversize = false;
   const watchdog = setInterval(() => {
     if (directoryBytes(dest, limits.maxCloneBytes) > limits.maxCloneBytes) {
@@ -414,6 +429,7 @@ export async function downloadRepository(
   let cloned: CommandResult;
   try {
     cloned = await runner.run("git", cloneArgv(repo.cloneUrl, dest, template, prefix), {
+      cwd: hooks,
       env: gitChildEnv(env),
       timeoutMs: CLONE_TIMEOUT_MS,
       label: "git:clone",
@@ -462,6 +478,7 @@ export async function downloadRepository(
   if (entries.length > limits.maxFiles) return failure("LIMIT");
 
   const seen = new Set<string>();
+  const spelling = new Map<string, string>();
   let total = 0;
   for (const entry of entries) {
     // symlink, gitlink (submodule) and anything that is not a plain file
@@ -471,6 +488,15 @@ export async function downloadRepository(
     const key = entry.filePath.normalize("NFC").toLowerCase();
     if (seen.has(key)) return failure("UNSAFE");
     seen.add(key);
+    const parts = entry.filePath.split("/");
+    for (let length = 1; length <= parts.length; length += 1) {
+      const prefix = parts.slice(0, length).join("/");
+      const canonical = prefix.normalize("NFC").toLowerCase();
+      const previous = spelling.get(canonical);
+      if (previous && previous !== prefix) return failure("UNSAFE");
+      if (length < parts.length && seen.has(canonical)) return failure("UNSAFE");
+      spelling.set(canonical, prefix);
+    }
     if (entry.size > limits.maxFileBytes) return failure("LIMIT");
     total += entry.size;
     if (total > limits.maxTotalBytes) return failure("LIMIT");
@@ -532,7 +558,7 @@ export function accessCommands(
     // A bundled gh may not be on an ordinary WSL terminal's PATH; name it exactly.
     const found = whichOnPath("gh", env);
     const ordinary = ["/usr/bin", "/usr/local/bin", "/bin", "/snap/bin"];
-    if (found && !ordinary.includes(path.dirname(found)) && /^[A-Za-z0-9._/@+-]+$/.test(found)) gh = `'${found}'`;
+    if (found && !ordinary.includes(path.dirname(found))) gh = `'${found.replace(/'/g, "'\\''")}'`;
   }
   const login = [
     `${gh} auth login --hostname github.com --git-protocol https --web`,

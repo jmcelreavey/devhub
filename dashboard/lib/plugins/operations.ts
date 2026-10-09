@@ -10,7 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { PluginApiError, toolEnv, type PluginContext } from "./context";
 import { NOT_COPIED, addedSummary, keptSummary, syncSummary, CANCELLING } from "./copy";
-import { applyReviewedAssets, cleanupReceipt, visibleSyncTargets, type InstallReceipt } from "./install";
+import { applyReviewedAssets, cleanupReceipt, type InstallReceipt } from "./install";
 import type {
   PluginDiagnostic,
   PluginOperationError,
@@ -18,7 +18,7 @@ import type {
   PluginPreview,
 } from "./model";
 import { ensureSecureDir, serviceRuntime, tildePath, commandOnPath } from "./runtime";
-import { withPluginMutationLock } from "./lock";
+import { withPluginPathsLock } from "./lock";
 import { expandHome } from "./registry";
 import {
   patchPluginEntry,
@@ -46,6 +46,7 @@ import {
   readStored,
   reconcile,
   rememberIdempotent,
+  requestCancellation,
   removeReceipt,
   removeSteps,
   save,
@@ -67,7 +68,8 @@ import {
   toPreview,
   type SourceFacts,
 } from "./preview";
-import { findEntry } from "./views";
+import { findEntry, readRawRegistry } from "./views";
+import { assertSafePath } from "./filesystem";
 
 export { PluginApiError, pluginContext, type PluginContext } from "./context";
 export { getRegistration, listRegistrations, type PluginListResult } from "./views";
@@ -89,7 +91,11 @@ function fail(code: string, message: string, retryable: boolean, consequences: s
   return { code, message, retryable, consequences, paths };
 }
 
-export function startPrepare(ctx: PluginContext, url: string, idempotencyKey?: string | null): PluginOperationView {
+export async function startPrepare(ctx: PluginContext, url: string, idempotencyKey?: string | null): Promise<PluginOperationView> {
+  return withPluginPathsLock(ctx.paths, async () => startPrepareLocked(ctx, url, idempotencyKey));
+}
+
+function startPrepareLocked(ctx: PluginContext, url: string, idempotencyKey?: string | null): PluginOperationView {
   const parsed = parseGitHubRepoUrl(url);
   if (!parsed.ok) throw new PluginApiError(400, "INVALID_URL", parsed.message);
   const bodyHash = sha256(parsed.repo.url);
@@ -137,6 +143,38 @@ export function getOperation(ctx: PluginContext, id: string): PluginOperationVie
   return reconcile(ctx, readStored(ctx, id)).view;
 }
 
+/** Recovery remains an explicit action, never a side effect of polling. */
+export async function retryCleanup(ctx: PluginContext, id: string): Promise<PluginOperationView> {
+  return withPluginPathsLock(ctx.paths, async () => {
+    const stored = reconcile(ctx, readStored(ctx, id));
+    if (stored.view.state !== "needs_attention" || stored.view.error?.code !== "INTERRUPTED") throw new PluginApiError(409, "NOT_READY", "This operation does not need interrupted-install cleanup.");
+    const pluginId = stored.internal.pluginRecordId ?? id;
+    if (readRawRegistry(ctx).problem) throw new PluginApiError(409, "REGISTRY", "Repair plugin settings before retrying cleanup.");
+    if (findEntry(ctx, pluginId)?.enabled) throw new PluginApiError(409, "ENABLED", "This plugin is enabled. Open its details in Plugins and disable it before cleaning up.");
+    const receipt = readReceipt(ctx, pluginId);
+    const cleaned = receipt ? cleanupReceipt(receipt, ctx.paths.targetHome) : { removed: [], kept: [] };
+    const kept = [...new Set([...(receipt?.retainedPaths ?? []), ...cleaned.kept])];
+    if (receipt) writeReceipt(ctx, { ...receipt, files: [], retainedPaths: kept });
+    stored.view.state = "failed";
+    stored.view.message = "Cleanup finished";
+    stored.view.error = fail("CLEANED", "Interrupted changes were checked.", false,
+      [`${cleaned.removed.length} unchanged copies removed.`, "Downloaded files were kept. Review the plugin again before enabling it."], kept.map((file) => tildePath(file, ctx.home)));
+    save(ctx, stored);
+    return stored.view;
+  });
+}
+
+export function unfinishedOperations(ctx: PluginContext): PluginOperationView[] {
+  const dir = path.join(ctx.paths.pluginHome, "operations");
+  if (!fs.existsSync(dir)) return [];
+  assertSafePath(ctx.paths.pluginHome, dir);
+  return fs.readdirSync(dir).flatMap((file) => {
+    if (!/^[a-z0-9]{16,64}\.json$/.test(file)) return [];
+    const view = getOperation(ctx, file.slice(0, -5));
+    return !terminal(view.state) || view.state === "needs_attention" ? [view] : [];
+  }).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+}
+
 export function getPreview(ctx: PluginContext, id: string): PluginPreview {
   const stored = reconcile(ctx, readStored(ctx, id));
   if (!stored.view.preview) throw new PluginApiError(404, "NOT_FOUND", "This review is no longer available.", false, id);
@@ -147,13 +185,18 @@ export function getPreview(ctx: PluginContext, id: string): PluginPreview {
 }
 
 export async function cancelOperation(ctx: PluginContext, id: string): Promise<PluginOperationView> {
-  const stored = readStored(ctx, id);
+  return withPluginPathsLock(ctx.paths, async () => cancelLocked(ctx, id));
+}
+
+function cancelLocked(ctx: PluginContext, id: string): PluginOperationView {
+  const stored = reconcile(ctx, readStored(ctx, id));
   if (stored.view.state === "applying" || stored.view.state === "succeeded") {
     throw new PluginApiError(409, "NOT_CANCELLABLE", "You can close this window. Progress stays in Plugins.", false, id);
   }
   if (terminal(stored.view.state) && stored.view.state !== "ready") return stored.view;
   stored.internal.cancelRequested = true;
-  if (stored.view.state === "ready" || !inflight.has(id)) return finishCancel(ctx, stored);
+  requestCancellation(ctx, id);
+  if (stored.view.state === "ready" || (stored.internal.pid === process.pid && !inflight.has(id))) return finishCancel(ctx, stored);
   // A command is running. Stop it and let the review finish the cancellation;
   // the page polls, so there is nothing to wait for here.
   stored.view.phase = CANCELLING;
@@ -164,9 +207,9 @@ export async function cancelOperation(ctx: PluginContext, id: string): Promise<P
 }
 
 export async function recheckOperation(ctx: PluginContext, id: string): Promise<PluginOperationView> {
-  return withPluginMutationLock(ctx.paths.pluginHome, async () => {
+  return withPluginPathsLock(ctx.paths, async () => {
     const stored = readStored(ctx, id);
-    if (stored.view.state !== "ready" || !stored.view.preview || !stored.internal.workTree) {
+    if (stored.view.state !== "ready" || !stored.view.preview || !stored.internal.workTree || !["install", "enable"].includes(stored.view.kind)) {
       throw new PluginApiError(409, "NOT_READY", "Review the plugin again before enabling it.", false, id);
     }
     stored.view.preview = rebuildPreview(ctx, stored);
@@ -193,8 +236,16 @@ export async function confirmOperation(
   if (!Array.isArray(body.selectedTargets) || body.selectedTargets.some((item) => typeof item !== "string")) {
     throw new PluginApiError(400, "INVALID_TARGETS", "Choose the tools to sync from the review.", false, id);
   }
-  return withPluginMutationLock(ctx.paths.pluginHome, async () => {
+  return withPluginPathsLock(ctx.paths, async () => {
     const stored = reconcile(ctx, readStored(ctx, id));
+    const stale = (): never => {
+      stored.view.state = "expired";
+      stored.view.message = "Review expired";
+      stored.view.cancellable = false;
+      stored.view.error = fail("PREVIEW_STALE", STALE_MESSAGE, false, ["No changes were made by this confirmation."]);
+      save(ctx, stored);
+      throw new PluginApiError(409, "PREVIEW_STALE", STALE_MESSAGE, false, id);
+    };
     const bodyHash = sha256(JSON.stringify({ revision: body.revision, planDigest: body.planDigest, selectedTargets: [...body.selectedTargets].sort(), accepted: true }));
     if (stored.internal.confirmKey && idempotencyKey && stored.internal.confirmKey === idempotencyKey) {
       if (stored.internal.confirmBody !== bodyHash) {
@@ -203,6 +254,10 @@ export async function confirmOperation(
       return stored.view;
     }
     if (stored.view.state === "succeeded") return stored.view;
+    if (stored.internal.cancelRequested) {
+      finishCancel(ctx, stored);
+      throw new PluginApiError(409, "CANCELLED", "This review was cancelled. Review the plugin again before enabling it.", false, id);
+    }
     if (stored.view.state === "applying") throw new PluginApiError(409, "BUSY", "Plugin settings are busy. Try again.", true, id);
     if (stored.view.state === "expired") throw new PluginApiError(410, "PREVIEW_EXPIRED", "Review expired", false, id);
     if (stored.view.state !== "ready" || !stored.view.preview) {
@@ -216,17 +271,17 @@ export async function confirmOperation(
       throw new PluginApiError(410, "PREVIEW_EXPIRED", "Review expired", false, id);
     }
     if (preview.revision !== body.revision || preview.planDigest !== body.planDigest) {
-      throw new PluginApiError(409, "PREVIEW_STALE", STALE_MESSAGE, false, id);
+      return stale();
     }
     if (!preview.canApply) {
       throw new PluginApiError(422, "CANNOT_APPLY", preview.heading || preview.blockers[0]?.message || "This plugin can’t be enabled.", false, id);
     }
     if (registryRevision(ctx.home, ctx.env) !== stored.internal.registryRevision) {
-      throw new PluginApiError(409, "PREVIEW_STALE", STALE_MESSAGE, false, id);
+      return stale();
     }
     const installing = stored.view.kind === "install" || stored.view.kind === "enable";
     if (installing) {
-      const known = new Set(visibleSyncTargets(ctx.paths.targetHome).map((target) => target.id));
+      const known = new Set(preview.targets.map((target) => target.id));
       if (body.selectedTargets.some((target) => !known.has(target))) {
         throw new PluginApiError(400, "INVALID_TARGETS", "Choose the tools to sync from the review.", false, id);
       }
@@ -236,12 +291,16 @@ export async function confirmOperation(
         }
       }
       if (!fingerprintsMatch(ctx, stored, body.selectedTargets)) {
-        throw new PluginApiError(409, "PREVIEW_STALE", STALE_MESSAGE, false, id);
+        return stale();
       }
+    } else {
+      const entry = findEntry(ctx, stored.internal.pluginRecordId ?? "");
+      if (!entry || lifecyclePreview(ctx, stored, entry, preview.plugin?.version ?? "unknown").planDigest !== preview.planDigest) return stale();
     }
     stored.internal.confirmKey = idempotencyKey ?? null;
     stored.internal.confirmBody = bodyHash;
     stored.view.state = "applying";
+    stored.internal.pid = process.pid;
     stored.view.cancellable = false;
     if (installing) stored.view.steps = applySteps();
     save(ctx, stored);
@@ -279,12 +338,18 @@ export async function startLifecycle(
   idOrName: string,
   kind: "disable" | "remove" | "enable",
 ): Promise<PluginOperationView> {
+  return withPluginPathsLock(ctx.paths, () => startLifecycleLocked(ctx, idOrName, kind));
+}
+
+async function startLifecycleLocked(ctx: PluginContext, idOrName: string, kind: "disable" | "remove" | "enable"): Promise<PluginOperationView> {
   const entry = findEntry(ctx, idOrName);
   if (!entry) throw new PluginApiError(404, "NOT_FOUND", "That plugin is not registered.");
   if (!entry.managed) {
     throw new PluginApiError(422, "NOT_MANAGED", "This plugin is registered from a folder you manage. DevHub won’t move, update or delete that folder.");
   }
-  if (kind === "disable" && !entry.enabled) throw new PluginApiError(409, "ALREADY_DISABLED", "This plugin is already disabled.");
+  const receipt = readReceipt(ctx, entry.id);
+  if (!receipt) throw new PluginApiError(409, "MISSING_RECEIPT", "The installation record is missing or unreadable. No files were changed.");
+  if (kind === "disable" && !entry.enabled && receipt.files.length === 0) throw new PluginApiError(409, "ALREADY_DISABLED", "This plugin is already disabled.");
   if (kind === "enable" && entry.enabled) throw new PluginApiError(409, "ALREADY_ENABLED", "This plugin is already enabled.");
   const stored = blank(ctx, kind, kind === "remove" ? removeSteps() : kind === "disable" ? disableSteps() : applySteps());
   stored.internal.pluginRecordId = entry.id;
@@ -354,6 +419,9 @@ async function runUrlPrepare(ctx: PluginContext, id: string, repo: ParsedGitHubR
   stored.view.state = "checking_access";
   save(ctx, stored);
   const stagingDir = path.join(ctx.paths.pluginHome, "staging", id);
+  assertSafePath(ctx.paths.pluginHome, stagingDir);
+  stored.internal.stagingDir = stagingDir;
+  save(ctx, stored);
   ensureSecureDir(ctx.paths.pluginHome);
   fs.rmSync(stagingDir, { recursive: true, force: true });
   ensureSecureDir(stagingDir);
@@ -387,8 +455,10 @@ async function runUrlPrepare(ctx: PluginContext, id: string, repo: ParsedGitHubR
     return;
   }
   if (!access.ok) {
+    save(ctx, stored);
     const gh = await readGhStatus(ctx.runner, env);
     stored = fresh(ctx, id);
+    if (stored.internal.cancelRequested) { finishCancel(ctx, stored); return; }
     stored.internal.ghAvailable = gh.available;
     stored.view.state = access.timedOut ? "failed" : "needs_access";
     stored.view.message = access.timedOut ? "The repository check timed out." : "We couldn’t access this repository";
@@ -417,6 +487,7 @@ async function runUrlPrepare(ctx: PluginContext, id: string, repo: ParsedGitHubR
     const denied = downloaded.code === "ACCESS";
     const gh = denied ? await readGhStatus(ctx.runner, env) : null;
     stored = fresh(ctx, id);
+    if (stored.internal.cancelRequested) { finishCancel(ctx, stored); return; }
     stored.internal.timedOut = downloaded.timedOut;
     stored.internal.exitCode = downloaded.exitCode;
     if (gh) stored.internal.ghAvailable = gh.available;
@@ -469,6 +540,7 @@ async function runLocalPrepare(ctx: PluginContext, id: string, root: string): Pr
   const stored = fresh(ctx, id);
   for (const stepId of ["url", "access", "download"]) mark(stored, stepId, "skipped");
   const stagingDir = path.join(ctx.paths.pluginHome, "staging", id);
+  assertSafePath(ctx.paths.pluginHome, stagingDir);
   const tree = path.join(stagingDir, "tree");
   try {
     copyTree(root, tree);
@@ -492,6 +564,7 @@ async function finishInspect(ctx: PluginContext, id: string, root: string): Prom
   stored.view.state = "validating";
   save(ctx, stored);
   await yieldToLoop();
+  if (fresh(ctx, id).internal.cancelRequested) { finishCancel(ctx, fresh(ctx, id)); return; }
   const inspected = inspectTree(ctx, root, null);
   stored = fresh(ctx, id);
   mark(stored, "validate", inspected.fatal ? "failed" : "complete");
@@ -499,11 +572,13 @@ async function finishInspect(ctx: PluginContext, id: string, root: string): Prom
   stored.view.state = "preparing_preview";
   save(ctx, stored);
   await yieldToLoop();
+  if (fresh(ctx, id).internal.cancelRequested) { finishCancel(ctx, fresh(ctx, id)); return; }
   const nameTaken = inspected.manifest ? nameCollision(ctx, inspected.manifest.name, null) : null;
   const preview = toPreview(ctx, id, 1, inspected, sourceFacts(ctx, id, stored), nameTaken);
   stored = fresh(ctx, id);
   stored.view.preview = preview;
   stored.internal.manifestHash = inspected.manifestHash;
+  stored.internal.sourceHash = inspected.treeHash;
   stored.internal.assetHashes = assetHashes(inspected);
   stored.internal.fingerprints = fingerprintMap(ctx, inspected);
   stored.internal.registryRevision = preview.registryRevision;
@@ -515,7 +590,7 @@ async function finishInspect(ctx: PluginContext, id: string, root: string): Prom
     stored.view.error = fail(inspected.issues[0]?.code ?? "INVALID", inspected.heading || "This repository isn’t a valid DevHub plugin", false, ["Nothing has been enabled."]);
     stored.view.cancellable = false;
     save(ctx, stored);
-    if (stored.internal.stagingDir) fs.rmSync(stored.internal.stagingDir, { recursive: true, force: true });
+    if (stored.internal.stagingDir) removeStaging(ctx, stored.internal.stagingDir);
     return;
   }
   stored.view.state = "ready";
@@ -536,6 +611,9 @@ function inspectRetained(ctx: PluginContext, stored: StoredOperation, allowName:
     return;
   }
   const inspected = inspectTree(ctx, root, allowName);
+  if (inspected.manifest?.name !== allowName) {
+    inspected.blockers.push({ code: "NAME_CONFLICT", message: "Registry name does not match the manifest" });
+  }
   const preview = toPreview(ctx, stored.view.id, 1, inspected, {
     url: stored.internal.url,
     owner: null,
@@ -548,6 +626,7 @@ function inspectRetained(ctx: PluginContext, stored: StoredOperation, allowName:
   }, null);
   stored.view.preview = preview;
   stored.internal.manifestHash = inspected.manifestHash;
+  stored.internal.sourceHash = inspected.treeHash;
   stored.internal.assetHashes = assetHashes(inspected);
   stored.internal.fingerprints = fingerprintMap(ctx, inspected);
   stored.internal.registryRevision = preview.registryRevision;
@@ -563,6 +642,9 @@ function rebuildPreview(ctx: PluginContext, stored: StoredOperation): PluginPrev
   if (!root) throw new PluginApiError(409, "NOT_READY", "Review the plugin again before enabling it.", false, stored.view.id);
   const reenable = stored.view.kind === "enable";
   const inspected = inspectTree(ctx, root, reenable ? stored.view.preview?.plugin?.name ?? null : null);
+  if (reenable && inspected.manifest?.name !== findEntry(ctx, stored.internal.pluginRecordId ?? "")?.name) {
+    inspected.blockers.push({ code: "NAME_CONFLICT", message: "Registry name does not match the manifest" });
+  }
   const nameTaken = inspected.manifest && !reenable ? nameCollision(ctx, inspected.manifest.name, stored.internal.pluginRecordId) : null;
   const preview = toPreview(ctx, stored.view.id, (stored.view.preview?.revision ?? 1) + 1, inspected, {
     ...sourceFacts(ctx, stored.view.id, stored),
@@ -572,6 +654,7 @@ function rebuildPreview(ctx: PluginContext, stored: StoredOperation): PluginPrev
   stored.internal.fingerprints = fingerprintMap(ctx, inspected);
   stored.internal.registryRevision = preview.registryRevision;
   stored.internal.manifestHash = inspected.manifestHash;
+  stored.internal.sourceHash = inspected.treeHash;
   return preview;
 }
 
@@ -583,8 +666,16 @@ async function applyInstall(ctx: PluginContext, stored: StoredOperation, selecte
   const pluginId = stored.internal.pluginRecordId ?? stored.view.id;
   const managed = reenable && workTree ? workTree : path.join(ctx.paths.pluginHome, "repos", pluginId);
   let copied = false;
+  let registered = false;
+  const receipt: InstallReceipt = {
+    pluginId, sha: stored.internal.sha, planDigest: preview.planDigest, files: [],
+    retainedPaths: reenable ? readReceipt(ctx, pluginId)?.retainedPaths : undefined,
+  };
   const stop = (error: PluginOperationError, state: "failed" | "expired" = "failed"): PluginOperationView => {
-    if (copied) fs.rmSync(managed, { recursive: true, force: true });
+    if (copied && !registered) {
+      assertSafePath(ctx.paths.pluginHome, managed);
+      fs.rmSync(managed, { recursive: true, force: true });
+    }
     stored.view.state = state;
     stored.view.message = state === "expired" ? "Review expired" : `${name} couldn’t be enabled`;
     stored.view.error = error;
@@ -594,7 +685,7 @@ async function applyInstall(ctx: PluginContext, stored: StoredOperation, selecte
   try {
     mark(stored, "verify", "running");
     save(ctx, stored);
-    if (!workTree || !hashesMatch(ctx, workTree, stored.internal.assetHashes)) {
+    if (!workTree || !hashesMatch(ctx, workTree, stored.internal.assetHashes, stored.internal.sourceHash)) {
       mark(stored, "verify", "failed");
       return stop(fail("PREVIEW_STALE", STALE_MESSAGE, false, ["Nothing was enabled."]), "expired");
     }
@@ -602,12 +693,13 @@ async function applyInstall(ctx: PluginContext, stored: StoredOperation, selecte
     mark(stored, "save", "running");
     save(ctx, stored);
     if (!reenable) {
+      assertSafePath(ctx.paths.pluginHome, managed);
       fs.rmSync(managed, { recursive: true, force: true });
-      copyTree(workTree, managed);
       copied = true;
+      copyTree(workTree, managed);
     }
     const inspected = inspectTree(ctx, managed, reenable ? name : null);
-    if (inspected.fatal || inspected.manifestHash !== stored.internal.manifestHash || !hashesMatch(ctx, managed, stored.internal.assetHashes)) {
+    if (inspected.fatal || inspected.blockers.length || !inspected.requirementsMet || inspected.manifestHash !== stored.internal.manifestHash || !hashesMatch(ctx, managed, stored.internal.assetHashes, stored.internal.sourceHash)) {
       mark(stored, "save", "failed");
       return stop(fail("PREVIEW_STALE", STALE_MESSAGE, false, ["Nothing was enabled."]), "expired");
     }
@@ -615,12 +707,19 @@ async function applyInstall(ctx: PluginContext, stored: StoredOperation, selecte
     mark(stored, "sync", "running");
     save(ctx, stored);
 
+    // Refuse to start copying if the journal cannot be persisted.
+    writeReceipt(ctx, receipt);
+
     const applied = await applyReviewedAssets({
       pluginName: name,
       targetHome: ctx.paths.targetHome,
       selected,
       skills: inspected.skills,
       agents: inspected.agents,
+      onWrite: (file) => {
+        receipt.files.push(file);
+        writeReceipt(ctx, receipt);
+      },
       onProgress: (rows) => {
         stored.view.progress = rows;
         save(ctx, stored);
@@ -636,7 +735,7 @@ async function applyInstall(ctx: PluginContext, stored: StoredOperation, selecte
       const retryable = applied.code === "TARGET_WRITE";
       return stop(fail(applied.code ?? "APPLY_FAILED", applied.message ?? "Nothing was enabled.", retryable, consequences, applied.leftover.map((file) => tildePath(file, ctx.home))));
     }
-    const receipt: InstallReceipt = { pluginId, sha: stored.internal.sha, planDigest: preview.planDigest, files: applied.files };
+    receipt.files = applied.files;
     writeReceipt(ctx, receipt);
     mark(stored, "sync", "complete");
     mark(stored, "registry", "running");
@@ -669,17 +768,19 @@ async function applyInstall(ctx: PluginContext, stored: StoredOperation, selecte
         }, ctx.home, ctx.env);
       }
     } catch (err) {
-      cleanupReceipt(receipt, ctx.paths.targetHome);
-      removeReceipt(ctx, pluginId);
+      const cleaned = cleanupReceipt(receipt, ctx.paths.targetHome);
+      writeReceipt(ctx, { ...receipt, files: [], retainedPaths: [...new Set([...(receipt.retainedPaths ?? []), ...cleaned.kept])] });
       mark(stored, "registry", "failed");
       const taken = err instanceof Error && err.message.includes("already registered");
       return stop(fail(
         "APPLY_FAILED",
         taken ? (err as Error).message : "Plugin settings couldn’t be saved.",
         !taken,
-        ["Plugin settings were not enabled.", "Copies already written by this operation were removed."],
+        ["Plugin settings were not enabled.", cleaned.kept.length ? "Some changes couldn’t be restored. Review the affected locations below." : "Copies already written by this operation were removed."],
+        cleaned.kept.map((file) => tildePath(file, ctx.home)),
       ));
     }
+    registered = true;
     mark(stored, "registry", "complete");
     const skillCount = inspected.skills.filter((skill) => skill.preview.status === "add").length;
     const agentCount = inspected.agents.filter((agent) => agent.preview.status === "add").length;
@@ -698,11 +799,22 @@ async function applyInstall(ctx: PluginContext, stored: StoredOperation, selecte
     stored.view.cancellable = false;
     save(ctx, stored);
     if (stored.internal.deleteStagingOnDone && stored.internal.stagingDir) {
-      fs.rmSync(stored.internal.stagingDir, { recursive: true, force: true });
+      removeStaging(ctx, stored.internal.stagingDir);
     }
     return stored.view;
   } catch {
-    return stop(fail("APPLY_FAILED", "Something went wrong while enabling this plugin.", true, ["Nothing was enabled."]));
+    if (registered) {
+      stored.view.state = "needs_attention";
+      stored.view.error = fail("FINALIZE_FAILED", "The plugin was enabled, but its completion record couldn’t be saved.", false, ["The plugin is enabled. Review its details in Plugins."]);
+      save(ctx, stored);
+      return stored.view;
+    }
+    let kept: string[] = [];
+    try { kept = cleanupReceipt(receipt, ctx.paths.targetHome).kept; }
+    catch { kept = receipt.files.map((file) => file.destination); }
+    return stop(fail("APPLY_FAILED", "Something went wrong while enabling this plugin.", kept.length === 0,
+      ["Plugin settings were not enabled.", kept.length ? "Some changes couldn’t be restored. Review the affected locations below." : "Copies already written by this operation were removed."],
+      kept.map((file) => tildePath(file, ctx.home))));
   }
 }
 
@@ -734,9 +846,9 @@ function needsAttention(ctx: PluginContext, stored: StoredOperation, name: strin
   stored.view.message = `${name} couldn’t be ${verb}`;
   stored.view.error = fail(
     verb === "removed" ? "REMOVE_FAILED" : "DISABLE_FAILED",
-    "The plugin is disabled, but some local copies need attention.",
+    "The change didn’t finish. Check the plugin’s current status and review its local copies.",
     true,
-    verb === "removed" ? ["The registration was kept so cleanup can be finished."] : [],
+    ["Retry from the plugin’s details after checking its status."],
   );
   save(ctx, stored);
   return stored.view;
@@ -756,11 +868,12 @@ async function disableAndClean(
   save(ctx, stored);
   const receipt = readReceipt(ctx, id);
   const cleaned = receipt ? cleanupReceipt(receipt, ctx.paths.targetHome) : { removed: [], kept: [] };
-  // Whatever was removed is gone; whatever was kept is no longer ours to track.
-  if (receipt) writeReceipt(ctx, { ...receipt, files: [] });
+  const kept = [...new Set([...(receipt?.retainedPaths ?? []), ...cleaned.kept])];
+  // Kept edits are no longer cleanup candidates, but general sync must preserve them.
+  if (receipt) writeReceipt(ctx, { ...receipt, files: [], retainedPaths: kept });
   mark(stored, "copies", "complete");
   save(ctx, stored);
-  return cleaned.kept.map((file) => tildePath(file, ctx.home));
+  return kept.map((file) => tildePath(file, ctx.home));
 }
 
 async function applyDisable(ctx: PluginContext, stored: StoredOperation): Promise<PluginOperationView> {
@@ -784,7 +897,7 @@ async function applyRemove(ctx: PluginContext, stored: StoredOperation): Promise
     mark(stored, "registry", "running");
     save(ctx, stored);
     await removePluginEntry(entry.id, ctx.home, ctx.env);
-    removeReceipt(ctx, entry.id);
+    if (!readReceipt(ctx, entry.id)?.retainedPaths?.length) removeReceipt(ctx, entry.id);
     mark(stored, "registry", "complete");
     return await finishLifecycle(ctx, stored, name, true, kept);
   } catch {
@@ -817,6 +930,12 @@ function copyTree(src: string, dest: string): void {
   walk(src, dest);
 }
 
+function removeStaging(ctx: PluginContext, dir: string): void {
+  assertSafePath(ctx.paths.pluginHome, path.join(ctx.paths.pluginHome, "staging"));
+  assertSafePath(path.join(ctx.paths.pluginHome, "staging"), dir);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 function finishCancel(ctx: PluginContext, stored: StoredOperation): PluginOperationView {
   const installing = stored.view.kind === "install" || stored.view.kind === "enable";
   stored.view.state = "cancelled";
@@ -825,7 +944,7 @@ function finishCancel(ctx: PluginContext, stored: StoredOperation): PluginOperat
   stored.internal.cancelRequested = true;
   save(ctx, stored);
   // Only this review's own staging goes. A retained download belongs to its registration.
-  if (stored.internal.stagingDir) fs.rmSync(stored.internal.stagingDir, { recursive: true, force: true });
+  if (stored.internal.stagingDir) removeStaging(ctx, stored.internal.stagingDir);
   return stored.view;
 }
 
@@ -838,7 +957,7 @@ function failUnexpected(ctx: PluginContext, id: string): void {
     stored.view.error = fail("INTERNAL", "Couldn’t review this plugin.", true, ["Nothing has been enabled."]);
     stored.view.cancellable = false;
     save(ctx, stored);
-    if (stored.internal.stagingDir) fs.rmSync(stored.internal.stagingDir, { recursive: true, force: true });
+    if (stored.internal.stagingDir) removeStaging(ctx, stored.internal.stagingDir);
   } catch {
     // The operation file itself could not be read.
   }
