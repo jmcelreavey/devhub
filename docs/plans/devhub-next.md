@@ -1,3 +1,11 @@
+---
+title: DevHub next
+description: Decision-focused plan for editor integration, the Paseo work flow, a built-in browser and generic integrations. Not implemented.
+order: 3
+icon: Compass
+tags: [plans, editor, paseo, browser, integrations]
+---
+
 # DevHub next: decisions and implementation plan
 
 Decision draft · 9 October 2026. Static investigation; no runtime benchmarks. Paths are repo-relative; new modules and behaviour are proposals.
