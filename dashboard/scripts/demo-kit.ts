@@ -7,8 +7,34 @@
 import { createHash } from "node:crypto";
 import { expect, type Locator, type Page } from "@playwright/test";
 import sharp from "sharp";
+import { HOLLOW_SEASON_KEY } from "../lib/hollow-theme";
+import { CORE_DEFAULT_THEME_PRESET_ID, THEME_MODE_KEY, THEME_PRESET_KEY } from "../lib/theme-presets";
 
 export const VIEWPORT = { width: 1280, height: 800 };
+
+/**
+ * The app labels shortcuts from navigator.userAgent (useModifierKey), so every clip is recorded with a
+ * Mac one. Clips then read ⌘ whichever OS ran the recorder, and match their captions and each other.
+ */
+export const MAC_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
+
+/**
+ * Pins the core default palette in dark mode and marks this year's seasonal Hollow default as
+ * already handled. A fresh browser profile otherwise gets Hollow on its first open each October
+ * (lib/hollow-theme.ts), so a clip recorded then would publish a seasonal skin as the app's look.
+ */
+export const THEME_PIN_SCRIPT = `try {
+  const now = new Date();
+  localStorage.setItem(${JSON.stringify(THEME_MODE_KEY)}, "dark");
+  localStorage.setItem(${JSON.stringify(THEME_PRESET_KEY)}, ${JSON.stringify(CORE_DEFAULT_THEME_PRESET_ID)});
+  localStorage.setItem(${JSON.stringify(HOLLOW_SEASON_KEY)}, JSON.stringify({
+    year: now.getFullYear(),
+    previous: { preset: ${JSON.stringify(CORE_DEFAULT_THEME_PRESET_ID)}, mode: "dark" },
+    overridden: true,
+    restored: false,
+  }));
+} catch {}`;
 
 /** GitHub renders README images at most ~1000px wide; capturing larger only costs bytes. */
 export const GIF_SIZE = { width: 1024, height: 640 };

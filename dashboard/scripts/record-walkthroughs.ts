@@ -21,12 +21,14 @@ import {
   encodeGif,
   type Frame,
   hydrated,
+  MAC_USER_AGENT,
   OVERLAY_SCRIPT,
   pointAt,
   requiredEnv,
   setCaption,
   sidebarLink,
   startScreencast,
+  THEME_PIN_SCRIPT,
   VIEWPORT,
 } from "./demo-kit";
 
@@ -98,7 +100,12 @@ const CLIPS: Clip[] = [
       await keyFrame(page, "today", "tasks");
       await page.mouse.wheel(0, -260);
       await setCaption(page, "Plans shows which tasks are ready for an agent to pick up");
-      await pointAt(page, page.getByText("Plans", { exact: true }).first());
+      // In the dashboard view Plans sits in the briefing card under the task list. Centre it so the
+      // caption pill doesn't cover the thing the caption is about.
+      const plans = page.getByText("Plans", { exact: true }).first();
+      await plans.evaluate((el) => el.scrollIntoView({ block: "center", behavior: "smooth" }));
+      await beat(page, 900);
+      await pointAt(page, plans);
       await beat(page, 2200);
     },
   },
@@ -574,7 +581,7 @@ async function encodeMp4(frames: Frame[], stoppedAt: number, out: string): Promi
 }
 
 async function record(browser: Browser, clip: Clip): Promise<void> {
-  const contextOptions = { viewport: VIEWPORT, deviceScaleFactor: 1, colorScheme: "dark" as const };
+  const contextOptions = { viewport: VIEWPORT, deviceScaleFactor: 1, colorScheme: "dark" as const, userAgent: MAC_USER_AGENT };
 
   const warmup = await browser.newContext(contextOptions);
   await clip.stubs?.(warmup);
@@ -587,6 +594,7 @@ async function record(browser: Browser, clip: Clip): Promise<void> {
 
   const context = await browser.newContext(contextOptions);
   await context.addInitScript(OVERLAY_SCRIPT);
+  await context.addInitScript(THEME_PIN_SCRIPT);
   // The PWA install hint would pop over every Status shot.
   await context.addInitScript(`try {
     localStorage.setItem(${JSON.stringify(PWA_HINT_KEYS[0])}, "1");

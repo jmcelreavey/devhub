@@ -47,9 +47,11 @@ By default the fixture dashboard runs a production build (`next build --webpack`
 
 | Clip | Output | Shown in |
 | --- | --- | --- |
-| Today, Work, Notes, command palette, Diagrams and docs, Repos | `<clip>.mp4` and `<clip>.gif` | docs, and the README |
+| Today, Work, Notes | `<clip>.mp4` and `<clip>.gif` | docs, and the README |
+| Command palette, Diagrams and docs, Repos | `<clip>.mp4` and `<clip>.gif` | docs, and the [feature tour](../guides/feature-tour.md) |
 | System | `system.mp4` only (`gif: false`) | docs |
-| Integrations, Review assignment, Git client, Databases, Skills and voice, Conventions, Token usage | `<clip>.gif` only (`mp4: false`) | README |
+| Skills and voice | `<clip>.gif` only (`mp4: false`) | the README and the feature tour |
+| Integrations, Review assignment, Git client, Databases, Conventions, Token usage | `<clip>.gif` only (`mp4: false`) | the feature tour |
 
 The fixture adds what the walks need on top of the README seed: a project note, a diagram, three completed days of tasks, and two local git repos. `payments-api` also carries a SQLite file (`orders.db`) for the Databases clip, and `search-service` has a GitHub remote URL that is never fetched, plus a seeded rule file so Conventions has something to show. The repo, reviewers and comments are invented. It also points Paseo at a dead port and stubs the LAN-address badge. The Token usage clip stubs `/api/agent-usage` during both warm-up and capture: a throwaway `HOME` doesn't isolate the macOS Keychain. These controls don't scrub text already in the checkout; review the frames before publishing.
 
@@ -80,6 +82,8 @@ Constraints:
 - The fixture is `git archive $DEVHUB_DEMO_REF` (default `HEAD`). Uncommitted app files are absent; recorder scripts run from your working checkout. To include uncommitted app changes without altering your branch or real index, use the temporary-index recipe below. It snapshots all non-ignored working files, so inspect the resulting file list and keep the commit local.
 - The fixture path shows on screen (Skills page, sync logs), so keep the default `/tmp/devhub-demo-fixture` or another path without your username. The script refuses to `rm -rf` a directory without its `.devhub-demo-fixture` marker.
 - Walks live in `record-readme-demo.ts` and `record-walkthroughs.ts`. When a page's labels change, update the corresponding selectors; the script should fail rather than record a blank scene.
+- Both recorders pin Graphite Neon in dark mode and mark this year's Hollow default as handled (`THEME_PIN_SCRIPT` in `dashboard/scripts/demo-kit.ts`). Without it a fresh browser profile gets the seasonal Hollow theme on its first open each October, and a clip recorded then would publish it as the app's look.
+- Clips are recorded with a Mac user agent (`MAC_USER_AGENT`), because the app labels shortcuts from `navigator.userAgent`. Hints and captions then read ⌘ whichever OS runs the recorder.
 - Key frames are written to `$DEVHUB_DEMO_FIXTURE/frames`. Review every one before publishing.
 
 From the repo root, this prints a local snapshot commit without changing the real index or branch:
