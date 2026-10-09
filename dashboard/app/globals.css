@@ -2997,8 +2997,20 @@ body[data-grid-resizing="true"] * {
   flex-shrink: 0;
 }
 
+/* The rail wraps onto its own line, right-aligned, whenever the title column
+   would drop below its floor — so at laptop widths the key chip, title and
+   rail never share (and overpaint) the same cramped line. */
 .task-row {
   position: relative;
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+/* The key + title column keeps a readable floor; it only wraps the rail, never
+   collapses to a letter per line. */
+.task-row-content {
+  flex: 1 1 14rem;
+  min-width: min(14rem, 100%);
 }
 
 /* Wrap at rest (2-line cap). The kebab column is always reserved in-flow, so
@@ -3019,8 +3031,11 @@ body[data-grid-resizing="true"] * {
 .task-row-meta {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  flex-shrink: 0;
+  gap: 0.25rem 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
+  flex-shrink: 1;
   margin-right: 4px;
 }
 
@@ -3112,9 +3127,14 @@ body[data-motion="off"] .task-timer-dot {
    drifting per row or inflating row height. */
 .task-row-actions {
   display: flex;
-  flex-shrink: 0;
+  flex-wrap: wrap;
+  flex-shrink: 1;
+  justify-content: flex-end;
   align-items: center;
   gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+  margin-left: auto;
   margin-top: -4px;
 }
 
@@ -3130,8 +3150,18 @@ body[data-motion="off"] .task-timer-dot {
    wrap; everything else linked lives behind the links button. */
 .task-row-actions .entity-link-chips {
   flex-wrap: nowrap;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
   margin-right: 4px;
+}
+.task-row-actions .entity-link-chips > li {
+  min-width: 0;
+}
+.task-row-actions .entity-link-chips > li:has(.entity-link-chip-more) {
+  flex-shrink: 0;
+}
+.task-row-actions .entity-link-chip {
+  max-width: 9rem;
 }
 /* Phone widths: the title needs the room more. The rail wraps onto its own
    line instead of crushing the title, and the repo chip stays one tap away

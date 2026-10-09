@@ -57,6 +57,9 @@ import type { EntityRef } from "@/lib/entity-note";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useTaskAgentActions } from "@/components/tasks/useTaskAgentActions";
 
+/** Repo chips shown in the rail before "+N"; the links button holds the full set. */
+const REPO_CHIPS_IN_RAIL = 1;
+
 interface JiraStatus {
   name: string;
   parent?: JiraTicketRef | null;
@@ -530,7 +533,7 @@ export function TaskItem({
                 {!isInactive && <TimerReadout task={task} />}
               </div>
             )}
-            {repoLinks.length > 0 ? <SharedEntityChips refs={repoLinks} label="Linked repos" /> : null}
+            {repoLinks.length > 0 ? <SharedEntityChips refs={repoLinks} label="Linked repos" max={REPO_CHIPS_IN_RAIL} /> : null}
             {noteExists ? (
               <HoverTip label="Open note">
                 <button

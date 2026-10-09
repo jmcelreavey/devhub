@@ -71,16 +71,22 @@ export function SharedEntityChips({
   refs,
   label,
   className,
+  max,
 }: {
   refs: readonly EntityRef[];
   /** Screen-reader name, e.g. "Shared by every backlog item". */
   label: string;
   className?: string;
+  /** Show at most this many chips; the rest collapse into a "+N" chip. */
+  max?: number;
 }) {
   if (refs.length === 0) return null;
+  const limit = max !== undefined && max >= 1 ? max : refs.length;
+  const shown = refs.slice(0, limit);
+  const rest = refs.slice(limit);
   return (
     <ul className={`entity-link-chips ${className ?? ""}`.trim()} aria-label={label}>
-      {refs.map((ref) => {
+      {shown.map((ref) => {
         const Icon = KIND_ICON[ref.kind] ?? ExternalLink;
         const target = defaultHrefForRef(ref);
         const text = chipDisplayLabel(ref);
@@ -113,6 +119,18 @@ export function SharedEntityChips({
           </li>
         );
       })}
+      {rest.length > 0 ? (
+        <li>
+          <span
+            className="entity-link-chip entity-link-chip-more"
+            data-entity-chip=""
+            title={rest.map((ref) => chipDisplayLabel(ref)).join(", ")}
+            aria-label={`${rest.length} more: ${rest.map((ref) => chipDisplayLabel(ref)).join(", ")}`}
+          >
+            +{rest.length}
+          </span>
+        </li>
+      ) : null}
     </ul>
   );
 }
