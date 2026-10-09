@@ -7,6 +7,7 @@ import { readBundleSource } from "@/lib/desktop/bundle-source";
 import { cleanBuildEnv, withNodeToolchain } from "@/lib/desktop/build-env.mjs";
 import { getAppDataDir, getCheckoutRoot } from "@/lib/desktop/runtime-paths";
 import { payloadRestartStatus } from "@/lib/desktop/payload-restart";
+import { parseNulSeparatedPaths, touchesBuildPaths } from "@/lib/content/sync-paths";
 
 export type RebuildMode = "service" | "payload";
 
@@ -45,6 +46,8 @@ export interface RebuildFacts {
   runningKnown?: boolean;
   headCommitMs?: number | null;
   bundleBuiltAtMs?: number | null;
+  /** Files changed between the built bundle and HEAD; null when unknown. */
+  changedPaths?: string[] | null;
   appData: string;
   basePayloadDir: string | null;
   basePayloadId: string | null;
@@ -77,6 +80,11 @@ export interface AheadInput {
   runningKnown: boolean;
   headCommitMs: number | null;
   bundleBuiltAtMs: number | null;
+  /**
+   * Files that differ between the built bundle and HEAD. Null when git could not say,
+   * which keeps the commit-based answer. A range of content-only files is not ahead.
+   */
+  changedPaths?: string[] | null;
 }
 
 /**
@@ -86,13 +94,18 @@ export interface AheadInput {
  * A release build's public SHA is not in the private checkout, so that test
  * can never succeed. Then HEAD is ahead only when its commit time is strictly
  * later than the bundle was built — equal or older is behind or the same generation.
+ *
+ * Newer commits only count when they change something a build contains. A notes-only
+ * content sync moves HEAD without changing the bundle, so rebuilding would change nothing.
  */
 export function decideCheckoutAhead(input: AheadInput): boolean {
   if (!input.head) return false;
   if (input.running && input.running === input.head) return false;
-  if (input.runningKnown) return Boolean(input.running && input.runningIsAncestor);
-  if (input.headCommitMs == null || input.bundleBuiltAtMs == null) return false;
-  return input.headCommitMs > input.bundleBuiltAtMs;
+  const newer = input.runningKnown
+    ? Boolean(input.running && input.runningIsAncestor)
+    : input.headCommitMs != null && input.bundleBuiltAtMs != null && input.headCommitMs > input.bundleBuiltAtMs;
+  if (!newer) return false;
+  return input.changedPaths == null || touchesBuildPaths(input.changedPaths);
 }
 
 export function checkoutIsAhead(running: string | null, head: string | null, runningIsAncestor: boolean): boolean {
@@ -173,6 +186,7 @@ export function classifyRebuild(facts: RebuildFacts): OfferDecision {
       runningKnown: facts.runningKnown !== false,
       headCommitMs: facts.headCommitMs ?? null,
       bundleBuiltAtMs: facts.bundleBuiltAtMs ?? null,
+      changedPaths: facts.changedPaths ?? null,
     }),
   };
 }
@@ -519,6 +533,19 @@ function serviceBuildCommit(checkout: string): string | null {
   return typeof commit === "string" && commit.trim() ? commit.trim() : null;
 }
 
+async function changedPathsBetween(checkout: string, base: string, label: string): Promise<string[] | null> {
+  try {
+    const diff = await execExternal("git", ["diff", "--name-only", "--no-renames", "-z", base, "HEAD"], {
+      cwd: checkout,
+      timeoutMs: 8_000,
+      label,
+    });
+    return parseNulSeparatedPaths(diff.stdout);
+  } catch {
+    return null;
+  }
+}
+
 export async function loadRebuildOffer(env: NodeJS.ProcessEnv = process.env): Promise<RebuildOffer> {
   const checkout = getCheckoutRoot();
   const desktop = env.DEVHUB_DESKTOP === "1";
@@ -537,6 +564,7 @@ export async function loadRebuildOffer(env: NodeJS.ProcessEnv = process.env): Pr
   let runningIsAncestor = false;
   let runningKnown = true;
   let headCommitMs: number | null = null;
+  let changedPaths: string[] | null = null;
   if (checkout && runningCommit) {
     try {
       const head = await execExternal("git", ["rev-parse", "HEAD"], { cwd: checkout, timeoutMs: 8_000, label: "rebuild:head" });
@@ -562,6 +590,7 @@ export async function loadRebuildOffer(env: NodeJS.ProcessEnv = process.env): Pr
             label: "rebuild:ancestor",
           });
           runningIsAncestor = true;
+          changedPaths = await changedPathsBetween(checkout, runningCommit, "rebuild:changed");
         } catch {
           runningIsAncestor = false;
         }
@@ -574,6 +603,16 @@ export async function loadRebuildOffer(env: NodeJS.ProcessEnv = process.env): Pr
           });
           const seconds = Number(stamp.stdout.trim());
           headCommitMs = Number.isFinite(seconds) ? seconds * 1000 : null;
+          // The release SHA is not in this checkout, so compare against the newest
+          // commit that existed when the bundle was built.
+          if (bundle?.builtAtMs != null) {
+            const base = await execExternal(
+              "git",
+              ["rev-list", "-1", `--before=${Math.floor(bundle.builtAtMs / 1000)}`, "HEAD"],
+              { cwd: checkout, timeoutMs: 8_000, label: "rebuild:built-base" },
+            ).then((r) => r.stdout.trim(), () => "");
+            if (base) changedPaths = await changedPathsBetween(checkout, base, "rebuild:changed");
+          }
         } catch {
           headCommitMs = null;
         }
@@ -595,6 +634,7 @@ export async function loadRebuildOffer(env: NodeJS.ProcessEnv = process.env): Pr
     runningKnown,
     headCommitMs,
     bundleBuiltAtMs: bundle?.builtAtMs ?? null,
+    changedPaths,
     appData: getAppDataDir(),
     basePayloadDir: env.DEVHUB_BASE_PAYLOAD_DIR?.trim() || null,
     basePayloadId: env.DEVHUB_BASE_PAYLOAD_ID?.trim() || null,

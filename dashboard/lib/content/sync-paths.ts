@@ -16,6 +16,20 @@ export function isContentSyncPath(filePath: string): boolean {
   );
 }
 
+/**
+ * Whether any changed path could alter a built bundle. Everything outside the
+ * content folders can, so this is the same split the pre-push hook uses for
+ * `DEVHUB_PREPUSH=content`: a range of notes/tasks/docs commits builds the same app.
+ */
+export function touchesBuildPaths(changedPaths: readonly string[]): boolean {
+  return changedPaths.some((file) => !isContentSyncPath(file));
+}
+
+/** Paths from `git diff --name-only -z` output. */
+export function parseNulSeparatedPaths(stdout: string): string[] {
+  return stdout.split("\0").filter(Boolean);
+}
+
 const CONTENT_SYNC_LABEL: Record<ContentSyncPath, string> = {
   notes: "notes",
   collections: "checklists",

@@ -107,6 +107,57 @@ describe("classifyRebuild", () => {
   });
 });
 
+describe("decideCheckoutAhead with changed files", () => {
+  const known = {
+    running: "aaa",
+    head: "bbb",
+    runningIsAncestor: true,
+    runningKnown: true,
+    headCommitMs: null,
+    bundleBuiltAtMs: null,
+  };
+  const built = Date.parse("2026-10-01T00:00:00.000Z");
+  const unknown = {
+    running: "publicsha",
+    head: "privatehead",
+    runningIsAncestor: false,
+    runningKnown: false,
+    headCommitMs: built + 60_000,
+    bundleBuiltAtMs: built,
+  };
+
+  it.each([known, unknown])("is not ahead when only content folders changed", (input) => {
+    expect(decideCheckoutAhead({ ...input, changedPaths: ["notes/a.md", "tasks/2026-10-09.json", "docs/x.md"] })).toBe(false);
+    expect(decideCheckoutAhead({ ...input, changedPaths: [] })).toBe(false);
+  });
+
+  it.each([known, unknown])("is ahead when a commit mixes content with app code", (input) => {
+    expect(decideCheckoutAhead({ ...input, changedPaths: ["notes/a.md", "dashboard/lib/x.ts"] })).toBe(true);
+  });
+
+  it.each([known, unknown])("is ahead when only code changed", (input) => {
+    expect(decideCheckoutAhead({ ...input, changedPaths: ["dashboard/package.json", "desktop/main.js", "scripts/build.mjs"] })).toBe(true);
+  });
+
+  it("treats task timers as app files, like the pre-push hook", () => {
+    expect(decideCheckoutAhead({ ...known, changedPaths: ["tasks/.local/timers.json"] })).toBe(true);
+  });
+
+  it("keeps the commit-based answer when git could not list the files", () => {
+    expect(decideCheckoutAhead({ ...known, changedPaths: null })).toBe(true);
+    expect(decideCheckoutAhead(known)).toBe(true);
+  });
+
+  it("never reports ahead for content-only paths when the commits are not newer", () => {
+    expect(decideCheckoutAhead({ ...known, runningIsAncestor: false, changedPaths: ["dashboard/x.ts"] })).toBe(false);
+  });
+
+  it("flows through classifyRebuild", () => {
+    expect(classifyRebuild(facts({ changedPaths: ["notes/a.md"] })).checkoutAhead).toBe(false);
+    expect(classifyRebuild(facts({ changedPaths: ["dashboard/app/page.tsx"] })).checkoutAhead).toBe(true);
+  });
+});
+
 describe("launchRebuild", () => {
   it.each([true, false])("only bootstraps pulls from the installed payload (pull=%s)", async (pull) => {
     const spawned: string[][] = [];

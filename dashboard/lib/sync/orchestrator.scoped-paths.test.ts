@@ -113,6 +113,39 @@ describe("hook output on a successful push", () => {
   });
 });
 
+describe("a push the remote's pre-receive hook rejects", () => {
+  const REJECTED = [
+    "remote: pre-receive hook failed",
+    "To github.com:example/devhub-private.git",
+    " ! [remote rejected] main -> main (pre-receive hook declined)",
+    "error: failed to push some refs to 'github.com:example/devhub-private.git'",
+  ].join("\n");
+  const pushWith = (result: (args: string[]) => { status: number; stdout: string; stderr: string }) => {
+    const base = mocks.git.getMockImplementation()!;
+    mocks.git.mockImplementation((cwd: string, args: string[], opts?: unknown) => (args[0] === "push" ? result(args) : base(cwd, args, opts)));
+  };
+
+  it("does not retry with --set-upstream or blame the connection and auth", async () => {
+    mkdirs("notes");
+    pushWith(() => ({ status: 1, stdout: "", stderr: REJECTED }));
+    expect(await commitAndPushPaths({ repoRoot: repo, emit, paths: CONTENT, commitMessage: "chore: sync" })).toBe(2);
+    expect(gitCalls("push")).toEqual([["push", "origin", "main"]]);
+    const log = emitted.join("\n");
+    expect(log).not.toMatch(/set-upstream|connection and auth/i);
+    expect(log).toContain("[remote rejected]");
+    expect(log).toContain("HOOK_FAILED: pre-receive");
+  });
+
+  it("still retries with --set-upstream when the first push fails for another reason", async () => {
+    mkdirs("notes");
+    pushWith((args) => args.includes("--set-upstream")
+      ? { status: 0, stdout: "", stderr: "" }
+      : { status: 1, stdout: "", stderr: "fatal: The current branch main has no upstream branch." });
+    expect(await commitAndPushPaths({ repoRoot: repo, emit, paths: CONTENT, commitMessage: "chore: sync" })).toBe(0);
+    expect(gitCalls("push")).toEqual([["push", "origin", "main"], ["push", "--set-upstream", "origin", "main"]]);
+  });
+});
+
 describe("pre-push content switch", () => {
   const pushOpts = () => mocks.git.mock.calls.filter(([, args]) => args[0] === "push").map(([, , opts]) => opts);
   it("is set on the content sync's push, so the hook can skip verify for content-only commits", async () => {

@@ -115,6 +115,35 @@ describe("getPackagedCheckoutStatus", () => {
     expect(status.reason).toMatch(/Rebuild/);
   });
 
+  describe("after a commit on top of the bundle's commit", () => {
+    function staleAfter(file: string): boolean {
+      const checkout = makeCheckout();
+      const bundle = readCheckoutHeadCommit(checkout);
+      fs.mkdirSync(path.dirname(path.join(checkout, file)), { recursive: true });
+      fs.writeFileSync(path.join(checkout, file), "x\n");
+      spawnSync("git", ["add", "-A"], { cwd: checkout });
+      spawnSync("git", ["commit", "-qm", "next"], { cwd: checkout });
+      const server = path.join(tmp, "server");
+      fs.mkdirSync(server, { recursive: true });
+      fs.writeFileSync(path.join(server, "bundle-source.json"), JSON.stringify({ commit: bundle }));
+      process.env.DEVHUB_PACKAGED_RUNTIME = "1";
+      process.env.DEVHUB_DESKTOP = "1";
+      process.env.DEVHUB_APP_DATA = path.join(tmp, "app-data");
+      fs.mkdirSync(process.env.DEVHUB_APP_DATA, { recursive: true });
+      fs.writeFileSync(path.join(process.env.DEVHUB_APP_DATA, "repo-path.txt"), `${checkout}\n`);
+      process.env.DEVHUB_SERVER_DIR = server;
+      return getPackagedCheckoutStatus().stale;
+    }
+
+    it("stays quiet for a notes-only sync", () => {
+      expect(staleAfter("notes/daily/2026-10-09.md")).toBe(false);
+    });
+
+    it("reports stale for a code change", () => {
+      expect(staleAfter("dashboard/lib/example.ts")).toBe(true);
+    });
+  });
+
   it("stays quiet when bundle marker matches checkout HEAD", () => {
     const checkout = makeCheckout();
     const head = readCheckoutHeadCommit(checkout);

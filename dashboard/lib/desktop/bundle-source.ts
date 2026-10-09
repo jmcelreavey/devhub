@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { getAppDataDir, getCheckoutRoot } from "@/lib/desktop/runtime-paths";
 import { PACKAGED_STALE_REASON } from "@/lib/desktop/packaged-checkout-copy";
+import { parseNulSeparatedPaths, touchesBuildPaths } from "@/lib/content/sync-paths";
 
 export interface PackagedCheckoutStatus {
   /** True when the sidecar sets DEVHUB_PACKAGED_RUNTIME=1 (installed .app bundle). */
@@ -83,6 +84,15 @@ export function readCheckoutHeadCommit(checkout: string): string | null {
   return commit || null;
 }
 
+/** Files that differ between two commits, or null when git cannot say (e.g. an unknown commit). */
+function changedPathsBetween(checkout: string, base: string, head: string): string[] | null {
+  const res = spawnSync("git", ["diff", "--name-only", "--no-renames", "-z", base, head], {
+    cwd: checkout,
+    encoding: "utf8",
+  });
+  return res.status === 0 ? parseNulSeparatedPaths(res.stdout) : null;
+}
+
 /**
  * Whether the installed app should nudge Rebuild Dashboard or Attach to Dev Server.
  *
@@ -111,9 +121,13 @@ export function getPackagedCheckoutStatus(): PackagedCheckoutStatus {
   base.bundleCommit = bundleCommit;
   base.checkoutCommit = checkoutCommit;
 
-  const stale = Boolean(
-    bundleCommit && checkoutCommit && bundleCommit !== checkoutCommit,
-  );
+  let stale = Boolean(bundleCommit && checkoutCommit && bundleCommit !== checkoutCommit);
+  if (stale) {
+    // A content-only sync (notes, tasks, docs) moves HEAD without changing what a rebuild
+    // produces. If git can't tell what changed, keep the nudge.
+    const changed = changedPathsBetween(checkout, bundleCommit!, checkoutCommit!);
+    if (changed && !touchesBuildPaths(changed)) stale = false;
+  }
   base.stale = stale;
   if (stale) base.reason = PACKAGED_STALE_REASON;
 

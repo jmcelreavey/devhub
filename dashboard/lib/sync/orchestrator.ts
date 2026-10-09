@@ -125,6 +125,10 @@ async function checkPrivateContentOrigin(repoRoot: string): Promise<void> {
   }
 }
 
+function isRemoteHookRejection(result: ReturnType<typeof runGitRepo>): boolean {
+  return result.status !== 0 && detectGitHookFailure(result.stdout, result.stderr, "push")?.remote === true;
+}
+
 function pushOriginBranch(
   emit: (line: string) => void,
   repoRoot: string,
@@ -133,12 +137,23 @@ function pushOriginBranch(
 ): boolean {
   emit(`Pushing to origin/${branch}...`);
   let p = runGit(repoRoot, ["push", "origin", branch], env);
-  if (p.status !== 0) {
+  // The remote reached us and refused the ref. --set-upstream can't change that and
+  // the failure isn't a connection or auth problem.
+  let remoteRejected = isRemoteHookRejection(p);
+  if (p.status !== 0 && !remoteRejected) {
     emit("Push failed; retrying with --set-upstream...");
     p = runGit(repoRoot, ["push", "--set-upstream", "origin", branch], env);
+    remoteRejected = isRemoteHookRejection(p);
   }
   if (p.status !== 0) {
-    emitGitFailure(emit, "WARNING: Push failed — check remote connection and auth.", p, repoRoot);
+    emitGitFailure(
+      emit,
+      remoteRejected
+        ? "WARNING: Push rejected by the remote's hook."
+        : "WARNING: Push failed — check remote connection and auth.",
+      p,
+      repoRoot,
+    );
     return false;
   }
   // Hooks (leak scan, "skipping verify") and the push summary go to stderr; without
