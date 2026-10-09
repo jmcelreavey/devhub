@@ -153,7 +153,7 @@ export function mark(stored: StoredOperation, id: string, state: PluginStep["sta
 }
 
 export function terminal(state: PluginOperationState): boolean {
-  return ["ready", "needs_access", "invalid", "succeeded", "failed", "cancelled", "expired", "needs_attention"].includes(state);
+  return ["ready", "needs_access", "git_missing", "invalid", "succeeded", "failed", "cancelled", "expired", "needs_attention"].includes(state);
 }
 
 export function save(ctx: PluginContext, stored: StoredOperation): void {

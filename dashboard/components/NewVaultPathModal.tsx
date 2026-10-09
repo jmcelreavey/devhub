@@ -106,7 +106,10 @@ export function NewVaultPathModal({
             if (e.key === "Enter") void handleCreate();
             if (e.key === "Escape") onClose();
           }}
-          placeholder={`folder/name${ext}`}
+          placeholder="folder/note-name"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           className="w-full px-3 py-2 rounded text-sm mb-3"
           style={{
             background: "var(--bg)",

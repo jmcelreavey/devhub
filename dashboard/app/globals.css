@@ -659,9 +659,9 @@ h3,
   cursor: not-allowed;
 }
 .btn-primary:disabled {
-  background: color-mix(in oklab, var(--accent) 35%, var(--bg-overlay));
-  color: color-mix(in oklab, var(--accent-fg) 55%, var(--text-subtle));
-  border-color: transparent;
+  background: var(--bg-overlay);
+  color: var(--text);
+  border-color: var(--border);
 }
 .btn[data-state="error"],
 .btn.is-error {

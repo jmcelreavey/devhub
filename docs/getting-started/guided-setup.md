@@ -26,17 +26,17 @@ see [Installation](installation.md).
 | System | macOS 13 or later | Windows with WSL 2 and an Ubuntu distro, plus WebView2 (the installer fetches it if missing) |
 | Installer | `.dmg` (Apple Silicon or Intel) | `-setup.exe` |
 | Node.js and GitHub CLI | Included in the app | Included in the installer |
-| Git | Not included. Only needed for the optional backup | Not included. Only needed for the optional backup, and it must be inside Ubuntu |
+| Git | Not included. Needed for **Plugins → Add from GitHub** and the optional backup | Not included. Needed for plugins and the optional backup, and it must be inside Ubuntu |
 
-DevHub does not bundle Git. It checks for it and, if it is missing, shows an install hint
-you can copy. Nothing else in the app needs it.
+DevHub does not bundle Git. **Plugins → Add from GitHub** needs it, and so does the optional private backup. On a Mac, **Install Git** runs `xcode-select --install`. Nothing else in day-to-day notes and tasks needs it.
 
 ## Install on a Mac
 
-1. Open the `.dmg`, drag **DevHub** to **Applications**, and launch it.
-2. The app is not notarised by Apple, so macOS may refuse the first launch. Go to
-   **System Settings → Privacy & Security**, choose **Open Anyway**, then confirm **Open**.
-   macOS remembers the exception.
+1. Drag **DevHub** into **Applications** and eject the DMG, then double-click **DevHub** in **Applications**.
+2. macOS says **"DevHub" Not Opened** (Apple could not verify it is free of malware). Click **Done**. Don't click **Move to Trash**.
+   Open **System Settings → Privacy & Security**, scroll down to **Security**, and click **Open Anyway** next to *"DevHub" was blocked to protect your Mac*.
+   In the next dialog click **Open Anyway** again, then enter your Mac password (or use Touch ID). You only do this once.
+   On macOS 15 and later, right-click → Open no longer gets past this.
 3. Wait a few seconds for the start-up screen. The setup wizard opens.
 
 ## Install on Windows
@@ -75,8 +75,8 @@ machine. You can do it on day one, or never.
    Today).
 2. **Sign in with GitHub.** DevHub uses the GitHub CLI it ships with, so you install
    nothing for this.
-3. If Git is missing you will see **Git isn't installed yet** with a command to copy and
-   a **Re-check Git** button. On a Mac the hint is `xcode-select --install`; on Windows
+3. If Git is missing you will see **Git isn't installed**, an **Install Git** button on a Mac, and
+   a **Re-check Git** button. On a Mac that runs `xcode-select --install`; on Windows
    run the command in your Ubuntu terminal.
 4. Choose **Create my private DevHub repo**.
 

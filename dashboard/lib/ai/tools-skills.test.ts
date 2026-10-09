@@ -35,6 +35,18 @@ describe("ai-tools-skills", () => {
     else process.env.AI_TOOLS_ROOT = prevRoot;
   });
 
+  it("resolves the default from the home directory at call time", () => {
+    delete process.env.AI_TOOLS_ROOT;
+    const spy = vi.spyOn(os, "homedir");
+    spy.mockReturnValue("/tmp/not-a-ci-user");
+    const first = resolveAiToolsRoot();
+    expect(first).toBe(path.join("/tmp/not-a-ci-user", "Developer", "ai-tools"));
+    expect(first).not.toContain("/Users/runner");
+    spy.mockReturnValue("/tmp/other-home");
+    expect(resolveAiToolsRoot()).toBe(path.join("/tmp/other-home", "Developer", "ai-tools"));
+    spy.mockRestore();
+  });
+
   it("lists skills with a BI prefix when checkout exists", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-aitools-"));
     process.env.AI_TOOLS_ROOT = root;

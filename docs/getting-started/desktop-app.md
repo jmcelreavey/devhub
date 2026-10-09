@@ -43,9 +43,7 @@ DevHub currently ships without an Apple Developer ID or Windows publisher
 certificate. These are optional for building and distributing installers, but
 the operating system cannot verify the publisher.
 
-**macOS:** the app has an ad-hoc signature and is not notarised. After trying
-to open a download you trust, go to **System Settings → Privacy & Security →
-Open Anyway**, then confirm **Open**. macOS saves an exception for that app.
+**macOS:** the app has an ad-hoc signature and is not notarised. Drag **DevHub** into **Applications** and eject the DMG, then double-click **DevHub** in **Applications**. macOS says **"DevHub" Not Opened** (Apple could not verify it is free of malware). Click **Done**. Don't click **Move to Trash**. Open **System Settings → Privacy & Security**, scroll down to **Security**, and click **Open Anyway** next to *"DevHub" was blocked to protect your Mac*. In the next dialog click **Open Anyway** again, then enter your Mac password (or use Touch ID). You only do this once. On macOS 15 and later, right-click → Open no longer gets past this.
 See [Apple's instructions](https://support.apple.com/en-au/102445). Rebuilds can
 also trigger permission prompts again; see
 [macOS permissions](../guides/macos-permissions.md).

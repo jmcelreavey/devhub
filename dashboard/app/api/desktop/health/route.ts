@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     devhub: true,
     desktop: true,
     status: "ready",
-    version: process.env.DEVHUB_VERSION ?? null,
+    version: process.env["DEVHUB_VERSION"]?.trim() || null,
     appData: getAppDataDir(),
     resourceRoot: getResourceRoot(),
     pid: process.pid,

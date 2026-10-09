@@ -20,6 +20,7 @@ import {
   type SetupStepMeta,
 } from "./shared";
 import { jiraSetupSavePayload, shouldSaveBeforeNext } from "./save-payload";
+import { pickInstalledAiProvider } from "@/lib/ai/setup-provider";
 import {
   isStepComplete,
   WelcomeStep,
@@ -123,7 +124,7 @@ const STEPS: Step[] = [
     title: "AI Provider",
     icon: <TerminalSquare size={18} />,
     description: "Cursor / ChatGPT / OpenCode CLI, or optional HTTP API key",
-    configured: true,
+    configured: false,
     optional: true,
   },
 
@@ -184,10 +185,10 @@ export default function SetupPage() {
   const [biChecking, setBiChecking] = useState(false);
   const [biForm, setBiForm] = useState({ capiRepoPath: "" });
   const [agentForm, setAgentForm] = useState<{
-    provider: "cursor-cli" | "chatgpt-cli" | "antigravity-cli" | "opencode" | "api";
+    provider: "cursor-cli" | "chatgpt-cli" | "antigravity-cli" | "opencode" | "api" | null;
     opencodeModel: string;
     cursorModel: string;
-  }>({ provider: "opencode", opencodeModel: "", cursorModel: "" });
+  }>({ provider: null, opencodeModel: "", cursorModel: "" });
 
 
   /**
@@ -254,18 +255,18 @@ export default function SetupPage() {
       }
       if (data.agentVars) {
         setAgentForm({
-          provider:
-            data.agentVars.provider ??
-            (data.agentVars.cli === "cursor"
-              ? "cursor-cli"
-              : data.agentVars.cli === "chatgpt"
-                ? "chatgpt-cli"
-                : data.agentVars.cli === "antigravity"
-                  ? "antigravity-cli"
-                  : "opencode"),
+          provider: pickInstalledAiProvider({
+            saved: data.agentVars.provider,
+            installed: {
+              "cursor-cli": data.agentVars.cursorAgentInstalled,
+              "chatgpt-cli": data.agentVars.chatgptCliInstalled === true,
+              "antigravity-cli": data.agentVars.antigravityCliInstalled === true,
+              opencode: data.agentVars.opencodeInstalled === true,
+              api: data.agentVars.apiConfigured === true,
+            },
+          }),
           opencodeModel: data.agentVars.opencodeModel,
           cursorModel: data.agentVars.cursorModel,
-
         });
       }
       return data;
@@ -393,6 +394,7 @@ export default function SetupPage() {
     if (s.id === "calendar" && status) return { ...s, configured: status.calendar };
     if (s.id === "jira" && status) return { ...s, configured: status.jira };
     if (s.id === "bi" && status) return { ...s, configured: status.bi };
+    if (s.id === "agent" && status) return { ...s, configured: Boolean(status.agentVars?.provider) };
     return s;
   });
   const currentStep = Math.max(0, steps.findIndex((step) => step.id === currentStepId));
@@ -745,7 +747,7 @@ export default function SetupPage() {
       if (step.id === "bi") {
         body.bi = { capiRepoPath: biForm.capiRepoPath };
       }
-      if (step.id === "agent") {
+      if (step.id === "agent" && agentForm.provider) {
         body.agent = agentForm;
       }
 
@@ -984,6 +986,7 @@ export default function SetupPage() {
                 device={githubDevice}
                 login={githubLogin}
                 error={error}
+                ghCommand={status.githubVars.ghCommand}
               />
               {status.desktop && <PrivateRepoSetup connected={status.github} onLinked={() => void loadSetupStatus()} onLater={() => { progressState.skipStep(step.id); goNext(); }} />}
             </div>
@@ -1068,6 +1071,7 @@ export default function SetupPage() {
                 opencodeInstalled: status.agentVars?.opencodeInstalled === true,
                 apiConfigured: status.agentVars?.apiConfigured === true,
               }}
+              desktop={status.desktop === true}
             />
             </div>
           )}

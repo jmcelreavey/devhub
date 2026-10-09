@@ -11,6 +11,7 @@ import { readManifestDetailed, type ManifestIssue } from "./manifest";
 import type { PluginManifest } from "./types";
 import { PLUGIN_LIMITS, assertRepoRelative } from "./source";
 import { commandOnPath } from "./runtime";
+import { assessGitAvailabilitySync } from "@/lib/setup/git-availability";
 import type { AssetPreview, InventoryGroup, PreviewIssue, RequirementPreview } from "./model";
 
 export interface InspectIssue {
@@ -451,7 +452,9 @@ export function inspectPluginDir(root: string, opts: InspectOptions = {}): Inspe
 
   const requirements: RequirementPreview[] = (manifest.requires?.commands ?? []).map((command) => ({
     command: clip(command.command),
-    available: commandOnPath(command.command, opts.env),
+    available: command.command === "git" || command.command === "git.exe"
+      ? assessGitAvailabilitySync({ env: opts.env, augment: false }).runnable
+      : commandOnPath(command.command, opts.env),
     installHint: command.install ? command.install.slice(0, 500) : null,
   }));
 

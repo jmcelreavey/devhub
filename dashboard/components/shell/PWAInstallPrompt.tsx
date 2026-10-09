@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Info, Trash2, X } from "lucide-react";
 import { usePathname } from "next/navigation";
+import { isDesktop } from "@/lib/desktop/bridge";
 import { usePwaInstall } from "@/lib/hooks/use-pwa-install";
 
 const DISMISSED_KEY = "devhub:pwa-dismissed";
@@ -16,12 +17,14 @@ export function PWAInstallPrompt() {
   /** Must match server first paint — never read `localStorage` in a `useState` initializer. */
   const [dismissed, setDismissed] = useState(false);
   const [statusBrowserHintDismissed, setStatusBrowserHintDismissed] = useState(false);
+  const [shell, setShell] = useState<"unknown" | "desktop" | "browser">("unknown");
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
       try {
         setDismissed(localStorage.getItem(DISMISSED_KEY) === "1");
         setStatusBrowserHintDismissed(localStorage.getItem(STATUS_BROWSER_HINT_DISMISSED_KEY) === "1");
+        setShell(isDesktop() ? "desktop" : "browser");
       } catch {
         /* ignore private mode / quota */
       }
@@ -51,6 +54,7 @@ export function PWAInstallPrompt() {
     return "Open your browser/app menu and remove the installed app for this site.";
   }, []);
 
+  if (shell !== "browser") return null;
   if (installed && !onStatusPage) return null;
   if (!installed && !canInstall && !onStatusPage) return null;
   if (!installed && dismissed && !onStatusPage) return null;

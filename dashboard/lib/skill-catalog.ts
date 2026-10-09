@@ -8,6 +8,7 @@ import {
   aiToolsSkillsDir,
   isAiToolsAvailable,
   isAiToolsSyncEnabled,
+  isAiToolsRootConfigured,
   resolveAiToolsRoot,
 } from "@/lib/ai/tools-skills";
 import { pluginAssetDirs } from "./plugins/registry";
@@ -106,6 +107,7 @@ export function buildAiToolsMeta(_repoRoot: string): AiToolsMeta {
     path: meta.aiToolsDir,
     root: resolveAiToolsRoot(),
     syncEnabled: isAiToolsSyncEnabled(),
+    configured: isAiToolsRootConfigured(),
   };
 }
 

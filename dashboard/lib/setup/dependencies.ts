@@ -17,6 +17,7 @@ import os from "node:os";
 import fs from "node:fs";
 import { findInstalledApp } from "@/lib/launch/desktop";
 import path from "node:path";
+import { assessGitAvailabilitySync } from "@/lib/setup/git-availability";
 
 /**
  * Directories to add to PATH before probing.
@@ -83,6 +84,11 @@ export interface DependencyStatus {
   version: string | null;
   installCommand?: string;
   installUrl?: string;
+  /**
+   * macOS, and the only git we can see is Apple's shim with no developer
+   * directory. The Tools step offers Install Git instead of running git.
+   */
+  macGitInstall?: boolean;
 }
 
 export const DEPENDENCIES: DependencySpec[] = [
@@ -204,21 +210,32 @@ export function firstVersionLine(raw: string): string | null {
  * habit worth not having. A short timeout matters because a broken Docker
  * install can hang `docker --version` indefinitely, and this runs on a page load.
  */
+function gitProbeBin(): string | null {
+  const gate = assessGitAvailabilitySync({
+    env: { ...process.env, PATH: probePath() },
+    augment: false,
+  });
+  return gate.runnable && gate.bin ? gate.bin : null;
+}
+
 export function probeDependency(spec: DependencySpec, timeoutMs = 2500): DependencyStatus {
   let version: string | null = null;
   let present = false;
-  try {
-    const out = execFileSync(spec.bin, spec.versionArgs, {
-      encoding: "utf8",
-      timeout: timeoutMs,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, PATH: probePath() },
-    });
-    present = true;
-    version = firstVersionLine(out);
-  } catch {
-    // ENOENT (not installed), non-zero exit, or timeout all mean "can't use it".
-    present = false;
+  const command = spec.bin === "git" || spec.bin === "git.exe" ? gitProbeBin() : spec.bin;
+  if (command) {
+    try {
+      const out = execFileSync(command, spec.versionArgs, {
+        encoding: "utf8",
+        timeout: timeoutMs,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, PATH: probePath() },
+      });
+      present = true;
+      version = firstVersionLine(out);
+    } catch {
+      // ENOENT (not installed), non-zero exit, or timeout all mean "can't use it".
+      present = false;
+    }
   }
   if (!present && spec.id === "cursor" && findInstalledApp("Cursor", "cursor")) {
     present = true;
@@ -232,6 +249,7 @@ export function probeDependency(spec: DependencySpec, timeoutMs = 2500): Depende
     version,
     installCommand: spec.installCommand,
     installUrl: spec.installUrl,
+    macGitInstall: spec.id === "git" && (spec.bin === "git" || spec.bin === "git.exe") && process.platform === "darwin" && !present,
   };
 }
 

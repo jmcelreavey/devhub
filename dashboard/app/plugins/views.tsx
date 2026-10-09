@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useId, useState, type ReactNode, type RefObject } from "react";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { GitInstallButton } from "@/components/setup/GitInstallButton";
+import { GIT_MISSING_PLUGIN_MESSAGE } from "@/lib/setup/git-copy";
 import { FieldError } from "@/components/ui/FieldError";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { CANCELLING, NO_CODE_HAS_RUN, PHASE_COPY, formatElapsed, joinAnd, plural } from "@/lib/plugins/copy";
@@ -298,6 +300,16 @@ function CommandBlock({ commands }: { commands: string[] }) {
   );
 }
 
+export function GitMissingBody() {
+  return (
+    <div className="text-sm" role="alert">
+      <p>{GIT_MISSING_PLUGIN_MESSAGE}</p>
+      <div className="mt-3"><GitInstallButton /></div>
+      <Link href="/setup?step=tools" className="btn btn-ghost mt-3">Go to Setup → Tools</Link>
+    </div>
+  );
+}
+
 export function AccessBody(props: {
   access: AccessView;
   tab: "gh" | "git";
@@ -345,12 +357,10 @@ export function AccessBody(props: {
       </div>
       {props.tab === "gh" ? (
         <div id={`${tabId}-panel`} aria-labelledby={`${tabId}-gh`} className="mt-3 text-sm" role="tabpanel">
-          <p className="text-sm font-semibold text-text">{wsl ? `Sign in inside ${distro}` : "Sign in with GitHub CLI"}</p>
-          <ol className="ml-4 mt-2 list-decimal space-y-1">
-            <li>{terminal}</li>
-            <li>{wsl ? `Run these commands inside ${distro}, not in PowerShell.` : "Run these commands."}</li>
-            <li>{wsl ? "Complete sign-in in your browser, then return here and choose Check again." : "Complete the browser sign-in, then return here and choose Check again."}</li>
-          </ol>
+          <p className="text-sm font-semibold text-text">Sign in with GitHub in DevHub</p>
+          <p className="mt-2">DevHub includes GitHub CLI. Use the in-app sign-in, then come back and choose Check again.</p>
+          <Link href="/setup?step=github" className="btn btn-primary mt-3">Sign in with GitHub</Link>
+          <p className="mt-3 text-text-muted">{wsl ? `If you use a terminal instead, open ${distro} (not PowerShell) and run the bundled GitHub CLI:` : "If you use a terminal instead, run the bundled GitHub CLI:"}</p>
           <CommandBlock commands={access.commands} />
           <p className="mt-2 text-text-muted">Use a GitHub account that can open this repository.</p>
           {wsl ? <p className="mt-2 text-text-muted">DevHub runs in {distro}. A GitHub CLI login made only in Windows isn’t automatically available there.</p> : null}
@@ -383,7 +393,9 @@ export function AccessBody(props: {
           )}
         </div>
       )}
-      <p className="mt-3 text-sm text-text-muted">Git works in your terminal, but the DevHub service still can’t access this repository? Restart the service after changing its credential or PATH configuration, then check again.</p>
+      {access.gitAvailable ? (
+        <p className="mt-3 text-sm text-text-muted">Git works in your terminal, but the DevHub service still can’t access this repository? Restart the service after changing its credential or PATH configuration, then check again.</p>
+      ) : null}
     </div>
   );
 }

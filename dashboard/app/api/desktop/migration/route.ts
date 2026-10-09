@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { readAppVersion } from "@/lib/desktop/app-version";
 import { z } from "zod";
 import { parseBody } from "@/lib/api-utils";
 import { isAuthenticatedDesktopRequest, isDesktopSession } from "@/lib/desktop/bootstrap-auth";
@@ -77,7 +78,7 @@ export async function POST(req: NextRequest) {
   const result = runMigration({
     plan,
     choices: parsed.data.choices as MigrationChoice[],
-    appVersion: process.env.DEVHUB_VERSION ?? "unknown",
+    appVersion: readAppVersion(),
   });
 
   if (!result.ok) {

@@ -16,7 +16,14 @@ async function connection() {
       agents: providers.map((p) => ({ id: p.id, name: p.label, ready: p.ready, models: p.models, ...(p.error ? { error: p.error } : {}) })),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    return NextResponse.json({ connected: false, error: error instanceof Error ? error.message : "Could not connect to Paseo." }, { status: 200 });
+    const detail = error instanceof Error && "detail" in error && typeof error.detail === "string" ? error.detail : null;
+    const setupHref = error instanceof Error && "setupHref" in error && typeof error.setupHref === "string" ? error.setupHref : null;
+    return NextResponse.json({
+      connected: false,
+      error: error instanceof Error ? error.message : "Could not connect to Paseo.",
+      detail,
+      setupHref,
+    }, { status: 200 });
   }
 }
 

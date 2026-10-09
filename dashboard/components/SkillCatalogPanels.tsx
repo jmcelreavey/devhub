@@ -31,6 +31,13 @@ export function SkillUpstreamBanner(props: {
   }
 
   if (!aiTools.available) {
+    if (!aiTools.configured) {
+      return (
+        <p className="text-xs mb-2" style={{ color: "var(--text-subtle)", lineHeight: 1.5 }}>
+          Optional: link an ai-tools checkout by setting <code>AI_TOOLS_ROOT</code>. DevHub works without it.
+        </p>
+      );
+    }
     return (
       <p className="text-xs mb-2" style={{ color: "var(--text-muted)", lineHeight: 1.5 }}>
         ai-tools not found at <code>{aiTools.root}</code> - clone the repo or set{" "}

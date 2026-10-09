@@ -18,7 +18,7 @@ export interface SetupStatus {
   /** A real DevHub git checkout exists — sync/ship/plugin actions can work. */
   hasCheckout?: boolean;
   reposDirInfo?: { resolved: string; exists: boolean; repoCount: number };
-  githubVars: { authenticated: boolean };
+  githubVars: { authenticated: boolean; ghCommand?: string | null };
   datadogVars: {
     hasApiKey: boolean;
     hasApplicationKey: boolean;

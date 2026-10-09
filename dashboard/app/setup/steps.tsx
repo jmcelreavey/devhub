@@ -28,6 +28,7 @@ export function isStepComplete(step: Step, status: SetupStatus): boolean {
   if (step.id === "calendar") return status.calendar;
   if (step.id === "jira") return status.jira;
   if (step.id === "bi") return status.bi;
+  if (step.id === "agent") return Boolean(status.agentVars?.provider);
   return true;
 }
 
@@ -221,6 +222,7 @@ export function GitHubStep({
   device,
   login,
   error,
+  ghCommand = null,
 }: {
   configured: boolean;
   checking: boolean;
@@ -229,6 +231,8 @@ export function GitHubStep({
   device: GithubDeviceLogin | null;
   login: string | null;
   error: string;
+  /** Quoted path of the bundled GitHub CLI, when it isn't already on a normal terminal PATH. */
+  ghCommand?: string | null;
 }) {
   return (
     <div>
@@ -328,8 +332,8 @@ export function GitHubStep({
         </button>
       </div>
       <p style={{ fontSize: "11px", color: "var(--text-subtle)", marginTop: "10px", lineHeight: 1.5 }}>
-        Prefer the terminal? <code style={{ fontSize: "11px" }}>gh auth login</code> works too — then
-        use <em>Check connection</em>.
+        The button above uses the GitHub CLI that comes with DevHub. You don&apos;t need a separate <code style={{ fontSize: "11px" }}>gh</code> install.
+        {ghCommand ? <> Prefer the terminal? Run <code style={{ fontSize: "11px" }}>{ghCommand}</code>, then use <em>Check connection</em>.</> : null}
       </p>
       {error && (
         <FieldError>{error}</FieldError>
@@ -1184,9 +1188,11 @@ export function AgentCliStep({
   cursorModel,
   onCursorModelChange,
   availability,
+  desktop = false,
 }: {
-  provider: SetupAiProvider;
+  provider: SetupAiProvider | null;
   onProviderChange: (v: SetupAiProvider) => void;
+  desktop?: boolean;
   opencodeModel: string;
   onOpencodeModelChange: (v: string) => void;
   cursorModel: string;
@@ -1239,7 +1245,9 @@ export function AgentCliStep({
       title: "HTTP API key",
       description: "Optional third-party / local OpenAI-compatible endpoint (AI_API_KEY).",
       available: availability.apiConfigured,
-      hint: "Set AI_API_KEY in dashboard/.env.local (and optionally AI_BASE_URL / AI_MODEL).",
+      hint: desktop
+        ? "Add AI_API_KEY in the desktop app's own settings, then come back to this step."
+        : "Set AI_API_KEY in dashboard/.env.local (and optionally AI_BASE_URL / AI_MODEL).",
     },
   ];
 
@@ -1250,9 +1258,13 @@ export function AgentCliStep({
       </h2>
       <p style={{ color: "var(--text-subtle)", fontSize: "13px", marginBottom: "16px", lineHeight: 1.5 }}>
         One default for learn-repo, morning briefings, and agent launches. Local CLIs are preferred —
-        you only need an API key if you pick HTTP API. Saved as{" "}
-        <code style={{ fontSize: "11px" }}>DEVHUB_AI_PROVIDER</code> in{" "}
-        <code style={{ fontSize: "11px" }}>.env.local</code>.
+        you only need an API key if you pick HTTP API.
+        {desktop ? " Saved for this app." : (
+          <>
+            {" "}Saved as <code style={{ fontSize: "11px" }}>DEVHUB_AI_PROVIDER</code> in{" "}
+            <code style={{ fontSize: "11px" }}>.env.local</code>.
+          </>
+        )}
       </p>
       <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
         {options.map((option) => (
@@ -1383,7 +1395,7 @@ export function DoneStep({ saveResult }: { saveResult: { ok: boolean; message: s
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-        <TipCard>You can revisit this setup anytime from the sidebar Settings link.</TipCard>
+        <TipCard>You can revisit this setup anytime from <Link href="/setup">Setup</Link> in the top bar.</TipCard>
         <TipCard>
           <Link href="/plugins?add=1" style={{ color: "var(--accent-text, var(--accent))", textDecoration: "underline" }}>Add a team plugin</Link>
         </TipCard>

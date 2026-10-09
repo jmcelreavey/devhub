@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DEPENDENCIES, checkDependencies } from "@/lib/setup/dependencies";
+import { clearGitAvailabilityCache } from "@/lib/setup/git-availability";
 import { isDesktopRuntime } from "@/lib/desktop/runtime-paths";
 import { isGoalId, type GoalId } from "@/lib/setup/goals";
 
@@ -25,6 +26,7 @@ export async function GET(req: NextRequest) {
     .filter(isGoalId);
 
   const codeGoals = goals.length === 0 || goals.some((g) => CODE_GOALS.includes(g));
+  clearGitAvailabilityCache();
 
   return NextResponse.json(
     checkDependencies(DEPENDENCIES, { desktop: isDesktopRuntime(), codeGoals }),

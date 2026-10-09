@@ -557,7 +557,7 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
       <BootScreen state={boot} />
       <div className="page-header">
         <div className="flex items-center gap-2">
-          <h1 className="page-title">Agents</h1>
+          <h1 className="page-title">{tab === "skills" ? "Skills" : tab === "agents" ? "Agents" : tab === "persona" ? "Persona" : tab === "mcp" ? "MCP servers" : "Agent CLI"}</h1>
           {(tab === "skills" || tab === "agents") && (
             <span className="badge badge-muted" suppressHydrationWarning>
               {mounted ? filteredRows.length : "-"}

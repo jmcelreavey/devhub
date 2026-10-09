@@ -114,7 +114,7 @@ export function CollapsibleSidebar() {
           (no room) and when nothing is gated (nothing to say).
         */}
         {/* `setup` undefined = still loading, not "nothing configured". */}
-        {!collapsed && setup && hiddenCount > 0 && (
+        {!collapsed && setup && !setup.completed && hiddenCount > 0 && (
           <Link
             href="/setup"
             className="mx-2 mt-2 block rounded px-2 py-1.5 text-[11px] leading-snug hover:bg-[var(--bg-elevated)]"

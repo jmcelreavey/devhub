@@ -56,8 +56,7 @@ and diagrams. Integration credentials stay in the app's local config and are not
 
 The Windows installer is not signed with a paid publisher certificate, so SmartScreen
 cannot recognise the publisher. Choose **More info**, then **Run anyway**, if you trust
-where you got the file. The macOS app is likewise not notarised; use **Open Anyway** in
-**System Settings → Privacy & Security**. Updates are verified separately against
+where you got the file. The macOS app is likewise not notarised. Drag it into **Applications**, eject the DMG, then use **Open Anyway** under **System Settings → Privacy & Security** (see [Unsigned installers](desktop-app.md#unsigned-installers)). Right-click → Open does not get past this on macOS 15 and later. Updates are verified separately against
 DevHub's own release key. See [The desktop app](desktop-app.md#unsigned-installers).
 
 ## Why does Windows need WSL 2?

@@ -33,6 +33,17 @@ describe("status checks", () => {
     expect(snapshot.mcp).toBeNull();
   });
 
+  it("treats a missing checkout as optional instead of a failed repository check", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(
+      JSON.stringify(url.endsWith("/git") ? { available: false, reason: "no-checkout" } : healthy[url]),
+      { status: 200 },
+    )));
+    const snapshot = await fetchStatusRows();
+    expect(snapshot.git).toBeNull();
+    expect(snapshot.unavailable).not.toContain("Repository");
+    expect(snapshot.notices.some((notice) => notice.includes("No linked checkout"))).toBe(true);
+  });
+
   it("treats malformed successful responses as unavailable and attaches a timeout to every request", async () => {
     const fetchMock = vi.fn(async () => new Response("{}"));
     vi.stubGlobal("fetch", fetchMock);

@@ -63,6 +63,26 @@ export function UpdateBanner() {
   // nothing to install: a menu item that ends in silence reads as broken.
   const [notice, setNotice] = useState<UpdateNotice | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [translocated, setTranslocated] = useState(false);
+  const [locationDismissed, setLocationDismissed] = useState(false);
+
+  useEffect(() => {
+    if (!isDesktop()) return;
+    const frame = requestAnimationFrame(() => {
+      try {
+        setLocationDismissed(localStorage.getItem("devhub:translocated-notice") === "1");
+      } catch {
+        /* ignore */
+      }
+    });
+    void fetch("/api/desktop/location")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: { translocated?: boolean } | null) => {
+        setTranslocated(body?.translocated === true);
+      })
+      .catch(() => setTranslocated(false));
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   const runManualCheck = useCallback(async () => {
     setNotice(CHECKING_NOTICE);
@@ -155,7 +175,7 @@ export function UpdateBanner() {
             {notice.body && <span style={{ color: "var(--text-subtle)" }}> {notice.body}</span>}
           </div>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            {notice.actions.includes("install") && (
+            {notice.actions.includes("install") && !translocated && (
               <button type="button" className="btn btn-primary" onClick={() => void download()} disabled={busy}>
                 <Download size={13} /> Install
               </button>
@@ -186,6 +206,19 @@ export function UpdateBanner() {
             <button type="button" className="btn btn-ghost" onClick={() => void copyTextToClipboard(notice.details ?? "")}>Copy</button>
           </div>
         )}
+      </div>
+    );
+  }
+  if (translocated && !locationDismissed && !update?.available && progress?.phase !== "failed") {
+    return (
+      <div role="status" className="update-banner" style={{ padding: "10px 14px", borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)", fontSize: "13px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <p style={{ flex: 1, margin: 0 }}>DevHub is running from a temporary location, so updates can&apos;t install. Quit, drag DevHub into Applications (and eject the DMG), then open it from Applications.</p>
+          <button type="button" className="hub-icon-btn" aria-label="Dismiss" onClick={() => {
+            setLocationDismissed(true);
+            try { localStorage.setItem("devhub:translocated-notice", "1"); } catch { /* ignore */ }
+          }}><X size={14} /></button>
+        </div>
       </div>
     );
   }
@@ -250,7 +283,9 @@ export function UpdateBanner() {
           <>
             <strong>DevHub {update?.version} is available.</strong>{" "}
             <span style={{ color: "var(--text-subtle)" }}>
-              You&rsquo;re on {update?.currentVersion}.
+              {translocated
+                ? "DevHub is running from a temporary location, so updates can't install. Quit, drag DevHub into Applications (and eject the DMG), then open it from Applications."
+                : <>You&rsquo;re on {update?.currentVersion}.</>}
             </span>
           </>
         )}
@@ -309,14 +344,16 @@ export function UpdateBanner() {
                 Release notes
               </a>
             )}
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => void download()}
-              disabled={busy}
-            >
-              <Download size={13} /> Download
-            </button>
+            {!translocated && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void download()}
+                disabled={busy}
+              >
+                <Download size={13} /> Download
+              </button>
+            )}
           </>
         )}
 

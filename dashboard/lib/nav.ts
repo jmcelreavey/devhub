@@ -191,6 +191,8 @@ export interface SetupGateStatus {
   cursor?: boolean;
   chatgpt?: boolean;
   antigravity?: boolean;
+  /** Wizard reached All set. Optional gates that were skipped are not unfinished work. */
+  completed?: boolean;
 }
 
 export function gateAllows(gate: NavGate | undefined, setup: SetupGateStatus | null): boolean {

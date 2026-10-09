@@ -250,8 +250,7 @@ Finder-styled layout.
 | `APPLE_TEAM_ID`                      | Team identifier                           |
 
 The Apple secrets are optional — without them the build still succeeds and
-skips signing and notarisation. The result is ad-hoc signed and needs
-right-click → Open on any machine that did not build it.
+skips signing and notarisation. The result is ad-hoc signed. On macOS 15 and later, right-click → Open does not get past the prompt; use **Open Anyway** under **System Settings → Privacy & Security** (see [Unsigned installers](../getting-started/desktop-app.md#unsigned-installers)).
 
 The updater key is **not** optional in the same way. Losing it means installed
 clients can never be updated again: a new key produces signatures the old

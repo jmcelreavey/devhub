@@ -8,6 +8,8 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { assessGitAvailability } from "@/lib/setup/git-availability";
+import { GIT_MISSING_PLUGIN_MESSAGE } from "@/lib/setup/git-copy";
 import { PluginApiError, toolEnv, type PluginContext } from "./context";
 import { NOT_COPIED, addedSummary, keptSummary, syncSummary, CANCELLING } from "./copy";
 import { applyReviewedAssets, cleanupReceipt, type InstallReceipt } from "./install";
@@ -17,7 +19,7 @@ import type {
   PluginOperationView,
   PluginPreview,
 } from "./model";
-import { ensureSecureDir, serviceRuntime, tildePath, commandOnPath } from "./runtime";
+import { ensureSecureDir, serviceRuntime, tildePath } from "./runtime";
 import { withPluginPathsLock } from "./lock";
 import { expandHome } from "./registry";
 import {
@@ -68,6 +70,7 @@ import {
   toPreview,
   type SourceFacts,
 } from "./preview";
+import { diagnosticToolFlags } from "./tool-flags";
 import { findEntry, readRawRegistry } from "./views";
 import { assertSafePath } from "./filesystem";
 
@@ -314,19 +317,20 @@ export function diagnosticsFor(ctx: PluginContext, id: string): PluginDiagnostic
   const stored = id === "registry" ? null : readStored(ctx, id);
   const runtime = serviceRuntime(ctx.env);
   const env = toolEnv(ctx);
+  const flags = diagnosticToolFlags(env);
   return {
     operationId: id,
     operation: stored?.view.kind ?? "read",
     phase: stored?.view.state ?? "registry",
     errorCode: stored?.view.error?.code ?? null,
-    appVersion: ctx.env.DEVHUB_VERSION?.trim() || "unknown",
+    appVersion: flags.appVersion,
     runtime: runtime.kind,
     distro: runtime.distro,
     source: stored?.internal.url ?? null,
     ref: stored?.internal.url ? "default" : null,
     sha: stored?.internal.sha ?? null,
-    gitAvailable: stored?.internal.gitAvailable ?? commandOnPath("git", env),
-    ghAvailable: stored?.internal.ghAvailable ?? commandOnPath("gh", env),
+    gitAvailable: flags.gitAvailable,
+    ghAvailable: flags.ghAvailable,
     authMethod: stored?.internal.authMethod ?? null,
     exitCode: stored?.internal.exitCode ?? null,
     timedOut: stored?.internal.timedOut ?? false,
@@ -428,6 +432,21 @@ async function runUrlPrepare(ctx: PluginContext, id: string, repo: ParsedGitHubR
   const hooks = path.join(stagingDir, "hooks");
   ensureSecureDir(hooks);
 
+  const gitGate = await assessGitAvailability({ env, augment: false });
+  if (!gitGate.runnable) {
+    stored = fresh(ctx, id);
+    stored.internal.stagingDir = stagingDir;
+    stored.internal.gitAvailable = false;
+    stored.view.state = "git_missing";
+    stored.view.message = GIT_MISSING_PLUGIN_MESSAGE;
+    stored.view.error = fail("GIT_MISSING", GIT_MISSING_PLUGIN_MESSAGE, true, ["Nothing has been enabled."]);
+    mark(stored, "access", "failed");
+    stored.view.cancellable = false;
+    save(ctx, stored);
+    fs.rmSync(stagingDir, { recursive: true, force: true });
+    return;
+  }
+
   const access = await checkRepositoryAccess(ctx.runner, repo, hooks, env, signal);
   stored = fresh(ctx, id);
   stored.internal.stagingDir = stagingDir;
@@ -454,6 +473,17 @@ async function runUrlPrepare(ctx: PluginContext, id: string, repo: ParsedGitHubR
     fs.rmSync(stagingDir, { recursive: true, force: true });
     return;
   }
+  if (!access.ok && !access.gitAvailable && !access.timedOut) {
+    stored.view.state = "git_missing";
+    stored.view.message = GIT_MISSING_PLUGIN_MESSAGE;
+    stored.view.error = fail("GIT_MISSING", GIT_MISSING_PLUGIN_MESSAGE, true, ["Nothing has been enabled."]);
+    stored.internal.gitAvailable = false;
+    mark(stored, "access", "failed");
+    stored.view.cancellable = false;
+    save(ctx, stored);
+    fs.rmSync(stagingDir, { recursive: true, force: true });
+    return;
+  }
   if (!access.ok) {
     save(ctx, stored);
     const gh = await readGhStatus(ctx.runner, env);
@@ -465,7 +495,7 @@ async function runUrlPrepare(ctx: PluginContext, id: string, repo: ParsedGitHubR
     stored.view.error = access.timedOut
       ? fail("TIMEOUT", "The repository check timed out.", true, ["Nothing has been enabled."])
       : fail("NEEDS_ACCESS", "We couldn’t access this repository", true);
-    stored.view.access = accessView(ctx, repo, gh, Boolean(gh.login) && !access.timedOut);
+    stored.view.access = accessView(ctx, repo, gh, Boolean(gh.login) && !access.timedOut, access.gitAvailable);
     mark(stored, "access", "failed");
     stored.view.cancellable = false;
     save(ctx, stored);
@@ -494,7 +524,7 @@ async function runUrlPrepare(ctx: PluginContext, id: string, repo: ParsedGitHubR
     if (denied && gh) {
       stored.view.state = "needs_access";
       stored.view.message = "We couldn’t access this repository";
-      stored.view.access = accessView(ctx, repo, gh, Boolean(gh.login));
+      stored.view.access = accessView(ctx, repo, gh, Boolean(gh.login), true);
       stored.view.error = fail("NEEDS_ACCESS", "We couldn’t access this repository", true);
     } else if (downloaded.code === "TIMEOUT") {
       stored.view.state = "failed";

@@ -8,6 +8,7 @@ import { resolveDatadogApplicationKey } from "@/lib/datadog/application-key";
 import { datadogAppOrigin } from "@/lib/datadog/links";
 import { getResolvedGoogleCalendarEnv } from "@/lib/google-calendar";
 import { isGithubCliAuthenticated } from "@/lib/repos";
+import { ghAuthLoginCommand } from "@/lib/plugins/source";
 import { detectBiPresence } from "@/lib/bi-presence";
 import { getPeerServiceGateStatus, isOpenCodeConfigured } from "@/lib/peer-service-availability";
 import { isCursorAgentInstalled, readAgentCliSettings } from "@/lib/agent/cli-env";
@@ -17,6 +18,7 @@ import {
   readConfiguredAiProvider,
 } from "@/lib/ai/preference";
 import { isNotesAiConfigured } from "@/lib/notes-ai/config";
+import { readSetupProgress } from "@/lib/setup/first-run";
 
 
 
@@ -122,6 +124,7 @@ export async function GET() {
     cursor: peerServices.cursor,
     chatgpt: peerServices.chatgpt,
     antigravity: peerServices.antigravity,
+    completed: readSetupProgress().completed,
     allowLanNetwork,
     hasAgentsPassword,
     envPath: ".env.local",
@@ -163,6 +166,7 @@ export async function GET() {
     },
     githubVars: {
       authenticated: github,
+      ghCommand: ghAuthLoginCommand(),
     },
     datadogVars: {
       hasApiKey: datadogApiKey,

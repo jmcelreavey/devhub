@@ -15,6 +15,7 @@ interface ProviderRow { id: string; label: string; ready: boolean; error?: strin
 interface PaseoStatus {
   installed: boolean; running: boolean; version: string | null; web: string; relayEnabled: boolean;
   providers: ProviderRow[] | null; defaultProvider: string | null; authFailed: boolean; unitBinaryMissing?: string | null; restartPending?: boolean; error?: string;
+  setupMessage?: string | null; setupDetail?: string | null; setupHref?: string | null; setupBlocked?: boolean;
 }
 async function post(body: Record<string, string>): Promise<Record<string, unknown>> {
   const response = await fetch("/api/paseo/managed", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -70,10 +71,17 @@ export function PaseoConnection({ setup = false }: { setup?: boolean }) {
       {update?.error && <p className="text-sm text-text-muted">{update.error}</p>}
       <div className="flex gap-3 flex-wrap">
         {updateReady && <button type="button" className="btn btn-primary gap-2" disabled={Boolean(busy)} onClick={() => void act("update")}>{spinner("update")}Update to {update?.installable}</button>}
-        <button type="button" className={`btn ${data.installed ? "btn-ghost" : "btn-primary"} gap-2`} disabled={Boolean(busy)} onClick={() => void act("setup")}>{spinner("setup")}{data.installed ? "Reinstall" : "Set up Paseo"}</button>
+        <button type="button" className={`btn ${data.installed ? "btn-ghost" : "btn-primary"} gap-2`} disabled={Boolean(busy) || Boolean(data.setupBlocked)} onClick={() => void act("setup")}>{spinner("setup")}{data.installed ? "Reinstall" : "Set up Paseo"}</button>
         {data.installed && <button type="button" className="btn btn-ghost gap-2" disabled={Boolean(busy)} onClick={() => void act("restart")}>{spinner("restart")}Restart</button>}
         {data.installed && <button type="button" className="btn btn-ghost gap-2" disabled={Boolean(busy)} onClick={() => void act("check-update")}>{spinner("check-update")}Check for updates</button>}
       </div>
+      {!data.running && data.setupMessage ? (
+        <div className="text-sm" role="status">
+          <p>{data.setupMessage}</p>
+          {data.setupHref ? <Link href={data.setupHref} className="btn btn-primary mt-3">Go to Setup → Tools</Link> : null}
+          {data.setupDetail ? <details className="mt-3 text-xs text-text-muted"><summary>Developer detail</summary><p className="mt-1">{data.setupDetail}</p></details> : null}
+        </div>
+      ) : null}
       {(error || data.error) && <p className="tone-panel tone-panel--warning text-sm" role="alert">{error || data.error}</p>}
     </div>
 

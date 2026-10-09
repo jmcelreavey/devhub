@@ -548,18 +548,39 @@ export interface AccessCommandSet {
 }
 
 /** Commands the person runs themselves. DevHub never runs these. */
+const ORDINARY_GH_DIRS = new Set(["/usr/bin", "/usr/local/bin", "/bin", "/snap/bin", "/opt/homebrew/bin"]);
+
+/** Quote a path for a POSIX shell. Ordinary terminal locations can stay bare. */
+export function ghInvocation(bin: string | null): string {
+  if (!bin || ORDINARY_GH_DIRS.has(path.dirname(bin))) return "gh";
+  return `'${bin.replace(/'/g, "'\\''")}'`;
+}
+
+export function locateGh(env: NodeJS.ProcessEnv = process.env): string | null {
+  const name = process.platform === "win32" ? "gh.exe" : "gh";
+  const bundled = path.join(path.dirname(process.execPath), name);
+  try {
+    fs.accessSync(bundled, fs.constants.X_OK);
+    return bundled;
+  } catch {
+    return whichOnPath("gh", env);
+  }
+}
+
+/** Null when DevHub cannot see gh. Callers should point at in-app sign-in instead of a bare command. */
+export function ghAuthLoginCommand(env: NodeJS.ProcessEnv = process.env): string | null {
+  const bin = locateGh(env);
+  if (!bin) return null;
+  return `${ghInvocation(bin)} auth login`;
+}
+
 export function accessCommands(
   repo: ParsedGitHubRepo,
   runtimeKind: "macos" | "linux" | "wsl",
   env: NodeJS.ProcessEnv = process.env,
+  locate: (env: NodeJS.ProcessEnv) => string | null = locateGh,
 ): AccessCommandSet {
-  let gh = "gh";
-  if (runtimeKind === "wsl") {
-    // A bundled gh may not be on an ordinary WSL terminal's PATH; name it exactly.
-    const found = whichOnPath("gh", env);
-    const ordinary = ["/usr/bin", "/usr/local/bin", "/bin", "/snap/bin"];
-    if (found && !ordinary.includes(path.dirname(found))) gh = `'${found.replace(/'/g, "'\\''")}'`;
-  }
+  const gh = ghInvocation(locate(env));
   const login = [
     `${gh} auth login --hostname github.com --git-protocol https --web`,
     `${gh} auth setup-git --hostname github.com`,

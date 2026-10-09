@@ -17,8 +17,8 @@ The desktop app uses Tauri 2. Electron was removed on 2026-07-26; the original p
 - Developers: [Desktop Development](../contributing/desktop-development.md)
 - When it breaks: [Desktop Recovery](../guides/desktop-recovery.md)
 
-Outstanding: Apple Developer ID signing (builds are ad-hoc signed, so other
-machines need right-click → Open), the canary N→N+1 update test on a clean
+Outstanding: Apple Developer ID signing (builds are ad-hoc signed; other
+machines use **Open Anyway** under **System Settings → Privacy & Security**, and on macOS 15 and later right-click → Open does not get past it), the canary N→N+1 update test on a clean
 machine, and the [Windows (WSL2) app](desktop-windows-wsl.md), which is unverified on real Windows.
 
 ## What Rust owns, and what it doesn't

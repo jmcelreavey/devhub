@@ -3,7 +3,8 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { beginExternalCall, endExternalCall } from "@/lib/exec-registry";
 import { terminalShellEnv } from "@/lib/process-env";
-import { GitMissingError, checkGit } from "@/lib/setup/git-check";
+import { assessGitAvailability } from "@/lib/setup/git-availability";
+import { GitMissingError, missingGitCheck } from "@/lib/setup/git-check";
 
 const execFileAsync = promisify(execFile);
 
@@ -64,10 +65,26 @@ export async function execExternal(
 ): Promise<ExecExternalResult> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_EXEC_TIMEOUT_MS;
   const id = beginExternalCall({ file, args, cwd: opts.cwd, label: opts.label, timeoutMs });
-  const env = isGit(file) ? (terminalShellEnv(opts.env ?? process.env) as NodeJS.ProcessEnv) : opts.env;
+  const gitCommand = isGit(file);
+  const env = gitCommand ? (terminalShellEnv(opts.env ?? process.env) as NodeJS.ProcessEnv) : opts.env;
+  let executable = file;
+  if (gitCommand) {
+    // A caller-supplied env is searched as-is so an empty PATH stays empty.
+    // The dashboard's own probes omit env and augment PATH, so Homebrew git
+    // wins over Apple's /usr/bin shim.
+    const gate = await assessGitAvailability({
+      env: env ?? process.env,
+      augment: opts.env == null,
+    });
+    if (!gate.runnable || !gate.bin) {
+      endExternalCall(id, { ok: false, timedOut: false });
+      throw Object.assign(new GitMissingError(missingGitCheck()), { code: "ENOENT" });
+    }
+    executable = gate.bin;
+  }
   try {
     if (opts.binary || opts.input !== undefined || opts.signal) {
-      const captured = await spawnCollected(file, [...args], {
+      const captured = await spawnCollected(executable, [...args], {
         cwd: opts.cwd,
         env,
         maxBuffer: opts.maxBuffer ?? 32 * 1024 * 1024,
@@ -79,7 +96,7 @@ export async function execExternal(
       endExternalCall(id, { ok: true, timedOut: false });
       return captured;
     }
-    const { stdout, stderr } = await execFileAsync(file, [...args], {
+    const { stdout, stderr } = await execFileAsync(executable, [...args], {
       encoding: "utf-8",
       cwd: opts.cwd,
       env,
@@ -93,8 +110,8 @@ export async function execExternal(
   } catch (err) {
     endExternalCall(id, { ok: false, timedOut: isExecTimeout(err) && !isExecAbort(err) });
     // `spawn git ENOENT` tells a new user nothing; say how to install it. `code` is kept for callers that test it.
-    if (file === "git" && (err as NodeJS.ErrnoException | null)?.code === "ENOENT") {
-      throw Object.assign(new GitMissingError(checkGit()), { code: "ENOENT" });
+    if (gitCommand && (err as NodeJS.ErrnoException | null)?.code === "ENOENT") {
+      throw Object.assign(new GitMissingError(missingGitCheck()), { code: "ENOENT" });
     }
     throw err;
   }

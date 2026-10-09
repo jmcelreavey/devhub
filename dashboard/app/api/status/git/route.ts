@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import { detectGitConflicts } from "@/lib/git/conflicts";
 import { buildContentBuckets, matchContentBucket } from "@/lib/content/sync-dirs";
 import { getCheckoutRoot } from "@/lib/desktop/runtime-paths";
-import { runGitRepo, runGitRepoAsync } from "@/lib/git/repo-local";
+import { gitEnv, runGitRepo, runGitRepoAsync } from "@/lib/git/repo-local";
+import { assessGitAvailabilitySync } from "@/lib/setup/git-availability";
 import { isGitNoisePath, parsePorcelainStatus } from "@/lib/repos/git-parsers";
 
 /** Throttle the network fetch — local counting stays per-request. */
@@ -13,7 +14,11 @@ let lastUpstreamFetchAt = 0;
 export async function GET() {
   const root = getCheckoutRoot();
   if (!root) {
-    return NextResponse.json({ available: false });
+    return NextResponse.json({ available: false, reason: "no-checkout" });
+  }
+  const gate = assessGitAvailabilitySync({ env: gitEnv(), augment: false });
+  if (!gate.runnable) {
+    return NextResponse.json({ available: false, reason: "git-missing" });
   }
   try {
     const branch = runGitRepo(root, ["rev-parse", "--abbrev-ref", "HEAD"]);

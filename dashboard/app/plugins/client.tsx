@@ -21,6 +21,7 @@ import { asFailure, getJson, postJson } from "./api";
 import { AddFooter, ConfirmFooter, DetailFooter, OperationFooter } from "./footers";
 import {
   AccessBody,
+  GitMissingBody,
   AddBody,
   ApplyingBody,
   DetailBody,
@@ -35,9 +36,9 @@ import {
   isPreparing,
 } from "./views";
 
-const SETTLED = new Set(["ready", "needs_access", "invalid", "succeeded", "failed", "cancelled", "expired", "needs_attention"]);
+const SETTLED = new Set(["ready", "needs_access", "git_missing", "invalid", "succeeded", "failed", "cancelled", "expired", "needs_attention"]);
 /** States where there is a decision or a result to read, so the heading takes focus. */
-const DECISION = new Set(["ready", "needs_access", "invalid", "succeeded", "failed", "expired", "needs_attention"]);
+const DECISION = new Set(["ready", "needs_access", "git_missing", "invalid", "succeeded", "failed", "expired", "needs_attention"]);
 
 interface ListBody {
   ok: boolean;
@@ -63,6 +64,7 @@ function titleFor(dialog: Dialog, operation: PluginOperationView | null, detail:
   const name = operation.preview?.plugin?.name ?? operation.subject ?? "plugin";
   switch (operation.state) {
     case "needs_access": return "We couldn’t access this repository";
+    case "git_missing": return "Adding plugins needs Git";
     case "invalid": return operation.message || "This repository isn’t a valid DevHub plugin";
     case "ready": return operation.kind === "disable" ? `Disable ${name}?` : operation.kind === "remove" ? `Remove ${name} from DevHub?` : `Review ${name}`;
     case "applying":
@@ -419,7 +421,7 @@ export function PluginsPage() {
   const subtitle = dialog === "add"
     ? "Paste the repository link. You’ll review what it adds before enabling it."
     : dialog === "detail" ? detail?.stateLabel
-    : dialog === "op" && operation && (isPreparing(operation) || operation.state === "needs_access" || operation.state === "invalid")
+    : dialog === "op" && operation && (isPreparing(operation) || operation.state === "needs_access" || operation.state === "git_missing" || operation.state === "invalid")
       ? operation.subject ?? undefined
       : undefined;
 
@@ -580,7 +582,12 @@ export function PluginsPage() {
         ) : null}
 
         {dialog === "op" && operation ? (
-          operation.state === "needs_access" && operation.access ? (
+          operation.state === "git_missing" ? (
+            <>
+              <GitMissingBody />
+              {diagnosticsText ? <DiagnosticsFallback text={diagnosticsText} /> : null}
+            </>
+          ) : operation.state === "needs_access" && operation.access ? (
             <>
               <AccessBody access={operation.access} tab={accessTab} onTab={setAccessTab} />
               {diagnosticsText ? <DiagnosticsFallback text={diagnosticsText} /> : null}

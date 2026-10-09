@@ -6,6 +6,8 @@
 export const USER_MESSAGE_PREFIX = "DEVHUB_USER_MESSAGE: ";
 
 export class PaseoUserError extends Error {
+  detail: string | null = null;
+  setupHref: string | null = null;
   constructor(message: string) {
     super(message);
     this.name = "PaseoUserError";

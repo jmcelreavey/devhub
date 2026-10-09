@@ -7,6 +7,7 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { FolderOpen, RotateCcw } from "lucide-react";
 import { pickFolder, isDesktop } from "@/lib/desktop/bridge";
 import type { GitCheck } from "@/lib/setup/git-check";
+import { GitInstallButton } from "@/components/setup/GitInstallButton";
 
 interface RepoStatus {
   directory: string; linked: boolean; url?: string; error?: string; existing?: boolean;
@@ -35,17 +36,19 @@ export function planFor(status: RepoStatus | undefined): Plan {
 
 const DEFAULT_REPO_NAME = "devhub-private";
 
-/** Git is missing: say where to run what, with a copy button and a re-check. */
+/** Git is missing: on a Mac, Install Git starts the system installer. The command stays as a fallback. */
 function GitMissing({ git, onRecheck, checking }: { git: GitCheck; onRecheck: () => void; checking: boolean }) {
+  const macInstall = git.installCommand === "xcode-select --install";
   return (
     <div className="tone-panel tone-panel--warning flex flex-col gap-2 p-3 text-sm" role="alert">
-      <p className="font-medium">Git isn&apos;t installed yet</p>
+      <p className="font-medium">Git isn&apos;t installed</p>
       <p>
-        A private repo needs Git. Everything else in DevHub works without it, so you can skip this and come back.
+        A private repo needs Git, and so does Plugins → Add from GitHub. You can skip this and come back.
       </p>
+      {macInstall ? <GitInstallButton /> : null}
       {git.installCommand ? (
         <>
-          <p>Run this in {git.where}:</p>
+          <p>{macInstall ? `Or copy this and run it in ${git.where}:` : `Run this in ${git.where}:`}</p>
           <div className="flex flex-wrap items-center gap-2">
             <code className="rounded px-2 py-1 text-xs" style={{ background: "var(--bg)" }}>{git.installCommand}</code>
             <CopyButton text={git.installCommand} label="install command" showLabel />

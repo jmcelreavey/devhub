@@ -242,6 +242,7 @@ export default function StatusPage() {
   const [git, setGit] = useState<GitStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [unavailable, setUnavailable] = useState<string[]>([]);
+  const [notices, setNotices] = useState<string[]>([]);
   const [checkedAt, setCheckedAt] = useState<number | null>(null);
   const statusRequest = useRef(0);
   const [refreshed, setRefreshed] = useState(0);
@@ -303,6 +304,7 @@ export default function StatusPage() {
     setMcpRuntime(snapshot.mcp ?? []);
     setLanAddresses(snapshot.lan ?? []);
     setUnavailable(snapshot.unavailable);
+    setNotices(snapshot.notices);
     setCheckedAt(Date.now());
     void loadLatestSyncFailure();
   }, [loadLatestSyncFailure]);
@@ -538,7 +540,7 @@ export default function StatusPage() {
     const visible = [
       services.agents,
     ].filter((s): s is ServiceInfo => !!s);
-    const stopped = visible.filter((s) => !s.active).length;
+    const stopped = visible.filter((s) => !s.active && !s.optional).length;
     if (stopped > 0) healthItems.push(`${stopped} service${stopped > 1 ? "s" : ""} stopped`);
   }
   // Content (notes/tasks/diagrams/docs) has a one-tap sync and is tracked
@@ -682,6 +684,10 @@ export default function StatusPage() {
               ))}
             </ul>}
             {allGreen && <p className={styles.healthy}>No issues reported by repository or runtime checks. Skill sync is detailed below.</p>}
+            {notices.map((notice) => <p key={notice} className="text-sm text-text-muted">{notice}</p>)}
+            {services?.agents.optional && !services.agents.active && (
+              <p className="text-sm text-text-muted">Agents aren&apos;t set up. That&apos;s optional. <Link href="/setup?step=tools">Go to Setup → Tools</Link></p>
+            )}
           </>
         )}
       </section>
@@ -707,7 +713,7 @@ export default function StatusPage() {
 
         {statusTab === "sync" && (
         <>
-        {!git && (loading ? <SkeletonRows count={3} variant="list" /> : <p className="tone-panel tone-panel--warning">Repository status is unavailable. Retry checks above to see sync and change details.</p>)}
+        {!git && (loading ? <SkeletonRows count={3} variant="list" /> : notices.some((notice) => notice.startsWith("No linked checkout") || notice.startsWith("Git isn't installed")) ? <p className="text-sm text-text-muted">{notices.find((notice) => notice.startsWith("No linked checkout") || notice.startsWith("Git isn't installed"))}</p> : <p className="tone-panel tone-panel--warning">Repository status is unavailable. Retry checks above to see sync and change details.</p>)}
         {git && (
           <>
           <div className="card min-w-0 flex flex-col">

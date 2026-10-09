@@ -46,6 +46,23 @@ export function checkGit(probe: typeof probeDependency = probeDependency): GitCh
   };
 }
 
+/** Install instructions without probing. Used when the CLT shim must not be executed. */
+export function missingGitCheck(): GitCheck {
+  const spec: DependencySpec = withInstallHints(DEPENDENCIES.find((tool) => tool.id === "git")!, {
+    platform: process.platform,
+    wsl: Boolean(process.env.WSL_DISTRO_NAME),
+    apt: false,
+    homebrew: false,
+  });
+  return {
+    present: false,
+    version: null,
+    where: whereToRun(),
+    installCommand: spec.installCommand ?? null,
+    installUrl: spec.installUrl ?? "https://git-scm.com/downloads",
+  };
+}
+
 export function assertGitAvailable(check: GitCheck = checkGit()): void {
   if (!check.present) throw new GitMissingError(check);
 }

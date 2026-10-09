@@ -34,6 +34,8 @@ export interface AiToolsMeta {
   path: string | null;
   root: string;
   syncEnabled: boolean;
+  /** False when the user never set AI_TOOLS_ROOT. A missing default is optional, not an error. */
+  configured?: boolean;
 }
 
 export interface SkillsListResponse {

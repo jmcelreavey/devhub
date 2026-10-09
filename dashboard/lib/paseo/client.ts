@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { createPaseoApi, type PaseoApi } from "@getpaseo/client";
 import { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import { describeAgentSetup } from "./agent-setup";
 import { PaseoUserError } from "./user-message";
 
 const DEFAULT_URL = "ws://127.0.0.1:6767/ws";
@@ -62,7 +63,11 @@ export async function withPaseo<T>(fn: (session: PaseoSession) => Promise<T>, en
     await daemon.close().catch(() => undefined);
     const running = await fetch(`${paseoWebOrigin(env)}/api/health`, { signal: AbortSignal.timeout(2_000) }).then((response) => response.ok).catch(() => false);
     if (running) throw new PaseoUserError("Paseo is running, but DevHub could not connect. Enter its existing Agents password in Setup, then retry. You do not need to reinstall it.");
-    throw new PaseoUserError("Paseo is unavailable. Start its daemon or check DEVHUB_PASEO_URL.");
+    const help = describeAgentSetup(false);
+    const unavailable = new PaseoUserError(help.message);
+    unavailable.detail = help.detail;
+    unavailable.setupHref = help.setupHref;
+    throw unavailable;
   }
   try {
     return await fn({ api: createPaseoApi(daemon), daemon });

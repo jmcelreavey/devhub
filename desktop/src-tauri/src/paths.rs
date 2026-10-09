@@ -149,6 +149,7 @@ pub fn sidecar_env_for(
     let under_app_data = |sub: &str| format!("{}/{sub}", dirs.app_data);
 
     set("DEVHUB_DESKTOP", "1".into());
+    set("DEVHUB_VERSION", env!("CARGO_PKG_VERSION").to_string());
     set("DEVHUB_APP_DATA", dirs.app_data.clone());
     set("DEVHUB_RESOURCE_ROOT", dirs.resource_root.clone());
     set("DEVHUB_SERVER_DIR", dirs.server_dir.clone());

@@ -12,6 +12,7 @@ import { defaultPaseoProvider, listPaseoProviders } from "@/lib/paseo/providers"
 import { checkPaseoUpdate, hasActivePaseoWork } from "@/lib/paseo/update";
 import { clearPaseoRestartPending, paseoHealthy as healthy, paseoRestartPending } from "@/lib/paseo/pending-restart";
 import { missingPaseoUnitBinary } from "@/lib/paseo/unit-health";
+import { describeAgentSetup } from "@/lib/paseo/agent-setup";
 import { paseoUserMessage } from "@/lib/paseo/user-message";
 import { withPaseo } from "@/lib/paseo/client";
 import { repairOpenCodeDevhubMcp } from "@/lib/sync/mcp";
@@ -38,8 +39,13 @@ export async function GET(req: NextRequest) {
     const managed = readPaseoManaged();
     const running = await healthy();
     const providers = running ? await listPaseoProviders().catch(() => null) : null;
+    const setup = running ? null : describeAgentSetup(false);
     return NextResponse.json({
       installed: Boolean(managed), running, version: managed?.version ?? null, web: paseoWebOrigin(),
+      setupMessage: setup?.message ?? null,
+      setupDetail: setup?.detail ?? null,
+      setupHref: setup?.setupHref ?? null,
+      setupBlocked: setup ? setup.blocker !== null && setup.blocker !== "paseo" : false,
       relayEnabled: managed ? paseoRelayEnabled(managed) : false,
       providers, defaultProvider: providers ? defaultPaseoProvider(providers) ?? null : null,
       authFailed: running && providers === null,

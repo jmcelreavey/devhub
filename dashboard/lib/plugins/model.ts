@@ -10,6 +10,7 @@ export type PluginOperationState =
   | "preparing_preview"
   | "ready"
   | "needs_access"
+  | "git_missing"
   | "invalid"
   | "applying"
   | "succeeded"
@@ -183,6 +184,8 @@ export interface AccessView {
   commands: string[];
   gitCommands: string[];
   signedInDenied: boolean;
+  /** False when Git itself is missing. The "git works in your terminal" line stays hidden. */
+  gitAvailable?: boolean;
 }
 
 export interface PluginListItem {

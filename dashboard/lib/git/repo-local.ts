@@ -3,6 +3,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { execExternal, isExecTimeout } from "@/lib/exec-external";
 import { augmentedPathEnv, terminalShellEnv } from "@/lib/process-env";
+import { assessGitAvailabilitySync } from "@/lib/setup/git-availability";
 
 const GH_GIT_CREDENTIAL_CONFIG = [
   "-c",
@@ -27,6 +28,12 @@ interface GitRepoRunOptions {
 
 export function gitEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   return { ...terminalShellEnv(augmentedPathEnv({ GIT_TERMINAL_PROMPT: "0" })), ...extra } as NodeJS.ProcessEnv;
+}
+
+/** Absolute git to execute, or null when the only candidate is Apple's CLT shim. */
+function gitBin(env: NodeJS.ProcessEnv): string | null {
+  const gate = assessGitAvailabilitySync({ env, augment: false });
+  return gate.runnable && gate.bin ? gate.bin : null;
 }
 
 /** Git commands that talk to remotes and need GitHub CLI credential helper in the dashboard server. */
@@ -76,9 +83,12 @@ export function runGitRepo(
 ): GitRepoRunResult {
   const useGh = opts?.useGhCredentials ?? isGitNetworkCommand(args);
   const maxBuffer = opts?.maxBuffer ?? GIT_MAX_BUFFER_BYTES;
-  const r = spawnSync("git", gitArgsForRepo(repoRoot, args, useGh), {
+  const env = gitEnv(opts?.env);
+  const bin = gitBin(env);
+  if (!bin) return { stdout: "", stderr: "Git isn't installed.", status: 1 };
+  const r = spawnSync(bin, gitArgsForRepo(repoRoot, args, useGh), {
     encoding: "utf-8",
-    env: gitEnv(opts?.env),
+    env,
     maxBuffer,
   });
   const processError = r.error
@@ -266,8 +276,11 @@ export function gitExtractSubtreeArchive(
   extractRoot: string,
 ): void {
   fs.mkdirSync(extractRoot, { recursive: true });
-  const archive = spawnSync("git", ["-C", repoRoot, "archive", treeRef, subtreePath], {
-    env: gitEnv(),
+  const env = gitEnv();
+  const bin = gitBin(env);
+  if (!bin) throw new Error("Git isn't installed.");
+  const archive = spawnSync(bin, ["-C", repoRoot, "archive", treeRef, subtreePath], {
+    env,
     encoding: "buffer",
     maxBuffer: 50 * 1024 * 1024,
   });

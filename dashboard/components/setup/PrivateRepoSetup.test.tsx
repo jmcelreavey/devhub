@@ -155,7 +155,8 @@ describe("without Git", () => {
   it("shows the install command with a copy button and a re-check instead of the create action", async () => {
     git = gitMissing;
     renderRepo(<PrivateRepoSetup connected onLinked={vi.fn()} />);
-    expect(await screen.findByText("Git isn't installed yet")).toBeTruthy();
+    expect(await screen.findByText("Git isn't installed")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Install Git" })).toBeNull();
     expect(screen.getByText(gitMissing.installCommand)).toBeTruthy();
     expect(screen.getByText(/Run this in Ubuntu \(WSL terminal\)/)).toBeTruthy();
     expect(screen.getByRole("button", { name: /Copy install command/ })).toBeTruthy();
@@ -164,6 +165,20 @@ describe("without Git", () => {
     git = gitPresent;
     fireEvent.click(screen.getByRole("button", { name: /Re-check Git/ }));
     expect(await screen.findByRole("button", { name: "Create my private DevHub repo" })).toBeTruthy();
+  });
+
+  it("offers Install Git on a Mac and only starts the installer when that button is clicked", async () => {
+    git = { present: false, version: null, where: "Terminal", installCommand: "xcode-select --install", installUrl: "https://git-scm.com/downloads" };
+    post.mockResolvedValue({ ok: true, json: async () => ({ ok: true, message: "macOS will show its own installer. It needs a lot of free disk space (about 24 GB on macOS 26). When it finishes, come back and click Re-check." }) } as Response);
+    renderRepo(<PrivateRepoSetup connected onLinked={vi.fn()} />);
+    expect(await screen.findByText("Git isn't installed")).toBeTruthy();
+    expect(screen.getByText("xcode-select --install")).toBeTruthy();
+    expect(post).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Install Git" }));
+    expect(await screen.findByText(/24 GB/)).toBeTruthy();
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls[0][0]).toBe("/api/setup/git/install");
+    expect(post.mock.calls[0][1].method).toBe("POST");
   });
   it("points to the download page where no command fits", async () => {
     git = { ...gitMissing, installCommand: null } as unknown as typeof gitMissing;

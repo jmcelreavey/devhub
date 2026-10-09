@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { parseGitHubRepoUrl } from "./github-url";
 import {
   accessCommands,
+  ghAuthLoginCommand,
+  ghInvocation,
   checkRepositoryAccess,
   cloneArgv,
   downloadRepository,
@@ -206,6 +208,15 @@ describe("accessCommands", () => {
 
   it("uses plain gh on WSL when it is somewhere ordinary", () => {
     expect(accessCommands(repo, "wsl", testEnv({ PATH: "/usr/bin" })).gh[0].startsWith("gh auth login")).toBe(true);
+  });
+
+  it("quotes a bundled gh on macOS instead of telling someone to run a bare gh", () => {
+    const bundled = "/Applications/DevHub.app/Contents/Resources/gh";
+    const commands = accessCommands(repo, "macos", testEnv(), () => bundled);
+    expect(commands.gh[0]).toBe(`'${bundled}' auth login --hostname github.com --git-protocol https --web`);
+    expect(ghInvocation(bundled)).toBe(`'${bundled}'`);
+    expect(ghInvocation("/opt/homebrew/bin/gh")).toBe("gh");
+    expect(ghAuthLoginCommand(testEnv({ PATH: "/usr/bin" }))).toBeNull();
   });
 });
 

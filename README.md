@@ -12,24 +12,24 @@ Download the installer for your computer from the **[latest release](https://git
 
 | You have | Download |
 | --- | --- |
-| A Mac with Apple Silicon | `DevHub_2.0.0_aarch64.dmg` |
-| A Mac with an Intel chip | `DevHub_2.0.0_x64.dmg` |
-| Windows, 64-bit Intel or AMD (not Arm) | `DevHub_2.0.0_x64-setup.exe` |
-| Linux, 64-bit | `DevHub_2.0.0_amd64.AppImage` or `DevHub_2.0.0_amd64.deb` |
+| A Mac with Apple Silicon | the file ending `_aarch64.dmg` (`DevHub_<version>_aarch64.dmg`) |
+| A Mac with an Intel chip | the file ending `_x64.dmg` (`DevHub_<version>_x64.dmg`) |
+| Windows, 64-bit Intel or AMD (not Arm) | the file ending `_x64-setup.exe` (`DevHub_<version>_x64-setup.exe`) |
+| Linux, 64-bit | the file ending `_amd64.AppImage` or `_amd64.deb` |
 
-2.0.0 is the first release. Later ones follow the same pattern with a higher version number.
+The file name includes the version. The [latest release](https://github.com/jmcelreavey/devhub/releases/latest) has the current files.
 
 ### Mac
 
-1. Open the `.dmg` and drag **DevHub** into **Applications**. You need macOS 13 or later. (**Apple menu → About This Mac** tells you which chip you have.)
-2. Open DevHub. macOS will stop you the first time, because the app isn't notarised by Apple, so macOS can't verify who made it.
-3. Try to open it once, then go to **System Settings → Privacy & Security**, click **Open Anyway** and confirm **Open**. macOS remembers the exception for this app.
+1. Drag **DevHub** into **Applications** and eject the DMG, then double-click **DevHub** in **Applications**. You need macOS 13 or later. (**Apple menu → About This Mac** tells you which chip you have.)
+2. macOS says **"DevHub" Not Opened** (Apple could not verify it is free of malware). Click **Done**. Don't click **Move to Trash**.
+3. Open **System Settings → Privacy & Security**, scroll down to **Security**, and click **Open Anyway** next to *"DevHub" was blocked to protect your Mac*. In the next dialog click **Open Anyway** again, then enter your Mac password (or use Touch ID). You only do this once. On macOS 15 and later, right-click → Open no longer gets past this.
 
 On a Mac managed by your company, policy can block apps like this. If **Open Anyway** doesn't appear, ask IT. More in [Unsigned installers](docs/getting-started/desktop-app.md#unsigned-installers).
 
 ### Windows
 
-1. Run `DevHub_2.0.0_x64-setup.exe`. It installs for you only, so it doesn't need admin rights, and it fetches WebView2 if your PC doesn't have it.
+1. Run the file ending `_x64-setup.exe`. It installs for you only, so it doesn't need admin rights, and it fetches WebView2 if your PC doesn't have it.
 2. Windows will probably say **Windows protected your PC**. That's SmartScreen, and it's expected: the installer isn't signed with a paid publisher certificate (that's on purpose), so Windows doesn't recognise the publisher. If you got the file from the release page, click **More info**, then **Run anyway**.
 3. DevHub runs inside **WSL 2** (Windows Subsystem for Linux) with Ubuntu. If you don't have that yet, the first launch shows **Set up Windows support**. Click it and accept the one administrator prompt. Finish Ubuntu's account setup, restart if Windows asks, then open DevHub again. If you already have a WSL 2 Ubuntu, DevHub uses it.
 
@@ -87,7 +87,7 @@ Files with a block editor: daily notes, meetings, projects and learnings, linked
 
 ### Agents
 
-Chat with coding agents (Claude Code, Codex, OpenCode, Cursor, Copilot) and, where DevHub can read your sign-ins, see how much of each subscription you've used. It runs through a small local helper called Paseo, which needs a one-off setup: **Agents → Connection → Set up Paseo**. That needs npm and Aikido Safe-Chain on your machine, and the **Tools** step of Setup shows you how. Skip it and the rest of DevHub works as normal. See [Agents (Paseo)](docs/guides/paseo-agents.md).
+Chat with coding agents (Claude Code, Codex, OpenCode, Cursor, Copilot) and, where DevHub can read your sign-ins, see how much of each subscription you've used. It runs through a small local helper called Paseo. Install **Node.js**, then **Safe-Chain**, then **Paseo**, in that order, from **Setup → Tools** (Safe-Chain's install needs npm, which comes with Node.js). You can also open **Agents → Connection** once those are in place. Skip it and the rest of DevHub works as normal. See [Agents (Paseo)](docs/guides/paseo-agents.md).
 
 ### Skills
 
@@ -103,14 +103,16 @@ There's more: Repos with a git client, Databases (SQLite, Postgres and MongoDB) 
 
 A plugin is a separate repo that adds skills, agents, MCP servers, dashboard pages or database connections to DevHub without living in the core. That's how company-specific things stay out of the shared code. It's just a folder with a `devhub-plugin.json` in it.
 
-To install one, clone its repo, then register it from a DevHub checkout (the command is part of the DevHub repo, so the desktop app on its own doesn't have it):
+In the app: **Plugins** (the top bar when you're on System, or the **Plugins** button on Skills) → **Add from GitHub**, paste the repo URL, review what it adds, then enable. Needs Git (on a Mac: **Install Git** / `xcode-select --install`). Skills and agents only for now; MCP servers and dashboard pages still need a checkout.
+
+From a DevHub checkout, the same install is:
 
 ```bash
 npm run plugins -- add <path-to-the-plugin>
 npm run plugins -- list
 ```
 
-Restart DevHub, then use the sync buttons on the **Skills** page to publish the plugin's skills, agents and MCP definitions to your AI tools. `npm run plugins -- disable <name>` and `npm run plugins -- enable <name>` turn one off and on. The list of plugins is a machine-local file, `~/.config/devhub/plugins.json`. [Creating a plugin](docs/contributing/creating-plugins.md) has the manifest and the details, and [Plugin system](docs/architecture/plugins.md) explains how it works.
+`npm run plugins -- disable <name>` and `npm run plugins -- enable <name>` turn one off and on. The list of plugins is a machine-local file, `~/.config/devhub/plugins.json`. [Creating a plugin](docs/contributing/creating-plugins.md) has the manifest and the details, and [Plugin system](docs/architecture/plugins.md) explains how it works.
 
 ## Updates
 
@@ -127,7 +129,7 @@ You can also check yourself with **DevHub → Check for Updates…**, which is i
 - **"Port 1337 is in use".** Another program, or a second DevHub, has the port. DevHub only offers to stop a leftover DevHub development server of its own (**Stop it and continue**). Otherwise quit the other program, then click **Try again**.
 - **A start-up error.** The window shows the last few log lines and an **Open logs** button.
 - **Closing the window didn't quit DevHub.** It keeps running from the tray or menu-bar icon so scheduled jobs carry on. Choose **Quit DevHub** there.
-- **Agents shows a connection error.** Paseo isn't set up yet: **Agents → Connection → Set up Paseo**. On Windows, WSL needs `systemd=true` in `/etc/wsl.conf` first.
+- **Agents shows a connection error.** Paseo isn't set up yet. Install Node.js, then Safe-Chain, then Paseo from **Setup → Tools**. On Windows, WSL needs `systemd=true` in `/etc/wsl.conf` first.
 - **An update failed.** Nothing changed. Click **Try again** or **Open release page**.
 
 More in [Desktop recovery](docs/guides/desktop-recovery.md) and the [FAQ](docs/getting-started/faq.md).

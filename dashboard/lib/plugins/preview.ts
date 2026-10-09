@@ -303,6 +303,7 @@ export function accessView(
   repo: ParsedGitHubRepo,
   gh: { available: boolean; login: string | null; label: string },
   signedInDenied: boolean,
+  gitAvailable = true,
 ): AccessView {
   const runtime = serviceRuntime(ctx.env);
   const env = toolEnv(ctx);
@@ -319,5 +320,6 @@ export function accessView(
     commands: commands.gh,
     gitCommands: commands.git,
     signedInDenied,
+    gitAvailable,
   };
 }

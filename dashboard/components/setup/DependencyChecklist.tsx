@@ -7,6 +7,8 @@ import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import type { GoalId } from "@/lib/setup/goals";
 import { proposeTerminalRun } from "@/lib/terminal-inject";
 import type { DependencyReport } from "@/lib/setup/dependencies";
+import { GitInstallButton } from "@/components/setup/GitInstallButton";
+import { safeChainRowState } from "@/lib/paseo/prerequisites";
 
 /**
  * What's installed on this machine, and what each missing tool would unlock.
@@ -41,11 +43,13 @@ export function DependencyChecklist({ goals = [] }: { goals?: readonly GoalId[] 
 
   const required = data.tools.filter((t) => t.required);
   const optional = data.tools.filter((t) => !t.required);
+  const npmPresent = data.tools.some((tool) => tool.id === "npm" && tool.present);
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+          For Agents, install Node.js, then Safe-Chain, then set up Paseo.{" "}
           {data.availableCount} of {data.totalCount} tools available.
           {data.ready
             ? " Everything DevHub needs is installed."
@@ -57,13 +61,13 @@ export function DependencyChecklist({ goals = [] }: { goals?: readonly GoalId[] 
         </button>
       </div>
 
-      <Group title="Needed" tools={required} />
-      <Group title="Optional - each one turns on a feature" tools={optional} />
+      <Group title="Needed" tools={required} npmPresent={npmPresent} />
+      <Group title="Optional - each one turns on a feature" tools={optional} npmPresent={npmPresent} />
     </div>
   );
 }
 
-function Group({ title, tools }: { title: string; tools: DependencyReport["tools"] }) {
+function Group({ title, tools, npmPresent }: { title: string; tools: DependencyReport["tools"]; npmPresent: boolean }) {
   if (tools.length === 0) return null;
   return (
     <div className="flex flex-col gap-1">
@@ -100,42 +104,68 @@ function Group({ title, tools }: { title: string; tools: DependencyReport["tools
                 {t.unlocks}
               </div>
 
+              {!t.present && t.id === "git" && (
+                <p className="mt-1 text-xs font-medium" style={{ color: "var(--text)" }}>Git isn&apos;t installed</p>
+              )}
               {/* Install help only when it's actually needed. */}
-              {!t.present && (t.installCommand || t.installUrl) && (
-                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              {!t.present && (t.installCommand || t.installUrl || t.macGitInstall) && (
+                <div className="mt-1.5 flex flex-col items-start gap-2">
+                  {t.macGitInstall ? <GitInstallButton /> : null}
                   {t.installCommand && (
-                    <>
+                    <div className="flex flex-wrap items-center gap-2">
                       {/*
-                        The command stays visible next to the button. This runs
-                        something on the user's machine — offering "Install"
-                        without showing what that means would be worse than the
-                        copy-paste it replaces. The terminal dock still asks for
-                        confirmation before anything is injected.
+                        The command stays visible next to the button. On a Mac
+                        the primary action is Install Git, which asks the server
+                        to open the system installer. This terminal button is the
+                        fallback for every other tool.
                       */}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          proposeTerminalRun({
-                            command: t.installCommand ?? "",
-                            label: `Install ${t.label}`,
-                            summary: `Install ${t.label}`,
-                            reason: t.unlocks,
-                            kind: "shell",
-                            source: "ui",
-                          })
-                        }
-                        className="btn btn-ghost"
-                      >
-                        <TerminalSquare size={12} /> Install
-                      </button>
-                      <code
-                        className="rounded px-1.5 py-0.5 font-mono text-[11px]"
-                        style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
-                      >
-                        {t.installCommand}
-                      </code>
-                      <CopyButton text={t.installCommand} label="Copy" />
-                    </>
+                      {(() => {
+                        const safeChain = t.id === "safe-chain" ? safeChainRowState(npmPresent) : null;
+                        const blocked = Boolean(safeChain && !safeChain.enabled);
+                        return (
+                          <>
+                            {blocked && safeChain ? (
+                              <p className="text-xs" style={{ color: "var(--text)" }}>
+                                {safeChain.hint}{" "}
+                                <a href={safeChain.downloadUrl ?? "https://nodejs.org/en/download"} target="_blank" rel="noopener noreferrer">Download the LTS installer</a>
+                                , then Re-check.
+                              </p>
+                            ) : null}
+                            {t.macGitInstall ? null : (
+                              <button
+                                type="button"
+                                disabled={blocked}
+                                onClick={() => {
+                                  if (blocked) return;
+                                  proposeTerminalRun({
+                                    command: t.installCommand ?? "",
+                                    label: `Install ${t.label}`,
+                                    summary: `Install ${t.label}`,
+                                    reason: t.unlocks,
+                                    kind: "shell",
+                                    source: "ui",
+                                  });
+                                }}
+                                className="btn btn-ghost"
+                              >
+                                <TerminalSquare size={12} /> Install
+                              </button>
+                            )}
+                            {blocked ? null : (
+                              <>
+                                <code
+                                  className="rounded px-1.5 py-0.5 font-mono text-[11px]"
+                                  style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
+                                >
+                                  {t.installCommand}
+                                </code>
+                                <CopyButton text={t.installCommand} label="Copy" />
+                              </>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
                   )}
                   {t.installUrl && (
                     <a

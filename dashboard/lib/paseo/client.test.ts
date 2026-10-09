@@ -2,6 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ configs: [] as { clientId: string }[], close: vi.fn(async () => undefined), connect: vi.fn(async () => undefined), fetchAgent: vi.fn() }));
 vi.mock("@getpaseo/client", () => ({ createPaseoApi: () => ({}) }));
+vi.mock("./agent-setup", () => ({
+  describeAgentSetup: () => ({
+    message: "Paseo isn't set up or isn't running. Agents need Node.js, then Safe-Chain, then Paseo. Set it up from Setup → Tools.",
+    detail: null,
+    setupHref: "/setup?step=tools",
+    blocker: "paseo",
+  }),
+}));
 vi.mock("@getpaseo/client/internal/daemon-client", () => ({
   DaemonClient: class {
     connect = mocks.connect;
@@ -29,7 +37,7 @@ describe("Paseo connections", () => {
   it("closes a failed operation and a failed connection", async () => {
     await expect(withPaseo(async () => { throw new Error("operation failed"); })).rejects.toThrow("operation failed");
     mocks.connect.mockRejectedValueOnce(new Error("authentication"));
-    await expect(withPaseo(async () => 1)).rejects.toThrow("unavailable");
+    await expect(withPaseo(async () => 1)).rejects.toThrow("Paseo isn't set up or isn't running");
     expect(mocks.close).toHaveBeenCalledTimes(2);
   });
   it("refuses non-loopback daemons and invalid transports", () => {

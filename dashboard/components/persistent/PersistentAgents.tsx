@@ -26,6 +26,7 @@ export function PersistentAgents() {
   const runLink = params.get("run");
   const [origin, setOrigin] = useState<string>();
   const [error, setError] = useState<string>();
+  const [setupHelp, setSetupHelp] = useState<{ detail: string | null; setupHref: string | null }>({ detail: null, setupHref: null });
   const [loading, setLoading] = useState(false);
   const [chatError, setChatError] = useState<string>();
   const [chatRetryable, setChatRetryable] = useState(false);
@@ -89,10 +90,17 @@ export function PersistentAgents() {
   const connect = useCallback(async () => {
     setLoading(true);
     setError(undefined);
+    setSetupHelp({ detail: null, setupHref: null });
     try {
       const response = await fetch("/api/agent/connection");
-      const data = await response.json();
-      if (!response.ok || !data.connected) throw new Error(data.error || "Paseo isn't running.");
+      const data = await response.json() as { connected?: boolean; error?: string; origin?: string; detail?: unknown; setupHref?: unknown };
+      if (!response.ok || !data.connected || typeof data.origin !== "string") {
+        setSetupHelp({
+          detail: typeof data.detail === "string" ? data.detail : null,
+          setupHref: typeof data.setupHref === "string" ? data.setupHref : null,
+        });
+        throw new Error(data.error || "Paseo isn't running.");
+      }
       const address = new URL(data.origin);
       // Paseo's web UI keeps its login per origin: match the dashboard's loopback
       // name so it's asked for once, the same host /api/paseo/open redirects to.
@@ -152,7 +160,12 @@ export function PersistentAgents() {
     <section aria-label="Agents chats" hidden={!active} style={{ position: "absolute", inset: "57px 0 0", display: active ? "flex" : "none", flexDirection: "column", background: "var(--bg)" }}>
       {error && <div className="tone-panel tone-panel--warning m-4" role="alert">
         <p>{error}</p>
-        <div className="flex gap-3 mt-3"><Link className="btn btn-primary" href="/agents?view=connection">Check Paseo</Link><button className="btn btn-ghost" onClick={() => void connect()} disabled={loading}>Retry</button></div>
+        {setupHelp.detail ? <details className="mt-2 text-xs"><summary>Developer detail</summary><p className="mt-1">{setupHelp.detail}</p></details> : null}
+        <div className="flex gap-3 mt-3">
+          {setupHelp.setupHref ? <Link className="btn btn-primary" href={setupHelp.setupHref}>Go to Setup → Tools</Link> : null}
+          <Link className="btn btn-ghost" href="/agents?view=connection">Check Paseo</Link>
+          <button className="btn btn-ghost" onClick={() => void connect()} disabled={loading}>Retry</button>
+        </div>
       </div>}
       {chatError && <div className="tone-panel tone-panel--warning m-4" role="alert">
         <p>{chatError}</p>

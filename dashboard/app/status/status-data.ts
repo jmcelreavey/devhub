@@ -2,6 +2,8 @@ export interface ServiceInfo {
   name: string;
   active: boolean;
   uptime: string | null;
+  /** Never set up. A stopped optional service is not a health warning. */
+  optional?: boolean;
 }
 
 export interface ServicesStatus {
@@ -44,6 +46,8 @@ export interface StatusSnapshot {
   mcp: McpRuntimeEntry[] | null;
   lan: string[] | null;
   unavailable: string[];
+  /** Checked, and skipped on purpose (no checkout, Git not installed). */
+  notices: string[];
 }
 
 async function readCheck<T>(url: string): Promise<T> {
@@ -61,15 +65,22 @@ export async function fetchStatusRows(): Promise<StatusSnapshot> {
     readCheck<{ addresses: unknown }>("/api/status/lan"),
   ]);
   const unavailable: string[] = [];
+  const notices: string[] = [];
   const serviceData = services.status === "fulfilled" && typeof services.value?.agents?.active === "boolean" ? services.value : null;
   if (!serviceData) unavailable.push("Agent connection");
-  const gitData = git.status === "fulfilled" && typeof git.value?.branch === "string" && typeof git.value?.dirtyCount === "number" ? git.value : null;
-  if (!gitData) unavailable.push("Repository");
+  const gitPayload = git.status === "fulfilled" ? git.value as GitStatus & { available?: boolean; reason?: string } : null;
+  const gitSkipped = gitPayload?.available === false && (gitPayload.reason === "no-checkout" || gitPayload.reason === "git-missing");
+  const gitData = !gitSkipped && git.status === "fulfilled" && typeof git.value?.branch === "string" && typeof git.value?.dirtyCount === "number" ? git.value : null;
+  if (gitSkipped) {
+    notices.push(gitPayload?.reason === "no-checkout"
+      ? "No linked checkout, so the repository check is skipped."
+      : "Git isn't installed, so the repository wasn't checked.");
+  } else if (!gitData) unavailable.push("Repository");
   const mcpData = mcp.status === "fulfilled" && Array.isArray(mcp.value?.servers) ? mcp.value.servers : null;
   if (!mcpData) unavailable.push("MCP servers");
   const lanData = lan.status === "fulfilled" && Array.isArray(lan.value?.addresses)
     ? lan.value.addresses.filter((address): address is string => typeof address === "string" && address.length > 0)
     : null;
   if (!lanData) unavailable.push("Local network");
-  return { services: serviceData, git: gitData, mcp: mcpData, lan: lanData, unavailable };
+  return { services: serviceData, git: gitData, mcp: mcpData, lan: lanData, unavailable, notices };
 }

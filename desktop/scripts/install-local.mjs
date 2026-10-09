@@ -399,7 +399,7 @@ if (backup && !KEEP_BACKUP) {
 process.stdout.write(
   `\nDone. DevHub ${builtInfo.version} is installed at ${INSTALL_PATH}.\n` +
     `Your notes, tasks, collections, upstarts and settings were not touched.\n` +
-    `\nThis build is not notarised, so the first launch needs: right-click the app → Open.\n` +
+    `\nThis build is not notarised. Drag it into Applications, eject the DMG, then use Open Anyway under System Settings → Privacy & Security. On macOS 15 and later, right-click → Open does not get past the prompt.\n` +
     (signedWith === "adhoc"
       ? `\nIt is ad-hoc signed, which means macOS will re-ask for Full Disk Access,\n` +
         `Local Network and Automation after every rebuild. Run once to stop that:\n` +

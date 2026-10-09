@@ -37,10 +37,16 @@ export function isAiToolsRefreshOnSyncEnabled(): boolean {
   return !isEnvFlagDisabled("AI_TOOLS_REFRESH_ON_SYNC");
 }
 
-export function resolveAiToolsRoot(): string {
-  const override = process.env.AI_TOOLS_ROOT?.trim();
+export function resolveAiToolsRoot(env: NodeJS.ProcessEnv = process.env): string {
+  // Bracket access: Next inlines process.env.AI_TOOLS_ROOT at build time.
+  const override = env["AI_TOOLS_ROOT"]?.trim();
   if (override) return path.resolve(override);
   return path.join(os.homedir(), "Developer", "ai-tools");
+}
+
+/** True only when the user set AI_TOOLS_ROOT. The default path is optional. */
+export function isAiToolsRootConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(env["AI_TOOLS_ROOT"]?.trim());
 }
 
 function checkoutSkillsDir(root: string): string {
