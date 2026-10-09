@@ -671,7 +671,14 @@ jobs:
           # job already folded into its installer.
           pattern: devhub-*
           merge-multiple: true
-          path: dist
+          path: artifacts
+
+      # upload-artifact roots each artifact at the least common ancestor of its
+      # paths, so installers arrive nested under <triple>/release/bundle/…, and
+      # both Macs ship an arch-less DevHub.app.tar.gz that would overwrite each
+      # other. Flatten into dist/ and give the tarballs their arch.
+      - name: Collect release assets
+        run: node desktop/scripts/collect-release-assets.mjs artifacts dist "${GITHUB_REF_NAME#v}"
 
       # latest.json is what installed clients poll. It is generated here rather
       # than by hand because a hand-written one with a wrong signature or URL
