@@ -633,8 +633,16 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         std::thread::spawn(move || {
             for mut stream in listener.incoming().take(1).flatten() {
-                use std::io::Write;
-                let _ = stream.write_all(b"HTTP/1.");
+                use std::io::{BufRead, Write};
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .unwrap();
+                let mut request = std::io::BufReader::new(&stream);
+                let mut headers = Vec::new();
+                while !headers.ends_with(b"\r\n\r\n") {
+                    assert!(request.read_until(b'\n', &mut headers).unwrap() > 0);
+                }
+                stream.write_all(b"HTTP/1.").unwrap();
                 std::thread::sleep(Duration::from_millis(20));
                 let _ = stream.write_all(
                     b"1 200 OK\r\nContent-Length: 30\r\n\r\n{\"devhub\":true,\"desktop\":true}",
