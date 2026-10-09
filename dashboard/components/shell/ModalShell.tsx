@@ -18,6 +18,10 @@ export interface ModalShellProps {
   footer?: ReactNode;
   /** Close when the backdrop is clicked. Default true. */
   dismissOnBackdrop?: boolean;
+  /** Move focus to the heading. Used when the heading is the review title. */
+  focusTitle?: boolean;
+  /** Changes which view should receive heading focus without remounting. */
+  focusToken?: string;
 }
 
 /**
@@ -37,10 +41,13 @@ export function ModalShell({
   align = "center",
   footer,
   dismissOnBackdrop = true,
+  focusTitle = false,
+  focusToken,
 }: ModalShellProps) {
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
 
   // Hold the latest onClose in a ref so the effect below depends only on `open`.
@@ -79,6 +86,12 @@ export function ModalShell({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!open || !focusTitle) return;
+    const frame = requestAnimationFrame(() => titleRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [open, focusTitle, focusToken]);
+
   if (!open) return null;
 
   return (
@@ -107,7 +120,7 @@ export function ModalShell({
           style={{ borderBottom: "1px solid var(--border)" }}
         >
           <div className="min-w-0">
-            <h2 id={titleId} className="flex items-center gap-2 text-sm font-semibold text-text">
+            <h2 id={titleId} ref={titleRef} tabIndex={focusTitle ? -1 : undefined} className="flex items-center gap-2 text-sm font-semibold text-text">
               {icon ? <span className="shrink-0 text-text-muted" aria-hidden>{icon}</span> : null}
               <span className={`min-w-0 ${wrapTitle ? "whitespace-normal break-words" : "truncate"}`}>{title}</span>
             </h2>

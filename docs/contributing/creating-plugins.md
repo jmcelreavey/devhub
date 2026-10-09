@@ -40,6 +40,19 @@ Add a manifest at the root, `devhub-plugin.json`:
 - `devhubApi` — the contract version DevHub understands (currently `"1"`).
 - `contributes` / `dashboard` — filled in below.
 
+
+You can also generate the starter tree:
+
+```bash
+npm run plugins -- new team-tools --out ~/dev/team-tools
+```
+
+That writes the manifest, a skill, an agent, an inert MCP example under
+`examples/mcp/`, and a README. It does not initialise git, register the plugin,
+or publish it. It refuses a destination that already exists. Add `--dry-run` to
+print the file list without writing. Add `--branding` only when you want a theme
+in the manifest; the GitHub installer will not enable a branded plugin yet.
+
 ## 2. Add tier-1 assets (skills, agents, MCP)
 
 These are file-copy assets — the simplest contribution. Lay them out like core:
@@ -112,6 +125,20 @@ The registry is **machine-local** and never committed: `~/.config/devhub/plugins
 `npm run plugins -- enable myplugin` to change it without removing the entry.
 The CLI preserves other entries and settings; malformed registry JSON must be fixed
 before it will write.
+
+
+To add a repository from GitHub instead of a local folder, open **Plugins** and
+choose **Add from GitHub**, or run:
+
+```bash
+npm run plugins -- add-from-url https://github.com/acme/team-tools
+```
+
+`add-from-url` reviews the default branch and does not enable the plugin. The
+Plugins page is also linked from Setup and from an empty Skills or Agents catalog.
+The current installer enables plugins that contribute skills and agents. MCP
+servers, dashboard modules, branding, and overlays are listed in the review and
+block activation.
 
 ## 4. Sync and verify
 
@@ -186,9 +213,13 @@ In core, commit a stub first (example: `dashboard/app/repos/RepoRadarSection.tsx
 ```json
 "dashboard": {
   "root": "dashboard",
+  "paths": ["app/repos/RepoRadarSection.tsx"],
   "overlays": ["app/repos/RepoRadarSection.tsx"]
 }
 ```
+
+`dashboard.paths` is required, and needs at least one file, whenever `dashboard`
+is set. A manifest with only `overlays` is invalid.
 
 Ship the real file at `dashboard/app/repos/RepoRadarSection.tsx` inside the plugin repo.
 On materialise, DevHub copies your file over the stub and marks the path

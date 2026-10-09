@@ -58,7 +58,7 @@ Reduced motion keeps the static textures (grain, vignette, stains) and turns off
 
 ## Plugin whitelabel (tier 3)
 
-An enabled plugin can contribute branding: custom presets, default mode, fonts, logo, and a desktop app icon. The branding materialiser writes generated files locally (`plugin-branding.generated.*`) that `theme-presets.ts` and the layout consume.
+An enabled plugin can contribute branding: custom presets, default mode, fonts, logo, and a desktop app icon. The branding materialiser writes generated files locally (`plugin-branding.generated.*`) that `theme-presets.ts` and the layout consume. That happens when a checkout materialises the plugin, not inside an already built app. The Plugins page can review a branding declaration, but it will not enable or apply it.
 
 - Plugin presets appear in the same Appearance menu as core themes.
 - `defaultMode` can seed **system**, **dark**, or **light** for fresh installs; user overrides still win.

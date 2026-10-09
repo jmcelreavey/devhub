@@ -56,12 +56,17 @@ type CommandKind =
   | "content"
   | "repo";
 
+/** Words that find the plugin commands without cluttering their labels. */
+const PLUGIN_KEYWORDS = "plugin extension team tools company GitHub URL";
+
 interface Command {
   id: string;
   kind: CommandKind;
   label: string;
   detail?: string;
   hint?: string;
+  /** Searched but not shown. */
+  keywords?: string;
   /** In-app destination — Shift+Enter / Shift+click opens this in a new workspace tab. */
   href?: string;
   perform: () => void | Promise<void>;
@@ -327,9 +332,31 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       kind: "nav",
       label: `Go to ${item.label}`,
       hint: item.href,
+      keywords: item.href === "/plugins" ? PLUGIN_KEYWORDS : undefined,
       href: item.href,
       perform: () => router.push(item.href),
     }));
+    // "Go to Plugins" comes from the navigation data above.
+    const pluginCmds: Command[] = [
+      {
+        id: "plugin:add",
+        kind: "nav",
+        label: "Add a plugin from GitHub",
+        hint: "/plugins?add=1",
+        keywords: PLUGIN_KEYWORDS,
+        href: "/plugins?add=1",
+        perform: () => router.push("/plugins?add=1"),
+      },
+      {
+        id: "plugin:docs",
+        kind: "nav",
+        label: "Open plugin documentation",
+        hint: "/docs/contributing/creating-plugins",
+        keywords: `${PLUGIN_KEYWORDS} creating a plugin`,
+        href: "/docs/contributing/creating-plugins",
+        perform: () => router.push("/docs/contributing/creating-plugins"),
+      },
+    ];
 
     const noteCmds: Command[] = notes.map((n) => {
       const href = `/notes/${n.path.replace(/\.json$/, "")}`;
@@ -622,6 +649,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
     return uniqueById([
       ...navCmds,
+      ...pluginCmds,
       ...projectCmds,
       ...actionCmds,
       ...repoCmds,

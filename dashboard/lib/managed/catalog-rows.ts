@@ -15,6 +15,11 @@ export interface AgentListItem {
   description: string | null;
   /** True for plugin-contributed agents — read-only in DevHub (edit in the plugin repo). */
   readOnly?: boolean;
+  /**
+   * "core" or "plugin:<name>". Not called `source`: skills have a `source`, and
+   * its presence is how the catalog tells a skill row from an agent row.
+   */
+  origin?: string;
 }
 
 export type CatalogListItem = SkillListItem | AgentListItem;

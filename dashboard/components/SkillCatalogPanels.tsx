@@ -1,6 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import Link from "next/link";
 import { useClientMounted } from "@/lib/hooks/use-client-mounted";
 import {
   SKILL_SOURCE_FILTER_OPTIONS,
@@ -121,13 +122,15 @@ export function SkillRowBadges(props: {
         </span>
       )}
       {props.source?.startsWith("plugin:") && (
-        <span
+        <Link
+          href={`/plugins?plugin=${encodeURIComponent(props.source.slice("plugin:".length))}`}
           className="badge badge-muted"
           style={{ fontSize: "9px", padding: "1px 5px" }}
+          aria-label={`Manage plugin ${props.source.slice("plugin:".length)}`}
           title={`Contributed by the ${props.source.slice("plugin:".length)} plugin (read-only)`}
         >
           {props.source.slice("plugin:".length)}
-        </span>
+        </Link>
       )}
       {props.overridesUpstream && (
         <span

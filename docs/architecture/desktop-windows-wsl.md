@@ -108,6 +108,16 @@ are rejected (logged). Paths typed or pasted into the wizard get the same
 mapping on the server (`lib/setup/input-path.ts`), so `C:\Users\me\code` and
 `\\wsl.localhost\Ubuntu\home\me\code` validate and save as WSL paths.
 
+## Plugins
+
+Plugin downloads, Git, and the GitHub CLI run inside the selected WSL
+distribution, because that is where the dashboard service runs. A `gh auth login`
+performed only in Windows PowerShell is not visible there. Sign in with GitHub
+CLI inside the distro, or point the distro's Git at Windows Git Credential
+Manager. The Plugins page shows the distro name and the commands to run. Skill
+and agent copies are written in the distro home (for example `~/.claude`), not
+in the Windows user profile.
+
 ## Getting an installer without building it
 
 `Actions → Release desktop → Run workflow`, tick **windows_only**, then download

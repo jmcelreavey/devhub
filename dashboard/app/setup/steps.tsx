@@ -1385,6 +1385,9 @@ export function DoneStep({ saveResult }: { saveResult: { ok: boolean; message: s
       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
         <TipCard>You can revisit this setup anytime from the sidebar Settings link.</TipCard>
         <TipCard>
+          <Link href="/plugins?add=1" style={{ color: "var(--accent-text, var(--accent))", textDecoration: "underline" }}>Add a team plugin</Link>
+        </TipCard>
+        <TipCard>
           <SetupShortcutTip />
         </TipCard>
         <TipCard>Press ? for the full shortcut list when DevHub has focus.</TipCard>

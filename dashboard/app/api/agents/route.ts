@@ -11,6 +11,8 @@ interface AgentInfo {
   name: string;
   description: string | null;
   readOnly: boolean;
+  /** "core" or "plugin:<name>", so the catalog can be filtered to one plugin. */
+  origin: string;
 }
 
 const AGENT_SLUG = /^[a-z0-9][a-z0-9_-]{0,62}$/;
@@ -27,7 +29,7 @@ export const GET = withErrorHandler(async () => {
     } catch {
       // unreadable agent file — list it without a description
     }
-    agents.push({ name, description, readOnly: src.origin !== "core" });
+    agents.push({ name, description, readOnly: src.origin !== "core", origin: src.origin });
   }
 
   return NextResponse.json(agents.sort((a, b) => a.name.localeCompare(b.name)));

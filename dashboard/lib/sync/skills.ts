@@ -29,6 +29,7 @@ import {
   SKILL_MD,
 } from "@/lib/skills/shared";
 import { copyTreeSync, safeRemovePath } from "@/lib/server-utils";
+import { pluginOriginGuard } from "@/lib/plugins/origin-guard";
 
 export interface SyncSkillsOptions {
   prune?: boolean;
@@ -314,6 +315,7 @@ export async function syncSkills(opts: SyncSkillsOptions): Promise<number> {
   );
   if (opts.dryRun) emit("(DRY RUN — no changes will be made)");
 
+  const originGuard = pluginOriginGuard();
   let syncedTotal = 0;
   for (const [tool, targetRoot] of toolEntries) {
     emit(`[${tool}] ${targetRoot}`);
@@ -324,6 +326,10 @@ export async function syncSkills(opts: SyncSkillsOptions): Promise<number> {
       if (opts.dryRun) {
         emit(`  WOULD [${tag}]: ${entry.name} -> ${dst}`);
         syncedTotal++;
+        continue;
+      }
+      if (!(await originGuard(entry.origin))) {
+        emit(`  SKIPPED [${tag}]: ${entry.name} is not enabled`);
         continue;
       }
       try {

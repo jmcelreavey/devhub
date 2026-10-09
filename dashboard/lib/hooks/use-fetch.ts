@@ -11,6 +11,9 @@ export const defaultFetcher = async (url: string): Promise<unknown> => {
     try {
       const payload = JSON.parse(text) as { error?: unknown };
       if (typeof payload.error === "string") message = payload.error;
+      else if (payload.error && typeof payload.error === "object" && "message" in payload.error && typeof payload.error.message === "string") {
+        message = payload.error.message;
+      }
     } catch {
       // Plain-text responses are already suitable for display.
     }

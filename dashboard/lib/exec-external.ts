@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
 import { beginExternalCall, endExternalCall } from "@/lib/exec-registry";
@@ -33,11 +33,18 @@ export interface ExecExternalOptions {
   timeoutMs?: number;
   /** Origin shown in diagnostics, e.g. "gh" or "git:fetch". */
   label?: string;
+  /** Optional stdin. Never interpolated into a shell command. */
+  input?: string | Buffer;
+  /** Capture stdout as bytes so Git blobs are not decoded as text. */
+  binary?: boolean;
+  /** Kills the child when aborted. Rejects with an error {@link isExecAbort} recognises. */
+  signal?: AbortSignal;
 }
 
 export interface ExecExternalResult {
   stdout: string;
   stderr: string;
+  stdoutBuffer?: Buffer;
 }
 
 /**
@@ -57,25 +64,137 @@ export async function execExternal(
 ): Promise<ExecExternalResult> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_EXEC_TIMEOUT_MS;
   const id = beginExternalCall({ file, args, cwd: opts.cwd, label: opts.label, timeoutMs });
+  const env = isGit(file) ? (terminalShellEnv(opts.env ?? process.env) as NodeJS.ProcessEnv) : opts.env;
   try {
+    if (opts.binary || opts.input !== undefined) {
+      const captured = await spawnCollected(file, [...args], {
+        cwd: opts.cwd,
+        env,
+        maxBuffer: opts.maxBuffer ?? 32 * 1024 * 1024,
+        timeoutMs,
+        input: opts.input,
+        binary: opts.binary === true,
+        signal: opts.signal,
+      });
+      endExternalCall(id, { ok: true, timedOut: false });
+      return captured;
+    }
     const { stdout, stderr } = await execFileAsync(file, [...args], {
       encoding: "utf-8",
       cwd: opts.cwd,
-      env: isGit(file) ? (terminalShellEnv(opts.env ?? process.env) as NodeJS.ProcessEnv) : opts.env,
+      env,
       maxBuffer: opts.maxBuffer,
       timeout: timeoutMs,
       killSignal: "SIGKILL",
+      signal: opts.signal,
     });
     endExternalCall(id, { ok: true, timedOut: false });
     return { stdout, stderr };
   } catch (err) {
-    endExternalCall(id, { ok: false, timedOut: isExecTimeout(err) });
+    endExternalCall(id, { ok: false, timedOut: isExecTimeout(err) && !isExecAbort(err) });
     // `spawn git ENOENT` tells a new user nothing; say how to install it. `code` is kept for callers that test it.
     if (file === "git" && (err as NodeJS.ErrnoException | null)?.code === "ENOENT") {
       throw Object.assign(new GitMissingError(checkGit()), { code: "ENOENT" });
     }
     throw err;
   }
+}
+
+interface SpawnCollectedOptions {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  maxBuffer: number;
+  timeoutMs: number;
+  input?: string | Buffer;
+  binary: boolean;
+  signal?: AbortSignal;
+}
+
+function abortError(): Error {
+  return Object.assign(new Error("The operation was aborted"), { name: "AbortError", code: "ABORT_ERR" });
+}
+
+/**
+ * `execFile` always decodes stdout and has no stdin or byte-exact mode, which
+ * is what reading Git blobs and feeding `cat-file --batch` need.
+ */
+function spawnCollected(file: string, args: string[], opts: SpawnCollectedOptions): Promise<ExecExternalResult> {
+  return new Promise((resolve, reject) => {
+    if (opts.signal?.aborted) {
+      reject(abortError());
+      return;
+    }
+    const child = spawn(file, args, { cwd: opts.cwd, env: opts.env, stdio: ["pipe", "pipe", "pipe"] });
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+    let stdoutLen = 0;
+    let stderrLen = 0;
+    let settled = false;
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+    }, opts.timeoutMs);
+
+    const onAbort = () => {
+      child.kill("SIGKILL");
+      fail(abortError());
+    };
+    const fail = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      opts.signal?.removeEventListener("abort", onAbort);
+      reject(err);
+    };
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
+
+    child.stdout?.on("data", (chunk: Buffer) => {
+      stdoutLen += chunk.length;
+      if (stdoutLen > opts.maxBuffer) {
+        child.kill("SIGKILL");
+        fail(Object.assign(new Error("stdout exceeded maxBuffer"), { code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" }));
+        return;
+      }
+      stdoutChunks.push(chunk);
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderrLen += chunk.length;
+      if (stderrLen > opts.maxBuffer) {
+        child.kill("SIGKILL");
+        fail(Object.assign(new Error("stderr exceeded maxBuffer"), { code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" }));
+        return;
+      }
+      stderrChunks.push(chunk);
+    });
+    // A child that exits before reading its input raises EPIPE here; the exit
+    // status is what callers act on, so don't let it become an uncaught error.
+    child.stdin?.on("error", () => undefined);
+    child.on("error", fail);
+    child.on("close", (code, signal) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      opts.signal?.removeEventListener("abort", onAbort);
+      const stdoutBuffer = Buffer.concat(stdoutChunks);
+      const stderr = Buffer.concat(stderrChunks).toString("utf8");
+      if (code === 0 && !signal) {
+        resolve({
+          stdout: opts.binary ? "" : stdoutBuffer.toString("utf8"),
+          stderr,
+          stdoutBuffer: opts.binary ? stdoutBuffer : undefined,
+        });
+        return;
+      }
+      reject(Object.assign(new Error(stderr || `Command failed: ${file}`), {
+        code: code ?? 1,
+        stdout: opts.binary ? "" : stdoutBuffer.toString("utf8"),
+        stderr,
+        killed: signal === "SIGKILL" || signal === "SIGTERM",
+        signal,
+      }));
+    });
+    if (opts.input !== undefined) child.stdin?.end(opts.input);
+    else child.stdin?.end();
+  });
 }
 
 /**
@@ -90,4 +209,11 @@ export function isExecTimeout(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   const { killed, signal } = err as { killed?: boolean; signal?: string | null };
   return killed === true && (signal === "SIGKILL" || signal === "SIGTERM");
+}
+
+/** Was this stopped by the caller's {@link AbortSignal} rather than failing on its own? */
+export function isExecAbort(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const { name, code } = err as { name?: string; code?: string };
+  return name === "AbortError" || code === "ABORT_ERR";
 }

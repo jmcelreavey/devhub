@@ -8,6 +8,7 @@ import { useSetupProgress } from "@/lib/setup/use-setup-progress";
 import { requestedSetupStep } from "@/lib/setup/progress";
 import type { SetupStepId } from "@/lib/setup/progress";
 import { FetchError } from "@/components/ui/FetchError";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback, useRef, startTransition } from "react";
 import { mutate as mutateSWR } from "swr";
@@ -915,6 +916,15 @@ export default function SetupPage() {
             </button>
             );
           })}
+        </div>
+
+        {/* Optional: plugins are never a required setup step, so this sits above every step. */}
+        <div className="card card-body mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-text">Plugins</h2>
+            <p className="mt-1 text-xs text-text-subtle">Add shared skills and agents from a GitHub repo.</p>
+          </div>
+          <Link href="/plugins" className="btn btn-ghost shrink-0 text-xs">Manage plugins</Link>
         </div>
 
         {/* Step content card */}

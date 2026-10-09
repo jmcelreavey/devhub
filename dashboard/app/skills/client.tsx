@@ -80,6 +80,8 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
   const router = useRouter();
   const searchParams = useSearchParams();
   const tab = tabFromParam(searchParams.get("tab"));
+  // Set by "View skills" / "View agents" on the Plugins page and by a plugin badge.
+  const pluginFilter = searchParams.get("plugin")?.trim() || null;
 
   const selectTab = useCallback(
     (next: Tab) => {
@@ -91,6 +93,12 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
     },
     [router, searchParams],
   );
+  const clearPluginFilter = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("plugin");
+    const qs = params.toString();
+    router.replace(qs ? `/skills?${qs}` : "/skills", { scroll: false });
+  }, [router, searchParams]);
   const [skills, setSkills] = useState<SkillListItem[]>(initialCatalog?.skills ?? []);
   const [agents, setAgents] = useState<AgentListItem[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(true);
@@ -232,16 +240,21 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
     [visibleKind, skills, agents, localSkillCandidates, localAgentCandidates],
   );
 
-  const filteredRows = useMemo(
-    () =>
-      filterManagedRows(managedRows, visibleKind, {
-        skillSourceFilter: visibleKind === "skill" ? skillSourceFilter : undefined,
-        agentSourceFilter: visibleKind === "agent" ? agentSourceFilter : undefined,
-        highlightNames: highlightNames.length > 0 ? highlightNames : undefined,
-        query: highlightNames.length > 0 ? undefined : query,
-      }),
-    [managedRows, visibleKind, skillSourceFilter, agentSourceFilter, query, highlightNames],
-  );
+  const filteredRows = useMemo(() => {
+    const rows = filterManagedRows(managedRows, visibleKind, {
+      skillSourceFilter: visibleKind === "skill" ? skillSourceFilter : undefined,
+      agentSourceFilter: visibleKind === "agent" ? agentSourceFilter : undefined,
+      highlightNames: highlightNames.length > 0 ? highlightNames : undefined,
+      query: highlightNames.length > 0 ? undefined : query,
+    });
+    if (!pluginFilter) return rows;
+    return rows.filter((row) => {
+      if (row.kind !== "catalog") return false;
+      const item = row.item as { source?: string; origin?: string };
+      return (item.source ?? item.origin) === `plugin:${pluginFilter}`;
+    });
+  }, [managedRows, visibleKind, skillSourceFilter, agentSourceFilter, query, highlightNames, pluginFilter]);
+  const unfilteredCatalog = !pluginFilter && !query.trim() && highlightNames.length === 0 && (visibleKind === "skill" ? skillSourceFilter === "all" : agentSourceFilter === "all");
 
   const skillRows = useMemo(
     () => managedRowsForKind("skill", skills, agents, localSkillCandidates, localAgentCandidates),
@@ -551,10 +564,15 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
             </span>
           )}
         </div>
-        {tab === "skills" && (
-          <Link href="/voice" className="btn btn-ghost text-xs">
-            <Sparkles size={12} aria-hidden /> Train my voice
-          </Link>
+        {(tab === "skills" || tab === "agents") && (
+          <div className="flex items-center gap-2">
+            <Link href="/plugins" className="btn btn-ghost text-xs">Plugins</Link>
+            {tab === "skills" ? (
+              <Link href="/voice" className="btn btn-ghost text-xs">
+                <Sparkles size={12} aria-hidden /> Train my voice
+              </Link>
+            ) : null}
+          </div>
         )}
       </div>
 
@@ -578,6 +596,13 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
 
       {(tab === "skills" || tab === "agents") && (
         <>
+          {pluginFilter ? (
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs" role="status">
+              <span className="badge badge-muted">Showing {visibleKind === "skill" ? "skills" : "agents"} from {pluginFilter}</span>
+              <button type="button" className="btn btn-ghost text-xs" onClick={() => clearPluginFilter()}>Show all</button>
+              <Link href={`/plugins?plugin=${encodeURIComponent(pluginFilter)}`} className="btn btn-ghost text-xs">Manage plugin</Link>
+            </div>
+          ) : null}
           <ul
             className="text-xs"
             style={{ color: "var(--text-muted)", lineHeight: 1.5, marginBottom: "12px", paddingLeft: "18px" }}
@@ -726,8 +751,19 @@ function AgentsLibraryPage({ initialCatalog }: { initialCatalog?: SkillsListResp
                     ? `No ${visibleKind}s in this prune set are waiting to be added to the catalog.`
                     : query
                       ? `No ${visibleKind}s matching "${query}".`
-                      : `No ${visibleKind}s found.`
+                      : unfilteredCatalog
+                        ? visibleKind === "skill" ? "No skills yet" : "No agents yet"
+                        : `No ${visibleKind}s found.`
                 }
+                subtitle={unfilteredCatalog ? "Add your own, or install a plugin shared by your team." : undefined}
+                action={unfilteredCatalog ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" className="btn btn-primary text-xs" onClick={() => setShowNew(true)}>
+                      <Plus size={12} aria-hidden /> New {visibleKind}
+                    </button>
+                    <Link href="/plugins?add=1" className="btn btn-ghost text-xs">Add a plugin</Link>
+                  </div>
+                ) : undefined}
               />
             }
           >

@@ -51,8 +51,21 @@ function readJson(file) {
   }
 }
 
+function registryFile() {
+  const explicit = process.env.DEVHUB_CONFIG_DIR?.trim();
+  if (explicit) return path.join(path.resolve(explicit), "plugins.json");
+  const legacy = path.join(HOME, ".config", "devhub", "plugins.json");
+  if (fs.existsSync(legacy)) return legacy;
+  const xdg = process.env.XDG_CONFIG_HOME?.trim();
+  if (xdg) {
+    const file = path.join(path.resolve(xdg), "devhub", "plugins.json");
+    if (fs.existsSync(file)) return file;
+  }
+  return legacy;
+}
+
 function enabledPluginDirs() {
-  const registry = readJson(path.join(HOME, ".config", "devhub", "plugins.json"));
+  const registry = readJson(registryFile());
   const entries = Array.isArray(registry?.plugins) ? registry.plugins : [];
   const dirs = [];
   for (const entry of entries) {

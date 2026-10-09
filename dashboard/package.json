@@ -24,7 +24,7 @@
     "lint": "eslint --max-warnings 0 --cache --cache-location .eslintcache",
     "pretypecheck": "next typegen",
     "typecheck": "NODE_OPTIONS='--max-old-space-size=4096' tsc --noEmit",
-    "test": "env -u DEVHUB_DESKTOP -u DEVHUB_APP_DATA -u DEVHUB_RESOURCE_ROOT -u DEVHUB_SERVER_DIR -u NOTES_DIR -u TASKS_DIR -u COLLECTIONS_DIR -u UPSTARTS_DIR -u DOCS_DIR -u DEVHUB_OP_CACHE_DIR -u DEVHUB_OP_CACHE -u DEVHUB_OP_REFRESH -u DEVHUB_OP_SYNC_LOCAL -u DEVHUB_OP_ITEM -u DEVHUB_OP_VAULT -u JIRA_API_TOKEN -u GOOGLE_CLIENT_SECRET NODE_ENV=test NODE_OPTIONS='--no-deprecation --disable-warning=ExperimentalWarning' vitest run",
+    "test": "env -u DEVHUB_CONFIG_DIR -u DEVHUB_PLUGIN_HOME -u DEVHUB_PLUGIN_TARGET_HOME -u DEVHUB_DESKTOP -u DEVHUB_APP_DATA -u DEVHUB_RESOURCE_ROOT -u DEVHUB_SERVER_DIR -u NOTES_DIR -u TASKS_DIR -u COLLECTIONS_DIR -u UPSTARTS_DIR -u DOCS_DIR -u DEVHUB_OP_CACHE_DIR -u DEVHUB_OP_CACHE -u DEVHUB_OP_REFRESH -u DEVHUB_OP_SYNC_LOCAL -u DEVHUB_OP_ITEM -u DEVHUB_OP_VAULT -u JIRA_API_TOKEN -u GOOGLE_CLIENT_SECRET NODE_ENV=test NODE_OPTIONS='--no-deprecation --disable-warning=ExperimentalWarning' vitest run",
     "test:e2e:skills": "node scripts/e2e-skills-catalog.mjs",
     "test:e2e:skills:ux": "node scripts/e2e-skills-ux-walkthrough.mjs",
     "test:watch": "env -u DEVHUB_DESKTOP -u DEVHUB_APP_DATA -u DEVHUB_RESOURCE_ROOT -u DEVHUB_SERVER_DIR -u NOTES_DIR -u TASKS_DIR -u COLLECTIONS_DIR -u UPSTARTS_DIR -u DOCS_DIR -u DEVHUB_OP_CACHE_DIR -u DEVHUB_OP_CACHE -u DEVHUB_OP_REFRESH -u DEVHUB_OP_SYNC_LOCAL -u DEVHUB_OP_ITEM -u DEVHUB_OP_VAULT -u JIRA_API_TOKEN -u GOOGLE_CLIENT_SECRET NODE_ENV=test vitest",

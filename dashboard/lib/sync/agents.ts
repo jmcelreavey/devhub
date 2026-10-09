@@ -5,6 +5,7 @@ import { formatAgentForTool } from "@/lib/agent/sync-format";
 import { agentDirEntries, TOOL_DIRS } from "@/lib/sync/skills";
 import { safeRemovePath } from "@/lib/server-utils";
 import { pluginAssetDirs } from "@/lib/plugins/registry";
+import { pluginOriginGuard } from "@/lib/plugins/origin-guard";
 import type { AssetOrigin } from "@/lib/plugins/types";
 
 export interface SyncAgentsOptions {
@@ -85,6 +86,7 @@ export async function syncAgents(opts: SyncAgentsOptions): Promise<number> {
   emit(`Syncing ${sourceAgents.length} agent(s)${originSummary} to ${entries.length} target(s)...`);
   if (opts.dryRun) emit("(DRY RUN — no changes will be made)");
 
+  const originGuard = pluginOriginGuard();
   let synced = 0;
   for (const { tool, path: targetRoot } of entries) {
     emit(`[${tool}:agents] ${targetRoot}`);
@@ -95,6 +97,10 @@ export async function syncAgents(opts: SyncAgentsOptions): Promise<number> {
       if (opts.dryRun) {
         emit(`  WOULD: ${agent} -> ${dst}`);
         synced++;
+        continue;
+      }
+      if (!(await originGuard(agentSources.get(agent)?.origin ?? "core"))) {
+        emit(`  SKIPPED: ${agent} is not enabled`);
         continue;
       }
       try {

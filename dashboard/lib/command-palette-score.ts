@@ -64,6 +64,8 @@ export interface PaletteListItem {
   label: string;
   detail?: string;
   hint?: string;
+  /** Extra words that find the command without being shown, e.g. "extension" for plugins. */
+  keywords?: string;
 }
 
 /** First occurrence of each id wins. Palette rows key on id — duplicates stack in the DOM. */
@@ -112,7 +114,7 @@ export function filterVisiblePaletteCommands<T extends PaletteListItem>(
 
   const scored = unique
     .map((c) => {
-      const parts = [c.label, c.detail, c.hint].filter(
+      const parts = [c.label, c.detail, c.hint, c.keywords].filter(
         (x): x is string => typeof x === "string" && x.trim().length > 0,
       );
       return { cmd: c, score: paletteCommandScore(query, parts) };

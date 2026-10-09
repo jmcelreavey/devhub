@@ -13,6 +13,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { readManifest } from "./manifest";
+import { resolvePluginPaths } from "./paths";
 import {
   pluginOrigin,
   type ContributeKind,
@@ -21,7 +22,7 @@ import {
 } from "./types";
 
 export function pluginRegistryPath(home = os.homedir()): string {
-  return path.join(home, ".config", "devhub", "plugins.json");
+  return resolvePluginPaths({ home }).registryPath;
 }
 
 /** Expand a leading `~` to the home directory and resolve to an absolute path. */

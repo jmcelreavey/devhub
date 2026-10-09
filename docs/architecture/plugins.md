@@ -309,6 +309,62 @@ enabled (same home as the `mcp-personal/` catalog):
 `path` accepts `~`. Disabled entries, missing paths, name/manifest mismatches, and
 invalid manifests are skipped (logged), never fatal — one bad plugin can't break sync.
 
+
+## Installing from a GitHub URL
+
+The Plugins page (`/plugins`) installs a public or private repository after a review.
+Private repositories use the GitHub CLI or Git credential helper that is already
+configured for the account running DevHub. DevHub does not store or print tokens.
+
+The URL has to be `https://github.com/<owner>/<repo>`, with an optional `.git`
+suffix. SSH URLs, other hosts, `/tree` and `/blob` links, query strings, fragments,
+and embedded usernames or tokens are rejected. The installer follows the
+repository's default branch.
+
+`npm run plugins -- add-from-url <url>` performs that same download and validation
+and prints the review. It does not enable the plugin. Confirming an install is an
+in-app step. A folder you already have is still registered with
+`npm run plugins -- add <path>`, which enables it immediately and can replace an
+entry of the same name.
+
+A GitHub install will not replace a plugin that is already registered under that
+name from another path.
+
+Managed entries live in the same `plugins.json`. Existing entries stay valid:
+missing `enabled` means enabled, and missing `managed` means you own the folder.
+Managed entries add an id, `managed: true`, and a `source` object. `plugins add`
+does not rewrite older entries just to add those fields.
+
+`npm run plugins -- list --all` includes disabled plugins and registrations that need attention (a missing folder, an invalid manifest, a name that does not match, or a duplicate name). `list --json` shortens paths to `<home>` or `<path>` and does not include command output or credentials.
+
+Managed downloads live in the app-data plugins directory, or in `DEVHUB_PLUGIN_HOME` when that is set. Skill and agent copies are written under the account home unless `DEVHUB_PLUGIN_TARGET_HOME` is set. `DEVHUB_CONFIG_DIR` selects only the registry directory; it does not retarget `~/.claude` or the other tool folders.
+
+Disabling a managed plugin removes the unchanged copies it installed and keeps the download. Removing it drops the registry entry and also keeps the download. A copy edited after install is left in place and listed in the result. On Windows the service runs in WSL, so the download, Git credentials and tool copies are inside that distribution, not in a Windows-only GitHub CLI login.
+
+```bash
+npm run plugins -- list            # enabled plugins, as before
+npm run plugins -- list --all      # disabled and broken registrations too
+npm run plugins -- list --json     # paths shortened; no credentials
+```
+
+`DEVHUB_CONFIG_DIR`, when set, is the only registry directory DevHub reads.
+It does not fall back to `~/.config/devhub/plugins.json`.
+
+This installer enables skills and agents. A plugin that also contributes MCP
+servers, a dashboard module, branding, overlays, docs, or persona modes is shown
+in the review and is not enabled. Nothing from the repository runs before you
+confirm, and an incompatible plugin is not registered.
+
+Scaffold a new plugin without registering or publishing it:
+
+```bash
+npm run plugins -- new team-tools --out ~/dev/team-tools
+npm run plugins -- new team-tools --out ~/dev/team-tools --dry-run
+```
+
+`--branding` adds a theme. The GitHub installer will refuse that manifest until
+branding can be applied. `plugins add <path>` still registers it.
+
 ## Precedence and read-only
 
 - Skill order: **core → vendor → plugins → ai-tools**. Enabled plugins are an
