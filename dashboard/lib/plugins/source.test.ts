@@ -216,7 +216,8 @@ describe("accessCommands", () => {
     expect(commands.gh[0]).toBe(`'${bundled}' auth login --hostname github.com --git-protocol https --web`);
     expect(ghInvocation(bundled)).toBe(`'${bundled}'`);
     expect(ghInvocation("/opt/homebrew/bin/gh")).toBe("gh");
-    expect(ghAuthLoginCommand(testEnv({ PATH: "/usr/bin" }))).toBeNull();
+    // An empty directory, not /usr/bin: CI runners ship gh there.
+    expect(ghAuthLoginCommand(testEnv({ PATH: scratchDir() }))).toBeNull();
   });
 });
 
