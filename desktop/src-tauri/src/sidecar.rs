@@ -590,7 +590,9 @@ mod tests {
     }
 
     fn read_health_request(stream: &mut TcpStream) {
-        stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
         let mut reader = BufReader::new(stream);
         loop {
             let mut line = String::new();
