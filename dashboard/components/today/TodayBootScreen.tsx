@@ -154,7 +154,7 @@ function BootScreenVisual({ state }: { state: BootState }) {
           height={56}
           unoptimized
           priority
-          className="boot-logo boot-logo-devhub"
+          className="boot-logo boot-logo-devhub devhub-mark"
         />
         {HAS_PLUGIN_BRAND && (
           <Image

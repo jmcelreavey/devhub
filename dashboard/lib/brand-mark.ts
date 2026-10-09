@@ -1,7 +1,7 @@
 import { PLUGIN_BRAND_LOGO } from "./plugin-branding.generated";
 
-/** Default DevHub bottle mark — bump `v` if the asset is replaced and caches should bust. */
-const DEFAULT_BRAND_IMAGE = "/brand-bottle-photo-transparent.png?v=4";
+/** Default DevHub Shift Dock mark — bump `v` when the asset changes so caches drop the old one. */
+const DEFAULT_BRAND_IMAGE = "/brand-mark-dark.svg?v=6";
 const DEFAULT_BRAND_LABEL = "DevHub";
 
 /**
@@ -14,7 +14,7 @@ export const BRAND_BOTTLE_IMAGE_SRC = PLUGIN_BRAND_LOGO?.src ?? DEFAULT_BRAND_IM
 /** Wordmark text shown next to the brand mark (whitelabelled by a branding plugin). */
 export const BRAND_LABEL = PLUGIN_BRAND_LOGO?.label ?? DEFAULT_BRAND_LABEL;
 
-/** The stock DevHub bottle mark, always available even when a plugin brand is active —
+/** The stock DevHub Shift Dock mark, always available even when a plugin brand is active —
  *  so the IconPicker can offer "switch back to the DevHub default". */
 export const DEVHUB_BRAND_IMAGE = DEFAULT_BRAND_IMAGE;
 
@@ -34,7 +34,8 @@ const LOGO_PLUGIN_SENTINEL = "__bottle__";
  * SSR cannot read localStorage, so the boot overlay used to paint the plugin
  * mark (BI) whenever a branding plugin was installed, then swap after hydrate.
  * This runs during HTML parse, before body, and sets `data-logo` on `<html>`:
- * `__bottle__` → plugin; anything else (including no key) → DevHub bottle.
+ * `__bottle__` is the historical key for the plugin brand; anything else
+ * (including no key) is the DevHub Shift Dock mark.
  */
 export function getLogoBootstrapInlineScript(): string {
   const key = JSON.stringify(LOGO_STORAGE_KEY);

@@ -2,12 +2,12 @@
 /**
  * Stage the OS app icons the Tauri bundler ships.
  *
- * The *bundled* Dock / Finder icon is always the core DevHub bottle
- * (`dashboard/public/icon-512.png`). Plugin branding used to win this race
+ * The *bundled* Dock / Finder icon is always the core DevHub Shift Dock mark
+ * (`dashboard/public/icon-master.png`). Plugin branding used to win this race
  * whenever `plugin-desktop-icon.png` existed, so a BI-branded machine shipped
  * a BI `.icns` and macOS's persistent Dock tile ignored every runtime reset.
  *
- * Plugin icons still exist — they land next to the bottle as `plugin.png` and
+ * Plugin icons still exist — they land next to the Shift Dock mark as `plugin.png` and
  * the shell overlays them at runtime when the in-app logo is the plugin brand.
  *
  * Icons land under `desktop/staging/icons/` (gitignored) so a plugin-branded
@@ -23,7 +23,7 @@ import { dashboardDir, repoRoot, stagingDir } from "./staging-paths.mjs";
 export const iconsStagingDir = path.join(stagingDir, "icons");
 
 const PLUGIN_ICON = path.join(dashboardDir, "public", "plugin-desktop-icon.png");
-const DEFAULT_ICON = path.join(dashboardDir, "public", "icon-512.png");
+const DEFAULT_ICON = path.join(dashboardDir, "public", "icon-master.png");
 const PLUGIN_SIDECAR = path.join(iconsStagingDir, "plugin.png");
 const MARKER = path.join(iconsStagingDir, ".source.sha256");
 
@@ -36,7 +36,7 @@ const PRUNE_PREFIXES = ["Square", "StoreLogo"];
 
 /**
  * The file `cargo tauri icon` turns into the bundled `.icns`.
- * Always the bottle — plugin branding is a runtime overlay, not the app tile.
+ * Always the Shift Dock mark — plugin branding is a runtime overlay, not the app tile.
  *
  * @returns {{ source: string, kind: "default" }}
  */
@@ -46,7 +46,7 @@ export function resolveDesktopIconSource(
 ) {
   if (!fs.existsSync(defaultIcon)) {
     throw new Error(
-      `No desktop icon source. Expected the core bottle at ${defaultIcon}.`,
+      `No desktop icon source. Expected the core Shift Dock mark at ${defaultIcon}.`,
     );
   }
   return { source: defaultIcon, kind: "default" };
@@ -67,7 +67,7 @@ export function stagePluginSidecar(
     fs.copyFileSync(pluginIcon, dest);
     return "plugin";
   }
-  // Always ship a sidecar so tauri.conf.json can list it. No plugin → bottle.
+  // Always ship a sidecar so tauri.conf.json can list it. No plugin → Shift Dock mark.
   if (fs.existsSync(fallback)) {
     fs.copyFileSync(fallback, dest);
     return "none";

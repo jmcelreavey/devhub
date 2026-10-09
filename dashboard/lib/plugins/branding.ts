@@ -67,7 +67,7 @@ export const PLUGIN_DEFAULT_PRESET: string | null = null;
 /** Default colour mode seeded on first run, or null to keep the core default. */
 export const PLUGIN_DEFAULT_MODE: "dark" | "light" | "system" | null = null;
 
-/** Default sidebar/boot brand mark, or null to keep the core DevHub bottle. */
+/** Default sidebar/boot brand mark, or null to keep the core DevHub Shift Dock mark. */
 export const PLUGIN_BRAND_LOGO: PluginBrandLogo | null = null;
 `;
 }

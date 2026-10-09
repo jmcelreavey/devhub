@@ -72,12 +72,40 @@ export const metadata: Metadata = {
     description: "Personal developer dashboard - repos, skills, actions, notes, and more.",
   },
   icons: {
+    // The SVG stays sharp at 16px and follows the browser scheme. The PNGs cover
+    // browsers that ignore SVG favicons. There is no shortcut icon: that link
+    // was the 192px app tile, which scaled into a soft tab mark and ignored
+    // light chrome. /favicon.ico is an unlinked light-palette fallback — putting
+    // it in app/ would make Next inject it first.
     icon: [
-      { url: "/icon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      {
+        url: "/favicon-16-light.png",
+        sizes: "16x16",
+        type: "image/png",
+        media: "(prefers-color-scheme: light)",
+      },
+      {
+        url: "/favicon-16.png",
+        sizes: "16x16",
+        type: "image/png",
+        media: "(prefers-color-scheme: dark)",
+      },
+      {
+        url: "/icon-32.png",
+        sizes: "32x32",
+        type: "image/png",
+        media: "(prefers-color-scheme: dark)",
+      },
+      {
+        url: "/icon-32-light.png",
+        sizes: "32x32",
+        type: "image/png",
+        media: "(prefers-color-scheme: light)",
+      },
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
-    shortcut: "/icon-192.png",
     apple: "/icon-180.png",
   },
 };

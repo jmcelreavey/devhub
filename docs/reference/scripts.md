@@ -97,7 +97,7 @@ The dashboard owns most operational scripts. They handle tasks such as:
 - Peer boot (`start-peer-services.ts`) is now a no-op note: Paseo runs under launchd, and OpenCode only lazy-starts for session recap.
 - 1Password secret fallback (`op-secrets.ts`) before services bind ports.
 - Standup diagnostics.
-- PWA icon generation.
+- Shift Dock mark raster generation (favicons, PWA icons, desktop icons).
 
 Prefer root commands or dashboard UI actions unless you are debugging a specific script.
 
@@ -109,7 +109,7 @@ Useful dashboard-only scripts (`npm run <name> --prefix dashboard`):
 | `test:e2e`, `test:e2e:ui` | Playwright journeys (`PLAYWRIGHT_VIDEO=1` records them — see [Recording demos](../contributing/recording-demos.md)) |
 | `check:contrast` | WCAG contrast check across theme presets |
 | `check:dynamic-routes` | Fail if a content route would be prerendered at build time |
-| `icons:pwa`, `build:seasonal-icons` | Regenerate PWA icons and the seasonal icon subset |
+| `icons:pwa`, `build:seasonal-icons` | Regenerate Shift Dock mark rasters, and the seasonal icon subset |
 
 ## In-Process Action Catalog
 

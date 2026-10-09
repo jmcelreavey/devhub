@@ -111,7 +111,7 @@ If you are only changing Rust, stage once and then use `cargo` directly in
 `desktop/src-tauri/`.
 
 `desktop:stage` also runs `desktop/scripts/stage-icons.mjs`. The bundled icon
-always uses the core DevHub bottle (`dashboard/public/icon-512.png`). Plugin
+always uses the core DevHub Shift Dock mark (`dashboard/public/icon-master.png`). Plugin
 branding is staged separately as `plugin.png` for the runtime overlay. Generated
 icons go into the gitignored `desktop/staging/icons/` directory.
 

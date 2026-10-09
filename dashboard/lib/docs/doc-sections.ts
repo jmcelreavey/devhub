@@ -65,6 +65,14 @@ export const DOC_SECTIONS: DocSectionMeta[] = [
     order: 50,
   },
   {
+    id: "brand",
+    label: "Brand",
+    description: "Logo explorations and the mark DevHub ships.",
+    icon: "Palette",
+    order: 70,
+    secondary: true,
+  },
+  {
     id: "plans",
     label: "Proposals",
     description: "Plans for unfinished work. Not a description of how things work today.",

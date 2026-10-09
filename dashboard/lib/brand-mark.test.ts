@@ -13,12 +13,12 @@ function runBootstrap() {
 }
 
 describe("getLogoBootstrapInlineScript", () => {
-  it("defaults to the DevHub bottle when nothing is stored", () => {
+  it("defaults to the DevHub mark when nothing is stored", () => {
     runBootstrap();
     expect(document.documentElement.getAttribute("data-logo")).toBe("devhub");
   });
 
-  it("keeps the DevHub bottle when the user picked the DevHub logo", () => {
+  it("keeps the DevHub mark when the user picked the DevHub logo", () => {
     localStorage.setItem("devhub-logo-icon", "__devhub__");
     runBootstrap();
     expect(document.documentElement.getAttribute("data-logo")).toBe("devhub");

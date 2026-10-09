@@ -454,7 +454,7 @@ installer tested on Windows before tagging a release:
   fallback dashboard, terminal, Browse dialog and updates control.
 - Check first-run routing, reload during setup, private-repo create/clone/link,
   and reopening after completion. Preserve real data when testing a fresh setup.
-- Confirm the setup executable's bottle icon and record the interactive
+- Confirm the setup executable's Shift Dock icon and record the interactive
   SmartScreen behaviour. Check the macOS DMG's icon and installation window too.
 - Re-test existing Paseo discovery, a fresh optional installation, Pi installs,
   OpenCode repair and provider sign-ins. Check startup phase timings on cold

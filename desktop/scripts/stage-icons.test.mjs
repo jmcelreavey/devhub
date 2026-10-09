@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { resolveDesktopIconSource, stagePluginSidecar } from "./stage-icons.mjs";
 
-test("bundled OS icon is always the core bottle, even when a plugin icon exists", () => {
+test("bundled OS icon is always the core Shift Dock mark, even when a plugin icon exists", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-icons-"));
   const plugin = path.join(root, "plugin-desktop-icon.png");
   const fallback = path.join(root, "icon-512.png");
@@ -17,7 +17,7 @@ test("bundled OS icon is always the core bottle, even when a plugin icon exists"
   assert.equal(resolved.source, fallback);
 });
 
-test("throws when the core bottle is missing", () => {
+test("throws when the core Shift Dock mark is missing", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-icons-"));
   assert.throws(
     () =>
@@ -39,15 +39,15 @@ test("plugin sidecar copies the plugin PNG when it exists", () => {
   assert.equal(fs.readFileSync(dest, "utf8"), "plugin-bytes");
 });
 
-test("plugin sidecar falls back to the bottle when no plugin icon exists", () => {
+test("plugin sidecar falls back to the Shift Dock mark when no plugin icon exists", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-icons-"));
   const dest = path.join(root, "out", "plugin.png");
   const fallback = path.join(root, "icon-512.png");
-  fs.writeFileSync(fallback, "bottle");
+  fs.writeFileSync(fallback, "mark");
 
   assert.equal(
     stagePluginSidecar(path.join(root, "missing.png"), dest, fallback),
     "none",
   );
-  assert.equal(fs.readFileSync(dest, "utf8"), "bottle");
+  assert.equal(fs.readFileSync(dest, "utf8"), "mark");
 });

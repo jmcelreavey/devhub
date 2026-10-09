@@ -2725,6 +2725,11 @@ body[data-grid-resizing="true"] * {
   transition: background 160ms var(--ease-swift);
 }
 
+/* Light surfaces use the light Shift Dock palette. Hollow keeps the October jack-o'-lantern. */
+:root[data-theme="light"]:not([data-theme-preset="hollow"]) img.devhub-mark {
+  content: url("/brand-mark-light.svg");
+}
+
 .mobile-brand-logo {
   width: 34px;
   height: 34px;

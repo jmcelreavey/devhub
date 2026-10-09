@@ -29,7 +29,7 @@
     "test:e2e:skills:ux": "node scripts/e2e-skills-ux-walkthrough.mjs",
     "test:watch": "env -u DEVHUB_DESKTOP -u DEVHUB_APP_DATA -u DEVHUB_RESOURCE_ROOT -u DEVHUB_SERVER_DIR -u NOTES_DIR -u TASKS_DIR -u COLLECTIONS_DIR -u UPSTARTS_DIR -u DOCS_DIR -u DEVHUB_OP_CACHE_DIR -u DEVHUB_OP_CACHE -u DEVHUB_OP_REFRESH -u DEVHUB_OP_SYNC_LOCAL -u DEVHUB_OP_ITEM -u DEVHUB_OP_VAULT -u JIRA_API_TOKEN -u GOOGLE_CLIENT_SECRET NODE_ENV=test vitest",
     "build:seasonal-icons": "tsx scripts/build-seasonal-iconify-subset.ts",
-    "icons:pwa": "swift scripts/compose-pwa-icons.swift ./public",
+    "icons:pwa": "node scripts/render-brand-icons.mjs",
     "verify": "npm run verify:checks && npm run skills:verify-vendor && npm run verify:build && DEVHUB_VERIFY_BUILD=1 npm run check:dynamic-routes",
     "postinstall": "tsx scripts/postinstall.ts",
     "setup": "tsx scripts/setup-reminder.ts",

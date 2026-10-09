@@ -1,6 +1,6 @@
 //! Runtime OS icon — window, Dock, and menu-bar tray (macOS).
 //!
-//! The bundled `.icns` is the DevHub bottle. Plugin branding overlays the Dock
+//! The bundled `.icns` is the DevHub Shift Dock mark. Plugin branding overlays the Dock
 //! at runtime. macOS's persistent Dock tile reads `CFBundleIconFile`, so a
 //! BI-branded *bundle* made `setApplicationIconImage` a no-op when switching
 //! back to default. Resetting default uses `nil` (restore the bundle icon).
@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use tauri::image::Image;
 use tauri::{AppHandle, Manager};
 
-/// Committed DevHub bottle. Not the staged plugin icon, not a path the
+/// Committed DevHub Shift Dock mark. Not the staged plugin icon, not a path the
 /// webview gets to name — the one file that makes "switch back to default"
 /// actually mean default.
 const DEFAULT_ICON_PNG: &[u8] = include_bytes!("../icons/icon.png");
@@ -81,7 +81,7 @@ fn apply_window_icons(app: &AppHandle, png: &[u8]) -> Result<(), String> {
 /// macOS has no window icon; `Window::set_icon` does not move the Dock tile.
 /// `setApplicationIconImage` overlays a custom image. Passing `nil` restores
 /// the bundled `CFBundleIconFile` — that is the default reset, and it only
-/// works if the bundle `.icns` is the bottle, not BI.
+/// works if the bundle `.icns` is the Shift Dock mark, not BI.
 #[cfg(target_os = "macos")]
 fn set_macos_dock_icon(png: &[u8]) -> Result<(), String> {
     use cocoa::appkit::NSImage;
@@ -135,9 +135,9 @@ fn log_icon(app: &AppHandle, kind: &DesktopIconKind, bytes: usize) {
     }
 }
 
-/// Apply the DevHub bottle or a plugin PNG to the running shell.
+/// Apply the DevHub Shift Dock mark or a plugin PNG to the running shell.
 ///
-/// `png` is ignored for `default` — the bottle is compiled in, and the Dock
+/// `png` is ignored for `default` — the Shift Dock mark is compiled in, and the Dock
 /// tile is restored from the bundle `.icns`. Plugin bytes come from the
 /// dashboard or `icons/plugin.png` in the bundle.
 #[tauri::command]

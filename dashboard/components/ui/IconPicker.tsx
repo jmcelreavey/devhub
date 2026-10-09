@@ -126,9 +126,9 @@ import {
 /** Sidebar brand: Lucide icon inside the accent chip */
 const BRAND_LUCIDE_PX = 20;
 const BRAND_LUCIDE_COLLAPSED_PX = 17;
-/** Transparent bottle mark: needs larger on-screen size or fizz bubbles disappear when downscaled */
-const BRAND_BOTTLE_MARK_EXPANDED_PX = 38;
-const BRAND_BOTTLE_MARK_COLLAPSED_PX = 28;
+/** Shift Dock mark fills the chip; slightly under the button so the rows are not clipped. */
+const BRAND_MARK_EXPANDED_PX = 38;
+const BRAND_MARK_COLLAPSED_PX = 28;
 /** Sidebar brand: full-color seasonal mark (SVG or emoji) — fits inside `.brand-dot[data-full-icon]` */
 const BRAND_GLYPH_MARK_PX = 32;
 const BRAND_GLYPH_EMOJI_PX = 28;
@@ -275,15 +275,14 @@ const STORAGE_KEY = "devhub-logo-icon";
 const DEFAULT_ICON = "Terminal";
 const SEASONAL_VALUE = "__seasonal__";
 /**
- * Sentinel for the brand's "DevHub bottle" PWA mark. This is the out-of-box
- * default — users only see another icon if they pick one in the popover, and
- * the Reset button restores this value.
+ * Historical storage value for the active brand mark (a plugin logo when one
+ * is installed, otherwise the DevHub hub). The Reset button restores this value.
  */
 const BOTTLE_VALUE = "__bottle__";
 /**
- * Sentinel for the stock DevHub bottle mark. Only meaningful when a branding plugin is
- * active: BOTTLE_VALUE then renders the whitelabel logo (the out-of-box default), and
- * DEVHUB_VALUE lets the user explicitly switch back to the original DevHub mark.
+ * Stock DevHub Shift Dock mark. Only meaningful when a branding plugin is active:
+ * BOTTLE_VALUE then renders the whitelabel logo (the out-of-box default), and
+ * DEVHUB_VALUE lets the user explicitly switch back to the DevHub mark.
  */
 const DEVHUB_VALUE = "__devhub__";
 const ICON_EVENT = "devhub:icon-change";
@@ -571,7 +570,16 @@ export function IconPicker({
                         transition: "all 0.15s ease",
                       }}
                     >
-                      <Image src={b.src} alt="" aria-hidden unoptimized width={28} height={28} style={{ width: 28, height: 28, borderRadius: 6, display: "block" }} />
+                      <Image
+                        src={b.src}
+                        alt=""
+                        aria-hidden
+                        unoptimized
+                        width={28}
+                        height={28}
+                        className={b.value === DEVHUB_VALUE ? "devhub-mark" : undefined}
+                        style={{ width: 28, height: 28, display: "block" }}
+                      />
                       <span style={{ fontSize: "12px", fontWeight: 500 }}>{b.label}</span>
                     </button>
                   ))}
@@ -710,7 +718,7 @@ export function IconPicker({
                     setSearch("");
                     onSelect?.();
                   }}
-                  title="Reset to default bottle icon"
+                  title="Reset to the DevHub logo"
                 >
                   Reset default
                 </button>
@@ -842,28 +850,27 @@ export function LogoIcon({
   const glyphProps = { markPixels: glyphMarkPx, emojiPixels: glyphEmojiPx };
 
   if (isBottleStored(stored) || isDevhubStored(stored)) {
-    const bottlePx =
-      lucidePx <= BRAND_LUCIDE_COLLAPSED_PX
-        ? BRAND_BOTTLE_MARK_COLLAPSED_PX
-        : BRAND_BOTTLE_MARK_EXPANDED_PX;
+    const markPx =
+      lucidePx <= BRAND_LUCIDE_COLLAPSED_PX ? BRAND_MARK_COLLAPSED_PX : BRAND_MARK_EXPANDED_PX;
     // BOTTLE_VALUE = the active brand (whitelabel logo if a plugin set one); DEVHUB_VALUE
-    // = always the stock DevHub mark.
+    // = always the stock DevHub mark. Light surfaces swap via .devhub-mark; Hollow overrides
+    // .theme-brand-image with the October jack-o'-lantern.
+    const showingDevhubArt = isDevhubStored(stored) || !HAS_PLUGIN_BRAND;
     const brandSrc = isDevhubStored(stored) ? DEVHUB_BRAND_IMAGE : BRAND_BOTTLE_IMAGE_SRC;
     return (
       <Image
         src={brandSrc}
-        className="theme-brand-image"
+        className={showingDevhubArt ? "theme-brand-image devhub-mark" : "theme-brand-image"}
         alt=""
         aria-hidden
         unoptimized
         priority
-        width={bottlePx}
-        height={bottlePx}
+        width={markPx}
+        height={markPx}
         style={{
-          width: bottlePx,
-          height: bottlePx,
+          width: markPx,
+          height: markPx,
           display: "block",
-          borderRadius: 8,
         }}
       />
     );

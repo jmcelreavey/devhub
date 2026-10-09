@@ -29,7 +29,7 @@ export function MobileTopBar() {
           <Image
             src={brand?.logo || BRAND_BOTTLE_IMAGE_SRC}
             alt=""
-            className="mobile-brand-logo-img"
+            className={brand?.logo ? "mobile-brand-logo-img theme-brand-image" : "mobile-brand-logo-img theme-brand-image devhub-mark"}
             unoptimized
             width={34}
             height={34}
