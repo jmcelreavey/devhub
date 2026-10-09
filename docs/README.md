@@ -44,6 +44,7 @@ Read [Architecture Overview](architecture/overview.md) for the full picture.
 | Try the desktop app, no Git needed | [Getting started without Git](getting-started/guided-setup.md) |
 | Get it running from source         | [Installation](getting-started/installation.md)   |
 | Quick answers (GitHub? fork?)      | [FAQ](getting-started/faq.md)                     |
+| See everything it can do           | [Feature tour](guides/feature-tour.md)            |
 | Understand how it works            | [Architecture Overview](architecture/overview.md) |
 | Do a specific task                 | [Skills](guides/skills.md) and the other guides   |
 | Look something up                  | [API Routes](reference/api-routes.md)             |

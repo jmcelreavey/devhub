@@ -18,11 +18,13 @@ import {
   encodeGif,
   GIF_SIZE,
   hydrated,
+  MAC_USER_AGENT,
   OVERLAY_SCRIPT,
   requiredEnv,
   setCaption,
   sidebarLink,
   startScreencast,
+  THEME_PIN_SCRIPT,
   VIEWPORT,
 } from "./demo-kit";
 
@@ -93,7 +95,7 @@ async function walk(page: Page): Promise<void> {
 async function main(): Promise<void> {
   fs.mkdirSync(FRAMES_DIR, { recursive: true });
   const browser = await chromium.launch();
-  const contextOptions = { viewport: VIEWPORT, deviceScaleFactor: 1, colorScheme: "dark" as const };
+  const contextOptions = { viewport: VIEWPORT, deviceScaleFactor: 1, colorScheme: "dark" as const, userAgent: MAC_USER_AGENT };
 
   // Dev mode compiles each route on first hit; warm them so the GIF shows pages, not
   // spinners. A separate context keeps the warm-up out of the recorded breadcrumbs.
@@ -107,6 +109,7 @@ async function main(): Promise<void> {
 
   const context = await browser.newContext(contextOptions);
   await context.addInitScript(OVERLAY_SCRIPT);
+  await context.addInitScript(THEME_PIN_SCRIPT);
   const page = await context.newPage();
 
   try {
