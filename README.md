@@ -2,7 +2,7 @@
 
 DevHub is a local dashboard for your working day as a developer: tasks, notes, pull requests, repos and your AI coding agents in one window. Everything is stored as files on your own machine, and GitHub, Jira, Google Calendar and the other integrations are optional. It also keeps your AI tools (Claude Code, Codex, Cursor, OpenCode and Antigravity) on the same skills and standards, so you set them up once.
 
-![DevHub 2.1.0: theme effects, What's new, browser, reviewed integrations, Telegram, editor Ask AI and resizing](docs/assets/demos/overview-2.1.0.gif)
+![DevHub overview: your day, ticket-to-PR agents, Git, notes, diagrams, skills, plugins and approved integrations](docs/assets/demos/overview.gif)
 
 <sub>DevHub 2.1.0, recorded against disposable fixture data. Provider replies are simulated; nothing is sent to real accounts.</sub>
 

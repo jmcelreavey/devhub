@@ -4,7 +4,7 @@ User-visible changes, newest first. Versioned sections describe the public relea
 
 ## 2.1.0 - 2026-10-11
 
-![DevHub 2.1.0: appearance, release notes, browser, reviewed integrations, Telegram, editor and resizing](https://raw.githubusercontent.com/jmcelreavey/devhub/v2.1.0/docs/assets/demos/overview-2.1.0.gif)
+![DevHub overview: your day, ticket-to-PR agents, Git, notes, diagrams, skills, plugins and approved integrations](https://raw.githubusercontent.com/jmcelreavey/devhub/main/docs/assets/demos/overview.gif)
 
 Recorded with disposable fixture data. Provider replies are simulated; no messages, tickets or AI requests are sent.
 
